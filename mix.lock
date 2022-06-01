@@ -1,0 +1,7 @@
+%{
+  "broadway": {:hex, :broadway, "0.6.2", "ef8e0d257420c72f0e600958cf95556835d9921ad14be333493083226458791a", [:mix], [{:gen_stage, "~> 1.0", [hex: :gen_stage, repo: "hexpm", optional: false]}, {:telemetry, "~> 0.4.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "f4f93704304a736c984cd6ed884f697415f68eb50906f4dc5d641926366ad8fa"},
+  "epgsql": {:hex, :epgsql, "4.6.0", "a403534d03811c867e79405bb18d6061a5fcef92acf0236a9150ac93748ce143", [:rebar3], [], "hexpm", "6be4910a02551f21eab6f6f27d97b0d4b1dffc617f1a64c8c95fdd45652fa9e1"},
+  "gen_stage": {:hex, :gen_stage, "1.1.2", "b1656cd4ba431ed02c5656fe10cb5423820847113a07218da68eae5d6a260c23", [:mix], [], "hexpm", "9e39af23140f704e2b07a3e29d8f05fd21c2aaf4088ff43cb82be4b9e3148d02"},
+  "pgoutput_decoder": {:hex, :pgoutput_decoder, "0.1.0", "d4ffae6e58a563f2e6de8a0495d9f9afbe2f4ac75d6805419cd4a0d05f414c00", [:mix], [], "hexpm", "4dbecbe4eb8de728178fd129ccba810bccafa9a8769c6714c8b7b22963081c27"},
+  "telemetry": {:hex, :telemetry, "0.4.3", "a06428a514bdbc63293cd9a6263aad00ddeb66f608163bdec7c8995784080818", [:rebar3], [], "hexpm", "eb72b8365ffda5bed68a620d1da88525e326cb82a75ee61354fc24b844768041"},
+}
