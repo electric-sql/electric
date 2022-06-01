@@ -2,12 +2,12 @@
 
 Step 1:
 
-- [ ] two Postgres database nodes (same single table schema for now)
-- [ ] setup logical replication between them
+- [x] two Postgres database nodes (same single table schema for now)
+- [x] setup logical replication between them
 
 Step 2:
 
-- [ ] consume and decode logical replication stream from Postgres A
+- [x] consume and decode logical replication stream from Postgres A
 - [ ] implement enough of the backend server logical replication protocol in order to replicate through Elixir
 - [ ] encode and produce logical replication stream for Postgres B
 
