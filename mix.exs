@@ -24,7 +24,8 @@ defmodule Electric.MixProject do
   defp deps do
     [
       {:broadway, "~> 0.6"},
-      {:epgsql, "~> 4.2"}
+      {:epgsql, "~> 4.2"},
+      {:mox, "~> 1.0.2"}
     ]
   end
 
