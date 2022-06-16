@@ -29,8 +29,8 @@ defmodule Electric.Replication.Client do
 
   Returns `:ok` on success.
   """
-  def acknowledge_lsn(conn, {xlog, offset} = _lsn_tup) do
-    <<decimal_lsn::integer-64>> = <<xlog::integer-32, offset::integer-32>>
+  def acknowledge_lsn(conn, %{segment: segment, offset: offset}) do
+    <<decimal_lsn::integer-64>> = <<segment::integer-32, offset::integer-32>>
 
     :epgsql.standby_status_update(conn, decimal_lsn, decimal_lsn)
   end

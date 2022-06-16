@@ -1,7 +1,9 @@
 defmodule Electric.Replication.Producer do
   use GenStage
 
-  alias PgoutputDecoder.Messages.{
+  alias Electric.Postgres.LogicalReplication
+
+  alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
     Commit,
     Relation,
@@ -53,7 +55,7 @@ defmodule Electric.Replication.Producer do
   @impl true
   def handle_info({:epgsql, _pid, {:x_log_data, _start_lsn, _end_lsn, binary_msg}}, state) do
     binary_msg
-    |> PgoutputDecoder.decode_message()
+    |> LogicalReplication.decode_message()
     |> process_message(state)
   end
 
