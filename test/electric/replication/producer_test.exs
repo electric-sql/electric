@@ -74,8 +74,8 @@ defmodule Electric.Replication.ProducerTest do
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} = Producer.init(nil)
-    {_, _, state} = Producer.handle_demand(10, state)
+    {:producer, state} = Producer.init(pg_client: Electric.Replication.MockPostgresClient)
+    {_, _, state} = Producer.handle_demand(demand, state)
     state
   end
 

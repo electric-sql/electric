@@ -4,17 +4,18 @@ defmodule Electric.Replication do
   alias Broadway.Message
   alias Electric.Replication
 
-  alias Replication.Config
   alias Replication.Changes.Transaction
 
   require Logger
 
-  def start_link(_opts) do
+  def start_link(opts) do
+    producer = Keyword.fetch!(opts, :producer)
+
     Broadway.start_link(
       Replication,
-      name: Replication,
+      name: Keyword.get(opts, :name, Replication),
       producer: [
-        module: {Config.producer(), []},
+        module: {producer, opts},
         transformer: {Replication, :transform, []},
         concurrency: 1
       ],
@@ -35,23 +36,18 @@ defmodule Electric.Replication do
   def handle_message(_, %Message{data: %Transaction{changes: changes}} = message, _) do
     Logger.debug(inspect({:message, message}, pretty: true))
 
-    errors =
-      changes
-      |> Enum.reduce([], &handle_change/2)
-
-    message =
-      case errors do
-        [] ->
-          message
-
-        reason ->
-          Message.failed(message, reason)
+    changes
+    |> Enum.reduce_while(:ok, fn change, :ok ->
+      case Electric.Replication.ToVaxine.handle_change(change) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, {change, error}}
       end
-
-    message
+    end)
+    |> case do
+      :ok -> message
+      {change, error} -> Message.failed(message, {change, error})
+    end
   end
-
-  def handle_change(_, acc), do: acc
 
   def ack(:ack_id, [], []), do: nil
   def ack(:ack_id, _, [_head | _tail]), do: throw("XXX ack failure handling not yet implemented")

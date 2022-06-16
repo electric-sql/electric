@@ -14,8 +14,6 @@ defmodule Electric.Replication.Producer do
     Type
   }
 
-  alias Electric.Replication.Config
-
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -38,8 +36,10 @@ defmodule Electric.Replication.Producer do
   end
 
   @impl true
-  def init(_) do
-    {:ok, conn} = Config.pg_client().connect_and_start_replication(self())
+  def init(opts) do
+    pg_client = Keyword.fetch!(opts, :pg_client)
+
+    {:ok, conn} = pg_client.connect_and_start_replication(self())
 
     {:producer, %State{conn: conn, queue: :queue.new()}}
   end
