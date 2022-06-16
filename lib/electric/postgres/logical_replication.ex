@@ -12,4 +12,11 @@ defmodule Electric.Postgres.LogicalReplication do
   defdelegate decode_message(binary),
     to: Electric.Postgres.LogicalReplication.Decoder,
     as: :decode
+
+  @doc """
+  Encode the message back to binary format to be consumed by the postgres logical replication
+  """
+  defdelegate encode_message(struct),
+    to: Electric.Postgres.LogicalReplication.Encoder,
+    as: :encode
 end
