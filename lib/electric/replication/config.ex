@@ -7,9 +7,9 @@ defmodule Electric.Replication.Config do
     Application.get_env(:electric, Electric.Replication)
   end
 
-  def epgsql do
+  def pg_client do
     config()
-    |> Keyword.get(:epgsql)
+    |> Keyword.get(:pg_client)
   end
 
   def producer do

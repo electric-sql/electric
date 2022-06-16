@@ -14,10 +14,7 @@ defmodule Electric.Replication.Producer do
     Type
   }
 
-  alias Electric.Replication.{
-    Client,
-    Config
-  }
+  alias Electric.Replication.Config
 
   alias Electric.Replication.Changes.{
     Transaction,
@@ -42,12 +39,7 @@ defmodule Electric.Replication.Producer do
 
   @impl true
   def init(_) do
-    {:ok, conn} = Config.epgsql() |> Client.connect()
-
-    slot = Config.slot()
-    publication = Config.publication()
-
-    :ok = Client.start_replication(conn, publication, slot, self())
+    {:ok, conn} = Config.pg_client().connect_and_start_replication(self())
 
     {:producer, %State{conn: conn, queue: :queue.new()}}
   end
