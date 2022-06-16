@@ -27,6 +27,52 @@ defmodule Electric.Replication.ProducerTest do
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
 
+  test "Producer keeps proper ordering of updates within the transaction for inserts" do
+    {_, events} =
+      begin()
+      |> relation("entities", id: :uuid, data: :varchar)
+      |> insert("entities", {"test1", "value"})
+      |> insert("entities", {"test2", "value"})
+      |> insert("entities", {"test3", "value"})
+      |> insert("entities", {"test4", "value"})
+      |> commit_and_get_messages()
+      |> process_messages(initialize_producer(), &Producer.handle_info/2)
+
+    assert [{transaction, _, _}] = events
+    assert length(transaction.changes) == 4
+
+    assert [
+             %NewRecord{record: %{"id" => "test1"}},
+             %NewRecord{record: %{"id" => "test2"}},
+             %NewRecord{record: %{"id" => "test3"}},
+             %NewRecord{record: %{"id" => "test4"}}
+           ] = transaction.changes
+  end
+
+  test "Producer keeps proper ordering of updates within the transaction for updates" do
+    {_, events} =
+      begin()
+      |> relation("entities", id: :uuid, data: :varchar)
+      |> insert("entities", {"test", "1"})
+      |> update("entities", {"test", "1"}, {"test", "2"})
+      |> update("entities", {"test", "2"}, {"test", "3"})
+      |> update("entities", {"test", "3"}, {"test", "4"})
+      |> update("entities", {"test", "4"}, {"test", "5"})
+      |> commit_and_get_messages()
+      |> process_messages(initialize_producer(), &Producer.handle_info/2)
+
+    assert [{transaction, _, _}] = events
+    assert length(transaction.changes) == 5
+
+    assert [
+             %NewRecord{record: %{"data" => "1"}},
+             %UpdatedRecord{record: %{"data" => "2"}, old_record: %{"data" => "1"}},
+             %UpdatedRecord{record: %{"data" => "3"}, old_record: %{"data" => "2"}},
+             %UpdatedRecord{record: %{"data" => "4"}, old_record: %{"data" => "3"}},
+             %UpdatedRecord{record: %{"data" => "5"}, old_record: %{"data" => "4"}}
+           ] = transaction.changes
+  end
+
   def initialize_producer(demand \\ 100) do
     {:producer, state} = Producer.init(nil)
     {_, _, state} = Producer.handle_demand(10, state)
@@ -83,6 +129,14 @@ defmodule Electric.Replication.ProducerTest do
   defp insert(state, relation, data) do
     add_action(state, %Messages.Insert{
       relation_id: Map.fetch!(state.relations, relation),
+      tuple_data: data
+    })
+  end
+
+  defp update(state, relation, old_record, data) when is_tuple(old_record) do
+    add_action(state, %Messages.Update{
+      relation_id: Map.fetch!(state.relations, relation),
+      old_tuple_data: old_record,
       tuple_data: data
     })
   end

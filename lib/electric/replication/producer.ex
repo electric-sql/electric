@@ -76,7 +76,7 @@ defmodule Electric.Replication.Producer do
     new_record = %NewRecord{relation: {relation.namespace, relation.name}, record: data}
 
     {lsn, txn} = state.transaction
-    txn = %{txn | changes: Enum.reverse([new_record | txn.changes])}
+    txn = %{txn | changes: [new_record | txn.changes]}
 
     {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
@@ -94,7 +94,7 @@ defmodule Electric.Replication.Producer do
     }
 
     {lsn, txn} = state.transaction
-    txn = %{txn | changes: Enum.reverse([updated_record | txn.changes])}
+    txn = %{txn | changes: [updated_record | txn.changes]}
 
     {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
@@ -114,7 +114,7 @@ defmodule Electric.Replication.Producer do
     }
 
     {lsn, txn} = state.transaction
-    txn = %{txn | changes: Enum.reverse([deleted_record | txn.changes])}
+    txn = %{txn | changes: [deleted_record | txn.changes]}
 
     {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
@@ -130,7 +130,7 @@ defmodule Electric.Replication.Producer do
       end
 
     {lsn, txn} = state.transaction
-    txn = %{txn | changes: Enum.reverse(truncated_relations ++ txn.changes)}
+    txn = %{txn | changes: Enum.reverse(truncated_relations) ++ txn.changes}
 
     {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
@@ -142,7 +142,7 @@ defmodule Electric.Replication.Producer do
          %State{transaction: {current_txn_lsn, txn}, conn: conn, queue: queue} = state
        )
        when commit_lsn == current_txn_lsn do
-    event = {txn, end_lsn, conn}
+    event = {Map.update!(txn, :changes, &Enum.reverse/1), end_lsn, conn}
 
     queue = :queue.in(event, queue)
     state = %{state | queue: queue, transaction: nil}
