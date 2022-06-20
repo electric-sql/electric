@@ -2,10 +2,12 @@ defmodule Electric.Replication do
   use Broadway
 
   alias Broadway.Message
-  alias __MODULE__
+  alias Electric.Replication
 
   alias Replication.Config
   alias Replication.Changes.Transaction
+
+  require Logger
 
   def start_link(_opts) do
     Broadway.start_link(
@@ -31,7 +33,7 @@ defmodule Electric.Replication do
 
   @impl true
   def handle_message(_, %Message{data: %Transaction{changes: changes}} = message, _) do
-    IO.inspect({:message, message})
+    Logger.debug(inspect({:message, message}, pretty: true))
 
     errors =
       changes
@@ -61,8 +63,8 @@ defmodule Electric.Replication do
       |> Enum.at(0)
 
     %{acknowledger: {_, _, {conn, end_lsn}}} = last_message
-    IO.inspect({:ack, end_lsn})
+    Logger.debug(inspect({:ack, end_lsn}))
 
-    Replication.Client.acknowledge_lsn(conn, end_lsn)
+    Replication.PostgresClient.acknowledge_lsn(conn, end_lsn)
   end
 end
