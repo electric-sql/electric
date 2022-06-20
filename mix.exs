@@ -32,8 +32,8 @@ defmodule Electric.MixProject do
        git: "git@github.com:vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
       {:broadway, "~> 0.6"},
       {:epgsql, "~> 4.2"},
+      {:ranch, "~> 2.1"},
       {:mox, "~> 1.0.2"},
-      {:pgoutput_decoder, "~> 0.1.0"},
       # TODO: shouldn't be needed, here for convenience
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16.3"}

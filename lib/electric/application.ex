@@ -6,7 +6,8 @@ defmodule Electric.Application do
   def start(_type, _args) do
     children = [
       Electric.VaxRepo,
-      {Electric.Replication, Application.get_env(:electric, Electric.Replication)}
+      {Electric.Replication, Application.get_env(:electric, Electric.Replication)},
+      Electric.ReplicationServer.Postgres
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
