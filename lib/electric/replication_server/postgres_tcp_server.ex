@@ -3,6 +3,8 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
   @behaviour :ranch_protocol
   require Logger
 
+  alias Electric.Postgres.Messaging
+
   defstruct socket: nil,
             transport: nil,
             client: nil,
@@ -46,7 +48,7 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
       {:ok, <<1234::16, 5680::16>>} ->
         # GSSAPI encrypted connection request
         # Deny the request and continue establishing the connection
-        :ok = state.transport.send(state.socket, "N")
+        tcp_send(Messaging.deny_upgrade_request(), state)
         Logger.debug("SSL upgrade denied")
         {:noreply, state, {:continue, :establish_connection}}
 
@@ -57,7 +59,7 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
 
   def handle_continue({:cancel, <<0::14, b::15, c::3>>, 0}, state) do
     pid = :c.pid(0, b, c)
-    Logger.debug("Cancellation request issued for #{inspect pid}")
+    Logger.debug("Cancellation request issued for #{inspect(pid)}")
     send(pid, :cancel_operation)
     state.transport.close(state.socket)
     {:stop, :normal, state}
@@ -65,14 +67,24 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
 
   def handle_continue(:upgrade_connection_to_ssl, %{accept_ssl: false} = state) do
     # Deny the upgrade request and continue establishing the connection
-    :ok = state.transport.send(state.socket, "N")
+    tcp_send(Messaging.deny_upgrade_request(), state)
     Logger.debug("SSL upgrade denied")
     {:noreply, state, {:continue, :establish_connection}}
   end
 
   @impl true
   def handle_info({:tcp, socket, <<?Q, _::32, data::binary>>}, state) do
-    IO.inspect(data |> String.trim_trailing(<<0>>), label: "Query")
+    query = String.trim_trailing(data, <<0>>)
+    Logger.debug("Query received: #{inspect(query)}")
+
+    case query do
+      "SELECT pg_catalog.set_config('search_path', '', false);" ->
+        Messaging.row_description(set_config: [type: :text])
+        |> Messaging.data_row([""])
+        |> Messaging.command_complete("SELECT 1")
+        |> Messaging.ready()
+        |> tcp_send(state)
+    end
 
     :ok = state.transport.setopts(socket, active: :once)
     {:noreply, state}
@@ -87,8 +99,9 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
 
   @impl true
   def handle_info(:cancel_operation, state) do
-    send_error(state, "57014", "Query has been cancelled by the client")
-    send(state, ?Z, <<?I>>)
+    Messaging.error(:fatal, code: "57014", message: "Query has been cancelled by the client")
+    |> Messaging.ready()
+    |> tcp_send(state)
 
     {:noreply, state}
   end
@@ -107,34 +120,36 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
       |> Enum.chunk_every(2)
       |> Map.new(&List.to_tuple/1)
 
-    send(state, ?R, <<0::integer-32>>)
-    send(state, ?K, <<pid_as_int(self())::binary, 0::integer-32>>)
-    send(state, ?Z, <<?I>>)
+    if settings["replication"] == "database" do
+      Messaging.authentication_ok()
+      |> Messaging.backend_key_data(serialize_pid(self()), 0)
+      |> Messaging.ready()
+      |> tcp_send(state)
 
-    Logger.debug("Connection established with #{inspect(state.client)}")
+      Logger.debug(
+        "Connection established with #{inspect(state.client)}, config: #{inspect(settings, pretty: true)}"
+      )
 
-    :ok = state.transport.setopts(state.socket, active: :once)
-    {:noreply, %__MODULE__{state | settings: settings}}
+      :ok = state.transport.setopts(state.socket, active: :once)
+      {:noreply, %__MODULE__{state | settings: settings}}
+    else
+      Messaging.error(:fatal,
+        code: "08004",
+        message: "Electric mesh allows connection only in `replication=database` mode"
+      )
+      |> tcp_send(state)
+
+      state.transport.close(state.socket)
+      {:stop, :normal, state}
+    end
   end
 
-  defp send(%__MODULE__{transport: transport, socket: socket}, tag, data) do
-    <<tag, byte_size(data) + 4::integer-32, data::binary>>
-    |> tap(&Logger.debug("Sending #{inspect(&1)} to client"))
-    |> then(&transport.send(socket, &1))
+  defp tcp_send(data, %__MODULE__{transport: transport, socket: socket}) when is_binary(data) do
+    Logger.debug("Sending #{inspect(data)} to client")
+    transport.send(socket, data)
   end
 
-  defp send_error(state, severity \\ :fatal, code, message) do
-    %{
-      ?S => String.upcase(to_string(severity)),
-      ?V => String.upcase(to_string(severity)),
-      ?C => code,
-      ?M => message
-    }
-    |> Enum.map_join(fn {k, v} -> <<k, v::binary, 0>> end)
-    |> then(&send(state, ?E, <<&1::binary, 0>>))
-  end
-
-  def pid_as_int(pid) do
+  def serialize_pid(pid) do
     [_, b, c] =
       pid
       |> :erlang.pid_to_list()
@@ -142,6 +157,6 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
       |> String.split([">", "<", "."], trim: true)
       |> Enum.map(&String.to_integer/1)
 
-    <<0::14, b::15,c::3>>
+    <<0::14, b::15, c::3>>
   end
 end
