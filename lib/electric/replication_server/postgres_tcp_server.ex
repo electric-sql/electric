@@ -24,9 +24,10 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
   @impl GenServer
   def handle_continue({:handshake, ref}, state) do
     {:ok, socket} = :ranch.handshake(ref)
-    {:ok, client} = :inet.peername(socket)
-    Logger.debug("Connection initialized by #{inspect(client)}")
+    {:ok, {ip, port}} = :inet.peername(socket)
+    client = "#{:inet.ntoa(ip)}:#{port}"
     Logger.metadata(client: client)
+    Logger.debug("Connection initialized by #{client}")
 
     {:noreply, %__MODULE__{state | socket: socket, client: client},
      {:continue, :establish_connection}}
@@ -73,7 +74,16 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
   end
 
   @impl true
+  def handle_info({:tcp, socket, <<?X, 4::32>>}, state) do
+    Logger.debug("Session terminated by the client")
+    state.transport.close(socket)
+    {:stop, :normal, state}
+  end
+
+  @impl true
   def handle_info({:tcp, socket, <<?Q, _::32, data::binary>>}, state) do
+    IO.inspect(Logger.metadata())
+
     query = String.trim_trailing(data, <<0>>)
     Logger.debug("Query received: #{inspect(query)}")
 
@@ -82,6 +92,23 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
         Messaging.row_description(set_config: [type: :text])
         |> Messaging.data_row([""])
         |> Messaging.command_complete("SELECT 1")
+        |> Messaging.ready()
+        |> tcp_send(state)
+
+      "IDENTIFY_SYSTEM" <> _ ->
+        Messaging.row_description(
+          systemid: [type: :text],
+          timeline: [type: :int4],
+          xlogpos: [type: :text],
+          dbname: [type: :text]
+        )
+        |> Messaging.data_row([
+          to_string(node(self())),
+          "1",
+          "0/10",
+          state.settings["database"]
+        ])
+        |> Messaging.command_complete("IDENTIFY_SYSTEM")
         |> Messaging.ready()
         |> tcp_send(state)
     end

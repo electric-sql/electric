@@ -6,4 +6,6 @@ config :electric, Electric.Replication,
   producer: Electric.Replication.Producer
 
 # Do not include metadata nor timestamps in development logs
-config :logger, :console, format: "[$level] $message\n"
+config :logger, :console,
+  format: "[$level] $metadata $message \n",
+  metadata: [:client, :connection]
