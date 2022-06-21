@@ -122,6 +122,11 @@ defmodule Electric.ReplicationServer.PostgresTcpServer do
 
     if settings["replication"] == "database" do
       Messaging.authentication_ok()
+      |> Messaging.parameter_status("application_name", settings["application_name"])
+      |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
+      |> Messaging.parameter_status("server_encoding", "UTF8")
+      |> Messaging.parameter_status("server_version", "electric-0.0.1")
+      |> Messaging.parameter_status("standard_conforming_strings", "on")
       |> Messaging.backend_key_data(serialize_pid(self()), 0)
       |> Messaging.ready()
       |> tcp_send(state)

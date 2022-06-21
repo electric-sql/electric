@@ -27,6 +27,14 @@ defmodule Electric.Postgres.Messaging do
   @spec ready(binary()) :: binary()
   def ready(prev \\ ""), do: prev <> tagged_message(?Z, "I")
 
+  def parameter_status(prev \\ "", name, value)
+
+  def parameter_status(prev, name, value) when is_atom(name),
+    do: parameter_status(prev, to_string(name), value)
+
+  def parameter_status(prev, name, value) when is_binary(name) and is_binary(value),
+    do: prev <> tagged_message(?S, str(name) <> str(value))
+
   @spec authentication_ok(binary()) :: binary()
   def authentication_ok(prev \\ ""), do: prev <> tagged_message(?R, <<0::32>>)
 
