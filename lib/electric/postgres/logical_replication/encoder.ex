@@ -189,7 +189,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
         [] -> 0
       end
 
-    <<flag::integer-8, name::binary, 0, OidDatabase.type_id_for_name(type)::integer-32,
+    <<flag::integer-8, name::binary, 0, OidDatabase.oid_for_name(type)::integer-32,
       modifier::integer-32>>
   end
 end
