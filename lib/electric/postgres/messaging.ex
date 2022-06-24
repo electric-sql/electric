@@ -4,6 +4,7 @@ defmodule Electric.Postgres.Messaging do
   """
 
   alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.LogicalReplication.Messages.Lsn
 
   @error_severity_levels [:error, :fatal, :panic]
   @notice_severity_levels [:warning, :notice, :debug, :info, :log]
@@ -48,16 +49,18 @@ defmodule Electric.Postgres.Messaging do
   def query_response(prev \\ "", command, fields, data) do
     prev
     |> row_description(fields)
-    |> then(fn x -> Enum.reduce(data, x, &data_row(&2, &1)) end)
+    |> data_rows(data)
     |> command_complete(command)
     |> ready()
   end
 
   def row_description(prev \\ "", fields) when is_list(fields) do
     data =
-      for {field_name, attrs} <- fields, into: <<length(fields)::16>> do
+      for {field_name, attrs_or_type} <- fields, into: <<length(fields)::16>> do
+        attrs = if is_list(attrs_or_type), do: attrs_or_type, else: [type: attrs_or_type]
         table_oid = Keyword.get(attrs, :table_oid, 0)
         column_attr = Keyword.get(attrs, :column_attr, 0)
+
         {type_oid, type_size, type_mod} = get_type_information(Keyword.fetch!(attrs, :type))
 
         <<str(field_name)::binary, table_oid::32, column_attr::16, type_oid::32, type_size::16,
@@ -75,6 +78,10 @@ defmodule Electric.Postgres.Messaging do
     {oid, len, modifier}
   end
 
+  def data_rows(prev \\ "", rows) do
+    Enum.reduce(rows, prev, &data_row(&2, &1))
+  end
+
   def data_row(prev \\ "", data)
   def data_row(prev, data) when is_tuple(data), do: data_row(prev, Tuple.to_list(data))
 
@@ -85,6 +92,29 @@ defmodule Electric.Postgres.Messaging do
       x when is_binary(x) -> <<byte_size(x)::32, x::binary>>
     end)
     |> then(&(prev <> tagged_message(?D, &1)))
+  end
+
+  def start_copy_mode(prev \\ ""), do: prev <> tagged_message(?W, <<0::8, 0::16>>)
+  def end_copy_mode(prev \\ ""), do: prev <> tagged_message(?c, <<>>)
+
+  def copy_data(prev \\ "", data)
+  def copy_data(prev, data) when is_binary(data), do: prev <> tagged_message(?d, data)
+  def copy_data(prev, data) when is_list(data), do: Enum.reduce(data, prev, &copy_data(&2, &1))
+
+  def replication_keepalive(prev \\ "", current_lsn)
+  def replication_keepalive(prev, %Lsn{segment: s, offset: o}) do
+    <<full_lsn::64>> = <<s::32, o::32>>
+    replication_keepalive(prev, full_lsn)
+  end
+  def replication_keepalive(prev, wal) when is_integer(wal) do
+    clock = timestamp_to_pgtimestamp(DateTime.now!("UTC"))
+    copy_data(prev, <<?k, wal::64, clock::64, 0>>)
+  end
+
+  def replication_log(prev \\ "", start_wal, current_wal, replication_message) do
+    clock = timestamp_to_pgtimestamp(DateTime.now!("UTC"))
+    data = Electric.Postgres.LogicalReplication.encode_message(replication_message)
+    copy_data(prev, <<?w, start_wal::64, current_wal::64, clock::64, data::binary>>)
   end
 
   @spec error(binary(), :error | :fatal | :panic, error_and_notice_fields()) :: binary()
@@ -128,5 +158,10 @@ defmodule Electric.Postgres.Messaging do
   @spec tagged_message(tag :: non_neg_integer(), data :: binary()) :: binary()
   defp tagged_message(tag, data) when is_integer(tag) do
     <<tag, byte_size(data) + 4::integer-32, data::binary>>
+  end
+
+  @pg_epoch DateTime.from_iso8601("2000-01-01T00:00:00.000000Z") |> elem(1)
+  defp timestamp_to_pgtimestamp(datetime) when is_struct(datetime, DateTime) do
+    DateTime.diff(datetime, @pg_epoch, :microsecond)
   end
 end
