@@ -8,7 +8,7 @@ defmodule Electric.ReplicationServer.Postgres do
       __MODULE__,
       :ranch_tcp,
       opts,
-      Electric.ReplicationServer.PostgresTcpServer,
+      Electric.ReplicationServer.Postgres.TcpServer,
       []
     )
   end
