@@ -5,6 +5,7 @@ defmodule Electric.Application do
 
   def start(_type, _args) do
     children = [
+      Electric.Postgres.SchemaRegistry,
       Electric.VaxRepo,
       {Electric.Replication, Application.get_env(:electric, Electric.Replication)},
       Electric.ReplicationServer.Postgres
