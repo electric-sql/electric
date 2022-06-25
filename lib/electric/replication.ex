@@ -16,20 +16,12 @@ defmodule Electric.Replication do
       name: Keyword.get(opts, :name, Replication),
       producer: [
         module: {producer, opts},
-        transformer: {Replication, :transform, []},
         concurrency: 1
       ],
       processors: [
         default: [concurrency: 1]
       ]
     )
-  end
-
-  def transform({txn, end_lsn, conn}, _opts) do
-    %Message{
-      data: txn,
-      acknowledger: {__MODULE__, :ack_id, {conn, end_lsn}}
-    }
   end
 
   @impl true
@@ -44,23 +36,21 @@ defmodule Electric.Replication do
       end
     end)
     |> case do
-      :ok -> message
-      {change, error} -> Message.failed(message, {change, error})
+      :ok ->
+        Registry.dispatch(
+          Electric.PostgresDispatcher,
+          {:publication, message.metadata.publication},
+          fn entries ->
+            Enum.each(entries, fn {pid, _slot} ->
+              send(pid, {:replication_message, message.data})
+            end)
+          end
+        )
+
+        message
+
+      {change, error} ->
+        Message.failed(message, {change, error})
     end
-  end
-
-  def ack(:ack_id, [], []), do: nil
-  def ack(:ack_id, _, [_head | _tail]), do: throw("XXX ack failure handling not yet implemented")
-
-  def ack(:ack_id, successful, []) do
-    last_message =
-      successful
-      |> Enum.reverse()
-      |> Enum.at(0)
-
-    %{acknowledger: {_, _, {conn, end_lsn}}} = last_message
-    Logger.debug(inspect({:ack, end_lsn}))
-
-    Replication.PostgresClient.acknowledge_lsn(conn, end_lsn)
   end
 end
