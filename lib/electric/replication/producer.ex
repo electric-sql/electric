@@ -2,6 +2,7 @@ defmodule Electric.Replication.Producer do
   use GenStage
 
   alias Electric.Postgres.LogicalReplication
+  alias Electric.Postgres.SchemaRegistry
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -28,6 +29,8 @@ defmodule Electric.Replication.Producer do
               queue: nil,
               relations: %{},
               transaction: nil,
+              publication: nil,
+              client: nil,
               types: %{}
   end
 
@@ -39,9 +42,17 @@ defmodule Electric.Replication.Producer do
   def init(opts) do
     pg_client = Keyword.fetch!(opts, :pg_client)
 
-    {:ok, conn} = pg_client.connect_and_start_replication(self())
+    {:ok, %{connection: conn, tables: tables, publication: publication}} =
+      pg_client.connect_and_start_replication(self())
 
-    {:producer, %State{conn: conn, queue: :queue.new()}}
+    tables
+    |> Enum.map(&Map.delete(&1, :columns))
+    |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
+
+    Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
+
+    {:producer,
+     %State{conn: conn, queue: :queue.new(), publication: publication, client: pg_client}}
   end
 
   @impl true
