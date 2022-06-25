@@ -18,7 +18,7 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
     Unsupported
   }
 
-  alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.OidDatabase
 
   @doc """
   Parses logical replication messages from Postgres pgoutput plugin

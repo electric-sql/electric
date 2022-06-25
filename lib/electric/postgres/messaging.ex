@@ -3,7 +3,7 @@ defmodule Electric.Postgres.Messaging do
   Build binary messages in the postgres communication protocol
   """
 
-  alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.OidDatabase
   alias Electric.Postgres.LogicalReplication.Messages.Lsn
 
   @error_severity_levels [:error, :fatal, :panic]

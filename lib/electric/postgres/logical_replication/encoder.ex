@@ -16,7 +16,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     Lsn
   }
 
-  alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.OidDatabase
 
   @doc """
   Encode a message to Postgres binary logical replication format

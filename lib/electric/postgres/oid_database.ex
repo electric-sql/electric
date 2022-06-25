@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.LogicalReplication.OidDatabase do
+defmodule Electric.Postgres.OidDatabase do
   # TODO: This really should be queried from Postgres at system startup and cached in ETS
   @pg_oid_values """
                           typname         | oid  | typarray | typlen
