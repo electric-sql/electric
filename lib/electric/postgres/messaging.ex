@@ -59,11 +59,11 @@ defmodule Electric.Postgres.Messaging do
       for {field_name, attrs_or_type} <- fields, into: <<length(fields)::16>> do
         attrs = if is_list(attrs_or_type), do: attrs_or_type, else: [type: attrs_or_type]
         table_oid = Keyword.get(attrs, :table_oid, 0)
-        column_attr = Keyword.get(attrs, :column_attr, 0)
+        column_index = Keyword.get(attrs, :column_index, 0)
 
         {type_oid, type_size, type_mod} = get_type_information(Keyword.fetch!(attrs, :type))
 
-        <<str(field_name)::binary, table_oid::32, column_attr::16, type_oid::32, type_size::16,
+        <<str(field_name)::binary, table_oid::32, column_index::16, type_oid::32, type_size::16,
           type_mod::32, 0::16>>
       end
 
@@ -87,6 +87,13 @@ defmodule Electric.Postgres.Messaging do
 
   def data_row(prev, data) when is_list(data) do
     data
+    |> Enum.map(fn
+      x when is_binary(x) -> x
+      x when is_integer(x) -> to_string(x)
+      true -> "t"
+      false -> "f"
+      nil -> nil
+    end)
     |> Enum.into(<<length(data)::16>>, fn
       nil -> <<-1::32>>
       x when is_binary(x) -> <<byte_size(x)::32, x::binary>>
@@ -102,19 +109,32 @@ defmodule Electric.Postgres.Messaging do
   def copy_data(prev, data) when is_list(data), do: Enum.reduce(data, prev, &copy_data(&2, &1))
 
   def replication_keepalive(prev \\ "", current_lsn)
+
   def replication_keepalive(prev, %Lsn{segment: s, offset: o}) do
     <<full_lsn::64>> = <<s::32, o::32>>
     replication_keepalive(prev, full_lsn)
   end
+
   def replication_keepalive(prev, wal) when is_integer(wal) do
-    clock = timestamp_to_pgtimestamp(DateTime.now!("UTC"))
+    clock = timestamp_to_pgtimestamp(DateTime.now!("Etc/UTC"))
     copy_data(prev, <<?k, wal::64, clock::64, 0>>)
   end
 
-  def replication_log(prev \\ "", start_wal, current_wal, replication_message) do
-    clock = timestamp_to_pgtimestamp(DateTime.now!("UTC"))
+  def replication_log(prev \\ "", start_lsn, current_lsn, replication_message)
+
+  def replication_log(prev, start_lsn, current_lsn, replication_message)
+      when is_struct(start_lsn),
+      do: replication_log(prev, Lsn.to_integer(start_lsn), current_lsn, replication_message)
+
+  def replication_log(prev, start_lsn, current_lsn, replication_message)
+      when is_struct(current_lsn),
+      do: replication_log(prev, start_lsn, Lsn.to_integer(current_lsn), replication_message)
+
+  def replication_log(prev, start_lsn, current_lsn, replication_message)
+      when is_integer(start_lsn) and is_integer(current_lsn) do
+    clock = timestamp_to_pgtimestamp(DateTime.now!("Etc/UTC"))
     data = Electric.Postgres.LogicalReplication.encode_message(replication_message)
-    copy_data(prev, <<?w, start_wal::64, current_wal::64, clock::64, data::binary>>)
+    copy_data(prev, <<?w, start_lsn::64, current_lsn::64, clock::64, data::binary>>)
   end
 
   @spec error(binary(), :error | :fatal | :panic, error_and_notice_fields()) :: binary()
