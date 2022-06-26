@@ -1,4 +1,14 @@
 defmodule Electric.ReplicationServer.Postgres.SlotServer do
+  @moduledoc """
+  Server to collect the upstream transaction and send them downstream to the subscriber
+
+  This server keeps track of the latest LSN sent, and converts the incoming replication
+  changes to the Postgres logical replication messages, with correctly incrementing LSNs.
+
+  Although the server supports being in a disconnected state (i.e. collecting messages
+  onto a queue and draining the queue on `start_replication` command), that functionality
+  is missing since the slot server dies along with the TCP socket.
+  """
   use GenServer
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
@@ -42,7 +52,14 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   end
 
   @impl true
+  def handle_continue({:backfill, start_lsn}, %{queue: []} = state) do
+    send(self(), :send_keepalive)
+    {:noreply, %{state | current_lsn: start_lsn}}
+  end
+
+  @impl true
   def handle_continue({:backfill, start_lsn}, state) do
+    send(self(), :send_keepalive)
     state.queue
     |> Enum.filter(fn {lsn, _} -> Lsn.compare(lsn, start_lsn) != :lt end)
     |> drain_queue(state.send_fn)

@@ -60,6 +60,8 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   > `CREATE_REPLICATION_SLOT ... USE_SNAPSHOT` and `DROP_REPLICATION_SLOT` commands.
   > This is an explicit decision, because this part of the process can be turned off on the
   > subscriber, using `CREATE SUBSCRIPTION ... WITH (copy_data = false)` command.
+  >
+  > TODO: Support creation of a fake replication slot & sending a null response to the `COPY` command
 
   After replication connection has been established, the subscriber will do the initial synchronization. For that purpose, it will
   create a temporary replication slot with data snapshot usable only within the transaction, and then ask the server to stream all the data it has.
@@ -136,6 +138,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
 
   @impl GenServer
   def handle_continue({:handshake, ref}, state) do
+    # Accept socket from Ranch and try to talk Postgres with it
     {:ok, socket} = :ranch.handshake(ref)
     {:ok, {ip, port}} = :inet.peername(socket)
     client = "#{:inet.ntoa(ip)}:#{port}"
@@ -243,6 +246,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:tcp, socket, <<?c, 4::32>>}, %{mode: :copy} = state) do
     # End copy mode
 
@@ -258,8 +262,10 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     {:noreply, %{state | mode: :normal, slot: nil}}
   end
 
+  @impl true
   def handle_info({:tcp, socket, <<?d, _::32, ?r, data::binary>>}, %{mode: :copy} = state) do
     # Copy mode client status report
+    # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
     <<_written_wal::64, _flushed_wal::64, _applied_wal::64, _client_timestamp::64,
       immediate_response::8>> = data
 
@@ -273,9 +279,16 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
 
   @impl true
   def handle_info({:tcp, socket, data}, state) do
-    IO.inspect(data)
-    :ok = state.transport.setopts(socket, active: :once)
-    {:noreply, state}
+    # Unknown / unexpected message from the client
+    Logger.warn("Received unexpected message in mode #{state.mode}: #{inspect(data)}")
+
+    Messaging.error(:fatal,
+      code: "08P01",
+      message: "Unexpected message during connection"
+    )
+    |> tcp_send(state)
+    state.transport.close(socket)
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -295,6 +308,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   end
 
   defp initialize_connection(%__MODULE__{} = state, %{"replication" => "database"} = settings) do
+    # TODO: Verify the server settings, maybe make them dynamic?
     Messaging.authentication_ok()
     |> Messaging.parameter_status("application_name", settings["application_name"])
     |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
@@ -326,6 +340,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   end
 
   defp handle_query(["SELECT", "pg_catalog.set_config('search_path', '', false)"], _) do
+    # Query to reset the search path, noop for us
     Messaging.row_description(set_config: [type: :text])
     |> Messaging.data_row([""])
     |> Messaging.command_complete("SELECT 1")
@@ -340,6 +355,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
          ],
          _
        ) do
+    # Listing all tables in the publication, as set in the schema registry
     with [pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
          {:ok, tables} <- SchemaRegistry.fetch_replicated_tables(pub) do
       Messaging.row_description(schemaname: :name, tablename: :name)
@@ -357,6 +373,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
          ],
          _
        ) do
+    # Getting the information about a particular table
     [schema, table] =
       Regex.run(~r/n\.nspname = '([^']+)' AND c\.relname = '([^']+)'/, where,
         capture: :all_but_first
@@ -370,6 +387,8 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     |> Messaging.ready()
   end
 
+  # Query is truncated here as it's too long. Full version is available in the module documentation.
+  # This does match other queries, but we don't expect them to be actually ran against this server.
   defp handle_query(
          [
            "SELECT",
@@ -378,6 +397,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
          ],
          _
        ) do
+    # Getting information about the columns within a table
     [target_oid] = Regex.run(~r/a\.attrelid = (\d+)/, rest, capture: :all_but_first)
     {:ok, columns} = SchemaRegistry.fetch_table_columns(String.to_integer(target_oid))
 
@@ -390,6 +410,10 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   end
 
   defp handle_query(["IDENTIFY_SYSTEM"], state) do
+    # Getting system information
+    # TODO: we're sending over `0/1` lsn as a consistent point of the system since that's
+    #       what the slot are going to be started from. Is that going to be an issue when
+    #       the client reconnects?
     Messaging.row_description(
       systemid: [type: :text],
       timeline: [type: :int4],
@@ -430,12 +454,12 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
 
     Logger.debug("Starting replication mode for slot #{slot_name} (publication '#{publication}')")
 
-    # TODO: This call might not be required once we introduce persistent slot management
+    # TODO: This call might not be required once we introduce persistent slot management,
+    #       but right now the slot servers stop as soon as the TCP connection stops, so we
+    #       just start a new slot server upon request.
     SlotServer.start_link(slot: slot_name)
-    current_lsn = SlotServer.get_current_lsn(slot_name)
 
     Messaging.start_copy_mode()
-    |> Messaging.replication_keepalive(current_lsn)
     |> tcp_send(state)
 
     SlotServer.start_replication(slot_name, &tcp_send(&1, state), publication, target_lsn)
@@ -444,6 +468,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   end
 
   defp handle_query(["CREATE_REPLICATION_SLOT", args], state) do
+    # Create a replication slot
     case String.split(args, " ", trim: true) do
       [_name, "LOGICAL", "pgoutput", "EXPORT_SNAPSHOT"] ->
         Messaging.error(:error,
@@ -469,6 +494,11 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
       [name_quoted, "LOGICAL", "pgoutput", "NOEXPORT_SNAPSHOT"] ->
         name = String.trim(name_quoted, ~s|"|)
 
+        # TODO: Currently we don't actually store any slot state persistently;
+        #       moreover, the slot server dies as soon as the TCP connection dies
+        #       instead of collecting ongoing changes. We likely want to change that,
+        #       so that we at least support backfilling reconnecting clients while
+        #       the elixir node is alive.
         case SlotServer.start_link(socket: state.socket, slot: name) do
           {:error, {:already_started, _}} ->
             Messaging.error(:error,
