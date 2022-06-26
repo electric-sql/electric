@@ -12,10 +12,10 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     Delete,
     Truncate,
     Type,
-    Unsupported,
-    Lsn
+    Unsupported
   }
 
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.OidDatabase
 
   @doc """

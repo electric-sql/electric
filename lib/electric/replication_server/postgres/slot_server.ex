@@ -1,6 +1,6 @@
 defmodule Electric.ReplicationServer.Postgres.SlotServer do
   use GenServer
-  alias Electric.Postgres.LogicalReplication.Messages.Lsn
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
   alias Electric.Postgres.SchemaRegistry

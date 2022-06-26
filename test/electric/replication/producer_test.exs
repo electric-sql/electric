@@ -89,7 +89,7 @@ defmodule Electric.Replication.ProducerTest do
 
   defp begin() do
     %{
-      lsn: %Messages.Lsn{segment: Enum.random(0..0xFF), offset: Enum.random(1..0xFFFFFFFF)},
+      lsn: %Lsn{segment: Enum.random(0..0xFF), offset: Enum.random(1..0xFFFFFFFF)},
       actions: [],
       relations: %{}
     }

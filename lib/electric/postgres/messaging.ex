@@ -1,10 +1,14 @@
 defmodule Electric.Postgres.Messaging do
   @moduledoc """
   Build binary messages in the postgres communication protocol
+
+  It implements only a required subsection of the protocol described
+  [in Postgres documentation] (https://www.postgresql.org/docs/current/protocol-message-formats.html),
+  and only the backend side (messages marked as `(B)`)
   """
 
   alias Electric.Postgres.OidDatabase
-  alias Electric.Postgres.LogicalReplication.Messages.Lsn
+  alias Electric.Postgres.Lsn
 
   @error_severity_levels [:error, :fatal, :panic]
   @notice_severity_levels [:warning, :notice, :debug, :info, :log]
@@ -110,9 +114,8 @@ defmodule Electric.Postgres.Messaging do
 
   def replication_keepalive(prev \\ "", current_lsn)
 
-  def replication_keepalive(prev, %Lsn{segment: s, offset: o}) do
-    <<full_lsn::64>> = <<s::32, o::32>>
-    replication_keepalive(prev, full_lsn)
+  def replication_keepalive(prev, %Lsn{} = lsn) do
+    replication_keepalive(prev, Lsn.to_integer(lsn))
   end
 
   def replication_keepalive(prev, wal) when is_integer(wal) do

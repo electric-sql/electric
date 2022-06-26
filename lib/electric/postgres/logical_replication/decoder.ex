@@ -14,11 +14,11 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
     Delete,
     Truncate,
     Type,
-    Lsn,
     Unsupported
   }
 
   alias Electric.Postgres.OidDatabase
+  alias Electric.Postgres.Lsn
 
   @doc """
   Parses logical replication messages from Postgres pgoutput plugin

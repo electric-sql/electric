@@ -82,17 +82,25 @@ defmodule Electric.Postgres.OidDatabase do
                   {String.to_atom(name), String.to_integer(oid), String.to_integer(array_oid), String.to_integer(len)}
                  end)
 
-
+  @doc """
+  Get an atom name by the type OID
+  """
   # TODO: Handle array oid type lookup
   for {type_name, oid, _, _} <- @pg_oid_values do
     def name_for_oid(unquote(oid)), do: unquote(type_name)
   end
   def name_for_oid(_), do: :unknown
 
+  @doc """
+  Get the type OID by the name atom
+  """
   for {type_name, oid, _, _} <- @pg_oid_values do
     def oid_for_name(unquote(type_name)), do: unquote(oid)
   end
 
+  @doc """
+  Get type length of a type. Negative values mean the type is variable-length
+  """
   for {type_name, oid, _, len} <- @pg_oid_values do
     def type_length(unquote(oid)), do: unquote(len)
     def type_length(unquote(type_name)), do: unquote(len)

@@ -114,7 +114,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.OidDatabase
   alias Electric.ReplicationServer.Postgres.SlotServer
-  alias Electric.Postgres.LogicalReplication.Messages.Lsn
+  alias Electric.Postgres.Lsn
 
   defstruct socket: nil,
             transport: nil,
