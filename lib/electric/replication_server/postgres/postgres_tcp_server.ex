@@ -55,6 +55,12 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
 
   ### After first replication start
 
+  > #### Note!
+  > This section is not supported yet, namely we don't support `COPY`,
+  > `CREATE_REPLICATION_SLOT ... USE_SNAPSHOT` and `DROP_REPLICATION_SLOT` commands.
+  > This is an explicit decision, because this part of the process can be turned off on the
+  > subscriber, using `CREATE SUBSCRIPTION ... WITH (copy_data = false)` command.
+
   After replication connection has been established, the subscriber will do the initial synchronization. For that purpose, it will
   create a temporary replication slot with data snapshot usable only within the transaction, and then ask the server to stream all the data it has.
   Right now we don't support streaming historic data, but we nonetheless support the commands so that the client thinks that everything is fine.
