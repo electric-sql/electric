@@ -10,3 +10,10 @@ config :electric, Electric.PostgresRepo,
   database: "electric",
   username: "electric",
   password: "password"
+
+config :electric, Electric.PostgresRepo2,
+  hostname: "localhost",
+  port: 54322,
+  database: "electric",
+  username: "electric",
+  password: "password"

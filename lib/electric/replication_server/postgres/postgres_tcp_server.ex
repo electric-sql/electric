@@ -443,6 +443,12 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     |> Messaging.ready()
   end
 
+  # no op
+  defp handle_query(["DROP_REPLICATION_SLOT" | _args], _) do
+    Messaging.command_complete("DROP_REPLICATION_SLOT")
+    |> Messaging.ready()
+  end
+
   defp handle_query(["START_REPLICATION", args], state) do
     ["SLOT", slot_name, "LOGICAL", lsn_string | options] =
       String.split(args, " ", trim: true, parts: 5)
