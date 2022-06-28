@@ -18,7 +18,8 @@ defmodule Electric.Replication.Row do
       id: schema <> ":" <> table <> ":" <> id,
       table: table,
       schema: schema,
-      row: record
+      row: record,
+      deleted?: false
     }
   end
 

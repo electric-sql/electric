@@ -6,7 +6,7 @@ defmodule Electric.Replication.Changes do
   defmodule NewRecord do
     defstruct [:relation, :record]
 
-    defimpl Electric.Replication.ToVaxine, for: __MODULE__ do
+    defimpl Electric.Replication.ToVaxine do
       alias Electric.Replication.Row
       alias Electric.VaxRepo
 
@@ -24,7 +24,7 @@ defmodule Electric.Replication.Changes do
   defmodule UpdatedRecord do
     defstruct [:relation, :old_record, :record]
 
-    defimpl Electric.Replication.ToVaxine, for: __MODULE__ do
+    defimpl Electric.Replication.ToVaxine do
       alias Electric.Replication.Row
 
       def handle_change(%{old_record: old_record, record: new_record, relation: {schema, table}}) do
@@ -43,7 +43,7 @@ defmodule Electric.Replication.Changes do
   defmodule DeletedRecord do
     defstruct [:relation, :old_record]
 
-    defimpl Electric.Replication.ToVaxine, for: __MODULE__ do
+    defimpl Electric.Replication.ToVaxine do
       alias Electric.Replication.Row
 
       def handle_change(%{old_record: old_record, relation: {schema, table}}) do
