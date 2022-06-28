@@ -287,6 +287,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
       message: "Unexpected message during connection"
     )
     |> tcp_send(state)
+
     state.transport.close(socket)
     {:stop, :normal, state}
   end

@@ -60,6 +60,7 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   @impl true
   def handle_continue({:backfill, start_lsn}, state) do
     send(self(), :send_keepalive)
+
     state.queue
     |> Enum.filter(fn {lsn, _} -> Lsn.compare(lsn, start_lsn) != :lt end)
     |> drain_queue(state.send_fn)
