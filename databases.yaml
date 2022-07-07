@@ -7,7 +7,7 @@ services:
     restart: always
     environment:
       RING_SIZE: "1"
-      ANTIDOTE_TXN_CERT: "true"
+      ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
       ANTIDOTE_TXN_PROT: "clocksi"
       ANTIDOTE_RECOVER_FROM_LOG: "true"
       ANTIDOTE_META_DATA_ON_START: "true"
@@ -37,7 +37,7 @@ services:
       - config_file=/etc/postgresql.conf
 
   db_b:
-    image: postgres
+    image: postgres:13
     restart: always
     environment:
       POSTGRES_DB: electric

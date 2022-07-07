@@ -3,6 +3,7 @@ defmodule Electric.Replication do
 
   alias Broadway.Message
   alias Electric.Replication
+  alias Electric.VaxRepo
 
   alias Replication.Changes.Transaction
 
@@ -29,12 +30,7 @@ defmodule Electric.Replication do
     Logger.debug(inspect({:message, message}, pretty: true))
 
     changes
-    |> Enum.reduce_while(:ok, fn change, :ok ->
-      case Electric.Replication.ToVaxine.handle_change(change) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, {change, error}}
-      end
-    end)
+    |> process_changes()
     |> case do
       :ok ->
         Registry.dispatch(
@@ -52,5 +48,17 @@ defmodule Electric.Replication do
       {change, error} ->
         Message.failed(message, {change, error})
     end
+  end
+
+  defp process_changes(changes) do
+    VaxRepo.transaction(fn ->
+      changes
+      |> Enum.reduce_while(:ok, fn change, :ok ->
+        case Electric.Replication.ToVaxine.handle_change(change) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, {change, error}}
+        end
+      end)
+    end)
   end
 end

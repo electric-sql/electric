@@ -14,5 +14,5 @@
   "postgrex": {:hex, :postgrex, "0.16.3", "fac79a81a9a234b11c44235a4494d8565303fa4b9147acf57e48978a074971db", [:mix], [{:connection, "~> 1.1", [hex: :connection, repo: "hexpm", optional: false]}, {:db_connection, "~> 2.1", [hex: :db_connection, repo: "hexpm", optional: false]}, {:decimal, "~> 1.5 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: true]}, {:table, "~> 0.1.0", [hex: :table, repo: "hexpm", optional: true]}], "hexpm", "aeaae1d2d1322da4e5fe90d241b0a564ce03a3add09d7270fb85362166194590"},
   "ranch": {:hex, :ranch, "2.1.0", "2261f9ed9574dcfcc444106b9f6da155e6e540b2f82ba3d42b339b93673b72a3", [:make, :rebar3], [], "hexpm", "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916"},
   "telemetry": {:hex, :telemetry, "0.4.3", "a06428a514bdbc63293cd9a6263aad00ddeb66f608163bdec7c8995784080818", [:rebar3], [], "hexpm", "eb72b8365ffda5bed68a620d1da88525e326cb82a75ee61354fc24b844768041"},
-  "vax": {:git, "git@github.com:vaxine-io/vaxine.git", "8b0b285113e30f556b9a18511946e6d5d1d582dc", [sparse: "apps/vax"]},
+  "vax": {:git, "git@github.com:vaxine-io/vaxine.git", "65ba27701323bec00c5bcabbbefcfa8ffed3b05a", [sparse: "apps/vax"]},
 }
