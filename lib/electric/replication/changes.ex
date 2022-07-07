@@ -11,7 +11,10 @@ defmodule Electric.Replication.Changes do
       alias Electric.VaxRepo
 
       def handle_change(%{record: record, relation: {schema, table}}) do
-        row = Row.new(schema, table, record)
+        row =
+          schema
+          |> Row.new(table, record)
+          |> Row.force_deleted_update(false)
 
         case VaxRepo.insert(row) do
           {:ok, _} -> :ok
@@ -31,6 +34,7 @@ defmodule Electric.Replication.Changes do
         schema
         |> Row.new(table, old_record)
         |> Ecto.Changeset.change(row: new_record)
+        |> Row.force_deleted_update(false)
         |> Electric.VaxRepo.update()
         |> case do
           {:ok, _} -> :ok
@@ -49,7 +53,7 @@ defmodule Electric.Replication.Changes do
       def handle_change(%{old_record: old_record, relation: {schema, table}}) do
         schema
         |> Row.new(table, old_record)
-        |> Row.mark_as_deleted()
+        |> Row.force_deleted_update(true)
         |> Electric.VaxRepo.update()
         |> case do
           {:ok, _} -> :ok

@@ -6,7 +6,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" "dbname=$POSTGRES_DB replica
 
   CREATE TABLE entries (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    content VARCHAR(64) NOT NULL
+    content VARCHAR(64) NOT NULL,
+    content_b VARCHAR(64)
   );
 
   ALTER TABLE entries REPLICA IDENTITY FULL;

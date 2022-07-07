@@ -6,9 +6,11 @@ defmodule Electric.Replication.Row do
   schema "rows" do
     field(:table, :string)
     field(:schema, :string)
-    field(:deleted?, Vax.Types.Flag, strategy: :enable_wins)
+    field(:deleted?, Vax.Types.Flag, conflict_resolution: :disable_wins)
     field(:row, Vax.Types.Map)
   end
+
+  # A
 
   @spec new(schema :: String.t(), table :: String.t(), record :: map()) :: t()
   def new(schema, table, record) do
@@ -23,9 +25,15 @@ defmodule Electric.Replication.Row do
     }
   end
 
-  @spec mark_as_deleted(t()) :: Ecto.Changeset.t(t())
-  def mark_as_deleted(%__MODULE__{} = row) do
-    Ecto.Changeset.change(row, deleted?: true)
+  # hack, fix in vax (change is not being propagated because of default value)
+  def force_deleted_update(%__MODULE__{} = row, value) do
+    row
+    |> Ecto.Changeset.change()
+    |> force_deleted_update(value)
+  end
+
+  def force_deleted_update(%Ecto.Changeset{} = changeset, value) do
+    %{changeset | changes: Map.put(changeset.changes, :deleted?, value)}
   end
 
   # TODO: other column names?
