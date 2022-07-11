@@ -14,11 +14,11 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
     Delete,
     Truncate,
     Type,
-    Lsn,
     Unsupported
   }
 
-  alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.OidDatabase
+  alias Electric.Postgres.Lsn
 
   @doc """
   Parses logical replication messages from Postgres pgoutput plugin
@@ -251,7 +251,7 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
       %Column{
         name: name,
         flags: decoded_flags,
-        type: OidDatabase.name_for_type_id(data_type_id),
+        type: OidDatabase.name_for_oid(data_type_id),
         type_modifier: type_modifier
       }
       | accumulator

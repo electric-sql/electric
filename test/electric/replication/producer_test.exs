@@ -6,10 +6,26 @@ defmodule Electric.Replication.ProducerTest do
   alias Electric.Replication.Changes.{NewRecord, UpdatedRecord}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Postgres.Lsn
 
   setup _ do
     stub(Electric.Replication.MockPostgresClient, :connect_and_start_replication, fn _ ->
-      {:ok, nil}
+      info = %{
+        tables: [
+          %{
+            schema: "public",
+            name: "entities",
+            oid: 0,
+            replica_identity: :all_columns,
+            columns: [%{name: "entities"}]
+          }
+        ],
+        database: "postgres",
+        publication: "stub",
+        connection: nil
+      }
+
+      {:ok, info}
     end)
 
     :ok
@@ -23,7 +39,7 @@ defmodule Electric.Replication.ProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &Producer.handle_info/2)
 
-    assert [{transaction, _, _}] = events
+    assert [%Broadway.Message{data: transaction}] = events
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
 
@@ -38,7 +54,7 @@ defmodule Electric.Replication.ProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &Producer.handle_info/2)
 
-    assert [{transaction, _, _}] = events
+    assert [%Broadway.Message{data: transaction}] = events
     assert length(transaction.changes) == 4
 
     assert [
@@ -61,7 +77,7 @@ defmodule Electric.Replication.ProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &Producer.handle_info/2)
 
-    assert [{transaction, _, _}] = events
+    assert [%Broadway.Message{data: transaction}] = events
     assert length(transaction.changes) == 5
 
     assert [
@@ -74,8 +90,8 @@ defmodule Electric.Replication.ProducerTest do
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} = Producer.init(nil)
-    {_, _, state} = Producer.handle_demand(10, state)
+    {:producer, state} = Producer.init(pg_client: Electric.Replication.MockPostgresClient)
+    {_, _, state} = Producer.handle_demand(demand, state)
     state
   end
 
@@ -89,7 +105,7 @@ defmodule Electric.Replication.ProducerTest do
 
   defp begin() do
     %{
-      lsn: %Messages.Lsn{segment: Enum.random(0..0xFF), offset: Enum.random(1..0xFFFFFFFF)},
+      lsn: %Lsn{segment: Enum.random(0..0xFF), offset: Enum.random(1..0xFFFFFFFF)},
       actions: [],
       relations: %{}
     }

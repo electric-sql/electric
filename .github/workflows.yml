@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request: null
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        elixir:
+          - '1.11'
+          - '1.12'
+    container:
+      image: 'elixir:${{ matrix.elixir }}'
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker-compose -f databases.yml up -d
+      - run: mix local.hex --force
+      - run: mix local.rebar --force
+      - run: mix test
+      - run: INTEGRATION=1 mix test

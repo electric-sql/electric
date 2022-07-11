@@ -12,11 +12,11 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     Delete,
     Truncate,
     Type,
-    Unsupported,
-    Lsn
+    Unsupported
   }
 
-  alias Electric.Postgres.LogicalReplication.OidDatabase
+  alias Electric.Postgres.Lsn
+  alias Electric.Postgres.OidDatabase
 
   @doc """
   Encode a message to Postgres binary logical replication format
@@ -189,7 +189,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
         [] -> 0
       end
 
-    <<flag::integer-8, name::binary, 0, OidDatabase.type_id_for_name(type)::integer-32,
+    <<flag::integer-8, name::binary, 0, OidDatabase.oid_for_name(type)::integer-32,
       modifier::integer-32>>
   end
 end

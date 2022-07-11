@@ -23,12 +23,24 @@ defmodule Electric.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:vax, git: "git@github.com:vaxine-io/vaxine.git", sparse: "apps/vax"},
+      {:antidote_pb_codec,
+       git: "git@github.com:vaxine-io/vaxine.git",
+       sparse: "apps/antidote_pb_codec",
+       override: true},
+      {:antidotec_pb,
+       git: "git@github.com:vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
       {:broadway, "~> 0.6"},
       {:epgsql, "~> 4.2"},
-      {:mox, "~> 1.0.2"}
+      {:ranch, "~> 2.1"},
+      {:mox, "~> 1.0.2"},
+      # TODO: shouldn't be needed, here for convenience
+      {:ecto_sql, "~> 3.0"},
+      {:postgrex, "~> 0.16.3"}
     ]
   end
 
   # Specifies which paths to compile per environment.
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 end

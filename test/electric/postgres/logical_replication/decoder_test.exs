@@ -13,9 +13,10 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
     Update,
     Delete,
     Truncate,
-    Type,
-    Lsn
+    Type
   }
+
+  alias Electric.Postgres.Lsn
 
   def lsn({segment, offset}), do: %Lsn{segment: segment, offset: offset}
 

@@ -3,19 +3,20 @@ defmodule Electric.Replication do
 
   alias Broadway.Message
   alias Electric.Replication
+  alias Electric.VaxRepo
 
-  alias Replication.Config
   alias Replication.Changes.Transaction
 
   require Logger
 
-  def start_link(_opts) do
+  def start_link(opts) do
+    producer = Keyword.fetch!(opts, :producer)
+
     Broadway.start_link(
       Replication,
-      name: Replication,
+      name: Keyword.get(opts, :name, Replication),
       producer: [
-        module: {Config.producer(), []},
-        transformer: {Replication, :transform, []},
+        module: {producer, opts},
         concurrency: 1
       ],
       processors: [
@@ -24,47 +25,40 @@ defmodule Electric.Replication do
     )
   end
 
-  def transform({txn, end_lsn, conn}, _opts) do
-    %Message{
-      data: txn,
-      acknowledger: {__MODULE__, :ack_id, {conn, end_lsn}}
-    }
-  end
-
   @impl true
   def handle_message(_, %Message{data: %Transaction{changes: changes}} = message, _) do
     Logger.debug(inspect({:message, message}, pretty: true))
 
-    errors =
-      changes
-      |> Enum.reduce([], &handle_change/2)
+    changes
+    |> process_changes()
+    |> case do
+      :ok ->
+        Registry.dispatch(
+          Electric.PostgresDispatcher,
+          {:publication, message.metadata.publication},
+          fn entries ->
+            Enum.each(entries, fn {pid, _slot} ->
+              send(pid, {:replication_message, message.data})
+            end)
+          end
+        )
 
-    message =
-      case errors do
-        [] ->
-          message
+        message
 
-        reason ->
-          Message.failed(message, reason)
-      end
-
-    message
+      {change, error} ->
+        Message.failed(message, {change, error})
+    end
   end
 
-  def handle_change(_, acc), do: acc
-
-  def ack(:ack_id, [], []), do: nil
-  def ack(:ack_id, _, [_head | _tail]), do: throw("XXX ack failure handling not yet implemented")
-
-  def ack(:ack_id, successful, []) do
-    last_message =
-      successful
-      |> Enum.reverse()
-      |> Enum.at(0)
-
-    %{acknowledger: {_, _, {conn, end_lsn}}} = last_message
-    Logger.debug(inspect({:ack, end_lsn}))
-
-    Replication.PostgresClient.acknowledge_lsn(conn, end_lsn)
+  defp process_changes(changes) do
+    VaxRepo.transaction(fn ->
+      changes
+      |> Enum.reduce_while(:ok, fn change, :ok ->
+        case Electric.Replication.ToVaxine.handle_change(change) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, {change, error}}
+        end
+      end)
+    end)
   end
 end

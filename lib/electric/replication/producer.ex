@@ -1,7 +1,9 @@
 defmodule Electric.Replication.Producer do
   use GenStage
+  require Logger
 
   alias Electric.Postgres.LogicalReplication
+  alias Electric.Postgres.SchemaRegistry
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -13,8 +15,6 @@ defmodule Electric.Replication.Producer do
     Truncate,
     Type
   }
-
-  alias Electric.Replication.Config
 
   alias Electric.Replication.Changes.{
     Transaction,
@@ -30,6 +30,8 @@ defmodule Electric.Replication.Producer do
               queue: nil,
               relations: %{},
               transaction: nil,
+              publication: nil,
+              client: nil,
               types: %{}
   end
 
@@ -38,10 +40,20 @@ defmodule Electric.Replication.Producer do
   end
 
   @impl true
-  def init(_) do
-    {:ok, conn} = Config.pg_client().connect_and_start_replication(self())
+  def init(opts) do
+    pg_client = Keyword.fetch!(opts, :pg_client)
 
-    {:producer, %State{conn: conn, queue: :queue.new()}}
+    {:ok, %{connection: conn, tables: tables, publication: publication}} =
+      pg_client.connect_and_start_replication(self())
+
+    tables
+    |> Enum.map(&Map.delete(&1, :columns))
+    |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
+
+    Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
+
+    {:producer,
+     %State{conn: conn, queue: :queue.new(), publication: publication, client: pg_client}}
   end
 
   @impl true
@@ -139,10 +151,10 @@ defmodule Electric.Replication.Producer do
   # pending demand we can meet by dispatching events.
   defp process_message(
          %Commit{lsn: commit_lsn, end_lsn: end_lsn},
-         %State{transaction: {current_txn_lsn, txn}, conn: conn, queue: queue} = state
+         %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
        )
        when commit_lsn == current_txn_lsn do
-    event = {Map.update!(txn, :changes, &Enum.reverse/1), end_lsn, conn}
+    event = build_message(Map.update!(txn, :changes, &Enum.reverse/1), end_lsn, state)
 
     queue = :queue.in(event, queue)
     state = %{state | queue: queue, transaction: nil}
@@ -196,5 +208,26 @@ defmodule Electric.Replication.Producer do
     for {column, index} <- Enum.with_index(columns, 1),
         do: {column.name, :erlang.element(index, tuple_data)},
         into: %{}
+  end
+
+  defp build_message(transaction, end_lsn, state) do
+    %Broadway.Message{
+      data: transaction,
+      metadata: %{publication: state.publication},
+      acknowledger: {__MODULE__, state.conn, {state.client, end_lsn}}
+    }
+  end
+
+  def ack(_, [], []), do: nil
+  def ack(_, _, x) when length(x) > 0, do: throw("XXX ack failure handling not yet implemented")
+
+  def ack(conn, successful, _) do
+    {_, _, {client, end_lsn}} =
+      successful
+      |> List.last()
+      |> Map.fetch!(:acknowledger)
+
+    Logger.debug(inspect({:ack, end_lsn}))
+    client.acknowledge_lsn(conn, end_lsn)
   end
 end

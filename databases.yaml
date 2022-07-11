@@ -2,6 +2,23 @@
 version: '3.1'
 
 services:
+  electric_antidote:
+    image: europe-docker.pkg.dev/vaxine/vaxine-io/antidote:latest
+    restart: always
+    environment:
+      RING_SIZE: "1"
+      ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
+      ANTIDOTE_TXN_PROT: "clocksi"
+      ANTIDOTE_RECOVER_FROM_LOG: "true"
+      ANTIDOTE_META_DATA_ON_START: "true"
+      ANTIDOTE_SYNC_LOG: "false"
+      ANTIDOTE_ENABLE_LOGGING: "true"
+      ANTIDOTE_AUTO_START_READ_SERVERS: "true"
+      COOKIE: "secret"
+      NODE_NAME: "antidote@dc1n1"
+    ports:
+      - "8087:8087"
+
   db_a:
     image: postgres
     restart: always
@@ -20,7 +37,7 @@ services:
       - config_file=/etc/postgresql.conf
 
   db_b:
-    image: postgres
+    image: postgres:13
     restart: always
     environment:
       POSTGRES_DB: electric

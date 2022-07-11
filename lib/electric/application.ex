@@ -5,7 +5,12 @@ defmodule Electric.Application do
 
   def start(_type, _args) do
     children = [
-      Electric.Replication
+      Electric.Postgres.SchemaRegistry,
+      {Registry, keys: :unique, name: Electric.PostgresSlotRegistry},
+      {Registry, keys: :duplicate, name: Electric.PostgresDispatcher},
+      Electric.VaxRepo,
+      {Electric.Replication, Application.get_env(:electric, Electric.Replication)},
+      Electric.ReplicationServer.Postgres
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

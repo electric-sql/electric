@@ -19,14 +19,4 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
   defmodule Unsupported, do: defstruct([:data])
 
   defmodule Relation.Column, do: defstruct([:flags, :name, :type, :type_modifier])
-
-  defmodule Lsn do
-    defstruct [:segment, :offset]
-
-    defimpl Inspect do
-      def inspect(%{segment: segment, offset: offset}, _opts) do
-        "#Lsn<#{Integer.to_string(segment, 16)}/#{Integer.to_string(offset, 16)}>"
-      end
-    end
-  end
 end

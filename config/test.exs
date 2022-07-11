@@ -4,5 +4,16 @@ config :electric, Electric.Replication,
   producer: Broadway.DummyProducer,
   pg_client: Electric.Replication.MockPostgresClient
 
-# Print only warnings and errors during test
-config :logger, level: :warn
+config :electric, Electric.PostgresRepo,
+  hostname: "localhost",
+  port: 54321,
+  database: "electric",
+  username: "electric",
+  password: "password"
+
+config :electric, Electric.PostgresRepo2,
+  hostname: "localhost",
+  port: 54322,
+  database: "electric",
+  username: "electric",
+  password: "password"
