@@ -10,6 +10,8 @@ defmodule Electric.Application do
       {Registry, keys: :duplicate, name: Electric.PostgresDispatcher},
       Electric.VaxRepo,
       {Electric.Replication, Application.get_env(:electric, Electric.Replication)},
+      {Electric.ReplicationServer.VaxineLogConsumer,
+       Application.get_env(:electric, Electric.ReplicationServer.VaxineLogConsumer)},
       Electric.ReplicationServer.Postgres
     ]
 
