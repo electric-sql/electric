@@ -17,12 +17,29 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: make compile
-  test:
+
+  start_environment:
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
       - run: make start_dev_env
+
+  test:
+    needs: start_environment
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        elixir:
+          - '1.13'
+    container:
+      image: 'elixir:${{ matrix.elixir }}'
+    steps:
       - run: mix test
+      - run: INTEGRATION=1 mix test
+
+  stop_environment:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
       - run: make stop_dev_env
-      #- run: mix test
-      #- run: INTEGRATION=1 mix test
