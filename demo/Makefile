@@ -14,8 +14,12 @@ stop_dev_env:
 	docker-compose down
 	docker-compose stop
 
-test: lux
+test: lux .pull
 	${LUX} simple_test.lux
+
+.pull:
+	docker-compose pull
+	touch .pull
 
 clean:
 	rm -rf lux
