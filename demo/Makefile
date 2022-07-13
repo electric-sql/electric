@@ -17,9 +17,13 @@ stop_dev_env:
 test: lux .pull
 	${LUX} simple_test.lux
 
-.pull:
+.pull: vaxine
 	docker-compose pull
+	docker-compose build
 	touch .pull
+
+vaxine:
+	git clone https://github.com/vaxine-io/vaxine.git
 
 clean:
 	rm -rf lux
