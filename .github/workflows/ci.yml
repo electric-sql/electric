@@ -16,7 +16,7 @@ jobs:
       image: 'elixir:${{ matrix.elixir }}'
     steps:
       - uses: actions/checkout@v2
-      #- run: docker-compose -f databases.yml up -d
+      - run: make start_dev_env
       - run: make compile
       #- run: mix test
       #- run: INTEGRATION=1 mix test
