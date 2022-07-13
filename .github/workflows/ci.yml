@@ -12,11 +12,12 @@ jobs:
       matrix:
         elixir:
           - '1.13'
-    container:
-      image: 'elixir:${{ matrix.elixir }}'
     steps:
       - uses: actions/checkout@v2
       - run: make start_dev_env
+    container:
+      image: 'elixir:${{ matrix.elixir }}'
+    steps:
       - run: make compile
       #- run: mix test
       #- run: INTEGRATION=1 mix test
