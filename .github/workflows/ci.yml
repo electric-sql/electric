@@ -5,19 +5,24 @@ on:
       - main
   pull_request: null
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         elixir:
           - '1.13'
-    steps:
-      - uses: actions/checkout@v2
-      - run: make start_dev_env
     container:
       image: 'elixir:${{ matrix.elixir }}'
     steps:
+      - uses: actions/checkout@v2
       - run: make compile
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: make start_dev_env
+      - run: mix test
+      - run: make stop_dev_env
       #- run: mix test
       #- run: INTEGRATION=1 mix test
