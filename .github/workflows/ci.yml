@@ -15,6 +15,6 @@ jobs:
       - name: build
         uses: docker://elixir:1.13
         with:
-          args: make compile test
+          args: make compile tests integration_tests
 
       - run: make stop_dev_env
