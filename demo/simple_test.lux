@@ -38,6 +38,10 @@
     !INSERT INTO entries (content) VALUES ('a');
     #$psql
 
+[shell vaxine]
+    [invoke wait_port 8088]
+    [invoke wait_port 8087]
+
 [cleanup]
     [progress stop development environment]
     !make stop_dev_env
