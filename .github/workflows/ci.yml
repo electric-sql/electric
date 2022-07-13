@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         elixir:
-          - '1.11'
           - '1.12'
+          - '1.13'
     container:
       image: 'elixir:${{ matrix.elixir }}'
     steps:
