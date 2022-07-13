@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: make start_dev_env
 
       - name: build
         uses: docker://elixir:1.13
         with:
-          args: make compile tests integration_tests
+          args: make compile
 
+      - run: make -C demo test
+
+      - run: make start_dev_env
       - run: make stop_dev_env
