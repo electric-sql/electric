@@ -23,13 +23,13 @@ defmodule Electric.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:vax, git: "git@github.com:vaxine-io/vaxine.git", sparse: "apps/vax"},
+      {:vax, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vax"},
       {:antidote_pb_codec,
-       git: "git@github.com:vaxine-io/vaxine.git",
+       git: "https://github.com/vaxine-io/vaxine.git",
        sparse: "apps/antidote_pb_codec",
        override: true},
       {:antidotec_pb,
-       git: "git@github.com:vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
+       git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
       {:broadway, "~> 0.6"},
       {:epgsql, "~> 4.2"},
       {:ranch, "~> 2.1"},
