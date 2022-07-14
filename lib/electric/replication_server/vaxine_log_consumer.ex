@@ -23,7 +23,23 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
   end
 
   @impl true
-  def handle_message(_, %Message{data: {:vx_wal_txn, _txid, transaction_data}} = message, _) do
+  def handle_message(_, message, _) do
+    {transaction, metadata} = process_message(message)
+
+    Registry.dispatch(
+      Electric.PostgresDispatcher,
+      {:publication, metadata.publication},
+      fn entries ->
+        Enum.each(entries, fn {pid, _slot} ->
+          send(pid, {:replication_message, transaction})
+        end)
+      end
+    )
+
+    %{message | data: transaction}
+  end
+
+  def process_message(%Message{data: {:vx_wal_txn, _txid, transaction_data}}) do
     {_, _, metadata_value, _} =
       transaction_data
       |> Enum.find(&(elem(&1, 0) == {"metadata:0", "vax"}))
@@ -33,7 +49,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       |> struct(convert_value(["metadata"], :antidote_crdt_map_rr, metadata_value))
       |> Map.update!(:commit_timestamp, &elem(DateTime.from_iso8601(&1), 1))
 
-    data =
+    transaction =
       transaction_data
       |> Enum.filter(fn {{key, _}, _, _, _} -> String.starts_with?(key, "row") end)
       |> Enum.map(fn {key, type, value, log_ops} ->
@@ -43,17 +59,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       end)
       |> to_transaction(metadata.commit_timestamp)
 
-    Registry.dispatch(
-      Electric.PostgresDispatcher,
-      {:publication, metadata.publication},
-      fn entries ->
-        Enum.each(entries, fn {pid, _slot} ->
-          send(pid, {:replication_message, data})
-        end)
-      end
-    )
-
-    %{message | data: data}
+    {transaction, metadata}
   end
 
   defp convert_value(keys, :antidote_crdt_map_rr, value) do
