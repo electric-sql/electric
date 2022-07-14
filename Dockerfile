@@ -14,14 +14,19 @@ RUN apt-get update -y && \
     rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
-COPY . /app/
+COPY config /app/
+COPY lib    /app/
+COPY mix.*  /app/
+COPY Makefile /app/
 
-RUN make compile
+RUN make compile release
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
-RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales \
-  && apt-get clean && rm -f /var/lib/apt/lists/*_*
+RUN apt-get update -y && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales && \
+    apt-get clean && \
+    rm -f /var/lib/apt/lists/*_*
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
@@ -33,10 +38,10 @@ ENV LC_ALL en_US.UTF-8
 WORKDIR "/app"
 RUN chown nobody /app
 
-# set runner ENV
-ENV MIX_ENV="prod"
-
 FROM runner_setup AS runner
 
 ## Vaxine configuration via environment variables
-COPY --from=builder --chown=nobody:root /app/_build/default/rel/vaxine ./
+COPY --from=builder --chown=nobody:root /app/_build/prod/rel/electric ./
+
+USER nobody
+ENTRYPOINT /app/bin/electric start

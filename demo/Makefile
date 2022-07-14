@@ -27,3 +27,7 @@ vaxine:
 
 clean:
 	rm -rf lux
+	rm -rf vaxine .pull
+
+docker-attach-%:
+	docker-compose exec $* bash
