@@ -18,7 +18,7 @@ defmodule Electric.Integration.PostgresReplicationTest do
       %Postgrex.Result{rows: [[true]]} ->
         %Postgrex.Result{} = PostgresRepo2.query!("DROP SUBSCRIPTION test_subscription")
 
-      %Postgrex.Result{rows: [[false]]} ->
+      %Postgrex.Result{rows: _} ->
         :ok
     end
 
