@@ -10,6 +10,7 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   is missing since the slot server dies along with the TCP socket.
   """
   use GenServer
+  require Logger
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
@@ -74,6 +75,7 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
 
   @impl true
   def handle_call({:start_replication, send_fn, publication, start_lsn}, _, state) do
+    Logger.metadata(slot: state.slot_name)
     {:ok, _} =
       Registry.register(Electric.PostgresDispatcher, {:publication, publication}, state.slot_name)
 
@@ -120,6 +122,8 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   defp drain_queue([], _), do: :ok
 
   defp drain_queue(queue, send_fn) when is_function(send_fn, 1) do
+    Logger.debug("Sending #{length(queue)} messages to the subscriber")
+
     queue
     |> Enum.reverse()
     |> Enum.map(fn {lsn, message} -> Messaging.replication_log(lsn, lsn, message) end)
