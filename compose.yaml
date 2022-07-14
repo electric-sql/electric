@@ -1,5 +1,5 @@
 # Run using `docker-compose -f databases.yaml up`.
-version: '3.1'
+version: "3.1"
 
 services:
   electric_antidote:
@@ -37,6 +37,8 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
     privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   db_b:
     image: postgres:13
@@ -55,3 +57,5 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
     privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
