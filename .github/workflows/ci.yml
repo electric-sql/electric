@@ -4,19 +4,19 @@ on:
     branches:
       - main
   pull_request: null
+
 jobs:
-  test:
+  build_and_test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        elixir:
-          - '1.13'
-    container:
-      image: 'elixir:${{ matrix.elixir }}'
     steps:
       - uses: actions/checkout@v2
-      #- run: docker-compose -f databases.yml up -d
-      - run: make compile
-      #- run: mix test
-      #- run: INTEGRATION=1 mix test
+
+      - name: build
+        uses: docker://elixir:1.13
+        with:
+          args: make compile
+
+      - run: make -C demo test
+
+      - run: make start_dev_env
+      - run: make stop_dev_env

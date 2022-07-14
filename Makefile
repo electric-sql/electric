@@ -12,7 +12,7 @@ tests:
 integration_tests:
 	INTETGRATION=1 mix test
 
-DC_CONFIG=databases.yaml
+DC_CONFIG=compose.yaml
 
 start_dev_env:
 	docker-compose -f ${DC_CONFIG} up -d
