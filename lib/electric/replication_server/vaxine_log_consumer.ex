@@ -30,8 +30,10 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       Electric.PostgresDispatcher,
       {:publication, metadata.publication},
       fn entries ->
-        Enum.each(entries, fn {pid, _slot} ->
-          send(pid, {:replication_message, transaction})
+        Enum.each(entries, fn {pid, slot} ->
+          if slot !== metadata.origin do
+            send(pid, {:replication_message, transaction})
+          end
         end)
       end
     )

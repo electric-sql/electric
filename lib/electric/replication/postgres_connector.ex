@@ -18,7 +18,8 @@ defmodule Electric.Replication.PostgresConnector do
     children = [
       Supervisor.child_spec({Task, fn -> initialize_postgres(args) end}, id: :init_postgres),
       {Electric.ReplicationServer.Postgres.SlotServer, slot: args.replication.subscription},
-      {Electric.Replication, Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
+      {Electric.Replication,
+       Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
       {Task, fn -> start_subscription(args) end}
     ]
 

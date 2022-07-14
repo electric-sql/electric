@@ -34,21 +34,22 @@ defmodule Electric.Replication do
         _
       ) do
     Logger.debug(inspect({:message, message}, pretty: true))
+    %{metadata: %{origin: origin, publication: publication}} = message
 
     changes
-    |> process_changes(ts, message.metadata.publication)
+    |> process_changes(ts, publication, origin)
     |> case do
       :ok ->
-           message
+        message
 
       {change, error} ->
         Message.failed(message, {change, error})
     end
   end
 
-  defp process_changes(changes, commit_timestamp, publication) do
+  defp process_changes(changes, commit_timestamp, publication, origin) do
     VaxRepo.transaction(fn ->
-      Metadata.new(commit_timestamp, publication)
+      Metadata.new(commit_timestamp, publication, origin)
       |> VaxRepo.insert()
 
       changes

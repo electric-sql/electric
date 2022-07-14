@@ -14,4 +14,3 @@ config :logger, :console,
   format: "[$level] $metadata $message \n",
   level: :debug,
   metadata: [:client, :connection, :slot]
-

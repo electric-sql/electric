@@ -76,6 +76,7 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   @impl true
   def handle_call({:start_replication, send_fn, publication, start_lsn}, _, state) do
     Logger.metadata(slot: state.slot_name)
+
     {:ok, _} =
       Registry.register(Electric.PostgresDispatcher, {:publication, publication}, state.slot_name)
 
