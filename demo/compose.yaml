@@ -2,7 +2,7 @@
 version: '3.1'
 
 services:
-  electric_vaxine:
+  vaxine:
 #    image: vaxine:local-build
 #    restart: always
     environment:
@@ -24,6 +24,17 @@ services:
       context: ./vaxine
       dockerfile: Dockerfile.vaxine
 
+  electric:
+    privileged: true
+    volumes:
+      - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
+    depends_on:
+      - db_a
+      - db_b
+    build:
+      context: ../
+      dockerfile: Dockerfile
+
   db_a:
     image: postgres:13
 #    restart: always
@@ -41,6 +52,8 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
     privileged: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U electric"]
 
   db_b:
     image: postgres:13
@@ -59,3 +72,5 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
     privileged: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U electric"]

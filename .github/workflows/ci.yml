@@ -16,6 +16,8 @@ jobs:
         with:
           args: make compile
 
+      - run: make docker-build
+
       - run: make -C demo test
 
       - run: make start_dev_env
