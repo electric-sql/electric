@@ -17,3 +17,8 @@ config :electric, Electric.PostgresRepo2,
   database: "electric",
   username: "electric",
   password: "password"
+
+config :electric, Electric.ReplicationServer.VaxineLogConsumer,
+  producer: Electric.ReplicationServer.VaxineLogProducer,
+  hostname: "vaxine",
+  port: 8088

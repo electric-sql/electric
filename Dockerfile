@@ -14,8 +14,8 @@ RUN apt-get update -y && \
     rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
-COPY config /app/
-COPY lib    /app/
+COPY config /app/config/
+COPY lib    /app/lib/
 COPY mix.*  /app/
 COPY Makefile /app/
 

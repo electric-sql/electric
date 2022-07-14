@@ -3,8 +3,7 @@ version: '3.1'
 
 services:
   vaxine:
-#    image: vaxine:local-build
-#    restart: always
+    image: vaxine:local-build
     environment:
       RING_SIZE: "1"
       ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
@@ -20,24 +19,18 @@ services:
       - "8087:8087"
       - "8088:8088"
     privileged: true
-    build:
-      context: ./vaxine
-      dockerfile: Dockerfile.vaxine
 
   electric:
+    image: electric:local-build
     privileged: true
     volumes:
       - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
     depends_on:
       - db_a
       - db_b
-    build:
-      context: ../
-      dockerfile: Dockerfile
 
   db_a:
     image: postgres:13
-#    restart: always
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: electric
@@ -57,7 +50,6 @@ services:
 
   db_b:
     image: postgres:13
-#    restart: always
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: electric

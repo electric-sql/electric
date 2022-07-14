@@ -18,12 +18,12 @@ test: lux .pull
 	${LUX} simple_test.lux
 
 .pull: vaxine
-	docker-compose pull
-	docker-compose build
+	docker-compose pull db_a db_b
 	touch .pull
 
 vaxine:
 	git clone https://github.com/vaxine-io/vaxine.git
+	cd vaxine && make docker-build
 
 clean:
 	rm -rf lux
