@@ -10,11 +10,11 @@ defmodule Electric.Replication do
   require Logger
 
   def start_link(opts) do
-    producer = Keyword.fetch!(opts, :producer)
+    producer = Map.fetch!(opts, :producer)
 
     Broadway.start_link(
       Replication,
-      name: Keyword.get(opts, :name, Replication),
+      name: Map.get(opts, :name, Replication),
       producer: [
         module: {producer, opts},
         concurrency: 1
@@ -37,8 +37,10 @@ defmodule Electric.Replication do
           Electric.PostgresDispatcher,
           {:publication, message.metadata.publication},
           fn entries ->
-            Enum.each(entries, fn {pid, _slot} ->
-              send(pid, {:replication_message, message.data})
+            Enum.each(entries, fn {pid, slot} ->
+              if slot !== message.metadata.origin do
+                send(pid, {:replication_message, message.data})
+              end
             end)
           end
         )
