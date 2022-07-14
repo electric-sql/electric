@@ -5,6 +5,8 @@ defmodule Electric.Replication do
   alias Electric.Replication
   alias Electric.VaxRepo
 
+  alias Electric.Replication.Metadata
+
   alias Replication.Changes.Transaction
 
   require Logger
@@ -26,23 +28,17 @@ defmodule Electric.Replication do
   end
 
   @impl true
-  def handle_message(_, %Message{data: %Transaction{changes: changes}} = message, _) do
+  def handle_message(
+        _,
+        %Message{data: %Transaction{changes: changes, commit_timestamp: ts}} = message,
+        _
+      ) do
     Logger.debug(inspect({:message, message}, pretty: true))
 
     changes
-    |> process_changes()
+    |> process_changes(ts, message.metadata.publication)
     |> case do
       :ok ->
-        Registry.dispatch(
-          Electric.PostgresDispatcher,
-          {:publication, message.metadata.publication},
-          fn entries ->
-            Enum.each(entries, fn {pid, _slot} ->
-              send(pid, {:replication_message, message.data})
-            end)
-          end
-        )
-
         message
 
       {change, error} ->
@@ -50,8 +46,11 @@ defmodule Electric.Replication do
     end
   end
 
-  defp process_changes(changes) do
+  defp process_changes(changes, commit_timestamp, publication) do
     VaxRepo.transaction(fn ->
+      Metadata.new(commit_timestamp, publication)
+      |> VaxRepo.insert()
+
       changes
       |> Enum.reduce_while(:ok, fn change, :ok ->
         case Electric.Replication.ToVaxine.handle_change(change) do

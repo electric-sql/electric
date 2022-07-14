@@ -1,6 +1,7 @@
 %{
-  "antidote_pb_codec": {:git, "https://github.com/vaxine-io/vaxine.git", "62448b043554ae3ea8cecd7069eaeb97f771d0ef", [sparse: "apps/antidote_pb_codec"]},
-  "antidotec_pb": {:git, "https://github.com/vaxine-io/vaxine.git", "62448b043554ae3ea8cecd7069eaeb97f771d0ef", [sparse: "apps/antidotec_pb"]},
+  "antidote_pb_codec": {:git, "https://github.com/vaxine-io/vaxine.git", "183cc673e3f06522d95706d91d0393f495ef32f1", [sparse: "apps/antidote_pb_codec"]},
+  "antidotec_pb": {:git, "https://github.com/vaxine-io/vaxine.git", "183cc673e3f06522d95706d91d0393f495ef32f1", [sparse: "apps/antidotec_pb"]},
+  "backoff": {:hex, :backoff, "1.1.6", "83b72ed2108ba1ee8f7d1c22e0b4a00cfe3593a67dbc792799e8cce9f42f796b", [:rebar3], [], "hexpm", "cf0cfff8995fb20562f822e5cc47d8ccf664c5ecdc26a684cbe85c225f9d7c39"},
   "broadway": {:hex, :broadway, "0.6.2", "ef8e0d257420c72f0e600958cf95556835d9921ad14be333493083226458791a", [:mix], [{:gen_stage, "~> 1.0", [hex: :gen_stage, repo: "hexpm", optional: false]}, {:telemetry, "~> 0.4.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "f4f93704304a736c984cd6ed884f697415f68eb50906f4dc5d641926366ad8fa"},
   "connection": {:hex, :connection, "1.1.0", "ff2a49c4b75b6fb3e674bfc5536451607270aac754ffd1bdfe175abe4a6d7a68", [:mix], [], "hexpm", "722c1eb0a418fbe91ba7bd59a47e28008a189d47e37e0e7bb85585a016b2869c"},
   "db_connection": {:hex, :db_connection, "2.4.2", "f92e79aff2375299a16bcb069a14ee8615c3414863a6fef93156aee8e86c2ff3", [:mix], [{:connection, "~> 1.0", [hex: :connection, repo: "hexpm", optional: false]}, {:telemetry, "~> 0.4 or ~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "4fe53ca91b99f55ea249693a0229356a08f4d1a7931d8ffa79289b145fe83668"},
@@ -14,5 +15,6 @@
   "postgrex": {:hex, :postgrex, "0.16.3", "fac79a81a9a234b11c44235a4494d8565303fa4b9147acf57e48978a074971db", [:mix], [{:connection, "~> 1.1", [hex: :connection, repo: "hexpm", optional: false]}, {:db_connection, "~> 2.1", [hex: :db_connection, repo: "hexpm", optional: false]}, {:decimal, "~> 1.5 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: true]}, {:table, "~> 0.1.0", [hex: :table, repo: "hexpm", optional: true]}], "hexpm", "aeaae1d2d1322da4e5fe90d241b0a564ce03a3add09d7270fb85362166194590"},
   "ranch": {:hex, :ranch, "2.1.0", "2261f9ed9574dcfcc444106b9f6da155e6e540b2f82ba3d42b339b93673b72a3", [:make, :rebar3], [], "hexpm", "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916"},
   "telemetry": {:hex, :telemetry, "0.4.3", "a06428a514bdbc63293cd9a6263aad00ddeb66f608163bdec7c8995784080818", [:rebar3], [], "hexpm", "eb72b8365ffda5bed68a620d1da88525e326cb82a75ee61354fc24b844768041"},
-  "vax": {:git, "https://github.com/vaxine-io/vaxine.git", "62448b043554ae3ea8cecd7069eaeb97f771d0ef", [sparse: "apps/vax"]},
+  "vax": {:git, "https://github.com/vaxine-io/vaxine.git", "183cc673e3f06522d95706d91d0393f495ef32f1", [sparse: "apps/vax"]},
+  "vx_client": {:git, "https://github.com/vaxine-io/vaxine.git", "183cc673e3f06522d95706d91d0393f495ef32f1", [sparse: "apps/vx_client"]},
 }

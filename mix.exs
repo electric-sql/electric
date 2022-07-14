@@ -30,6 +30,7 @@ defmodule Electric.MixProject do
        override: true},
       {:antidotec_pb,
        git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
+      {:vx_client, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vx_client"},
       {:broadway, "~> 0.6"},
       {:epgsql, "~> 4.2"},
       {:ranch, "~> 2.1"},

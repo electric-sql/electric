@@ -6,11 +6,10 @@ defmodule Electric.Replication.Row do
   schema "rows" do
     field(:table, :string)
     field(:schema, :string)
+    field(:last_operation, :string)
     field(:deleted?, Vax.Types.Flag, conflict_resolution: :disable_wins)
     field(:row, Vax.Types.Map)
   end
-
-  # A
 
   @spec new(schema :: String.t(), table :: String.t(), record :: map()) :: t()
   def new(schema, table, record) do
