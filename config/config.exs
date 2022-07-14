@@ -14,19 +14,48 @@ config :logger, :console,
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
-config :electric, Electric.Replication.PostgresClient,
-  connection: [
-    host: 'localhost',
-    port: 54321,
-    database: 'electric',
-    username: 'electric',
-    password: 'password',
-    replication: 'database',
-    ssl: false
+config :electric, Electric.Replication.Connectors,
+  postgres_1: [
+    producer: Electric.Replication.Producer,
+    connection: [
+      host: 'localhost',
+      port: 54321,
+      database: 'electric',
+      username: 'electric',
+      password: 'password',
+      replication: 'database',
+      ssl: false
+    ],
+    replication: [
+      publication: "all_tables",
+      slot: "all_changes",
+      electric_connection: [
+        host: "host.docker.internal",
+        port: 5433,
+        dbname: "test"
+      ]
+    ]
   ],
-  replication: [
-    publication: "all_tables",
-    slot: "all_changes"
+  postgres_2: [
+    producer: Electric.Replication.Producer,
+    connection: [
+      host: 'localhost',
+      port: 54322,
+      database: 'electric',
+      username: 'electric',
+      password: 'password',
+      replication: 'database',
+      ssl: false
+    ],
+    replication: [
+      publication: "all_tables",
+      slot: "all_changes",
+      electric_connection: [
+        host: "host.docker.internal",
+        port: 5433,
+        dbname: "test"
+      ]
+    ]
   ]
 
 # Import environment specific config. This must remain at the bottom

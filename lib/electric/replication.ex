@@ -12,11 +12,11 @@ defmodule Electric.Replication do
   require Logger
 
   def start_link(opts) do
-    producer = Keyword.fetch!(opts, :producer)
+    producer = Map.fetch!(opts, :producer)
 
     Broadway.start_link(
       Replication,
-      name: Keyword.get(opts, :name, Replication),
+      name: Map.get(opts, :name, Replication),
       producer: [
         module: {producer, opts},
         concurrency: 1
@@ -39,7 +39,7 @@ defmodule Electric.Replication do
     |> process_changes(ts, message.metadata.publication)
     |> case do
       :ok ->
-        message
+           message
 
       {change, error} ->
         Message.failed(message, {change, error})
