@@ -12,6 +12,6 @@ config :electric, Electric.ReplicationServer.VaxineLogConsumer,
 # Do not include metadata nor timestamps in development logs
 config :logger, :console,
   format: "[$level] $metadata $message \n",
-  level: :debug
+  level: :debug,
   metadata: [:client, :connection, :slot]
 
