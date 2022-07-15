@@ -42,14 +42,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
   end
 
   def process_message(%Message{data: {:vx_wal_txn, _txid, transaction_data}}) do
-    {_, _, metadata_value, _} =
-      transaction_data
-      |> Enum.find(&(elem(&1, 0) == {"metadata:0", "vax"}))
-
-    metadata =
-      Metadata
-      |> struct(convert_value(["metadata"], :antidote_crdt_map_rr, metadata_value))
-      |> Map.update!(:commit_timestamp, &elem(DateTime.from_iso8601(&1), 1))
+    metadata = extract_metadata(transaction_data)
 
     transaction =
       transaction_data
@@ -62,6 +55,21 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       |> to_transaction(metadata.commit_timestamp)
 
     {transaction, metadata}
+  end
+
+  defp extract_metadata(transaction_data) do
+    case Enum.find(transaction_data, fn el -> match?({{"metadata:0", _}, _, _, _}, el) end) do
+      nil ->
+        raise "Transaction without metadata"
+
+      {_key, _type, _value, ops} ->
+        ops
+        |> Enum.reduce(%Metadata{}, fn {[{{field, _type}, {:ok, {_timestamp, value}}}], []},
+                                       acc ->
+          field_atom = String.to_existing_atom(field)
+          Map.put(acc, field_atom, value)
+        end)
+    end
   end
 
   defp convert_value(keys, :antidote_crdt_map_rr, value) do
@@ -92,8 +100,8 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
 
     # if the final state is `deleted?` it means that the record was deleted;
     # if the entry was inserted within the transaction, it will have ops setting
-    # the table field
-    # otherwise, its a delete
+    # the `table` field;
+    # otherwise, its an update;
     cond do
       deleted? ->
         %Changes.DeletedRecord{old_record: to_string_keys(row), relation: {schema, table}}
