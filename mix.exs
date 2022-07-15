@@ -8,7 +8,8 @@ defmodule Electric.MixProject do
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"]
     ]
   end
 
@@ -37,7 +38,9 @@ defmodule Electric.MixProject do
       {:mox, "~> 1.0.2"},
       # TODO: shouldn't be needed, here for convenience
       {:ecto_sql, "~> 3.0"},
-      {:postgrex, "~> 0.16.3"}
+      {:postgrex, "~> 0.16.3"},
+      {:recon_ex, "~> 0.9.1"},
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false}
     ]
   end
 

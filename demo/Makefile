@@ -8,7 +8,7 @@ lux:
 	make
 
 start_dev_env:
-	docker-compose up -d
+	docker-compose up -d vaxine db_a db_b
 
 stop_dev_env:
 	docker-compose down

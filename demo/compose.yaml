@@ -28,6 +28,7 @@ services:
     depends_on:
       - db_a
       - db_b
+      - vaxine
 
   db_a:
     image: postgres:13
