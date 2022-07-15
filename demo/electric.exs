@@ -54,7 +54,8 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
+config :logger, backends: [:console], level: :debug
+
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id],
-  level: :debug
+  metadata: [:client, :connection, :slot]
