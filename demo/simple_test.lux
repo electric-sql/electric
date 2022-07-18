@@ -26,21 +26,19 @@
 [shell db_a]
     [invoke start_psql db_a]
 
-    !INSERT INTO entries (content) VALUES ('a');
-    ?INSERT 0 1
-
-    !SELECT * from entries;
-    ?(1 row)
-    ?$psql
-
 [shell db_b]
     [invoke start_psql db_b]
-    !INSERT INTO entries (content) VALUES ('a');
-    #$psql
 
 [shell vaxine]
-    [invoke wait_port 8088]
-    [invoke wait_port 8087]
+    [invoke wait_port localhost 8088]
+    [invoke wait_port localhost 8087]
+
+[shell electric]
+    !make start_electric
+
+[shell electric2]
+    [invoke wait_port localhost 5433]
+    [invoke wait_logs electric Message]
 
 [cleanup]
     [progress stop development environment]
@@ -51,10 +49,10 @@
 #####################################################
 ## Not used, but could be helpfull
 
-[macro wait_port port]
+[macro wait_port host port]
     [loop iter 1..10]
           @==0==
-          !nc -z localhost $port; echo ==$$?==
+          !nc -z $host $port; echo ==$$?==
           ?SH-PROMPT:
           [sleep 1]
     [endloop]
@@ -69,3 +67,22 @@
     [endloop]
     ?SH-PROMPT:
 [endmacro]
+
+[macro wait_logs name match_spec]
+    [loop iter 1..10]
+          @${match_spec}
+          !docker logs demo_${name}_1
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+
+#    !INSERT INTO entries (content) VALUES ('a');
+#    ?INSERT 0 1
+#
+#    !SELECT * from entries;
+#    ?(1 row)
+#    ?$psql
+#
+#    !INSERT INTO entries (content) VALUES ('b');
+#    #$psql
