@@ -37,7 +37,8 @@
     !sleep 3
     [invoke ok]
     !make start_electric
-    ?Message
+    ?Starting replication mode for slot
+    ?Starting replication mode for slot
 
 [cleanup]
     [progress stop development environment]
