@@ -29,7 +29,7 @@ test: lux .pull
 
 vaxine:
 	git clone https://github.com/vaxine-io/vaxine.git
-	cd vaxine && git checkout defnull/fix-race-condition-in-wal-materialization && make docker-build
+	cd vaxine && make docker-build
 
 docker-psql-%:
 	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric
