@@ -6,6 +6,8 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
   alias Electric.Replication.Row
   alias Electric.Replication.Metadata
 
+  require Logger
+
   def start_link(opts) do
     producer = Keyword.fetch!(opts, :producer)
 
@@ -32,6 +34,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       fn entries ->
         Enum.each(entries, fn {pid, slot} ->
           if slot !== metadata.origin do
+            Logger.debug("Sending transaction #{inspect(transaction)} to slot: #{inspect(slot)}")
             send(pid, {:replication_message, transaction})
           end
         end)
@@ -69,6 +72,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
           field_atom = String.to_existing_atom(field)
           Map.put(acc, field_atom, value)
         end)
+        |> Map.update!(:commit_timestamp, &(DateTime.from_iso8601(&1) |> elem(1)))
     end
   end
 
