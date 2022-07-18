@@ -322,7 +322,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     |> tcp_send(state)
 
     Logger.debug(
-      "Connection established with #{inspect(state.client)}, config: #{inspect(settings, pretty: true)}"
+      "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
     )
 
     :ok = state.transport.setopts(state.socket, active: :once)

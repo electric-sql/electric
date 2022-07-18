@@ -84,6 +84,8 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
       if Keyword.get(state.opts, :keepalive_enabled?, true),
         do: :timer.send_interval(10000, :send_keepalive)
 
+    Logger.info("Starting replication to #{state.slot_name}")
+
     {:reply, :ok, %{state | publication: publication, send_fn: send_fn, timer: timer},
      {:continue, {:backfill, start_lsn}}}
   end
@@ -100,6 +102,10 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   @impl true
   def handle_info({:replication_message, transaction}, state)
       when is_struct(transaction, Changes.Transaction) do
+    Logger.debug(
+      "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
+    )
+
     {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
 
     state = %{state | current_lsn: new_lsn, sent_relations: relations}
