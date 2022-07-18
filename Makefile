@@ -1,15 +1,15 @@
 
-.PHONY: compile tests start_dev_env stop_dev_env integration_tests
+.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests
 
 build_tools:
 	mix local.hex --force
 	mix local.rebar --force
 
-deps: build_tools
+deps:
 	mix deps.get
 	mix deps.compile
 
-compile: deps
+compile:
 	mix compile
 
 release:
