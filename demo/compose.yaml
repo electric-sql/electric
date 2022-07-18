@@ -50,6 +50,8 @@ services:
     privileged: true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U electric"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   db_b:
     image: postgres:13
@@ -69,3 +71,5 @@ services:
     privileged: true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U electric"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

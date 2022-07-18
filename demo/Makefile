@@ -11,7 +11,7 @@ start_dev_env:
 	docker-compose up -d vaxine db_a db_b
 
 start_electric:
-	docker-compose up electric
+	docker-compose up electric --no-color	--no-log-prefix
 
 stop_dev_env:
 	docker-compose down
