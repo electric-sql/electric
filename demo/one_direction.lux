@@ -1,0 +1,125 @@
+[doc Test of single and multi line regular expressions]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric]
+
+[macro ok]
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?^==0==
+[endmacro]
+
+[macro start_psql name]
+    [loop iter 1..10]
+          @electric=#
+          !docker exec -it -e PGPASSWORD=password demo_${name}_1 psql -h ${name} -U electric -d electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[shell start_env]
+    [progress start development environment]
+    !make start_dev_env
+    [invoke ok]
+
+[shell db_a]
+    [invoke start_psql db_a]
+
+[shell db_b]
+    [invoke start_psql db_b]
+
+[shell vaxine]
+    [invoke wait_port localhost 8088]
+    [invoke wait_port localhost 8087]
+
+[shell electric]
+    !sleep 3
+    [invoke ok]
+    !make start_electric
+    ?Starting replication to
+    ?Starting replication to
+
+[shell db_a]
+    !INSERT INTO entries (content) VALUES ('Hello from a');
+    ?INSERT 0 1
+
+[shell electric]
+    ?to slot: "postgres_2"
+    ?slot=postgres_2 \[debug\] Sending \d messages to the subscriber
+
+[shell db_b]
+    !SELECT * FROM entries;
+    ?Hello from a
+    ?(1 row)
+
+[shell db_a]
+    !SELECT * FROM entries;
+    ?Hello from a
+    ?(1 row)
+
+# [shell db_b]
+#     !INSERT INTO entries (content) VALUES ('Hello from b');
+#     ?INSERT 0 1
+
+# [shell electric]
+#     ?to slot: "postgres_1"
+#     ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
+
+# [shell db_a]
+#     !SELECT * FROM entries;
+#     ?Hello from b
+#     ?(2 rows)
+
+# [shell db_b]
+#     !SELECT * FROM entries;
+#     ?Hello from b
+#     ?(2 rows)
+
+
+[cleanup]
+    [progress stop development environment]
+    !make stop_dev_env
+    [invoke ok]
+
+
+#####################################################
+## Not used, but could be helpfull
+
+[macro wait_port host port]
+    [loop iter 1..10]
+          @==0==
+          !nc -z $host $port; echo ==$$?==
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro wait_name name]
+    [loop iter 1..10]
+          @accepting connections
+          !docker exec -it -e PGPASSWORD=password demo_${name}_1 pg_isready -U electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+    ?SH-PROMPT:
+[endmacro]
+
+[macro wait_logs name match_spec]
+    [loop iter 1..10]
+          @${match_spec}
+          !docker logs demo_${name}_1
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+
+#    !INSERT INTO entries (content) VALUES ('a');
+#    ?INSERT 0 1
+#
+#    !SELECT * from entries;
+#    ?(1 row)
+#    ?$psql
+#
+#    !INSERT INTO entries (content) VALUES ('b');
+#    #$psql
