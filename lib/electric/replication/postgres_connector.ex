@@ -14,9 +14,9 @@ defmodule Electric.Replication.PostgresConnector do
   @spec init(init_arg()) :: {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init(init_arg) do
     args = normalize_args(init_arg)
+    {:ok, _} = initialize_postgres(args)
 
     children = [
-      Supervisor.child_spec({Task, fn -> initialize_postgres(args) end}, id: :init_postgres),
       {Electric.ReplicationServer.Postgres.SlotServer, slot: args.replication.subscription},
       {Electric.Replication,
        Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
@@ -63,7 +63,7 @@ defmodule Electric.Replication.PostgresConnector do
              conn,
              subscription_name,
              publication,
-             reverse_connection ++ [application_name: system_id]
+             reverse_connection
            ),
          tables <- client.query_replicated_tables(conn, publication_name),
          :ok <- client.close(conn) do
