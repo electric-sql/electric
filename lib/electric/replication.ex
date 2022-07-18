@@ -30,11 +30,31 @@ defmodule Electric.Replication do
   @impl true
   def handle_message(
         _,
+        %Message{data: %Transaction{changes: []}} = message,
+        _
+      ) do
+    %{metadata: %{origin: origin, publication: publication}} = message
+
+    Logger.debug(
+      "Empty transaction in publication `#{publication}`",
+      origin: origin
+    )
+
+    message
+  end
+
+  @impl true
+  def handle_message(
+        _,
         %Message{data: %Transaction{changes: changes, commit_timestamp: ts}} = message,
         _
       ) do
-    Logger.debug(inspect({:message, message}, pretty: true))
     %{metadata: %{origin: origin, publication: publication}} = message
+
+    Logger.debug(
+      "New transaction in publication `#{publication}`: #{inspect(message.data, pretty: true)}",
+      origin: origin
+    )
 
     changes
     |> process_changes(ts, publication, origin)

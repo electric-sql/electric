@@ -13,4 +13,4 @@ config :electric, Electric.ReplicationServer.VaxineLogConsumer,
 config :logger, :console,
   format: "[$level] $metadata $message \n",
   level: :debug,
-  metadata: [:client, :connection, :slot]
+  metadata: [:client, :connection, :slot, :origin]

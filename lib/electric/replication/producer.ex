@@ -48,6 +48,8 @@ defmodule Electric.Replication.Producer do
 
     with {:ok, conn} <- opts.client.connect(opts.connection),
          :ok <- opts.client.start_replication(conn, publication, slot, self()) do
+      Logger.metadata(origin: opts.origin)
+      Logger.info("Starting replication from #{opts.origin}")
       {:producer,
        %State{
          conn: conn,
@@ -160,8 +162,8 @@ defmodule Electric.Replication.Producer do
   # pending demand we can meet by dispatching events.
 
   defp process_message(
-         %Commit{lsn: commit_lsn, end_lsn: end_lsn},
-         %State{transaction: {current_txn_lsn, txn}, drop_current_transaction?: true} = state
+         %Commit{lsn: commit_lsn},
+         %State{transaction: {current_txn_lsn, _}, drop_current_transaction?: true} = state
        )
        when commit_lsn == current_txn_lsn do
     {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
@@ -232,20 +234,20 @@ defmodule Electric.Replication.Producer do
     %Broadway.Message{
       data: transaction,
       metadata: %{publication: state.publication, origin: state.origin},
-      acknowledger: {__MODULE__, state.conn, {state.client, end_lsn}}
+      acknowledger: {__MODULE__, {state.conn, state.origin}, {state.client, end_lsn}}
     }
   end
 
   def ack(_, [], []), do: nil
   def ack(_, _, x) when length(x) > 0, do: throw("XXX ack failure handling not yet implemented")
 
-  def ack(conn, successful, _) do
+  def ack({conn, origin}, successful, _) do
     {_, _, {client, end_lsn}} =
       successful
       |> List.last()
       |> Map.fetch!(:acknowledger)
 
-    Logger.debug(inspect({:ack, end_lsn}))
+    Logger.debug("Acknowledging #{end_lsn}", origin: origin)
     client.acknowledge_lsn(conn, end_lsn)
   end
 end

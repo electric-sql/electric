@@ -58,4 +58,4 @@ config :logger, backends: [:console], level: :debug
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:client, :connection, :slot]
+  metadata: [:client, :connection, :slot, :origin]
