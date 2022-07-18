@@ -37,8 +37,8 @@
 [shell electric]
     [timeout 10]
     !make start_electric
-    ?Starting replication to
-    ?Starting replication to
+    ?START_REPLICATION SLOT
+    ?START_REPLICATION SLOT
 [endmacro]
 
 [macro teardown]

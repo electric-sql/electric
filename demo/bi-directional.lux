@@ -19,9 +19,15 @@
         [sleep 1]
     [endloop]
 
+[shell electric]
+    ?"content" => "hello from db_a"
+
 [shell db_b]
-    !INSERT INTO entries (content) VALUES ('hello from db_a');
+    !INSERT INTO entries (content) VALUES ('hello from db_b');
     ?$psql
+
+[shell electric]
+    ?"content" => "hello from db_b"
 
 [shell db_a]
     [loop iter 1..10]
