@@ -8,7 +8,10 @@ lux:
 	make
 
 start_dev_env:
-	docker-compose up -d vaxine db_a db_b
+	docker-compose up -d db_a db_b
+
+start_vaxine:
+	docker-compose up --no-color --no-log-prefix vaxine
 
 start_electric:
 	docker-compose up --no-color --no-log-prefix electric
@@ -18,7 +21,7 @@ stop_dev_env:
 	docker-compose stop
 
 test: lux .pull
-	${LUX} simple_test.lux
+	${LUX} *.lux
 
 .pull: vaxine
 	docker-compose pull db_a db_b
@@ -26,7 +29,10 @@ test: lux .pull
 
 vaxine:
 	git clone https://github.com/vaxine-io/vaxine.git
-	cd vaxine && make docker-build
+	cd vaxine && git checkout defnull/fix-race-condition-in-wal-materialization && make docker-build
+
+docker-psql-%:
+	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric
 
 clean:
 	rm -rf lux
