@@ -114,7 +114,10 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
         %Changes.NewRecord{record: to_string_keys(row), relation: {schema, table}}
 
       true ->
-        %Changes.UpdatedRecord{record: to_string_keys(row), relation: {schema, table}}
+        %Changes.UpdatedRecord{
+          record: to_string_keys(row),
+          relation: {schema, table}
+        }
     end
   end
 
@@ -140,11 +143,6 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
   end
 
   defp to_transaction(updates, timestamp) do
-    %Changes.Transaction{changes: updates, commit_timestamp: timestamp_str_to_datetime(timestamp)}
-  end
-
-  defp timestamp_str_to_datetime(timestamp) when is_binary(timestamp) do
-    {:ok, dt, _} = DateTime.from_iso8601(timestamp)
-    dt
+    %Changes.Transaction{changes: updates, commit_timestamp: timestamp}
   end
 end
