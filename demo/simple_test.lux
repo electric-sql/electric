@@ -34,11 +34,10 @@
     [invoke wait_port localhost 8087]
 
 [shell electric]
+    !sleep 3
+    [invoke ok]
     !make start_electric
-
-[shell electric2]
-    [invoke wait_port localhost 5433]
-    [invoke wait_logs electric Message]
+    ?Message
 
 [cleanup]
     [progress stop development environment]
