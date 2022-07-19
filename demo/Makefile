@@ -8,13 +8,16 @@ lux:
 	make
 
 start_dev_env:
-	docker-compose up -d db_a db_b
+	docker-compose up -d db_a db_b db_c
 
 start_vaxine:
 	docker-compose up --no-color --no-log-prefix vaxine
 
 start_electric:
 	docker-compose up --no-color --no-log-prefix electric
+
+start_electric_b:
+	docker-compose up --no-color --no-log-prefix electric_b
 
 stop_dev_env:
 	docker-compose down
