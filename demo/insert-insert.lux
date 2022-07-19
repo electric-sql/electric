@@ -4,24 +4,20 @@
 [global psql=electric]
 
 [include shared.luxinc]
-
-#[invoke setup]
-
+[invoke setup]
 #--------------------------------------------------
 
 [shell db_a]
-    [invoke start_psql db_a]
     !insert into entries (content, content_b) values ('1', 'A_VALUE');
 
 [shell db_b]
-    [invoke start_psql db_b]
     !insert into entries (content, content_b) values ('1', 'B_VALUE');
 
 [shell electric]
-    ?Sending transasction
-    ?"content_b" => "*_VALUE"
-    ?Sending transasction
-    ?"content_b" => "*_VALUE"
+    ?+postgres_1 \[debug\] New transaction in publication
+    ?+postgres_2 \[debug\] New transaction in publication
+    ?Sending transaction
+    ?Sending transaction
 
 [shell db_b]
     [loop iter 1..10]
