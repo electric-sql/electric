@@ -27,6 +27,7 @@
     ?$psql
 
 [shell electric]
+    ?NewRecord
     ?"content" => "hello from db_b"
 
 [shell db_a]
@@ -36,6 +37,34 @@
         ?electric=
         [sleep 1]
     [endloop]
+    !UPDATE entries SET content_b = 'bye from db_a';
+    ?$psql
+
+[shell electric]
+    ?UpdatedRecord
+    ?"content_b" => "bye from db_a"
+
+[shell db_b]
+    [loop iter 1..10]
+        @bye from db_a
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+    !DELETE FROM entries WHERE content_b = 'bye from db_a';
+    ?$psql
+
+[shell electric]
+    ?DeletedRecord
+    ?"content_b" => "bye from db_a"
+
+[shell db_b]
+  [loop iter 1..10]
+      @0 rows
+      !select * from entries;
+      ?electric=
+      [sleep 1]
+  [endloop]
 
 [cleanup]
     [invoke teardown]
