@@ -1,0 +1,34 @@
+[doc Bidirectional replication test db_a <-> db_b]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric]
+
+[include shared.luxinc]
+[invoke setup]
+#--------------------------------------------------
+
+[shell db_a]
+    !insert into entries (content, content_b) values ('1', 'A_VALUE');
+
+[shell db_b]
+    !insert into entries (content, content_b) values ('1', 'B_VALUE');
+
+[shell electric]
+    ?+postgres_1 \[debug\] New transaction in publication
+    ?+postgres_2 \[debug\] New transaction in publication
+    ?Sending transaction
+    ?Sending transaction
+
+[shell db_b]
+    [loop iter 1..10]
+        @_VALUE
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+
+
+#--------------------------------------------------
+
+[cleanup]
+    [invoke teardown]

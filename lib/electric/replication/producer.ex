@@ -3,10 +3,10 @@ defmodule Electric.Replication.Producer do
   require Logger
 
   alias Electric.Postgres.LogicalReplication
-  alias Electric.Postgres.SchemaRegistry
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
+    Origin,
     Commit,
     Relation,
     Insert,
@@ -32,6 +32,8 @@ defmodule Electric.Replication.Producer do
               transaction: nil,
               publication: nil,
               client: nil,
+              origin: nil,
+              drop_current_transaction?: false,
               types: %{}
   end
 
@@ -41,19 +43,23 @@ defmodule Electric.Replication.Producer do
 
   @impl true
   def init(opts) do
-    pg_client = Keyword.fetch!(opts, :pg_client)
+    publication = opts.replication.publication
+    slot = opts.replication.slot
 
-    {:ok, %{connection: conn, tables: tables, publication: publication}} =
-      pg_client.connect_and_start_replication(self())
-
-    tables
-    |> Enum.map(&Map.delete(&1, :columns))
-    |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
-
-    Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
-
-    {:producer,
-     %State{conn: conn, queue: :queue.new(), publication: publication, client: pg_client}}
+    with {:ok, conn} <- opts.client.connect(opts.connection),
+         :ok <- opts.client.start_replication(conn, publication, slot, self()) do
+      Logger.metadata(origin: opts.origin)
+      Logger.info("Starting replication from #{opts.origin}")
+      Logger.info("Connection settings: #{inspect(opts)}")
+      {:producer,
+       %State{
+         conn: conn,
+         queue: :queue.new(),
+         publication: publication,
+         client: opts.client,
+         origin: opts.origin
+       }}
+    end
   end
 
   @impl true
@@ -72,6 +78,12 @@ defmodule Electric.Replication.Producer do
     tx = %Transaction{changes: [], commit_timestamp: msg.commit_timestamp}
 
     {:noreply, [], %{state | transaction: {msg.final_lsn, tx}}}
+  end
+
+  defp process_message(%Origin{}, state) do
+    # If we got the "origin" message, it means that the Postgres sending the data has got it from Electric already
+    # so we just drop the transaction altogether
+    {:noreply, [], %{state | drop_current_transaction?: true}}
   end
 
   defp process_message(%Type{}, state), do: {:noreply, [], state}
@@ -149,6 +161,15 @@ defmodule Electric.Replication.Producer do
 
   # When we have a new event, enqueue it and see if there's any
   # pending demand we can meet by dispatching events.
+
+  defp process_message(
+         %Commit{lsn: commit_lsn},
+         %State{transaction: {current_txn_lsn, _}, drop_current_transaction?: true} = state
+       )
+       when commit_lsn == current_txn_lsn do
+    {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
+  end
+
   defp process_message(
          %Commit{lsn: commit_lsn, end_lsn: end_lsn},
          %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
@@ -157,7 +178,7 @@ defmodule Electric.Replication.Producer do
     event = build_message(Map.update!(txn, :changes, &Enum.reverse/1), end_lsn, state)
 
     queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil}
+    state = %{state | queue: queue, transaction: nil, drop_current_transaction?: false}
 
     dispatch_events(state, [])
   end
@@ -205,29 +226,29 @@ defmodule Electric.Replication.Producer do
   defp data_tuple_to_map(_columns, nil), do: %{}
 
   defp data_tuple_to_map(columns, tuple_data) do
-    for {column, index} <- Enum.with_index(columns, 1),
-        do: {column.name, :erlang.element(index, tuple_data)},
-        into: %{}
+    columns
+    |> Enum.zip(Tuple.to_list(tuple_data))
+    |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
   defp build_message(transaction, end_lsn, state) do
     %Broadway.Message{
       data: transaction,
-      metadata: %{publication: state.publication},
-      acknowledger: {__MODULE__, state.conn, {state.client, end_lsn}}
+      metadata: %{publication: state.publication, origin: state.origin},
+      acknowledger: {__MODULE__, {state.conn, state.origin}, {state.client, end_lsn}}
     }
   end
 
   def ack(_, [], []), do: nil
   def ack(_, _, x) when length(x) > 0, do: throw("XXX ack failure handling not yet implemented")
 
-  def ack(conn, successful, _) do
+  def ack({conn, origin}, successful, _) do
     {_, _, {client, end_lsn}} =
       successful
       |> List.last()
       |> Map.fetch!(:acknowledger)
 
-    Logger.debug(inspect({:ack, end_lsn}))
+    Logger.debug("Acknowledging #{end_lsn}", origin: origin)
     client.acknowledge_lsn(conn, end_lsn)
   end
 end

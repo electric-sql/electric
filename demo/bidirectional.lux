@@ -1,0 +1,70 @@
+[doc Bidirectional replication test db_a <-> db_b]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric]
+
+[include shared.luxinc]
+
+[invoke setup]
+
+[shell db_a]
+    !INSERT INTO entries (content) VALUES ('hello from db_a');
+    ?$psql
+
+[shell db_b]
+    [loop iter 1..10]
+        @hello from db_a
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+
+[shell electric]
+    ?"content" => "hello from db_a"
+
+[shell db_b]
+    !INSERT INTO entries (content) VALUES ('hello from db_b');
+    ?$psql
+
+[shell electric]
+    ?NewRecord
+    ?"content" => "hello from db_b"
+
+[shell db_a]
+    [loop iter 1..10]
+        @hello from db_b
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+    !UPDATE entries SET content_b = 'bye from db_a';
+    ?$psql
+
+[shell electric]
+    ?UpdatedRecord
+    ?"content_b" => "bye from db_a"
+
+[shell db_b]
+    [loop iter 1..10]
+        @bye from db_a
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+    !DELETE FROM entries WHERE content_b = 'bye from db_a';
+    ?$psql
+
+[shell electric]
+    ?DeletedRecord
+    ?"content_b" => "bye from db_a"
+
+[shell db_b]
+  [loop iter 1..10]
+      @0 rows
+      !select * from entries;
+      ?electric=
+      [sleep 1]
+  [endloop]
+
+[cleanup]
+    [invoke teardown]

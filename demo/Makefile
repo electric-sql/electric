@@ -8,22 +8,31 @@ lux:
 	make
 
 start_dev_env:
-	docker-compose up -d
+	docker-compose up -d db_a db_b
+
+start_vaxine:
+	docker-compose up --no-color --no-log-prefix vaxine
+
+start_electric:
+	docker-compose up --no-color --no-log-prefix electric
 
 stop_dev_env:
 	docker-compose down
 	docker-compose stop
 
 test: lux .pull
-	${LUX} simple_test.lux
+	${LUX} *.lux
 
 .pull: vaxine
-	docker-compose pull
-	docker-compose build
+	docker-compose pull db_a db_b
 	touch .pull
 
 vaxine:
 	git clone https://github.com/vaxine-io/vaxine.git
+	cd vaxine && make docker-build
+
+docker-psql-%:
+	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric
 
 clean:
 	rm -rf lux

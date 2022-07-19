@@ -87,8 +87,14 @@ defmodule Electric.Replication.PostgresClient do
     end
   end
 
+  @spec connect(:epgsql.connect_opts()) ::
+          {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(%{} = config) do
     :epgsql.connect(config)
+  end
+
+  def close(conn) do
+    :epgsql.close(conn)
   end
 
   @tables_query """
@@ -150,6 +156,64 @@ defmodule Electric.Replication.PostgresClient do
       # them with new "generic" ones.
       |> Map.put(:oid, incremental_oid)
     end)
+  end
+
+  def start_subscription(conn, name) do
+    with {:ok, _, _} <- :epgsql.squery(conn, "ALTER SUBSCRIPTION #{name} ENABLE"),
+         {:ok, _, _} <-
+           :epgsql.squery(
+             conn,
+             "ALTER SUBSCRIPTION #{name} REFRESH PUBLICATION WITH (copy_data = false)"
+           ) do
+      :ok
+    end
+  end
+
+  def create_publication(conn, name, :all) do
+    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
+    create_publication(conn, name, "ALL TABLES")
+  end
+
+  def create_publication(conn, name, tables) when is_list(tables) do
+    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
+    create_publication(conn, name, "TABLE " <> Enum.join(tables, ", "))
+  end
+
+  def create_publication(conn, name, table_spec) when is_binary(table_spec) do
+    case :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR #{table_spec}") do
+      {:ok, _, _} -> {:ok, name}
+      # TODO: Verify that the publication has the correct tables
+      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
+    end
+  end
+
+  def get_system_id(conn) do
+    {:ok, _, [{system_id, _, _, _}]} = :epgsql.squery(conn, "IDENTIFY_SYSTEM")
+    {:ok, system_id}
+  end
+
+  def create_slot(conn, slot_name) do
+    case :epgsql.squery(
+           conn,
+           "CREATE_REPLICATION_SLOT #{slot_name} LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+         ) do
+      {:ok, _, _} -> {:ok, slot_name}
+      # TODO: Verify that the subscription references the correct publication
+      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, slot_name}
+    end
+  end
+
+  def create_subscription(conn, name, publication_name, connection_params) do
+    connection_string = Enum.map_join(connection_params, " ", fn {k, v} -> "#{k}=#{v}" end)
+
+    case :epgsql.squery(
+           conn,
+           "CREATE SUBSCRIPTION #{name} CONNECTION '#{connection_string}' PUBLICATION #{publication_name} WITH (connect = false)"
+         ) do
+      {:ok, _, _} -> {:ok, name}
+      # TODO: Verify that the subscription references the correct publication
+      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
+    end
   end
 
   defp build_table_representation({schema, table, oid, identity}) do

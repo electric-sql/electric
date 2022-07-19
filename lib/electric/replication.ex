@@ -12,11 +12,11 @@ defmodule Electric.Replication do
   require Logger
 
   def start_link(opts) do
-    producer = Keyword.fetch!(opts, :producer)
+    producer = Map.fetch!(opts, :producer)
 
     Broadway.start_link(
       Replication,
-      name: Keyword.get(opts, :name, Replication),
+      name: Map.get(opts, :name, Replication),
       producer: [
         module: {producer, opts},
         concurrency: 1
@@ -30,13 +30,34 @@ defmodule Electric.Replication do
   @impl true
   def handle_message(
         _,
+        %Message{data: %Transaction{changes: []}} = message,
+        _
+      ) do
+    %{metadata: %{origin: origin, publication: publication}} = message
+
+    Logger.debug(
+      "Empty transaction in publication `#{publication}`",
+      origin: origin
+    )
+
+    message
+  end
+
+  @impl true
+  def handle_message(
+        _,
         %Message{data: %Transaction{changes: changes, commit_timestamp: ts}} = message,
         _
       ) do
-    Logger.debug(inspect({:message, message}, pretty: true))
+    %{metadata: %{origin: origin, publication: publication}} = message
+
+    Logger.debug(
+      "New transaction in publication `#{publication}`: #{inspect(message.data, pretty: true)}",
+      origin: origin
+    )
 
     changes
-    |> process_changes(ts, message.metadata.publication)
+    |> process_changes(ts, publication, origin)
     |> case do
       :ok ->
         message
@@ -46,9 +67,9 @@ defmodule Electric.Replication do
     end
   end
 
-  defp process_changes(changes, commit_timestamp, publication) do
+  defp process_changes(changes, commit_timestamp, publication, origin) do
     VaxRepo.transaction(fn ->
-      Metadata.new(commit_timestamp, publication)
+      Metadata.new(commit_timestamp, publication, origin)
       |> VaxRepo.insert()
 
       changes

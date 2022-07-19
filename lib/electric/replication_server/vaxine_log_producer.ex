@@ -15,7 +15,7 @@ defmodule Electric.ReplicationServer.VaxineLogProducer do
     address = opts[:hostname] |> String.to_charlist()
     port = opts[:port]
     {:ok, pid} = :vx_client.connect(address, port, [])
-    :ok = :vx_client.start_replication(pid, require_ack: false)
+    :ok = :vx_client.start_replication(pid, [])
 
     {:producer, {:queue.new(), 0}, dispatcher: GenStage.DemandDispatcher}
   end

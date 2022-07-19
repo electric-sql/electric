@@ -322,7 +322,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
     |> tcp_send(state)
 
     Logger.debug(
-      "Connection established with #{inspect(state.client)}, config: #{inspect(settings, pretty: true)}"
+      "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
     )
 
     :ok = state.transport.setopts(state.socket, active: :once)
@@ -535,12 +535,11 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
 
   # TODO: implement actual logic for authentication requirement
   defp authentication_required?("127.0.0.1" <> _, _settings), do: false
-  defp authentication_required?(_, _settings), do: true
+  defp authentication_required?(_, _settings), do: false
 
   defp tcp_send(nil, _), do: :ok
 
   defp tcp_send(data, %__MODULE__{transport: transport, socket: socket}) when is_binary(data) do
-    Logger.debug("Sending #{inspect(data)} to client")
     transport.send(socket, data)
   end
 

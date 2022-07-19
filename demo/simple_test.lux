@@ -1,71 +1,11 @@
-[doc Test of single and multi line regular expressions]
+[doc Sanity check test that environment starts correctly]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 
-[macro ok]
-    ?SH-PROMPT:
-    !echo ==$$?==
-    ?^==0==
-[endmacro]
+[include shared.luxinc]
 
-[macro start_psql name]
-    [loop iter 1..10]
-          @electric=#
-          !docker exec -it -e PGPASSWORD=password demo_${name}_1 psql -h ${name} -U electric -d electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-[endmacro]
-
-[shell start_env]
-    [progress start development environment]
-    !make start_dev_env
-    [invoke ok]
-
-[shell db_a]
-    [invoke start_psql db_a]
-
-    !INSERT INTO entries (content) VALUES ('a');
-    ?INSERT 0 1
-
-    !SELECT * from entries;
-    ?(1 row)
-    ?$psql
-
-[shell db_b]
-    [invoke start_psql db_b]
-    !INSERT INTO entries (content) VALUES ('a');
-    #$psql
-
-[shell vaxine]
-    [invoke wait_port 8088]
-    [invoke wait_port 8087]
+[invoke setup]
 
 [cleanup]
-    [progress stop development environment]
-    !make stop_dev_env
-    [invoke ok]
-
-
-#####################################################
-## Not used, but could be helpfull
-
-[macro wait_port port]
-    [loop iter 1..10]
-          @==0==
-          !nc -z localhost $port; echo ==$$?==
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-[endmacro]
-
-[macro wait_name name]
-    [loop iter 1..10]
-          @accepting connections
-          !docker exec -it -e PGPASSWORD=password demo_${name}_1 pg_isready -U electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-    ?SH-PROMPT:
-[endmacro]
+    [invoke teardown]

@@ -14,11 +14,14 @@ RUN apt-get update -y && \
     rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
-COPY config /app/
-COPY lib    /app/
-COPY mix.*  /app/
 COPY Makefile /app/
+RUN make build_tools
 
+COPY mix.*  /app/
+RUN make deps
+
+COPY config /app/config/
+COPY lib    /app/lib/
 RUN make compile release
 
 FROM ${RUNNER_IMAGE} AS runner_setup

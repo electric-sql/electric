@@ -9,10 +9,11 @@ defmodule Electric.Application do
       {Registry, keys: :unique, name: Electric.PostgresSlotRegistry},
       {Registry, keys: :duplicate, name: Electric.PostgresDispatcher},
       Electric.VaxRepo,
-      {Electric.Replication, Application.get_env(:electric, Electric.Replication)},
+      Electric.ReplicationServer.Postgres,
+      {Electric.Replication.Connectors,
+      Application.get_env(:electric, Electric.Replication.Connectors)},
       {Electric.ReplicationServer.VaxineLogConsumer,
-       Application.get_env(:electric, Electric.ReplicationServer.VaxineLogConsumer)},
-      Electric.ReplicationServer.Postgres
+      Application.get_env(:electric, Electric.ReplicationServer.VaxineLogConsumer)}
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

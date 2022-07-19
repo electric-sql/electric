@@ -1,0 +1,75 @@
+[macro ok]
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?^==0==
+[endmacro]
+
+[macro start_psql name]
+    [loop iter 1..10]
+          @electric=#
+          !docker exec -it -e PGPASSWORD=password demo_${name}_1 psql -h ${name} -U electric -d electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro setup]
+[shell start_env]
+    [progress start development environment]
+    !make start_dev_env
+    [invoke ok]
+
+[shell db_a]
+    [invoke start_psql db_a]
+
+[shell db_b]
+    [invoke start_psql db_b]
+
+[shell vaxine]
+    !make start_vaxine
+    ?application: vx_server
+    ?started_at: antidote@dc1n1
+
+[shell vaxine_wait]
+    [invoke wait_port localhost 8088]
+    [invoke wait_port localhost 8087]
+
+[shell electric]
+    [timeout 10]
+    !make start_electric
+    ?START_REPLICATION SLOT
+    ?START_REPLICATION SLOT
+[endmacro]
+
+[macro teardown]
+    [progress stop development environment]
+    !make stop_dev_env
+    [invoke ok]
+[endmacro]
+
+[macro wait_name name]
+    [loop iter 1..10]
+          @accepting connections
+          !docker exec -it -e PGPASSWORD=password demo_${name}_1 pg_isready -U electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+    ?SH-PROMPT:
+[endmacro]
+
+[macro wait_logs name match_spec]
+    [loop iter 1..10]
+          @${match_spec}
+          !docker logs demo_${name}_1
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro wait_port host port]
+    [loop iter 1..10]
+          @==0==
+          !nc -z $host $port; echo ==$$?==
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]

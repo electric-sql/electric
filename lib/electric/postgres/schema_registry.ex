@@ -17,6 +17,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   subscriber, instances rely on server-sent OIDs. To save us the headache, we generate the OIDs before
   storing the information here and then send the data over with the newly generated OIDs.
   """
+  require Logger
 
   @typedoc """
   Qualified name of the table - its schema (namespace) and its name.
@@ -45,17 +46,12 @@ defmodule Electric.Postgres.SchemaRegistry do
           replica_identity: :all_columns | :default | :nothing | :index
         }
 
-  @type registry() :: Agent.agent()
+  @type registry() :: GenServer.server()
 
-  use Agent
+  use GenServer
 
   def start_link(_) do
-    Agent.start_link(
-      fn ->
-        :ets.new(:postgres_schema_registry, [])
-      end,
-      name: __MODULE__
-    )
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   @doc """
@@ -67,12 +63,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   """
   @spec put_replicated_tables(registry(), String.t(), [replicated_table()]) :: true
   def put_replicated_tables(agent \\ __MODULE__, publication, tables) do
-    Agent.get(agent, fn ets_table ->
-      tables
-      |> Enum.map(&{{:table, {&1.schema, &1.name}, :info}, &1.oid, &1})
-      |> then(&[{{:publication, publication, :tables}, tables} | &1])
-      |> then(&:ets.insert(ets_table, &1))
-    end)
+    GenServer.call(agent, {:put_replicated_tables, publication, tables})
   end
 
   @doc """
@@ -80,7 +71,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   """
   @spec fetch_replicated_tables(registry(), String.t()) :: {:ok, [replicated_table()]} | :error
   def fetch_replicated_tables(agent \\ __MODULE__, publication) do
-    Agent.get(agent, &(:ets.match(&1, {{:publication, publication, :tables}, :"$1"}) |> fetch))
+    GenServer.call(agent, {:fetch_replicated_tables, publication})
   end
 
   @doc """
@@ -95,14 +86,9 @@ defmodule Electric.Postgres.SchemaRegistry do
   """
   @spec fetch_table_info(registry(), {String.t(), String.t()} | non_neg_integer()) ::
           {:ok, replicated_table()} | :error
-  def fetch_table_info(agent \\ __MODULE__, table)
 
-  def fetch_table_info(agent, table) when is_tuple(table) do
-    Agent.get(agent, &(:ets.match(&1, {{:table, table, :info}, :_, :"$1"}) |> fetch))
-  end
-
-  def fetch_table_info(agent, oid) when is_integer(oid) do
-    Agent.get(agent, &(:ets.match(&1, {{:table, :_, :info}, oid, :"$1"}) |> fetch))
+  def fetch_table_info(agent \\ __MODULE__, table) when is_tuple(table) or is_integer(table) do
+    GenServer.call(agent, {:fetch_table_info, table})
   end
 
   @doc """
@@ -121,9 +107,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   """
   @spec put_table_columns(registry(), table_name(), [column()]) :: true
   def put_table_columns(agent \\ __MODULE__, table, columns) do
-    Agent.get(agent, fn ets_table ->
-      :ets.insert(ets_table, {{:table, table, :columns}, columns})
-    end)
+    GenServer.call(agent, {:put_table_columns, table, columns})
   end
 
   @doc """
@@ -136,7 +120,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   def fetch_table_columns(agent \\ __MODULE__, table)
 
   def fetch_table_columns(agent, table) when is_tuple(table) do
-    Agent.get(agent, &(:ets.match(&1, {{:table, table, :columns}, :"$1"}) |> fetch))
+    GenServer.call(agent, {:fetch_table_columns, table})
   end
 
   def fetch_table_columns(agent, table_oid) when is_integer(table_oid) do
@@ -156,6 +140,121 @@ defmodule Electric.Postgres.SchemaRegistry do
     value
   end
 
-  defp fetch([[value]]), do: {:ok, value}
-  defp fetch([]), do: :error
+  @impl true
+  def init(_) do
+    ets_table = :ets.new(:postgres_schema_registry, [])
+
+    {:ok, %{ets_table: ets_table, pending: []}}
+  end
+
+  @impl true
+  def handle_call({:put_replicated_tables, publication, tables}, _from, state) do
+    tables
+    |> Enum.map(&{{:table, {&1.schema, &1.name}, :info}, &1.oid, &1})
+    |> then(&[{{:publication, publication, :tables}, tables} | &1])
+    |> then(&:ets.insert(state.ets_table, &1))
+
+    state = send_pending_calls(state, {:fetch_replicated_tables, publication}, tables)
+
+    state =
+      Enum.reduce(
+        tables,
+        state,
+        &send_pending_calls(&2, {:fetch_table_info, {&1.schema, &1.name}}, &1)
+      )
+
+    state =
+      Enum.reduce(
+        tables,
+        state,
+        &send_pending_calls(&2, {:fetch_table_info, &1.oid}, &1)
+      )
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:put_table_columns, table, columns}, _from, state) do
+    :ets.insert(state.ets_table, {{:table, table, :columns}, columns})
+
+    state = send_pending_calls(state, {:fetch_table_columns, table}, columns)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:fetch_replicated_tables, publication} = key, from, state) do
+    case :ets.match(state.ets_table, {{:publication, publication, :tables}, :"$1"}) do
+      [] ->
+        {:noreply, add_pending_call(state, key, from)}
+
+      [[value]] ->
+        {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:fetch_table_info, {schema, name}} = key, from, state) do
+    case :ets.match(state.ets_table, {{:table, {schema, name}, :info}, :_, :"$1"}) do
+      [] ->
+        {:noreply, add_pending_call(state, key, from)}
+
+      [[value]] ->
+        {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:fetch_table_info, oid} = key, from, state) do
+    case :ets.match(state.ets_table, {{:table, :_, :info}, oid, :"$1"}) do
+      [] ->
+        {:noreply, add_pending_call(state, key, from)}
+
+      [[value]] ->
+        {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:fetch_table_columns, table} = key, from, state) do
+    case :ets.match(state.ets_table, {{:table, table, :columns}, :"$1"}) do
+      [] ->
+        {:noreply, add_pending_call(state, key, from)}
+
+      [[value]] ->
+        {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:timeout, {key, from}}, state) do
+    state.pending
+    |> Enum.find_index(&(&1 == {key, from}))
+    |> case do
+      nil ->
+        {:noreply, state}
+
+      i ->
+        {_, pending} = List.pop_at(state.pending, i)
+        GenServer.reply(from, :error)
+        {:noreply, %{state | pending: pending}}
+    end
+  end
+
+  defp add_pending_call(state, key, from, timeout \\ 3000) do
+    Logger.debug("Waiting for postgres data: #{inspect(key)}")
+    Process.send_after(self(), {:timeout, {key, from}}, timeout)
+    Map.update!(state, :pending, &[{key, from} | &1])
+  end
+
+  defp send_pending_calls(state, key, data) do
+    Logger.debug("Fulfilling postgres data: #{inspect(key)}")
+    {relevant, pending} = Enum.split_with(state.pending, fn {k, _} -> k == key end)
+
+    relevant
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.each(&GenServer.reply(&1, {:ok, data}))
+
+    %{state | pending: pending}
+  end
 end
