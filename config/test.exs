@@ -50,7 +50,6 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
-
 config :electric, Electric.PostgresRepo,
   hostname: "localhost",
   port: 54321,

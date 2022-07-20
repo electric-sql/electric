@@ -11,9 +11,9 @@ defmodule Electric.Application do
       Electric.VaxRepo,
       Electric.ReplicationServer.Postgres,
       {Electric.Replication.Connectors,
-      Application.get_env(:electric, Electric.Replication.Connectors)},
+       Application.get_env(:electric, Electric.Replication.Connectors)},
       {Electric.ReplicationServer.VaxineLogConsumer,
-      Application.get_env(:electric, Electric.ReplicationServer.VaxineLogConsumer)}
+       Application.get_env(:electric, Electric.ReplicationServer.VaxineLogConsumer)}
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

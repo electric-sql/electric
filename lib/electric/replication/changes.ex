@@ -1,5 +1,7 @@
 defmodule Electric.Replication.Changes do
   defmodule Transaction do
+    @type t() :: %__MODULE__{}
+
     defstruct [:changes, :commit_timestamp]
   end
 
