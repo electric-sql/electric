@@ -9,7 +9,7 @@ config :electric, Electric.ReplicationServer.VaxineLogConsumer,
   hostname: "localhost",
   port: 8088
 
-  config :electric, Electric.Replication.Connectors,
+config :electric, Electric.Replication.Connectors,
   postgres_1: [
     producer: Electric.Replication.Producer,
     connection: [
@@ -52,7 +52,6 @@ config :electric, Electric.ReplicationServer.VaxineLogConsumer,
       ]
     ]
   ]
-
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console,

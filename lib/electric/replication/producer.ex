@@ -51,6 +51,7 @@ defmodule Electric.Replication.Producer do
       Logger.metadata(origin: opts.origin)
       Logger.info("Starting replication from #{opts.origin}")
       Logger.info("Connection settings: #{inspect(opts)}")
+
       {:producer,
        %State{
          conn: conn,

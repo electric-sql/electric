@@ -4,6 +4,10 @@ defmodule Electric.ReplicationServer.VaxineLogProducer do
   them to consumer on demand.
   """
 
+  @type vx_txn_data ::
+          {key :: binary(), type :: atom(), materialized_value :: term(), ops :: list(term())}
+  @type vx_wal_txn :: {:vx_wal_txn, tx_id :: term, data :: [vx_txn_data()]}
+
   use GenStage
 
   def start_link(opts) do

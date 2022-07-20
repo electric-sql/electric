@@ -2,6 +2,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumerTest do
   use ExUnit.Case, async: true
 
   alias Electric.ReplicationServer.VaxineLogConsumer
+  alias Electric.ReplicationServer.VaxineLogConsumer.TransactionBuilder
 
   @message {:vx_wal_txn, {:tx_id, 1_657_818_413_769_328, :stub},
             [
@@ -153,17 +154,29 @@ defmodule Electric.ReplicationServer.VaxineLogConsumerTest do
                ]}
             ]}
 
-  @message_expected_transaction
-
   test "are processed" do
     ref = Broadway.test_message(VaxineLogConsumer, @message, metadata: %{})
     assert_receive {:ack, ^ref, [_], _}
   end
 
   test "messages are turned into transactions" do
-    {transaction, metadata} =
-      %Broadway.Message{data: @message, acknowledger: Broadway.CallerAcknowledger}
-      |> VaxineLogConsumer.process_message()
+    metadata = TransactionBuilder.extract_metadata(@message)
+    origin_transaction = TransactionBuilder.build_transaction_for_origin(@message, metadata)
+    peers_transaction = TransactionBuilder.build_transaction_for_peers(@message, metadata)
+
+    assert %Electric.Replication.Changes.Transaction{
+             changes: [
+               %Electric.Replication.Changes.UpdatedRecord{
+                 record: %{
+                   "content" => "iliketrains100",
+                   "content_b" => nil,
+                   "id" => "f7a20872-67ec-4132-a417-e503446b9dba"
+                 },
+                 relation: {"public", "entries"}
+               }
+             ],
+             commit_timestamp: commit_timestamp
+           } = origin_transaction
 
     assert %Electric.Replication.Changes.Transaction{
              changes: [
@@ -176,8 +189,8 @@ defmodule Electric.ReplicationServer.VaxineLogConsumerTest do
                  relation: {"public", "entries"}
                }
              ],
-             commit_timestamp: commit_timestamp
-           } = transaction
+             commit_timestamp: ^commit_timestamp
+           } = peers_transaction
 
     assert %Electric.Replication.Metadata{
              commit_timestamp: ^commit_timestamp,
