@@ -160,9 +160,13 @@ defmodule Electric.ReplicationServer.VaxineLogConsumerTest do
   end
 
   test "messages are turned into transactions" do
-    metadata = TransactionBuilder.extract_metadata(@message)
-    origin_transaction = TransactionBuilder.build_transaction_for_origin(@message, metadata)
-    peers_transaction = TransactionBuilder.build_transaction_for_peers(@message, metadata)
+    assert {:ok, metadata} = TransactionBuilder.extract_metadata(@message)
+
+    assert {:ok, origin_transaction} =
+             TransactionBuilder.build_transaction_for_origin(@message, metadata)
+
+    assert {:ok, peers_transaction} =
+             TransactionBuilder.build_transaction_for_peers(@message, metadata)
 
     assert %Electric.Replication.Changes.Transaction{
              changes: [
