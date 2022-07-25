@@ -3,7 +3,7 @@ version: '3.1'
 
 services:
   vaxine:
-    image: vaxine:local-build
+    image: "${VAXINE_IMAGE:-vaxine:local-build}"
     environment:
       RING_SIZE: "1"
       ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
