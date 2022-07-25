@@ -27,7 +27,7 @@ defmodule Electric.ReplicationServer.VaxineLogProducer do
       port: opts[:port],
       queue: :queue.new(),
       demand: 0,
-      backoff: :backoff.increment(100, @max_backoff_ms)
+      backoff: :backoff.init(100, @max_backoff_ms)
     }
 
     # Can't use `:continue` since it is not yet supported by gen_stage.
@@ -47,11 +47,13 @@ defmodule Electric.ReplicationServer.VaxineLogProducer do
           "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
         )
 
-      _ ->
-        :ok
-    end
+        {:noreply, [], %{state | backoff: :backoff.succeed(state.backoff)}}
 
-    {:noreply, [], state}
+      # No-op. We handle the EXIT signal we receive from the crashing process
+      # instead.
+      {:error, _} ->
+        {:noreply, [], state}
+    end
   end
 
   @impl true
@@ -69,9 +71,9 @@ defmodule Electric.ReplicationServer.VaxineLogProducer do
   end
 
   def handle_info({:EXIT, _pid, _reason}, state) do
-    backoff = :backoff.increment(state.backoff, @max_backoff_ms)
-    Logger.warn("VaxineLogProducer couldn't connect to Vaxine, retrying in #{backoff}ms")
-    :erlang.send_after(backoff, self(), :connect)
+    {backoff_time, backoff} = :backoff.fail(state.backoff)
+    Logger.warn("VaxineLogProducer couldn't connect to Vaxine, retrying in #{backoff_time}ms")
+    :erlang.send_after(backoff_time, self(), :connect)
     {:noreply, [], %{state | backoff: backoff}}
   end
 
