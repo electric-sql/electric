@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.Postgres.SlotServer do
+defmodule Electric.Replication.Postgres.SlotServer do
   @moduledoc """
   Server to collect the upstream transaction and send them downstream to the subscriber
 

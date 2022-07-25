@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.Postgres.TcpServer do
+defmodule Electric.Replication.Postgres.TcpServer do
   @moduledoc """
   Ranch protocol that speaks Postgres messaging. It supports a small subset of Postgres queries
   required to establish an perform logical replication.
@@ -115,7 +115,7 @@ defmodule Electric.ReplicationServer.Postgres.TcpServer do
   alias Electric.Postgres.Messaging
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.OidDatabase
-  alias Electric.ReplicationServer.Postgres.SlotServer
+  alias Electric.Replication.Postgres.SlotServer
   alias Electric.Postgres.Lsn
 
   defstruct socket: nil,

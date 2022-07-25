@@ -18,9 +18,6 @@ release:
 tests:
 	mix test
 
-integration_tests:
-	INTETGRATION=1 mix test
-
 DC_CONFIG=compose.yaml
 
 start_dev_env:

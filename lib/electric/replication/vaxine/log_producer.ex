@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.VaxineLogProducer do
+defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   @moduledoc """
   Connects vx_client, buffers incoming messages and sends
   them to consumer on demand.

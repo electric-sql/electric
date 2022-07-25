@@ -17,8 +17,8 @@ defmodule Electric.Replication.PostgresConnector do
     {:ok, _} = initialize_postgres(args)
 
     children = [
-      {Electric.ReplicationServer.Postgres.SlotServer, slot: args.replication.subscription},
-      {Electric.Replication,
+      {Electric.Replication.Postgres.SlotServer, slot: args.replication.subscription},
+      {Electric.Replication.Postgres.UpstreamPipeline,
        Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
       {Task, fn -> start_subscription(args) end}
     ]
@@ -32,7 +32,7 @@ defmodule Electric.Replication.PostgresConnector do
     args
     |> Map.update!(:connection, &Map.new/1)
     |> Map.update!(:replication, &Map.new/1)
-    |> Map.put_new(:client, Electric.Replication.PostgresClient)
+    |> Map.put_new(:client, Electric.Replication.Postgres.Client)
     |> Map.update!(:replication, &Map.put_new(&1, :slot, "electric_replication"))
     |> Map.update!(:replication, &Map.put_new(&1, :publication_tables, :all))
     |> Map.update!(:replication, &Map.put_new(&1, :subscription, args.origin))

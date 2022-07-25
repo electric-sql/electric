@@ -1,4 +1,4 @@
-defmodule Electric.Replication.PostgresClient do
+defmodule Electric.Replication.Postgres.Client do
   @moduledoc """
   Postgres database replication client.
 
@@ -30,17 +30,19 @@ defmodule Electric.Replication.PostgresClient do
         }
 
   @doc """
-  Invoke to connect to a Postgres instance and start logical replication
-
-  On success returns the established connection, so that it can be used to acknowledge LSNs
+  Connect to a postgres instance
   """
-  @callback connect_and_start_replication(handler_process :: pid()) ::
-              {:ok, replication_info()}
-              | {:error, :epgsql.connect_error() | :epgsql.query_error()}
-  @callback connect_and_start_replication(handler_process :: pid(), config_overrides :: map()) ::
-              {:ok, replication_info()}
-              | {:error, :epgsql.connect_error() | :epgsql.query_error()}
+  @callback connect(connection_config :: :epgsql.connect_opts()) :: {:ok, term()}
 
+  @doc """
+  Start replication and send logical replication messages back to pid
+  """
+  @callback start_replication(
+              conn :: term(),
+              publication :: String.t(),
+              slot :: String.t(),
+              handler :: pid()
+            ) :: :ok
   @doc """
   Query the Postgres instance for table names which fall under the replication
 
@@ -55,8 +57,6 @@ defmodule Electric.Replication.PostgresClient do
   @callback acknowledge_lsn(connection :: term(), lsn :: %{segment: integer(), offset: integer()}) ::
               :ok
 
-  @spec connect_and_start_replication(pid(), keyword) ::
-          {:ok, replication_info()} | {:error, :epgsql.connect_error() | :epgsql.query_error()}
   def connect_and_start_replication(handler, config_overrides \\ []) do
     config = Application.fetch_env!(:electric, __MODULE__)
 

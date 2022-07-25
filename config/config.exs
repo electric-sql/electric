@@ -10,9 +10,14 @@ import Config
 # Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id]
+  metadata: [:client, :connection, :slot, :origin]
 
-config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
+config :electric, Electric.Replication.Postgres,
+  pg_client: Electric.Replication.Postgres.Client,
+  producer: Electric.Replication.Postgres.LogicalReplicationProducer
+
+config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
+  producer: Electric.ReplicationServer.Vaxine.LogProducer
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

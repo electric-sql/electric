@@ -1,8 +1,8 @@
-defmodule Electric.ReplicationServer.VaxineLogConsumer do
+defmodule Electric.Replication.Vaxine.DownstreamPipeline do
   use Broadway
 
   alias Broadway.Message
-  alias Electric.ReplicationServer.VaxineLogConsumer.TransactionBuilder
+  alias Electric.Replication.Vaxine.TransactionBuilder
 
   require Logger
 
