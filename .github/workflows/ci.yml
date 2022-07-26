@@ -58,11 +58,12 @@ jobs:
       - run: mix coveralls.lcov
         env:
           MIX_ENV: test
-      - uses: romeovs/lcov-reporter-action@v0.2.16
+      - name: Report code coverage
+        uses: zgosalvez/github-actions-report-lcov@v1
         with:
-          lcov-file: ./cover/lcov.info
-          delete-old-comments: true
-
+          coverage-files: cover/lcov.info
+          artifact-name: code-coverage-report
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   e2e_tests:
     name: E2E tests
