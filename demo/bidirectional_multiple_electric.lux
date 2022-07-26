@@ -32,18 +32,25 @@
     ?INSERT 0 1
 
 [shell electric]
-    ?+to slot: "postgres_2"
-    ?to slot: "postgres_1"
+    ?+slot=postgres_2 \[debug\] Sending \d messages to the subscriber
+    ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
+    [timeout 10]
 
 [shell db_a]
-    !SELECT * FROM entries;
-    ?Hello from c
-    ?(2 rows)
+    [loop iter 1..10]
+        @Hello from c
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
 
 [shell db_b]
-    !SELECT * FROM entries;
-    ?Hello from c
-    ?(2 rows)
+    [loop iter 1..10]
+        @Hello from c
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
 
 [cleanup]
     [invoke teardown]
