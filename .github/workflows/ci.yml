@@ -31,7 +31,11 @@ jobs:
       - run: |
           mix deps.get
           mix deps.compile
+        env:
+          MIX_ENV: test
       - run: mix compile --force --warnings-as-error
+        env:
+            MIX_ENV: test
       - run: mix test
 
   e2e_tests:
