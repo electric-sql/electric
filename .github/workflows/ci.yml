@@ -5,8 +5,37 @@ on:
       - main
   pull_request: null
 
+env: 
+  VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
+
 jobs:
-  build_and_test:
+  elixir_tests:
+    name: Elixir tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.3"
+          elixir-version: "1.13"
+      - name: Prepare auxillary services
+        run: make start_dev_env
+      - uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
+      - run: |
+          mix deps.get
+          mix deps.compile
+      - run: mix compile --force --warnings-as-error
+      - run: mix test
+
+  e2e_tests:
+    name: E2E tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
