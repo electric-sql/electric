@@ -8,17 +8,40 @@ on:
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+    env: 
+      VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
     steps:
       - uses: actions/checkout@v2
-
-      - name: build
-        uses: docker://elixir:1.13
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
-          args: make build_tools deps compile
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: make docker-build
+      - run: make docker-build-ci
+        env:
+          ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
+          ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_HEAD_REF_SLUG }}
 
-      - run: make -C demo test
+      - run: make lux
+        working-directory: demo
+
+      - run: make .pull
+        working-directory: demo
+
+      - run: make test
+        id: tests
+        working-directory: demo
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ always() }}
+        with:
+          name: lux_logs
+          path: demo/lux_logs/run_*
 
       - run: make start_dev_env
       - run: make stop_dev_env
