@@ -1,5 +1,5 @@
 defmodule Electric.Replication.Postgres.UpstreamPipelineTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Electric.Replication.Postgres.UpstreamPipeline
   alias Electric.Replication.Changes

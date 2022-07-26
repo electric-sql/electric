@@ -1,4 +1,4 @@
-defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
+defmodule Electric.Replication.Vaxine.TransactionBuilderTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Vaxine.TransactionBuilder
@@ -24,14 +24,14 @@ defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
              changes: [
                %Electric.Replication.Changes.UpdatedRecord{
                  record: %{
-                   "content" => "iliketrains100",
+                   "content" => "iliketrains1",
                    "content_b" => nil,
-                   "id" => "f7a20872-67ec-4132-a417-e503446b9dba"
+                   "id" => "cb2fb0f0-dd12-4e87-a3cd-4eaff087995c"
                  },
                  relation: {"public", "entries"}
                }
              ],
-             commit_timestamp: commit_timestamp
+             commit_timestamp: %DateTime{}
            } = origin_transaction
   end
 
@@ -44,14 +44,14 @@ defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
              changes: [
                %Electric.Replication.Changes.NewRecord{
                  record: %{
-                   "content" => "iliketrains100",
+                   "content" => "iliketrains1",
                    "content_b" => nil,
-                   "id" => "f7a20872-67ec-4132-a417-e503446b9dba"
+                   "id" => "cb2fb0f0-dd12-4e87-a3cd-4eaff087995c"
                  },
                  relation: {"public", "entries"}
                }
              ],
-             commit_timestamp: ^commit_timestamp
+             commit_timestamp: %DateTime{}
            } = peers_transaction
   end
 end

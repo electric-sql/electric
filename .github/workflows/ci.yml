@@ -5,8 +5,64 @@ on:
       - main
   pull_request: null
 
+env: 
+  VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
+
 jobs:
-  build_and_test:
+  formatting_check:
+    name: Formatting check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.3"
+          elixir-version: "1.13"
+      - uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
+      - run: mix deps.get
+      - run: mix format --check-formatted
+
+  elixir_tests:
+    name: Elixir tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.3"
+          elixir-version: "1.13"
+      - name: Prepare auxillary services
+        run: make start_dev_env
+      - uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
+      - run: make pretest_compile
+        env:
+          MIX_ENV: test
+      - run: mix coveralls.lcov
+        env:
+          MIX_ENV: test
+      - name: Report code coverage
+        uses: zgosalvez/github-actions-report-lcov@v1
+        with:
+          coverage-files: cover/lcov.info
+          artifact-name: code-coverage-report
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e_tests:
+    name: E2E tests
     runs-on: ubuntu-latest
     env: 
       VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest

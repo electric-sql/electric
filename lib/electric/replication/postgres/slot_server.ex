@@ -132,7 +132,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
     reversed_queue = Enum.reverse(queue)
     {first_lsn, _} = List.first(queue)
     {last_lsn, _} = List.first(reversed_queue)
-    Logger.debug("Sending #{length(queue)} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}")
+
+    Logger.debug(
+      "Sending #{length(queue)} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}"
+    )
 
     reversed_queue
     |> Enum.map(fn {lsn, message} -> Messaging.replication_log(lsn, lsn, message) end)
