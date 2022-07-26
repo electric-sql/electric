@@ -28,15 +28,16 @@ jobs:
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix
-      - run: |
-          mix deps.get
-          mix deps.compile
+      - run: mix deps.get
+      - run: mix deps.compile
         env:
           MIX_ENV: test
       - run: mix compile --force --warnings-as-error
         env:
-            MIX_ENV: test
+          MIX_ENV: test
       - run: mix test
+        env:
+          MIX_ENV: test
 
   e2e_tests:
     name: E2E tests
