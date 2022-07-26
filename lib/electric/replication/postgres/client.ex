@@ -32,7 +32,7 @@ defmodule Electric.Replication.Postgres.Client do
   @doc """
   Connect to a postgres instance
   """
-  @callback connect(connection_config :: :epgsql.connect_opts()) :: {:ok, term()}
+  @callback connect(connection_config :: :epgsql.connect_opts()) :: {:ok, term()} | {:error, term()}
 
   @doc """
   Start replication and send logical replication messages back to pid
@@ -42,7 +42,7 @@ defmodule Electric.Replication.Postgres.Client do
               publication :: String.t(),
               slot :: String.t(),
               handler :: pid()
-            ) :: :ok
+            ) :: :ok | {:error, term()}
   @doc """
   Query the Postgres instance for table names which fall under the replication
 
@@ -56,36 +56,6 @@ defmodule Electric.Replication.Postgres.Client do
   """
   @callback acknowledge_lsn(connection :: term(), lsn :: %{segment: integer(), offset: integer()}) ::
               :ok
-
-  def connect_and_start_replication(handler, config_overrides \\ []) do
-    config = Application.fetch_env!(:electric, __MODULE__)
-
-    connection_config =
-      config
-      |> Keyword.get(:connection, [])
-      |> Map.new()
-      |> Map.merge(Map.new(Keyword.get(config_overrides, :connection, [])))
-
-    %{slot: slot, publication: publication} =
-      config
-      |> Keyword.get(:replication, [])
-      |> Map.new()
-      |> Map.merge(Map.new(Keyword.get(config_overrides, :replication, [])))
-
-    opts = 'proto_version \'1\', publication_names \'#{publication}\''
-
-    with {:ok, conn} <- :epgsql.connect(connection_config),
-         replicated_tables = query_replicated_tables(conn, publication),
-         :ok <- :epgsql.start_replication(conn, slot, handler, [], '0/0', opts) do
-      {:ok,
-       %{
-         tables: replicated_tables,
-         database: connection_config.database,
-         connection: conn,
-         publication: publication
-       }}
-    end
-  end
 
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
