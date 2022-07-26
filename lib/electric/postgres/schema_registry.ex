@@ -76,6 +76,14 @@ defmodule Electric.Postgres.SchemaRegistry do
   end
 
   @doc """
+  Delete all information related to a given publication
+  """
+  @spec clear_replicated_tables(registry(), String.t()) :: :ok
+  def clear_replicated_tables(agent \\ __MODULE__, publication) do
+    GenServer.call(agent, {:clear_replicated_tables, publication})
+  end
+
+  @doc """
   Fetch information about a single table.
 
   For now we're essentially using a global namespace for all tables, under the assumption that
@@ -106,7 +114,8 @@ defmodule Electric.Postgres.SchemaRegistry do
   """
   @spec put_table_columns(registry(), table_name(), [column()]) :: true
   def put_table_columns(agent \\ __MODULE__, table, columns) do
-    GenServer.call(agent, {:put_table_columns, table, columns})
+    %{oid: oid} = fetch_table_info!(agent, table)
+    GenServer.call(agent, {:put_table_columns, table, oid, columns})
   end
 
   @doc """
@@ -118,14 +127,8 @@ defmodule Electric.Postgres.SchemaRegistry do
   @spec fetch_table_columns(registry(), table_name() | oid()) :: {:ok, [column()]} | :error
   def fetch_table_columns(agent \\ __MODULE__, table)
 
-  def fetch_table_columns(agent, table) when is_tuple(table) do
+  def fetch_table_columns(agent, table) when is_tuple(table) or is_integer(table) do
     GenServer.call(agent, {:fetch_table_columns, table})
-  end
-
-  def fetch_table_columns(agent, table_oid) when is_integer(table_oid) do
-    with {:ok, %{schema: schema, name: name}} <- fetch_table_info(agent, table_oid) do
-      fetch_table_columns(agent, {schema, name})
-    end
   end
 
   @doc """
@@ -173,12 +176,29 @@ defmodule Electric.Postgres.SchemaRegistry do
   end
 
   @impl true
-  def handle_call({:put_table_columns, table, columns}, _from, state) do
-    :ets.insert(state.ets_table, {{:table, table, :columns}, columns})
+  def handle_call({:put_table_columns, table, table_oid, columns}, _from, state) do
+    :ets.insert(state.ets_table, {{:table, table, :columns}, table_oid, columns})
 
     state = send_pending_calls(state, {:fetch_table_columns, table}, columns)
+    state = send_pending_calls(state, {:fetch_table_columns, table_oid}, columns)
 
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:clear_replicated_tables, publication}, _from, state) do
+    case :ets.match(state.ets_table, {{:publication, publication, :tables}, :"$1"}) do
+      [] ->
+        {:reply, :ok, state}
+
+      [[tables]] ->
+        tables
+        |> Enum.map(&{&1.schema, &1.name})
+        |> Enum.each(&:ets.match_delete(state.ets_table, {{:table, &1, :_}, :_, :_}))
+
+        :ets.match_delete(state.ets_table, {{:publication, publication, :tables}, :_})
+        {:reply, :ok, state}
+    end
   end
 
   @impl true
@@ -215,8 +235,19 @@ defmodule Electric.Postgres.SchemaRegistry do
   end
 
   @impl true
-  def handle_call({:fetch_table_columns, table} = key, from, state) do
-    case :ets.match(state.ets_table, {{:table, table, :columns}, :"$1"}) do
+  def handle_call({:fetch_table_columns, {schema, name}} = key, from, state) do
+    case :ets.match(state.ets_table, {{:table, {schema, name}, :columns}, :_, :"$1"}) do
+      [] ->
+        {:noreply, add_pending_call(state, key, from)}
+
+      [[value]] ->
+        {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:fetch_table_columns, oid} = key, from, state) do
+    case :ets.match(state.ets_table, {{:table, :_, :columns}, oid, :"$1"}) do
       [] ->
         {:noreply, add_pending_call(state, key, from)}
 

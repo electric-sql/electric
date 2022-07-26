@@ -23,11 +23,18 @@ defmodule Electric.Replication.Postgres.SlotServer do
             publication: nil,
             timer: nil,
             queue: [],
+            socket_process_ref: nil,
             sent_relations: %{},
             opts: []
 
+  defguardp replication_started?(state) when not is_nil(state.send_fn)
+
+  @type server :: pid() | String.t()
+  @type send_fn :: (binary() -> none())
+
   # Public interface
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(init_args) do
     slot_name = Keyword.fetch!(init_args, :slot)
     GenServer.start_link(__MODULE__, init_args, name: name(slot_name))
@@ -37,8 +44,18 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   def get_current_lsn(slot_name), do: GenServer.call(name(slot_name), :get_current_lsn)
 
+  @spec start_replication(server(), send_fn(), String.t(), Lsn.t()) :: :ok | {:error, term()}
   def start_replication(slot_name, send_fn, publication, lsn),
     do: GenServer.call(name(slot_name), {:start_replication, send_fn, publication, lsn})
+
+  @spec stop_replication(server()) :: :ok
+  def stop_replication(slot_name), do: GenServer.call(name(slot_name), {:stop_replication})
+
+  def push_replication_message(slot_name, message) when is_pid(slot_name),
+    do: send(slot_name, {:replication_message, message})
+
+  def push_replication_message(slot_name, message),
+    do: name(slot_name) |> GenServer.whereis() |> send({:replication_message, message})
 
   def send_keepalive(slot_name),
     do: name(slot_name) |> GenServer.whereis() |> send(:send_keepalive)
@@ -74,8 +91,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_call({:start_replication, send_fn, publication, start_lsn}, _, state) do
+  def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
+    {:reply, {:error, :replication_already_started}, state}
+  end
+
+  @impl true
+  def handle_call({:start_replication, send_fn, publication, start_lsn}, {from, _}, state) do
     Logger.metadata(slot: state.slot_name)
+    ref = Process.monitor(from)
 
     {:ok, _} =
       Registry.register(Electric.PostgresDispatcher, {:publication, publication}, state.slot_name)
@@ -86,8 +109,20 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.info("Starting replication to #{state.slot_name}")
 
-    {:reply, :ok, %{state | publication: publication, send_fn: send_fn, timer: timer},
+    {:reply, :ok,
+     %{state | publication: publication, send_fn: send_fn, timer: timer, socket_process_ref: ref},
      {:continue, {:backfill, start_lsn}}}
+  end
+
+  @impl true
+  def handle_call({:stop_replication}, _, state) do
+    {:reply, :ok, clear_replication(state)}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _, _}, state) when ref == state.socket_process_ref do
+    # Socket process died unexpectedly, send function is likely invalid so we stop replication
+    {:noreply, clear_replication(state)}
   end
 
   @impl true
@@ -110,7 +145,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     state = %{state | current_lsn: new_lsn, sent_relations: relations}
 
-    if is_function(state.send_fn) do
+    if replication_started?(state) do
       drain_queue(Enum.reverse(wal_messages), state.send_fn)
 
       {:noreply, state}
@@ -125,6 +160,21 @@ defmodule Electric.Replication.Postgres.SlotServer do
     do: {:via, Registry, {Electric.PostgresSlotRegistry, {:slot, slot_name}}}
 
   defp name(server), do: server
+
+  defp clear_replication(%__MODULE__{} = state) do
+    Process.demonitor(state.socket_process_ref)
+    Registry.unregister(Electric.PostgresDispatcher, {:publication, state.publication})
+    if state.timer, do: :timer.cancel(state.timer)
+
+    %__MODULE__{
+      state
+      | publication: nil,
+        send_fn: nil,
+        timer: nil,
+        socket_process_ref: nil,
+        sent_relations: %{}
+    }
+  end
 
   defp drain_queue([], _), do: :ok
 
