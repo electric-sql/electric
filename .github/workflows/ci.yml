@@ -36,9 +36,9 @@ jobs:
         id: tests
         working-directory: demo
 
-      - name: Upload lux logs on failure
+      - name: Upload lux logs
         uses: actions/upload-artifact@v3
-        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        if: ${{ always() }}
         with:
           name: lux_logs
           path: demo/lux_logs/run_*
