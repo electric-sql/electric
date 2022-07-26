@@ -1,4 +1,4 @@
-defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
+defmodule Electric.Replication.Vaxine.TransactionBuilderTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Vaxine.TransactionBuilder
