@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.Postgres.SlotServer do
+defmodule Electric.Replication.Postgres.SlotServer do
   @moduledoc """
   Server to collect the upstream transaction and send them downstream to the subscriber
 
@@ -129,10 +129,12 @@ defmodule Electric.ReplicationServer.Postgres.SlotServer do
   defp drain_queue([], _), do: :ok
 
   defp drain_queue(queue, send_fn) when is_function(send_fn, 1) do
-    Logger.debug("Sending #{length(queue)} messages to the subscriber")
+    reversed_queue = Enum.reverse(queue)
+    {first_lsn, _} = List.first(queue)
+    {last_lsn, _} = List.first(reversed_queue)
+    Logger.debug("Sending #{length(queue)} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}")
 
-    queue
-    |> Enum.reverse()
+    reversed_queue
     |> Enum.map(fn {lsn, message} -> Messaging.replication_log(lsn, lsn, message) end)
     |> Enum.each(send_fn)
   end

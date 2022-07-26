@@ -1,14 +1,16 @@
 import Config
 
-config :electric, Electric.Replication,
+config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
+
+config :electric, Electric.Replication.Postgres,
   producer: Broadway.DummyProducer,
   pg_client: Electric.Replication.MockPostgresClient
 
-config :electric, Electric.ReplicationServer.VaxineLogConsumer, producer: Broadway.DummyProducer
+config :electric, Electric.Replication.Vaxine.DownstreamPipeline, producer: Broadway.DummyProducer
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
-    producer: Electric.Replication.Producer,
+    producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
       host: 'localhost',
       port: 54321,
@@ -29,7 +31,7 @@ config :electric, Electric.Replication.Connectors,
     ]
   ],
   postgres_2: [
-    producer: Electric.Replication.Producer,
+    producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
       host: 'localhost',
       port: 54322,

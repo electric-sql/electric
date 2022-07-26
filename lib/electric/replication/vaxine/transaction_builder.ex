@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.VaxineLogConsumer.TransactionBuilder do
+defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.Replication.Changes
   alias Electric.Replication.Row
   alias Electric.Replication.Metadata

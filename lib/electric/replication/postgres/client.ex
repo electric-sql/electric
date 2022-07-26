@@ -1,4 +1,4 @@
-defmodule Electric.Replication.PostgresClient do
+defmodule Electric.Replication.Postgres.Client do
   @moduledoc """
   Postgres database replication client.
 
@@ -30,17 +30,19 @@ defmodule Electric.Replication.PostgresClient do
         }
 
   @doc """
-  Invoke to connect to a Postgres instance and start logical replication
-
-  On success returns the established connection, so that it can be used to acknowledge LSNs
+  Connect to a postgres instance
   """
-  @callback connect_and_start_replication(handler_process :: pid()) ::
-              {:ok, replication_info()}
-              | {:error, :epgsql.connect_error() | :epgsql.query_error()}
-  @callback connect_and_start_replication(handler_process :: pid(), config_overrides :: map()) ::
-              {:ok, replication_info()}
-              | {:error, :epgsql.connect_error() | :epgsql.query_error()}
+  @callback connect(connection_config :: :epgsql.connect_opts()) :: {:ok, term()} | {:error, term()}
 
+  @doc """
+  Start replication and send logical replication messages back to pid
+  """
+  @callback start_replication(
+              conn :: term(),
+              publication :: String.t(),
+              slot :: String.t(),
+              handler :: pid()
+            ) :: :ok | {:error, term()}
   @doc """
   Query the Postgres instance for table names which fall under the replication
 
@@ -54,38 +56,6 @@ defmodule Electric.Replication.PostgresClient do
   """
   @callback acknowledge_lsn(connection :: term(), lsn :: %{segment: integer(), offset: integer()}) ::
               :ok
-
-  @spec connect_and_start_replication(pid(), keyword) ::
-          {:ok, replication_info()} | {:error, :epgsql.connect_error() | :epgsql.query_error()}
-  def connect_and_start_replication(handler, config_overrides \\ []) do
-    config = Application.fetch_env!(:electric, __MODULE__)
-
-    connection_config =
-      config
-      |> Keyword.get(:connection, [])
-      |> Map.new()
-      |> Map.merge(Map.new(Keyword.get(config_overrides, :connection, [])))
-
-    %{slot: slot, publication: publication} =
-      config
-      |> Keyword.get(:replication, [])
-      |> Map.new()
-      |> Map.merge(Map.new(Keyword.get(config_overrides, :replication, [])))
-
-    opts = 'proto_version \'1\', publication_names \'#{publication}\''
-
-    with {:ok, conn} <- :epgsql.connect(connection_config),
-         replicated_tables = query_replicated_tables(conn, publication),
-         :ok <- :epgsql.start_replication(conn, slot, handler, [], '0/0', opts) do
-      {:ok,
-       %{
-         tables: replicated_tables,
-         database: connection_config.database,
-         connection: conn,
-         publication: publication
-       }}
-    end
-  end
 
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}

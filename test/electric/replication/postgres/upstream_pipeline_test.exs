@@ -1,6 +1,7 @@
-defmodule Electric.ReplicationTest do
+defmodule Electric.Replication.Postgres.UpstreamPipelineTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Postgres.UpstreamPipeline
   alias Electric.Replication.Changes
 
   @id Ecto.UUID.generate()
@@ -21,7 +22,13 @@ defmodule Electric.ReplicationTest do
     relation: {"public", "entries"}
   }
 
-  describe "Electric.Replication correctly consumes and acks" do
+  setup _ do
+    start_supervised!({UpstreamPipeline, %{producer: Broadway.DummyProducer}})
+
+    :ok
+  end
+
+  describe "Postgres upstream pipeline correctly consumes and acks" do
     test "transactions that create new records" do
       ref = changes_test_message([@new_record_change])
       assert_receive {:ack, ^ref, _, _}
@@ -39,8 +46,8 @@ defmodule Electric.ReplicationTest do
   end
 
   defp changes_test_message(changes) do
-    Broadway.test_message(Electric.Replication, %Changes.Transaction{changes: changes},
-      metadata: %{publication: "test"}
+    Broadway.test_message(UpstreamPipeline, %Changes.Transaction{changes: changes},
+      metadata: %{publication: "dummy_publication", origin: "dummy_postgres"}
     )
   end
 end
