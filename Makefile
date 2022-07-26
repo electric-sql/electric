@@ -15,6 +15,9 @@ compile:
 release:
 	MIX_ENV="prod" mix release
 
+pretest_compile: deps
+	mix compile --force --warnings-as-error
+
 tests:
 	mix test
 
