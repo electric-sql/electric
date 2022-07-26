@@ -9,6 +9,26 @@ env:
   VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
 
 jobs:
+  formatting_check:
+    name: Formatting check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.3"
+          elixir-version: "1.13"
+      - uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
+      - run: mix deps.get
+      - run: mix format --check-formatted
+
   elixir_tests:
     name: Elixir tests
     runs-on: ubuntu-latest

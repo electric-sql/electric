@@ -32,7 +32,8 @@ defmodule Electric.Replication.Postgres.Client do
   @doc """
   Connect to a postgres instance
   """
-  @callback connect(connection_config :: :epgsql.connect_opts()) :: {:ok, term()} | {:error, term()}
+  @callback connect(connection_config :: :epgsql.connect_opts()) ::
+              {:ok, term()} | {:error, term()}
 
   @doc """
   Start replication and send logical replication messages back to pid
