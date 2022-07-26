@@ -9,7 +9,13 @@ defmodule Electric.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"]
+      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"],
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.lcov": :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -40,7 +46,8 @@ defmodule Electric.MixProject do
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16.3"},
       {:recon_ex, "~> 0.9.1"},
-      {:dialyxir, "~> 1.0", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:excoveralls, "~> 0.10", only: :test, runtime: false}
     ]
   end
 

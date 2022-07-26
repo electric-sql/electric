@@ -55,9 +55,14 @@ jobs:
       - run: mix compile --force --warnings-as-error
         env:
           MIX_ENV: test
-      - run: mix test
+      - run: mix coveralls.lcov
         env:
           MIX_ENV: test
+      - uses: romeovs/lcov-reporter-action@v0.2.16
+        with:
+          lcov-file: ./cover/lcov.info
+          delete-old-comments: true
+
 
   e2e_tests:
     name: E2E tests
