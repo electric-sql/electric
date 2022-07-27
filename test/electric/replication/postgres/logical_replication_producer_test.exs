@@ -1,32 +1,17 @@
-defmodule Electric.Replication.ProducerTest do
+defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   use ExUnit.Case, async: true
   import Mox
 
-  alias Electric.Replication.Producer
+  alias Electric.Replication.Postgres.LogicalReplicationProducer
   alias Electric.Replication.Changes.{NewRecord, UpdatedRecord}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
+  alias Electric.Replication.MockPostgresClient
 
   setup _ do
-    stub(Electric.Replication.MockPostgresClient, :connect_and_start_replication, fn _ ->
-      info = %{
-        tables: [
-          %{
-            schema: "public",
-            name: "entities",
-            oid: 0,
-            replica_identity: :all_columns,
-            columns: [%{name: "entities"}]
-          }
-        ],
-        database: "postgres",
-        publication: "stub",
-        connection: nil
-      }
-
-      {:ok, info}
-    end)
+    stub(MockPostgresClient, :connect, fn _ -> {:ok, :conn} end)
+    stub(MockPostgresClient, :start_replication, fn :conn, _, _, _ -> :ok end)
 
     :ok
   end
@@ -37,7 +22,7 @@ defmodule Electric.Replication.ProducerTest do
       |> relation("entities", id: :uuid, data: :varchar)
       |> insert("entities", {"test", "value"})
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &Producer.handle_info/2)
+      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
     assert [%Broadway.Message{data: transaction}] = events
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
@@ -52,7 +37,7 @@ defmodule Electric.Replication.ProducerTest do
       |> insert("entities", {"test3", "value"})
       |> insert("entities", {"test4", "value"})
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &Producer.handle_info/2)
+      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
     assert [%Broadway.Message{data: transaction}] = events
     assert length(transaction.changes) == 4
@@ -75,7 +60,7 @@ defmodule Electric.Replication.ProducerTest do
       |> update("entities", {"test", "3"}, {"test", "4"})
       |> update("entities", {"test", "4"}, {"test", "5"})
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &Producer.handle_info/2)
+      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
     assert [%Broadway.Message{data: transaction}] = events
     assert length(transaction.changes) == 5
@@ -90,8 +75,15 @@ defmodule Electric.Replication.ProducerTest do
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} = Producer.init(pg_client: Electric.Replication.MockPostgresClient)
-    {_, _, state} = Producer.handle_demand(demand, state)
+    {:producer, state} =
+      LogicalReplicationProducer.init(%{
+        client: MockPostgresClient,
+        origin: "mock_postgres",
+        replication: %{publication: "mock_pub", slot: "mock_slot"},
+        connection: %{}
+      })
+
+    {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state
   end
 
