@@ -13,10 +13,8 @@ defmodule Electric.Replication.Row do
 
   @spec new(schema :: String.t(), table :: String.t(), record :: map()) :: t()
   def new(schema, table, record) do
-    id = extract_id(record)
-
     %__MODULE__{
-      id: schema <> ":" <> table <> ":" <> id,
+      id: extract_id(schema, table, record),
       table: table,
       schema: schema,
       row: record,
@@ -35,7 +33,18 @@ defmodule Electric.Replication.Row do
     %{changeset | changes: Map.put(changeset.changes, :deleted?, value)}
   end
 
-  # TODO: other column names?
-  defp extract_id(%{"id" => id}), do: id
-  defp extract_id(%{id: id}), do: id
+  defp extract_id(schema, table, record) do
+    keys =
+      {schema, table}
+      |> Electric.Postgres.SchemaRegistry.fetch_table_info!()
+      |> Map.fetch!(:primary_keys)
+
+    primary_keys_joined =
+      record
+      |> Map.take(keys)
+      |> Map.values()
+      |> Enum.join(":")
+
+    schema <> ":" <> table <> ":" <> primary_keys_joined
+  end
 end

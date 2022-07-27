@@ -89,6 +89,14 @@ defmodule Electric.Replication.Postgres.Client do
     ORDER BY attrelid, a.attnum;
   """
 
+  @primary_keys_query """
+  SELECT i.indrelid, a.attname
+  FROM   pg_index i
+  JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+  WHERE  i.indrelid = ANY('{$1}')
+  AND    i.indisprimary
+  """
+
   def query_replicated_tables(conn, publication \\ nil)
 
   def query_replicated_tables(conn, nil) do
@@ -114,14 +122,24 @@ defmodule Electric.Replication.Postgres.Client do
       |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
       |> then(&:epgsql.squery(conn, &1))
 
+    {:ok, _, pks_data} =
+      @primary_keys_query
+      |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
+      |> then(&:epgsql.squery(conn, &1))
+
+    pks = Enum.group_by(pks_data, &String.to_integer(elem(&1, 0)), &elem(&1, 1))
+
     columns_data
     |> Enum.group_by(&String.to_integer(elem(&1, 0)), &build_column_representation/1)
     # We start our fake OIDs from 20000 to avoid any conflicts with reserved type oids (although unlikely anyhow)
     |> Enum.with_index(20000)
     |> Enum.map(fn {{table_oid, columns}, incremental_oid} ->
+      table_pks = Map.fetch!(pks, table_oid)
+
       tables
       |> Map.fetch!(table_oid)
       |> Map.put(:columns, columns)
+      |> Map.put(:primary_keys, table_pks)
       # We replace original OIDs with the fake ones since this schema is essentially shared between all PGs
       # all of which have their own OIDs for the same tables. To avoid any unintentional usage, we replace
       # them with new "generic" ones.

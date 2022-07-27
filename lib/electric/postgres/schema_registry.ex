@@ -43,6 +43,7 @@ defmodule Electric.Postgres.SchemaRegistry do
           schema: String.t(),
           name: String.t(),
           oid: integer(),
+          primary_keys: [String.t()],
           replica_identity: :all_columns | :default | :nothing | :index
         }
 
@@ -84,9 +85,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Table can be identified either as a `{"schema_name", "table_name"}` tuple, or the table's OID.
   See note on OIDs in the module documentation.
   """
-  @spec fetch_table_info(registry(), {String.t(), String.t()} | non_neg_integer()) ::
-          {:ok, replicated_table()} | :error
-
+  @spec fetch_table_info(registry(), table_name() | oid()) :: {:ok, replicated_table()} | :error
   def fetch_table_info(agent \\ __MODULE__, table) when is_tuple(table) or is_integer(table) do
     GenServer.call(agent, {:fetch_table_info, table})
   end
