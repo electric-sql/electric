@@ -8,7 +8,6 @@ config :electric, Electric.Replication.Postgres,
 
 config :electric, Electric.Replication.Vaxine.DownstreamPipeline, producer: Broadway.DummyProducer
 
-
 config :electric, Electric.PostgresRepo,
   hostname: "localhost",
   port: 54321,
