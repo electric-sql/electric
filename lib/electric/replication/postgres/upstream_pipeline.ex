@@ -1,13 +1,11 @@
-defmodule Electric.Replication do
+defmodule Electric.Replication.Postgres.UpstreamPipeline do
   use Broadway
 
   alias Broadway.Message
-  alias Electric.Replication
   alias Electric.VaxRepo
 
   alias Electric.Replication.Metadata
-
-  alias Replication.Changes.Transaction
+  alias Electric.Replication.Changes.Transaction
 
   require Logger
 
@@ -15,8 +13,8 @@ defmodule Electric.Replication do
     producer = Map.fetch!(opts, :producer)
 
     Broadway.start_link(
-      Replication,
-      name: Map.get(opts, :name, Replication),
+      __MODULE__,
+      name: Map.get(opts, :name, __MODULE__),
       producer: [
         module: {producer, opts},
         concurrency: 1
@@ -57,7 +55,7 @@ defmodule Electric.Replication do
     )
 
     changes
-    |> process_changes(ts, publication, origin)
+    |> send_to_vaxine(ts, publication, origin)
     |> case do
       :ok ->
         message
@@ -67,7 +65,7 @@ defmodule Electric.Replication do
     end
   end
 
-  defp process_changes(changes, commit_timestamp, publication, origin) do
+  defp send_to_vaxine(changes, commit_timestamp, publication, origin) do
     VaxRepo.transaction(fn ->
       Metadata.new(commit_timestamp, publication, origin)
       |> VaxRepo.insert()

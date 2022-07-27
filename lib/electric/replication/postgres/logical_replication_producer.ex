@@ -1,4 +1,4 @@
-defmodule Electric.Replication.Producer do
+defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 

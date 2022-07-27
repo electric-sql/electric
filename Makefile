@@ -15,11 +15,11 @@ compile:
 release:
 	MIX_ENV="prod" mix release
 
+pretest_compile: deps
+	mix compile --force --warnings-as-error
+
 tests:
 	mix test
-
-integration_tests:
-	INTETGRATION=1 mix test
 
 DC_CONFIG=compose.yaml
 
@@ -31,6 +31,12 @@ stop_dev_env:
 
 docker-build:
 	docker build -t electric:local-build .
+
+docker-build-ci:
+	docker pull ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} || true
+	docker pull ${ELECTRIC_IMAGE_NAME}:latest || true
+	docker build --cache-from ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} --cache-from ${ELECTRIC_IMAGE_NAME}:latest -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} -t electric:local-build .
+	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 
 docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")

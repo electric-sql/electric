@@ -1,4 +1,4 @@
-defmodule Electric.ReplicationServer.Postgres do
+defmodule Electric.PostgresServer do
   def child_spec(opts) do
     opts =
       opts
@@ -8,7 +8,7 @@ defmodule Electric.ReplicationServer.Postgres do
       __MODULE__,
       :ranch_tcp,
       opts,
-      Electric.ReplicationServer.Postgres.TcpServer,
+      Electric.Replication.Postgres.TcpServer,
       []
     )
   end

@@ -31,8 +31,12 @@ test: lux .pull
 	touch .pull
 
 vaxine:
+ifndef VAXINE_IMAGE
 	git clone https://github.com/vaxine-io/vaxine.git
 	cd vaxine && make docker-build
+else
+	docker pull ${VAXINE_IMAGE}
+endif
 
 docker-psql-%:
 	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric

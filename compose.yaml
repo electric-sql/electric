@@ -2,8 +2,8 @@
 version: "3.1"
 
 services:
-  electric_antidote:
-    image: europe-docker.pkg.dev/vaxine/vaxine-io/antidote:latest
+  vaxine:
+    image: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
 #    restart: always
     environment:
       RING_SIZE: "1"
@@ -18,6 +18,7 @@ services:
       NODE_NAME: "antidote@dc1n1"
     ports:
       - "8087:8087"
+      - "8088:8088"
     privileged: true
 
   db_a:
