@@ -78,7 +78,7 @@ defmodule Electric.Postgres.OidDatabase do
                  |> String.split("\n", trim: true)
                  |> Enum.drop(2)
                  |> Enum.map(&String.split(&1, ~r/[\s\|]+/, trim: true))
-                 |> Enum.map(fn [name, oid, len, array_oid] ->
+                 |> Enum.map(fn [name, oid, array_oid, len] ->
                    {String.to_atom(name), String.to_integer(oid), String.to_integer(array_oid),
                     String.to_integer(len)}
                  end)
@@ -87,17 +87,20 @@ defmodule Electric.Postgres.OidDatabase do
   Get an atom name by the type OID
   """
   # TODO: Handle array oid type lookup
-  for {type_name, oid, _, _} <- @pg_oid_values do
+  for {type_name, oid, array_oid, _} <- @pg_oid_values do
     def name_for_oid(unquote(oid)), do: unquote(type_name)
+    def name_for_oid(unquote(array_oid)), do: {:array, unquote(type_name)}
   end
 
-  def name_for_oid(_), do: :unknown
+  def name_for_oid(oid),
+    do: raise("Unknown OID #{oid}, cannot get a name that won't result in data loss")
 
   @doc """
   Get the type OID by the name atom
   """
-  for {type_name, oid, _, _} <- @pg_oid_values do
+  for {type_name, oid, array_oid, _} <- @pg_oid_values do
     def oid_for_name(unquote(type_name)), do: unquote(oid)
+    def oid_for_name({:array, unquote(type_name)}), do: unquote(array_oid)
   end
 
   @doc """

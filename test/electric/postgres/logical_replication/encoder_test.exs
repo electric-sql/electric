@@ -77,6 +77,39 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
                255, 255>>
   end
 
+  test "encodes relation messages with array types" do
+    assert encode(%Relation{
+             id: 16402,
+             namespace: "public",
+             name: "complex",
+             replica_identity: :all_columns,
+             columns: [
+               %Column{
+                 flags: [:key],
+                 name: "id",
+                 type: :uuid,
+                 type_modifier: -1
+               },
+               %Column{
+                 flags: [:key],
+                 name: "numbers",
+                 type: {:array, :int4},
+                 type_modifier: -1
+               },
+               %Column{
+                 flags: [:key],
+                 name: "text_matrix",
+                 type: {:array, :text},
+                 type_modifier: -1
+               }
+             ]
+           }) ==
+             <<82, 0, 0, 64, 18, 112, 117, 98, 108, 105, 99, 0, 99, 111, 109, 112, 108, 101, 120,
+               0, 102, 0, 3, 1, 105, 100, 0, 0, 0, 11, 134, 255, 255, 255, 255, 1, 110, 117, 109,
+               98, 101, 114, 115, 0, 0, 0, 3, 239, 255, 255, 255, 255, 1, 116, 101, 120, 116, 95,
+               109, 97, 116, 114, 105, 120, 0, 0, 0, 3, 241, 255, 255, 255, 255>>
+  end
+
   test "encodes type messages" do
     assert encode(%Type{
              id: 32820,
