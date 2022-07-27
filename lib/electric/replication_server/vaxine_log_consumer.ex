@@ -44,7 +44,7 @@ defmodule Electric.ReplicationServer.VaxineLogConsumer do
       message
     else
       {:error, _} = error ->
-        "Failed to process message with error #{inspect(error)}, no-op done"
+        "Failed to process Vaxine message with error #{inspect(error)}, no-op done"
         |> Logger.error(message: message)
 
         message
