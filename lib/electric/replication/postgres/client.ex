@@ -134,7 +134,7 @@ defmodule Electric.Replication.Postgres.Client do
     # We start our fake OIDs from 20000 to avoid any conflicts with reserved type oids (although unlikely anyhow)
     |> Enum.with_index(20000)
     |> Enum.map(fn {{table_oid, columns}, incremental_oid} ->
-      table_pks = Map.get(pks, table_oid)
+      table_pks = Map.fetch!(pks, table_oid)
 
       tables
       |> Map.fetch!(table_oid)

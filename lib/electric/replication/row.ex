@@ -37,7 +37,7 @@ defmodule Electric.Replication.Row do
     keys =
       {schema, table}
       |> Electric.Postgres.SchemaRegistry.fetch_table_info!()
-      |> Map.get(:primary_keys)
+      |> Map.fetch!(:primary_keys)
 
     primary_keys_joined =
       record
