@@ -43,7 +43,7 @@ defmodule Electric.Postgres.SchemaRegistry do
           schema: String.t(),
           name: String.t(),
           oid: integer(),
-          primary_key: [String.t()],
+          primary_keys: [String.t()],
           replica_identity: :all_columns | :default | :nothing | :index
         }
 
