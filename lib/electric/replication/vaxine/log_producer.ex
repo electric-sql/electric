@@ -4,11 +4,15 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   them to consumer on demand.
   """
 
+  use GenStage
+
+  require Logger
+
   @type vx_txn_data ::
           {key :: binary(), type :: atom(), materialized_value :: term(), ops :: list(term())}
   @type vx_wal_txn :: {:vx_wal_txn, tx_id :: term, data :: [vx_txn_data()]}
 
-  use GenStage
+  @max_backoff_ms 5000
 
   def start_link(opts) do
     GenStage.start_link(__MODULE__, opts)
@@ -16,26 +20,61 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
 
   @impl true
   def init(opts) do
-    address = opts[:hostname] |> String.to_charlist()
-    port = opts[:port]
-    {:ok, pid} = :vx_client.connect(address, port, [])
-    :ok = :vx_client.start_replication(pid, [])
+    Process.flag(:trap_exit, true)
 
-    {:producer, {:queue.new(), 0}, dispatcher: GenStage.DemandDispatcher}
+    state = %{
+      address: opts[:hostname] |> String.to_charlist(),
+      port: opts[:port],
+      queue: :queue.new(),
+      demand: 0,
+      backoff: :backoff.init(100, @max_backoff_ms)
+    }
+
+    # Can't use `:continue` since it is not yet supported by gen_stage.
+    # We can then use a message to simulate a continue, as long as
+    # the process can handle demand without being connected
+    send(self(), :connect)
+
+    {:producer, state, dispatcher: GenStage.DemandDispatcher}
+  end
+
+  def handle_info(:connect, state) do
+    case :vx_client.connect(state.address, state.port, []) do
+      {:ok, pid} ->
+        :ok = :vx_client.start_replication(pid, [])
+
+        Logger.debug(
+          "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
+        )
+
+        {:noreply, [], %{state | backoff: :backoff.succeed(state.backoff)}}
+
+      # No-op. We handle the EXIT signal we receive from the crashing process
+      # instead.
+      {:error, _} ->
+        {:noreply, [], state}
+    end
   end
 
   @impl true
-  def handle_info({:vx_client_msg, _from, :ok}, {queue, pending_demand}) do
-    {:noreply, [], {queue, pending_demand}}
+  def handle_info({:vx_client_msg, _from, :ok}, state) do
+    {:noreply, [], state}
   end
 
-  def handle_info({:vx_client_msg, from, msg}, {queue, pending_demand}) do
+  def handle_info({:vx_client_msg, from, msg}, state) do
     queue =
       msg
       |> build_message(from)
-      |> :queue.in(queue)
+      |> :queue.in(state.queue)
 
-    dispatch_events(queue, pending_demand, [])
+    dispatch_events(%{state | queue: queue}, [])
+  end
+
+  def handle_info({:EXIT, _pid, _reason}, state) do
+    {backoff_time, backoff} = :backoff.fail(state.backoff)
+    Logger.warn("VaxineLogProducer couldn't connect to Vaxine, retrying in #{backoff_time}ms")
+    :erlang.send_after(backoff_time, self(), :connect)
+    {:noreply, [], %{state | backoff: backoff}}
   end
 
   def ack(_, _, _) do
@@ -43,21 +82,21 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   end
 
   @impl true
-  def handle_demand(incoming_demand, {queue, pending_demand}) do
-    dispatch_events(queue, incoming_demand + pending_demand, [])
+  def handle_demand(incoming_demand, state) do
+    dispatch_events(%{state | demand: state.demand + incoming_demand}, [])
   end
 
-  defp dispatch_events(queue, 0, events) do
-    {:noreply, Enum.reverse(events), {queue, 0}}
+  defp dispatch_events(%{demand: 0} = state, events) do
+    {:noreply, Enum.reverse(events), state}
   end
 
-  defp dispatch_events(queue, demand, events) do
-    case :queue.out(queue) do
+  defp dispatch_events(state, events) do
+    case :queue.out(state.queue) do
       {{:value, event}, queue} ->
-        dispatch_events(queue, demand - 1, [event | events])
+        dispatch_events(%{state | queue: queue, demand: state.demand - 1}, [event | events])
 
-      {:empty, queue} ->
-        {:noreply, Enum.reverse(events), {queue, demand}}
+      {:empty, _queue} ->
+        {:noreply, Enum.reverse(events), state}
     end
   end
 
