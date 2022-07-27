@@ -481,11 +481,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
       "Starting replication mode for slot #{slot_name} (publication '#{publication}') starting from #{target_lsn}"
     )
 
-    # TODO: This call might not be required once we introduce persistent slot management,
-    #       but right now the slot servers stop as soon as the TCP connection stops, so we
-    #       just start a new slot server upon request.
-    SlotServer.start_link(slot: slot_name)
-
     Messaging.start_copy_mode()
     |> tcp_send(state)
 
