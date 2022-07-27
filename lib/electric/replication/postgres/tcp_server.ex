@@ -250,7 +250,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   def handle_info({:tcp, socket, <<?c, 4::32>>}, %{mode: :copy} = state) do
     # End copy mode
 
-    SlotServer.stop(state.slot)
+    SlotServer.stop_replication(state.slot)
 
     Messaging.end_copy_mode()
     |> Messaging.command_complete("COPY 0")
@@ -459,7 +459,9 @@ defmodule Electric.Replication.Postgres.TcpServer do
     options = parse_replication_options(options)
     publication = String.trim(options["publication_names"], ~s|"|)
 
-    Logger.debug("Starting replication mode for slot #{slot_name} (publication '#{publication}')")
+    Logger.debug(
+      "Starting replication mode for slot #{slot_name} (publication '#{publication}') starting from #{target_lsn}"
+    )
 
     # TODO: This call might not be required once we introduce persistent slot management,
     #       but right now the slot servers stop as soon as the TCP connection stops, so we
