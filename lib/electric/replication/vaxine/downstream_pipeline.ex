@@ -23,25 +23,31 @@ defmodule Electric.Replication.Vaxine.DownstreamPipeline do
   end
 
   @impl true
-  def handle_message(_, %Message{data: vx_transaction} = message, _) do
-    metadata = TransactionBuilder.extract_metadata(vx_transaction)
-    origin_transaction = TransactionBuilder.build_transaction_for_origin(vx_transaction, metadata)
-    peers_transaction = TransactionBuilder.build_transaction_for_peers(vx_transaction, metadata)
+  def handle_message(_, %Message{data: vaxine_tx} = message, _) do
+    with {:ok, metadata} <- TransactionBuilder.extract_metadata(vaxine_tx),
+         {:ok, origin_tx} <- TransactionBuilder.build_transaction_for_origin(vaxine_tx, metadata),
+         {:ok, peers_tx} <- TransactionBuilder.build_transaction_for_peers(vaxine_tx, metadata) do
+      Registry.dispatch(
+        Electric.PostgresDispatcher,
+        {:publication, metadata.publication},
+        fn entries ->
+          Enum.each(entries, fn {pid, slot} ->
+            transaction = if slot == metadata.origin, do: origin_tx, else: peers_tx
 
-    Registry.dispatch(
-      Electric.PostgresDispatcher,
-      {:publication, metadata.publication},
-      fn entries ->
-        Enum.each(entries, fn {pid, slot} ->
-          transaction =
-            if slot == metadata.origin, do: origin_transaction, else: peers_transaction
+            Logger.debug("Sending transaction #{inspect(transaction)} to slot: #{inspect(slot)}")
 
-          Logger.debug("Sending transaction #{inspect(transaction)} to slot: #{inspect(slot)}")
-          send(pid, {:replication_message, transaction})
-        end)
-      end
-    )
+            send(pid, {:replication_message, transaction})
+          end)
+        end
+      )
 
-    message
+      message
+    else
+      {:error, _} = error ->
+        "Failed to process Vaxine message with error #{inspect(error)}, no-op done"
+        |> Logger.error(message: message)
+
+        message
+    end
   end
 end

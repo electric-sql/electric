@@ -5,7 +5,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.ReplicationServer.VaxineLogProducer
 
   @spec build_transaction_for_origin(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
-          Changes.Transaction.t()
+          {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   def build_transaction_for_origin({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
     vaxine_transaction_data
     |> build_rows()
@@ -13,7 +13,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   end
 
   @spec build_transaction_for_peers(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
-          Changes.Transaction.t()
+          {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   def build_transaction_for_peers({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
     vaxine_transaction_data
     |> build_rows()
@@ -29,38 +29,59 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
         |> Enum.flat_map(fn {ops, []} -> ops end)
         |> Enum.map(fn {{key, type}, op_value} -> handle_log_op(key, type, op_value) end)
 
-      {struct(Row, convert_value([key], type, value)), processed_log_ops}
+      {to_row(convert_value([key], type, value)), processed_log_ops}
     end)
   end
 
+  defp to_row(map) when map_size(map) == 0, do: nil
+  defp to_row(map), do: struct(Row, map)
+
   @spec build_transaction(
-          [{Row.t(), ops :: term()}],
+          [{Row.t() | nil, ops :: term()}],
           commit_timestamp :: DateTime.t(),
           target :: :origin | :peers
-        ) :: Changes.Transaction.t()
+        ) :: {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   defp build_transaction(entries, commit_timestamp, target) do
-    dml_changes = Enum.map(entries, fn {row, ops} -> to_dml(row, ops, target) end)
-    %Changes.Transaction{changes: dml_changes, commit_timestamp: commit_timestamp}
+    entries
+    |> Enum.reduce_while([], fn
+      {nil, _ops}, _acc -> {:halt, {:error, :invalid_materialized_row}}
+      {row, ops}, acc -> {:cont, [to_dml(row, ops, target) | acc]}
+    end)
+    |> case do
+      dml_changes when is_list(dml_changes) ->
+        {:ok,
+         %Changes.Transaction{
+           changes: Enum.reverse(dml_changes),
+           commit_timestamp: commit_timestamp
+         }}
+
+      {:halt, error} ->
+        error
+    end
   end
 
   @doc """
   Extracts metadata from a vx_client message
   """
-  @spec extract_metadata(VaxineLogProducer.vx_wal_txn()) :: Metadata.t()
+  @spec extract_metadata(VaxineLogProducer.vx_wal_txn()) ::
+          {:ok, Metadata.t()} | {:error, :metadata_not_available}
   def extract_metadata({:vx_wal_txn, _tx_id, vaxine_transaction_data}) do
     case Enum.find(vaxine_transaction_data, fn el -> match?({{"metadata:0", _}, _, _, _}, el) end) do
       nil ->
-        raise "Transaction without metadata"
+        {:error, :metadata_not_available}
 
       {_key, _type, _value, ops} ->
-        ops
-        |> Enum.reduce(%Metadata{}, fn entry, acc ->
-          # decomposing lww register update
-          {[{{field, _type}, {:ok, {_timestamp, value}}}], []} = entry
-          field_atom = String.to_existing_atom(field)
-          Map.put(acc, field_atom, value)
-        end)
-        |> Map.update!(:commit_timestamp, &(DateTime.from_iso8601(&1) |> elem(1)))
+        metadata =
+          ops
+          |> Enum.reduce(%Metadata{}, fn entry, acc ->
+            # decomposing lww register update
+            {[{{field, _type}, {:ok, {_timestamp, value}}}], []} = entry
+            field_atom = String.to_existing_atom(field)
+            Map.put(acc, field_atom, value)
+          end)
+          |> Map.update!(:commit_timestamp, &(DateTime.from_iso8601(&1) |> elem(1)))
+
+        {:ok, metadata}
     end
   end
 

@@ -2,7 +2,6 @@ defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Vaxine.DownstreamPipeline
-  alias Electric.Replication.Vaxine.TransactionBuilder
 
   @external_resource Path.expand("vx_client_message_example.exs", __DIR__)
   @message @external_resource |> List.first() |> Code.eval_file() |> elem(0)
