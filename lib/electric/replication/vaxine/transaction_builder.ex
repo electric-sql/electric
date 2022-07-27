@@ -62,6 +62,13 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
 
   @doc """
   Extracts metadata from a vx_client message
+
+  The metadata is extracted from the operations performed in the transaction,
+  and not from the materialized value. By using this approach, we can use
+  a single key on Vaxine to store metadata for all transactions, without
+  worrying with conflict resolution.
+
+  Should futurely be superseded by transaction metadata at Vaxine's side.
   """
   @spec extract_metadata(VaxineLogProducer.vx_wal_txn()) ::
           {:ok, Metadata.t()} | {:error, :metadata_not_available}

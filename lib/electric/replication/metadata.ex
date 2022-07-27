@@ -9,6 +9,13 @@ defmodule Electric.Replication.Metadata do
     field(:origin, :string)
   end
 
+  @doc """
+  Updates the metadata key.
+
+  There's a single metadata key which is updated for every postgres transaction.
+  For more information about the metadata key, see the documentation for
+  `Electric.Replication.Vaxine.TransactionBuilder.extract_metadata/1`
+  """
   @spec new(commit_timestamp :: integer(), publication :: String.t(), origin :: String.t()) :: t()
   def new(commit_timestamp, publication, origin) do
     %__MODULE__{
