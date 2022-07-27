@@ -1,5 +1,8 @@
 defmodule Electric.Replication.PostgresConnector do
   use Supervisor
+  import Retry
+  import Retry.DelayStreams
+  require Logger
   alias Electric.Postgres.SchemaRegistry
 
   @type args :: {:connection, keyword()} | {:replication, keyword()}
@@ -14,16 +17,43 @@ defmodule Electric.Replication.PostgresConnector do
   @spec init(init_arg()) :: {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init(init_arg) do
     args = normalize_args(init_arg)
-    {:ok, _} = initialize_postgres(args)
+    supervisor = self()
 
     children = [
+      {Task,
+       fn ->
+         retry_while with: exponential_backoff() |> randomize() |> cap(1000) |> expiry(10000) do
+           case initialize_postgres(args) do
+             {:ok, _} -> {:halt, :ok}
+             error -> {:cont, error}
+           end
+         end
+         |> case do
+           :ok ->
+             SchemaRegistry.mark_origin_ready(args.origin)
+             finish_initialization(supervisor, args)
+
+           error ->
+             Logger.error(
+               "Couldn't initialize Postgres #{inspect(args.origin)}. Error: #{inspect(error, pretty: true)}"
+             )
+
+             Process.exit(supervisor, {:error, :initialization_failed})
+         end
+       end}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp finish_initialization(supervisor, args) do
+    [
       {Electric.Replication.Postgres.SlotServer, slot: args.replication.subscription},
       {Electric.Replication.Postgres.UpstreamPipeline,
        Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
       {Task, fn -> start_subscription(args) end}
     ]
-
-    Supervisor.init(children, strategy: :one_for_one)
+    |> Enum.map(&Supervisor.start_child(supervisor, &1))
   end
 
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))
@@ -53,6 +83,8 @@ defmodule Electric.Replication.PostgresConnector do
     publication_tables = Map.fetch!(repl_config, :publication_tables)
     reverse_connection = Map.fetch!(repl_config, :electric_connection)
 
+    Logger.debug("Attempting to initialize #{conf.origin}")
+
     with {:ok, conn} <- client.connect(conn_config),
          {:ok, system_id} <- client.get_system_id(conn),
          {:ok, publication} <-
@@ -65,13 +97,15 @@ defmodule Electric.Replication.PostgresConnector do
              publication,
              reverse_connection
            ),
-         tables <- client.query_replicated_tables(conn, publication_name),
+         tables = client.query_replicated_tables(conn, publication_name),
          :ok <- client.close(conn) do
       tables
       |> Enum.map(&Map.delete(&1, :columns))
       |> then(&SchemaRegistry.put_replicated_tables(publication_name, &1))
 
       Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
+
+      Logger.debug("Successfully initialized origin #{conf.origin}")
 
       {:ok, system_id}
     end
