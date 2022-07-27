@@ -8,21 +8,28 @@ defmodule Electric.Replication.Postgres.UpstreamPipelineTest do
 
   @new_record_change %Changes.NewRecord{
     record: %{"content" => "a", "id" => @id},
-    relation: {"public", "entries"}
+    relation: {"fake", "upstream_pipeline_test"}
   }
 
   @updated_record_change %Changes.UpdatedRecord{
     old_record: %{"content" => "a", "id" => @id},
     record: %{"content" => "b", "id" => @id},
-    relation: {"public", "entries"}
+    relation: {"fake", "upstream_pipeline_test"}
   }
 
   @deleted_record_change %Changes.DeletedRecord{
     old_record: %{"content" => "a", "id" => @id},
-    relation: {"public", "entries"}
+    relation: {"fake", "upstream_pipeline_test"}
   }
 
   setup _ do
+    Electric.Test.SchemaRegistryHelper.initialize_registry(
+      "dummy_publication",
+      {"fake", "upstream_pipeline_test"},
+      id: :uuid,
+      content: :text
+    )
+
     start_supervised!({UpstreamPipeline, %{producer: Broadway.DummyProducer}})
 
     :ok

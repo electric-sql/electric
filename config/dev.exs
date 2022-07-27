@@ -52,6 +52,6 @@ config :electric, Electric.Replication.Connectors,
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console,
-  format: "[$level] $metadata $message \n",
+  format: "[$level] $metadata$message \n",
   level: :debug,
   metadata: [:client, :connection, :slot, :origin]
