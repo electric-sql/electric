@@ -38,6 +38,14 @@ else
 	docker pull ${VAXINE_IMAGE}
 endif
 
+postgres:
+ifndef POSTGRES_IMAGE
+	git clone https://github.com/v0idpwn/postgres.git --branch replication-upsert --depth 1
+	cd postgres && ./configure && make docker-build
+else
+	docker pull ${POSTGRES_IMAGE}
+endif
+
 docker-psql-%:
 	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric
 

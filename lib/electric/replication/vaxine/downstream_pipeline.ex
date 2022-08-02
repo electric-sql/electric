@@ -25,18 +25,14 @@ defmodule Electric.Replication.Vaxine.DownstreamPipeline do
   @impl true
   def handle_message(_, %Message{data: vaxine_tx} = message, _) do
     with {:ok, metadata} <- TransactionBuilder.extract_metadata(vaxine_tx),
-         {:ok, origin_tx} <- TransactionBuilder.build_transaction_for_origin(vaxine_tx, metadata),
-         {:ok, peers_tx} <- TransactionBuilder.build_transaction_for_peers(vaxine_tx, metadata) do
+         {:ok, tx} <- TransactionBuilder.build_transaction(vaxine_tx, metadata) do
       Registry.dispatch(
         Electric.PostgresDispatcher,
         {:publication, metadata.publication},
         fn entries ->
           Enum.each(entries, fn {pid, slot} ->
-            transaction = if slot == metadata.origin, do: origin_tx, else: peers_tx
-
-            Logger.debug("Sending transaction #{inspect(transaction)} to slot: #{inspect(slot)}")
-
-            send(pid, {:replication_message, transaction})
+            Logger.debug("Sending transaction #{inspect(tx)} to slot: #{inspect(slot)}")
+            send(pid, {:replication_message, tx})
           end)
         end
       )

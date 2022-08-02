@@ -17,9 +17,9 @@ defmodule Electric.Replication.Vaxine.TransactionBuilderTest do
             }} = metadata
   end
 
-  test "extracts origin transaction" do
+  test "extracts transaction" do
     {:ok, metadata} = TransactionBuilder.extract_metadata(@message)
-    origin_transaction = TransactionBuilder.build_transaction_for_origin(@message, metadata)
+    origin_transaction = TransactionBuilder.build_transaction(@message, metadata)
 
     assert {:ok,
             %Electric.Replication.Changes.Transaction{
@@ -35,25 +35,5 @@ defmodule Electric.Replication.Vaxine.TransactionBuilderTest do
               ],
               commit_timestamp: %DateTime{}
             }} = origin_transaction
-  end
-
-  test "extracts peer transaction" do
-    {:ok, metadata} = TransactionBuilder.extract_metadata(@message)
-    peers_transaction = TransactionBuilder.build_transaction_for_peers(@message, metadata)
-
-    assert {:ok,
-            %Electric.Replication.Changes.Transaction{
-              changes: [
-                %Electric.Replication.Changes.NewRecord{
-                  record: %{
-                    "content" => "iliketrains1",
-                    "content_b" => nil,
-                    "id" => "cb2fb0f0-dd12-4e87-a3cd-4eaff087995c"
-                  },
-                  relation: {"public", "entries"}
-                }
-              ],
-              commit_timestamp: %DateTime{}
-            }} = peers_transaction
   end
 end

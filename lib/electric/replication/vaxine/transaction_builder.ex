@@ -4,20 +4,12 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.Replication.Metadata
   alias Electric.ReplicationServer.VaxineLogProducer
 
-  @spec build_transaction_for_origin(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
+  @spec build_transaction(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
           {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  def build_transaction_for_origin({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
+  def build_transaction({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
     vaxine_transaction_data
     |> build_rows()
     |> build_transaction(metadata.commit_timestamp, :origin)
-  end
-
-  @spec build_transaction_for_peers(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
-          {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  def build_transaction_for_peers({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
-    vaxine_transaction_data
-    |> build_rows()
-    |> build_transaction(metadata.commit_timestamp, :peers)
   end
 
   defp build_rows(vaxine_transaction_data) do
@@ -114,8 +106,8 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
 
   defp to_dml(
          %Row{table: table, deleted?: deleted?, schema: schema, row: row},
-         processed_log_ops,
-         target
+         _processed_log_ops,
+         _target
        ) do
     # if the final state is `deleted?` it means that the record was deleted;
     # if the entry was inserted within the transaction, it will have ops setting
@@ -124,9 +116,6 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
     cond do
       deleted? ->
         %Changes.DeletedRecord{old_record: to_string_keys(row), relation: {schema, table}}
-
-      Enum.find(processed_log_ops, fn {key, _value} -> key == "table" end) && target != :origin ->
-        %Changes.NewRecord{record: to_string_keys(row), relation: {schema, table}}
 
       true ->
         %Changes.UpdatedRecord{

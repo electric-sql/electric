@@ -36,7 +36,7 @@ defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
     assert_receive {:replication_message,
                     %Electric.Replication.Changes.Transaction{
                       changes: [
-                        %Electric.Replication.Changes.NewRecord{
+                        %Electric.Replication.Changes.UpdatedRecord{
                           record: %{
                             "content" => "iliketrains1",
                             "content_b" => nil,
@@ -47,5 +47,7 @@ defmodule Electric.Replication.Vaxine.DownstreamPipelineTest do
                       ],
                       commit_timestamp: ^commit_timestamp
                     }}
+
+    assert %DateTime{} = commit_timestamp
   end
 end
