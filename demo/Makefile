@@ -23,12 +23,8 @@ stop_dev_env:
 	docker-compose down
 	docker-compose stop
 
-test: lux .pull
+test: lux postgres
 	${LUX} *.lux
-
-.pull: vaxine
-	docker-compose pull db_a db_b
-	touch .pull
 
 vaxine:
 ifndef VAXINE_IMAGE
@@ -51,7 +47,8 @@ docker-psql-%:
 
 clean:
 	rm -rf lux
-	rm -rf vaxine .pull
+	rm -rf postgres
+	rm -rf vaxine
 
 docker-attach-%:
 	docker-compose exec $* bash
