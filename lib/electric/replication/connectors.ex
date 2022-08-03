@@ -7,7 +7,7 @@ defmodule Electric.Replication.Connectors do
 
   @impl true
   def init(_extra_args) do
-    DynamicSupervisor.init(strategy: :one_for_one)
+    DynamicSupervisor.init(strategy: :one_for_one, max_restarts: 0)
   end
 
   def start_connector(module, args) do
