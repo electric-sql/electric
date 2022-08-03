@@ -85,6 +85,9 @@ jobs:
       - run: make lux
         working-directory: demo
 
+      - run: make vaxine
+        working-directory: demo
+
       - run: make postgres
         working-directory: demo
 
