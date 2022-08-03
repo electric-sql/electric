@@ -46,7 +46,6 @@ defmodule Electric.MixProject do
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16.3"},
       {:recon_ex, "~> 0.9.1"},
-      {:retry, "~> 0.15"},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.10", only: :test, runtime: false}
     ]

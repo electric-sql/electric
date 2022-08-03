@@ -1,9 +1,37 @@
 defmodule Electric.Replication.PostgresConnector do
   use Supervisor
-  import Retry
-  import Retry.DelayStreams
   require Logger
   alias Electric.Postgres.SchemaRegistry
+
+  defmacrop retry_while(opts, do_block \\ nil) do
+    code = Keyword.get(opts, :do, Keyword.fetch!(do_block, :do))
+    start_backoff = Keyword.get(opts, :start_backoff, 10)
+    max_single_backoff = Keyword.get(opts, :max_single_backoff, 1000)
+    total_timeout = Keyword.get(opts, :total_timeout, 10000)
+
+    quote do
+      Stream.unfold(
+        unquote(start_backoff),
+        &{&1, :backoff.rand_increment(&1, unquote(max_single_backoff))}
+      )
+      |> Stream.transform(0, fn
+        elem, acc when acc > unquote(total_timeout) -> {:halt, acc}
+        elem, acc -> {[elem], acc + elem}
+      end)
+      |> Enum.reduce_while(nil, fn timeout, _ ->
+        result = unquote(code)
+
+        case result do
+          {:cont, value} ->
+            Process.sleep(timeout)
+            {:cont, value}
+
+          {:halt, value} ->
+            {:halt, value}
+        end
+      end)
+    end
+  end
 
   @type args :: {:connection, keyword()} | {:replication, keyword()}
   @type init_arg :: [args, ...]
@@ -22,7 +50,7 @@ defmodule Electric.Replication.PostgresConnector do
     children = [
       {Task,
        fn ->
-         retry_while with: exponential_backoff() |> randomize() |> cap(1000) |> expiry(10000) do
+         retry_while total_timeout: 10000, max_single_backoff: 1000 do
            case initialize_postgres(args) do
              {:ok, _} -> {:halt, :ok}
              error -> {:cont, error}
