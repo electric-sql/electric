@@ -19,8 +19,8 @@
     ?INSERT 0 1
 
 [shell electric]
-    ?to slot: "postgres_2"
-    ?slot=postgres_2 \[debug\] Sending \d messages to the subscriber
+    ?to slot: "postgres_1"
+    ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
 
 [shell db_a]
     [loop iter 1..10]
