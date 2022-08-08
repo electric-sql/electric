@@ -66,6 +66,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def init(opts) do
     slot = Keyword.fetch!(opts, :slot)
 
+    Logger.metadata(slot: slot)
+    Logger.debug("Started slot server")
+
     {:ok, %__MODULE__{slot_name: slot, opts: Keyword.get(opts, :opts, [])}}
   end
 
@@ -97,7 +100,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_call({:start_replication, send_fn, publication, start_lsn}, {from, _}, state) do
-    Logger.metadata(slot: state.slot_name)
     ref = Process.monitor(from)
 
     {:ok, _} =

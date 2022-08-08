@@ -48,30 +48,33 @@ defmodule Electric.Replication.PostgresConnector do
     supervisor = self()
 
     children = [
-      {Task,
-       fn ->
-         retry_while total_timeout: 10000, max_single_backoff: 1000 do
-           case initialize_postgres(args) do
-             {:ok, _} -> {:halt, :ok}
-             error -> {:cont, error}
-           end
-         end
-         |> case do
-           :ok ->
-             SchemaRegistry.mark_origin_ready(args.origin)
-             finish_initialization(supervisor, args)
-
-           error ->
-             Logger.error(
-               "Couldn't initialize Postgres #{inspect(args.origin)}. Error: #{inspect(error, pretty: true)}"
-             )
-
-             Process.exit(supervisor, {:error, :initialization_failed})
-         end
-       end}
+      Supervisor.child_spec({Task, fn -> initialize_connector(supervisor, args) end},
+        id: {Task, :initialize_connector}
+      )
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp initialize_connector(supervisor, args) when is_pid(supervisor) do
+    retry_while total_timeout: 10000, max_single_backoff: 1000 do
+      case initialize_postgres(args) do
+        {:ok, _} -> {:halt, :ok}
+        error -> {:cont, error}
+      end
+    end
+    |> case do
+      :ok ->
+        :ok = finish_initialization(supervisor, args)
+        SchemaRegistry.mark_origin_ready(args.origin)
+
+      error ->
+        Logger.error(
+          "Couldn't initialize Postgres #{inspect(args.origin)}. Error: #{inspect(error, pretty: true)}"
+        )
+
+        Process.exit(supervisor, {:error, :initialization_failed})
+    end
   end
 
   defp finish_initialization(supervisor, args) do
@@ -79,9 +82,20 @@ defmodule Electric.Replication.PostgresConnector do
       {Electric.Replication.Postgres.SlotServer, slot: args.replication.subscription},
       {Electric.Replication.Postgres.UpstreamPipeline,
        Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
-      {Task, fn -> start_subscription(args) end}
+      Supervisor.child_spec({Task, fn -> start_subscription(args) end},
+        id: {Task, :start_subscription}
+      )
     ]
     |> Enum.map(&Supervisor.start_child(supervisor, &1))
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> case do
+      %{error: [error | _]} ->
+        Process.exit(supervisor, error)
+        error
+
+      _ ->
+        :ok
+    end
   end
 
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))
