@@ -142,6 +142,20 @@ defmodule Electric.Postgres.SchemaRegistry do
     value
   end
 
+  @doc """
+  Marks an origin database as ready
+  """
+  @spec mark_origin_ready(registry(), String.t()) :: :ok
+  def mark_origin_ready(agent \\ __MODULE__, origin),
+    do: GenServer.call(agent, {:mark_origin_ready, origin})
+
+  @doc """
+  Checks if origin is ready
+  """
+  @spec is_origin_ready?(registry(), String.t()) :: boolean()
+  def is_origin_ready?(agent \\ __MODULE__, origin),
+    do: GenServer.call(agent, {:is_origin_ready?, origin})
+
   @impl true
   def init(_) do
     ets_table = :ets.new(:postgres_schema_registry, [])
@@ -253,6 +267,20 @@ defmodule Electric.Postgres.SchemaRegistry do
 
       [[value]] ->
         {:reply, {:ok, value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:mark_origin_ready, origin}, _, state) do
+    :ets.insert(state.ets_table, {{:origin, origin, :ready?}, true})
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:is_origin_ready?, origin}, _, state) do
+    case :ets.match(state.ets_table, {{:origin, origin, :ready?}, :"$1"}) do
+      [] -> {:reply, false, state}
+      [[value]] -> {:reply, value, state}
     end
   end
 

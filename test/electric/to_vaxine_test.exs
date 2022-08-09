@@ -1,16 +1,17 @@
 defmodule Electric.Replication.ToVaxineTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
 
   alias Electric.Replication.{Changes, Row, ToVaxine}
   alias Electric.VaxRepo
+  alias Electric.Postgres.SchemaRegistry
 
   @id Ecto.UUID.generate()
-  @row Row.new("public", "entries", %{"id" => @id})
+  @row Row.new("fake", "to_vaxine_test", %{"id" => @id}, ["id"])
 
   def new_record_change(columns \\ %{"content" => "a"}) do
     %Changes.NewRecord{
       record: Map.put(columns, "id", @id),
-      relation: {"public", "entries"}
+      relation: {"fake", "to_vaxine_test"}
     }
   end
 
@@ -18,15 +19,29 @@ defmodule Electric.Replication.ToVaxineTest do
     %Changes.UpdatedRecord{
       old_record: Map.put(old_columns, "id", @id),
       record: Map.put(new_columns, "id", @id),
-      relation: {"public", "entries"}
+      relation: {"fake", "to_vaxine_test"}
     }
   end
 
   def deleted_record_change(old_columns) do
     %Changes.DeletedRecord{
       old_record: Map.put(old_columns, "id", @id),
-      relation: {"public", "entries"}
+      relation: {"fake", "to_vaxine_test"}
     }
+  end
+
+  setup_all _ do
+    Electric.Test.SchemaRegistryHelper.initialize_registry(
+      "fake_publication",
+      {"fake", "to_vaxine_test"},
+      id: :uuid,
+      content: :text,
+      content_b: :text
+    )
+
+    on_exit(fn -> SchemaRegistry.clear_replicated_tables("fake_publication") end)
+
+    :ok
   end
 
   describe "ToVaxine propagates changes to vaxine" do

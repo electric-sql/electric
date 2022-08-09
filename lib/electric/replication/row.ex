@@ -11,10 +11,11 @@ defmodule Electric.Replication.Row do
     field(:row, Vax.Types.Map)
   end
 
-  @spec new(schema :: String.t(), table :: String.t(), record :: map()) :: t()
-  def new(schema, table, record) do
+  @spec new(schema :: String.t(), table :: String.t(), record :: map(), keys :: [String.t(), ...]) ::
+          t()
+  def new(schema, table, record, primary_keys) do
     %__MODULE__{
-      id: extract_id(schema, table, record),
+      id: extract_id(schema, table, primary_keys, record),
       table: table,
       schema: schema,
       row: record,
@@ -33,12 +34,7 @@ defmodule Electric.Replication.Row do
     %{changeset | changes: Map.put(changeset.changes, :deleted?, value)}
   end
 
-  defp extract_id(schema, table, record) do
-    keys =
-      {schema, table}
-      |> Electric.Postgres.SchemaRegistry.fetch_table_info!()
-      |> Map.fetch!(:primary_keys)
-
+  defp extract_id(schema, table, keys, record) do
     primary_keys_joined =
       record
       |> Map.take(keys)

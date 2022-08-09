@@ -309,24 +309,42 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   defp initialize_connection(%__MODULE__{} = state, %{"replication" => "database"} = settings) do
-    # TODO: Verify the server settings, maybe make them dynamic?
-    Messaging.authentication_ok()
-    |> Messaging.parameter_status("application_name", settings["application_name"])
-    |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
-    |> Messaging.parameter_status("server_encoding", "UTF8")
-    |> Messaging.parameter_status("server_version", "electric-0.0.1")
-    |> Messaging.parameter_status("standard_conforming_strings", "on")
-    |> Messaging.parameter_status("TimeZone", "Etc/UTC")
-    |> Messaging.backend_key_data(serialize_pid(self()), 0)
-    |> Messaging.ready()
-    |> tcp_send(state)
+    if SchemaRegistry.is_origin_ready?(settings["application_name"]) do
+      # TODO: Verify the server settings, maybe make them dynamic?
+      Messaging.authentication_ok()
+      |> Messaging.parameter_status("application_name", settings["application_name"])
+      |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
+      |> Messaging.parameter_status("server_encoding", "UTF8")
+      |> Messaging.parameter_status("server_version", "electric-0.0.1")
+      |> Messaging.parameter_status("standard_conforming_strings", "on")
+      |> Messaging.parameter_status("TimeZone", "Etc/UTC")
+      |> Messaging.backend_key_data(serialize_pid(self()), 0)
+      |> Messaging.ready()
+      |> tcp_send(state)
 
-    Logger.debug(
-      "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
-    )
+      Logger.metadata(origin: settings["application_name"])
 
-    :ok = state.transport.setopts(state.socket, active: :once)
-    {:noreply, %__MODULE__{state | settings: settings}}
+      Logger.debug(
+        "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
+      )
+
+      :ok = state.transport.setopts(state.socket, active: :once)
+      {:noreply, %__MODULE__{state | settings: settings}}
+    else
+      Messaging.error(:fatal,
+        code: "08004",
+        message:
+          "Electric replication is not ready, missing schema for #{settings["application_name"]}"
+      )
+      |> tcp_send(state)
+
+      Logger.debug(
+        "Denied connection for client #{settings["application_name"]}, schema not ready"
+      )
+
+      state.transport.close(state.socket)
+      {:stop, :normal, state}
+    end
   end
 
   defp initialize_connection(%__MODULE__{} = state, _settings) do
@@ -462,11 +480,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
     Logger.debug(
       "Starting replication mode for slot #{slot_name} (publication '#{publication}') starting from #{target_lsn}"
     )
-
-    # TODO: This call might not be required once we introduce persistent slot management,
-    #       but right now the slot servers stop as soon as the TCP connection stops, so we
-    #       just start a new slot server upon request.
-    SlotServer.start_link(slot: slot_name)
 
     Messaging.start_copy_mode()
     |> tcp_send(state)
