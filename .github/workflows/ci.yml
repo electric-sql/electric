@@ -80,7 +80,7 @@ jobs:
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
-          ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_HEAD_REF_SLUG }}
+          ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_HEAD_REF_SLUG || 'main' }}
 
       - run: make lux
         working-directory: demo
