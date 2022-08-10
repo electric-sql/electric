@@ -9,8 +9,8 @@ agent:
 steps:
   - label: ":whale: Build & push the electric container"
     command:
-      - ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
-      - "ELECTRIC_IMAGE_TAG=$(echo $BUILDKITE_COMMIT | head -c 7)"
+      - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
+      - export ELECTRIC_IMAGE_TAG=$(echo $BUILDKITE_COMMIT | head -c 7)"
       - make docker-build-ci
-      - docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}" "${ELECTRIC_IMAGE_NAME}:latest"
-      - docker push "${ELECTRIC_IMAGE_NAME}:latest"
+      - docker tag "$${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_IMAGE_TAG}" "$${ELECTRIC_IMAGE_NAME}:latest"
+      - docker push "$${ELECTRIC_IMAGE_NAME}:latest"
