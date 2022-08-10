@@ -39,7 +39,7 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   end
 
   def handle_info(:connect, state) do
-    case :vx_client.connect(state.address, state.port, []) do
+    case :vx_client.connect(state.address, state.port, connection_timeout: 15_000) do
       {:ok, pid} ->
         :ok = :vx_client.start_replication(pid, [])
 
