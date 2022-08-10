@@ -13,6 +13,8 @@ RUN apt-get update -y && \
     apt-get clean && \
     rm -f /var/lib/apt/lists/*_*
 
+ENV MIX_ENV=prod
+
 WORKDIR /app
 COPY Makefile /app/
 RUN make build_tools
