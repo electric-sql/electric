@@ -11,9 +11,13 @@ if config_env() == :prod do
   vaxine_hostname =
     System.get_env("VAXINE_HOSTNAME") || raise "Env variable VAXINE_HOSTNAME is not set"
 
+  vaxine_connection_timeout =
+    System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
+
   config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
     hostname: vaxine_hostname,
-    port: 8088
+    port: 8088,
+    connection_timeout: vaxine_connection_timeout
 
   config :electric, Electric.VaxRepo,
     hostname: vaxine_hostname,
@@ -35,7 +39,7 @@ if config_env() == :prod do
         |> then(&Keyword.put(&1, :host, &1[:hostname]))
         |> Keyword.delete(:hostname)
         |> Keyword.put_new(:ssl, false)
-        |> Keyword.update(:timeout, 10000, &String.to_integer/1)
+        |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
 
       {String.to_atom(name),
        producer: Electric.Replication.Postgres.LogicalReplicationProducer,
