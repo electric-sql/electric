@@ -17,7 +17,8 @@ config :electric, Electric.Replication.Postgres,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
 config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  producer: Electric.ReplicationServer.Vaxine.LogProducer
+  producer: Electric.ReplicationServer.Vaxine.LogProducer,
+  connection_timeout: 5_000
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

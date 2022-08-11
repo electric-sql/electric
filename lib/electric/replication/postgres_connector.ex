@@ -86,23 +86,31 @@ defmodule Electric.Replication.PostgresConnector do
         id: {Task, :start_subscription}
       )
     ]
-    |> Enum.map(&Supervisor.start_child(supervisor, &1))
-    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-    |> case do
-      %{error: [error | _]} ->
-        Process.exit(supervisor, error)
-        error
+    |> Enum.map(&Supervisor.child_spec(&1, []))
+    |> Enum.reduce_while(:ok, fn %{id: id} = child_spec, _ ->
+      case Supervisor.start_child(supervisor, child_spec) do
+        {:ok, _} ->
+          {:cont, :ok}
 
-      _ ->
-        :ok
-    end
+        {:ok, _, _} ->
+          {:cont, :ok}
+
+        {:error, reason} ->
+          Logger.error(
+            "Couldn't finish initialization of the connector. Error while starting #{id}: #{inspect(reason)}"
+          )
+
+          Process.exit(supervisor, {:error, reason})
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))
 
   defp normalize_args(args) when is_map(args) do
     args
-    |> Map.update!(:connection, &Map.new/1)
+    |> Map.update!(:connection, &new_map_with_charlists/1)
     |> Map.update!(:replication, &Map.new/1)
     |> Map.put_new(:client, Electric.Replication.Postgres.Client)
     |> Map.update!(:replication, &Map.put_new(&1, :slot, "electric_replication"))
@@ -110,10 +118,21 @@ defmodule Electric.Replication.PostgresConnector do
     |> Map.update!(:replication, &Map.put_new(&1, :subscription, args.origin))
   end
 
+  defp new_map_with_charlists(list),
+    do:
+      Map.new(list, fn
+        {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
+        {k, v} -> {k, v}
+      end)
+
   defp start_subscription(%{connection: conn_config, client: client} = conf) do
     with {:ok, conn} <- client.connect(conn_config),
          :ok <- client.start_subscription(conn, conf.replication.subscription) do
       :ok
+    else
+      error ->
+        Logger.error("Error while starting subscription for #{conf.origin}: #{inspect(error)}")
+        error
     end
   end
 

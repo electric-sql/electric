@@ -45,6 +45,7 @@ defmodule Electric.MixProject do
       # TODO: shouldn't be needed, here for convenience
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16.3"},
+      {:postgresql_uri, "~> 0.1.0"},
       {:recon_ex, "~> 0.9.1"},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.10", only: :test, runtime: false}
