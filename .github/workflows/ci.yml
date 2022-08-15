@@ -100,6 +100,3 @@ jobs:
         with:
           name: lux_logs
           path: demo/lux_logs/run_*
-
-      - run: make start_dev_env
-      - run: make stop_dev_env
