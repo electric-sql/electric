@@ -8,6 +8,8 @@ defmodule Electric.Application do
       Electric.Postgres.SchemaRegistry,
       {Registry, keys: :unique, name: Electric.PostgresSlotRegistry},
       {Registry, keys: :duplicate, name: Electric.PostgresDispatcher},
+      {Registry, keys: :unique, name: Electric.StatusRegistry},
+      {Plug.Cowboy, scheme: :http, plug: Electric.StatusPlug, options: [port: status_port()]},
       Electric.VaxRepo,
       Electric.PostgresServer,
       Electric.Replication.Connectors,
@@ -28,4 +30,7 @@ defmodule Electric.Application do
 
     {:ok, supervisor}
   end
+
+  defp status_port(),
+    do: Application.fetch_env!(:electric, Electric.StatusPlug) |> Keyword.fetch!(:port)
 end
