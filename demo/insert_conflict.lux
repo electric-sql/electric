@@ -1,4 +1,4 @@
-[doc Test one direction replication from db_b to db_a, when db_a already has a record for the primary key. We can force this conflict by disabling replication consumption on db_b]
+[doc Test one direction replication from pg_2 to pg_1, when pg_1 already has a record for the primary key. We can force this conflict by disabling replication consumption on pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -6,18 +6,18 @@
 [include shared.luxinc]
 [invoke setup]
 
-[shell db_b]
+[shell pg_2]
     !UPDATE pg_catalog.pg_subscription SET subenabled = false;
     ?$psql
 
-[shell db_a]
+[shell pg_1]
     !INSERT INTO entries (id, content) VALUES ('dab0679d-fa41-476f-8615-738b08773521', 'Hello from a');
     ?INSERT 0 1
 
 [shell electric]
     ?COMMIT TRANSACTION
 
-[shell db_b]
+[shell pg_2]
     !INSERT INTO entries (id, content) VALUES ('dab0679d-fa41-476f-8615-738b08773521', 'Hello from b');
     ?INSERT 0 1
 
@@ -25,7 +25,7 @@
     ?to slot: "postgres_1"
     ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
 
-[shell db_a]
+[shell pg_1]
     [loop iter 1..10]
         @Hello from b
         !select * from entries;

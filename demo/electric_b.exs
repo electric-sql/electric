@@ -12,7 +12,7 @@ config :electric, Electric.Replication.Connectors,
   postgres_3: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
-      host: 'db_c',
+      host: 'pg_3',
       port: 5432,
       database: 'electric',
       username: 'electric',
@@ -24,7 +24,7 @@ config :electric, Electric.Replication.Connectors,
       publication: "all_tables",
       slot: "all_changes",
       electric_connection: [
-        host: "electric_b",
+        host: "electric_2",
         port: 5433,
         dbname: "test"
       ]

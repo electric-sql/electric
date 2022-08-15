@@ -1,4 +1,4 @@
-[doc Test one direction replication from db_b to db_a, when db_a already has a deleted a record that existed previously. We can force this conflict by disabling replication consumption on db_b]
+[doc Test one direction replication from pg_2 to pg_1, when pg_1 already has a deleted a record that existed previously. We can force this conflict by disabling replication consumption on pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -6,15 +6,15 @@
 [include shared.luxinc]
 [invoke setup]
 
-[shell db_b]
+[shell pg_2]
     !UPDATE pg_catalog.pg_subscription SET subenabled = false;
     ?$psql
 
-[shell db_b]
+[shell pg_2]
     !INSERT INTO entries (content) VALUES ('State1');
     ?INSERT 0 1
 
-[shell db_a]
+[shell pg_1]
     [loop iter 1..10]
         @State1
         !select * from entries;
@@ -24,7 +24,7 @@
     !DELETE FROM entries;
     ?electric=
 
-[shell db_b]
+[shell pg_2]
     [loop iter 1..10]
         @State1
         !select * from entries;
@@ -34,7 +34,7 @@
     !UPDATE entries SET content = 'State2';
     ?electric=
 
-[shell db_b]
+[shell pg_2]
     [loop iter 1..10]
         @State2
         !select * from entries;
@@ -42,7 +42,7 @@
         [sleep 1]
     [endloop]
 
-[shell db_a]
+[shell pg_1]
     [loop iter 1..10]
         @State2
         !select * from entries;

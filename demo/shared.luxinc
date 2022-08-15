@@ -19,16 +19,16 @@
     !make start_dev_env
     [invoke ok]
 
-[shell db_a]
-    [invoke start_psql db_a]
+[shell pg_1]
+    [invoke start_psql pg_1]
 
-[shell db_b]
-    [invoke start_psql db_b]
+[shell pg_2]
+    [invoke start_psql pg_2]
 
 [shell vaxine]
     !make start_vaxine
     ?application: vx_server
-    ?started_at: antidote@dc1n1
+    ?started_at: vaxine@dc1n1
 
 [shell vaxine_wait]
     [invoke wait_port localhost 8088]
