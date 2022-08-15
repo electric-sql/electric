@@ -8,6 +8,9 @@
 import Config
 
 if config_env() == :prod do
+  config :electric, Electric.StatusPlug,
+    port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
+
   vaxine_hostname =
     System.get_env("VAXINE_HOSTNAME") || raise "Env variable VAXINE_HOSTNAME is not set"
 
