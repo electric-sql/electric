@@ -48,6 +48,8 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
       {:ok, pid} ->
         :ok = :vx_client.start_replication(pid, [])
 
+        Registry.put_meta(Electric.StatusRegistry, {:connection, :vaxine_downstream}, true)
+
         Logger.debug(
           "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
         )
@@ -77,6 +79,7 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   end
 
   def handle_info({:EXIT, _pid, _reason}, state) do
+    Registry.put_meta(Electric.StatusRegistry, {:connection, :vaxine_downstream}, false)
     {backoff_time, backoff} = :backoff.fail(state.backoff)
     Logger.warn("VaxineLogProducer couldn't connect to Vaxine, retrying in #{backoff_time}ms")
     :erlang.send_after(backoff_time, self(), :connect)
