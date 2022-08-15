@@ -5,9 +5,6 @@ on:
       - main
   pull_request: null
 
-env:
-  VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
-
 jobs:
   formatting_check:
     name: Formatting check

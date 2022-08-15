@@ -11,7 +11,7 @@
 
 [shell electric_b]
     [timeout 10]
-    !make start_electric_b
+    !make start_electric_2
     ?Starting replication to postgres_3
 
 [shell pg_1]

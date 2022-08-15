@@ -1,11 +1,11 @@
 import Config
 
 config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  hostname: "vaxine",
+  hostname: "vaxine_1",
   port: 8088
 
 config :electric, Electric.VaxRepo,
-  hostname: "vaxine",
+  hostname: "vaxine_1",
   port: 8087
 
 config :electric, Electric.Replication.Connectors,
