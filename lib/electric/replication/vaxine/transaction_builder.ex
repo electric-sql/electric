@@ -6,7 +6,10 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
 
   @spec build_transaction(LogProducer.vx_wal_txn(), Metadata.t()) ::
           {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  def build_transaction({:vx_wal_txn, _txid, _dcid, _wal_offset, vaxine_transaction_data}, metadata) do
+  def build_transaction(
+        {:vx_wal_txn, _txid, _dcid, _wal_offset, vaxine_transaction_data},
+        metadata
+      ) do
     vaxine_transaction_data
     |> build_rows()
     |> build_transaction(metadata.commit_timestamp, :origin)

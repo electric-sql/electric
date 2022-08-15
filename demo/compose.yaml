@@ -2,7 +2,6 @@
 version: '3.1'
 
 services:
-
   vaxine:
     extends:
       file: services_templates.yaml
@@ -23,7 +22,7 @@ services:
     extends:
       file: services_templates.yaml
       service: electric
-   volumes:
+    volumes:
       - ./electric_b.exs:/app/releases/0.1.0/runtime.exs:ro
     depends_on:
       - pg_3

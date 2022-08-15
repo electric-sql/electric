@@ -10,9 +10,9 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
 
   @type vx_txn_data ::
           {key :: binary(), type :: atom(), materialized_value :: term(), ops :: list(term())}
-  @type vx_wal_txn :: {:vx_wal_txn, tx_id :: term(), dcid :: term(),
-                       wal_offset :: term(),
-                       data :: [vx_txn_data()]}
+  @type vx_wal_txn ::
+          {:vx_wal_txn, tx_id :: term(), dcid :: term(), wal_offset :: term(),
+           data :: [vx_txn_data()]}
 
   @max_backoff_ms 5000
 
@@ -51,6 +51,7 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
         Logger.debug(
           "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
         )
+
         {_, backoff} = :backoff.succeed(state.backoff)
         {:noreply, [], %{state | backoff: backoff}}
 

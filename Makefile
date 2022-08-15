@@ -24,6 +24,12 @@ pretest_compile: deps
 tests:
 	mix test
 
+format:
+	mix format
+
+check-format:
+	mix format --check-formatted
+
 DC_CONFIG=compose.yaml
 
 start_dev_env:

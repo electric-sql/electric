@@ -26,7 +26,7 @@ stop_dev_env:
 test: lux postgres
 	${LUX} *.lux
 
-VAXINE_BRANCH?=main:
+VAXINE_BRANCH?=main
 vaxine:
 ifndef VAXINE_IMAGE
 	git clone https://github.com/vaxine-io/vaxine.git
