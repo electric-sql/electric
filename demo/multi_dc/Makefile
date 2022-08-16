@@ -4,7 +4,7 @@ include ../Makefile.common
 
 DOCKER_COMPOSE_FILE=multi-dc.yaml
 
-test:
+test: build
 	${LUX} *.lux
 
 build:

@@ -1,0 +1,5 @@
+.DS_Store
+.idea
+*.log
+tmp/
+electric_*.exs

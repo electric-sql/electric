@@ -6,6 +6,14 @@ services:
     extends:
       file: ../services_templates.yaml
       service: vaxine
+    environment:
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
     ports:
       - "8087:8087"
       - "8088:8088"
