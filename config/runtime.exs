@@ -53,7 +53,8 @@ if config_env() == :prod do
          electric_connection: [
            host: electric_host,
            port: electric_port,
-           dbname: "test"
+           dbname: "test",
+           connect_timeout: connection[:timeout]
          ]
        ]}
     end)
