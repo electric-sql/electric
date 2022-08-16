@@ -14,6 +14,9 @@
     !INSERT INTO entries (id, content) VALUES ('dab0679d-fa41-476f-8615-738b08773521', 'Hello from a');
     ?INSERT 0 1
 
+[shell electric]
+    ?COMMIT TRANSACTION
+
 [shell db_b]
     !INSERT INTO entries (id, content) VALUES ('dab0679d-fa41-476f-8615-738b08773521', 'Hello from b');
     ?INSERT 0 1
