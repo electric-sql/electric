@@ -24,7 +24,7 @@ defmodule Electric.StatusPlug do
         end)
     }
 
-    if vaxine and Enum.all?(connectors, &match?({_, :ready}, &1)) do
+    if vaxine do
       send_resp(conn, 200, Jason.encode!(data))
     else
       send_resp(conn, 500, Jason.encode!(data))
