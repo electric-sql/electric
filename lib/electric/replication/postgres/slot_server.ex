@@ -105,7 +105,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:reply, false, state}
   end
 
-
   @impl true
   def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
     {:reply, {:error, :replication_already_started}, state}
