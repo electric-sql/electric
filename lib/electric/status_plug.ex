@@ -5,8 +5,10 @@ defmodule Electric.StatusPlug do
   plug(:dispatch)
 
   defp vaxine_ready? do
-    {:ok, ready} = Registry.meta(Electric.StatusRegistry, {:connection, :vaxine_downstream})
-    ready
+    case Registry.meta(Electric.StatusRegistry, {:connection, :vaxine_downstream}) do
+      {:ok, ready?} -> ready?
+      :error -> false
+    end
   end
 
   get "/ready" do
