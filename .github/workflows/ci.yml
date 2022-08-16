@@ -82,21 +82,21 @@ jobs:
           ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_HEAD_REF_SLUG || 'main' }}
 
       - run: make lux
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make vaxine
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make postgres
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make test
         id: tests
-        working-directory: demo
+        working-directory: integration_tests
 
       - name: Upload lux logs
         uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: lux_logs
-          path: demo/lux_logs/run_*
+          path: integration_tests/lux_logs/run_*

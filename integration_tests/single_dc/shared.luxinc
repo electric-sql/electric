@@ -60,7 +60,7 @@
 [macro wait_logs name match_spec]
     [loop iter 1..10]
           @${match_spec}
-          !docker logs demo_${name}_1
+          !docker logs single_dc_${name}_1
           [sleep 1]
     [endloop]
 [endmacro]

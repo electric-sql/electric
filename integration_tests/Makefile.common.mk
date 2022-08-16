@@ -1,5 +1,5 @@
 PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
-LUX=${PROJECT_ROOT}/demo/lux/bin/lux
+LUX=${PROJECT_ROOT}/integration_tests/lux/bin/lux
 DOCKER_REGISTRY=europe-docker.pkg.dev/vaxine/vaxine-io
 
 export UID=$(shell id -u)
@@ -61,7 +61,7 @@ else
 endif
 
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password demo_$*_1 psql -h $* -U electric -d electric
+	docker exec -it -e PGPASSWORD=password integration_tests_$*_1 psql -h $* -U electric -d electric
 
 docker-attach-%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
