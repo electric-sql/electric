@@ -47,7 +47,7 @@ defmodule Electric.MixProject do
       {:postgrex, "~> 0.16.3"},
       {:postgresql_uri, "~> 0.1.0"},
       {:recon_ex, "~> 0.9.1"},
-      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.10", only: :test, runtime: false}
     ]
   end
