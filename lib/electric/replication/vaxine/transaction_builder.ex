@@ -2,11 +2,14 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.Replication.Changes
   alias Electric.Replication.Row
   alias Electric.Replication.Metadata
-  alias Electric.ReplicationServer.VaxineLogProducer
+  alias Electric.ReplicationServer.Vaxine.LogProducer
 
-  @spec build_transaction(VaxineLogProducer.vx_wal_txn(), Metadata.t()) ::
+  @spec build_transaction(LogProducer.vx_wal_txn(), Metadata.t()) ::
           {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  def build_transaction({:vx_wal_txn, _txid, vaxine_transaction_data}, metadata) do
+  def build_transaction(
+        {:vx_wal_txn, _txid, _dcid, _wal_offset, vaxine_transaction_data},
+        metadata
+      ) do
     vaxine_transaction_data
     |> build_rows()
     |> build_transaction(metadata.commit_timestamp, :origin)
@@ -62,9 +65,9 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
 
   Should futurely be superseded by transaction metadata at Vaxine's side.
   """
-  @spec extract_metadata(VaxineLogProducer.vx_wal_txn()) ::
+  @spec extract_metadata(LogProducer.vx_wal_txn()) ::
           {:ok, Metadata.t()} | {:error, :metadata_not_available}
-  def extract_metadata({:vx_wal_txn, _tx_id, vaxine_transaction_data}) do
+  def extract_metadata({:vx_wal_txn, _tx_id, _dcid, _wal_offset, vaxine_transaction_data}) do
     case Enum.find(vaxine_transaction_data, fn el -> match?({{"metadata:0", _}, _, _, _}, el) end) do
       nil ->
         {:error, :metadata_not_available}

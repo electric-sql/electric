@@ -1,4 +1,4 @@
-[doc Test one direction replication from db_a to db_b]
+[doc Test one direction replication from pg_1 to pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -6,7 +6,7 @@
 [include shared.luxinc]
 [invoke setup]
 
-[shell db_a]
+[shell pg_1]
     !INSERT INTO entries (content) VALUES ('Hello from a');
     ?INSERT 0 1
 
@@ -14,12 +14,12 @@
     ?to slot: "postgres_2"
     ?slot=postgres_2 \[debug\] Sending \d messages to the subscriber
 
-[shell db_b]
+[shell pg_2]
     !SELECT * FROM entries;
     ?Hello from a
     ?(1 row)
 
-[shell db_a]
+[shell pg_1]
     !SELECT * FROM entries;
     ?Hello from a
     ?(1 row)

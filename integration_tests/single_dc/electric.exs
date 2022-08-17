@@ -1,18 +1,18 @@
 import Config
 
 config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  hostname: "vaxine",
+  hostname: "vaxine_1",
   port: 8088
 
 config :electric, Electric.VaxRepo,
-  hostname: "vaxine",
+  hostname: "vaxine_1",
   port: 8087
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
-      host: 'db_a',
+      host: 'pg_1',
       port: 5432,
       database: 'electric',
       username: 'electric',
@@ -24,7 +24,7 @@ config :electric, Electric.Replication.Connectors,
       publication: "all_tables",
       slot: "all_changes",
       electric_connection: [
-        host: "electric",
+        host: "electric_1",
         port: 5433,
         dbname: "test"
       ]
@@ -34,7 +34,7 @@ config :electric, Electric.Replication.Connectors,
   postgres_2: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
-      host: 'db_b',
+      host: 'pg_2',
       port: 5432,
       database: 'electric',
       username: 'electric',
@@ -46,7 +46,7 @@ config :electric, Electric.Replication.Connectors,
       publication: "all_tables",
       slot: "all_changes",
       electric_connection: [
-        host: "electric",
+        host: "electric_1",
         port: 5433,
         dbname: "test"
       ]

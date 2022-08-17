@@ -7,7 +7,7 @@
 [macro start_psql name]
     [loop iter 1..10]
           @electric=#
-          !docker exec -it -e PGPASSWORD=password demo_${name}_1 psql -h ${name} -U electric -d electric
+          !docker exec -it -e PGPASSWORD=password single_dc_${name}_1 psql -h ${name} -U electric -d electric
           ?SH-PROMPT:
           [sleep 1]
     [endloop]
@@ -19,16 +19,16 @@
     !make start_dev_env
     [invoke ok]
 
-[shell db_a]
-    [invoke start_psql db_a]
+[shell pg_1]
+    [invoke start_psql pg_1]
 
-[shell db_b]
-    [invoke start_psql db_b]
+[shell pg_2]
+    [invoke start_psql pg_2]
 
 [shell vaxine]
-    !make start_vaxine
+    !make start_vaxine_1
     ?application: vx_server
-    ?started_at: antidote@dc1n1
+    ?started_at: vaxine@
 
 [shell vaxine_wait]
     [invoke wait_port localhost 8088]
@@ -36,7 +36,7 @@
 
 [shell electric]
     [timeout 10]
-    !make start_electric
+    !make start_electric_1
     ?START_REPLICATION SLOT
     ?START_REPLICATION SLOT
 [endmacro]
@@ -50,7 +50,7 @@
 [macro wait_name name]
     [loop iter 1..10]
           @accepting connections
-          !docker exec -it -e PGPASSWORD=password demo_${name}_1 pg_isready -U electric
+          !docker exec -it -e PGPASSWORD=password single_dc_${name}_1 pg_isready -U electric
           ?SH-PROMPT:
           [sleep 1]
     [endloop]
@@ -60,7 +60,7 @@
 [macro wait_logs name match_spec]
     [loop iter 1..10]
           @${match_spec}
-          !docker logs demo_${name}_1
+          !docker logs single_dc_${name}_1
           [sleep 1]
     [endloop]
 [endmacro]

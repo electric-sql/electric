@@ -1,4 +1,4 @@
-[doc Test one direction replication from db_a to db_b]
+[doc Test one direction replication from pg_1 to pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -6,15 +6,15 @@
 [include shared.luxinc]
 [invoke setup]
 
-[shell db_c]
-    [invoke start_psql db_c]
+[shell pg_3]
+    [invoke start_psql pg_3]
 
 [shell electric_b]
     [timeout 10]
-    !make start_electric_b
+    !make start_electric_2
     ?Starting replication to postgres_3
 
-[shell db_a]
+[shell pg_1]
     !INSERT INTO entries (content) VALUES ('Hello from a');
     ?INSERT 0 1
 
@@ -22,12 +22,12 @@
     ?to slot: "postgres_3"
     ?slot=postgres_3 \[debug\] Sending \d messages to the subscriber
 
-[shell db_c]
+[shell pg_3]
     !SELECT * FROM entries;
     ?Hello from a
     ?(1 row)
 
-[shell db_c]
+[shell pg_3]
     !INSERT INTO entries (content) VALUES ('Hello from c');
     ?INSERT 0 1
 
@@ -36,7 +36,7 @@
     ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
     [timeout 10]
 
-[shell db_a]
+[shell pg_1]
     [loop iter 1..10]
         @Hello from c
         !select * from entries;
@@ -44,7 +44,7 @@
         [sleep 1]
     [endloop]
 
-[shell db_b]
+[shell pg_2]
     [loop iter 1..10]
         @Hello from c
         !select * from entries;

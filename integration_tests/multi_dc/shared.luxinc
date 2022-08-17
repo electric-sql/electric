@@ -1,0 +1,100 @@
+[macro ok]
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?^==0==
+[endmacro]
+
+[macro start_psql name]
+    [loop iter 1..10]
+          @electric=#
+          !docker exec -it -e PGPASSWORD=password multi_dc_${name}_1 psql -h ${name} -U electric -d electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro setup]
+[shell start_env]
+    [progress start development environment]
+    !make start_dev_env
+    [invoke ok]
+
+[shell pg_1]
+    [invoke start_psql pg_1]
+
+[shell pg_2]
+    [invoke start_psql pg_2]
+
+[shell vaxine_1]
+    !make start_vaxine_1
+    ?application: vx_server
+    ?started_at: vaxine@
+
+[shell vaxine_2]
+    !make start_vaxine_2
+    ?application: vx_server
+    ?started_at: vaxine@
+
+[shell vaxine_wait]
+    [invoke wait_port localhost 8087]
+    [invoke wait_port localhost 8088]
+    [invoke wait_port localhost 8089]
+    [invoke wait_port localhost 8090]
+
+[shell ctrl1]
+    !make create-dc-vaxine_1
+    ?Done.
+    [invoke ok]
+    !make create-dc-vaxine_2
+    ?Done.
+    [invoke ok]
+    !make connect-dcs
+    ?DCs connected
+    [invoke ok]
+
+[shell link_cluster]
+    !make
+
+[shell electric_1]
+    [timeout 10]
+    !make start_electric_1
+    ?START_REPLICATION SLOT
+
+[shell electric_2]
+    [timeout 10]
+    !make start_electric_2
+    ?START_REPLICATION SLOT
+[endmacro]
+
+[macro teardown]
+    [progress stop development environment]
+    !make stop_dev_env
+    [invoke ok]
+[endmacro]
+
+[macro wait_name name]
+    [loop iter 1..10]
+          @accepting connections
+          !docker exec -it -e PGPASSWORD=password multi_dc_${name}_1 pg_isready -U electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+    ?SH-PROMPT:
+[endmacro]
+
+[macro wait_logs name match_spec]
+    [loop iter 1..10]
+          @${match_spec}
+          !docker logs multi_dc_${name}_1
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro wait_port host port]
+    [loop iter 1..10]
+          @==0==
+          !nc -z $host $port; echo ==$$?==
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]

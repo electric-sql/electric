@@ -1,4 +1,4 @@
-{:vx_wal_txn, {:tx_id, 1_658_761_743_568_123, :stub},
+{:vx_wal_txn, {:tx_id, 1_658_761_743_568_123, :stub}, :none, :none,
  [
    {{"rows:public:entries:cb2fb0f0-dd12-4e87-a3cd-4eaff087995c", "vax"}, :antidote_crdt_map_rr,
     {:dict, 5, 16, 16, 8, 80, 48,

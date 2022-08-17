@@ -9,6 +9,9 @@ deps:
 	mix deps.get
 	mix deps.compile
 
+dialyzer:
+	mix dialyzer
+
 compile:
 	mix compile
 
@@ -20,6 +23,12 @@ pretest_compile: deps
 
 tests:
 	mix test
+
+format:
+	mix format
+
+check-format:
+	mix format --check-formatted
 
 DC_CONFIG=compose.yaml
 
@@ -35,7 +44,10 @@ docker-build:
 docker-build-ci:
 	docker pull ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} || true
 	docker pull ${ELECTRIC_IMAGE_NAME}:latest || true
-	docker build --cache-from ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} --cache-from ${ELECTRIC_IMAGE_NAME}:latest -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} -t electric:local-build .
+	docker build --cache-from ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
+      --cache-from ${ELECTRIC_IMAGE_NAME}:latest \
+      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
+      -t electric:local-build .
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 
 docker-clean:

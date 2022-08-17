@@ -5,9 +5,6 @@ on:
       - main
   pull_request: null
 
-env:
-  VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
-
 jobs:
   formatting_check:
     name: Formatting check
@@ -26,8 +23,8 @@ jobs:
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix
-      - run: mix deps.get
-      - run: mix format --check-formatted
+      - run: make deps
+      - run: make check-format
 
   elixir_tests:
     name: Elixir tests
@@ -60,6 +57,8 @@ jobs:
           coverage-files: cover/lcov.info
           artifact-name: code-coverage-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Dialyzer
+        run: make dialyzer
 
   e2e_tests:
     name: E2E tests
@@ -83,24 +82,21 @@ jobs:
           ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_HEAD_REF_SLUG || 'main' }}
 
       - run: make lux
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make vaxine
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make postgres
-        working-directory: demo
+        working-directory: integration_tests
 
       - run: make test
         id: tests
-        working-directory: demo
+        working-directory: integration_tests
 
       - name: Upload lux logs
         uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: lux_logs
-          path: demo/lux_logs/run_*
-
-      - run: make start_dev_env
-      - run: make stop_dev_env
+          path: integration_tests/lux_logs/run_*

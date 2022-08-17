@@ -1,4 +1,4 @@
-[doc Bidirectional replication test db_a <-> db_b]
+[doc Bidirectional replication test pg_1 <-> pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -7,31 +7,31 @@
 
 [invoke setup]
 
-[shell db_b]
-    !INSERT INTO entries (content) VALUES ('hello from db_b');
+[shell pg_2]
+    !INSERT INTO entries (content) VALUES ('hello from pg_2');
     ?$psql
 
-[shell db_a]
+[shell pg_1]
     [loop iter 1..10]
-        @hello from db_b
+        @hello from pg_2
         !select * from entries;
         ?electric=
         [sleep 1]
     [endloop]
 
 [shell electric]
-    ?"content" => "hello from db_b"
+    ?"content" => "hello from pg_2"
 
-[shell db_a]
-    !INSERT INTO entries (content) VALUES ('hello from db_a');
+[shell pg_1]
+    !INSERT INTO entries (content) VALUES ('hello from pg_1');
     ?$psql
 
 [shell electric]
-    ?"content" => "hello from db_a"
+    ?"content" => "hello from pg_1"
 
-[shell db_b]
+[shell pg_2]
     [loop iter 1..10]
-        @hello from db_a
+        @hello from pg_1
         !select * from entries;
         ?electric=
         [sleep 1]

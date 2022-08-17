@@ -1,0 +1,95 @@
+# Run using `docker-compose -f databases.yaml up`.
+version: '3.1'
+
+services:
+  vaxine_1:
+    extends:
+      file: ../services_templates.yaml
+      service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_1"
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
+    ports:
+      - "8087:8087"
+      - "8088:8088"
+
+  vaxine_2:
+    extends:
+      file: ../services_templates.yaml
+      service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_2"
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_2:/vaxine-data
+    ports:
+      - "8089:8087"
+      - "8090:8088"
+
+  vaxine_3:
+    extends:
+      file: ../services_templates.yaml
+      service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_3"
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_3:/vaxine-data
+    ports:
+      - "8091:8087"
+      - "8092:8088"
+
+  electric_1:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    volumes:
+      - ./electric_1.exs:/app/releases/0.1.0/runtime.exs:ro
+    depends_on:
+      - pg_1
+      - vaxine_1
+
+  electric_2:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    volumes:
+      - ./electric_2.exs:/app/releases/0.1.0/runtime.exs:ro
+    depends_on:
+      - pg_2
+      - vaxine_2
+
+  electric_3:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    volumes:
+      - ./electric_3.exs:/app/releases/0.1.0/runtime.exs:ro
+    depends_on:
+      - pg_3
+      - vaxine_3
+
+  pg_1:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54321:5432"
+
+  pg_2:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54322:5432"
+
+  pg_3:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54323:5432"
+
+  ctrl:
+    environment:
+      GODEBUG: netdns=go
+    image: peterzel/antidote-connect

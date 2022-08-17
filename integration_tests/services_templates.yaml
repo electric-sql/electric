@@ -1,0 +1,48 @@
+services:
+  vaxine:
+    image: "${VAXINE_IMAGE}"
+    environment:
+      RING_SIZE: "1"
+      ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
+      ANTIDOTE_TXN_PROT: "clocksi"
+      ANTIDOTE_RECOVER_FROM_LOG: "true"
+      ANTIDOTE_META_DATA_ON_START: "true"
+      ANTIDOTE_SYNC_LOG: "true"
+      ANTIDOTE_ENABLE_LOGGING: "true"
+      ANTIDOTE_AUTO_START_READ_SERVERS: "true"
+      COOKIE: "secret"
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+    privileged: true
+
+  electric:
+    image: electric:local-build
+    privileged: true
+
+  postgresql:
+    image: "${POSTGRESQL_IMAGE}"
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: electric
+      POSTGRES_PASSWORD: password
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    volumes:
+      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./postgres.conf:/etc/postgresql.conf:ro
+    entrypoint:
+      - /docker-entrypoint.sh
+      - -c
+      - config_file=/etc/postgresql.conf
+    cap_add:
+      - SYS_PTRACE
+    privileged: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U electric"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

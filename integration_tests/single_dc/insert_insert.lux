@@ -1,4 +1,4 @@
-[doc Bidirectional replication test db_a <-> db_b]
+[doc Bidirectional replication test pg_1 <-> pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
@@ -7,10 +7,10 @@
 [invoke setup]
 #--------------------------------------------------
 
-[shell db_a]
+[shell pg_1]
     !insert into entries (content, content_b) values ('1', 'A_VALUE');
 
-[shell db_b]
+[shell pg_2]
     !insert into entries (content, content_b) values ('1', 'B_VALUE');
 
 [shell electric]
@@ -19,7 +19,7 @@
     ?Sending transaction
     ?Sending transaction
 
-[shell db_b]
+[shell pg_2]
     [loop iter 1..10]
         @_VALUE
         !select * from entries;

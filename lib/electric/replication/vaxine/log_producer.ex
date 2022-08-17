@@ -10,7 +10,9 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
 
   @type vx_txn_data ::
           {key :: binary(), type :: atom(), materialized_value :: term(), ops :: list(term())}
-  @type vx_wal_txn :: {:vx_wal_txn, tx_id :: term, data :: [vx_txn_data()]}
+  @type vx_wal_txn ::
+          {:vx_wal_txn, tx_id :: term(), dcid :: term(), wal_offset :: term(),
+           data :: [vx_txn_data()]}
 
   @max_backoff_ms 5000
 
@@ -50,7 +52,8 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
           "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
         )
 
-        {:noreply, [], %{state | backoff: :backoff.succeed(state.backoff)}}
+        {_, backoff} = :backoff.succeed(state.backoff)
+        {:noreply, [], %{state | backoff: backoff}}
 
       # No-op. We handle the EXIT signal we receive from the crashing process
       # instead.
@@ -60,11 +63,11 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   end
 
   @impl true
-  def handle_info({:vx_client_msg, _from, :ok}, state) do
+  def handle_info({:vx_client_msg, _from, :ok, _}, state) do
     {:noreply, [], state}
   end
 
-  def handle_info({:vx_client_msg, from, msg}, state) do
+  def handle_info({:vx_client_msg, from, msg, _}, state) do
     queue =
       msg
       |> build_message(from)
