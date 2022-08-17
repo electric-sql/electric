@@ -11,7 +11,12 @@ services:
       ANTIDOTE_ENABLE_LOGGING: "true"
       ANTIDOTE_AUTO_START_READ_SERVERS: "true"
       COOKIE: "secret"
-      NODE_NAME: "vaxine@dc1n1"
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
     privileged: true
 
   electric:

@@ -71,4 +71,4 @@ echo:
 
 
 docker-start-clean-%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run --entrypoint=bash $*
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run --entrypoint=/bin/sh $*

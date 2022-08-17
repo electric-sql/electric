@@ -28,18 +28,32 @@
 [shell vaxine_1]
     !make start_vaxine_1
     ?application: vx_server
-    ?started_at: vaxine@dc1n1
+    ?started_at: vaxine@
 
 [shell vaxine_2]
     !make start_vaxine_2
     ?application: vx_server
-    ?started_at: vaxine@dc1n1
+    ?started_at: vaxine@
 
 [shell vaxine_wait]
     [invoke wait_port localhost 8087]
     [invoke wait_port localhost 8088]
     [invoke wait_port localhost 8089]
     [invoke wait_port localhost 8090]
+
+[shell ctrl1]
+    !make create-dc-vaxine_1
+    ?Done.
+    [invoke ok]
+    !make create-dc-vaxine_2
+    ?Done.
+    [invoke ok]
+    !make connect-dcs
+    ?DCs connected
+    [invoke ok]
+
+[shell link_cluster]
+    !make
 
 [shell electric_1]
     [timeout 10]

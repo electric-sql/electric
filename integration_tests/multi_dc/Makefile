@@ -19,6 +19,12 @@ build:
 		< electric.template > electric_$$num.exs; \
 	done
 
+create-dc-%:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run ctrl --createDc "$*:8087"
+
+connect-dcs:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run ctrl --connectDcs "vaxine_1:8087" "vaxine_2:8087"
+
 clean:
 	rm -rf *.exs
 # end

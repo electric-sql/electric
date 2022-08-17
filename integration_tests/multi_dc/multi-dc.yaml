@@ -7,13 +7,9 @@ services:
       file: ../services_templates.yaml
       service: vaxine
     environment:
-      UID: ${UID}
-      GID: ${GID}
+      NODE_NAME: "vaxine@vaxine_1"
     volumes:
       - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
-      - /etc/group:/etc/group:ro
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/shadow:/etc/shadow:ro
     ports:
       - "8087:8087"
       - "8088:8088"
@@ -23,13 +19,9 @@ services:
       file: ../services_templates.yaml
       service: vaxine
     environment:
-      UID: ${UID}
-      GID: ${GID}
+      NODE_NAME: "vaxine@vaxine_2"
     volumes:
       - ${VAXINE_VOLUME}/vaxine_2:/vaxine-data
-      - /etc/group:/etc/group:ro
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/shadow:/etc/shadow:ro
     ports:
       - "8089:8087"
       - "8090:8088"
@@ -38,6 +30,10 @@ services:
     extends:
       file: ../services_templates.yaml
       service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_3"
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_3:/vaxine-data
     ports:
       - "8091:8087"
       - "8092:8088"
@@ -92,3 +88,8 @@ services:
       service: postgresql
     ports:
       - "54323:5432"
+
+  ctrl:
+    environment:
+      GODEBUG: netdns=go
+    image: peterzel/antidote-connect
