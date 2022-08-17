@@ -1,4 +1,4 @@
-include Makefile.common.mk
+include common.mk
 
 LUX_DIRS= \
 	single_dc \
