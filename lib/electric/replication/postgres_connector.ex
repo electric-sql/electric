@@ -48,7 +48,7 @@ defmodule Electric.Replication.PostgresConnector do
     args = normalize_args(init_arg)
     supervisor = self()
 
-    Process.put(:name, args.origin)
+    Registry.register(Electric.StatusRegistry, {:connector, args.origin}, args.origin)
 
     children = [
       Supervisor.child_spec({Task, fn -> initialize_connector(supervisor, args) end},
@@ -60,8 +60,8 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   def name(pid) do
-    {:dictionary, data} = Process.info(pid, :dictionary)
-    Keyword.fetch!(data, :name)
+    [name] = Registry.select(Electric.StatusRegistry, [{{{:connector, :_}, pid, :"$1"}, [], [:"$1"]}])
+    name
   end
 
   def status(pid) do
