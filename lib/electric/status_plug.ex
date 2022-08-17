@@ -11,7 +11,7 @@ defmodule Electric.StatusPlug do
     end
   end
 
-  get "/ready" do
+  get "/status" do
     connectors = Electric.Replication.Connectors.status()
     vaxine = vaxine_ready?()
 
