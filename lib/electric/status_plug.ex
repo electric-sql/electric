@@ -5,9 +5,9 @@ defmodule Electric.StatusPlug do
   plug(:dispatch)
 
   defp vaxine_ready? do
-    case Registry.meta(Electric.StatusRegistry, {:connection, :vaxine_downstream}) do
-      {:ok, ready?} -> ready?
-      :error -> false
+    case Registry.lookup(Electric.StatusRegistry, {:connection, :vaxine_downstream}) do
+      [{_pid, ready?}] -> ready?
+      [] -> false
     end
   end
 
