@@ -69,6 +69,5 @@ docker-attach-%:
 echo:
 	echo ${UID}:${GID}
 
-
 docker-start-clean-%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run --entrypoint=/bin/sh $*
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh $*

@@ -9,7 +9,7 @@ config :electric, Electric.VaxRepo,
   port: {AN_PORT}
 
 config :electric, Electric.Replication.Connectors,
-  ${PG_HOST}: [
+  {PG_HOST}: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
       host: '{PG_HOST}',
