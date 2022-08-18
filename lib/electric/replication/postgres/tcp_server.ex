@@ -150,47 +150,14 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   def handle_continue(:establish_connection, state) do
-    {:ok, <<length::32>>} = state.transport.recv(state.socket, 4, 100)
-
-    case state.transport.recv(state.socket, length - 4, 100) do
-      {:ok, <<1234::16, 5679::16>>} ->
-        # SSL connection request
-        Logger.debug("SSL upgrade requested by the client")
-        {:noreply, state, {:continue, :upgrade_connection_to_ssl}}
-
-      {:ok, <<1234::16, 5678::16, pid::binary-4, secret::32>>} ->
-        # Cancellation request
-        {:noreply, state, {:continue, {:cancel, pid, secret}}}
-
-      {:ok, <<1234::16, 5680::16>>} ->
-        # GSSAPI encrypted connection request
-        # Deny the request and continue establishing the connection
-        tcp_send(Messaging.deny_upgrade_request(), state)
-        Logger.debug("GSSAPI encrypted connection upgrade denied")
-        {:noreply, state, {:continue, :establish_connection}}
-
-      {:ok, <<3::16, 0::16, data::binary>>} ->
-        settings = parse_client_startup_settings(data)
-
-        if authentication_required?(state.client, settings) do
-          # TODO: `handle_continue` for authentication is not implemented
-          Logger.debug("Authentication required for the client")
-          {:noreply, %{state | settings: settings}, {:continue, :request_authentication}}
-        else
-          initialize_connection(state, settings)
-        end
-
-      {:ok, data} ->
-        Logger.warning("Unexpected data from the client during initialization: #{inspect(data)}")
-
-        Messaging.error(:fatal,
-          code: "08P01",
-          message: "Unexpected message during connection establishment"
-        )
-        |> tcp_send(state)
-
+    with {:ok, <<length::32>>} <- state.transport.recv(state.socket, 4, 100),
+         {:ok, data} <- state.transport.recv(state.socket, length - 4, 100) do
+      establish_connection(data, state)
+    else
+      {:error, :closed} ->
+        Logger.debug("Connection closed by client")
         state.transport.close(state.socket)
-        {:stop, :normal, :state}
+        {:stop, :normal, state}
     end
   end
 
@@ -306,6 +273,50 @@ defmodule Electric.Replication.Postgres.TcpServer do
     state.transport.close(state.socket)
     Logger.debug("Socket closed by client #{inspect(state.client)}")
     {:stop, :shutdown, state}
+  end
+
+  defp establish_connection(<<1234::16, 5679::16>>, state) do
+    # SSL connection request
+    Logger.debug("SSL upgrade requested by the client")
+    {:noreply, state, {:continue, :upgrade_connection_to_ssl}}
+  end
+
+  defp establish_connection(<<1234::16, 5678::16, pid::binary-4, secret::32>>, state) do
+    # Cancellation request
+    {:noreply, state, {:continue, {:cancel, pid, secret}}}
+  end
+
+  defp establish_connection(<<1234::16, 5680::16>>, state) do
+    # GSSAPI encrypted connection request
+    # Deny the request and continue establishing the connection
+    tcp_send(Messaging.deny_upgrade_request(), state)
+    Logger.debug("GSSAPI encrypted connection upgrade denied")
+    {:noreply, state, {:continue, :establish_connection}}
+  end
+
+  defp establish_connection(<<3::16, 0::16, data::binary>>, state) do
+    settings = parse_client_startup_settings(data)
+
+    if authentication_required?(state.client, settings) do
+      # TODO: `handle_continue` for authentication is not implemented
+      Logger.debug("Authentication required for the client")
+      {:noreply, %{state | settings: settings}, {:continue, :request_authentication}}
+    else
+      initialize_connection(state, settings)
+    end
+  end
+
+  defp establish_connection(data, state) do
+    Logger.warning("Unexpected data from the client during initialization: #{inspect(data)}")
+
+    Messaging.error(:fatal,
+      code: "08P01",
+      message: "Unexpected message during connection establishment"
+    )
+    |> tcp_send(state)
+
+    state.transport.close(state.socket)
+    {:stop, :normal, :state}
   end
 
   defp initialize_connection(%__MODULE__{} = state, %{"replication" => "database"} = settings) do

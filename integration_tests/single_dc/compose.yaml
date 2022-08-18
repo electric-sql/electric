@@ -20,6 +20,8 @@ services:
       service: electric
     volumes:
       - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
+    ports:
+      - "5050:5050"
     depends_on:
       - pg_1
       - pg_2

@@ -33,6 +33,8 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
       backoff: :backoff.init(100, @max_backoff_ms)
     }
 
+    Registry.register(Electric.StatusRegistry, {:connection, :vaxine_downstream}, false)
+
     # Can't use `:continue` since it is not yet supported by gen_stage.
     # We can then use a message to simulate a continue, as long as
     # the process can handle demand without being connected
@@ -47,6 +49,10 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
          ) do
       {:ok, pid} ->
         :ok = :vx_client.start_replication(pid, [])
+
+        Registry.update_value(Electric.StatusRegistry, {:connection, :vaxine_downstream}, fn _ ->
+          true
+        end)
 
         Logger.debug(
           "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication"
@@ -77,6 +83,10 @@ defmodule Electric.ReplicationServer.Vaxine.LogProducer do
   end
 
   def handle_info({:EXIT, _pid, _reason}, state) do
+    Registry.update_value(Electric.StatusRegistry, {:connection, :vaxine_downstream}, fn _ ->
+      false
+    end)
+
     {backoff_time, backoff} = :backoff.fail(state.backoff)
     Logger.warn("VaxineLogProducer couldn't connect to Vaxine, retrying in #{backoff_time}ms")
     :erlang.send_after(backoff_time, self(), :connect)

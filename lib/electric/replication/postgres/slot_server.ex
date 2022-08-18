@@ -40,6 +40,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
     GenServer.start_link(__MODULE__, init_args, name: name(slot_name))
   end
 
+  def connected?(slot_name), do: GenServer.call(name(slot_name), :connected?)
+
   def stop(slot_name), do: GenServer.stop(name(slot_name))
 
   def get_current_lsn(slot_name), do: GenServer.call(name(slot_name), :get_current_lsn)
@@ -91,6 +93,16 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @impl true
   def handle_call(:get_current_lsn, _, state) do
     {:reply, state.current_lsn, state}
+  end
+
+  @impl true
+  def handle_call(:connected?, _, state) when replication_started?(state) do
+    {:reply, true, state}
+  end
+
+  @impl true
+  def handle_call(:connected?, _, state) do
+    {:reply, false, state}
   end
 
   @impl true

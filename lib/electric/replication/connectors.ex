@@ -13,4 +13,10 @@ defmodule Electric.Replication.Connectors do
   def start_connector(module, args) do
     DynamicSupervisor.start_child(__MODULE__, {module, args})
   end
+
+  def status() do
+    __MODULE__
+    |> DynamicSupervisor.which_children()
+    |> Enum.map(fn {_, pid, _, [module]} -> {module.name(pid), module.status(pid)} end)
+  end
 end

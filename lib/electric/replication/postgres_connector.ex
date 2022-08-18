@@ -1,6 +1,7 @@
 defmodule Electric.Replication.PostgresConnector do
   use Supervisor
   require Logger
+  alias Electric.Replication.Postgres
   alias Electric.Postgres.SchemaRegistry
 
   defmacrop retry_while(opts, do_block \\ nil) do
@@ -47,6 +48,8 @@ defmodule Electric.Replication.PostgresConnector do
     args = normalize_args(init_arg)
     supervisor = self()
 
+    Registry.register(Electric.StatusRegistry, {:connector, args.origin}, args.origin)
+
     children = [
       Supervisor.child_spec({Task, fn -> initialize_connector(supervisor, args) end},
         id: {Task, :initialize_connector}
@@ -56,18 +59,57 @@ defmodule Electric.Replication.PostgresConnector do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp initialize_connector(supervisor, args) when is_pid(supervisor) do
+  def name(pid) do
+    [name] =
+      Registry.select(Electric.StatusRegistry, [{{{:connector, :_}, pid, :"$1"}, [], [:"$1"]}])
+
+    name
+  end
+
+  def status(pid) do
+    children = Supervisor.which_children(pid)
+
+    cond do
+      match?({{Task, :initialize_connector}, _, _, _}, List.first(children)) ->
+        {:not_ready, :initialization}
+
+      match?({{Task, :start_subscription}, _, _, _}, List.last(children)) ->
+        {:not_ready, :initialization}
+
+      not module_connected?(children, Postgres.SlotServer) ->
+        {:not_ready, {:disconnected, :downstream}}
+
+      # TODO: Doesn't really make sense until we ensure `Postgres.LogicalReplicationProducer`
+      #       reconnects properly on connection loss
+      # not module_connected?(children, Postgres.UpstreamPipeline) ->
+      #   {:not_ready, {:disconnected, :upstream}}
+
+      true ->
+        :ready
+    end
+  end
+
+  defp module_connected?(children, module) do
+    case List.keyfind(children, module, 0) do
+      {_, pid, _, _} -> module.connected?(pid)
+      nil -> false
+    end
+  end
+
+  defp initialize_connector_with_retries(args) do
     retry_while total_timeout: 10000, max_single_backoff: 1000 do
       case initialize_postgres(args) do
         {:ok, _} -> {:halt, :ok}
         error -> {:cont, error}
       end
     end
-    |> case do
-      :ok ->
-        :ok = finish_initialization(supervisor, args)
-        SchemaRegistry.mark_origin_ready(args.origin)
+  end
 
+  defp initialize_connector(supervisor, args) when is_pid(supervisor) do
+    with :ok <- initialize_connector_with_retries(args),
+         :ok <- finish_initialization(supervisor, args) do
+      SchemaRegistry.mark_origin_ready(args.origin)
+    else
       error ->
         Logger.error(
           "Couldn't initialize Postgres #{inspect(args.origin)}. Error: #{inspect(error, pretty: true)}"
@@ -100,7 +142,6 @@ defmodule Electric.Replication.PostgresConnector do
             "Couldn't finish initialization of the connector. Error while starting #{id}: #{inspect(reason)}"
           )
 
-          Process.exit(supervisor, {:error, reason})
           {:halt, {:error, reason}}
       end
     end)
