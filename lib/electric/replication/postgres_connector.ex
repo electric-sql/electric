@@ -60,7 +60,9 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   def name(pid) do
-    [name] = Registry.select(Electric.StatusRegistry, [{{{:connector, :_}, pid, :"$1"}, [], [:"$1"]}])
+    [name] =
+      Registry.select(Electric.StatusRegistry, [{{{:connector, :_}, pid, :"$1"}, [], [:"$1"]}])
+
     name
   end
 
