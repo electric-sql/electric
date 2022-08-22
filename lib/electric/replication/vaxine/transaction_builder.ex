@@ -2,12 +2,12 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.Replication.Changes
   alias Electric.Replication.Row
   alias Electric.Replication.Metadata
-  alias Electric.ReplicationServer.Vaxine.LogProducer
+  alias Electric.Replication.Vaxine.LogProducer
 
   @spec build_transaction(LogProducer.vx_wal_txn(), Metadata.t()) ::
           {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   def build_transaction(
-        {:vx_wal_txn, _txid, _dcid, _wal_offset, vaxine_transaction_data},
+        {:vx_wal_txn, _txid, _dc_id, _wal_position, vaxine_transaction_data},
         metadata
       ) do
     vaxine_transaction_data
@@ -40,6 +40,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
     entries
     |> Enum.reduce_while([], fn
       {nil, _ops}, _acc -> {:halt, {:error, :invalid_materialized_row}}
+      {%{id: nil}, _ops}, _acc -> {:halt, {:error, :invalid_materialized_row}}
       {row, ops}, acc -> {:cont, [to_dml(row, ops, target) | acc]}
     end)
     |> case do
@@ -50,7 +51,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
            commit_timestamp: commit_timestamp
          }}
 
-      {:halt, error} ->
+      error ->
         error
     end
   end
@@ -67,7 +68,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   """
   @spec extract_metadata(LogProducer.vx_wal_txn()) ::
           {:ok, Metadata.t()} | {:error, :metadata_not_available}
-  def extract_metadata({:vx_wal_txn, _tx_id, _dcid, _wal_offset, vaxine_transaction_data}) do
+  def extract_metadata({:vx_wal_txn, _tx_id, _dc_id, _wal_position, vaxine_transaction_data}) do
     case Enum.find(vaxine_transaction_data, fn el -> match?({{"metadata:0", _}, _, _, _}, el) end) do
       nil ->
         {:error, :metadata_not_available}
@@ -113,9 +114,6 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
          _target
        ) do
     # if the final state is `deleted?` it means that the record was deleted;
-    # if the entry was inserted within the transaction, it will have ops setting
-    # the `table` field;
-    # otherwise, its an update;
     cond do
       deleted? ->
         %Changes.DeletedRecord{old_record: to_string_keys(row), relation: {schema, table}}

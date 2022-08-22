@@ -16,10 +16,6 @@ config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
-config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  producer: Electric.ReplicationServer.Vaxine.LogProducer,
-  connection_timeout: 5_000
-
 config :electric, Electric.StatusPlug, port: 5050
 
 # Import environment specific config. This must remain at the bottom

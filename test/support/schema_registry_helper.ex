@@ -5,13 +5,14 @@ defmodule Electric.Test.SchemaRegistryHelper do
         publication,
         {schema, name},
         columns,
-        primary_keys \\ ["id"]
+        primary_keys \\ ["id"],
+        oid \\ 100_001
       ) do
     SchemaRegistry.put_replicated_tables(publication, [
       %{
         schema: schema,
         name: name,
-        oid: 100_001,
+        oid: oid,
         replica_identity: :all_columns,
         primary_keys: primary_keys
       }

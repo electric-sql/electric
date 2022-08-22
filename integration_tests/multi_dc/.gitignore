@@ -3,3 +3,4 @@
 *.log
 tmp/
 electric_*.exs
+vaxine_*

@@ -13,7 +13,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       %{
         schema: "fake",
         name: "slot_server_test",
-        oid: 100_001,
+        oid: 100_003,
         replica_identity: :all_columns
       }
     ])
@@ -38,36 +38,51 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     :ok
   end
 
-  describe "Slot server callbacks" do
-    test "collect the replication message in the queue if replication isn't started" do
-      {:ok, state} = SlotServer.init(slot: "fake_slot")
+  defmodule ProducerMock do
+    use GenStage
 
-      assert {:noreply, state} =
-               %Changes.NewRecord{
-                 record: %{"content" => "a", "id" => "fakeid"},
-                 relation: {"fake", "slot_server_test"}
-               }
-               |> build_transaction_message()
-               |> SlotServer.handle_info(state)
+    def start_link([]), do: GenStage.start_link(__MODULE__, [])
 
-      assert length(state.queue) == 4
+    def init([]) do
+      {:producer, [], dispatcher: GenStage.DemandDispatcher}
     end
 
+    def start_replication(producer, offset) do
+      GenStage.call(producer, {:start_replication, offset})
+    end
+
+    def produce(producer, events) do
+      GenStage.call(producer, {:produce, events})
+    end
+
+    def handle_call({:start_replication, _offset}, _from, []) do
+      {:reply, :ok, [], []}
+    end
+
+    def handle_call({:produce, events}, _from, []) do
+      {:reply, :ok, events, []}
+    end
+
+    def handle_demand(_incoming_demand, []) do
+      {:noreply, [], []}
+    end
+  end
+
+  describe "Slot server callbacks" do
     test "send the replication messages asap if replication is started" do
-      {:ok, state} = SlotServer.init(slot: "fake_slot")
+      {:ok, state} = init_slot_server("fake_slot")
       send_back = send_back_message(self())
 
       state = %{state | send_fn: send_back}
 
-      assert {:noreply, state} =
+      assert {:noreply, [], _state} =
                %Changes.NewRecord{
                  record: %{"content" => "a", "id" => "fakeid"},
                  relation: {"fake", "slot_server_test"}
                }
-               |> build_transaction_message()
-               |> SlotServer.handle_info(state)
+               |> build_events()
+               |> SlotServer.handle_events(self(), state)
 
-      assert length(state.queue) == 0
       assert_received {:sent, %Messages.Begin{}}
       assert_received {:sent, %Messages.Relation{}}
       assert_received {:sent, %Messages.Insert{}}
@@ -75,28 +90,27 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     end
 
     test "send the relation only the first time" do
-      {:ok, state} = SlotServer.init(slot: "fake_slot")
+      {:ok, state} = init_slot_server("fake_slot")
       send_back = send_back_message(self())
 
       state = %{state | send_fn: send_back}
 
-      assert {:noreply, state} =
+      assert {:noreply, [], state} =
                %Changes.NewRecord{
                  record: %{"content" => "a", "id" => "fakeid"},
                  relation: {"fake", "slot_server_test"}
                }
-               |> build_transaction_message()
-               |> SlotServer.handle_info(state)
+               |> build_events()
+               |> SlotServer.handle_events(self(), state)
 
-      assert {:noreply, state} =
+      assert {:noreply, [], _state} =
                %Changes.NewRecord{
                  record: %{"content" => "a", "id" => "fakeid"},
                  relation: {"fake", "slot_server_test"}
                }
-               |> build_transaction_message()
-               |> SlotServer.handle_info(state)
+               |> build_events()
+               |> SlotServer.handle_events(self(), state)
 
-      assert length(state.queue) == 0
       assert_received {:sent, %Messages.Begin{}}
       assert_received {:sent, %Messages.Relation{}}
       assert_received {:sent, %Messages.Insert{}}
@@ -111,8 +125,14 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Slot server lifecycle" do
     setup do
-      {:ok, server} = start_supervised({SlotServer, slot: "fake_slot"})
-      {:ok, server: server, send_fn: send_back_message(self())}
+      producer = start_supervised!(ProducerMock, [])
+
+      server =
+        start_supervised!(
+          {SlotServer, slot: "fake_slot", producer: ProducerMock, producer_pid: producer}
+        )
+
+      {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
 
     test "starts and reports current LSN", %{server: server} do
@@ -135,6 +155,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     end
 
     test "starts replication and sends replication messages over", %{
+      producer: producer,
       server: server,
       send_fn: send_back
     } do
@@ -142,67 +163,10 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
       assert_receive {:sent, :keepalive}
 
-      push_transaction(server, %Changes.NewRecord{
+      push_transaction_event(producer, %Changes.NewRecord{
         record: %{"content" => "a", "id" => "fakeid"},
         relation: {"fake", "slot_server_test"}
       })
-
-      assert_receive {:sent, %Messages.Begin{}}
-      assert_receive {:sent, %Messages.Relation{}}
-      assert_receive {:sent, %Messages.Insert{}}
-      assert_receive {:sent, %Messages.Commit{}}
-    end
-
-    test "immediately sends over queue data on replication start", %{
-      server: server,
-      send_fn: send_back
-    } do
-      server
-      |> push_transaction(%Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid"},
-        relation: {"fake", "slot_server_test"}
-      })
-      |> push_transaction(%Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid"},
-        relation: {"fake", "slot_server_test"}
-      })
-      |> start_replication(send_back)
-
-      assert_receive {:sent, %Messages.Begin{}}
-      assert_receive {:sent, %Messages.Relation{}}
-      assert_receive {:sent, %Messages.Insert{}}
-      assert_receive {:sent, %Messages.Commit{}}
-      assert_receive {:sent, %Messages.Begin{}}
-      refute_receive {:sent, %Messages.Relation{}}
-      assert_receive {:sent, %Messages.Insert{}}
-      assert_receive {:sent, %Messages.Commit{}}
-    end
-
-    test "collects messages if replication has been stopped and re-sends relations", %{
-      server: server,
-      send_fn: send_back
-    } do
-      start_replication(server, send_back)
-      |> push_transaction(%Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid"},
-        relation: {"fake", "slot_server_test"}
-      })
-
-      assert_receive {:sent, %Messages.Begin{}}
-      assert_receive {:sent, %Messages.Relation{}}
-      assert_receive {:sent, %Messages.Insert{}}
-      assert_receive {:sent, %Messages.Commit{}}
-
-      SlotServer.stop_replication(server)
-
-      push_transaction(server, %Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid"},
-        relation: {"fake", "slot_server_test"}
-      })
-
-      refute_receive {:sent, %Messages.Begin{}}
-
-      start_replication(server, send_back)
 
       assert_receive {:sent, %Messages.Begin{}}
       assert_receive {:sent, %Messages.Relation{}}
@@ -228,7 +192,12 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Interaction with TCP server" do
     test "stops replication when process that started replication dies" do
-      server = start_supervised!({SlotServer, slot: "test_slot"})
+      producer_pid = start_supervised!(ProducerMock, [])
+
+      server =
+        start_supervised!(
+          {SlotServer, slot: "test_slot", producer: ProducerMock, producer_pid: producer_pid}
+        )
 
       task = Task.async(fn -> start_replication(server, send_back_message(self())) end)
 
@@ -258,10 +227,14 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     server
   end
 
-  defp push_transaction(server, changes) do
-    SlotServer.push_replication_message(server, build_transaction(changes))
-    server
-  end
+  defp push_transaction_event(producer_pid, changes),
+    do: ProducerMock.produce(producer_pid, build_events(changes))
+
+  defp build_events(changes),
+    do: [
+      {%Changes.Transaction{changes: List.wrap(changes), commit_timestamp: DateTime.utc_now()},
+       {0, 0}}
+    ]
 
   defp send_back_message(pid) do
     fn
@@ -273,9 +246,12 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     end
   end
 
-  defp build_transaction(changes),
-    do: %Changes.Transaction{changes: List.wrap(changes), commit_timestamp: DateTime.utc_now()}
+  defp init_slot_server(slot) do
+    producer_pid = start_supervised!(ProducerMock, [])
 
-  defp build_transaction_message(changes),
-    do: {:replication_message, build_transaction(changes)}
+    {:consumer, state, _opts} =
+      SlotServer.init(slot: slot, producer: ProducerMock, producer_pid: producer_pid)
+
+    {:ok, state}
+  end
 end

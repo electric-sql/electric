@@ -6,15 +6,13 @@ defmodule Electric.Application do
   def start(_type, _args) do
     children = [
       Electric.Postgres.SchemaRegistry,
+      Electric.Replication.VaxinePostgresOffsetStorage,
       {Registry, keys: :unique, name: Electric.PostgresSlotRegistry},
-      {Registry, keys: :duplicate, name: Electric.PostgresDispatcher},
       {Registry, keys: :unique, name: Electric.StatusRegistry},
       {Plug.Cowboy, scheme: :http, plug: Electric.StatusPlug, options: [port: status_port()]},
       Electric.VaxRepo,
       Electric.PostgresServer,
-      Electric.Replication.Connectors,
-      {Electric.Replication.Vaxine.DownstreamPipeline,
-       Application.get_env(:electric, Electric.Replication.Vaxine.DownstreamPipeline)}
+      Electric.Replication.Connectors
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

@@ -4,10 +4,11 @@ defmodule Electric.StatusPlug do
   plug(:match)
   plug(:dispatch)
 
-  defp vaxine_ready? do
-    case Registry.lookup(Electric.StatusRegistry, {:connection, :vaxine_downstream}) do
-      [{_pid, ready?}] -> ready?
-      [] -> false
+  defp vaxine_ready?() do
+    try do
+      Electric.VaxRepo.checkout(fn -> true end, timeout: 100)
+    rescue
+      _ -> false
     end
   end
 
@@ -24,11 +25,7 @@ defmodule Electric.StatusPlug do
         end)
     }
 
-    if vaxine do
-      send_resp(conn, 200, Jason.encode!(data))
-    else
-      send_resp(conn, 500, Jason.encode!(data))
-    end
+    send_resp(conn, 200, Jason.encode!(data))
   end
 
   match _ do

@@ -154,6 +154,10 @@ defmodule Electric.Replication.Postgres.TcpServer do
          {:ok, data} <- state.transport.recv(state.socket, length - 4, 100) do
       establish_connection(data, state)
     else
+      {:error, :timeout} ->
+        Logger.debug("Connection timeout")
+        {:stop, :timeout, state}
+
       {:error, :closed} ->
         Logger.debug("Connection closed by client")
         state.transport.close(state.socket)

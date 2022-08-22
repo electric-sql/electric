@@ -1,7 +1,8 @@
-defmodule Electric.Replication.ToVaxineTest do
+defmodule Electric.Replication.VaxineTest do
   use ExUnit.Case
 
-  alias Electric.Replication.{Changes, Row, ToVaxine}
+  alias Electric.Replication.{Changes, Row}
+  alias Electric.Replication.Vaxine.ToVaxine
   alias Electric.VaxRepo
   alias Electric.Postgres.SchemaRegistry
 

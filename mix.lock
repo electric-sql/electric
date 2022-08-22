@@ -38,5 +38,5 @@
   "telemetry": {:hex, :telemetry, "0.4.3", "a06428a514bdbc63293cd9a6263aad00ddeb66f608163bdec7c8995784080818", [:rebar3], [], "hexpm", "eb72b8365ffda5bed68a620d1da88525e326cb82a75ee61354fc24b844768041"},
   "unicode_util_compat": {:hex, :unicode_util_compat, "0.7.0", "bc84380c9ab48177092f43ac89e4dfa2c6d62b40b8bd132b1059ecc7232f9a78", [:rebar3], [], "hexpm", "25eee6d67df61960cf6a794239566599b09e17e668d3700247bc498638152521"},
   "vax": {:git, "https://github.com/vaxine-io/vaxine.git", "183cc673e3f06522d95706d91d0393f495ef32f1", [sparse: "apps/vax"]},
-  "vx_client": {:git, "https://github.com/vaxine-io/vaxine.git", "aef9cb08351fec9bf43749ab5f27bb90b54c7a3c", [sparse: "apps/vx_client"]},
+  "vx_client": {:git, "https://github.com/vaxine-io/vaxine.git", "056d4a8bacf2b196a4676ec85f7c5c7aae2e9e9e", [sparse: "apps/vx_client"]},
 }
