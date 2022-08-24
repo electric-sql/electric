@@ -56,4 +56,4 @@ ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
 endif
 
 rm_offset_storage:
-	rm vaxine_postgres_offset_storage.dat
+	rm vx_pg_offset_storage_*

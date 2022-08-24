@@ -93,8 +93,6 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp finish_initialization(supervisor, args) do
-    IO.inspect(args)
-
     [
       {Electric.Replication.Postgres.SlotServer, put_name(args, Electric.SlotServer)},
       {Electric.Replication.Postgres.UpstreamPipeline,

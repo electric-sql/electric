@@ -44,27 +44,43 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     def start_link([]), do: GenStage.start_link(__MODULE__, [])
 
     def init([]) do
-      {:producer, [], dispatcher: GenStage.DemandDispatcher}
+      {:producer, false, dispatcher: GenStage.DemandDispatcher}
     end
 
     def start_replication(producer, offset) do
       GenStage.call(producer, {:start_replication, offset})
     end
 
+    def connected?(producer) do
+      GenStage.call(producer, :connected?)
+    end
+
+    def set_expected_producer_connected(producer, status) do
+      GenStage.call(producer, {:set_expected_producer_connected, status})
+    end
+
     def produce(producer, events) do
       GenStage.call(producer, {:produce, events})
     end
 
-    def handle_call({:start_replication, _offset}, _from, []) do
-      {:reply, :ok, [], []}
+    def handle_call({:start_replication, _offset}, _from, connected?) do
+      {:reply, :ok, [], connected?}
     end
 
-    def handle_call({:produce, events}, _from, []) do
-      {:reply, :ok, events, []}
+    def handle_call(:connected?, _from, connected?) do
+      {:reply, connected?, [], connected?}
     end
 
-    def handle_demand(_incoming_demand, []) do
-      {:noreply, [], []}
+    def handle_call({:set_expected_producer_connected, status}, _from, _) do
+      {:reply, :ok, [], status}
+    end
+
+    def handle_call({:produce, events}, _from, connected?) do
+      {:reply, :ok, events, connected?}
+    end
+
+    def handle_demand(_incoming_demand, connected?) do
+      {:noreply, [], connected?}
     end
   end
 
@@ -131,6 +147,15 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
 
+    test "downstream_connected? calls downstream producer to check if its connected", %{
+      server: server,
+      producer: producer
+    } do
+      refute SlotServer.downstream_connected?(server)
+      ProducerMock.set_expected_producer_connected(producer, true)
+      assert SlotServer.downstream_connected?(server)
+    end
+
     test "starts and reports current LSN", %{server: server} do
       assert %Lsn{segment: 0, offset: 1} = SlotServer.get_current_lsn(server)
     end
@@ -188,7 +213,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Interaction with TCP server" do
     test "stops replication when process that started replication dies" do
-      server = start_supervised!({SlotServer, slot: "test_slot", producer: ProducerMock})
+      server = start_supervised!({SlotServer, start_args("test_slot")})
 
       task = Task.async(fn -> start_replication(server, send_back_message(self())) end)
 
@@ -248,7 +273,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   defp start_args(slot) do
     %{
-      replication: %{subscription: "fake_slot"},
+      replication: %{subscription: slot},
       downstream: %{producer: ProducerMock, producer_opts: []}
     }
   end

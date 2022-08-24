@@ -7,7 +7,10 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   require Logger
 
+  alias Electric.Replication.DownstreamProducer
   alias Electric.Replication.Vaxine.TransactionBuilder
+
+  @behaviour DownstreamProducer
 
   @type vx_txn_data ::
           {key :: binary(), type :: atom(), materialized_value :: term(), ops :: list(term())}
@@ -16,22 +19,24 @@ defmodule Electric.Replication.Vaxine.LogProducer do
            data :: [vx_txn_data()]}
 
   @max_backoff_ms 5000
-
   @starting_demand 5
 
+  @impl DownstreamProducer
   def start_link(opts) do
     GenStage.start_link(__MODULE__, opts)
   end
 
+  @impl DownstreamProducer
   def start_replication(producer, offset) do
     GenStage.call(producer, {:start_replication, offset})
   end
 
+  @impl DownstreamProducer
   def connected?(producer) do
     GenStage.call(producer, :connected?)
   end
 
-  @impl true
+  @impl GenStage
   def init(opts) do
     Process.flag(:trap_exit, true)
 
@@ -48,29 +53,29 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     {:producer, state, dispatcher: GenStage.DemandDispatcher}
   end
 
-  @impl true
+  @impl GenStage
   def handle_call({:start_replication, offset}, _from, state) do
     {:ok, state} = do_start_replication(offset, state)
     {:reply, :ok, [], state}
   end
 
-  @impl true
+  @impl GenStage
   def handle_call(:connected?, _from, %{socket_pid: nil} = state) do
     {:reply, false, [], state}
   end
 
-  @impl true
+  @impl GenStage
   def handle_call(:connected?, _from, %{socket_pid: pid} = state) do
     {:reply, Process.alive?(pid), [], state}
   end
 
-  @impl true
+  @impl GenStage
   def handle_info(:start_replication, state) do
     {:ok, state} = do_start_replication(state.last_vx_offset_sent, state)
     {:noreply, [], state}
   end
 
-  @impl true
+  @impl GenStage
   def handle_info({:vx_client_msg, _from, :ok, _await_sync}, state) do
     {_, backoff} = :backoff.succeed(state.backoff)
 
@@ -115,7 +120,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     end
   end
 
-  @impl true
+  @impl GenStage
   def handle_demand(incoming_demand, state) do
     {:noreply, [], %{state | demand: state.demand + incoming_demand}}
   end

@@ -529,6 +529,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
         |> Messaging.ready()
 
       [name_quoted, "LOGICAL", "pgoutput", "NOEXPORT_SNAPSHOT"] ->
+        raise RuntimeError, "AYAYA Clap"
         name = String.trim(name_quoted, ~s|"|)
 
         # TODO: Currently we don't actually store any slot state persistently;

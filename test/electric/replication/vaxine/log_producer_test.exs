@@ -23,31 +23,29 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
     end
   end
 
+  test "connected?/1 returns true if connected to Vaxine and false otherwise" do
+    producer = start_log_producer_with_forwarder!()
+    refute LogProducer.connected?(producer)
+    :ok = LogProducer.start_replication(producer, nil)
+    assert LogProducer.connected?(producer)
+  end
+
   test "Doesn't start replication until requested" do
     start_log_producer_with_forwarder!()
     refute_receive {:events, _, _}, 200
   end
 
   test "Allows starting replication synchronously without an offset" do
+    initialize_registry("replication_start")
+    insert_data("replication_start")
+
     producer = start_log_producer_with_forwarder!()
     assert :ok = LogProducer.start_replication(producer, nil)
     assert_receive {:events, _, [_]}
   end
 
   test "Allows starting replication from a specific offset" do
-    # necessary because there is a dependency on schema registry (for primary keys)
-    Electric.Test.SchemaRegistryHelper.initialize_registry(
-      "replication_restart_test_pub",
-      {"public", "replication_restart_test"},
-      [id: :uuid, message: :text],
-      ["id"],
-      100_002
-    )
-
-    on_exit(fn ->
-      "replication_restart_test_pub"
-      |> Electric.Postgres.SchemaRegistry.clear_replicated_tables()
-    end)
+    initialize_registry("replication_restart")
 
     producer_1 = start_log_producer_with_forwarder!(1)
     offset = clean_offset(producer_1)
@@ -60,24 +58,7 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
 
     refute_receive {:events, _, _}, 200
 
-    transaction = %Electric.Replication.Changes.Transaction{
-      changes: [
-        %Electric.Replication.Changes.NewRecord{
-          record: %{
-            "message" => "content",
-            "id" => "911fee88-2a0f-4fff-9d71-0c3eb7c9a380"
-          },
-          relation: {"public", "replication_restart_test"}
-        }
-      ],
-      commit_timestamp: DateTime.utc_now()
-    }
-
-    Electric.Replication.Vaxine.transaction_to_vaxine(
-      transaction,
-      "some_publication",
-      "some_origin"
-    )
+    insert_data("replication_restart")
 
     assert_receive {:events, ^producer_2, [{received_transaction, _new_offset}]}, 2500
 
@@ -118,5 +99,45 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
     after
       300 -> last_offset
     end
+  end
+
+  defp initialize_registry(test_identifier) do
+    Electric.Test.SchemaRegistryHelper.initialize_registry(
+      "#{test_identifier}_test_pub",
+      {"public", "#{test_identifier}_test"},
+      [id: :uuid, message: :text],
+      ["id"],
+      100_002
+    )
+
+    on_exit(fn ->
+      "#{test_identifier}_test_pub"
+      |> Electric.Postgres.SchemaRegistry.clear_replicated_tables()
+    end)
+  end
+
+  defp default_transaction(test_identifier) do
+    %Electric.Replication.Changes.Transaction{
+      changes: [
+        %Electric.Replication.Changes.NewRecord{
+          record: %{
+            "message" => "content",
+            "id" => "911fee88-2a0f-4fff-9d71-0c3eb7c9a380"
+          },
+          relation: {"public", "#{test_identifier}_test"}
+        }
+      ],
+      commit_timestamp: DateTime.utc_now()
+    }
+  end
+
+  defp insert_data(test_identifier, transaction \\ nil) do
+    transaction = transaction || default_transaction(test_identifier)
+
+    Electric.Replication.Vaxine.transaction_to_vaxine(
+      transaction,
+      "#{test_identifier}_pub",
+      "some_origin"
+    )
   end
 end

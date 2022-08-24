@@ -28,7 +28,7 @@ config :electric, Electric.Replication.Connectors,
     downstream: [
       producer: Electric.Replication.Vaxine.LogProducer,
       producer_opts: [
-        vaxine_hostname: {VX_HOST},
+        vaxine_hostname: "{VX_HOST}",
         vaxine_port: {VX_PORT}
       ]
     ]

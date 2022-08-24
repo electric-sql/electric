@@ -4,6 +4,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   This server keeps track of the latest LSN sent, and converts the incoming replication
   changes to the Postgres logical replication messages, with correctly incrementing LSNs.
+
+  The `downstream` option should specify the module for a GenStage producer, which
+  should implement the `Electric.Replication.DownstreamProducer` behaviour. Consumes
+  the messages from the producer and sends the data to postgres.
   """
 
   use GenStage
@@ -35,7 +39,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   # Public interface
 
-  @spec start_link(map()) :: GenServer.on_start()
+  @spec start_link(%{
+          replication: %{subscription: binary()},
+          downstream: %{producer: module(), producer_opts: keyword()}
+        }) :: GenServer.on_start()
   def start_link(init_args) do
     slot_name = init_args.replication.subscription
     GenStage.start_link(__MODULE__, init_args, name: name(slot_name))
