@@ -2,9 +2,8 @@ import Config
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
-config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  hostname: "localhost",
-  port: 8088
+config :electric, Electric.Replication.VaxinePostgresOffsetStorage,
+  file: "./vx_pg_offset_storage_dev.dat"
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
@@ -25,6 +24,14 @@ config :electric, Electric.Replication.Connectors,
         host: "host.docker.internal",
         port: 5433,
         dbname: "test"
+      ]
+    ],
+    downstream: [
+      producer: Electric.Replication.Vaxine.LogProducer,
+      producer_opts: [
+        vaxine_hostname: "localhost",
+        vaxine_port: 8088,
+        vaxine_connection_timeout: 5000
       ]
     ]
   ],
@@ -47,11 +54,19 @@ config :electric, Electric.Replication.Connectors,
         port: 5433,
         dbname: "test"
       ]
+    ],
+    downstream: [
+      producer: Electric.Replication.Vaxine.LogProducer,
+      producer_opts: [
+        vaxine_hostname: "localhost",
+        vaxine_port: 8088
+      ]
     ]
   ]
+
+config :logger, level: :debug
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console,
   format: "[$level] $metadata$message \n",
-  level: :debug,
   metadata: [:client, :connection, :slot, :origin]

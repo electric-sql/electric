@@ -19,21 +19,21 @@ defmodule Electric.Replication.Vaxine.TransactionBuilderTest do
 
   test "extracts transaction" do
     {:ok, metadata} = TransactionBuilder.extract_metadata(@message)
-    origin_transaction = TransactionBuilder.build_transaction(@message, metadata)
+    transaction = TransactionBuilder.build_transaction(@message, metadata)
 
     assert {:ok,
             %Electric.Replication.Changes.Transaction{
               changes: [
                 %Electric.Replication.Changes.UpdatedRecord{
                   record: %{
-                    "content" => "iliketrains1",
-                    "content_b" => nil,
-                    "id" => "cb2fb0f0-dd12-4e87-a3cd-4eaff087995c"
+                    "content" => "entries kjdlksjklkdlsajdklasjdlt",
+                    "content_b" => "extra content",
+                    "id" => "911fee88-2a0f-4fff-9d71-0c3eb7c9a380"
                   },
                   relation: {"public", "entries"}
                 }
               ],
               commit_timestamp: %DateTime{}
-            }} = origin_transaction
+            }} = transaction
   end
 end

@@ -8,7 +8,7 @@ defmodule Electric.Replication.Changes do
   defmodule NewRecord do
     defstruct [:relation, :record]
 
-    defimpl Electric.Replication.ToVaxine do
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       alias Electric.Replication.Row
       alias Electric.VaxRepo
       alias Electric.Postgres.SchemaRegistry
@@ -32,7 +32,7 @@ defmodule Electric.Replication.Changes do
   defmodule UpdatedRecord do
     defstruct [:relation, :old_record, :record]
 
-    defimpl Electric.Replication.ToVaxine do
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       alias Electric.Replication.Row
       alias Electric.Postgres.SchemaRegistry
 
@@ -55,7 +55,7 @@ defmodule Electric.Replication.Changes do
   defmodule DeletedRecord do
     defstruct [:relation, :old_record]
 
-    defimpl Electric.Replication.ToVaxine do
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       alias Electric.Replication.Row
       alias Electric.Postgres.SchemaRegistry
 

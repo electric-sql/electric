@@ -17,11 +17,6 @@ if config_env() == :prod do
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
 
-  config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-    hostname: vaxine_hostname,
-    port: 8088,
-    connection_timeout: vaxine_connection_timeout
-
   config :electric, Electric.VaxRepo,
     hostname: vaxine_hostname,
     port: 8087
@@ -55,6 +50,14 @@ if config_env() == :prod do
            port: electric_port,
            dbname: "test",
            connect_timeout: connection[:timeout]
+         ]
+       ],
+       downstream: [
+         producer: Electric.Replication.Vaxine.LogProducer,
+         producer_opts: [
+           vaxine_hostname: vaxine_hostname,
+           vaxine_port: 8088,
+           vaxine_connection_timeout: vaxine_connection_timeout
          ]
        ]}
     end)

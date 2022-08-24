@@ -1,38 +1,11 @@
 defmodule Electric.Replication.PostgresConnector do
   use Supervisor
+
+  require Electric.Retry
   require Logger
+
   alias Electric.Replication.Postgres
   alias Electric.Postgres.SchemaRegistry
-
-  defmacrop retry_while(opts, do_block \\ nil) do
-    code = Keyword.get(opts, :do, Keyword.fetch!(do_block, :do))
-    start_backoff = Keyword.get(opts, :start_backoff, 10)
-    max_single_backoff = Keyword.get(opts, :max_single_backoff, 1000)
-    total_timeout = Keyword.get(opts, :total_timeout, 10000)
-
-    quote do
-      Stream.unfold(
-        unquote(start_backoff),
-        &{&1, :backoff.rand_increment(&1, unquote(max_single_backoff))}
-      )
-      |> Stream.transform(0, fn
-        elem, acc when acc > unquote(total_timeout) -> {:halt, acc}
-        elem, acc -> {[elem], acc + elem}
-      end)
-      |> Enum.reduce_while(nil, fn timeout, _ ->
-        result = unquote(code)
-
-        case result do
-          {:cont, value} ->
-            Process.sleep(timeout)
-            {:cont, value}
-
-          {:halt, value} ->
-            {:halt, value}
-        end
-      end)
-    end
-  end
 
   @type args :: {:connection, keyword()} | {:replication, keyword()}
   @type init_arg :: [args, ...]
@@ -76,7 +49,7 @@ defmodule Electric.Replication.PostgresConnector do
       match?({{Task, :start_subscription}, _, _, _}, List.last(children)) ->
         {:not_ready, :initialization}
 
-      not module_connected?(children, Postgres.SlotServer) ->
+      not child_healthcheck(children, Postgres.SlotServer, :downstream_connected?) ->
         {:not_ready, {:disconnected, :downstream}}
 
       # TODO: Doesn't really make sense until we ensure `Postgres.LogicalReplicationProducer`
@@ -89,15 +62,15 @@ defmodule Electric.Replication.PostgresConnector do
     end
   end
 
-  defp module_connected?(children, module) do
+  defp child_healthcheck(children, module, function) do
     case List.keyfind(children, module, 0) do
-      {_, pid, _, _} -> module.connected?(pid)
+      {_, pid, _, _} -> apply(module, function, [pid])
       nil -> false
     end
   end
 
   defp initialize_connector_with_retries(args) do
-    retry_while total_timeout: 10000, max_single_backoff: 1000 do
+    Electric.Retry.retry_while total_timeout: 10000, max_single_backoff: 1000 do
       case initialize_postgres(args) do
         {:ok, _} -> {:halt, :ok}
         error -> {:cont, error}
@@ -121,9 +94,9 @@ defmodule Electric.Replication.PostgresConnector do
 
   defp finish_initialization(supervisor, args) do
     [
-      {Electric.Replication.Postgres.SlotServer, slot: args.replication.subscription},
+      {Electric.Replication.Postgres.SlotServer, put_name(args, Electric.SlotServer)},
       {Electric.Replication.Postgres.UpstreamPipeline,
-       Map.put(args, :name, :"Elixir.Electric.ReplicationSource.#{args.origin}")},
+       put_name(args, Electric.ReplicationSource)},
       Supervisor.child_spec({Task, fn -> start_subscription(args) end},
         id: {Task, :start_subscription}
       )
@@ -147,12 +120,18 @@ defmodule Electric.Replication.PostgresConnector do
     end)
   end
 
+  defp put_name(args, mod) do
+    name = Module.concat([mod, String.to_atom(args.origin)])
+    Map.put(args, :name, name)
+  end
+
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))
 
   defp normalize_args(args) when is_map(args) do
     args
     |> Map.update!(:connection, &new_map_with_charlists/1)
     |> Map.update!(:replication, &Map.new/1)
+    |> Map.update!(:downstream, &Map.new/1)
     |> Map.put_new(:client, Electric.Replication.Postgres.Client)
     |> Map.update!(:replication, &Map.put_new(&1, :slot, "electric_replication"))
     |> Map.update!(:replication, &Map.put_new(&1, :publication_tables, :all))

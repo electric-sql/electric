@@ -22,7 +22,7 @@ services:
     privileged: true
 
   db_a:
-    image: postgres:13
+    image: europe-docker.pkg.dev/vaxine/vaxine-io/postgres:latest
 #    restart: always
     environment:
       POSTGRES_DB: electric
@@ -42,7 +42,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   db_b:
-    image: postgres:13
+    image: europe-docker.pkg.dev/vaxine/vaxine-io/postgres:latest
 #    restart: always
     environment:
       POSTGRES_DB: electric

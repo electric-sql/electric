@@ -19,7 +19,6 @@
     ?INSERT 0 1
 
 [shell electric_b]
-    ?to slot: "postgres_3"
     ?slot=postgres_3 \[debug\] Sending \d messages to the subscriber
 
 [shell pg_3]

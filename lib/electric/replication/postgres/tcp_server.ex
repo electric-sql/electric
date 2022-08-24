@@ -154,6 +154,10 @@ defmodule Electric.Replication.Postgres.TcpServer do
          {:ok, data} <- state.transport.recv(state.socket, length - 4, 100) do
       establish_connection(data, state)
     else
+      {:error, :timeout} ->
+        Logger.debug("Connection timeout")
+        {:stop, :timeout, state}
+
       {:error, :closed} ->
         Logger.debug("Connection closed by client")
         state.transport.close(state.socket)
@@ -500,63 +504,12 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {nil, %{state | mode: :copy, slot: slot_name}}
   end
 
-  defp handle_query(["CREATE_REPLICATION_SLOT", args], state) do
-    # Create a replication slot
-    case String.split(args, " ", trim: true) do
-      [_name, "LOGICAL", "pgoutput", "EXPORT_SNAPSHOT"] ->
-        Messaging.error(:error,
-          code: "0A000",
-          message: "Electric replication does not support snapshot exporting"
-        )
-        |> Messaging.ready()
-
-      [_name, "LOGICAL", "pgoutput", "USE_SNAPSHOT"] ->
-        Messaging.error(:error,
-          code: "0A000",
-          message: "Electric replication does not support snapshot usage"
-        )
-        |> Messaging.ready()
-
-      [_name, "PHYSICAL" | _] ->
-        Messaging.error(:error,
-          code: "0A000",
-          message: "Electric replication supports only LOGICAL replication"
-        )
-        |> Messaging.ready()
-
-      [name_quoted, "LOGICAL", "pgoutput", "NOEXPORT_SNAPSHOT"] ->
-        name = String.trim(name_quoted, ~s|"|)
-
-        # TODO: Currently we don't actually store any slot state persistently;
-        #       moreover, the slot server dies as soon as the TCP connection dies
-        #       instead of collecting ongoing changes. We likely want to change that,
-        #       so that we at least support backfilling reconnecting clients while
-        #       the elixir node is alive.
-        case SlotServer.start_link(socket: state.socket, slot: name) do
-          {:error, {:already_started, _}} ->
-            Messaging.error(:error,
-              code: "42710",
-              message: ~s|replication slot "#{name}" already exists|
-            )
-            |> Messaging.ready()
-
-          {:ok, _} ->
-            Messaging.row_description(
-              slot_name: :text,
-              consistent_point: :text,
-              snapshot_name: :text,
-              output_plugin: :text
-            )
-            |> Messaging.data_row([
-              name,
-              to_string(SlotServer.get_current_lsn(name)),
-              nil,
-              "pgoutput"
-            ])
-            |> Messaging.command_complete("CREATE_REPLICATION_SLOT")
-            |> Messaging.ready()
-        end
-    end
+  defp handle_query(["CREATE_REPLICATION_SLOT", _args], _state) do
+    Messaging.error(:error,
+      code: "0A000",
+      message: "Electric replication does not support snapshot exporting"
+    )
+    |> Messaging.ready()
   end
 
   # TODO: implement actual logic for authentication requirement

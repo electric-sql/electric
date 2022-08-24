@@ -1,5 +1,5 @@
 
-.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests
+.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage
 
 build_tools:
 	mix local.hex --force
@@ -54,3 +54,6 @@ docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
 	docker image rm -f electric:local-build
 endif
+
+rm_offset_storage:
+	rm vx_pg_offset_storage_*

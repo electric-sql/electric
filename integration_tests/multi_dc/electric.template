@@ -1,9 +1,5 @@
 import Config
 
-config :electric, Electric.Replication.Vaxine.DownstreamPipeline,
-  hostname: "{VX_HOST}",
-  port: {VX_PORT}
-
 config :electric, Electric.VaxRepo,
   hostname: "{VX_HOST}",
   port: {AN_PORT}
@@ -27,6 +23,13 @@ config :electric, Electric.Replication.Connectors,
         host: "{EL_HOST}",
         port: {EL_PORT},
         dbname: "test"
+      ]
+    ],
+    downstream: [
+      producer: Electric.Replication.Vaxine.LogProducer,
+      producer_opts: [
+        vaxine_hostname: "{VX_HOST}",
+        vaxine_port: {VX_PORT}
       ]
     ]
   ]

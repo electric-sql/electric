@@ -14,10 +14,10 @@
     !insert into entries (content, content_b) values ('1', 'B_VALUE');
 
 [shell electric]
-    ?+postgres_1 \[debug\] New transaction in publication
-    ?+postgres_2 \[debug\] New transaction in publication
-    ?Sending transaction
-    ?Sending transaction
+    ?New transaction in publication
+    ?New transaction in publication
+    ?Will send 1 to subscriber
+    ?Will send 1 to subscriber
 
 [shell pg_2]
     [loop iter 1..10]

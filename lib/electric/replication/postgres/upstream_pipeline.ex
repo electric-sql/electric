@@ -2,12 +2,12 @@ defmodule Electric.Replication.Postgres.UpstreamPipeline do
   use Broadway
 
   alias Broadway.Message
-  alias Electric.VaxRepo
 
-  alias Electric.Replication.Metadata
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Vaxine
 
   require Logger
+  require Electric.Retry
 
   def start_link(opts) do
     producer = Map.fetch!(opts, :producer)
@@ -42,11 +42,7 @@ defmodule Electric.Replication.Postgres.UpstreamPipeline do
   end
 
   @impl true
-  def handle_message(
-        _,
-        %Message{data: %Transaction{changes: changes, commit_timestamp: ts}} = message,
-        _
-      ) do
+  def handle_message(_, %Message{data: transaction} = message, _) do
     %{metadata: %{origin: origin, publication: publication}} = message
 
     Logger.debug(
@@ -54,29 +50,16 @@ defmodule Electric.Replication.Postgres.UpstreamPipeline do
       origin: origin
     )
 
-    changes
-    |> send_to_vaxine(ts, publication, origin)
-    |> case do
-      :ok ->
-        message
+    Electric.Retry.retry_while total_timeout: 10000, max_single_backoff: 1000 do
+      transaction
+      |> Vaxine.transaction_to_vaxine(publication, origin)
+      |> case do
+        :ok ->
+          {:halt, message}
 
-      {change, error} ->
-        Message.failed(message, {change, error})
+        {change, error} ->
+          {:cont, Message.failed(message, {change, error})}
+      end
     end
-  end
-
-  defp send_to_vaxine(changes, commit_timestamp, publication, origin) do
-    VaxRepo.transaction(fn ->
-      Metadata.new(commit_timestamp, publication, origin)
-      |> VaxRepo.insert()
-
-      changes
-      |> Enum.reduce_while(:ok, fn change, :ok ->
-        case Electric.Replication.ToVaxine.handle_change(change) do
-          :ok -> {:cont, :ok}
-          error -> {:halt, {change, error}}
-        end
-      end)
-    end)
   end
 end
