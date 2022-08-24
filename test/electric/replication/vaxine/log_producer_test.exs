@@ -99,7 +99,7 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
     receive do
       {:events, _, [{_transaction, offset}]} -> rec_receive_until_timeout(offset)
     after
-      500 -> last_offset
+      1000 -> last_offset
     end
   end
 
