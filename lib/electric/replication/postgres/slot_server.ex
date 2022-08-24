@@ -20,6 +20,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Replication.Changes
   alias Electric.Replication.VaxinePostgresOffsetStorage
 
+  alias Electric.Replication.DownstreamProducer
+
   defstruct current_lsn: %Lsn{segment: 0, offset: 1},
             send_fn: nil,
             slot_name: nil,
@@ -79,7 +81,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     slot = args.replication.subscription
     producer = args.downstream.producer
 
-    {:ok, producer_pid} = producer.start_link(args.downstream.producer_opts)
+    {:ok, producer_pid} = DownstreamProducer.start_link(producer, args.downstream.producer_opts)
 
     Logger.metadata(slot: slot)
     Logger.debug("Started slot server")
@@ -109,7 +111,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   def handle_call(:downstream_connected?, _from, state) do
-    {:reply, state.producer.connected?(state.producer_pid), [], state}
+    {:reply, DownstreamProducer.connected?(state.producer, state.producer_pid), [], state}
   end
 
   def handle_call(:get_producer_pid, _from, state) do
@@ -157,7 +159,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
 
-    state.producer.start_replication(state.producer_pid, vx_offset)
+    DownstreamProducer.start_replication(state.producer, state.producer_pid, vx_offset)
 
     {:noreply, [], %{state | current_lsn: start_lsn}}
   end

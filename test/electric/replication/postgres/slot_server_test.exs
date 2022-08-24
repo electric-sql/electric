@@ -38,52 +38,6 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
     :ok
   end
 
-  defmodule ProducerMock do
-    use GenStage
-
-    def start_link([]), do: GenStage.start_link(__MODULE__, [])
-
-    def init([]) do
-      {:producer, false, dispatcher: GenStage.DemandDispatcher}
-    end
-
-    def start_replication(producer, offset) do
-      GenStage.call(producer, {:start_replication, offset})
-    end
-
-    def connected?(producer) do
-      GenStage.call(producer, :connected?)
-    end
-
-    def set_expected_producer_connected(producer, status) do
-      GenStage.call(producer, {:set_expected_producer_connected, status})
-    end
-
-    def produce(producer, events) do
-      GenStage.call(producer, {:produce, events})
-    end
-
-    def handle_call({:start_replication, _offset}, _from, connected?) do
-      {:reply, :ok, [], connected?}
-    end
-
-    def handle_call(:connected?, _from, connected?) do
-      {:reply, connected?, [], connected?}
-    end
-
-    def handle_call({:set_expected_producer_connected, status}, _from, _) do
-      {:reply, :ok, [], status}
-    end
-
-    def handle_call({:produce, events}, _from, connected?) do
-      {:reply, :ok, events, connected?}
-    end
-
-    def handle_demand(_incoming_demand, connected?) do
-      {:noreply, [], connected?}
-    end
-  end
-
   describe "Slot server callbacks" do
     test "send the replication messages asap if replication is started" do
       {:ok, state} = init_slot_server("fake_slot")
@@ -152,7 +106,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       producer: producer
     } do
       refute SlotServer.downstream_connected?(server)
-      ProducerMock.set_expected_producer_connected(producer, true)
+      DownstreamProducerMock.set_expected_producer_connected(producer, true)
       assert SlotServer.downstream_connected?(server)
     end
 
@@ -244,7 +198,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   end
 
   defp push_transaction_event(producer_pid, changes),
-    do: ProducerMock.produce(producer_pid, build_events(changes))
+    do: DownstreamProducerMock.produce(producer_pid, build_events(changes))
 
   defp build_events(changes),
     do: [
@@ -274,7 +228,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   defp start_args(slot) do
     %{
       replication: %{subscription: slot},
-      downstream: %{producer: ProducerMock, producer_opts: []}
+      downstream: %{producer: DownstreamProducerMock, producer_opts: []}
     }
   end
 end

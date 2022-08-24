@@ -55,8 +55,8 @@ if config_env() == :prod do
        downstream: [
          producer: Electric.Replication.Vaxine.LogProducer,
          producer_opts: [
-           vaxine_hostname: {VX_HOST},
-           vaxine_port: {VX_PORT},
+           vaxine_hostname: vaxine_hostname,
+           vaxine_port: 8088,
            vaxine_connection_timeout: vaxine_connection_timeout
          ]
        ]}

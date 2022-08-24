@@ -36,12 +36,14 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
   end
 
   test "Allows starting replication synchronously without an offset" do
+    producer = start_log_producer_with_forwarder!()
+    assert :ok = LogProducer.start_replication(producer, nil)
+
     initialize_registry("replication_start")
     insert_data("replication_start")
 
-    producer = start_log_producer_with_forwarder!()
-    assert :ok = LogProducer.start_replication(producer, nil)
-    assert_receive {:events, _, [_]}
+    # big timeout because this can take a while on CI
+    assert_receive {:events, _, [_]}, 5000
   end
 
   test "Allows starting replication from a specific offset" do
@@ -60,7 +62,7 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
 
     insert_data("replication_restart")
 
-    assert_receive {:events, ^producer_2, [{received_transaction, _new_offset}]}, 2500
+    assert_receive {:events, ^producer_2, [{received_transaction, _new_offset}]}, 5000
 
     assert %Electric.Replication.Changes.Transaction{
              changes: [
@@ -97,7 +99,7 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
     receive do
       {:events, _, [{_transaction, offset}]} -> rec_receive_until_timeout(offset)
     after
-      300 -> last_offset
+      500 -> last_offset
     end
   end
 

@@ -16,8 +16,8 @@
 [shell electric]
     ?New transaction in publication
     ?New transaction in publication
-    ?Will send to 1 subscriber
-    ?Will send to 1 subscriber
+    ?Will send 1 to subscriber
+    ?Will send 1 to subscriber
 
 [shell pg_2]
     [loop iter 1..10]
