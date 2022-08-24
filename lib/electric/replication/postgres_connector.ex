@@ -49,7 +49,7 @@ defmodule Electric.Replication.PostgresConnector do
       match?({{Task, :start_subscription}, _, _, _}, List.last(children)) ->
         {:not_ready, :initialization}
 
-      not module_connected?(children, Postgres.DownstreamPipeline) ->
+      not child_healthcheck(children, Postgres.SlotServer, :downstream_connected?) ->
         {:not_ready, {:disconnected, :downstream}}
 
       # TODO: Doesn't really make sense until we ensure `Postgres.LogicalReplicationProducer`
@@ -62,9 +62,9 @@ defmodule Electric.Replication.PostgresConnector do
     end
   end
 
-  defp module_connected?(children, module) do
+  defp child_healthcheck(children, module, function) do
     case List.keyfind(children, module, 0) do
-      {_, pid, _, _} -> module.connected?(pid)
+      {_, pid, _, _} -> apply(module, function, [pid])
       nil -> false
     end
   end
@@ -93,9 +93,10 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp finish_initialization(supervisor, args) do
+    IO.inspect(args)
+
     [
-      {Electric.Replication.Postgres.DownstreamPipeline,
-       put_name(args, Electric.DownstreamPipeline)},
+      {Electric.Replication.Postgres.SlotServer, put_name(args, Electric.SlotServer)},
       {Electric.Replication.Postgres.UpstreamPipeline,
        put_name(args, Electric.ReplicationSource)},
       Supervisor.child_spec({Task, fn -> start_subscription(args) end},

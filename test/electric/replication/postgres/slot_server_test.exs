@@ -125,12 +125,8 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Slot server lifecycle" do
     setup do
-      producer = start_supervised!(ProducerMock, [])
-
-      server =
-        start_supervised!(
-          {SlotServer, slot: "fake_slot", producer: ProducerMock, producer_pid: producer}
-        )
+      server = start_supervised!({SlotServer, start_args("fake_slot")})
+      producer = SlotServer.get_producer_pid(server)
 
       {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
@@ -192,12 +188,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Interaction with TCP server" do
     test "stops replication when process that started replication dies" do
-      producer_pid = start_supervised!(ProducerMock, [])
-
-      server =
-        start_supervised!(
-          {SlotServer, slot: "test_slot", producer: ProducerMock, producer_pid: producer_pid}
-        )
+      server = start_supervised!({SlotServer, slot: "test_slot", producer: ProducerMock})
 
       task = Task.async(fn -> start_replication(server, send_back_message(self())) end)
 
@@ -247,11 +238,18 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   end
 
   defp init_slot_server(slot) do
-    producer_pid = start_supervised!(ProducerMock, [])
-
     {:consumer, state, _opts} =
-      SlotServer.init(slot: slot, producer: ProducerMock, producer_pid: producer_pid)
+      slot
+      |> start_args()
+      |> SlotServer.init()
 
     {:ok, state}
+  end
+
+  defp start_args(slot) do
+    %{
+      replication: %{subscription: "fake_slot"},
+      downstream: %{producer: ProducerMock, producer_opts: []}
+    }
   end
 end

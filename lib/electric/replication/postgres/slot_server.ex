@@ -35,13 +35,21 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   # Public interface
 
-  @spec start_link(keyword()) :: GenServer.on_start()
+  @spec start_link(map()) :: GenServer.on_start()
   def start_link(init_args) do
-    slot_name = Keyword.fetch!(init_args, :slot)
+    slot_name = init_args.replication.subscription
     GenStage.start_link(__MODULE__, init_args, name: name(slot_name))
   end
 
   def connected?(slot_name), do: GenStage.call(name(slot_name), :connected?)
+
+  def downstream_connected?(pid) do
+    GenStage.call(pid, :downstream_connected?)
+  end
+
+  def get_producer_pid(pid) do
+    GenStage.call(pid, :get_producer_pid)
+  end
 
   def stop(slot_name), do: GenStage.stop(name(slot_name))
 
@@ -60,10 +68,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Server callbacks
 
   @impl true
-  def init(opts) do
-    slot = Keyword.fetch!(opts, :slot)
-    producer = Keyword.fetch!(opts, :producer)
-    producer_pid = Keyword.fetch!(opts, :producer_pid)
+  def init(args) do
+    slot = args.replication.subscription
+    producer = args.downstream.producer
+
+    {:ok, producer_pid} = producer.start_link(args.downstream.producer_opts)
 
     Logger.metadata(slot: slot)
     Logger.debug("Started slot server")
@@ -73,7 +82,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
        slot_name: slot,
        producer_pid: producer_pid,
        producer: producer,
-       opts: Keyword.get(opts, :opts, [])
+       opts: Map.get(args.replication, :opts, [])
      }, subscribe_to: [{producer_pid, min_demand: 10, max_demand: 50}]}
   end
 
@@ -90,6 +99,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @impl true
   def handle_call(:connected?, _, state) do
     {:reply, false, [], state}
+  end
+
+  def handle_call(:downstream_connected?, _from, state) do
+    {:reply, state.producer.connected?(state.producer_pid), [], state}
+  end
+
+  def handle_call(:get_producer_pid, _from, state) do
+    {:reply, state.producer_pid, [], state}
   end
 
   @impl true

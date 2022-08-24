@@ -27,6 +27,10 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     GenStage.call(producer, {:start_replication, offset})
   end
 
+  def connected?(producer) do
+    GenStage.call(producer, :connected?)
+  end
+
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
