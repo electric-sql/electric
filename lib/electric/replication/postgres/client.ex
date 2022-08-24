@@ -148,11 +148,11 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   def start_subscription(conn, name) do
-    with {:ok, _, _} <- :epgsql.squery(conn, "ALTER SUBSCRIPTION #{name} ENABLE"),
+    with {:ok, _, _} <- :epgsql.squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
          {:ok, _, _} <-
            :epgsql.squery(
              conn,
-             "ALTER SUBSCRIPTION #{name} REFRESH PUBLICATION WITH (copy_data = false)"
+             ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
            ) do
       :ok
     end
@@ -164,12 +164,17 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   def create_publication(conn, name, tables) when is_list(tables) do
-    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
-    create_publication(conn, name, "TABLE " <> Enum.join(tables, ", "))
+    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR TABLE t1, t2")
+    table_list =
+      tables
+      |> Enum.map(&~s|"#{&1}"|)
+      |> Enum.join(", ")
+
+    create_publication(conn, name, "TABLE #{table_list}")
   end
 
   def create_publication(conn, name, table_spec) when is_binary(table_spec) do
-    case :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR #{table_spec}") do
+    case :epgsql.squery(conn, ~s|CREATE PUBLICATION "#{name}" FOR #{table_spec}|) do
       {:ok, _, _} -> {:ok, name}
       # TODO: Verify that the publication has the correct tables
       {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
@@ -184,7 +189,7 @@ defmodule Electric.Replication.Postgres.Client do
   def create_slot(conn, slot_name) do
     case :epgsql.squery(
            conn,
-           "CREATE_REPLICATION_SLOT #{slot_name} LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+           ~s|CREATE_REPLICATION_SLOT "#{slot_name}" LOGICAL pgoutput NOEXPORT_SNAPSHOT|
          ) do
       {:ok, _, _} -> {:ok, slot_name}
       # TODO: Verify that the subscription references the correct publication
@@ -197,7 +202,7 @@ defmodule Electric.Replication.Postgres.Client do
 
     case :epgsql.squery(
            conn,
-           "CREATE SUBSCRIPTION #{name} CONNECTION '#{connection_string}' PUBLICATION #{publication_name} WITH (connect = false)"
+           ~s|CREATE SUBSCRIPTION "#{name}" CONNECTION '#{connection_string}' PUBLICATION "#{publication_name}" WITH (connect = false)|
          ) do
       {:ok, _, _} -> {:ok, name}
       # TODO: Verify that the subscription references the correct publication
