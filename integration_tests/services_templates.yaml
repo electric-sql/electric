@@ -35,8 +35,7 @@ services:
     volumes:
       - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
-    entrypoint:
-      - /docker-entrypoint.sh
+    command:
       - -c
       - config_file=/etc/postgresql.conf
     cap_add:
