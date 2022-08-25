@@ -136,7 +136,7 @@ test('running a prepared statement *inside* of a transaction does *not* notify',
   })
   runTx()
 
-  // The transaaction notifies, so we're testing it's only
+  // The transaction notifies, so we're testing it's only
   // notification not two!
   t.is(notifier.notifications.length, 1)
 })
