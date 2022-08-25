@@ -1,0 +1,96 @@
+{
+  "version": "0.1.0",
+  "name": "electric-sql-ts",
+  "description": "Electric SQL client for edge (node), web and (javscript based) mobile applications.",
+  "repository": "https://github.com/vaxine-io/electric-sql-ts",
+  "author": "Electric DB Limited",
+  "homepage": "https://electric-sql.com",
+  "license": "MIT",
+  "keywords": [
+    "active",
+    "android",
+    "crdt",
+    "crdts",
+    "database",
+    "db",
+    "electric",
+    "electric-sql",
+    "ios",
+    "local-first",
+    "local-first-sql",
+    "node",
+    "offline",
+    "offline-first",
+    "react-native",
+    "react-native-electric-sql",
+    "sql",
+    "sqlite",
+    "sqlite3",
+    "sync",
+    "web"
+  ],
+  "bugs": {
+    "url": "https://github.com/vaxine-io/electric-sql-ts/issues"
+  },
+  "main": "index.js",
+  "type": "module",
+  "platform": "node",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./dist/index.js",
+    "./*": "./dist/*/index.js"
+  },
+  "scripts": {
+    "dev": "tsmodule dev",
+    "build": "tsmodule build",
+    "test": "ava",
+    "pretest": "tsmodule build",
+    "prepublishOnly": "yarn test",
+    "lint": "eslint src --fix"
+  },
+  "ava": {
+    "timeout": "10m",
+    "files": [
+      "test/**/*.test.ts"
+    ],
+    "extensions": {
+      "ts": "module"
+    },
+    "nodeArguments": [
+      "--no-warnings",
+      "--loader=@tsmodule/tsmodule/loader"
+    ]
+  },
+  "dependencies": {
+    "events": "^3.3.0",
+    "sqlite-parser": "^1.0.1",
+    "walkjs": "^3.2.4"
+  },
+  "devDependencies": {
+    "@tsmodule/tsmodule": "^40.0.17",
+    "@types/node": "^18.7.13",
+    "@typescript-eslint/eslint-plugin": "^5.34.0",
+    "@typescript-eslint/parser": "^5.34.0",
+    "ava": "^4.3.1",
+    "eslint": "^8.22.0",
+    "typescript": "^4.7.4",
+
+    "@capacitor-community/sqlite": ">= 3.0.0",
+    "better-sqlite3": ">= 7.4.0",
+    "cordova-sqlite-storage": ">= 5.0.0",
+    "expo-asset": ">= 8.0.0",
+    "expo-file-system": "13.0.0",
+    "expo-sqlite": ">= 10.0.0",
+    "nativescript-sqlite": ">= 2.8.0",
+    "react-native": ">=0.14.0",
+    "react-native-fs": ">= 2.17.0",
+    "react-native-sqlite-storage": ">= 6.0.0",
+    "sql.js": ">= 1.6.0",
+    "sqlite3": ">= 5.0.0",
+    "typeorm": ">=0.3.0"
+  }
+}
