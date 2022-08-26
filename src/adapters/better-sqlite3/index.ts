@@ -1,5 +1,5 @@
 import { Notifier } from '../../notifiers/index'
-import { EmitNotifier } from '../../notifiers/node'
+import { EmitNotifier } from '../../notifiers/event'
 
 import { ProxyWrapper, proxy } from '../../proxy/index'
 
