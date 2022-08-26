@@ -1,13 +1,13 @@
-import { BindParams, Row } from '../../util/types'
+import { BindParams, DbName, Row } from '../../util/types'
 import { Database, Info, Statement } from './index'
 
 export class MockDatabase implements Database {
-  name: string
+  name: DbName
 
   inTransaction = false
   memory = false
 
-  constructor(name: string) {
+  constructor(name: DbName) {
     this.name = name
   }
 

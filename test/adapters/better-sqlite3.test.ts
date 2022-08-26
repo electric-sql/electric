@@ -2,7 +2,7 @@ import test from 'ava'
 
 import Database from 'better-sqlite3'
 
-import { electrify } from '../../dist/adapters/better-sqlite3'
+import { electrify } from '../../dist/adapters/better-sqlite3/index'
 import { MockDatabase } from '../../dist/adapters/better-sqlite3/mock'
 import { MockNotifier } from '../../dist/notifiers/mock'
 

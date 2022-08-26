@@ -1,5 +1,13 @@
 import { hasPublicKey, publicKeys } from '../util/keys'
 
+const isInstanceOfSameClass = (instance: object, candidate?: object): boolean => {
+  if (!candidate) {
+    return false
+  }
+
+  return candidate.constructor === instance.constructor
+}
+
 // Proxy the original, intercepting the properties and methods that
 // need to be patched to make the auto coommit notifications work.
 //
@@ -32,7 +40,7 @@ export const proxyOriginal = (original: any, electric: any): any => {
             const retval = Reflect.apply(value, electric, args)
 
             // Preserve chainability.
-            if (retval.constructor === electric.constructor) {
+            if (isInstanceOfSameClass(electric, retval)) {
               return proxyOriginal(retval._getOriginal(), retval)
             }
 
@@ -50,7 +58,7 @@ export const proxyOriginal = (original: any, electric: any): any => {
           const retval = Reflect.apply(value, target, args)
 
           // Preserve chainability.
-          if (retval.constructor === target.constructor) {
+          if (isInstanceOfSameClass(target, retval)) {
             electric._setOriginal(retval)
 
             return proxyOriginal(retval, electric)

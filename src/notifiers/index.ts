@@ -1,11 +1,16 @@
+import { DbName } from '../util/types'
+
 export interface CommitNotification {
-  dbName: string
+  dbName: DbName
 }
 
 export interface Notifier {
-  dbName: string
+  dbNames: Set<DbName>
 
   notifications?: CommitNotification[]
+
+  attach(dbName: DbName): void
+  detatch(dbName: DbName): void
 
   notifyCommit(): void
 }

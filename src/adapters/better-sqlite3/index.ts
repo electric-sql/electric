@@ -4,12 +4,12 @@ import { EmitNotifier } from '../../notifiers/event'
 import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
 
 import { isPotentiallyDangerous } from '../../util/parser'
-import { BindParams, Row } from '../../util/types'
+import { BindParams, DbName, Row } from '../../util/types'
 
 // The relevant subset of the Better-SQLite3 database client
 // that we need to ensure the client we're electrifying provides.
 export interface Database {
-  name: string
+  name: DbName
   inTransaction: boolean
 
   exec(sql: string): Database
