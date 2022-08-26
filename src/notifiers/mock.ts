@@ -1,4 +1,3 @@
-
 import { CommitNotification, Notifier } from './index'
 
 export class MockNotifier implements Notifier {

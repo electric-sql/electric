@@ -1,5 +1,5 @@
-
-import { BindParams, Database, Info, Row, Statement } from './index'
+import { BindParams, Row } from '../../util/types'
+import { Database, Info, Statement } from './index'
 
 export class MockDatabase implements Database {
   name: string
@@ -11,11 +11,11 @@ export class MockDatabase implements Database {
     this.name = name
   }
 
-  exec(sql: string): Database {
+  exec(_sql: string): Database {
     return this
   }
 
-  prepare(sql: string): Statement {
+  prepare(_sql: string): Statement {
     return new MockStatement(this)
   }
 
@@ -42,20 +42,20 @@ export class MockStatement implements Statement {
     this.database = db
   }
 
-  run(bindParams: BindParams): Info {
+  run(_bindParams: BindParams): Info {
     return {
       changes: 0,
       lastInsertRowid: 1234
     }
   }
 
-  get(bindParams: BindParams): Row | void {}
+  get(_bindParams: BindParams): Row | void {}
 
-  all(bindParams: BindParams): Row[] {
+  all(_bindParams: BindParams): Row[] {
     return []
   }
 
-  iterate(bindParams: BindParams): Iterable<Row> {
+  iterate(_bindParams: BindParams): Iterable<Row> {
     return []
   }
 }

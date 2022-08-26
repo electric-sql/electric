@@ -1,6 +1,3 @@
-
-import { MockNotifier } from './mock'
-
 export interface CommitNotification {
   dbName: string
 }

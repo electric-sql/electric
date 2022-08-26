@@ -1,4 +1,3 @@
-
 import { EventEmitter } from 'events'
 import { CommitNotification, Notifier } from './index'
 

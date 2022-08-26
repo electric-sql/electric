@@ -1,4 +1,3 @@
-
 import sqliteParser from 'sqlite-parser'
 import { WalkBuilder } from 'walkjs'
 

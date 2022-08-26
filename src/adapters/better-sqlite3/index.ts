@@ -1,8 +1,10 @@
-import { Notifier } from '../../notifiers'
+import { Notifier } from '../../notifiers/index'
 import { EmitNotifier } from '../../notifiers/node'
 
-import { hasPublicKey, publicKeys } from '../../util/keys'
+import { ProxyWrapper, proxy } from '../../proxy/index'
+
 import { isPotentiallyDangerous } from '../../util/parser'
+import { BindParams, Row } from '../../util/types'
 
 // The relevant subset of the Better-SQLite3 database client
 // that we need to ensure the client we're electrifying provides.
@@ -19,8 +21,6 @@ export interface Info {
   changes: number
   lastInsertRowid: number
 }
-export type BindParams = any[] | object
-export type Row = object
 
 // The relevant subset of the Better-SQLite3 prepared statement.
 export interface Statement {
@@ -33,16 +33,6 @@ export interface Statement {
   iterate(bindParams: BindParams): Iterable<Row>
 }
 
-type Original = Database | Statement
-
-// The common interface our Electric wrappers must provide.
-export interface Electric {
-  electric: Notifier
-
-  _setOriginal(original: Original): void
-  _getOriginal(): Original
-}
-
 // `CallableTransaction` wraps the `txFn` returned from `db.transaction(fn)`
 // so we can call `notifier.notifyCommit()` after the transaction executes --
 // be it directly, or via the `deferred`, `immediate`, or `exclusive` methods.
@@ -52,14 +42,14 @@ class CallableTransaction extends Function {
   txFn: any
   notifier: Notifier
 
-  constructor(txFn, notifier) {
+  constructor(txFn: (...args: any[]) => any, notifier: Notifier) {
     super()
 
     this.txFn = txFn
     this.notifier = notifier
 
     return new Proxy(this, {
-      apply: (target, thisArg, args) => target._call(...args)
+      apply: (target, _thisArg, args) => target._call(...args)
     })
   }
 
@@ -100,8 +90,8 @@ class CallableTransaction extends Function {
   }
 }
 
-// Wrap the database client to automaticallly notify on commit.
-export class ElectricDatabase implements Electric {
+// Wrap the database client to automatically notify on commit.
+export class ElectricDatabase implements ProxyWrapper {
   // Private properties are not exposed via the proxy.
   _db: Database
 
@@ -153,9 +143,9 @@ export class ElectricDatabase implements Electric {
   }
 }
 
-// Wrap prepared statements to automaticallly notify on write
+// Wrap prepared statements to automatically notify on write
 // when executed outside of a transaction.
-export class ElectricStatement implements Electric {
+export class ElectricStatement implements ProxyWrapper {
   _stmt: Statement
   electric: Notifier
 
@@ -230,73 +220,6 @@ export class ElectricStatement implements Electric {
 
     return generator()
   }
-}
-
-// Proxy the original, intercepting the properties and methods that
-// need to be patched to make the auto coommit notifications work.
-//
-// See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy
-// and https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect
-// for background on the proxy voodoo.
-function proxy(original: Database, electric: ElectricDatabase): any;
-function proxy(original: Statement, electric: ElectricStatement): any;
-function proxy(original: Original, electric: any): any {
-  return new Proxy(original, {
-    has(target, key) {
-      return Reflect.has(target, key) || hasPublicKey(electric, key)
-    },
-    ownKeys(target) {
-      return Reflect.ownKeys(target).concat(publicKeys(electric));
-    },
-    getOwnPropertyDescriptor(target, key) {
-      if (hasPublicKey(electric, key)) {
-        return Reflect.getOwnPropertyDescriptor(electric, key)
-      }
-
-      return Reflect.getOwnPropertyDescriptor(target, key)
-    },
-    get(target, key, _receiver) {
-      let value
-
-      if (hasPublicKey(electric, key)) {
-        value = electric[key]
-
-        if (typeof value === 'function') {
-          return (...args: any) => {
-            const retval = Reflect.apply(value, electric, args)
-
-            // Preserve chainability.
-            if (retval.constructor === electric.constructor) {
-              return proxy(retval._getOriginal(), retval)
-            }
-
-            return retval
-          }
-        }
-
-        return value
-      }
-
-      value = target[key]
-
-      if (typeof value === 'function') {
-        return (...args: any) => {
-          const retval = Reflect.apply(value, target, args)
-
-          // Preserve chainability.
-          if (retval.constructor === target.constructor) {
-            electric._setOriginal(retval)
-
-            return proxy(retval, electric)
-          }
-
-          return retval
-        }
-      }
-
-      return value
-    }
-  })
 }
 
 export const electrify = (db: Database, notifier?: Notifier): Database => {
