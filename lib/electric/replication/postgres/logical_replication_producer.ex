@@ -35,20 +35,43 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               drop_current_transaction?: false,
               types: %{}
+    @type t() :: %__MODULE__{
+      conn: pid(),
+      demand: non_neg_integer(),
+      queue: :queue.queue(),
+      relations: %{},
+      transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
+      publication: String.t(),
+      client: module(),
+      origin: String.t(),
+      drop_current_transaction?: boolean(),
+      types: %{}
+    }
   end
 
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts)
+  def start_link(name, opts) do
+    GenStage.start_link(__MODULE__, [name, opts])
+   end
+
+  @spec get_name(String.t()) :: Electric.reg_name()
+  def get_name(name) do
+    {:via, :gproc, name(name)}
+  end
+
+  defp name(name) do
+    {:n, :l, {__MODULE__, name}}
   end
 
   @impl true
-  def init(opts) do
+  def init([name, opts]) do
+    :gproc.reg(name(name))
+
     publication = opts.replication.publication
     slot = opts.replication.slot
 
     with {:ok, conn} <- opts.client.connect(opts.connection),
          :ok <- opts.client.start_replication(conn, publication, slot, self()) do
-      Logger.metadata(origin: opts.origin)
+      Logger.metadata(pg_producer: opts.origin)
       Logger.info("Starting replication from #{opts.origin}")
       Logger.info("Connection settings: #{inspect(opts)}")
 
@@ -234,10 +257,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp build_message(transaction, end_lsn, state) do
-    %Broadway.Message{
-      data: transaction,
-      metadata: %{publication: state.publication, origin: state.origin},
-      acknowledger: {__MODULE__, {state.conn, state.origin}, {state.client, end_lsn}}
+    %{transaction |
+      origin: state.origin,
+      publication: state.publication,
+      lsn: end_lsn
     }
   end
 

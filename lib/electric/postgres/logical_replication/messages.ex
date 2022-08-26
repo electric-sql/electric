@@ -1,5 +1,12 @@
 defmodule Electric.Postgres.LogicalReplication.Messages do
-  defmodule Begin, do: defstruct([:final_lsn, :commit_timestamp, :xid])
+  defmodule Begin do
+    defstruct([:final_lsn, :commit_timestamp, :xid])
+    @type t() :: %__MODULE__{
+      final_lsn: Electric.Postgres.Lsn.t(),
+      commit_timestamp: DateTime.t(),
+      xid: Electric.Postgres.Lsn.int32()
+    }
+  end
   defmodule Commit, do: defstruct([:flags, :lsn, :end_lsn, :commit_timestamp])
   defmodule Origin, do: defstruct([:origin_commit_lsn, :name])
   defmodule Relation, do: defstruct([:id, :namespace, :name, :replica_identity, :columns])

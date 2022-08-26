@@ -1,8 +1,16 @@
 defmodule Electric.Replication.Changes do
   defmodule Transaction do
-    @type t() :: %__MODULE__{}
+    @type t() :: %__MODULE__{
+      changes: list(),
+      commit_timestamp: DateTime.t(),
+      origin: String.t(),
+      publication: String.t(),
+      lsn: Electric.Postgres.Lsn.t()
+    }
 
-    defstruct [:changes, :commit_timestamp]
+    defstruct [:changes, :commit_timestamp,
+               :origin, :publication, :lsn
+              ]
   end
 
   defmodule NewRecord do

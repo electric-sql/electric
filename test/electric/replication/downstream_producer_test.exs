@@ -2,14 +2,17 @@ defmodule Electric.Replication.DownstreamProducerTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.DownstreamProducer
+  @producer {:via, :gproc, {:n, :l, "producer"}}
 
   test "start_link/2 starts the producer" do
-    assert {:ok, pid} = DownstreamProducer.start_link(DownstreamProducerMock, [])
+    assert {:ok, pid} =
+      DownstreamProducer.start_link(DownstreamProducerMock, @producer)
     assert Process.alive?(pid)
   end
 
   test "connected?/2 returns true if connected, false otherwise" do
-    {:ok, pid} = DownstreamProducer.start_link(DownstreamProducerMock, [])
+    {:ok, pid} =
+      DownstreamProducer.start_link(DownstreamProducerMock, @producer)
 
     refute DownstreamProducer.connected?(DownstreamProducerMock, pid)
 
@@ -19,7 +22,8 @@ defmodule Electric.Replication.DownstreamProducerTest do
   end
 
   test "start_replication/3 calls start replication on producer" do
-    {:ok, pid} = DownstreamProducer.start_link(DownstreamProducerMock, [])
+    {:ok, pid} =
+      DownstreamProducer.start_link(DownstreamProducerMock, @producer)
 
     :erlang.trace(pid, true, [:receive])
 

@@ -50,7 +50,8 @@ defmodule Electric.MixProject do
       {:jason, "~> 1.3.0"},
       {:recon_ex, "~> 0.9.1"},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
-      {:excoveralls, "~> 0.10", only: :test, runtime: false}
+      {:excoveralls, "~> 0.10", only: :test, runtime: false},
+      {:gproc, "~> 0.9.0"}
     ]
   end
 

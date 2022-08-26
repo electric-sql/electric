@@ -21,9 +21,38 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   @max_backoff_ms 1000
   @starting_demand 5
 
+  defmodule State do
+    defstruct address: nil,
+      port: 0,
+      connection_timeout: 0,
+      demand: 0,
+      backoff: nil,
+      socket_pid: nil,
+      last_vx_offset_sent: nil
+
+    @type t() :: %__MODULE__{
+      address: charlist(),
+      port: non_neg_integer(),
+      connection_timeout: non_neg_integer(),
+      demand: non_neg_integer(),
+      backoff: :backoff.backoff(),
+      socket_pid: pid(),
+      last_vx_offset_sent: term()
+    }
+  end
+
   @impl DownstreamProducer
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts)
+  def start_link(name, opts) do
+    GenStage.start_link(__MODULE__, [name, opts])
+  end
+
+  @spec get_name(String.t()) :: Electric.reg_name()
+  def get_name(name) do
+    {:via, :gproc, name(name)}
+  end
+
+  defp name(name) do
+    {:n, :l, {__MODULE__, name}}
   end
 
   @impl DownstreamProducer
@@ -42,10 +71,13 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   end
 
   @impl GenStage
-  def init(opts) do
+  def init([name, opts]) do
     Process.flag(:trap_exit, true)
+    :gproc.reg(name(name))
 
-    state = %{
+    Logger.metadata(origin: name, vx_producer: opts[:vaxine_hostname])
+
+    state = %State{
       address: opts[:vaxine_hostname] |> String.to_charlist(),
       port: opts[:vaxine_port],
       connection_timeout: opts[:vaxine_connection_timeout] || 1000,
@@ -65,12 +97,12 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   end
 
   @impl GenStage
-  def handle_call(:connected?, _from, %{socket_pid: nil} = state) do
+  def handle_call(:connected?, _from, %State{socket_pid: nil} = state) do
     {:reply, false, [], state}
   end
 
   @impl GenStage
-  def handle_call(:connected?, _from, %{socket_pid: pid} = state) do
+  def handle_call(:connected?, _from, %State{socket_pid: pid} = state) do
     {:reply, Process.alive?(pid), [], state}
   end
 
