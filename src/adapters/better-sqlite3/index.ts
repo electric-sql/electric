@@ -1,7 +1,7 @@
 import { Notifier } from '../../notifiers/index'
 import { EmitNotifier } from '../../notifiers/event'
 
-import { ProxyWrapper, proxy } from '../../proxy/index'
+import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
 
 import { isPotentiallyDangerous } from '../../util/parser'
 import { BindParams, Row } from '../../util/types'
@@ -132,7 +132,7 @@ export class ElectricDatabase implements ProxyWrapper {
     const stmt = this._db.prepare(sql)
     const electric = new ElectricStatement(stmt, this.electric)
 
-    return proxy(stmt, electric)
+    return proxyOriginal(stmt, electric)
   }
 
   transaction(fn: (...args: any[]) => any): CallableTransaction {
@@ -228,5 +228,5 @@ export const electrify = (db: Database, notifier?: Notifier): Database => {
   }
   const electric = new ElectricDatabase(db, notifier)
 
-  return proxy(db, electric)
+  return proxyOriginal(db, electric)
 }
