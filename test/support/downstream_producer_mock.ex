@@ -4,10 +4,11 @@ defmodule DownstreamProducerMock do
   @behaviour Electric.Replication.DownstreamProducer
 
   @impl true
-  def start_link([]), do: GenStage.start_link(__MODULE__, [])
+  def start_link(name), do: GenStage.start_link(__MODULE__, name)
 
   @impl true
-  def init([]) do
+  def init({:via, :gproc, name}) do
+    :gproc.reg(name)
     {:producer, false, dispatcher: GenStage.DemandDispatcher}
   end
 

@@ -19,7 +19,7 @@
     ?INSERT 0 1
 
 [shell electric_b]
-    ?slot=postgres_3 \[debug\] Sending \d messages to the subscriber
+    ?pg_slot=postgres_3 origin=postgres_3 \[debug\] Sending \d messages to the subscriber
 
 [shell pg_3]
     !SELECT * FROM entries;
@@ -31,8 +31,8 @@
     ?INSERT 0 1
 
 [shell electric]
-    ?+slot=postgres_2 \[debug\] Sending \d messages to the subscriber
-    ?slot=postgres_1 \[debug\] Sending \d messages to the subscriber
+    ?+pg_slot=postgres_2 origin=postgres_2 \[debug\] Sending \d messages to the subscriber
+    ?pg_slot=postgres_1 origin=postgres_1 \[debug\] Sending \d messages to the subscriber
     [timeout 10]
 
 [shell pg_1]

@@ -11,7 +11,7 @@
     ?INSERT 0 1
 
 [shell electric]
-    ?slot=postgres_2 \[debug\] Sending \d messages to the subscriber
+    ?pg_slot=postgres_2 origin=postgres_2 \[debug\] Sending \d messages to the subscriber
 
 [shell pg_2]
     !SELECT * FROM entries;
