@@ -3,7 +3,20 @@ import { EmitNotifier } from '../../notifiers/event'
 
 import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
 
-import { DbName } from '../../util/types'
+import { AnyFunction, DbName, VoidOrPromise } from '../../util/types'
+
+const ensurePromise = (candidate: any): Promise<any> => {
+  if (candidate instanceof Promise) {
+    return candidate
+  }
+
+  throw `
+    Expecting promises to be enabled.
+
+    Electric SQL does not support disabling promises
+    after electrifying your database client.
+  `
+}
 
 // The relevant subset of the SQLitePlugin database client API
 // that we need to ensure the client we're electrifying provides.
@@ -16,10 +29,12 @@ export interface Database {
     [key: DbName]: 'INIT' | 'OPEN'
   }
 
-  // XXX Deal with the enablePromise(true) thing.
   addTransaction(tx: Transaction): void
-  attach(dbName: DbName, dbAlias: DbName, success?: (...args: any[]) => any, error?: (...args: any[]) => any): any
-  detatch(dbAlias: DbName, success?: (...args: any[]) => any, error?: (...args: any[]) => any): any
+
+  attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
+  detach(dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
+
+  echoTest(success?: AnyFunction, _error?: AnyFunction): VoidOrPromise
 }
 
 // The relevant subset of the SQLiteTransaction interface.
@@ -31,10 +46,11 @@ export interface Transaction {
 // Wrap the database client to automatically notify on commit.
 export class ElectricDatabase implements ProxyWrapper {
   // Private properties are not exposed via the proxy.
-  _db: Database
   _aliases: {
     [key: DbName]: DbName
   }
+  _db: Database
+  _hasEnabledPromises: boolean
 
   // This is the one public property we add to the underlying
   // Database client. Hence calling it our specific name, rather
@@ -43,11 +59,18 @@ export class ElectricDatabase implements ProxyWrapper {
   // run `db.electric.notifyCommit()`.
   electric: Notifier
 
-  constructor(db: Database, notifier: Notifier) {
-    this._db = db
-    this.electric = notifier
-
+  constructor(db: Database, notifier: Notifier, hasEnabledPromises?: boolean) {
     this._aliases = {}
+    this._db = db
+
+    if (hasEnabledPromises !== undefined) {
+      this._hasEnabledPromises = hasEnabledPromises
+    }
+    else {
+      this._hasEnabledPromises = this._db.echoTest() instanceof Promise
+    }
+
+    this.electric = notifier
   }
 
   // Used when re-proxying so the proxy code doesn't need
@@ -75,47 +98,61 @@ export class ElectricDatabase implements ProxyWrapper {
       }
     }
 
-    this._db.addTransaction(tx)
+    return this._db.addTransaction(tx)
   }
 
   // Because the plugin also supports attaching multiple databases
   // and running SQL statements against them both, we also hook
-  // into `attach` and `detatch` to keep a running tally of all
+  // into `attach` and `detach` to keep a running tally of all
   // the names of the attached databases.
-  attach(dbName: DbName, dbAlias: DbName, success?: (...args: any[]) => any, error?: (...args: any[]) => any) {
+  attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const aliases = this._aliases
     const notifier = this.electric
+    const hasEnabledPromises = this._hasEnabledPromises
     const originalSuccessFn = success
 
     const successFn = (...args: any[]): any => {
       aliases[dbAlias] = dbName
       notifier.attach(dbName)
 
-      if (!!originalSuccessFn) {
+      if (!!originalSuccessFn && !hasEnabledPromises) {
         return originalSuccessFn(...args)
       }
+    }
+
+    if (hasEnabledPromises) {
+      const retval = ensurePromise(this._db.attach(dbName, dbAlias))
+
+      return retval.then(successFn)
     }
 
     return this._db.attach(dbName, dbAlias, successFn, error)
   }
 
-  detatch(dbAlias: DbName, success?: (...args: any[]) => any, error?: (...args: any[]) => any) {
+  detach(dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const aliases = this._aliases
     const notifier = this.electric
+    const hasEnabledPromises = this._hasEnabledPromises
     const originalSuccessFn = success
 
     const successFn = (...args: any[]): any => {
       const dbName = aliases[dbAlias]
       delete aliases[dbAlias]
 
-      notifier.detatch(dbName)
+      notifier.detach(dbName)
 
       if (!!originalSuccessFn) {
         return originalSuccessFn(...args)
       }
     }
 
-    return this._db.detatch(dbAlias, successFn, error)
+    if (hasEnabledPromises) {
+      const retval = ensurePromise(this._db.detach(dbAlias))
+
+      return retval.then(successFn)
+    }
+
+    return this._db.detach(dbAlias, successFn, error)
   }
 }
 

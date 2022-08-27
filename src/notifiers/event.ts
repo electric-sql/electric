@@ -18,7 +18,7 @@ export class EmitNotifier extends EventEmitter implements Notifier {
     this.dbNames.add(dbName)
   }
 
-  detatch(dbName: DbName): void {
+  detach(dbName: DbName): void {
     this.dbNames.delete(dbName)
   }
 

@@ -13,7 +13,7 @@ export class MockNotifier implements Notifier {
   attach(dbName: DbName): void {
     this.dbNames.add(dbName)
   }
-  detatch(dbName: DbName): void {
+  detach(dbName: DbName): void {
     this.dbNames.delete(dbName)
   }
 

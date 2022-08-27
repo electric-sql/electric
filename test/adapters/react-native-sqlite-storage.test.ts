@@ -1,8 +1,8 @@
 import test from 'ava'
 
-import { electrify } from '../../dist/adapters/react-native-sqlite-storage/index'
-import { MockDatabase, MockTransaction } from '../../dist/adapters/react-native-sqlite-storage/mock'
-import { MockNotifier } from '../../dist/notifiers/mock'
+import { electrify } from '../../src/adapters/react-native-sqlite-storage/index'
+import { MockDatabase, MockTransaction, enablePromiseRuntime } from '../../src/adapters/react-native-sqlite-storage/mock'
+import { MockNotifier } from '../../src/notifiers/mock'
 
 test('electrify returns an equivalent database client', t => {
   const original = new MockDatabase('test.db')
@@ -68,8 +68,41 @@ test('detaching a database notifies for one less', t => {
 
   t.is(notifier.notifications.length, 2)
 
-  db.detatch('lala')
+  db.detach('lala')
   db.addTransaction(new MockTransaction())
 
   t.is(notifier.notifications.length, 3)
+})
+
+test('enablePromiseRuntime(mockDb) works', t => {
+  const mockDb = new MockDatabase('test.db')
+  const original = enablePromiseRuntime(mockDb)
+  const notifier = new MockNotifier(original.dbName)
+  const db = electrify(original, notifier)
+
+  t.is(notifier.dbNames.size, 1)
+
+  return original.attach('lala.db', 'lala')
+    .then((arg) => {
+      t.is(arg, 'mocked!')
+    })
+})
+
+test('working with the promise runtime works', t => {
+  const mockDb = new MockDatabase('test.db')
+  const original = enablePromiseRuntime(mockDb)
+  const notifier = new MockNotifier(original.dbName)
+  const db = electrify(original, notifier)
+
+  t.is(notifier.notifications.length, 0)
+
+  const promise = db.attach('lala.db', 'lala')
+    .then(() => {
+      const tx = new MockTransaction()
+      db.addTransaction(tx)
+
+      t.is(notifier.notifications.length, 2)
+    })
+
+  return promise
 })

@@ -10,7 +10,7 @@ export interface Notifier {
   notifications?: CommitNotification[]
 
   attach(dbName: DbName): void
-  detatch(dbName: DbName): void
+  detach(dbName: DbName): void
 
   notifyCommit(): void
 }
