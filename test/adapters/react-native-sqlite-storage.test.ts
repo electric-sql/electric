@@ -1,7 +1,8 @@
 import test from 'ava'
 
 import { electrify } from '../../src/adapters/react-native-sqlite-storage/index'
-import { MockDatabase, MockTransaction, enablePromiseRuntime } from '../../src/adapters/react-native-sqlite-storage/mock'
+import { MockDatabase, enablePromiseRuntime } from '../../src/adapters/react-native-sqlite-storage/mock'
+import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
 import { MockNotifier } from '../../src/notifiers/mock'
 
 test('electrify returns an equivalent database client', t => {
@@ -24,7 +25,7 @@ test('running a transaction runs notifyCommit', t => {
 
   t.is(notifier.notifications.length, 0)
 
-  const tx = new MockTransaction()
+  const tx = new MockSQLitePluginTransaction()
   db.addTransaction(tx)
 
   t.is(notifier.notifications.length, 1)
@@ -37,7 +38,7 @@ test('running a read only transaction does not notifyCommit', t => {
 
   t.is(notifier.notifications.length, 0)
 
-  const tx = new MockTransaction(true)
+  const tx = new MockSQLitePluginTransaction(true)
   db.addTransaction(tx)
 
   t.is(notifier.notifications.length, 0)
@@ -51,7 +52,7 @@ test('attaching a database now notifies for both', t => {
   t.is(notifier.notifications.length, 0)
 
   db.attach('lala.db', 'lala')
-  db.addTransaction(new MockTransaction())
+  db.addTransaction(new MockSQLitePluginTransaction())
 
   t.is(notifier.notifications.length, 2)
 })
@@ -64,12 +65,12 @@ test('detaching a database notifies for one less', t => {
   t.is(notifier.notifications.length, 0)
 
   db.attach('lala.db', 'lala')
-  db.addTransaction(new MockTransaction())
+  db.addTransaction(new MockSQLitePluginTransaction())
 
   t.is(notifier.notifications.length, 2)
 
   db.detach('lala')
-  db.addTransaction(new MockTransaction())
+  db.addTransaction(new MockSQLitePluginTransaction())
 
   t.is(notifier.notifications.length, 3)
 })
@@ -98,7 +99,7 @@ test('working with the promise runtime works', t => {
 
   const promise = db.attach('lala.db', 'lala')
     .then(() => {
-      const tx = new MockTransaction()
+      const tx = new MockSQLitePluginTransaction()
       db.addTransaction(tx)
 
       t.is(notifier.notifications.length, 2)

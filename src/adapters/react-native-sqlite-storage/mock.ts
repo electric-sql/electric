@@ -1,5 +1,6 @@
 import { AnyFunction, DbName } from '../../util/types'
-import { Database, Transaction } from './index'
+import { MockSQLitePlugin } from '../sqlite-plugin/mock'
+import { Database } from './index'
 
 const promisablePatchedMethods = [
   'attach',
@@ -10,8 +11,8 @@ const isPromisablePatchedMethod = (key: string | symbol) => {
   return typeof key === 'string' && promisablePatchedMethods.includes(key)
 }
 
-// This adapts the `mockDb` to function like the SQLPlugin does
-// after `SQLPluginFactory.enablePromise(true)` has been called.
+// This adapts the `mockDb` to function like the SQLitePlugin does
+// after `SQLitePluginFactory.enablePromise(true)` has been called.
 export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
   return new Proxy(mockDb, {
     get(target, key, receiver) {
@@ -39,28 +40,13 @@ export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
   })
 }
 
-export class MockDatabase implements Database {
+export class MockDatabase extends MockSQLitePlugin implements Database {
   dbName: DbName
 
-  databaseFeatures: {
-    isSQLitePluginDatabase: true
-  }
-  openDBs: {
-    [key: DbName]: 'INIT' | 'OPEN'
-  }
-
   constructor(dbName: DbName) {
+    super(dbName)
+
     this.dbName = dbName
-
-    this.databaseFeatures = {isSQLitePluginDatabase: true}
-    this.openDBs = {}
-    this.openDBs[dbName] = 'OPEN'
-  }
-
-  addTransaction(tx: Transaction): void {
-    if (!!tx.success) {
-      tx.success('mocked!')
-    }
   }
 
   attach(_dbName: DbName, _dbAlias: DbName, success?: AnyFunction, _error?: AnyFunction): void {
@@ -80,14 +66,4 @@ export class MockDatabase implements Database {
       success('mocked!')
     }
   }
-}
-
-export class MockTransaction implements Transaction {
-  readOnly: boolean
-
-  constructor(readOnly: boolean = false) {
-    this.readOnly = readOnly
-  }
-
-  success(..._args: any[]): void {}
 }

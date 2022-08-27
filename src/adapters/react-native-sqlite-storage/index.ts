@@ -1,11 +1,11 @@
 import { Notifier } from '../../notifiers/index'
 import { EmitNotifier } from '../../notifiers/event'
-
-import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
-
+import { proxyOriginal } from '../../proxy/index'
 import { AnyFunction, DbName, VoidOrPromise } from '../../util/types'
 
-const ensurePromise = (candidate: any): Promise<any> => {
+import { ElectricSQLitePlugin, SQLitePlugin } from '../sqlite-plugin/index'
+
+export const ensurePromise = (candidate: any): Promise<any> => {
   if (candidate instanceof Promise) {
     return candidate
   }
@@ -20,47 +20,29 @@ const ensurePromise = (candidate: any): Promise<any> => {
 
 // The relevant subset of the SQLitePlugin database client API
 // that we need to ensure the client we're electrifying provides.
-export interface Database {
-  databaseFeatures: {
-    isSQLitePluginDatabase: true
-  }
+export interface Database extends SQLitePlugin {
+  // React Native calls the database name `.dbName` using camel case.
+  // this is diffferent to Cordova which uses `.dbname`.
   dbName: DbName
-  openDBs: {
-    [key: DbName]: 'INIT' | 'OPEN'
-  }
-
-  addTransaction(tx: Transaction): void
 
   attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
   detach(dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
 
+  // XXX we use `echoTest` to detect whether the promises API
+  // is enabled. This could be removed if we require the user
+  // to just tell us instead.
   echoTest(success?: AnyFunction, _error?: AnyFunction): VoidOrPromise
 }
 
-// The relevant subset of the SQLiteTransaction interface.
-export interface Transaction {
-  readOnly: boolean
-  success(...args: any[]): any
-}
-
 // Wrap the database client to automatically notify on commit.
-export class ElectricDatabase implements ProxyWrapper {
+export class ElectricDatabase extends ElectricSQLitePlugin {
   // Private properties are not exposed via the proxy.
-  _aliases: {
-    [key: DbName]: DbName
-  }
   _db: Database
   _hasEnabledPromises: boolean
 
-  // This is the one public property we add to the underlying
-  // Database client. Hence calling it our specific name, rather
-  // than `notifier` as this way we're less likely to clobber
-  // some existing property + allowing the user to manually
-  // run `db.electric.notifyCommit()`.
-  electric: Notifier
-
   constructor(db: Database, notifier: Notifier, hasEnabledPromises?: boolean) {
-    this._aliases = {}
+    super(db, notifier)
+
     this._db = db
 
     if (hasEnabledPromises !== undefined) {
@@ -69,40 +51,10 @@ export class ElectricDatabase implements ProxyWrapper {
     else {
       this._hasEnabledPromises = this._db.echoTest() instanceof Promise
     }
-
-    this.electric = notifier
   }
 
-  // Used when re-proxying so the proxy code doesn't need
-  // to know the property name.
-  _setOriginal(db: Database): void {
-    this._db = db
-  }
-  _getOriginal(): Database {
-    return this._db
-  }
-
-  // Everything goes through `addTransaction`, so we patch
-  // it to patch the `tx.success`` function.
-  addTransaction(tx: Transaction): void {
-    const originalSuccessFn = tx.success
-    const notifyCommit = this.electric.notifyCommit.bind(this.electric)
-
-    tx.success = (...args: any[]): any => {
-      if (!tx.readOnly) {
-        notifyCommit()
-      }
-
-      if (!!originalSuccessFn) {
-        originalSuccessFn(...args)
-      }
-    }
-
-    return this._db.addTransaction(tx)
-  }
-
-  // Because the plugin also supports attaching multiple databases
-  // and running SQL statements against them both, we also hook
+  // The React Native plugin also supports attaching multiple databases
+  // and running SQL statements against them both, so we also hook
   // into `attach` and `detach` to keep a running tally of all
   // the names of the attached databases.
   attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
