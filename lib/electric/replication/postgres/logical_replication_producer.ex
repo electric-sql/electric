@@ -35,23 +35,24 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               drop_current_transaction?: false,
               types: %{}
+
     @type t() :: %__MODULE__{
-      conn: pid(),
-      demand: non_neg_integer(),
-      queue: :queue.queue(),
-      relations: %{},
-      transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
-      publication: String.t(),
-      client: module(),
-      origin: String.t(),
-      drop_current_transaction?: boolean(),
-      types: %{}
-    }
+            conn: pid(),
+            demand: non_neg_integer(),
+            queue: :queue.queue(),
+            relations: %{},
+            transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
+            publication: String.t(),
+            client: module(),
+            origin: String.t(),
+            drop_current_transaction?: boolean(),
+            types: %{}
+          }
   end
 
   def start_link(name, opts) do
     GenStage.start_link(__MODULE__, [name, opts])
-   end
+  end
 
   @spec get_name(String.t()) :: Electric.reg_name()
   def get_name(name) do
@@ -257,11 +258,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp build_message(transaction, end_lsn, state) do
-    %{transaction |
-      origin: state.origin,
-      publication: state.publication,
-      lsn: end_lsn
-    }
+    %{transaction | origin: state.origin, publication: state.publication, lsn: end_lsn}
   end
 
   def ack(_, [], []), do: nil

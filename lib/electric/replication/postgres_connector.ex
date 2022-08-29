@@ -64,7 +64,8 @@ defmodule Electric.Replication.PostgresConnector do
   defp child_healthcheck(children, :slot_server = id) do
     case List.keyfind(children, id, 0) do
       {_, pid, _, _} ->
-         Electric.Replication.Postgres.SlotServer.downstream_connected?(pid)
+        Electric.Replication.Postgres.SlotServer.downstream_connected?(pid)
+
       nil ->
         false
     end
@@ -81,8 +82,7 @@ defmodule Electric.Replication.PostgresConnector do
 
   defp initialize_connector(supervisor, args) when is_pid(supervisor) do
     with :ok <- initialize_connector_with_retries(args),
-         :ok <- finish_initialization(supervisor, args)
-      do
+         :ok <- finish_initialization(supervisor, args) do
       Logger.info("Succesfuly initialised connector #{inspect(args.origin)}")
       SchemaRegistry.mark_origin_ready(args.origin)
     else
@@ -103,44 +103,44 @@ defmodule Electric.Replication.PostgresConnector do
     _postgres_slot = Electric.Replication.Postgres.SlotServer.get_name(name)
     postgres_producer = args.producer.get_name(name)
 
-    children =
-      [
-        %{:id => :slot_server,
-          :start => {Electric.Replication.Postgres.SlotServer, :start_link,
-                     [name, args, vaxine_producer]}
-         },
-        %{id: :vaxine_consumer,
-          start: {Electric.Replication.Vaxine.Replicator, :start_link,
-                     [name, postgres_producer]}
-        },
-        %{id: :postgres_producer,
-         start: {args.producer, :start_link, [name, args]}
-        },
-        %{id: :vaxine_producer,
-          start: {args.downstream.producer, :start_link,
-                  [name, args.downstream.producer_opts]}
-        },
-        %{id: :start_subscription,
-          start: {Task, :start_link, [fn -> start_subscription(args) end]},
-          restart: :temporary
-         }
-      ]
-   Enum.reduce_while(children, :ok,
-      fn %{id: id} = child_spec, _ ->
-        case Supervisor.start_child(supervisor, child_spec) do
-          {:ok, _} ->
-            {:cont, :ok}
+    children = [
+      %{
+        :id => :slot_server,
+        :start =>
+          {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
+      },
+      %{
+        id: :vaxine_consumer,
+        start: {Electric.Replication.Vaxine.Replicator, :start_link, [name, postgres_producer]}
+      },
+      %{id: :postgres_producer, start: {args.producer, :start_link, [name, args]}},
+      %{
+        id: :vaxine_producer,
+        start: {args.downstream.producer, :start_link, [name, args.downstream.producer_opts]}
+      },
+      %{
+        id: :start_subscription,
+        start: {Task, :start_link, [fn -> start_subscription(args) end]},
+        restart: :temporary
+      }
+    ]
 
-          {:ok, _, _} ->
-            {:cont, :ok}
+    Enum.reduce_while(children, :ok, fn %{id: id} = child_spec, _ ->
+      case Supervisor.start_child(supervisor, child_spec) do
+        {:ok, _} ->
+          {:cont, :ok}
 
-          {:error, reason} ->
-            Logger.error(
-              "Couldn't finish initialization of the connector. Error while starting #{id}: #{inspect(reason)}"
-            )
-            {:halt, {:error, reason}}
-       end
-      end)
+        {:ok, _, _} ->
+          {:cont, :ok}
+
+        {:error, reason} ->
+          Logger.error(
+            "Couldn't finish initialization of the connector. Error while starting #{id}: #{inspect(reason)}"
+          )
+
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))

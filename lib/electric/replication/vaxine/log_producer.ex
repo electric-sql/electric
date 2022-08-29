@@ -23,22 +23,22 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   defmodule State do
     defstruct address: nil,
-      port: 0,
-      connection_timeout: 0,
-      demand: 0,
-      backoff: nil,
-      socket_pid: nil,
-      last_vx_offset_sent: nil
+              port: 0,
+              connection_timeout: 0,
+              demand: 0,
+              backoff: nil,
+              socket_pid: nil,
+              last_vx_offset_sent: nil
 
     @type t() :: %__MODULE__{
-      address: charlist(),
-      port: non_neg_integer(),
-      connection_timeout: non_neg_integer(),
-      demand: non_neg_integer(),
-      backoff: :backoff.backoff(),
-      socket_pid: pid(),
-      last_vx_offset_sent: term()
-    }
+            address: charlist(),
+            port: non_neg_integer(),
+            connection_timeout: non_neg_integer(),
+            demand: non_neg_integer(),
+            backoff: :backoff.backoff(),
+            socket_pid: pid(),
+            last_vx_offset_sent: term()
+          }
   end
 
   @impl DownstreamProducer

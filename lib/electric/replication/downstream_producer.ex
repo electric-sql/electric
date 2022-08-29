@@ -11,8 +11,8 @@ defmodule Electric.Replication.DownstreamProducer do
   @typedoc "The events produced follow this typespec"
   @type event :: {Electric.Replication.Changes.Transaction.t(), offset_state}
 
-  @callback start_link(name :: Electric.reg_name(), opts :: keyword())
-  :: {:ok, pid()} | {:error, term()}
+  @callback start_link(name :: Electric.reg_name(), opts :: keyword()) ::
+              {:ok, pid()} | {:error, term()}
   @callback start_replication(producer :: pid(), offset_state) :: :ok
   @callback connected?(producer :: pid()) :: boolean()
 
