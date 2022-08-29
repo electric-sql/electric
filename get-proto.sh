@@ -13,4 +13,4 @@ cd satellite
 echo "Prepare sparse"
 git sparse-checkout init --no-cone
 git sparse-checkout set *.proto
-git checkout bd81a40f328896571c782ceb53f2b298568f62bc
+git checkout 7ff60ccaa4edc44121f49631cb19c1fce2e8f21c

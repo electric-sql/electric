@@ -62,3 +62,14 @@ endif
 
 rm_offset_storage:
 	rm vx_pg_offset_storage_*
+
+update_protobuf: deps_proto
+	mix protox.generate \
+		--output-path=./lib/electric/satellite/satellite_pb.ex \
+		./proto/satellite/satellite.proto
+
+shell:
+	iex -S mix
+
+shell_clean:
+	iex -S mix run --no-start

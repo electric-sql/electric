@@ -76,12 +76,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
 
   def initialize_producer(demand \\ 100) do
     {:producer, state} =
-      LogicalReplicationProducer.init(["regname", %{
-        client: MockPostgresClient,
-        origin: "mock_postgres",
-        replication: %{publication: "mock_pub", slot: "mock_slot"},
-        connection: %{}
-      }])
+      LogicalReplicationProducer.init([
+        "regname",
+        %{
+          client: MockPostgresClient,
+          origin: "mock_postgres",
+          replication: %{publication: "mock_pub", slot: "mock_slot"},
+          connection: %{}
+        }
+      ])
 
     {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state

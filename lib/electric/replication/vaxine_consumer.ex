@@ -1,4 +1,4 @@
-defmodule Electric.Replication.Vaxine.Replicator do
+defmodule Electric.Replication.Vaxine.LogConsumer do
   use GenStage
 
   alias Electric.Replication.Changes.Transaction
@@ -9,9 +9,10 @@ defmodule Electric.Replication.Vaxine.Replicator do
 
   defmodule State do
     defstruct producer: nil
+
     @type t() :: %__MODULE__{
-      producer: Electric.reg_name()
-    }
+            producer: Electric.reg_name()
+          }
   end
 
   @spec start_link(String.t(), Electric.reg_name()) :: GenServer.on_start()
@@ -25,7 +26,7 @@ defmodule Electric.Replication.Vaxine.Replicator do
   end
 
   defp name(param) do
-     {:n, :l, {__MODULE__, param}}
+    {:n, :l, {__MODULE__, param}}
   end
 
   defp producer_info() do
@@ -38,7 +39,7 @@ defmodule Electric.Replication.Vaxine.Replicator do
     :gproc.nb_wait(producer)
 
     Logger.metadata(vx_consumer: origin)
-    Logger.debug("Vaxine consumer started for #{origin}")
+    Logger.debug("Vaxine consumer started for #{origin} consume from #{inspect(producer)}")
     {:consumer, %State{producer: producer}}
   end
 
@@ -54,23 +55,27 @@ defmodule Electric.Replication.Vaxine.Replicator do
 
   @impl true
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
+    Logger.debug("request subscription")
     :ok = GenStage.async_subscribe(self(), [{:to, pid} | producer_info()])
     {:noreply, [], state}
   end
 
   @impl true
-  def handle_info(_, state) do
+  def handle_info(msg, state) do
+    Logger.warn("request unhandled #{inspect(msg)}")
     {:noreply, [], state}
   end
 
   @impl true
   def handle_events(events, _, state) do
-    state = Enum.reduce(events, state, fn event, state1 ->
-      handle_event(event, state1)
-    end)
+    state =
+      Enum.reduce(events, state, fn event, state1 ->
+        handle_event(event, state1)
+      end)
+
     {:noreply, [], state}
   end
-  
+
   defp handle_event(%Transaction{changes: []} = tx, state) do
     %{origin: _origin, publication: publication} = tx
 
@@ -79,28 +84,29 @@ defmodule Electric.Replication.Vaxine.Replicator do
   end
 
   defp handle_event(%Transaction{} = tx, state) do
-     %{origin: origin, publication: publication} = tx
+    %Transaction{ack_fn: ack_fn, origin: origin, publication: publication} = tx
 
-    Logger.debug(
-      "New transaction in publication `#{publication}`: #{inspect(tx, pretty: true)}"
-    )
+    Logger.debug("New transaction in publication `#{publication}`: #{inspect(tx, pretty: true)}")
 
-    res = Electric.Retry.retry_while total_timeout: 10000, max_single_backoff: 1000 do
-      case Vaxine.transaction_to_vaxine(tx, publication, origin) do
-        :ok ->
-          # FIXME: Persist LSN from PG to Vaxine
-          {:halt, :ok}
+    res =
+      Electric.Retry.retry_while total_timeout: 10000, max_single_backoff: 1000 do
+        case Vaxine.transaction_to_vaxine(tx, publication, origin) do
+          :ok ->
+            # FIXME: Persist LSN from PG to Vaxine
+            :ok = ack_fn.()
+            {:halt, :ok}
 
-        {_change, error} ->
-          Logger.warning(
-            "Failure to write change into vaxine #{error}"
-          )
-          {:cont, tx}
+          {_change, error} ->
+            Logger.warning("Failure to write change into vaxine #{error}")
+            {:cont, tx}
+        end
       end
-    end
+
     case res do
-      :ok -> {:noreply, [], state}
-      _   ->
+      :ok ->
+        {:noreply, [], state}
+
+      _ ->
         # FIXME: Vaxine node might be down, reconnect to other instance?
         {:stop, :vaxine_error, state}
     end

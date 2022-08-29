@@ -32,7 +32,6 @@ defmodule Electric.Replication.VaxineTest do
   end
 
   setup_all _ do
-    #Electric.Postgres.SchemaRegistry.start_link(:nil)
     Electric.Test.SchemaRegistryHelper.initialize_registry(
       "fake_publication",
       {"fake", "to_vaxine_test"},
@@ -41,10 +40,7 @@ defmodule Electric.Replication.VaxineTest do
       content_b: :text
     )
 
-    on_exit(fn ->
-      SchemaRegistry.clear_replicated_tables("fake_publication")
-      #SchemaRegistry.stop()
-    end)
+    on_exit(fn -> SchemaRegistry.clear_replicated_tables("fake_publication") end)
 
     :ok
   end

@@ -7,6 +7,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Replication.Vaxine.LogProducer
 
   setup_all _ do
     SchemaRegistry.put_replicated_tables("fake_publication", [
@@ -95,16 +96,17 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Slot server lifecycle" do
     setup do
-      server = start_supervised!(
-        Supervisor.child_spec(%{id: SlotServer,
-                                start: {SlotServer, :start_link, start_args("fake_slot")}
-                               }, []))
+      server =
+        start_supervised!(
+          Supervisor.child_spec(
+            %{id: SlotServer, start: {SlotServer, :start_link, start_args("fake_slot")}},
+            []
+          )
+        )
+
       producer = start_supervised!({DownstreamProducerMock, producer_name()})
 
-      {:ok, server: server,
-            send_fn: send_back_message(self()),
-            producer: producer
-      }
+      {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
 
     test "downstream_connected? calls downstream producer to check if its connected", %{
@@ -173,10 +175,14 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Interaction with TCP server" do
     test "stops replication when process that started replication dies" do
-      server = start_supervised!(
-        Supervisor.child_spec(%{id: SlotServer,
-                                start: {SlotServer, :start_link, start_args("test_slot")}
-                               }, []))
+      server =
+        start_supervised!(
+          Supervisor.child_spec(
+            %{id: SlotServer, start: {SlotServer, :start_link, start_args("test_slot")}},
+            []
+          )
+        )
+
       _producer = start_supervised!({DownstreamProducerMock, producer_name()})
 
       task = Task.async(fn -> start_replication(server, send_back_message(self())) end)
@@ -236,15 +242,14 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   end
 
   defp start_args(slot) do
-    [slot,
-    %{replication: %{subscription: slot},
-      downstream: %{producer: DownstreamProducerMock}
-    },
-     producer_name()
+    [
+      slot,
+      %{replication: %{subscription: slot}, downstream: %{producer: DownstreamProducerMock}},
+      LogProducer.get_name(producer_name())
     ]
   end
 
   defp producer_name do
-    SlotServer.get_name("producer")
+    "producer"
   end
 end

@@ -78,17 +78,23 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
   end
 
   defp start_log_producer_with_forwarder!(number \\ 1) do
-    producer_args = ["log_producer_#{number}",
-                      [vaxine_hostname: "localhost", vaxine_port: 8088]]
+    producer_args = ["log_producer_#{number}", [vaxine_hostname: "localhost", vaxine_port: 8088]]
+
     producer_pid =
       start_supervised!(
-        Supervisor.child_spec(%{id: :"log_producer_#{number}",
-                                start: {LogProducer, :start_link, producer_args}}, []))
+        Supervisor.child_spec(
+          %{id: :"log_producer_#{number}", start: {LogProducer, :start_link, producer_args}},
+          []
+        )
+      )
 
     consumer_pid =
       start_supervised!(
-        Supervisor.child_spec(%{id: :"log_consumer_#{number}",
-                                start: {TestConsumer, :start_link, [self()]}}, []))
+        Supervisor.child_spec(
+          %{id: :"log_consumer_#{number}", start: {TestConsumer, :start_link, [self()]}},
+          []
+        )
+      )
 
     {:ok, _} = GenStage.sync_subscribe(consumer_pid, to: producer_pid)
     producer_pid

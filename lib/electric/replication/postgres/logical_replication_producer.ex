@@ -3,6 +3,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   require Logger
 
   alias Electric.Postgres.LogicalReplication
+  alias Electric.Postgres.LogicalReplication.Messages
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -35,23 +36,24 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               drop_current_transaction?: false,
               types: %{}
+
     @type t() :: %__MODULE__{
-      conn: pid(),
-      demand: non_neg_integer(),
-      queue: :queue.queue(),
-      relations: %{},
-      transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
-      publication: String.t(),
-      client: module(),
-      origin: String.t(),
-      drop_current_transaction?: boolean(),
-      types: %{}
-    }
+            conn: pid(),
+            demand: non_neg_integer(),
+            queue: :queue.queue(),
+            relations: %{Messages.relation_id() => %Relation{}},
+            transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
+            publication: String.t(),
+            client: module(),
+            origin: String.t(),
+            drop_current_transaction?: boolean(),
+            types: %{}
+          }
   end
 
   def start_link(name, opts) do
     GenStage.start_link(__MODULE__, [name, opts])
-   end
+  end
 
   @spec get_name(String.t()) :: Electric.reg_name()
   def get_name(name) do
@@ -248,6 +250,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   # TODO: Typecast to meaningful Elixir types here later
+  @spec data_tuple_to_map([Relation.Column.t()], tuple()) :: term()
   defp data_tuple_to_map(_columns, nil), do: %{}
 
   defp data_tuple_to_map(columns, tuple_data) do
@@ -256,24 +259,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
-  defp build_message(transaction, end_lsn, state) do
-    %{transaction |
-      origin: state.origin,
-      publication: state.publication,
-      lsn: end_lsn
+  defp build_message(%Transaction{} = transaction, end_lsn, %State{} = state) do
+    %Transaction{
+      transaction
+      | origin: state.origin,
+        publication: state.publication,
+        lsn: end_lsn,
+        ack_fn: fn -> ack(state.client, state.conn, state.origin, end_lsn) end
     }
   end
 
-  def ack(_, [], []), do: nil
-  def ack(_, _, x) when length(x) > 0, do: throw("XXX ack failure handling not yet implemented")
-
-  def ack({conn, origin}, successful, _) do
-    {_, _, {client, end_lsn}} =
-      successful
-      |> List.last()
-      |> Map.fetch!(:acknowledger)
-
-    Logger.debug("Acknowledging #{end_lsn}", origin: origin)
-    client.acknowledge_lsn(conn, end_lsn)
+  @spec ack(module(), pid(), String.t(), Electric.Postgres.Lsn.t()) :: :ok
+  def ack(client, conn, origin, lsn) do
+    Logger.debug("Acknowledging #{lsn}", origin: origin)
+    client.acknowledge_lsn(conn, lsn)
   end
 end

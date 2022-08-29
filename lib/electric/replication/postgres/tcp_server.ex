@@ -120,24 +120,24 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   defmodule State do
     defstruct socket: nil,
-      transport: nil,
-      client: nil,
-      settings: %{},
-      accept_ssl: false,
-      mode: :normal,
-      slot: nil,
-      slot_server: nil
+              transport: nil,
+              client: nil,
+              settings: %{},
+              accept_ssl: false,
+              mode: :normal,
+              slot: nil,
+              slot_server: nil
 
     @type t() :: %__MODULE__{
-      socket: :ranch_transport.socket(),
-      transport: module(),
-      client: String.t() | nil,
-      settings: %{},
-      accept_ssl: boolean(),
-      mode: :normal | :copy,
-      slot: SlotServer.slot_name() | nil,
-      slot_server: SlotServer.slot_reg() | nil
-    }
+            socket: :ranch_transport.socket(),
+            transport: module(),
+            client: String.t() | nil,
+            settings: %{},
+            accept_ssl: boolean(),
+            mode: :normal | :copy,
+            slot: SlotServer.slot_name() | nil,
+            slot_server: SlotServer.slot_reg() | nil
+          }
   end
 
   @impl :ranch_protocol
@@ -159,8 +159,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     Logger.metadata(pg_client: client)
     Logger.debug("Connection initialized by #{client}")
 
-    {:noreply, %State{state | socket: socket, client: client},
-     {:continue, :establish_connection}}
+    {:noreply, %State{state | socket: socket, client: client}, {:continue, :establish_connection}}
   end
 
   def handle_continue(:establish_connection, state) do
@@ -515,8 +514,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> tcp_send(state)
 
     # FIXME: we should handle screnario when slot server is down at this moment
-    SlotServer.start_replication(slot_server,
-      &tcp_send(&1, state), publication, target_lsn)
+    SlotServer.start_replication(slot_server, &tcp_send(&1, state), publication, target_lsn)
 
     {nil, %{state | mode: :copy, slot: slot_name, slot_server: slot_server}}
   end

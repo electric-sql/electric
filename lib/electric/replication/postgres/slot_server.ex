@@ -24,16 +24,17 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
-      send_fn: nil,
-      slot_name: nil,
-      publication: nil,
-      timer: nil,
-      socket_process_ref: nil,
-      producer: nil,
-      producer_pid: nil,
-      sent_relations: %{},
-      current_vx_offset: nil,
-      opts: []
+              send_fn: nil,
+              slot_name: nil,
+              publication: nil,
+              timer: nil,
+              socket_process_ref: nil,
+              producer: nil,
+              producer_name: nil,
+              producer_pid: nil,
+              sent_relations: %{},
+              current_vx_offset: nil,
+              opts: []
   end
 
   defguardp replication_started?(state) when not is_nil(state.send_fn)
@@ -47,11 +48,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Public interface
 
   @spec start_link(
-       String.t(),
-       %{
-          replication: %{subscription: binary()},
-          downstream: %{producer: module()}
-        }, Electric.reg_name()) :: GenServer.on_start()
+          String.t(),
+          %{
+            replication: %{subscription: binary()},
+            downstream: %{producer: module()}
+          },
+          Electric.reg_name()
+        ) :: GenServer.on_start()
   def start_link(reg_name, init_args, producer) do
     GenStage.start_link(__MODULE__, [reg_name, init_args, producer])
   end
@@ -74,7 +77,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     [min_demand: 10, max_demand: 50]
   end
 
-#  @spec connected?(slot_name()) :: boolean()
+  #  @spec connected?(slot_name()) :: boolean()
   def connected?(server) do
     GenStage.call(server, :connected?)
   end
@@ -93,7 +96,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
     GenStage.call(server, :get_current_lsn)
   end
 
-  @spec start_replication(Electric.reg_name(), send_fn(), String.t(), Lsn.t()) :: :ok | {:error, term()}
+  @spec start_replication(Electric.reg_name(), send_fn(), String.t(), Lsn.t()) ::
+          :ok | {:error, term()}
   def start_replication(server, send_fn, publication, lsn),
     do: GenStage.call(server, {:start_replication, send_fn, publication, lsn})
 
@@ -106,6 +110,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def send_keepalive(pid) when is_pid(pid) do
     send(pid, :send_keepalive)
   end
+
   def send_keepalive(server) do
     send_keepalive(GenServer.whereis(server))
   end
@@ -123,11 +128,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
     Logger.metadata(origin: origin, pg_slot: slot)
     Logger.debug("Started slot server")
 
-    {:consumer, %State{ slot_name: slot,
-                        producer: args.downstream.producer,
-                        opts: Map.get(args.replication, :opts, [])
-                      }
-    }
+    {:consumer,
+     %State{
+       slot_name: slot,
+       producer_name: producer,
+       producer: args.downstream.producer,
+       opts: Map.get(args.replication, :opts, [])
+     }}
   end
 
   @impl true
@@ -154,7 +161,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @impl true
   def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
     Logger.warning("Replication already started #{state.slot_name}")
-
     {:reply, {:error, :replication_already_started}, [], state}
   end
 
@@ -195,7 +201,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
     Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
 
     DownstreamProducer.start_replication(
-       state.producer, state.producer_pid, vx_offset)
+      state.producer,
+      state.producer_pid,
+      vx_offset
+    )
 
     {:noreply, [], %{state | current_lsn: start_lsn}}
   end
@@ -215,7 +224,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
     :ok = GenStage.async_subscribe(self(), [{:to, pid} | producer_info()])
-    {:noreply, [], %State{state | producer_pid: pid} }
+    {:noreply, [], %State{state | producer_pid: pid}}
   end
 
   @impl true
@@ -247,7 +256,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_cancel({:down, _}, _from, state) do
-    :gproc.nb_wait(state.producer)
+    :gproc.nb_wait(state.producer_name)
     {:noreply, [], state}
   end
 
