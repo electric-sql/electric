@@ -1,5 +1,5 @@
 import { Filesystem } from '../filesystems/index'
-import { AnyFunction, DbName } from '../util/types'
+import { DbName } from '../util/types'
 
 import { Satellite, SatelliteClient, SatelliteRegistry } from './index'
 import { SatelliteProcess } from './process'
@@ -18,50 +18,43 @@ class GlobalRegistry implements SatelliteRegistry {
   ensureStarted(dbName: DbName, client: SatelliteClient, fs: Filesystem): Promise<Satellite> {
     const satellites = this._satellites
 
-    return new Promise((resolve: AnyFunction) => {
-      if (!(dbName in satellites)) {
-        satellites[dbName] = new SatelliteProcess(dbName, client, fs)
-      }
+    if (!(dbName in satellites)) {
+      satellites[dbName] = new SatelliteProcess(dbName, client, fs)
+    }
 
-      resolve(satellites[dbName])
-    })
+    return Promise.resolve(satellites[dbName])
   }
 
   stop(dbName: DbName): Promise<void> {
     const satellites = this._satellites
 
-    return new Promise((resolve: AnyFunction) => {
-      if (dbName in satellites) {
-        const satellite = satellites[dbName]
+    if (dbName in satellites) {
+      const satellite = satellites[dbName]
 
-        satellite.stop().then(() => {
+      return satellite.stop()
+        .then(() => {
           delete satellites[dbName]
-
-          resolve()
         })
-      }
-      else {
-        resolve()
-      }
-    })
+    }
+
+    return Promise.resolve()
   }
 
   stopAll(): Promise<void> {
+    const promisesToStop = []
     const satellites = this._satellites
 
-    return new Promise((resolve: AnyFunction) => {
-      const promisesToStop = []
-
-      for (const [dbName, satellite] of Object.entries(satellites)) {
-        promisesToStop.push(
-          satellite.stop().then(() => {
+    for (const [dbName, satellite] of Object.entries(satellites)) {
+      promisesToStop.push(
+        satellite.stop()
+          .then(() => {
             delete satellites[dbName]
           })
-        )
-      }
+      )
+    }
 
-      Promise.all(promisesToStop).then(() => resolve())
-    })
+    return Promise.all(promisesToStop)
+      .then(() => {})
   }
 }
 

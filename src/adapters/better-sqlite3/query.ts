@@ -2,7 +2,7 @@ import { QueryAdapter as QueryAdapterInterface } from '../../query-adapters/inde
 
 import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
-import { AnyFunction, BindParams, DbNamespace, Row } from '../../util/types'
+import { BindParams, DbNamespace, Row } from '../../util/types'
 
 import { Database, Statement } from './database'
 
@@ -22,9 +22,7 @@ export class QueryAdapter implements QueryAdapterInterface {
       ? this.db.prepare(query)
       : query
 
-    return new Promise((resolve: AnyFunction) => {
-      resolve(stmt.all(bindParams))
-    })
+    return Promise.resolve(stmt.all(bindParams))
   }
 
   tableNames(query: Query): QualifiedTablename[] {

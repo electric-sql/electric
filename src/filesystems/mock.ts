@@ -1,4 +1,3 @@
-import { AnyFunction } from '../util/types'
 import { File, Filesystem } from './index'
 
 export class MockFile implements File {
@@ -13,20 +12,16 @@ export class MockFile implements File {
 
 export class MockFilesystem implements Filesystem {
   listDirectory(path: string): Promise<MockFile[]> {
-    return new Promise((resolve: AnyFunction) => {
-      const normalisedPath = path.endsWith('/') ? path.slice(0, -1) : path
-      const files = [
-        new MockFile('foo.sql', `${normalisedPath}/foo.sql`),
-        new MockFile('bar.sql', `${normalisedPath}/bar.sql`)
-      ]
+    const normalisedPath = path.endsWith('/') ? path.slice(0, -1) : path
+    const files = [
+      new MockFile('foo.sql', `${normalisedPath}/foo.sql`),
+      new MockFile('bar.sql', `${normalisedPath}/bar.sql`)
+    ]
 
-      resolve(files)
-    })
+    return Promise.resolve(files)
   }
 
   readFile(file: MockFile): Promise<string> {
-    return new Promise((resolve: AnyFunction) => {
-      resolve(`-- ${file.name}`)
-    })
+    return Promise.resolve(`-- ${file.name}`)
   }
 }

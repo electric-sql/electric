@@ -1,7 +1,7 @@
 import { Filesystem } from '../filesystems/index'
 import { ChangeNotifier } from '../notifiers/index'
 import { MockChangeNotifier } from '../notifiers/mock'
-import { AnyFunction, DbName } from '../util/types'
+import { DbName } from '../util/types'
 import { Satellite, SatelliteClient, SatelliteRegistry } from './index'
 
 export class MockSatellite implements Satellite {
@@ -20,9 +20,7 @@ export class MockSatellite implements Satellite {
   }
 
   stop(): Promise<void> {
-    return new Promise((resolve: AnyFunction) => {
-      resolve()
-    })
+    return Promise.resolve()
   }
 }
 
@@ -36,27 +34,21 @@ class MockRegistry implements SatelliteRegistry {
   }
 
   ensureStarted(dbName: DbName, client: SatelliteClient, fs: Filesystem): Promise<Satellite> {
-    return new Promise((resolve: AnyFunction) => {
-      if (!(dbName in this._satellites)) {
-        this._satellites[dbName] = new MockSatellite(dbName, client, fs)
-      }
+    if (!(dbName in this._satellites)) {
+      this._satellites[dbName] = new MockSatellite(dbName, client, fs)
+    }
 
-      resolve(this._satellites[dbName])
-    })
+    return Promise.resolve(this._satellites[dbName])
   }
   stop(dbName: DbName): Promise<void> {
-    return new Promise((resolve: AnyFunction) => {
-      delete this._satellites[dbName]
+    delete this._satellites[dbName]
 
-      resolve()
-    })
+    return Promise.resolve()
   }
   stopAll(): Promise<void> {
-    return new Promise((resolve: AnyFunction) => {
-      this._satellites = {}
+    this._satellites = {}
 
-      resolve()
-    })
+    return Promise.resolve()
   }
 }
 
