@@ -44,14 +44,12 @@ We also provide an `initElectricSqlJs` function to instantiate a persistent, ele
 
 ```js
 // Use instead of the default `initSqlJs` from SQL.js.
-import { initElectricSqlJs } from 'electric-sql/browser'
+import { makeElectric, initElectricSqlJs } from 'electric-sql/browser'
 
-// Initialise a persistent, named, electrified SQL.js database.
+// Initialise a persistent, electrified SQL.js database.
 initElectricSqlJs({locateFile: file => `/${file}`})
-  .then(ElectricSQL => {
-    const db = new ElectricSQL.Database('example.db')
-
-    // Use as normal, e.g.:
+  .then(SQL => makeElectric(SQL, 'example.db'))
+  .then(db => { // Use as normal, e.g.:
     db.exec('SELECT 1')
   })
 ```
