@@ -1,13 +1,10 @@
 import test from 'ava'
 
-import { electrify } from '../../src/adapters/react-native-sqlite-storage/index'
-import { MockDatabase, enablePromiseRuntime } from '../../src/adapters/react-native-sqlite-storage/mock'
+import { initTestable } from '../../src/adapters/react-native-sqlite-storage/test'
 import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
-import { MockNotifier } from '../../src/notifiers/mock'
 
-test('electrify returns an equivalent database client', t => {
-  const original = new MockDatabase('test.db')
-  const db = electrify(original)
+test('electrify returns an equivalent database client', async t => {
+  const [original, _notifier, db] = await initTestable('test.db')
 
   const originalKeys = Object.getOwnPropertyNames(original)
   const originalPrototype = Object.getPrototypeOf(original)
@@ -18,10 +15,8 @@ test('electrify returns an equivalent database client', t => {
   })
 })
 
-test('running a transaction runs notifyCommit', t => {
-  const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('running a transaction runs notifyCommit', async t => {
+  const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -31,10 +26,8 @@ test('running a transaction runs notifyCommit', t => {
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a read only transaction does not notifyCommit', t => {
-  const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('running a read only transaction does not notifyCommit', async t => {
+  const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -44,10 +37,8 @@ test('running a read only transaction does not notifyCommit', t => {
   t.is(notifier.notifications.length, 0)
 })
 
-test('attaching a database now notifies for both', t => {
-  const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('attaching a database now notifies for both', async t => {
+  const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -57,10 +48,8 @@ test('attaching a database now notifies for both', t => {
   t.is(notifier.notifications.length, 2)
 })
 
-test('detaching a database notifies for one less', t => {
-  const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('detaching a database notifies for one less', async t => {
+  const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -75,11 +64,10 @@ test('detaching a database notifies for one less', t => {
   t.is(notifier.notifications.length, 3)
 })
 
-test('enablePromiseRuntime(mockDb) works', t => {
-  const mockDb = new MockDatabase('test.db')
-  const original = enablePromiseRuntime(mockDb)
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('enablePromiseRuntime(mockDb) works', async t => {
+  const [original, notifier, db] = await initTestable('test.db', {
+    enablePromises: true
+  })
 
   t.is(notifier.dbNames.size, 1)
 
@@ -89,21 +77,19 @@ test('enablePromiseRuntime(mockDb) works', t => {
     })
 })
 
-test('working with the promise runtime works', t => {
-  const mockDb = new MockDatabase('test.db')
-  const original = enablePromiseRuntime(mockDb)
-  const notifier = new MockNotifier(original.dbName)
-  const db = electrify(original, notifier)
+test('working with the promise runtime works', async t => {
+  const [original, notifier, db] = await initTestable('test.db', {
+    enablePromises: true
+  })
 
   t.is(notifier.notifications.length, 0)
 
-  const promise = db.attach('lala.db', 'lala')
+  return db
+    .attach('lala.db', 'lala')
     .then(() => {
       const tx = new MockSQLitePluginTransaction()
       db.addTransaction(tx)
 
       t.is(notifier.notifications.length, 2)
     })
-
-  return promise
 })

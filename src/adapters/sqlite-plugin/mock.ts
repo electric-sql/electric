@@ -1,4 +1,4 @@
-import { DbName } from '../../util/types'
+import { AnyFunction, BindParams, DbName } from '../../util/types'
 import { SQLitePlugin, SQLitePluginTransaction } from './index'
 
 export abstract class MockSQLitePlugin implements SQLitePlugin {
@@ -22,14 +22,29 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
       tx.success('mocked!')
     }
   }
+
+  readTransaction(_txFn: AnyFunction, _error?: AnyFunction, success?: AnyFunction): void {
+    this.addTransaction(new MockSQLitePluginTransaction(true, success))
+  }
+  transaction(_txFn: AnyFunction, _error?: AnyFunction, success?: AnyFunction): void {
+    this.addTransaction(new MockSQLitePluginTransaction(false, success))
+  }
 }
 
 export class MockSQLitePluginTransaction implements SQLitePluginTransaction {
   readOnly: boolean
+  successCallback?: AnyFunction
 
-  constructor(readOnly: boolean = false) {
+  constructor(readOnly: boolean = false, successCallback?: AnyFunction) {
     this.readOnly = readOnly
+    this.successCallback = successCallback
   }
 
-  success(..._args: any[]): void {}
+  success(...args: any[]): void {
+    if (this.successCallback !== undefined) {
+      this.successCallback(...args)
+    }
+  }
+
+  executeSql(_sql: string, _values?: BindParams, _success?: AnyFunction, _error?: AnyFunction): void {}
 }

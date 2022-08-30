@@ -1,232 +1,33 @@
-import { Notifier } from '../../notifiers/index'
-import { EmitNotifier } from '../../notifiers/event'
+// N.b.: importing this module is an entrypoint that imports the better-sqlite3
+// environment dependencies. Specifically the node filesystem.
+import { DbName } from '../../util/types'
 
-import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
+import { DEFAULTS } from '../../electric/config'
+import {
+  ElectricNamespace,
+  ElectrifyOptions,
+  electrify as baseElectrify
+} from '../../electric/index'
 
-import { isPotentiallyDangerous } from '../../util/parser'
-import { BindParams, DbName, Row } from '../../util/types'
+import { NodeFilesystem } from '../../filesystems/node'
+import { EmitCommitNotifier } from '../../notifiers/emit'
+import { globalRegistry } from '../../satellite/registry'
 
-// The relevant subset of the Better-SQLite3 database client
-// that we need to ensure the client we're electrifying provides.
-export interface Database {
-  name: DbName
-  inTransaction: boolean
+import { Database, ElectricDatabase } from './database'
+import { QueryAdapter } from './query'
+import { SatelliteClient } from './satellite'
 
-  exec(sql: string): Database
-  prepare(sql: string): Statement
-  transaction(fn: (...args: any[]) => any): (...args: any[]) => any
-}
+export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Database> => {
+  const dbName: DbName = db.name
+  const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
+  const adapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
+  const client = opts.satelliteClient || new SatelliteClient(db)
+  const fs = opts.filesystem || new NodeFilesystem()
+  const notifier = opts.notifier || new EmitCommitNotifier(dbName)
+  const registry = opts.satelliteRegistry || globalRegistry
 
-export interface Info {
-  changes: number
-  lastInsertRowid: number
-}
+  const namespace = new ElectricNamespace(notifier, adapter)
+  const electric = new ElectricDatabase(db, namespace)
 
-// The relevant subset of the Better-SQLite3 prepared statement.
-export interface Statement {
-  database: Database
-  readonly: boolean
-
-  run(bindParams: BindParams): Info
-  get(bindParams: BindParams): Row | void
-  all(bindParams: BindParams): Row[]
-  iterate(bindParams: BindParams): Iterable<Row>
-}
-
-// `CallableTransaction` wraps the `txFn` returned from `db.transaction(fn)`
-// so we can call `notifier.notifyCommit()` after the transaction executes --
-// be it directly, or via the `deferred`, `immediate`, or `exclusive` methods.
-//
-// See https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#transactionfunction---function
-class CallableTransaction extends Function {
-  txFn: any
-  notifier: Notifier
-
-  constructor(txFn: (...args: any[]) => any, notifier: Notifier) {
-    super()
-
-    this.txFn = txFn
-    this.notifier = notifier
-
-    return new Proxy(this, {
-      apply: (target, _thisArg, args) => target._call(...args)
-    })
-  }
-
-  _call(...args: any[]): any {
-    const retval = this.txFn(...args)
-
-    this.notifyCommit()
-
-    return retval
-  }
-
-  deferred(...args: any[]): any {
-    const retval = this.txFn.deferred(...args)
-
-    this.notifyCommit()
-
-    return retval
-  }
-
-  immediate(...args: any[]): any {
-    const retval = this.txFn.immediate(...args)
-
-    this.notifyCommit()
-
-    return retval
-  }
-
-  exclusive(...args: any[]): any {
-    const retval = this.txFn.exclusive(...args)
-
-    this.notifyCommit()
-
-    return retval
-  }
-
-  notifyCommit() {
-    this.notifier.notifyCommit()
-  }
-}
-
-// Wrap the database client to automatically notify on commit.
-export class ElectricDatabase implements ProxyWrapper {
-  // Private properties are not exposed via the proxy.
-  _db: Database
-
-  // This is the one public property we add to the underlying
-  // Database client. Hence calling it our specific name, rather
-  // than `notifier` as this way we're less likely to clobber
-  // some existing property + allowing the user to manually
-  // run `db.electric.notifyCommit()`.
-  electric: Notifier
-
-  constructor(db: Database, notifier: Notifier) {
-    this._db = db
-    this.electric = notifier
-  }
-
-  // Used when re-proxying so the proxy code doesn't need
-  // to know the property name.
-  _setOriginal(db: Database): void {
-    this._db = db
-  }
-  _getOriginal(): Database {
-    return this._db
-  }
-
-  exec(sql: string): ElectricDatabase {
-    const shouldNotify = isPotentiallyDangerous(sql)
-
-    this._db.exec(sql)
-
-    if (shouldNotify) {
-      this.electric.notifyCommit()
-    }
-
-    return this
-  }
-
-  prepare(sql: string): Statement {
-    const stmt = this._db.prepare(sql)
-    const electric = new ElectricStatement(stmt, this.electric)
-
-    return proxyOriginal(stmt, electric)
-  }
-
-  transaction(fn: (...args: any[]) => any): CallableTransaction {
-    const txFn = this._db.transaction(fn)
-    const notifier = this.electric
-
-    return new CallableTransaction(txFn, notifier)
-  }
-}
-
-// Wrap prepared statements to automatically notify on write
-// when executed outside of a transaction.
-export class ElectricStatement implements ProxyWrapper {
-  _stmt: Statement
-  electric: Notifier
-
-  constructor(stmt: Statement, notifier: Notifier) {
-    this._stmt = stmt
-    this.electric = notifier
-  }
-
-  _setOriginal(stmt: Statement): void {
-    this._stmt = stmt
-  }
-  _getOriginal(): Statement {
-    return this._stmt
-  }
-
-  _shouldNotify() {
-    return !this._stmt.readonly
-        && !this._stmt.database.inTransaction
-  }
-
-  run(bindParams: BindParams): Info {
-    const shouldNotify = this._shouldNotify()
-    const info = this._stmt.run(bindParams)
-
-    if (shouldNotify) {
-      this.electric.notifyCommit()
-    }
-
-    return info
-  }
-
-  get(bindParams: BindParams): Row | void {
-    const shouldNotify = this._shouldNotify()
-    const row = this._stmt.get(bindParams)
-
-    if (shouldNotify) {
-      this.electric.notifyCommit()
-    }
-
-    return row
-  }
-
-  all(bindParams: BindParams): Row[] {
-    const shouldNotify = this._shouldNotify()
-    const rows = this._stmt.all(bindParams)
-
-    if (shouldNotify) {
-      this.electric.notifyCommit()
-    }
-
-    return rows
-  }
-
-  iterate(bindParams: BindParams): IterableIterator<Row> {
-    const shouldNotify = this._shouldNotify()
-    const notifyCommit = this.electric.notifyCommit.bind(this.electric)
-
-    const iterRows = this._stmt.iterate(bindParams)
-
-    function *generator(): IterableIterator<Row> {
-      try {
-        for (const row of iterRows) {
-          yield row
-        }
-      }
-      finally {
-        if (shouldNotify) {
-          notifyCommit()
-        }
-      }
-    }
-
-    return generator()
-  }
-}
-
-export const electrify = (db: Database, notifier?: Notifier): Database => {
-  if (!notifier) {
-    notifier = new EmitNotifier(db.name)
-  }
-  const electric = new ElectricDatabase(db, notifier)
-
-  return proxyOriginal(db, electric)
+  return baseElectrify(dbName, db, electric, client, fs, registry)
 }

@@ -1,6 +1,6 @@
-import { Notifier } from '../../notifiers/index'
+import { ElectricNamespace } from '../../electric/index'
 import { ProxyWrapper } from '../../proxy/index'
-import { DbName } from '../../util/types'
+import { AnyFunction, BindParams, DbName, VoidOrPromise } from '../../util/types'
 
 // The common subset of the SQLitePlugin database client API
 // shared by Cordova and React Native.
@@ -12,13 +12,19 @@ export interface SQLitePlugin {
     [key: DbName]: 'INIT' | 'OPEN'
   }
 
+  // Never promisified.
   addTransaction(tx: SQLitePluginTransaction): void
+
+  // May be promisified.
+  readTransaction(txFn: AnyFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
+  transaction(txFn: AnyFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
 }
 
 // The relevant subset of the SQLitePluginTransaction interface.
 export interface SQLitePluginTransaction {
   readOnly: boolean
   success(...args: any[]): any
+  executeSql(sql: string, values?: BindParams, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
 }
 
 // Abstract class designed to be extended by concrete
@@ -30,18 +36,14 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
   }
   _db: SQLitePlugin
 
-  // This is the one public property we add to the underlying
-  // Database client. Hence calling it our specific name, rather
-  // than `notifier` as this way we're less likely to clobber
-  // some existing property + allowing the user to manually
-  // run `db.electric.notifyCommit()`.
-  electric: Notifier
+  // The public property we add to the underlying Database client,
+  electric: ElectricNamespace
 
-  constructor(db: SQLitePlugin, notifier: Notifier) {
+  constructor(db: SQLitePlugin, namespace: ElectricNamespace) {
     this._aliases = {}
-    this._db = db
 
-    this.electric = notifier
+    this._db = db
+    this.electric = namespace
   }
 
   // Used when re-proxying so the proxy code doesn't need
@@ -56,7 +58,7 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
   // Everything goes through `addTransaction`, so we patch
   // it to patch the `tx.success`` function.
   addTransaction(tx: SQLitePluginTransaction): void {
-    const originalSuccessFn = tx.success
+    const originalSuccessFn = tx.success.bind(tx)
     const notifyCommit = this.electric.notifyCommit.bind(this.electric)
 
     tx.success = (...args: any[]): any => {

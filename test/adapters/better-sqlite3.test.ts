@@ -4,11 +4,11 @@ import Database from 'better-sqlite3'
 
 import { electrify } from '../../dist/adapters/better-sqlite3/index'
 import { MockDatabase } from '../../dist/adapters/better-sqlite3/mock'
-import { MockNotifier } from '../../dist/notifiers/mock'
+import { MockCommitNotifier } from '../../dist/notifiers/mock'
 
-test('electrify returns an equivalent database client', t => {
+test('electrify returns an equivalent database client', async t => {
   const original = new Database('test.db')
-  const db = electrify(original)
+  const db = await electrify(original)
 
   const originalKeys = Object.getOwnPropertyNames(original)
   const originalPrototype = Object.getPrototypeOf(original)
@@ -18,67 +18,66 @@ test('electrify returns an equivalent database client', t => {
   })
 })
 
-test('electrify does not remove non-patched properties and methods', t => {
+test('electrify does not remove non-patched properties and methods', async t => {
   const original = new Database('test.db')
-  const electric = electrify(original)
+  const electric = await electrify(original)
 
   t.is(typeof electric.pragma, 'function')
 })
 
-test('the electrified database has `.electric.notifyCommit()`', t => {
+test('the electrified database has `.electric.notifyCommit()`', async t => {
   const original = new Database('test.db')
 
-  const notifier = new MockNotifier(original.name)
+  const notifier = new MockCommitNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = electrify(original, notifier)
+  const db = await electrify(original, {notifier: notifier})
   db.electric.notifyCommit()
 
-  t.is(db.electric, notifier)
   t.is(notifier.notifications.length, 1)
 })
 
-test('exec\'ing a dangerous statement calls notifyCommit', t => {
+test('exec\'ing a dangerous statement calls notifyCommit', async t => {
   const original = new MockDatabase('test.db')
 
-  const notifier = new MockNotifier(original.name)
+  const notifier = new MockCommitNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = electrify(original, notifier)
+  const db = await electrify(original, {notifier: notifier})
   db.exec('insert into items')
 
   t.is(notifier.notifications.length, 1)
 })
 
-test('exec\'ing a non dangerous statement doesn\'t call notifyCommit', t => {
+test('exec\'ing a non dangerous statement doesn\'t call notifyCommit', async t => {
   const original = new MockDatabase('test.db')
 
-  const notifier = new MockNotifier(original.name)
+  const notifier = new MockCommitNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = electrify(original, notifier)
+  const db = await electrify(original, {notifier: notifier})
   db.exec('select 1')
 
   t.is(notifier.notifications.length, 0)
 })
 
-test('running a transaction function calls notifyCommit', t => {
+test('running a transaction function calls notifyCommit', async t => {
   const original = new Database('test.db')
 
-  const notifier = new MockNotifier(original.name)
+  const notifier = new MockCommitNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = electrify(original, notifier)
+  const db = await electrify(original, {notifier: notifier})
   const runTx = db.transaction(() => {})
   runTx()
 
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a transaction sub function calls notifyCommit', t => {
+test('running a transaction sub function calls notifyCommit', async t => {
   const original = new Database('test.db')
-  const notifier = new MockNotifier(original.name)
-  const db = electrify(original, notifier)
+  const notifier = new MockCommitNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   const a = db.transaction(() => {})
   const b = db.transaction(() => {})
@@ -96,10 +95,10 @@ test('running a transaction sub function calls notifyCommit', t => {
   t.is(notifier.notifications.length, 3)
 })
 
-test('electrify preserves chainability', t => {
+test('electrify preserves chainability', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.name)
-  const db = electrify(original, notifier)
+  const notifier = new MockCommitNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -110,10 +109,10 @@ test('electrify preserves chainability', t => {
   t.is(notifier.notifications.length, 3)
 })
 
-test('running a prepared statement outside of a transaction notifies', t => {
+test('running a prepared statement outside of a transaction notifies', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.name)
-  const db = electrify(original, notifier)
+  const notifier = new MockCommitNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -123,10 +122,10 @@ test('running a prepared statement outside of a transaction notifies', t => {
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a prepared statement *inside* of a transaction does *not* notify', t => {
+test('running a prepared statement *inside* of a transaction does *not* notify', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.name)
-  const db = electrify(original, notifier)
+  const notifier = new MockCommitNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -137,14 +136,14 @@ test('running a prepared statement *inside* of a transaction does *not* notify',
   runTx()
 
   // The transaction notifies, so we're testing it's only
-  // notification not two!
+  // one notification not two!
   t.is(notifier.notifications.length, 1)
 })
 
-test('iterating a prepared statement works', t => {
+test('iterating a prepared statement works', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockNotifier(original.name)
-  const db = electrify(original, notifier)
+  const notifier = new MockCommitNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 

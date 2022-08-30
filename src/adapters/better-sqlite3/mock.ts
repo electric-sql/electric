@@ -1,5 +1,5 @@
 import { BindParams, DbName, Row } from '../../util/types'
-import { Database, Info, Statement } from './index'
+import { Database, Info, Statement } from './database'
 
 export class MockDatabase implements Database {
   name: DbName
@@ -37,6 +37,7 @@ export class MockDatabase implements Database {
 export class MockStatement implements Statement {
   database: Database
   readonly = false
+  source = 'select foo from bar'
 
   constructor(db: Database) {
     this.database = db

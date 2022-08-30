@@ -1,25 +1,48 @@
 import { DbName } from '../util/types'
-import { CommitNotification, Notifier } from './index'
 
-export class MockNotifier implements Notifier {
-  dbNames: Set<DbName>
-  notifications: CommitNotification[]
+import {
+  BaseChangeNotifier,
+  BaseCommitNotifier,
+  ChangeNotification,
+  ChangeNotifier,
+  ChangedIdentifier,
+  CommitNotification,
+  CommitNotifier
+} from './index'
 
-  constructor(dbNames: DbName | DbName[]) {
-    this.dbNames = new Set(Array.isArray(dbNames) ? dbNames : [dbNames])
+export class MockChangeNotifier extends BaseChangeNotifier implements ChangeNotifier {
+  notifications: ChangeNotification[]
+
+  constructor(dbName: DbName) {
+    super(dbName)
+
     this.notifications = []
   }
 
-  attach(dbName: DbName): void {
-    this.dbNames.add(dbName)
+  notifyChange(changes: ChangedIdentifier[]): void {
+    const notification: ChangeNotification = {
+      dbName: this.dbName,
+      changes: changes
+    }
+
+    this.notifications.push(notification)
   }
-  detach(dbName: DbName): void {
-    this.dbNames.delete(dbName)
+}
+
+export class MockCommitNotifier extends BaseCommitNotifier implements CommitNotifier {
+  notifications: CommitNotification[]
+
+  constructor(dbNames: DbName | DbName[]) {
+    super(dbNames)
+
+    this.notifications = []
   }
 
   notifyCommit(): void {
     this.dbNames.forEach((dbName) => {
-      const notification: CommitNotification = {dbName: dbName}
+      const notification: CommitNotification = {
+        dbName: dbName
+      }
 
       this.notifications.push(notification)
     })

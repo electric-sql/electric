@@ -1,3 +1,6 @@
+import { QualifiedTablename } from './tablename'
+import { DbNamespace } from './types'
+
 import sqliteParser from 'sqlite-parser'
 import { WalkBuilder } from 'walkjs'
 
@@ -32,8 +35,8 @@ export const isPotentiallyDangerous = (stmt: string): boolean => {
   return dangerousKeywordsExp.test(stmt)
 }
 
-export const parseTableNames = (query: string, defaultNamespace: string) => {
-  const ast = sqliteParser(query)
+export const parseTableNames = (sqlQuery: string, defaultNamespace: DbNamespace): QualifiedTablename[] => {
+  const ast = sqliteParser(sqlQuery)
   if (ast.type !== 'statement') { throw 'Invalid SQL statement' }
   if (ast.statement.length !== 1) { throw 'Query must be a single SQL statement.' }
 
@@ -42,21 +45,28 @@ export const parseTableNames = (query: string, defaultNamespace: string) => {
     throw 'Query must be a valid SELECT statement.'
   }
 
-  const results = new Set()
+  const results: QualifiedTablename[] = []
+  const resultSet: Set<string> = new Set()
 
   new WalkBuilder()
     .withSimpleCallback((node) => {
-      const result = _ensureNamespaced(node.val.name, defaultNamespace).toLowerCase()
+      const result = _ensureQualified(node.val.name, defaultNamespace).toLowerCase()
 
-      results.add(result)
+      resultSet.add(result)
     })
     .withGlobalFilter(_isTableIdentifier)
     .walk(statement.from)
 
+  Array.from(resultSet).sort().forEach((value: string) => {
+    const [ namespace, tablename ] = value.split('.')
+
+    results.push(new QualifiedTablename(namespace, tablename))
+  })
+
   return results
 }
 
-const _isTableIdentifier = (node: any) => {
+const _isTableIdentifier = (node: any): boolean => {
   if (node.nodeType !== 'object') { return false }
 
   const { val } = node
@@ -70,10 +80,10 @@ const _isTableIdentifier = (node: any) => {
   return true
 }
 
-const _ensureNamespaced = (tableName: string, defaultNamespace: string) => {
-  if (tableName.includes('.')) {
-    return tableName
+const _ensureQualified = (candidate: string, defaultNamespace: DbNamespace): string => {
+  if (candidate.includes('.')) {
+    return candidate
   }
 
-  return `${defaultNamespace}.${tableName}`
+  return `${defaultNamespace}.${candidate}`
 }

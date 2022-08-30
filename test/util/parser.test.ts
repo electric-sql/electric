@@ -1,8 +1,7 @@
 import test from 'ava'
 
-import { isPotentiallyDangerous, parseTableNames } from '../../dist/util/parser'
-
-const toSortedArray = (set) => Array.from(set).sort()
+import { isPotentiallyDangerous, parseTableNames } from '../../src/util/parser'
+import { QualifiedTablename } from '../../src/util/tablename'
 
 test('selects are not dangerous', t => {
   const stmt = 'select foo from bar'
@@ -20,14 +19,14 @@ test('parse tablenames from simple query', t => {
   const query = 'select * from laundry;'
   const results = parseTableNames(query, 'main')
 
-  t.deepEqual(toSortedArray(results), ['main.laundry'])
+  t.deepEqual(results, [new QualifiedTablename('main', 'laundry')])
 })
 
 test('parse namespaced query', t => {
   const query = 'select * from public.laundry;'
   const results = parseTableNames(query, 'main')
 
-  t.deepEqual(toSortedArray(results), ['public.laundry'])
+  t.deepEqual(results, [new QualifiedTablename('public', 'laundry')])
 })
 
 test('parse a query with join', t => {
@@ -38,5 +37,8 @@ test('parse a query with join', t => {
   `
   const results = parseTableNames(query, 'main')
 
-  t.deepEqual(toSortedArray(results), ['main.a', 'main.b'])
+  t.deepEqual(results, [
+    new QualifiedTablename('main', 'a'),
+    new QualifiedTablename('main', 'b')
+  ])
 })

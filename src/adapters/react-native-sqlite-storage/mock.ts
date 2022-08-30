@@ -1,24 +1,27 @@
 import { AnyFunction, DbName } from '../../util/types'
 import { MockSQLitePlugin } from '../sqlite-plugin/mock'
-import { Database } from './index'
+import { Database } from './database'
 
-const promisablePatchedMethods = [
-  'attach',
-  'detach',
-  'echoTest'
-]
-const isPromisablePatchedMethod = (key: string | symbol) => {
-  return typeof key === 'string' && promisablePatchedMethods.includes(key)
+// Key is the method name, value is whether the
+// callbacks need to be reversed.
+const promisablePatchedMethods: {[key: string]: boolean} = {
+  'attach': false,
+  'detach': false,
+  'echoTest': false,
+  'readTransaction': true,
+  'transaction': true
 }
 
-// This adapts the `mockDb` to function like the SQLitePlugin does
+// This adapts the `mockDb` to behave like the SQLitePlugin does
 // after `SQLitePluginFactory.enablePromise(true)` has been called.
 export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
   return new Proxy(mockDb, {
     get(target, key, receiver) {
       let value = Reflect.get(target, key, receiver)
 
-      if (isPromisablePatchedMethod(key)) {
+      if (typeof key === 'string' && key in promisablePatchedMethods) {
+        const shouldReverseCallbacks = promisablePatchedMethods[key]
+
         return (...args: any): any => {
           return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
             let success = function(...args: any[]): any {
@@ -30,7 +33,11 @@ export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
               return false
             }
 
-            Reflect.apply(value, target, [...args, success, error])
+            const argsList = shouldReverseCallbacks
+              ? [...args, error, success]
+              : [...args, success, error]
+
+            Reflect.apply(value, target, argsList)
           })
         }
       }
