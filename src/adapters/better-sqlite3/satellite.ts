@@ -15,7 +15,7 @@ export class SatelliteClient implements SatelliteClientInterface {
     return Promise.resolve()
   }
 
-  select(sql: string, bindParams: BindParams = []): Promise<Row[]> {
+  query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
     const stmt = this.db.prepare(sql)
 
     return Promise.resolve(stmt.all(bindParams))

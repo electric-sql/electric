@@ -34,7 +34,7 @@ export interface SatelliteClient {
 
   // Runs a query against the database, returning a promise. If the
   // query succeeds, the promise resolves with a list of rows.
-  select(sql: string, bindParams?: BindParams): Promise<Row[]>
+  query(sql: string, bindParams?: BindParams): Promise<Row[]>
 }
 
 // The `SatelliteRegistry` is intended to be a global singleton that

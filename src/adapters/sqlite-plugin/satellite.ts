@@ -24,7 +24,7 @@ export abstract class SQLitePluginSatelliteClient {
     })
   }
 
-  select(sql: string, bindParams: BindParams = []): Promise<Row[]> {
+  query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = ([_tx, results]: ExecutionResult) => {
         resolve(rowsFromResults(results))
