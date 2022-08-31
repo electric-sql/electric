@@ -13,6 +13,8 @@ export abstract class SQLitePluginSatelliteClient {
   }
 
   exec(sql: string): Promise<void> {
+    const run = this._transaction.bind(this)
+
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = ([_tx, _results]: ExecutionResult) => {
         resolve()
@@ -20,11 +22,13 @@ export abstract class SQLitePluginSatelliteClient {
       const error = (err: any) => reject(err)
       const txFn = (tx: SQLitePluginTransaction) => tx.executeSql(sql)
 
-      this._transaction(txFn, success, error)
+      run(txFn, success, error)
     })
   }
 
   query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
+    const read = this._readTransaction.bind(this)
+
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = ([_tx, results]: ExecutionResult) => {
         resolve(rowsFromResults(results))
@@ -32,12 +36,14 @@ export abstract class SQLitePluginSatelliteClient {
       const error = (err: any) => reject(err)
       const txFn = (tx: SQLitePluginTransaction) => tx.executeSql(sql, bindParams)
 
-      this._readTransaction(txFn, success, error)
+      read(txFn, success, error)
     })
   }
 
   _transaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction, readOnly: boolean = false): void {
-    const run = readOnly ? this.db.readTransaction : this.db.transaction
+    const run = readOnly
+      ? this.db.readTransaction.bind(this.db)
+      : this.db.transaction.bind(this.db)
 
     if (this.promisesEnabled) {
       ensurePromise(run(txFn)).then(success).catch(error)

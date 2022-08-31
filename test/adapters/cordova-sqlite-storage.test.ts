@@ -1,7 +1,11 @@
 import test from 'ava'
 
 import { initTestable } from '../../src/adapters/cordova-sqlite-storage/test'
+import { MockDatabase } from '../../src/adapters/cordova-sqlite-storage/mock'
+import { QueryAdapter } from '../../src/adapters/cordova-sqlite-storage/query'
+import { SatelliteClient } from '../../src/adapters/cordova-sqlite-storage/satellite'
 import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
+import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async t => {
   const [original, _notifier, db] = await initTestable('test.db')
@@ -35,4 +39,42 @@ test('running a read only transaction does not notifyCommit', async t => {
   db.addTransaction(tx)
 
   t.is(notifier.notifications.length, 0)
+})
+
+test('query adapter perform works', async t => {
+  const db = new MockDatabase('test.db')
+  const adapter = new QueryAdapter(db, 'main')
+
+  const r1 = await adapter.perform('select 1')
+  const r2 = await adapter.perform('select ?', [1])
+
+  t.deepEqual([r1, r2], [[{i: 0}], [{i: 0}]])
+})
+
+test('query adapter tableNames works', async t => {
+  const db = new MockDatabase('test.db')
+  const adapter = new QueryAdapter(db, 'main')
+
+  const sql = 'select foo from bar'
+  const r1 = await adapter.tableNames(sql)
+
+  t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
+})
+
+test('satellite client exec works', async t => {
+  const db = new MockDatabase('test.db')
+  const client = new SatelliteClient(db)
+
+  const result = await client.exec('drop badgers')
+
+  t.is(result, undefined)
+})
+
+test('satellite client query works', async t => {
+  const db = new MockDatabase('test.db')
+  const client = new SatelliteClient(db)
+
+  const result = await client.query('select foo from bars')
+
+  t.deepEqual(result, [{i: 0}])
 })

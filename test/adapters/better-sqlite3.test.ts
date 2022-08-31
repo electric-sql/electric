@@ -2,9 +2,12 @@ import test from 'ava'
 
 import Database from 'better-sqlite3'
 
-import { electrify } from '../../dist/adapters/better-sqlite3/index'
-import { MockDatabase } from '../../dist/adapters/better-sqlite3/mock'
-import { MockCommitNotifier } from '../../dist/notifiers/mock'
+import { electrify } from '../../src/adapters/better-sqlite3/index'
+import { MockDatabase } from '../../src/adapters/better-sqlite3/mock'
+import { QueryAdapter } from '../../src/adapters/better-sqlite3/query'
+import { SatelliteClient } from '../../src/adapters/better-sqlite3/satellite'
+import { MockCommitNotifier } from '../../src/notifiers/mock'
+import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async t => {
   const original = new Database('test.db')
@@ -153,3 +156,45 @@ test('iterating a prepared statement works', async t => {
   t.is(notifier.notifications.length, 1)
 })
 
+test('query adapter perform works', async t => {
+  const db = new MockDatabase('test.db')
+  const adapter = new QueryAdapter(db, 'main')
+
+  const r1 = await adapter.perform('select 1')
+  const r2 = await adapter.perform('select ?', [1])
+
+  const stmt = db.prepare('select ?')
+  const r3 = await adapter.perform(stmt, [2])
+
+  t.deepEqual([r1, r2, r3], [[], [], []])
+})
+
+test('query adapter tableNames works', async t => {
+  const db = new MockDatabase('test.db')
+  const adapter = new QueryAdapter(db, 'main')
+
+  const sql = 'select foo from bar'
+  const r1 = await adapter.tableNames(sql)
+  const r2 = await adapter.tableNames(db.prepare(sql))
+
+  t.deepEqual(r1, r2)
+  t.deepEqual(r2, [new QualifiedTablename('main', 'bar')])
+})
+
+test('satellite client exec works', async t => {
+  const db = new MockDatabase('test.db')
+  const client = new SatelliteClient(db)
+
+  const result = await client.exec('drop badgers')
+
+  t.is(result, undefined)
+})
+
+test('satellite client query works', async t => {
+  const db = new MockDatabase('test.db')
+  const client = new SatelliteClient(db)
+
+  const result = await client.query('select foo from bars')
+
+  t.deepEqual(result, [])
+})

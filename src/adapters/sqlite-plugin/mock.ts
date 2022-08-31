@@ -1,5 +1,19 @@
-import { AnyFunction, BindParams, DbName } from '../../util/types'
+import { AnyFunction, BindParams, DbName, Row } from '../../util/types'
 import { SQLitePlugin, SQLitePluginTransaction } from './index'
+import { Results } from './results'
+
+export const mockResults: Results = {
+  rows: {
+    length: 1,
+    item(i: number): Row {
+      return {i: i}
+    },
+    raw(): Row[] {
+      return [{i: 0}]
+    }
+  },
+  rowsAffected: 0
+}
 
 export abstract class MockSQLitePlugin implements SQLitePlugin {
   databaseFeatures: {
@@ -19,7 +33,7 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
 
   addTransaction(tx: SQLitePluginTransaction): void {
     if (!!tx.success) {
-      tx.success('mocked!')
+      tx.success([tx, mockResults])
     }
   }
 

@@ -18,19 +18,19 @@ export abstract class SQLitePluginQueryAdapter {
   }
 
   perform(query: string, bindParams: BindParams = []): Promise<Row[]> {
+    const run = this.db.readTransaction.bind(this.db)
+
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = ([_tx, results]: ExecutionResult) => {
-        resolve(rowsFromResults(results))
+        const rows = rowsFromResults(results)
+
+        resolve(rows)
       }
       const error = (err: any) => reject(err)
       const txFn = (tx: SQLitePluginTransaction) => tx.executeSql(query, bindParams)
 
-      const run = this.db.readTransaction
       if (this.promisesEnabled) {
-        const retval = run(txFn)
-        const retvalPromise = ensurePromise(retval)
-
-        retvalPromise
+        ensurePromise(run(txFn))
           .then(success)
           .catch(error)
       }
