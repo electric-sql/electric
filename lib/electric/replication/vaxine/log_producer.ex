@@ -18,7 +18,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
           {:vx_wal_txn, tx_id :: term(), dcid :: term(), wal_offset :: term(),
            data :: [vx_txn_data()]}
 
-  @max_backoff_ms 5000
+  @max_backoff_ms 1000
   @starting_demand 5
 
   @impl DownstreamProducer
@@ -28,7 +28,12 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   @impl DownstreamProducer
   def start_replication(producer, offset) do
-    GenStage.call(producer, {:start_replication, offset})
+    # Timeout is set to `:infinity` here to account for variable connection timeout setting
+    # Without this and with the connection timeout set to a value higher than 5000,
+    # the caller crashes here since it doesn't receive a response within the expected window.
+    #
+    # It's safe to set this to `:infinity` since actual timeout is handled within the function.
+    GenStage.call(producer, {:start_replication, offset}, :infinity)
   end
 
   @impl DownstreamProducer
