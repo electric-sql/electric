@@ -3,7 +3,7 @@ import { SQLitePlugin, SQLitePluginTransaction } from './index'
 import { ensurePromise } from './promise'
 import { ExecutionResult, rowsFromResults } from './results'
 
-export abstract class SQLitePluginSatelliteClient {
+export abstract class SQLitePluginSatelliteDatabaseAdapter {
   db: SQLitePlugin
   promisesEnabled: boolean
 

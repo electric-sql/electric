@@ -15,19 +15,20 @@ import { globalRegistry } from '../../satellite/registry'
 
 import { Database, ElectricDatabase } from './database'
 import { QueryAdapter } from './query'
-import { SatelliteClient } from './satellite'
+import { SatelliteDatabaseAdapter } from './satellite'
 
 export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Database> => {
   const dbName: DbName = db.name
   const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
-  const adapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
-  const client = opts.satelliteClient || new SatelliteClient(db)
-  const fs = opts.filesystem || new NodeFilesystem()
-  const notifier = opts.notifier || new EmitCommitNotifier(dbName)
-  const registry = opts.satelliteRegistry || globalRegistry
 
-  const namespace = new ElectricNamespace(notifier, adapter)
+  const commitNotifier = opts.commitNotifier || new EmitCommitNotifier(dbName)
+  const fs = opts.filesystem || new NodeFilesystem()
+  const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
+  const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
+  const satelliteRegistry = opts.satelliteRegistry || globalRegistry
+
+  const namespace = new ElectricNamespace(commitNotifier, queryAdapter)
   const electric = new ElectricDatabase(db, namespace)
 
-  return baseElectrify(dbName, db, electric, client, fs, registry)
+  return baseElectrify(dbName, db, electric, fs, satelliteDbAdapter, satelliteRegistry)
 }

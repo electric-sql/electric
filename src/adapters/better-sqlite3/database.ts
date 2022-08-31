@@ -132,7 +132,7 @@ export class ElectricDatabase implements ProxyWrapper {
 
   transaction(fn: (...args: any[]) => any): CallableTransaction {
     const txFn = this._db.transaction(fn)
-    const notifier = this.electric.notifier
+    const notifier = this.electric.commitNotifier
 
     return new CallableTransaction(txFn, notifier)
   }

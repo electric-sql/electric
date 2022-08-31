@@ -1,7 +1,7 @@
 import { Filesystem } from '../filesystems/index'
 import { DbName } from '../util/types'
 
-import { Satellite, SatelliteClient, SatelliteRegistry } from './index'
+import { Satellite, SatelliteDatabaseAdapter, SatelliteRegistry } from './index'
 import { SatelliteProcess } from './process'
 
 // XXX Todo: implement locking so that you don't have multiple concurrent
@@ -15,11 +15,11 @@ class GlobalRegistry implements SatelliteRegistry {
     this._satellites = {}
   }
 
-  ensureStarted(dbName: DbName, client: SatelliteClient, fs: Filesystem): Promise<Satellite> {
+  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
     const satellites = this._satellites
 
     if (!(dbName in satellites)) {
-      satellites[dbName] = new SatelliteProcess(dbName, client, fs)
+      satellites[dbName] = new SatelliteProcess(dbName, dbAdapter, fs)
     }
 
     return Promise.resolve(satellites[dbName])

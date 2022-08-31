@@ -13,18 +13,18 @@ import { BindParams, DbName, Row } from '../util/types'
 // the `dbName` and `notifier` to recieve commit notifications and emit
 // table and row scoped data-changed notifications.
 export interface Satellite {
-  client: SatelliteClient
+  dbAdapter: SatelliteDatabaseAdapter
   dbName: DbName
   fs: Filesystem
-  notifier: ChangeNotifier
+  changeNotifier: ChangeNotifier
 
   stop(): Promise<void>
 }
 
-// `SatelliteClient`s adapt a database client to provide the normalised
+// `SatelliteDatabaseAdapter`s adapt a database client to provide the normalised
 // interface defined here. This allows the satellite instance to
 // interact with the database in a standardised way.
-export interface SatelliteClient {
+export interface SatelliteDatabaseAdapter {
   db: AnyDatabase
 
   // Runs sql against the DB, inside a transaction. If it's a success,
@@ -41,7 +41,7 @@ export interface SatelliteClient {
 // starts and stops replication processing for every SQLite database
 // that the application is using.
 export interface SatelliteRegistry {
-  ensureStarted(dbName: DbName, client: SatelliteClient, fs: Filesystem): Promise<Satellite>
+  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
   stopAll(): Promise<void>
 }

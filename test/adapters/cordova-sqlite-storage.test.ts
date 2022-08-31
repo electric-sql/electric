@@ -3,7 +3,7 @@ import test from 'ava'
 import { initTestable } from '../../src/adapters/cordova-sqlite-storage/test'
 import { MockDatabase } from '../../src/adapters/cordova-sqlite-storage/mock'
 import { QueryAdapter } from '../../src/adapters/cordova-sqlite-storage/query'
-import { SatelliteClient } from '../../src/adapters/cordova-sqlite-storage/satellite'
+import { SatelliteDatabaseAdapter } from '../../src/adapters/cordova-sqlite-storage/satellite'
 import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
@@ -63,18 +63,18 @@ test('query adapter tableNames works', async t => {
 
 test('satellite client exec works', async t => {
   const db = new MockDatabase('test.db')
-  const client = new SatelliteClient(db)
+  const adapter = new SatelliteDatabaseAdapter(db)
 
-  const result = await client.exec('drop badgers')
+  const result = await adapter.exec('drop badgers')
 
   t.is(result, undefined)
 })
 
 test('satellite client query works', async t => {
   const db = new MockDatabase('test.db')
-  const client = new SatelliteClient(db)
+  const adapter = new SatelliteDatabaseAdapter(db)
 
-  const result = await client.query('select foo from bars')
+  const result = await adapter.query('select foo from bars')
 
   t.deepEqual(result, [{i: 0}])
 })

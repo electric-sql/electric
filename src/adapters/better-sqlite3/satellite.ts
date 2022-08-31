@@ -1,8 +1,8 @@
-import { SatelliteClient as SatelliteClientInterface } from '../../satellite/index'
+import { SatelliteDatabaseAdapter as SatelliteDatabaseAdapterInterface } from '../../satellite/index'
 import { BindParams, Row } from '../../util/types'
 import { Database } from './database'
 
-export class SatelliteClient implements SatelliteClientInterface {
+export class SatelliteDatabaseAdapter implements SatelliteDatabaseAdapterInterface {
   db: Database
 
   constructor(db: Database) {
