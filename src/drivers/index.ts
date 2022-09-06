@@ -4,6 +4,10 @@ import {
 } from './better-sqlite3/database'
 
 import {
+  Database as BrowserDatabase,
+} from './browser/database'
+
+import {
   Database as CordovaSQLiteStorageDatabase,
   ElectricDatabase as CordovaSQLiteStorageElectricDatabase
 } from './cordova-sqlite-storage/database'
@@ -20,6 +24,7 @@ import {
 
 export type AnyDatabase =
   BetterSQLite3Database
+  | BrowserDatabase
   | CordovaSQLiteStorageDatabase
   | ReactNativeSQLiteStorageDatabase
   | GenericDatabase

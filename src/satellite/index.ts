@@ -1,4 +1,4 @@
-import { AnyDatabase } from '../adapters/index'
+import { AnyDatabase } from '../drivers/index'
 import { Filesystem } from '../filesystems/index'
 import { ChangeNotifier } from '../notifiers/index'
 import { BindParams, DbName, Row } from '../util/types'
@@ -42,6 +42,7 @@ export interface SatelliteDatabaseAdapter {
 // that the application is using.
 export interface SatelliteRegistry {
   ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite>
+  ensureAlreadyStarted(dbName: DbName): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
   stopAll(): Promise<void>
 }

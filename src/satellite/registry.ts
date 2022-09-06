@@ -15,32 +15,40 @@ class GlobalRegistry implements SatelliteRegistry {
     this._satellites = {}
   }
 
-  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
+  // XXX there's scope here to block on the process initialisation if need be.
+  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
     const satellites = this._satellites
 
     if (!(dbName in satellites)) {
       satellites[dbName] = new SatelliteProcess(dbName, dbAdapter, fs)
     }
 
-    return Promise.resolve(satellites[dbName])
+    return satellites[dbName]
   }
 
-  stop(dbName: DbName): Promise<void> {
+  // XXX there's scope here to block on the process initialisation if need be.
+  async ensureAlreadyStarted(dbName: DbName): Promise<Satellite> {
+    const satellites = this._satellites
+
+    if (!(dbName in satellites)) {
+      throw new Error(`Satellite not running for db: ${dbName}`)
+    }
+
+    return satellites[dbName]
+  }
+
+  async stop(dbName: DbName): Promise<void> {
     const satellites = this._satellites
 
     if (dbName in satellites) {
       const satellite = satellites[dbName]
 
-      return satellite.stop()
-        .then(() => {
-          delete satellites[dbName]
-        })
+      await satellite.stop()
+      delete satellites[dbName]
     }
-
-    return Promise.resolve()
   }
 
-  stopAll(): Promise<void> {
+  async stopAll(): Promise<void> {
     const promisesToStop = []
     const satellites = this._satellites
 
@@ -53,8 +61,7 @@ class GlobalRegistry implements SatelliteRegistry {
       )
     }
 
-    return Promise.all(promisesToStop)
-      .then(() => {})
+    await Promise.all(promisesToStop)
   }
 }
 

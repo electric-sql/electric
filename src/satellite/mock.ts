@@ -31,22 +31,29 @@ class MockRegistry implements SatelliteRegistry {
     this._satellites = {}
   }
 
-  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
-    if (!(dbName in this._satellites)) {
-      this._satellites[dbName] = new MockSatellite(dbName, dbAdapter, fs)
+  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
+    const satellites = this._satellites
+
+    if (!(dbName in satellites)) {
+      satellites[dbName] = new MockSatellite(dbName, dbAdapter, fs)
     }
 
-    return Promise.resolve(this._satellites[dbName])
+    return satellites[dbName]
   }
-  stop(dbName: DbName): Promise<void> {
+  async ensureAlreadyStarted(dbName: DbName): Promise<Satellite> {
+    const satellites = this._satellites
+
+    if (!(dbName in satellites)) {
+      throw new Error(`Satellite not running for db: ${dbName}`)
+    }
+
+    return satellites[dbName]
+  }
+  async stop(dbName: DbName): Promise<void> {
     delete this._satellites[dbName]
-
-    return Promise.resolve()
   }
-  stopAll(): Promise<void> {
+  async stopAll(): Promise<void> {
     this._satellites = {}
-
-    return Promise.resolve()
   }
 }
 

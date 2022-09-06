@@ -1,10 +1,10 @@
 import test from 'ava'
 
-import { initTestable } from '../../src/adapters/react-native-sqlite-storage/test'
-import { MockDatabase } from '../../src/adapters/react-native-sqlite-storage/mock'
-import { QueryAdapter } from '../../src/adapters/react-native-sqlite-storage/query'
-import { SatelliteDatabaseAdapter } from '../../src/adapters/react-native-sqlite-storage/satellite'
-import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
+import { initTestable } from '../../src/drivers/react-native-sqlite-storage/test'
+import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
+import { QueryAdapter } from '../../src/drivers/react-native-sqlite-storage/query'
+import { SatelliteDatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/satellite'
+import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async t => {

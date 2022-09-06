@@ -41,14 +41,19 @@
   ],
   "exports": {
     "./package.json": "./package.json",
+    "./browser": "./dist/drivers/browser/index.js",
+    "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
+    "./expo": "./dist/drivers/expo-sqlite/index.js",
+    "./node": "./dist/drivers/better-sqlite3/index.js",
+    "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
   "scripts": {
     "dev": "tsmodule dev",
-    "build": "tsmodule build",
-    "test": "ava",
-    "pretest": "tsmodule build",
+    "build": "rm -rf ./dist && tsmodule build",
+    "test": "ava --no-worker-threads",
+    "pretest": "yarn build",
     "prepublishOnly": "yarn test",
     "lint": "eslint src --fix"
   },
@@ -71,26 +76,23 @@
     "walkjs": "^3.2.4"
   },
   "devDependencies": {
+    "@aphro/absurd-sql": "^0.0.53",
+    "@aphro/sql.js": "^1.7.0",
     "@tsmodule/tsmodule": "^40.0.17",
     "@types/node": "^18.7.13",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
-    "eslint": "^8.22.0",
-    "typescript": "^4.7.4",
-
-    "@capacitor-community/sqlite": ">= 3.0.0",
     "better-sqlite3": ">= 7.4.0",
     "cordova-sqlite-storage": ">= 5.0.0",
+    "eslint": "^8.22.0",
     "expo-asset": ">= 8.0.0",
     "expo-file-system": "13.0.0",
     "expo-sqlite": ">= 10.0.0",
-    "nativescript-sqlite": ">= 2.8.0",
-    "react-native": ">=0.14.0",
     "react-native-fs": ">= 2.17.0",
     "react-native-sqlite-storage": ">= 6.0.0",
-    "sql.js": ">= 1.6.0",
-    "sqlite3": ">= 5.0.0",
-    "typeorm": ">=0.3.0"
+    "typeorm": ">=0.3.0",
+    "typescript": "^4.7.4",
+    "web-worker": "^1.2.0"
   }
 }

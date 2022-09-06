@@ -7,6 +7,7 @@ import { WalkBuilder } from 'walkjs'
 const dangerousKeywords = [
   'add',
   'alter',
+  'commit',
   'create',
   'delete',
   'drop',

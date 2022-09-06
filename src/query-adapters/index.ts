@@ -1,4 +1,4 @@
-import { AnyDatabase } from '../adapters/index'
+import { AnyDatabase } from '../drivers/index'
 import { QualifiedTablename } from '../util/tablename'
 import { BindParams, DbNamespace, Query } from '../util/types'
 

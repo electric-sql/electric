@@ -1,10 +1,10 @@
 import test from 'ava'
 
-import { initTestable } from '../../src/adapters/cordova-sqlite-storage/test'
-import { MockDatabase } from '../../src/adapters/cordova-sqlite-storage/mock'
-import { QueryAdapter } from '../../src/adapters/cordova-sqlite-storage/query'
-import { SatelliteDatabaseAdapter } from '../../src/adapters/cordova-sqlite-storage/satellite'
-import { MockSQLitePluginTransaction } from '../../src/adapters/sqlite-plugin/mock'
+import { initTestable } from '../../src/drivers/cordova-sqlite-storage/test'
+import { MockDatabase } from '../../src/drivers/cordova-sqlite-storage/mock'
+import { QueryAdapter } from '../../src/drivers/cordova-sqlite-storage/query'
+import { SatelliteDatabaseAdapter } from '../../src/drivers/cordova-sqlite-storage/satellite'
+import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async t => {

@@ -2,10 +2,10 @@ import test from 'ava'
 
 import Database from 'better-sqlite3'
 
-import { electrify } from '../../src/adapters/better-sqlite3/index'
-import { MockDatabase } from '../../src/adapters/better-sqlite3/mock'
-import { QueryAdapter } from '../../src/adapters/better-sqlite3/query'
-import { SatelliteDatabaseAdapter } from '../../src/adapters/better-sqlite3/satellite'
+import { electrify } from '../../src/drivers/better-sqlite3/index'
+import { MockDatabase } from '../../src/drivers/better-sqlite3/mock'
+import { QueryAdapter } from '../../src/drivers/better-sqlite3/query'
+import { SatelliteDatabaseAdapter } from '../../src/drivers/better-sqlite3/satellite'
 import { MockCommitNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 

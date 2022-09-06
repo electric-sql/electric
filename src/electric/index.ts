@@ -1,4 +1,4 @@
-import { AnyDatabase, AnyElectricDatabase } from '../adapters/index'
+import { AnyDatabase, AnyElectricDatabase } from '../drivers/index'
 import { Filesystem } from '../filesystems/index'
 import { CommitNotifier } from '../notifiers/index'
 import { QueryAdapter } from '../query-adapters/index'
@@ -37,7 +37,7 @@ export class ElectricNamespace {
   }
 }
 
-// This is the primary `electrify()` endpoint that the individal adapters
+// This is the primary `electrify()` endpoint that the individal drivers
 // call once they've constructed their implementations. This function can
 // also be called directly by tests that don't want to go via the adapter
 // entrypoints in order to avoid loading the environment dependencies.
