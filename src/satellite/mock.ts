@@ -1,20 +1,19 @@
 import { Filesystem } from '../filesystems/index'
-import { ChangeNotifier } from '../notifiers/index'
-import { MockChangeNotifier } from '../notifiers/mock'
+import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'
 import { Satellite, SatelliteDatabaseAdapter, SatelliteRegistry } from './index'
 
 export class MockSatellite implements Satellite {
-  changeNotifier: ChangeNotifier
   dbAdapter: SatelliteDatabaseAdapter
   dbName: DbName
   fs: Filesystem
+  notifier: Notifier
 
-  constructor(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem) {
-    this.changeNotifier = new MockChangeNotifier(dbName)
+  constructor(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier) {
     this.dbAdapter = dbAdapter
     this.dbName = dbName
     this.fs = fs
+    this.notifier = notifier
   }
 
   stop(): Promise<void> {
@@ -31,11 +30,11 @@ class MockRegistry implements SatelliteRegistry {
     this._satellites = {}
   }
 
-  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
+  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier): Promise<Satellite> {
     const satellites = this._satellites
 
     if (!(dbName in satellites)) {
-      satellites[dbName] = new MockSatellite(dbName, dbAdapter, fs)
+      satellites[dbName] = new MockSatellite(dbName, dbAdapter, fs, notifier)
     }
 
     return satellites[dbName]

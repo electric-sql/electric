@@ -1,4 +1,5 @@
 import { Filesystem } from '../filesystems/index'
+import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'
 
 import { Satellite, SatelliteDatabaseAdapter, SatelliteRegistry } from './index'
@@ -16,11 +17,11 @@ class GlobalRegistry implements SatelliteRegistry {
   }
 
   // XXX there's scope here to block on the process initialisation if need be.
-  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite> {
+  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier): Promise<Satellite> {
     const satellites = this._satellites
 
     if (!(dbName in satellites)) {
-      satellites[dbName] = new SatelliteProcess(dbName, dbAdapter, fs)
+      satellites[dbName] = new SatelliteProcess(dbName, dbAdapter, fs, notifier)
     }
 
     return satellites[dbName]

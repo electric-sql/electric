@@ -1,3 +1,4 @@
+import { DbMethod, StatementMethod, WorkerClient } from '../../bridge/index'
 import { ElectricNamespace } from '../../electric/index'
 import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
 import { isPotentiallyDangerous } from '../../util/parser'
@@ -12,7 +13,6 @@ import {
   RowCallback,
   SqlValue
 } from '../../util/types'
-import { DbMethod, StatementMethod, WorkerClient } from './bridge'
 
 export interface Config {
   useBigInt?: boolean
@@ -98,7 +98,7 @@ export class ElectricDatabase {
     const retval = await this.db.exec(sql, params, config)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
 
     return retval
@@ -109,7 +109,7 @@ export class ElectricDatabase {
     await this.db.run(sql, params)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
   }
   async prepare(sql: string, params?: BindParams): Promise<string> {
@@ -189,7 +189,7 @@ export class ElectricStatement implements ProxyWrapper {
       return
     }
 
-    this.electric.notifyCommit()
+    this.electric.potentiallyChanged()
     this._hasNotified = true
   }
 
@@ -384,6 +384,10 @@ export class MainThreadDatabaseProxy implements Database {
 
     return this
   }
+}
+
+export interface ElectricMainThreadDatabaseProxy extends MainThreadDatabaseProxy {
+  electric: ElectricNamespace
 }
 
 export class MainThreadStatementProxy implements Statement {

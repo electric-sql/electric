@@ -1,5 +1,5 @@
 import { ElectricNamespace } from '../../electric/index'
-import { CommitNotifier } from '../../notifiers/index'
+import { Notifier } from '../../notifiers/index'
 import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
 import { isPotentiallyDangerous } from '../../util/parser'
 import { BindParams, DbName, Row } from '../../util/types'
@@ -33,15 +33,15 @@ export interface Statement {
 }
 
 // `CallableTransaction` wraps the `txFn` returned from `db.transaction(fn)`
-// so we can call `notifier.notifyCommit()` after the transaction executes --
+// so we can call `notifier.potentiallyChanged()` after the transaction executes --
 // be it directly, or via the `deferred`, `immediate`, or `exclusive` methods.
 //
 // See https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#transactionfunction---function
 class CallableTransaction extends Function {
   txFn: any
-  notifier: CommitNotifier
+  notifier: Notifier
 
-  constructor(txFn: (...args: any[]) => any, notifier: CommitNotifier) {
+  constructor(txFn: (...args: any[]) => any, notifier: Notifier) {
     super()
 
     this.txFn = txFn
@@ -55,7 +55,7 @@ class CallableTransaction extends Function {
   _call(...args: any[]): any {
     const retval = this.txFn(...args)
 
-    this.notifyCommit()
+    this.potentiallyChanged()
 
     return retval
   }
@@ -63,7 +63,7 @@ class CallableTransaction extends Function {
   deferred(...args: any[]): any {
     const retval = this.txFn.deferred(...args)
 
-    this.notifyCommit()
+    this.potentiallyChanged()
 
     return retval
   }
@@ -71,7 +71,7 @@ class CallableTransaction extends Function {
   immediate(...args: any[]): any {
     const retval = this.txFn.immediate(...args)
 
-    this.notifyCommit()
+    this.potentiallyChanged()
 
     return retval
   }
@@ -79,13 +79,13 @@ class CallableTransaction extends Function {
   exclusive(...args: any[]): any {
     const retval = this.txFn.exclusive(...args)
 
-    this.notifyCommit()
+    this.potentiallyChanged()
 
     return retval
   }
 
-  notifyCommit() {
-    this.notifier.notifyCommit()
+  potentiallyChanged() {
+    this.notifier.potentiallyChanged()
   }
 }
 
@@ -117,7 +117,7 @@ export class ElectricDatabase implements ProxyWrapper {
     this._db.exec(sql)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
 
     return this
@@ -132,7 +132,7 @@ export class ElectricDatabase implements ProxyWrapper {
 
   transaction(fn: (...args: any[]) => any): CallableTransaction {
     const txFn = this._db.transaction(fn)
-    const notifier = this.electric.commitNotifier
+    const notifier = this.electric.notifier
 
     return new CallableTransaction(txFn, notifier)
   }
@@ -166,7 +166,7 @@ export class ElectricStatement implements ProxyWrapper {
     const info = this._stmt.run(bindParams)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
 
     return info
@@ -177,7 +177,7 @@ export class ElectricStatement implements ProxyWrapper {
     const row = this._stmt.get(bindParams)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
 
     return row
@@ -188,7 +188,7 @@ export class ElectricStatement implements ProxyWrapper {
     const rows = this._stmt.all(bindParams)
 
     if (shouldNotify) {
-      this.electric.notifyCommit()
+      this.electric.potentiallyChanged()
     }
 
     return rows
@@ -196,7 +196,7 @@ export class ElectricStatement implements ProxyWrapper {
 
   iterate(bindParams: BindParams): IterableIterator<Row> {
     const shouldNotify = this._shouldNotify()
-    const notifyCommit = this.electric.notifyCommit.bind(this.electric)
+    const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
 
     const iterRows = this._stmt.iterate(bindParams)
 
@@ -208,7 +208,7 @@ export class ElectricStatement implements ProxyWrapper {
       }
       finally {
         if (shouldNotify) {
-          notifyCommit()
+          potentiallyChanged()
         }
       }
     }

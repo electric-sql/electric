@@ -1,16 +1,21 @@
 import { initBackend } from '@aphro/absurd-sql/dist/indexeddb-main-thread'
 
+import { ServerMethod, WorkerClient } from '../../bridge/index'
+import { DEFAULTS } from '../../electric/config'
+import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
+import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
+import { proxyOriginal } from '../../proxy/original'
 import { DbName } from '../../util/types'
 
-import { ServerMethod, WorkerClient } from './bridge'
-import { MainThreadDatabaseProxy } from './database'
+import { ElectricMainThreadDatabaseProxy, MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
+import { QueryAdapter } from './query'
 
 export { resultToRows } from './query'
 export { ElectricWorker } from './worker'
 
 interface SQL {
-  openDatabase(dbName: DbName): Promise<MainThreadDatabaseProxy>
+  openDatabase(dbName: DbName): Promise<ElectricMainThreadDatabaseProxy>
 }
 
 export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOpts = {}): Promise<SQL> => {
@@ -24,14 +29,21 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
   }
   await workerClient.request(init, locator.serialise())
 
-  const openDatabase = async (dbName: DbName): Promise<MainThreadDatabaseProxy> => {
+  const openDatabase = async (dbName: DbName, opts: ElectrifyOptions = {}): Promise<ElectricMainThreadDatabaseProxy> => {
     const open: ServerMethod = {
       target: 'server',
       name: 'open'
     }
     await workerClient.request(open, dbName)
 
-    return new MainThreadDatabaseProxy(dbName, workerClient)
+    const db = new MainThreadDatabaseProxy(dbName, workerClient)
+    const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
+
+    const notifier = opts.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
+    const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
+    const namespace = new ElectricNamespace(notifier, queryAdapter)
+
+    return proxyOriginal(db, {electric: namespace}) as ElectricMainThreadDatabaseProxy
   }
 
   return { openDatabase }

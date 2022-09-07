@@ -6,7 +6,7 @@ import { electrify } from '../../src/drivers/better-sqlite3/index'
 import { MockDatabase } from '../../src/drivers/better-sqlite3/mock'
 import { QueryAdapter } from '../../src/drivers/better-sqlite3/query'
 import { SatelliteDatabaseAdapter } from '../../src/drivers/better-sqlite3/satellite'
-import { MockCommitNotifier } from '../../src/notifiers/mock'
+import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async t => {
@@ -28,59 +28,59 @@ test('electrify does not remove non-patched properties and methods', async t => 
   t.is(typeof electric.pragma, 'function')
 })
 
-test('the electrified database has `.electric.notifyCommit()`', async t => {
+test('the electrified database has `.electric.potentiallyChanged()`', async t => {
   const original = new Database('test.db')
 
-  const notifier = new MockCommitNotifier(original.name)
+  const notifier = new MockNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = await electrify(original, {commitNotifier: notifier})
-  db.electric.notifyCommit()
+  const db = await electrify(original, {notifier: notifier})
+  db.electric.potentiallyChanged()
 
   t.is(notifier.notifications.length, 1)
 })
 
-test('exec\'ing a dangerous statement calls notifyCommit', async t => {
+test('exec\'ing a dangerous statement calls potentiallyChanged', async t => {
   const original = new MockDatabase('test.db')
 
-  const notifier = new MockCommitNotifier(original.name)
+  const notifier = new MockNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = await electrify(original, {commitNotifier: notifier})
+  const db = await electrify(original, {notifier: notifier})
   db.exec('insert into items')
 
   t.is(notifier.notifications.length, 1)
 })
 
-test('exec\'ing a non dangerous statement doesn\'t call notifyCommit', async t => {
+test('exec\'ing a non dangerous statement doesn\'t call potentiallyChanged', async t => {
   const original = new MockDatabase('test.db')
 
-  const notifier = new MockCommitNotifier(original.name)
+  const notifier = new MockNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = await electrify(original, {commitNotifier: notifier})
+  const db = await electrify(original, {notifier: notifier})
   db.exec('select 1')
 
   t.is(notifier.notifications.length, 0)
 })
 
-test('running a transaction function calls notifyCommit', async t => {
+test('running a transaction function calls potentiallyChanged', async t => {
   const original = new Database('test.db')
 
-  const notifier = new MockCommitNotifier(original.name)
+  const notifier = new MockNotifier(original.name)
   t.is(notifier.notifications.length, 0)
 
-  const db = await electrify(original, {commitNotifier: notifier})
+  const db = await electrify(original, {notifier: notifier})
   const runTx = db.transaction(() => {})
   runTx()
 
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a transaction sub function calls notifyCommit', async t => {
+test('running a transaction sub function calls potentiallyChanged', async t => {
   const original = new Database('test.db')
-  const notifier = new MockCommitNotifier(original.name)
-  const db = await electrify(original, {commitNotifier: notifier})
+  const notifier = new MockNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   const a = db.transaction(() => {})
   const b = db.transaction(() => {})
@@ -100,8 +100,8 @@ test('running a transaction sub function calls notifyCommit', async t => {
 
 test('electrify preserves chainability', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockCommitNotifier(original.name)
-  const db = await electrify(original, {commitNotifier: notifier})
+  const notifier = new MockNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -114,8 +114,8 @@ test('electrify preserves chainability', async t => {
 
 test('running a prepared statement outside of a transaction notifies', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockCommitNotifier(original.name)
-  const db = await electrify(original, {commitNotifier: notifier})
+  const notifier = new MockNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -127,8 +127,8 @@ test('running a prepared statement outside of a transaction notifies', async t =
 
 test('running a prepared statement *inside* of a transaction does *not* notify', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockCommitNotifier(original.name)
-  const db = await electrify(original, {commitNotifier: notifier})
+  const notifier = new MockNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -145,8 +145,8 @@ test('running a prepared statement *inside* of a transaction does *not* notify',
 
 test('iterating a prepared statement works', async t => {
   const original = new MockDatabase('test.db')
-  const notifier = new MockCommitNotifier(original.name)
-  const db = await electrify(original, {commitNotifier: notifier})
+  const notifier = new MockNotifier(original.name)
+  const db = await electrify(original, {notifier: notifier})
 
   t.is(notifier.notifications.length, 0)
 
@@ -166,7 +166,9 @@ test('query adapter perform works', async t => {
   const stmt = db.prepare('select ?')
   const r3 = await adapter.perform(stmt, [2])
 
-  t.deepEqual([r1, r2, r3], [[], [], []])
+  const expectedResults = [{foo: 'bar'}, {foo: 'baz'}]
+
+  t.deepEqual([r1, r2, r3], [expectedResults, expectedResults, expectedResults])
 })
 
 test('query adapter tableNames works', async t => {
@@ -196,5 +198,5 @@ test('satellite client query works', async t => {
 
   const result = await adapter.query('select foo from bars')
 
-  t.deepEqual(result, [])
+  t.deepEqual(result, [{foo: 'bar'}, {foo: 'baz'}])
 })

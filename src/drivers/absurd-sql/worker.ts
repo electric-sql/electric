@@ -2,14 +2,14 @@ import initSqlJs from '@aphro/sql.js'
 import { SQLiteFS } from '@aphro/absurd-sql'
 import IndexedDBBackend from '@aphro/absurd-sql/dist/indexeddb-backend'
 
+import { WorkerServer, RequestError } from '../../bridge/index'
 import { DEFAULTS } from '../../electric/config'
 import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { BrowserFilesystem } from '../../filesystems/browser'
-import { EmitCommitNotifier } from '../../notifiers/emit'
+import { WorkerBridgeNotifier } from '../../notifiers/bridge'
 import { globalRegistry } from '../../satellite/registry'
 import { DbName } from '../../util/types'
 
-import { BaseWorkerServer, RequestError } from './bridge'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
 import { QueryAdapter } from './query'
@@ -20,7 +20,7 @@ const refs = []
 
 // Runs in the worker thread and handles the communication with the
 // `ElectricDatabase`, mapping postMessages to db method calls.
-export class ElectricWorker extends BaseWorkerServer {
+export class ElectricWorker extends WorkerServer {
   async init(locatorPattern: string): Promise<boolean> {
     const locateFileFn = WasmLocator.deserialise(locatorPattern)
 
@@ -59,15 +59,15 @@ export class ElectricWorker extends BaseWorkerServer {
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
       const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
-      const commitNotifier = opts.commitNotifier || new EmitCommitNotifier(dbName)
+      const notifier = opts.notifier || new WorkerBridgeNotifier(dbName, this)
       const fs = opts.filesystem || new BrowserFilesystem()
       const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
       const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
 
-      const namespace = new ElectricNamespace(commitNotifier, queryAdapter)
+      const namespace = new ElectricNamespace(notifier, queryAdapter)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs)
+      await satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs, notifier)
     }
     else {
       await satelliteRegistry.ensureAlreadyStarted(dbName)

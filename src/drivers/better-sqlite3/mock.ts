@@ -43,20 +43,26 @@ export class MockStatement implements Statement {
     this.database = db
   }
 
-  run(_bindParams: BindParams): Info {
+  run(_params: BindParams): Info {
     return {
       changes: 0,
       lastInsertRowid: 1234
     }
   }
 
-  get(_bindParams: BindParams): Row | void {}
-
-  all(_bindParams: BindParams): Row[] {
-    return []
+  get(_params: BindParams): Row | void {
+    return {foo: 'bar'}
   }
 
-  iterate(_bindParams: BindParams): Iterable<Row> {
-    return []
+  all(params: BindParams): Row[] {
+    if (params && 'shouldError' in params && params.shouldError) {
+      throw new Error('Mock query error')
+    }
+
+    return [{foo: 'bar'}, {foo: 'baz'}]
+  }
+
+  iterate(_params: BindParams): Iterable<Row> {
+    return [{foo: 'bar'}, {foo: 'baz'}]
   }
 }

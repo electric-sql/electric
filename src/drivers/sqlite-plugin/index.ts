@@ -59,11 +59,11 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
   // it to patch the `tx.success`` function.
   addTransaction(tx: SQLitePluginTransaction): void {
     const originalSuccessFn = tx.success.bind(tx)
-    const notifyCommit = this.electric.notifyCommit.bind(this.electric)
+    const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
 
     tx.success = (...args: any[]): any => {
       if (!tx.readOnly) {
-        notifyCommit()
+        potentiallyChanged()
       }
 
       if (!!originalSuccessFn) {

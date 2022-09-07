@@ -17,12 +17,12 @@ export class QueryAdapter implements QueryAdapterInterface {
     this.defaultNamespace = defaultNamespace
   }
 
-  perform(query: Query, bindParams: BindParams): Promise<Row[]> {
+  async perform(query: Query, bindParams: BindParams): Promise<Row[]> {
     const stmt: Statement = typeof query === 'string'
       ? this.db.prepare(query)
       : query
 
-    return Promise.resolve(stmt.all(bindParams))
+    return stmt.all(bindParams)
   }
 
   tableNames(query: Query): QualifiedTablename[] {

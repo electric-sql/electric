@@ -10,7 +10,7 @@ import {
 } from '../../electric/index'
 
 import { NodeFilesystem } from '../../filesystems/node'
-import { EmitCommitNotifier } from '../../notifiers/emit'
+import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
 
 import { Database, ElectricDatabase } from './database'
@@ -21,14 +21,14 @@ export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Da
   const dbName: DbName = db.name
   const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
 
-  const commitNotifier = opts.commitNotifier || new EmitCommitNotifier(dbName)
+  const notifier = opts.notifier || new EventNotifier(dbName)
   const fs = opts.filesystem || new NodeFilesystem()
   const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
   const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
   const satelliteRegistry = opts.satelliteRegistry || globalRegistry
 
-  const namespace = new ElectricNamespace(commitNotifier, queryAdapter)
+  const namespace = new ElectricNamespace(notifier, queryAdapter)
   const electric = new ElectricDatabase(db, namespace)
 
-  return baseElectrify(dbName, db, electric, fs, satelliteDbAdapter, satelliteRegistry)
+  return baseElectrify(dbName, db, electric, fs, notifier, satelliteDbAdapter, satelliteRegistry)
 }

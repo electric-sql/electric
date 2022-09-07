@@ -1,9 +1,9 @@
 import test from 'ava'
 
-import { initTestable } from '../../src/drivers/react-native-sqlite-storage/test'
-import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
-import { QueryAdapter } from '../../src/drivers/react-native-sqlite-storage/query'
-import { SatelliteDatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/satellite'
+import { initTestable } from '../../src/drivers/cordova-sqlite-storage/test'
+import { MockDatabase } from '../../src/drivers/cordova-sqlite-storage/mock'
+import { QueryAdapter } from '../../src/drivers/cordova-sqlite-storage/query'
+import { SatelliteDatabaseAdapter } from '../../src/drivers/cordova-sqlite-storage/satellite'
 import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
@@ -19,7 +19,7 @@ test('electrify returns an equivalent database client', async t => {
   })
 })
 
-test('running a transaction runs notifyCommit', async t => {
+test('running a transaction runs potentiallyChanged', async t => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
@@ -30,7 +30,7 @@ test('running a transaction runs notifyCommit', async t => {
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a read only transaction does not notifyCommit', async t => {
+test('running a read only transaction does not potentiallyChanged', async t => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
@@ -39,63 +39,6 @@ test('running a read only transaction does not notifyCommit', async t => {
   db.addTransaction(tx)
 
   t.is(notifier.notifications.length, 0)
-})
-
-test('attaching a database now notifies for both', async t => {
-  const [original, notifier, db] = await initTestable('test.db')
-
-  t.is(notifier.notifications.length, 0)
-
-  db.attach('lala.db', 'lala')
-  db.addTransaction(new MockSQLitePluginTransaction())
-
-  t.is(notifier.notifications.length, 2)
-})
-
-test('detaching a database notifies for one less', async t => {
-  const [original, notifier, db] = await initTestable('test.db')
-
-  t.is(notifier.notifications.length, 0)
-
-  db.attach('lala.db', 'lala')
-  db.addTransaction(new MockSQLitePluginTransaction())
-
-  t.is(notifier.notifications.length, 2)
-
-  db.detach('lala')
-  db.addTransaction(new MockSQLitePluginTransaction())
-
-  t.is(notifier.notifications.length, 3)
-})
-
-test('enablePromiseRuntime(mockDb) works', async t => {
-  const [original, notifier, db] = await initTestable('test.db', {
-    enablePromises: true
-  })
-
-  t.is(notifier.dbNames.size, 1)
-
-  return original.attach('lala.db', 'lala')
-    .then((arg) => {
-      t.is(arg, 'mocked!')
-    })
-})
-
-test('working with the promise runtime works', async t => {
-  const [original, notifier, db] = await initTestable('test.db', {
-    enablePromises: true
-  })
-
-  t.is(notifier.notifications.length, 0)
-
-  return db
-    .attach('lala.db', 'lala')
-    .then(() => {
-      const tx = new MockSQLitePluginTransaction()
-      db.addTransaction(tx)
-
-      t.is(notifier.notifications.length, 2)
-    })
 })
 
 test('query adapter perform works', async t => {

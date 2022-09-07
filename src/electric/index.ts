@@ -1,6 +1,6 @@
 import { AnyDatabase, AnyElectricDatabase } from '../drivers/index'
 import { Filesystem } from '../filesystems/index'
-import { CommitNotifier } from '../notifiers/index'
+import { Notifier } from '../notifiers/index'
 import { QueryAdapter } from '../query-adapters/index'
 import { SatelliteDatabaseAdapter, SatelliteRegistry } from '../satellite/index'
 import { proxyOriginal } from '../proxy/original'
@@ -12,7 +12,7 @@ import { DbName, DbNamespace } from '../util/types'
 export interface ElectrifyOptions {
   defaultNamespace?: DbNamespace,
   filesystem?: Filesystem,
-  commitNotifier?: CommitNotifier,
+  notifier?: Notifier,
   queryAdapter?: QueryAdapter,
   satelliteDbAdapter?: SatelliteDatabaseAdapter,
   satelliteRegistry?: SatelliteRegistry
@@ -21,19 +21,19 @@ export interface ElectrifyOptions {
 // This is the namespace that's patched onto the user's database client
 // (technically via the proxy machinery) as the `.electric` property.
 export class ElectricNamespace {
-  commitNotifier: CommitNotifier
+  notifier: Notifier
   queryAdapter: QueryAdapter
 
-  constructor(commitNotifier: CommitNotifier, queryAdapter: QueryAdapter) {
-    this.commitNotifier = commitNotifier
+  constructor(notifier: Notifier, queryAdapter: QueryAdapter) {
+    this.notifier = notifier
     this.queryAdapter = queryAdapter
   }
 
   // We lift this function a level so the user can call
-  // `db.electric.notifyCommit()` rather than the longer / more redundant
-  // `db.electric.notifier.notifyCommit()`.
-  notifyCommit(): void {
-    this.commitNotifier.notifyCommit()
+  // `db.electric.potentiallyChanged()` rather than the longer / more redundant
+  // `db.electric.notifier.potentiallyChanged()`.
+  potentiallyChanged(): void {
+    this.notifier.potentiallyChanged()
   }
 }
 
@@ -46,9 +46,10 @@ export const electrify = (
       db: AnyDatabase,
       electric: AnyElectricDatabase,
       fs: Filesystem,
+      notifier: Notifier,
       satelliteDbAdapter: SatelliteDatabaseAdapter,
       satelliteRegistry: SatelliteRegistry
     ): Promise<any> => {
-  return satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs)
+  return satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs, notifier)
     .then(() => proxyOriginal(db, electric))
 }

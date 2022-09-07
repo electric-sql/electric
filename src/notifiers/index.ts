@@ -1,65 +1,51 @@
-import { DbName, DbNamespace, Tablename, RowId } from '../util/types'
+import { QualifiedTablename } from '../util/tablename'
+import { DbName, RowId } from '../util/types'
 
-export interface ChangedIdentifier {
-  namespace: DbNamespace,
-  tablename: Tablename,
-  rowid?: RowId
+export interface Change {
+  qualifiedTablename: QualifiedTablename,
+  rowids?: RowId[]
 }
-
 export interface ChangeNotification {
-  dbName: DbName,
-  changes: ChangedIdentifier[]
+  dbName: DbName
+  changes: Change[]
 }
-
-export interface CommitNotification {
+export interface PotentialChangeNotification {
   dbName: DbName
 }
+export type Notification = ChangeNotification | PotentialChangeNotification
 
-export interface ChangeNotifier {
-  dbName: DbName
+export type ChangeCallback = (notification: ChangeNotification) => void
+export type PotentialChangeCallback = (notification: PotentialChangeNotification) => void
+export type NotificationCallback = ChangeCallback | PotentialChangeCallback
 
-  notifyChange(changes: ChangedIdentifier[]): void
-}
-
-export interface CommitNotifier {
+export interface Notifier {
+  // Most database clients just open a single named database. However,
+  // some can attach multiple databases. We keep track of this in the
+  // set of `dbNames` by providing attach and detach methods.
   dbNames: Set<DbName>
-
-  notifications?: CommitNotification[]
-
   attach(dbName: DbName): void
   detach(dbName: DbName): void
 
-  notifyCommit(): void
-}
+  // The notification workflow starts by the electric database clients
+  // (or the user manually) calling `potentiallyChanged` following
+  // a write or transaction that may have changed the contents of one
+  // or more of the opened/attached databases. If `dbName` is provided,
+  // it restricts the potential change to the named database (as long)
+  // as it is in the set of `this.dbNames`.
+  potentiallyChanged(dbName?: DbName): void
 
-export abstract class BaseChangeNotifier implements ChangeNotifier {
-  dbName: DbName
+  // Satellite processes subscribe to *potential* data changes and check
+  // the opslog for *actual* changes as part of the replication machinery.
+  subscribeToPotentialDataChanges(callback: PotentialChangeCallback): string
+  unsubscribeFromPotentialDataChanges(key: string): void
 
-  constructor(dbName: DbName) {
-    this.dbName = dbName
-  }
+  // When Satellite detects actual data changes in the opslog for a given
+  // database, it calls  `actuallyChanged` with the list of changes.
+  actuallyChanged(dbName: DbName, changes: Change[]): void
 
-  notifyChange(_changes: ChangedIdentifier[]): void {
-    throw 'Subclasses of `BaseChangeNotifier` must implement notifyChange()'
-  }
-}
-
-export abstract class BaseCommitNotifier implements CommitNotifier {
-  dbNames: Set<DbName>
-
-  constructor(dbNames: DbName | DbName[]) {
-    this.dbNames = new Set(Array.isArray(dbNames) ? dbNames : [dbNames])
-  }
-
-  attach(dbName: DbName): void {
-    this.dbNames.add(dbName)
-  }
-
-  detach(dbName: DbName): void {
-    this.dbNames.delete(dbName)
-  }
-
-  notifyCommit(): void {
-    throw 'Subclasses of `BaseCommitNotifier` must implement notifyCommit()'
-  }
+  // Reactive hooks then subscribe to `ActualDataChange` notifications,
+  // using the info about what has actually changed to trigger re-queries.
+  // when (and only when) necessary.
+  subscribeToDataChanges(callback: ChangeCallback): string
+  unsubscribeFromDataChanges(key: string): void
 }

@@ -1,15 +1,10 @@
 import test from 'ava'
 
 import Worker from 'web-worker'
-import { Blob } from 'node:buffer'
 
-import { RequestError, ServerMethod, WorkerClient } from '../../src/drivers/browser/bridge'
-import { MainThreadDatabaseProxy, MainThreadStatementProxy } from '../../src/drivers/browser/database'
-import { MockDatabase, MockElectricWorker } from '../../src/drivers/browser/mock'
-import { QueryAdapter, resultToRows } from '../../src/drivers/browser/query'
-import { SatelliteDatabaseAdapter } from '../../src/drivers/browser/satellite'
-import { MockCommitNotifier } from '../../src/notifiers/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
+import { ServerMethod, WorkerClient } from '../../src/bridge/index'
+import { MainThreadDatabaseProxy, MainThreadStatementProxy } from '../../src/drivers/absurd-sql/database'
+import { resultToRows } from '../../src/drivers/absurd-sql/query'
 
 const initMethod: ServerMethod = {target: 'server', name: 'init'}
 const openMethod: ServerMethod = {target: 'server', name: 'open'}
@@ -363,7 +358,7 @@ test('db.exec harmless sql does not notify', async t => {
   await db.exec('select 1')
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 0)
 })
@@ -378,7 +373,7 @@ test('db.exec dangerous sql does notify', async t => {
   await db.exec('insert foo into bar')
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -393,7 +388,7 @@ test('db.run harmless sql does not notify', async t => {
   await db.run('select 1')
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 0)
 })
@@ -408,7 +403,7 @@ test('db.run dangerous sql notifies', async t => {
   await db.run('insert foo into bar')
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -427,7 +422,7 @@ test('db.each notifies', async t => {
   const retval = await db.each('insert into lala', handleRow, handleDone)
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -445,7 +440,7 @@ test('db.iterateStatements doesn\'t notify on its own', async t => {
   }
 
   let testData = await client.request(getTestData, 'test.db')
-  let notifications = testData.commitNotifications
+  let notifications = testData.notifications
 
   t.is(notifications.length, 0)
 
@@ -454,7 +449,7 @@ test('db.iterateStatements doesn\'t notify on its own', async t => {
   }
 
   testData = await client.request(getTestData, 'test.db')
-  notifications = testData.commitNotifications
+  notifications = testData.notifications
 
   t.is(notifications.length, 2)
 })
@@ -470,7 +465,7 @@ test('statement run notifies when dangerous', async t => {
   await stmt.run()
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -486,7 +481,7 @@ test('statement step notifies when dangerous', async t => {
   await stmt.step()
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -503,7 +498,7 @@ test('statement step only notifies once', async t => {
   await stmt.step()
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 1)
 })
@@ -523,7 +518,7 @@ test('statement bind and reset allows reuse with notify', async t => {
   await stmt.step()
 
   const testData = await client.request(getTestData, 'test.db')
-  const notifications = testData.commitNotifications
+  const notifications = testData.notifications
 
   t.is(notifications.length, 3)
 })
@@ -539,19 +534,19 @@ test('statement get notifies if called with params', async t => {
   await stmt.step()
 
   let testData = await client.request(getTestData, 'test.db')
-  let notifications = testData.commitNotifications
+  let notifications = testData.notifications
   t.is(notifications.length, 1)
 
   await stmt.get()
 
   testData = await client.request(getTestData, 'test.db')
-  notifications = testData.commitNotifications
+  notifications = testData.notifications
   t.is(notifications.length, 1)
 
   await stmt.get({foo: 'baz'})
 
   testData = await client.request(getTestData, 'test.db')
-  notifications = testData.commitNotifications
+  notifications = testData.notifications
   t.is(notifications.length, 2)
 })
 
@@ -566,18 +561,18 @@ test('statement getAsObject notifies if called with params', async t => {
   await stmt.step()
 
   let testData = await client.request(getTestData, 'test.db')
-  let notifications = testData.commitNotifications
+  let notifications = testData.notifications
   t.is(notifications.length, 1)
 
   await stmt.getAsObject()
 
   testData = await client.request(getTestData, 'test.db')
-  notifications = testData.commitNotifications
+  notifications = testData.notifications
   t.is(notifications.length, 1)
 
   await stmt.getAsObject({foo: 'baz'})
 
   testData = await client.request(getTestData, 'test.db')
-  notifications = testData.commitNotifications
+  notifications = testData.notifications
   t.is(notifications.length, 2)
 })

@@ -41,7 +41,7 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
   // the names of the attached databases.
   attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const aliases = this._aliases
-    const notifier = this.electric.commitNotifier
+    const notifier = this.electric.notifier
     const promisesEnabled = this._promisesEnabled
     const originalSuccessFn = success
 
@@ -65,7 +65,7 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
 
   detach(dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const aliases = this._aliases
-    const notifier = this.electric.commitNotifier
+    const notifier = this.electric.notifier
     const promisesEnabled = this._promisesEnabled
     const originalSuccessFn = success
 

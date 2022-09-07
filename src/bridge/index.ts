@@ -1,7 +1,8 @@
-import { randomValue } from '../../util/random'
-import { AnyFunction, DbName, StatementId } from '../../util/types'
-import { ElectrifyOptions } from '../../electric/index'
-import { ElectricDatabase } from './database'
+import { AnyWorkerThreadElectricDatabase } from '../drivers/index'
+import { ElectrifyOptions } from '../electric/index'
+import { ChangeCallback, ChangeNotification } from '../notifiers/index'
+import { randomValue } from '../util/random'
+import { AnyFunction, DbName, StatementId } from '../util/types'
 
 declare global {
   interface Worker {
@@ -22,6 +23,12 @@ export interface DbMethod {
   name: string
 }
 
+export interface NotifyMethod {
+  target: 'notify'
+  dbName: DbName
+  name: string
+}
+
 export interface StatementMethod {
   target: 'statement'
   dbName: DbName
@@ -29,7 +36,7 @@ export interface StatementMethod {
   name: string
 }
 
-type RequestMethod = ServerMethod | DbMethod | StatementMethod
+type RequestMethod = ServerMethod | DbMethod | NotifyMethod | StatementMethod
 
 export interface Request {
   args: any[]
@@ -53,6 +60,12 @@ export interface Response {
   requestId: string
 }
 
+export interface ChangeNotificationResponse {
+  status: 'changed'
+  result: ChangeNotification,
+  isChangeNotification: true
+}
+
 // Used by the main thread to send requests to the the worker.
 export class WorkerClient {
   worker: Worker
@@ -61,12 +74,20 @@ export class WorkerClient {
   removeListener: AnyFunction
   postMessage: AnyFunction
 
+  _changeCallbacks: {
+    [key: string]: ChangeCallback
+  }
+
   constructor(worker: Worker) {
     this.worker = worker
 
     this.addListener = worker.addEventListener.bind(worker)
     this.removeListener = worker.removeEventListener.bind(worker)
     this.postMessage = worker.postMessage.bind(worker)
+
+    this._changeCallbacks = {}
+
+    this.addListener('message', this.handleMessage.bind(this))
   }
 
   request(method: RequestMethod, ...args: any[]): Promise<any> {
@@ -82,22 +103,58 @@ export class WorkerClient {
     const postMessage = this.postMessage
 
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const handleResponse = (event: MessageEvent): any => {
-        const resp: Response = event.data
-
-        if (resp.requestId !== requestId) {
+      const handleResponse = ({ data }: MessageEvent): any => {
+        if (data.requestId === undefined) {
+          return
+        }
+        if (data.requestId !== requestId) {
           return
         }
 
         removeListener('message', handleResponse)
 
-        const { result, status } = resp
+        const { result, status }: Response = data
         status === 'error' ? reject(result) : resolve(result)
       }
 
       addListener('message', handleResponse)
       postMessage(data)
     })
+  }
+
+  notify(method: NotifyMethod, ...args: any[]): void {
+    const requestId = randomValue()
+    const data = {
+      args: args,
+      method: method,
+      requestId: requestId
+    }
+
+    this.postMessage(data)
+  }
+
+  subscribeToChanges(key: string, callback: ChangeCallback): string {
+    if (key in this._changeCallbacks) {
+      throw new Error(`Subscription key clash -- \`key\` must be unique.`)
+    }
+
+    this._changeCallbacks[key] = callback
+
+    return key
+  }
+  unsubscribeFromChanges(key: string): void {
+    delete this._changeCallbacks[key]
+  }
+
+  handleMessage({ data }: MessageEvent): void {
+    if (data.isChangeNotification !== true) {
+      return
+    }
+
+    const callbacks = Object.values(this._changeCallbacks)
+    const notification = data.result as ChangeNotification
+
+    callbacks.forEach((callback) => callback(notification))
   }
 }
 
@@ -106,19 +163,23 @@ export class WorkerClient {
 //
 // - ServerMethod => this.init / this.open
 // - DbMethod => this._dbs[dbName].method
+// - NotifyMethod => this._dbs[dbName].electric.notifier.method
 // - StatementMethod => this._dbs[dbName]._getStatement(id).method
+//
+// Note that the server can also notify the client to make the bridge
+// notification messaging work.
 //
 // It's abstract because we extend with concrete implementations
 // for the open and init methods and an implementatin specific
 // start method.
-export abstract class BaseWorkerServer {
+export abstract class WorkerServer {
   SQL?: any
 
   worker: Worker
   opts: ElectrifyOptions
 
   _dbs: {
-    [key: DbName]: ElectricDatabase
+    [key: DbName]: AnyWorkerThreadElectricDatabase
   }
 
   constructor(worker: Worker, opts: ElectrifyOptions) {
@@ -168,6 +229,16 @@ export abstract class BaseWorkerServer {
     this.worker.postMessage(resp)
   }
 
+  _dispatchChangeNotification(notification: ChangeNotification): void {
+    const resp: ChangeNotificationResponse = {
+      status: 'changed',
+      result: notification,
+      isChangeNotification: true
+    }
+
+    this.worker.postMessage(resp)
+  }
+
   _getBound(target: any, methodName: string): AnyFunction | undefined {
     if (target === undefined) {
       return
@@ -182,7 +253,7 @@ export abstract class BaseWorkerServer {
     return fn.bind(target)
   }
 
-  _getDb(dbName: DbName): ElectricDatabase | undefined {
+  _getDb(dbName: DbName): AnyWorkerThreadElectricDatabase | undefined {
     return this._dbs[dbName]
   }
 
@@ -198,6 +269,12 @@ export abstract class BaseWorkerServer {
 
     if (method.target === 'db') {
       return this._getBound(db, method.name)
+    }
+
+    if (method.target === 'notify') {
+      const notifier = db.electric.notifier
+
+      return this._getBound(notifier, method.name)
     }
 
     if (method.target === 'statement') {

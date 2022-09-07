@@ -1,6 +1,6 @@
 import { AnyDatabase } from '../drivers/index'
 import { Filesystem } from '../filesystems/index'
-import { ChangeNotifier } from '../notifiers/index'
+import { Notifier } from '../notifiers/index'
 import { BindParams, DbName, Row } from '../util/types'
 
 // `Satellite` is the main process handling Electric SQL replication.
@@ -16,7 +16,7 @@ export interface Satellite {
   dbAdapter: SatelliteDatabaseAdapter
   dbName: DbName
   fs: Filesystem
-  changeNotifier: ChangeNotifier
+  notifier: Notifier
 
   stop(): Promise<void>
 }
@@ -41,7 +41,7 @@ export interface SatelliteDatabaseAdapter {
 // starts and stops replication processing for every SQLite database
 // that the application is using.
 export interface SatelliteRegistry {
-  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem): Promise<Satellite>
+  ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier): Promise<Satellite>
   ensureAlreadyStarted(dbName: DbName): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
   stopAll(): Promise<void>

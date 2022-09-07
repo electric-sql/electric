@@ -1,5 +1,5 @@
-import { MockCommitNotifier } from '../../src/notifiers/mock'
-import { MockElectricWorker } from '../../src/drivers/browser/mock'
+import { MockElectricWorker } from '../../src/drivers/absurd-sql/mock'
+import { MockNotifier } from '../../src/notifiers/mock'
 
 // XXX These functions become available to add to an
 // open database using `db.create_function`.
@@ -9,5 +9,5 @@ self.user_defined_functions = {
   }
 }
 
-const notifier = new MockCommitNotifier('test.db')
-const ref = new MockElectricWorker(self, {commitNotifier: notifier})
+const notifier = new MockNotifier('test.db')
+const ref = new MockElectricWorker(self, {notifier: notifier})
