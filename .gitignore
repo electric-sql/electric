@@ -28,3 +28,6 @@ electric-*.tar
 vx_pg_offset_storage_dev.dat
 vx_pg_offset_storage_test.dat
 vx_pg_offset_storage_prod.dat
+
+# Fetched protobuff files
+/proto/satellite

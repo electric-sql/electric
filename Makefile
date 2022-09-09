@@ -5,9 +5,14 @@ build_tools:
 	mix local.hex --force
 	mix local.rebar --force
 
-deps:
+deps: deps_proto
 	mix deps.get
 	mix deps.compile
+
+deps_proto: ./proto/satellite
+
+./proto/satellite:
+	./get-proto.sh
 
 dialyzer:
 	mix dialyzer
