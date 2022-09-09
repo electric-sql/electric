@@ -80,7 +80,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - uses: actions/cache@v3
+        with:
+          path: |
+            proto
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
