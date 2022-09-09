@@ -18,6 +18,7 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: |
+            proto
             deps
             _build
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
@@ -43,6 +44,7 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: |
+            proto
             deps
             _build
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
