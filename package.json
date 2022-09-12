@@ -53,7 +53,7 @@
   "scripts": {
     "dev": "tsmodule dev",
     "build": "rm -rf ./dist && tsmodule build",
-    "test": "ava --no-worker-threads",
+    "test": "ava",
     "pretest": "yarn build",
     "prepublishOnly": "yarn test",
     "lint": "eslint src --fix"
@@ -71,16 +71,16 @@
     "nodeArguments": [
       "--no-warnings",
       "--loader=@tsmodule/tsmodule/loader"
-    ]
+    ],
+    "workerThreads": false
   },
   "dependencies": {
     "events": "^3.3.0",
+    "lodash.throttle": "^4.1.1",
     "sqlite-parser": "^1.0.1",
     "walkjs": "^3.2.4"
   },
   "devDependencies": {
-    "@aphro/absurd-sql": "^0.0.53",
-    "@aphro/sql.js": "^1.7.0",
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "^40.0.17",
     "@types/node": "^18.7.13",
@@ -88,19 +88,46 @@
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
-    "better-sqlite3": ">= 7.4.0",
+    "better-sqlite3": "^7.6.2",
     "browser-env": "^3.3.0",
-    "cordova-sqlite-storage": ">= 5.0.0",
     "eslint": "^8.22.0",
-    "expo-asset": ">= 8.0.0",
-    "expo-file-system": "13.0.0",
-    "expo-sqlite": ">= 10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-native-fs": ">= 2.17.0",
-    "react-native-sqlite-storage": ">= 6.0.0",
-    "typeorm": ">=0.3.0",
+    "typeorm": "^0.3.9",
     "typescript": "^4.7.4",
     "web-worker": "^1.2.0"
+  },
+  "peerDependencies": {
+    "@aphro/absurd-sql": "^0.0.53",
+    "@aphro/sql.js": "^1.7.0",
+    "better-sqlite3": ">= 7.4.0",
+    "cordova-sqlite-storage": ">= 5.0.0",
+    "expo-sqlite": ">= 10.0.0",
+    "react": ">= 16.8.0",
+    "react-native-sqlite-storage": ">= 6.0.0",
+    "typeorm": ">=0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@aphro/absurd-sql": {
+      "optional": true
+    },
+    "@aphro/sql.js": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "cordova-sqlite-storage": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-native-sqlite-storage": {
+      "optional": true
+    },
+    "typeorm": {
+      "optional": true
+    }
   }
 }

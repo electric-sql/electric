@@ -1,9 +1,8 @@
 import test from 'ava'
 
-import { initTestable } from '../../src/drivers/react-native-sqlite-storage/test'
+import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
 import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
-import { QueryAdapter } from '../../src/drivers/react-native-sqlite-storage/query'
-import { SatelliteDatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/satellite'
+import { initTestable } from '../../src/drivers/react-native-sqlite-storage/test'
 import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
@@ -73,8 +72,6 @@ test('enablePromiseRuntime(mockDb) works', async t => {
     enablePromises: true
   })
 
-  t.is(notifier.dbNames.size, 1)
-
   return original.attach('lala.db', 'lala')
     .then((arg) => {
       t.is(arg, 'mocked!')
@@ -98,40 +95,30 @@ test('working with the promise runtime works', async t => {
     })
 })
 
-test('query adapter perform works', async t => {
+test('database adapter run works', async t => {
   const db = new MockDatabase('test.db')
-  const adapter = new QueryAdapter(db, 'main')
+  const adapter = new DatabaseAdapter(db)
 
-  const r1 = await adapter.perform('select 1')
-  const r2 = await adapter.perform('select ?', [1])
-
-  t.deepEqual([r1, r2], [[{i: 0}], [{i: 0}]])
-})
-
-test('query adapter tableNames works', async t => {
-  const db = new MockDatabase('test.db')
-  const adapter = new QueryAdapter(db, 'main')
-
-  const sql = 'select foo from bar'
-  const r1 = await adapter.tableNames(sql)
-
-  t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
-})
-
-test('satellite client exec works', async t => {
-  const db = new MockDatabase('test.db')
-  const adapter = new SatelliteDatabaseAdapter(db)
-
-  const result = await adapter.exec('drop badgers')
+  const result = await adapter.run('drop badgers')
 
   t.is(result, undefined)
 })
 
-test('satellite client query works', async t => {
+test('database adapter query works', async t => {
   const db = new MockDatabase('test.db')
-  const adapter = new SatelliteDatabaseAdapter(db)
+  const adapter = new DatabaseAdapter(db)
 
   const result = await adapter.query('select foo from bars')
 
   t.deepEqual(result, [{i: 0}])
+})
+
+test('database adapter tableNames works', async t => {
+  const db = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(db)
+
+  const sql = 'select foo from bar'
+  const r1 = adapter.tableNames(sql)
+
+  t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
 })

@@ -1,17 +1,14 @@
 import { AnyFunction, BindParams, DbName, Row, SqlValue } from '../../util/types'
 
-import { DEFAULTS } from '../../electric/config'
-import { ElectricNamespace } from '../../electric/index'
-
 import { WorkerServer, RequestError } from '../../bridge/index'
-import { MockFilesystem } from '../../filesystems/mock'
+import { ElectricNamespace } from '../../electric/index'
+import { MockMigrator } from '../../migrators/mock'
 import { Notification } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
-import { globalRegistry } from '../../satellite/registry'
+import { MockRegistry } from '../../satellite/mock'
 
+import { DatabaseAdapter } from './adapter'
 import { Config, Database, ElectricDatabase, QueryExecResult, Statement } from './database'
-import { QueryAdapter } from './query'
-import { SatelliteDatabaseAdapter } from './satellite'
 
 interface TestData {
   notifications: Notification[]
@@ -120,24 +117,21 @@ export class MockElectricWorker extends WorkerServer {
     }
 
     const opts = this.opts
-    const satelliteRegistry = opts.satelliteRegistry || globalRegistry
+    const registry = opts.registry || new MockRegistry()
 
     if (!(dbName in this._dbs)) {
       const db = new MockDatabase(dbName)
-      const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
-
+      const adapter = opts.adapter || new DatabaseAdapter(db)
+      const migrator = opts.migrator || new MockMigrator()
       const notifier = opts.notifier || new MockNotifier(dbName)
-      const fs = opts.filesystem || new MockFilesystem()
-      const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
-      const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
 
-      const namespace = new ElectricNamespace(notifier, queryAdapter)
+      const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs, notifier)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier)
     }
     else {
-      await satelliteRegistry.ensureAlreadyStarted(dbName)
+      await registry.ensureAlreadyStarted(dbName)
     }
 
     return true

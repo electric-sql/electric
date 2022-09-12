@@ -22,7 +22,7 @@ export class MockDatabase implements Database {
   transaction(fn: (...args: any[]) => any): (...args: any[]) => any {
     const self = this
 
-    return (...args) => {
+    function txFn(...args: any[]) {
       self.inTransaction = true
 
       const retval = fn(...args)
@@ -31,6 +31,11 @@ export class MockDatabase implements Database {
 
       return retval
     }
+    txFn.deferred = () => {}
+    txFn.immediate = () => {}
+    txFn.exclusive = () => {}
+
+    return txFn
   }
 }
 

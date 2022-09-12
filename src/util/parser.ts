@@ -1,8 +1,8 @@
-import { QualifiedTablename } from './tablename'
-import { DbNamespace } from './types'
-
 import sqliteParser from 'sqlite-parser'
 import { WalkBuilder } from 'walkjs'
+
+import { QualifiedTablename } from './tablename'
+import { DbNamespace } from './types'
 
 const dangerousKeywords = [
   'add',
@@ -36,7 +36,7 @@ export const isPotentiallyDangerous = (stmt: string): boolean => {
   return dangerousKeywordsExp.test(stmt)
 }
 
-export const parseTableNames = (sqlQuery: string, defaultNamespace: DbNamespace): QualifiedTablename[] => {
+export const parseTableNames = (sqlQuery: string, defaultNamespace: DbNamespace = 'main'): QualifiedTablename[] => {
   const ast = sqliteParser(sqlQuery)
   if (ast.type !== 'statement') { throw 'Invalid SQL statement' }
   if (ast.statement.length !== 1) { throw 'Query must be a single SQL statement.' }
@@ -81,7 +81,7 @@ const _isTableIdentifier = (node: any): boolean => {
   return true
 }
 
-const _ensureQualified = (candidate: string, defaultNamespace: DbNamespace): string => {
+const _ensureQualified = (candidate: string, defaultNamespace: DbNamespace = 'main'): string => {
   if (candidate.includes('.')) {
     return candidate
   }

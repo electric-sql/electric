@@ -4,7 +4,7 @@ import Worker from 'web-worker'
 
 import { ServerMethod, WorkerClient } from '../../src/bridge/index'
 import { MainThreadDatabaseProxy, MainThreadStatementProxy } from '../../src/drivers/absurd-sql/database'
-import { resultToRows } from '../../src/drivers/absurd-sql/query'
+import { resultToRows } from '../../src/drivers/absurd-sql/result'
 
 const initMethod: ServerMethod = {target: 'server', name: 'init'}
 const openMethod: ServerMethod = {target: 'server', name: 'open'}

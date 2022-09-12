@@ -39,15 +39,13 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
   // and running SQL statements against them both, so we also hook
   // into `attach` and `detach` to keep a running tally of all
   // the names of the attached databases.
-  attach(dbName: DbName, dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
-    const aliases = this._aliases
+  attach(dbName: DbName, dbAlias: string, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const notifier = this.electric.notifier
     const promisesEnabled = this._promisesEnabled
     const originalSuccessFn = success
 
     const successFn = (...args: any[]): any => {
-      aliases[dbAlias] = dbName
-      notifier.attach(dbName)
+      notifier.attach(dbName, dbAlias)
 
       if (!!originalSuccessFn && !promisesEnabled) {
         return originalSuccessFn(...args)
@@ -63,17 +61,13 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
     return this._db.attach(dbName, dbAlias, successFn, error)
   }
 
-  detach(dbAlias: DbName, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
-    const aliases = this._aliases
+  detach(dbAlias: string, success?: AnyFunction, error?: AnyFunction): VoidOrPromise {
     const notifier = this.electric.notifier
     const promisesEnabled = this._promisesEnabled
     const originalSuccessFn = success
 
     const successFn = (...args: any[]): any => {
-      const dbName = aliases[dbAlias]
-      delete aliases[dbAlias]
-
-      notifier.detach(dbName)
+      notifier.detach(dbAlias)
 
       if (!!originalSuccessFn) {
         return originalSuccessFn(...args)

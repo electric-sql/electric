@@ -12,4 +12,3 @@ export type SqlValue = string | number | null | Uint8Array
 export type StatementId = string
 export type Tablename = string
 export type VoidOrPromise = void | Promise<void>
-

@@ -1,59 +1,52 @@
-import { Filesystem } from '../filesystems/index'
+import { AuthState } from '../auth/index'
+import { DatabaseAdapter } from '../electric/adapter'
+import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
+import { sleepAsync } from '../util/timer'
 import { DbName } from '../util/types'
-import { Satellite, SatelliteDatabaseAdapter, SatelliteRegistry } from './index'
 
-export class MockSatellite implements Satellite {
-  dbAdapter: SatelliteDatabaseAdapter
+import { Satellite } from './index'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
+import { BaseRegistry } from './registry'
+
+export class MockSatelliteProcess implements Satellite {
   dbName: DbName
-  fs: Filesystem
+  adapter: DatabaseAdapter
+  migrator: Migrator
   notifier: Notifier
+  opts: SatelliteOpts
 
-  constructor(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier) {
-    this.dbAdapter = dbAdapter
+  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, opts: SatelliteOpts) {
     this.dbName = dbName
-    this.fs = fs
+    this.adapter = adapter
+    this.migrator = migrator
     this.notifier = notifier
+    this.opts = opts
   }
 
-  stop(): Promise<void> {
-    return Promise.resolve()
-  }
-}
-
-class MockRegistry implements SatelliteRegistry {
-  _satellites: {
-    [key: DbName]: Satellite
+  async start(_authState?: AuthState): Promise<void> {
+    await sleepAsync(50)
   }
 
-  constructor() {
-    this._satellites = {}
-  }
-
-  async ensureStarted(dbName: DbName, dbAdapter: SatelliteDatabaseAdapter, fs: Filesystem, notifier: Notifier): Promise<Satellite> {
-    const satellites = this._satellites
-
-    if (!(dbName in satellites)) {
-      satellites[dbName] = new MockSatellite(dbName, dbAdapter, fs, notifier)
-    }
-
-    return satellites[dbName]
-  }
-  async ensureAlreadyStarted(dbName: DbName): Promise<Satellite> {
-    const satellites = this._satellites
-
-    if (!(dbName in satellites)) {
-      throw new Error(`Satellite not running for db: ${dbName}`)
-    }
-
-    return satellites[dbName]
-  }
-  async stop(dbName: DbName): Promise<void> {
-    delete this._satellites[dbName]
-  }
-  async stopAll(): Promise<void> {
-    this._satellites = {}
+  async stop(): Promise<void> {
+    await sleepAsync(50)
   }
 }
 
-export const mockRegistry = new MockRegistry()
+export class MockRegistry extends BaseRegistry {
+  async startProcess(
+        dbName: DbName,
+        adapter: DatabaseAdapter,
+        migrator: Migrator,
+        notifier: Notifier,
+        authState?: AuthState,
+        overrides?: SatelliteOverrides
+      ): Promise<Satellite> {
+    const opts = {...satelliteDefaults, ...overrides}
+
+    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, opts)
+    await satellite.start(authState)
+
+    return satellite
+  }
+}

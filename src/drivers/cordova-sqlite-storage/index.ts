@@ -3,42 +3,29 @@
 // use the alternative entrypoint in `./test` to avoid importing this.
 import { DbName } from '../../util/types'
 
-import { DEFAULTS } from '../../electric/config'
 import {
   ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify
 } from '../../electric/index'
 
-import { Filesystem } from '../../filesystems/index'
-import { CordovaFilesystem } from '../../filesystems/cordova'
+import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
 
+import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase } from './database'
-import { QueryAdapter } from './query'
-import { SatelliteDatabaseAdapter } from './satellite'
-
-const resolveFilesystem = (fs?: Filesystem): Promise<Filesystem> => {
-  if (fs !== undefined) {
-    return Promise.resolve(fs)
-  }
-
-  return CordovaFilesystem.init()
-}
 
 export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Database> => {
   const dbName: DbName = db.dbname
-  const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
 
+  const adapter = opts.adapter || new DatabaseAdapter(db)
+  const migrator = opts.migrator || new BundleMigrator(opts.migrationsPath)
   const notifier = opts.notifier || new EventNotifier(dbName)
-  const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
-  const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
-  const satelliteRegistry = opts.satelliteRegistry || globalRegistry
+  const registry = opts.registry || globalRegistry
 
-  const namespace = new ElectricNamespace(notifier, queryAdapter)
+  const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  return resolveFilesystem(opts.filesystem)
-    .then(fs => baseElectrify(dbName, db, electric, fs, notifier, satelliteDbAdapter, satelliteRegistry))
+  return baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
 }

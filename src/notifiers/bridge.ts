@@ -19,8 +19,8 @@ import { EventNotifier } from './event'
 export class MainThreadBridgeNotifier extends EventNotifier implements Notifier {
   workerClient: WorkerClient
 
-  constructor(dbNames: DbName | DbName[], workerClient: WorkerClient) {
-    super(dbNames)
+  constructor(dbName: DbName, workerClient: WorkerClient) {
+    super(dbName)
 
     this.workerClient = workerClient
   }
@@ -41,7 +41,7 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
 
   subscribeToDataChanges(callback: ChangeCallback): string {
     const key = super.subscribeToDataChanges(callback)
-    const wrappedCallback = this._changeCallbacks[key]
+    const wrappedCallback = this._changeCallbacks[key] as ChangeCallback
 
     return this.workerClient.subscribeToChanges(key, wrappedCallback)
   }
@@ -57,8 +57,8 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
 export class WorkerBridgeNotifier extends EventNotifier implements Notifier {
   workerServer: WorkerServer
 
-  constructor(dbNames: DbName | DbName[], workerServer: WorkerServer) {
-    super(dbNames)
+  constructor(dbName: DbName, workerServer: WorkerServer) {
+    super(dbName)
 
     this.workerServer = workerServer
   }

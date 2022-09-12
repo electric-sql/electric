@@ -31,18 +31,14 @@ export interface SQLitePluginTransaction {
 // implementations for Cordova and React Native.
 export abstract class ElectricSQLitePlugin implements ProxyWrapper {
   // Private properties are not exposed via the proxy.
-  _aliases: {
-    [key: DbName]: DbName
-  }
   _db: SQLitePlugin
 
   // The public property we add to the underlying Database client,
   electric: ElectricNamespace
 
   constructor(db: SQLitePlugin, namespace: ElectricNamespace) {
-    this._aliases = {}
-
     this._db = db
+
     this.electric = namespace
   }
 

@@ -1,9 +1,12 @@
+import { parseTableNames } from '../../util/parser'
+import { QualifiedTablename } from '../../util/tablename'
 import { AnyFunction, BindParams, Row } from '../../util/types'
+
 import { SQLitePlugin, SQLitePluginTransaction } from './index'
 import { ensurePromise } from './promise'
 import { ExecutionResult, rowsFromResults } from './results'
 
-export abstract class SQLitePluginSatelliteDatabaseAdapter {
+export abstract class SQLitePluginDatabaseAdapter {
   db: SQLitePlugin
   promisesEnabled: boolean
 
@@ -12,7 +15,24 @@ export abstract class SQLitePluginSatelliteDatabaseAdapter {
     this.promisesEnabled = false
   }
 
-  exec(sql: string): Promise<void> {
+  _transaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction, readOnly: boolean = false): void {
+    const run = readOnly
+      ? this.db.readTransaction.bind(this.db)
+      : this.db.transaction.bind(this.db)
+
+    if (this.promisesEnabled) {
+      ensurePromise(run(txFn)).then(success).catch(error)
+    }
+    else { // The callback args are reversed!
+      run(txFn, error, success)
+    }
+  }
+
+  _readTransaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction): void {
+    this._transaction(txFn, success, error, true)
+  }
+
+  run(sql: string): Promise<void> {
     const run = this._transaction.bind(this)
 
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
@@ -40,20 +60,7 @@ export abstract class SQLitePluginSatelliteDatabaseAdapter {
     })
   }
 
-  _transaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction, readOnly: boolean = false): void {
-    const run = readOnly
-      ? this.db.readTransaction.bind(this.db)
-      : this.db.transaction.bind(this.db)
-
-    if (this.promisesEnabled) {
-      ensurePromise(run(txFn)).then(success).catch(error)
-    }
-    else { // The callback args are reversed!
-      run(txFn, error, success)
-    }
-  }
-
-  _readTransaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction): void {
-    this._transaction(txFn, success, error, true)
+  tableNames(query: string): QualifiedTablename[] {
+    return parseTableNames(query)
   }
 }

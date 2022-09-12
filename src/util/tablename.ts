@@ -13,6 +13,10 @@ export class QualifiedTablename {
     return namespace === this.namespace
         && tablename === this.tablename
   }
+
+  toString(): string {
+    return `${this.namespace}.${this.tablename}`
+  }
 }
 
 export const hasIntersection = (tablenames: QualifiedTablename[], candidates: QualifiedTablename[]): boolean => {

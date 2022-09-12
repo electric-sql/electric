@@ -3,20 +3,18 @@
 // alternative entrypoint in `./test` to avoid importing this.
 import { DbName } from '../../util/types'
 
-import { DEFAULTS } from '../../electric/config'
 import {
   ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify
 } from '../../electric/index'
 
-import { ReactNativeFilesystem } from '../../filesystems/react-native'
+import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
 
+import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase } from './database'
-import { QueryAdapter } from './query'
-import { SatelliteDatabaseAdapter } from './satellite'
 
 export const electrify = (db: Database, promisesEnabled?: boolean, opts?: ElectrifyOptions): Promise<Database> => {
   if (opts === undefined) {
@@ -24,16 +22,14 @@ export const electrify = (db: Database, promisesEnabled?: boolean, opts?: Electr
   }
 
   const dbName: DbName = db.dbName
-  const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
 
+  const adapter = opts.adapter || new DatabaseAdapter(db, promisesEnabled)
+  const migrator = opts.migrator || new BundleMigrator(opts.migrationsPath)
   const notifier = opts.notifier || new EventNotifier(dbName)
-  const fs = opts.filesystem || new ReactNativeFilesystem()
-  const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace, promisesEnabled)
-  const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db, promisesEnabled)
-  const satelliteRegistry = opts.satelliteRegistry || globalRegistry
+  const registry = opts.registry || globalRegistry
 
-  const namespace = new ElectricNamespace(notifier, queryAdapter)
+  const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace, promisesEnabled)
 
-  return baseElectrify(dbName, db, electric, fs, notifier, satelliteDbAdapter, satelliteRegistry)
+  return baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
 }

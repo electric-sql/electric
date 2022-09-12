@@ -1,17 +1,16 @@
 import { initBackend } from '@aphro/absurd-sql/dist/indexeddb-main-thread'
 
 import { ServerMethod, WorkerClient } from '../../bridge/index'
-import { DEFAULTS } from '../../electric/config'
 import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
 import { proxyOriginal } from '../../proxy/original'
 import { DbName } from '../../util/types'
 
+import { DatabaseAdapter } from './adapter'
 import { ElectricMainThreadDatabaseProxy, MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
-import { QueryAdapter } from './query'
 
-export { resultToRows } from './query'
+export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
 interface SQL {
@@ -37,11 +36,9 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
     await workerClient.request(open, dbName)
 
     const db = new MainThreadDatabaseProxy(dbName, workerClient)
-    const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
-
+    const adapter = opts.adapter || new DatabaseAdapter(db)
     const notifier = opts.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
-    const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
-    const namespace = new ElectricNamespace(notifier, queryAdapter)
+    const namespace = new ElectricNamespace(adapter, notifier)
 
     return proxyOriginal(db, {electric: namespace}) as ElectricMainThreadDatabaseProxy
   }

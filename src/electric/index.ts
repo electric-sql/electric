@@ -1,32 +1,31 @@
 import { AnyDatabase, AnyElectricDatabase } from '../drivers/index'
-import { Filesystem } from '../filesystems/index'
+import { DatabaseAdapter } from '../electric/adapter'
+import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
-import { QueryAdapter } from '../query-adapters/index'
-import { SatelliteDatabaseAdapter, SatelliteRegistry } from '../satellite/index'
+import { Registry } from '../satellite/index'
 import { proxyOriginal } from '../proxy/original'
-import { DbName, DbNamespace } from '../util/types'
+import { DbName } from '../util/types'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock
 // implementations to be passed in to facilitate testing.
 export interface ElectrifyOptions {
-  defaultNamespace?: DbNamespace,
-  filesystem?: Filesystem,
+  adapter?: DatabaseAdapter,
+  migrationsPath?: string,
+  migrator?: Migrator,
   notifier?: Notifier,
-  queryAdapter?: QueryAdapter,
-  satelliteDbAdapter?: SatelliteDatabaseAdapter,
-  satelliteRegistry?: SatelliteRegistry
+  registry?: Registry
 }
 
 // This is the namespace that's patched onto the user's database client
 // (technically via the proxy machinery) as the `.electric` property.
 export class ElectricNamespace {
+  adapter: DatabaseAdapter
   notifier: Notifier
-  queryAdapter: QueryAdapter
 
-  constructor(notifier: Notifier, queryAdapter: QueryAdapter) {
+  constructor(adapter: DatabaseAdapter, notifier: Notifier) {
+    this.adapter = adapter
     this.notifier = notifier
-    this.queryAdapter = queryAdapter
   }
 
   // We lift this function a level so the user can call
@@ -45,11 +44,11 @@ export const electrify = (
       dbName: DbName,
       db: AnyDatabase,
       electric: AnyElectricDatabase,
-      fs: Filesystem,
+      adapter: DatabaseAdapter,
+      migrator: Migrator,
       notifier: Notifier,
-      satelliteDbAdapter: SatelliteDatabaseAdapter,
-      satelliteRegistry: SatelliteRegistry
+      registry: Registry
     ): Promise<any> => {
-  return satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs, notifier)
+  return registry.ensureStarted(dbName, adapter, migrator, notifier)
     .then(() => proxyOriginal(db, electric))
 }

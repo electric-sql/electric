@@ -3,17 +3,15 @@ import { SQLiteFS } from '@aphro/absurd-sql'
 import IndexedDBBackend from '@aphro/absurd-sql/dist/indexeddb-backend'
 
 import { WorkerServer, RequestError } from '../../bridge/index'
-import { DEFAULTS } from '../../electric/config'
 import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
-import { BrowserFilesystem } from '../../filesystems/browser'
+import { BundleMigrator } from '../../migrators/bundle'
 import { WorkerBridgeNotifier } from '../../notifiers/bridge'
 import { globalRegistry } from '../../satellite/registry'
 import { DbName } from '../../util/types'
 
+import { DatabaseAdapter } from './adapter'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
-import { QueryAdapter } from './query'
-import { SatelliteDatabaseAdapter } from './satellite'
 
 // Avoid garbage collection.
 const refs = []
@@ -43,7 +41,7 @@ export class ElectricWorker extends WorkerServer {
     }
 
     const opts = this.opts
-    const satelliteRegistry = opts.satelliteRegistry || globalRegistry
+    const registry = opts.registry || globalRegistry
 
     if (!(dbName in this._dbs)) {
       const SQL = this.SQL
@@ -58,19 +56,17 @@ export class ElectricWorker extends WorkerServer {
       const db = new SQL.Database(path, {filename: true})
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
-      const defaultNamespace = opts.defaultNamespace || DEFAULTS.namespace
+      const adapter = opts.adapter || new DatabaseAdapter(db)
+      const migrator = opts.migrator || new BundleMigrator(opts.migrationsPath)
       const notifier = opts.notifier || new WorkerBridgeNotifier(dbName, this)
-      const fs = opts.filesystem || new BrowserFilesystem()
-      const queryAdapter = opts.queryAdapter || new QueryAdapter(db, defaultNamespace)
-      const satelliteDbAdapter = opts.satelliteDbAdapter || new SatelliteDatabaseAdapter(db)
 
-      const namespace = new ElectricNamespace(notifier, queryAdapter)
+      const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await satelliteRegistry.ensureStarted(dbName, satelliteDbAdapter, fs, notifier)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier)
     }
     else {
-      await satelliteRegistry.ensureAlreadyStarted(dbName)
+      await registry.ensureAlreadyStarted(dbName)
     }
 
     return true

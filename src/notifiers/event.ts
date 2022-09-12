@@ -1,8 +1,13 @@
 import { EventEmitter } from 'events'
+
+import { AuthState } from '../auth/index'
 import { randomValue } from '../util/random'
+import { QualifiedTablename } from '../util/tablename'
 import { DbName } from '../util/types'
 
 import {
+  AuthStateCallback,
+  AuthStateNotification,
   Change,
   ChangeCallback,
   ChangeNotification,
@@ -14,8 +19,9 @@ import {
 } from './index'
 
 const EVENT_NAMES = {
-  actualChange: 'actually:changed',
-  potentialChange: 'potentially:changed'
+  authChange: 'auth:changed',
+  actualDataChange: 'data:actually:changed',
+  potentialDataChange: 'data:potentially:changed'
 }
 
 // Global singleton that all event notifiers use by default. Emitting an event
@@ -24,15 +30,29 @@ const EVENT_NAMES = {
 const globalEmitter = new EventEmitter()
 
 export class EventNotifier implements Notifier {
-  dbNames: Set<DbName>
+  dbName: DbName
+
+  attachedDbIndex: {
+    byAlias: {
+      [key: string]: DbName
+    },
+    byName: {
+      [key: DbName]: string
+    }
+  }
+
   events: EventEmitter
 
   _changeCallbacks: {
     [key: string]: NotificationCallback
   }
 
-  constructor(dbNames: DbName | DbName[], eventEmitter?: EventEmitter) {
-    this.dbNames = new Set(Array.isArray(dbNames) ? dbNames : [dbNames])
+  constructor(dbName: DbName, eventEmitter?: EventEmitter) {
+    this.dbName = dbName
+    this.attachedDbIndex = {
+      byAlias: {},
+      byName: {}
+    }
 
     this.events = eventEmitter !== undefined
       ? eventEmitter
@@ -41,16 +61,69 @@ export class EventNotifier implements Notifier {
     this._changeCallbacks = {}
   }
 
-  attach(dbName: DbName): void {
-    this.dbNames.add(dbName)
+  attach(dbName: DbName, dbAlias: string): void {
+    const idx = this.attachedDbIndex
+
+    idx.byAlias[dbAlias] = dbName
+    idx.byName[dbName] = dbAlias
   }
 
-  detach(dbName: DbName): void {
-    this.dbNames.delete(dbName)
+  detach(dbAlias: string): void {
+    const idx = this.attachedDbIndex
+
+    if (dbAlias in idx.byAlias) {
+      const dbName = idx.byAlias[dbAlias]
+
+      delete idx.byAlias[dbAlias]
+      delete idx.byName[dbName]
+    }
   }
 
-  potentiallyChanged(dbName?: DbName): void {
-    const dbNames = this._filterDbNames(dbName)
+  alias({ dbName, changes }: ChangeNotification): QualifiedTablename[] {
+    const idx = this.attachedDbIndex
+    const primaryDbName = this.dbName
+
+    return changes
+      .map(({ qualifiedTablename }): QualifiedTablename | void => {
+        if (dbName === primaryDbName) {
+          return qualifiedTablename
+        }
+
+        const dbAlias = idx.byName[dbName]
+        if (dbAlias !== undefined) {
+          qualifiedTablename.namespace = dbAlias
+
+          return qualifiedTablename
+        }
+      })
+      .filter((value) => value !== undefined) as QualifiedTablename[]
+  }
+
+  authStateChanged(authState: AuthState): void {
+    this._emitAuthStateChange(authState)
+  }
+  subscribeToAuthStateChanges(callback: AuthStateCallback): string {
+    const key = randomValue()
+
+    this._changeCallbacks[key] = callback
+    this._subscribe(EVENT_NAMES.authChange, callback)
+
+    return key
+  }
+  unsubscribeFromAuthStateChanges(key: string): void {
+    const callback = this._changeCallbacks[key]
+
+    if (callback === undefined) {
+      return
+    }
+
+    this._unsubscribe(EVENT_NAMES.authChange, callback)
+
+    delete this._changeCallbacks[key]
+  }
+
+  potentiallyChanged(): void {
+    const dbNames = this._getDbNames()
     const emitPotentialChange = this._emitPotentialChange.bind(this)
 
     dbNames.forEach(emitPotentialChange)
@@ -74,7 +147,7 @@ export class EventNotifier implements Notifier {
     }
 
     this._changeCallbacks[key] = wrappedCallback
-    this._subscribe(EVENT_NAMES.potentialChange, wrappedCallback)
+    this._subscribe(EVENT_NAMES.potentialDataChange, wrappedCallback)
 
     return key
   }
@@ -85,7 +158,7 @@ export class EventNotifier implements Notifier {
       return
     }
 
-    this._unsubscribe(EVENT_NAMES.potentialChange, callback)
+    this._unsubscribe(EVENT_NAMES.potentialDataChange, callback)
 
     delete this._changeCallbacks[key]
   }
@@ -101,7 +174,7 @@ export class EventNotifier implements Notifier {
     }
 
     this._changeCallbacks[key] = wrappedCallback
-    this._subscribe(EVENT_NAMES.actualChange, wrappedCallback)
+    this._subscribe(EVENT_NAMES.actualDataChange, wrappedCallback)
 
     return key
   }
@@ -112,32 +185,39 @@ export class EventNotifier implements Notifier {
       return
     }
 
-    this._unsubscribe(EVENT_NAMES.actualChange, callback)
+    this._unsubscribe(EVENT_NAMES.actualDataChange, callback)
 
     delete this._changeCallbacks[key]
   }
 
-  _filterDbNames(dbName?: DbName): DbName[] {
-    const dbNames = [...this.dbNames]
+  _getDbNames(): DbName[] {
+    const idx = this.attachedDbIndex
 
-    if (dbName === undefined) {
-      return dbNames
-    }
-
-    return dbNames.filter((candidate) => candidate === dbName)
+    return [this.dbName, ...Object.keys(idx.byName)]
   }
   _hasDbName(dbName: DbName): boolean {
-    return this.dbNames.has(dbName)
+    const idx = this.attachedDbIndex
+
+    return dbName === this.dbName || dbName in idx.byName
   }
 
-  // Extracting out these two methds allows them to be overridden
-  // without duplicating the dbName filter / check logic.
+  // Extracting out these methods allows them to be overridden
+  // without duplicating any dbName filter / check logic, etc.
+  _emitAuthStateChange(authState: AuthState): AuthStateNotification {
+    const notification = {
+      authState: authState
+    }
+
+    this._emit(EVENT_NAMES.authChange, notification)
+
+    return notification
+  }
   _emitPotentialChange(dbName: DbName): PotentialChangeNotification {
     const notification = {
       dbName: dbName
     }
 
-    this._emit(EVENT_NAMES.potentialChange, notification)
+    this._emit(EVENT_NAMES.potentialDataChange, notification)
 
     return notification
   }
@@ -147,7 +227,7 @@ export class EventNotifier implements Notifier {
       changes: changes
     }
 
-    this._emit(EVENT_NAMES.actualChange, notification)
+    this._emit(EVENT_NAMES.actualDataChange, notification)
 
     return notification
   }

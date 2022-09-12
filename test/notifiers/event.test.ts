@@ -40,10 +40,6 @@ test('potential data change subscriptions are scoped by dbName(s)', async t => {
   source.potentiallyChanged()
 
   t.is(notifications.length, 3)
-
-  source.potentiallyChanged('bar.db')
-
-  t.is(notifications.length, 4)
 })
 
 test('subscribe to actual data changes', async t => {
