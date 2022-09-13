@@ -77,6 +77,8 @@
   "dependencies": {
     "events": "^3.3.0",
     "lodash.throttle": "^4.1.1",
+    "long": "^5.2.0",
+    "protobufjs": "^7.1.1",
     "sqlite-parser": "^1.0.1",
     "walkjs": "^3.2.4"
   },
