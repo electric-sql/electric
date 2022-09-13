@@ -37,7 +37,7 @@ message SatPingResp{
     // If LSN is present, it conveys to producer the latest LSN position that
     // was applied on the consumer side. If there is no active replication
     // ongoing the field should be left 0
-    optional uint64 lsn = 1;
+    optional string lsn = 1;
 }
 
 // (Client) Auth request
@@ -65,6 +65,7 @@ message SatErrorResp {
         INTERNAL = 0;
         AUTH_REQUIRED = 1;
         AUTH_FAILED = 2;
+        REPLICATION_FAILED = 3;
     }
 
     ErrorCode error_type = 1;
@@ -78,11 +79,16 @@ message SatInStartReplicationReq {
         // position that have been acknowledged by this Consumer. In such a case
         // provided lsn will be ignored
         LAST_ACKNOWLEDGED = 1;
+        // In sync mode consumer of the stream is expected to send SatPingResp
+        // message for every committed batch of SatOpLog messages
+        SYNC_MODE = 2;
     }
     // LSN position of the log on the producer side
-    uint64 lsn = 1;
+    string lsn = 1;
     repeated Option options = 2;
-
+    // Amount of message after which SatPingResp message is expected to be
+    // delivered when SYNC_MODE is used
+    int32 sync_batch_size = 3;
 }
 
 // (Producer) Acknowledgement that replication have been started
@@ -148,7 +154,7 @@ message SatTransOp {
 message SatOpBegin {
     uint64 commit_timestamp = 1;
     string trans_id = 2;
-    uint64 lsn = 3;
+    string lsn = 3;
 }
 
 // (Proucer) Replication message that indicates transaction boundaries
@@ -156,7 +162,7 @@ message SatOpBegin {
 message SatOpCommit {
     uint64 commit_timestamp = 1;
     string trans_id = 2;
-    uint64 lsn = 3;
+    string lsn = 3;
 }
 
 // (Producer) Data manipulation message, that only should be part of the
