@@ -174,13 +174,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   @impl GenStage
   def terminate(reason, state) do
-    case reason do
-      :normal ->
-        :ok
-
-      _ ->
-        Logger.debug("terminate: #{inspect(reason)}")
-    end
+    if reason != :normal, do: Logger.debug("terminate: #{inspect(reason)}")
 
     state
   end
@@ -264,7 +258,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     end
   end
 
-  @spec process_message(vx_wal_txn()) :: {:ok, {Changes.Transaction, term()}} | {:error, term()}
+  @spec process_message(vx_wal_txn()) :: {:ok, {Electric.Replication.Changes.Transaction.t(), term()}} | {:error, term()}
   defp process_message(vaxine_tx) do
     with {:ok, metadata} <- TransactionBuilder.extract_metadata(vaxine_tx),
          {:ok, tx} <- TransactionBuilder.build_transaction(vaxine_tx, metadata) do

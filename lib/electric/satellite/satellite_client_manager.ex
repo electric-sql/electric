@@ -113,28 +113,21 @@ defmodule Electric.Satellite.ClientManager do
     # missbehaving
     {{client_name, ^sup_ref}, resources} = Map.pop!(state.resources, sup_pid)
 
-    case Map.pop(state.reverse, client_name) do
-      {{nil, ^sup_pid}, reverse} ->
-        # client have been disconnected
+    with {{client_pid, _}, reverse} when is_pid(client_pid) <-
+           Map.pop(state.reverse, client_name),
+         {:ok, sup_pid} <- Connectors.start_connector(SatelliteConnector, %{name: client_name}) do
+      resource_ref = Process.monitor(sup_pid)
+      resources = Map.put(resources, sup_pid, resource_ref)
+      reverse = Map.put(reverse, client_name, {client_pid, sup_pid})
+
+      {:noreply, %State{state | resources: resources, reverse: reverse}}
+    else
+      {{nil, _}, reverse} ->
+        # client has been disconnected
         {:noreply, %State{state | reverse: reverse, resources: resources}}
 
-        reverse
-
-      {{client_pid, ^sup_pid}, reverse} ->
-        with {:ok, sup_pid2} <-
-               Connectors.start_connector(
-                 SatelliteConnector,
-                 %{name: client_name}
-               ) do
-          resource_ref = Process.monitor(sup_pid2)
-          resources = Map.put(resources, sup_pid2, resource_ref)
-          reverse = Map.put(reverse, client_name, {client_pid, sup_pid2})
-
-          {:noreply, %State{state | resources: resources, reverse: reverse}}
-        else
-          error ->
-            {:stop, {:shutdown, error}, state}
-        end
+      error ->
+        {:stop, {:shutdown, error}, state}
     end
   end
 
