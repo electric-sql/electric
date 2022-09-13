@@ -93,6 +93,7 @@
     "eslint": "^8.22.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "ts-proto": "^1.125.0",
     "typeorm": "^0.3.9",
     "typescript": "^4.7.4",
     "web-worker": "^1.2.0"
