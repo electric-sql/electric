@@ -27,6 +27,3 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_hostname: "localhost",
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
-
-# config :logger,
-#  handle_sasl_reports: true

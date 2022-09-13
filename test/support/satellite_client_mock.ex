@@ -44,7 +44,7 @@ defmodule Electric.Test.SatelliteMockClient do
       send(conn, {:tcp_closed, :none})
 
       receive do
-        {:DOWN, ref, :process, _, _} ->
+        {:DOWN, ^ref, :process, _, _} ->
           :ok
       after
         5000 ->

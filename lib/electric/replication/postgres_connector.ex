@@ -98,15 +98,14 @@ defmodule Electric.Replication.PostgresConnector do
   defp finish_initialization(supervisor, args) do
     name = args.origin
 
-    _vaxine_consumer = Electric.Replication.Vaxine.LogConsumer.get_name(name)
     vaxine_producer = args.downstream.producer.get_name(name)
-    _postgres_slot = Electric.Replication.Postgres.SlotServer.get_name(name)
     postgres_producer = args.producer.get_name(name)
 
     children = [
       %{
         id: :slot_server,
-        start: {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
+        start:
+          {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
       },
       %{
         id: :vaxine_consumer,

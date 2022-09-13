@@ -84,6 +84,3 @@ config :logger, :console,
     :origin,
     :sq_client
   ]
-
-# config :logger,
-#  handle_sasl_reports: true

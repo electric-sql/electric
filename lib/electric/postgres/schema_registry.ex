@@ -55,6 +55,7 @@ defmodule Electric.Postgres.SchemaRegistry do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  # for tests only
   def stop() do
     GenServer.call(__MODULE__, :stop)
   end

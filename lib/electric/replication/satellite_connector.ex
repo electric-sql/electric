@@ -31,12 +31,12 @@ defmodule Electric.Replication.SatelliteConnector do
 
     children = [
       %{
-        :id => :vx_consumer,
-        :start => {Electric.Replication.Vaxine.LogConsumer, :start_link, [name, producer]}
+        id: :vx_consumer,
+        start: {Electric.Replication.Vaxine.LogConsumer, :start_link, [name, producer]}
       },
       %{
-        :id => :vx_producer,
-        :start => {Electric.Replication.Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
+        id: :vx_producer,
+        start: {Electric.Replication.Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
       }
     ]
 

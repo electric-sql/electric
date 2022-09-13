@@ -3,12 +3,8 @@ defmodule Electric.Postgres.LogicalReplicationTest do
 
   alias Electric.Satellite.{
     SatAuthReq,
-    SatGetServerInfoReq,
     SatPingReq,
     SatAuthReq,
-    SatStartClientReplicationReq,
-    SatStartServerReplicationReq,
-    SatStopReplicationReq,
     SatOpLog,
     SatTransOp,
     SatOpBegin,

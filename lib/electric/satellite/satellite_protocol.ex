@@ -30,11 +30,9 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.ClientManager
 
   @type lsn() :: non_neg_integer
-  @ping_interval 5_000
   @producer_timeout 5_000
   @producer_demand 5
 
-  # Outgoing replication Satellite -> Vaxine
   defmodule InRep do
     defstruct lsn: "",
               status: nil,
@@ -48,6 +46,9 @@ defmodule Electric.Satellite.Protocol do
               sync_counter: 0,
               sync_batch_size: nil
 
+    @typedoc """
+    Incoming replication Satellite -> Vaxine
+    """
     @type t() :: %__MODULE__{
             pid: pid() | nil,
             lsn: String.t(),
@@ -71,7 +72,6 @@ defmodule Electric.Satellite.Protocol do
           }
   end
 
-  # Outgoing replication Vaxine -> Satellite
   defmodule OutRep do
     defstruct lsn: "",
               status: nil,
@@ -81,6 +81,9 @@ defmodule Electric.Satellite.Protocol do
               sync_counter: 0,
               sync_batch_size: nil
 
+    @typedoc """
+    Outgoing replication Vaxine -> Satellite
+    """
     @type t() :: %__MODULE__{
             pid: pid() | nil,
             lsn: String.t(),
@@ -117,17 +120,9 @@ defmodule Electric.Satellite.Protocol do
   defguard in_rep?(state) when state.in_rep.status == :active
   defguard out_rep?(state) when state.out_rep.status == :active
 
-  defp set_ping_timer(%State{ping_tref: tref} = state) when tref == nil do
-    tref = :erlang.start_timer(@ping_interval, self(), :ping)
-    %{state | ping_tref: tref}
-  end
-
-  defp set_ping_timer(state) do
-    state
-  end
-
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
-          {nil | PB.sq_pb_msg(), State.t()} | {:error, PB.sq_pb_msg()}
+          {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
+          | {:error, PB.sq_pb_msg()}
   def process_message(msg, %State{} = state)
       when not auth_passed?(state) do
     case msg do
@@ -168,7 +163,7 @@ defmodule Electric.Satellite.Protocol do
       case Enum.member?(opts, :SYNC_MODE) do
         true ->
           sync_batch_size = msg.sync_batch_size
-          true = sync_batch_size > 0
+          :true = sync_batch_size > 0
           %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
 
         false ->
@@ -327,6 +322,8 @@ defmodule Electric.Satellite.Protocol do
     {Enum.reverse(acc), state}
   end
 
+  @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
+          {[%SatRelation{}], %SatOpLog{}, OutRep.t()}
   def handle_out_trans({trans, vx_offset}, %State{out_rep: out_rep}) do
     Logger.debug("trans: #{inspect(trans)} with offset #{inspect(vx_offset)}")
 
@@ -373,9 +370,14 @@ defmodule Electric.Satellite.Protocol do
     msg = {:"$gen_producer", {self(), sub_ref}, {:subscribe, nil, opts}}
 
     Process.send(sub_pid, msg, [])
-    GenStage.ask({sub_pid, sub_ref}, @producer_demand, [])
+    ask({sub_pid, sub_ref}, @producer_demand)
 
     %OutRep{out_rep | pid: sub_pid, status: :active, stage_sub: sub_ref}
+  end
+
+  # copied from gen_stage.ask, but form is defined as opaque there :/
+  def ask({pid, ref}, demand) when is_integer(demand) and demand > 0 do
+    Process.send(pid, {:"$gen_producer", {self(), ref}, {:ask, demand}}, [])
   end
 
   def terminate_subscription(out_rep) do

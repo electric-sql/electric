@@ -7,6 +7,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   require Logger
 
+  alias Electric.Utils
   alias Electric.Replication.DownstreamProducer
   alias Electric.Replication.Vaxine.TransactionBuilder
 
@@ -19,11 +20,11 @@ defmodule Electric.Replication.Vaxine.LogProducer do
           {:vx_wal_txn, tx_id :: term(), dcid :: term(), wal_offset :: vx_wal_offset(),
            data :: [vx_txn_data()]}
 
-  @type vaxine_opts :: %{
+  @type vaxine_opts :: [
           vaxine_hostname: String.t(),
           vaxine_port: non_neg_integer,
           vaxine_connection_timeout: non_neg_integer
-        }
+        ]
 
   @max_backoff_ms 5000
   @starting_demand 5
@@ -69,11 +70,13 @@ defmodule Electric.Replication.Vaxine.LogProducer do
 
   @impl DownstreamProducer
   def start_replication(producer, offset) do
-    # Timeout is set to `:infinity` here to account for variable connection timeout setting
-    # Without this and with the connection timeout set to a value higher than 5000,
-    # the caller crashes here since it doesn't receive a response within the expected window.
+    # Timeout is set to `:infinity` here to account for variable connection
+    # timeout setting Without this and with the connection timeout set to a
+    # value higher than 5000, the caller crashes here since it doesn't receive a
+    # response within the expected window.
     #
-    # It's safe to set this to `:infinity` since actual timeout is handled within the function.
+    # It's safe to set this to `:infinity` since actual timeout is handled
+    # within the function.
     GenStage.call(producer, {:start_replication, offset}, :infinity)
   end
 
@@ -195,21 +198,9 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   @impl GenStage
   def handle_demand(incoming_demand, %State{} = state) do
     demand = incoming_demand + state.demand
-    len_ev = :queue.len(state.events)
-
-    case demand > len_ev do
-      true ->
-        send_events = :queue.to_list(state.events)
-        state = %{state | demand: demand - len_ev, events: :queue.new()}
-
-        {:noreply, send_events, maybe_get_next_stream_bulk(state.async_wait, state)}
-
-      false ->
-        {demanded, remaining} = :queue.split(demand, state.events)
-        state = %{state | demand: 0, events: remaining}
-
-        {:noreply, :queue.to_list(demanded), state}
-    end
+    {demand, demanded, remaining} =
+      Utils.fetch_demand_from_queue(demand, state.events)
+    {:noreply, demanded, %State{state | demand: demand, events: remaining}}
   end
 
   @impl GenStage
@@ -258,7 +249,8 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     end
   end
 
-  @spec process_message(vx_wal_txn()) :: {:ok, {Electric.Replication.Changes.Transaction.t(), term()}} | {:error, term()}
+  @spec process_message(vx_wal_txn()) ::
+          {:ok, {Electric.Replication.Changes.Transaction.t(), term()}} | {:error, term()}
   defp process_message(vaxine_tx) do
     with {:ok, metadata} <- TransactionBuilder.extract_metadata(vaxine_tx),
          {:ok, tx} <- TransactionBuilder.build_transaction(vaxine_tx, metadata) do
