@@ -105,9 +105,8 @@ defmodule Electric.Replication.PostgresConnector do
 
     children = [
       %{
-        :id => :slot_server,
-        :start =>
-          {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
+        id: :slot_server,
+        start: {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
       },
       %{
         id: :vaxine_consumer,
