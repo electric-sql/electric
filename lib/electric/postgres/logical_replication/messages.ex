@@ -42,7 +42,7 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
             namespace: String.t(),
             name: String.t(),
             replica_identity: :default | :nothing | :all_columns | :index,
-            columns: [Relation.Column.t()]
+            columns: [Messages.Relation.Column.t()]
           }
   end
 
