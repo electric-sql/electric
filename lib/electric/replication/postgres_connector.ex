@@ -83,7 +83,7 @@ defmodule Electric.Replication.PostgresConnector do
   defp initialize_connector(supervisor, args) when is_pid(supervisor) do
     with :ok <- initialize_connector_with_retries(args),
          :ok <- finish_initialization(supervisor, args) do
-      Logger.info("Succesfuly initialised connector #{inspect(args.origin)}")
+      Logger.info("Successfully initialized connector #{inspect(args.origin)}")
       SchemaRegistry.mark_origin_ready(args.origin)
     else
       error ->
