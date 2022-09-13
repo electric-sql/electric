@@ -14,7 +14,7 @@ defmodule Electric.Application do
       {Registry, keys: :unique, name: Electric.StatusRegistry},
       {Plug.Cowboy, scheme: :http, plug: Electric.StatusPlug, options: [port: status_port()]},
       Electric.VaxRepo,
-      Electric.PostgresServer.child_spec([{:port, postgres_server_port()}]),
+      Electric.PostgresServer.child_spec(port: postgres_server_port()),
       Electric.Satellite.ClientManager,
       Electric.Satellite.WsServer.child_spec([{:port, sqlite_server_port()}]),
       Electric.Replication.Connectors
