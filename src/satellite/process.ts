@@ -5,7 +5,7 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName } from '../util/types'
+import { DbName, SqlValue } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
