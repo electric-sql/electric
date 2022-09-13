@@ -7,7 +7,6 @@ build_tools:
 
 deps: deps_proto
 	mix deps.get
-	mix deps.compile
 
 deps_proto: ./proto/satellite
 
@@ -24,7 +23,7 @@ release:
 	MIX_ENV="prod" mix release
 
 pretest_compile: deps
-	mix compile --force --warnings-as-error
+	MIX_ENV="test" mix compile --force --warnings-as-error
 
 tests:
 	mix test
