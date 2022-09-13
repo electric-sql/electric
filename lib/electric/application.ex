@@ -44,6 +44,6 @@ defmodule Electric.Application do
 
   defp postgres_server_port(),
     do:
-      Application.get_env(:electric, Electric.PosgresServer, [])
+      Application.get_env(:electric, Electric.PostgresServer, [])
       |> Keyword.get(:port, 5433)
 end
