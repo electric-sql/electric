@@ -198,8 +198,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   @impl GenStage
   def handle_demand(incoming_demand, %State{} = state) do
     demand = incoming_demand + state.demand
-    {demand, demanded, remaining} =
-      Utils.fetch_demand_from_queue(demand, state.events)
+    {demand, demanded, remaining} = Utils.fetch_demand_from_queue(demand, state.events)
     {:noreply, demanded, %State{state | demand: demand, events: remaining}}
   end
 

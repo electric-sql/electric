@@ -25,7 +25,7 @@ defmodule Electric.Utils do
         {demanded, remaining} = :queue.split(demand, events)
         {0, :queue.to_list(demanded), remaining}
     end
-   end
+  end
 
   @doc """
   Helper function to add events from list to existing queue

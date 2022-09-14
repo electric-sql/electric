@@ -163,7 +163,7 @@ defmodule Electric.Satellite.Protocol do
       case Enum.member?(opts, :SYNC_MODE) do
         true ->
           sync_batch_size = msg.sync_batch_size
-          :true = sync_batch_size > 0
+          true = sync_batch_size > 0
           %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
 
         false ->
