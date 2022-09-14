@@ -61,25 +61,27 @@ defmodule Electric.Satellite.Replication do
               {relation_id, new_relations, known_relations1}
           end
 
-        op =
-          case record do
-            %NewRecord{} ->
-              op_insert = %SatOpInsert{relation_id: rel_id}
-              %SatTransOp{op: {:insert, op_insert}}
-
-            %UpdatedRecord{} ->
-              op_update = %SatOpUpdate{relation_id: rel_id}
-              %SatTransOp{op: {:update, op_update}}
-
-            %DeletedRecord{} ->
-              op_delete = %SatOpDelete{relation_id: rel_id}
-              %SatTransOp{op: {:delete, op_delete}}
-          end
+        op = mk_trans_op(record, rel_id)
 
         {[op | ops], new_relations, known_relations1}
       end)
 
     {%SatOpLog{ops: Enum.reverse([tx_end | ops])}, new_relations, known_relations}
+  end
+
+  defp mk_trans_op(%NewRecord{}, rel_id) do
+    op_insert = %SatOpInsert{relation_id: rel_id}
+    %SatTransOp{op: {:insert, op_insert}}
+  end
+
+  defp mk_trans_op(%UpdatedRecord{}, rel_id) do
+    op_update = %SatOpUpdate{relation_id: rel_id}
+    %SatTransOp{op: {:update, op_update}}
+  end
+
+  defp mk_trans_op(%DeletedRecord{}, rel_id) do
+    op_delete = %SatOpDelete{relation_id: rel_id}
+    %SatTransOp{op: {:delete, op_delete}}
   end
 
   def fetch_relation_id(relation, known_relations) do

@@ -8,12 +8,10 @@ defmodule Electric.Satellite.WsServer do
     SatErrorResp,
     SatPingResp,
     SatInStopReplicationReq,
-    SatInStartReplicationReq,
-    SatInStartReplicationResp,
-    SatInStopReplicationResp
+    SatInStartReplicationReq
   }
 
-  import Protocol, only: [in_rep?: 1, out_rep?: 1, auth_passed?: 1]
+  import Protocol, only: [out_rep?: 1]
 
   require Logger
 
