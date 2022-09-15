@@ -5,9 +5,13 @@ build_tools:
 	mix local.hex --force
 	mix local.rebar --force
 
-deps:
+deps: deps_proto
 	mix deps.get
-	mix deps.compile
+
+deps_proto: ./proto/satellite
+
+./proto/satellite:
+	./get-proto.sh
 
 dialyzer:
 	mix dialyzer
@@ -19,7 +23,7 @@ release:
 	MIX_ENV="prod" mix release
 
 pretest_compile: deps
-	mix compile --force --warnings-as-error
+	MIX_ENV="test" mix compile --force --warnings-as-error
 
 tests:
 	mix test
@@ -57,3 +61,14 @@ endif
 
 rm_offset_storage:
 	rm vx_pg_offset_storage_*
+
+update_protobuf: deps_proto
+	mix protox.generate \
+		--output-path=./lib/electric/satellite/satellite_pb.ex \
+		./proto/satellite/satellite.proto
+
+shell:
+	iex -S mix
+
+shell_clean:
+	iex -S mix run --no-start

@@ -1,5 +1,6 @@
 defmodule Electric.StatusPlug do
   use Plug.Router
+  require Logger
 
   plug(:match)
   plug(:dispatch)
@@ -15,6 +16,8 @@ defmodule Electric.StatusPlug do
   get "/status" do
     connectors = Electric.Replication.Connectors.status()
     vaxine = vaxine_ready?()
+
+    Logger.debug("get /status #{inspect(connectors)}")
 
     data = %{
       vaxine: vaxine,

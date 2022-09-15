@@ -55,6 +55,11 @@ defmodule Electric.Postgres.SchemaRegistry do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  # for tests only
+  def stop() do
+    GenServer.call(__MODULE__, :stop)
+  end
+
   @doc """
   Store information about the tables which are replicated under a publication name.
 
@@ -282,6 +287,11 @@ defmodule Electric.Postgres.SchemaRegistry do
       [] -> {:reply, false, state}
       [[value]] -> {:reply, value, state}
     end
+  end
+
+  @impl true
+  def handle_call(:stop, _, state) do
+    {:stop, :normal, state}
   end
 
   @impl true

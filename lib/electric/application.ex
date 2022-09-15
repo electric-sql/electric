@@ -1,6 +1,9 @@
 defmodule Electric.Application do
   @moduledoc false
 
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.PostgresConnector
+
   use Application
 
   def start(_type, _args) do
@@ -11,7 +14,9 @@ defmodule Electric.Application do
       {Registry, keys: :unique, name: Electric.StatusRegistry},
       {Plug.Cowboy, scheme: :http, plug: Electric.StatusPlug, options: [port: status_port()]},
       Electric.VaxRepo,
-      Electric.PostgresServer,
+      Electric.PostgresServer.child_spec(port: postgres_server_port()),
+      Electric.Satellite.ClientManager,
+      Electric.Satellite.WsServer.child_spec([{:port, sqlite_server_port()}]),
       Electric.Replication.Connectors
     ]
 
@@ -20,8 +25,8 @@ defmodule Electric.Application do
 
     Application.get_env(:electric, Electric.Replication.Connectors, [])
     |> Enum.each(fn {name, config} ->
-      Electric.Replication.Connectors.start_connector(
-        Electric.Replication.PostgresConnector,
+      Connectors.start_connector(
+        PostgresConnector,
         Keyword.put(config, :origin, to_string(name))
       )
     end)
@@ -31,4 +36,14 @@ defmodule Electric.Application do
 
   defp status_port(),
     do: Application.fetch_env!(:electric, Electric.StatusPlug) |> Keyword.fetch!(:port)
+
+  defp sqlite_server_port(),
+    do:
+      Application.get_env(:electric, Electric.Satellite.WsServer, [])
+      |> Keyword.get(:port, 5133)
+
+  defp postgres_server_port(),
+    do:
+      Application.get_env(:electric, Electric.PostgresServer, [])
+      |> Keyword.get(:port, 5433)
 end

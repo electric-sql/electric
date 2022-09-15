@@ -1,18 +1,38 @@
 defmodule Electric.Replication.Changes do
-  defmodule Transaction do
-    @type t() :: %__MODULE__{}
+  alias Electric.Replication.Row
+  alias Electric.VaxRepo
+  alias Electric.Postgres.SchemaRegistry
+  alias Electric.Replication.Changes
 
-    defstruct [:changes, :commit_timestamp]
+  @type relation() :: {schema :: String.t(), table :: String.t()}
+  @type record() :: %{(column_name :: String.t()) => column_data :: binary()}
+  @type change() ::
+          Changes.NewRecord.t()
+          | Changes.UpdatedRecord.t()
+          | Changes.DeletedRecord.t()
+
+  defmodule Transaction do
+    @type t() :: %__MODULE__{
+            changes: [Changes.change()],
+            commit_timestamp: DateTime.t(),
+            origin: String.t(),
+            publication: String.t(),
+            lsn: Electric.Postgres.Lsn.t(),
+            ack_fn: (() -> :ok | {:error, term()})
+          }
+
+    defstruct [:changes, :commit_timestamp, :origin, :publication, :lsn, :ack_fn]
   end
 
   defmodule NewRecord do
     defstruct [:relation, :record]
 
-    defimpl Electric.Replication.Vaxine.ToVaxine do
-      alias Electric.Replication.Row
-      alias Electric.VaxRepo
-      alias Electric.Postgres.SchemaRegistry
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            record: Changes.record()
+          }
 
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       def handle_change(%{record: record, relation: {schema, table}}) do
         %{primary_keys: keys} = SchemaRegistry.fetch_table_info!({schema, table})
 
@@ -32,10 +52,13 @@ defmodule Electric.Replication.Changes do
   defmodule UpdatedRecord do
     defstruct [:relation, :old_record, :record]
 
-    defimpl Electric.Replication.Vaxine.ToVaxine do
-      alias Electric.Replication.Row
-      alias Electric.Postgres.SchemaRegistry
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            old_record: Changes.record() | nil,
+            record: Changes.record()
+          }
 
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       def handle_change(%{old_record: old_record, record: new_record, relation: {schema, table}}) do
         %{primary_keys: keys} = SchemaRegistry.fetch_table_info!({schema, table})
 
@@ -55,10 +78,12 @@ defmodule Electric.Replication.Changes do
   defmodule DeletedRecord do
     defstruct [:relation, :old_record]
 
-    defimpl Electric.Replication.Vaxine.ToVaxine do
-      alias Electric.Replication.Row
-      alias Electric.Postgres.SchemaRegistry
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            old_record: Changes.record()
+          }
 
+    defimpl Electric.Replication.Vaxine.ToVaxine do
       def handle_change(%{old_record: old_record, relation: {schema, table}}) do
         %{primary_keys: keys} = SchemaRegistry.fetch_table_info!({schema, table})
 

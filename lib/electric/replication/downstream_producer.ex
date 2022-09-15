@@ -11,16 +11,17 @@ defmodule Electric.Replication.DownstreamProducer do
   @typedoc "The events produced follow this typespec"
   @type event :: {Electric.Replication.Changes.Transaction.t(), offset_state}
 
-  @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, term()}
+  @callback start_link(name :: String.t(), opts :: keyword()) ::
+              {:ok, pid()} | {:error, term()}
   @callback start_replication(producer :: pid(), offset_state) :: :ok
   @callback connected?(producer :: pid()) :: boolean()
 
-  @spec start_link(atom(), opts :: keyword()) :: {:ok, pid()} | {:error, term()}
-  def start_link(module, start_arg) do
-    module.start_link(start_arg)
+  @spec start_link(module(), String.t(), opts :: keyword()) :: {:ok, pid()} | {:error, term()}
+  def start_link(module, start_arg, opts \\ []) do
+    module.start_link(start_arg, opts)
   end
 
-  @spec start_replication(atom(), pid(), offset_state()) :: :ok
+  @spec start_replication(atom(), pid(), offset_state()) :: :ok | {:error, term()}
   def start_replication(module, pid, offset_state) do
     module.start_replication(pid, offset_state)
   end

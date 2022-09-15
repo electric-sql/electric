@@ -234,6 +234,7 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
            ]
          )
 
+  @spec decode_columns(binary, [Column.t()]) :: [Column.t()]
   defp decode_columns(binary, accumulator \\ [])
   defp decode_columns(<<>>, accumulator), do: Enum.reverse(accumulator)
 

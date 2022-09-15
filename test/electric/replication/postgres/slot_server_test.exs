@@ -7,6 +7,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Replication.Vaxine.LogProducer
 
   setup_all _ do
     SchemaRegistry.put_replicated_tables("fake_publication", [
@@ -95,8 +96,15 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Slot server lifecycle" do
     setup do
-      server = start_supervised!({SlotServer, start_args("fake_slot")})
-      producer = SlotServer.get_producer_pid(server)
+      server =
+        start_supervised!(
+          Supervisor.child_spec(
+            %{id: SlotServer, start: {SlotServer, :start_link, start_args("fake_slot")}},
+            []
+          )
+        )
+
+      producer = start_supervised!({DownstreamProducerMock, producer_name()})
 
       {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
@@ -167,7 +175,15 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   describe "Interaction with TCP server" do
     test "stops replication when process that started replication dies" do
-      server = start_supervised!({SlotServer, start_args("test_slot")})
+      server =
+        start_supervised!(
+          Supervisor.child_spec(
+            %{id: SlotServer, start: {SlotServer, :start_link, start_args("test_slot")}},
+            []
+          )
+        )
+
+      _producer = start_supervised!({DownstreamProducerMock, producer_name()})
 
       task = Task.async(fn -> start_replication(server, send_back_message(self())) end)
 
@@ -217,7 +233,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   end
 
   defp init_slot_server(slot) do
-    {:consumer, state, _opts} =
+    {:consumer, state} =
       slot
       |> start_args()
       |> SlotServer.init()
@@ -226,9 +242,14 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   end
 
   defp start_args(slot) do
-    %{
-      replication: %{subscription: slot},
-      downstream: %{producer: DownstreamProducerMock, producer_opts: []}
-    }
+    [
+      slot,
+      %{replication: %{subscription: slot}, downstream: %{producer: DownstreamProducerMock}},
+      LogProducer.get_name(producer_name())
+    ]
+  end
+
+  defp producer_name do
+    "producer"
   end
 end

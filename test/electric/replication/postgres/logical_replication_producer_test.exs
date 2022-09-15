@@ -3,7 +3,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   import Mox
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
-  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord}
+  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
@@ -24,7 +24,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Broadway.Message{data: transaction}] = events
+    assert [%Transaction{} = transaction] = events
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
 
@@ -39,7 +39,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Broadway.Message{data: transaction}] = events
+    assert [%Transaction{} = transaction] = events
     assert length(transaction.changes) == 4
 
     assert [
@@ -62,7 +62,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Broadway.Message{data: transaction}] = events
+    assert [%Transaction{} = transaction] = events
     assert length(transaction.changes) == 5
 
     assert [
@@ -76,12 +76,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
 
   def initialize_producer(demand \\ 100) do
     {:producer, state} =
-      LogicalReplicationProducer.init(%{
-        client: MockPostgresClient,
-        origin: "mock_postgres",
-        replication: %{publication: "mock_pub", slot: "mock_slot"},
-        connection: %{}
-      })
+      LogicalReplicationProducer.init([
+        "regname",
+        %{
+          client: MockPostgresClient,
+          origin: "mock_postgres",
+          replication: %{publication: "mock_pub", slot: "mock_slot"},
+          connection: %{}
+        }
+      ])
 
     {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state

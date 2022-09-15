@@ -34,8 +34,11 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
+config :logger,
+  handle_sasl_reports: true
+
 config :logger, backends: [:console], level: :debug
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:client, :connection, :slot, :origin]
+  metadata: [:pg_producer, :pg_client, :connection, :vx_consumer, :vx_producer, :pg_slot, :origin]

@@ -64,9 +64,23 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
+config :electric, Electric.Replication.SQConnectors,
+  vaxine_hostname: "localhost",
+  vaxine_port: 8088,
+  vaxine_connection_timeout: 5000
+
 config :logger, level: :debug
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console,
   format: "[$level] $metadata$message \n",
-  metadata: [:client, :connection, :slot, :origin]
+  metadata: [
+    :pg_producer,
+    :pg_client,
+    :connection,
+    :vx_consumer,
+    :vx_producer,
+    :pg_slot,
+    :origin,
+    :sq_client
+  ]

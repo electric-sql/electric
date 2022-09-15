@@ -6,8 +6,8 @@ on:
   pull_request: null
 
 jobs:
-  formatting_check:
-    name: Formatting check
+  deps:
+    name: Get all the necessary dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -15,20 +15,24 @@ jobs:
         with:
           otp-version: "24.3"
           elixir-version: "1.13"
+      - uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
+      - run: make deps
       - uses: actions/cache@v3
         with:
           path: |
+            proto
             deps
             _build
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix
-      - run: make deps
-      - run: make check-format
 
-  elixir_tests:
-    name: Elixir tests
+  tests:
+    name: elixir tests and dialyzer
     runs-on: ubuntu-latest
+    needs: deps
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
@@ -40,14 +44,16 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: |
+            proto
             deps
             _build
           key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix
+      - uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
       - run: make pretest_compile
-        env:
-          MIX_ENV: test
       - run: mix coveralls.lcov
         env:
           MIX_ENV: test
@@ -59,10 +65,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Dialyzer
         run: make dialyzer
+      - run: make check-format
 
   e2e_tests:
     name: E2E tests
     runs-on: ubuntu-latest
+    needs: deps
     env:
       VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
     steps:
@@ -75,7 +83,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - uses: actions/cache@v3
+        with:
+          path: |
+            proto
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric

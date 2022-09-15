@@ -38,10 +38,10 @@ defmodule Electric.MixProject do
       {:antidotec_pb,
        git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
       {:vx_client, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vx_client"},
-      {:broadway, "~> 0.6"},
       {:epgsql, "~> 4.2"},
       {:ranch, "~> 2.1", override: true},
       {:mox, "~> 1.0.2"},
+      {:mock, "~> 0.3.0", only: :test},
       # TODO: shouldn't be needed, here for convenience
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16.3"},
@@ -50,7 +50,12 @@ defmodule Electric.MixProject do
       {:jason, "~> 1.3.0"},
       {:recon_ex, "~> 0.9.1"},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
-      {:excoveralls, "~> 0.10", only: :test, runtime: false}
+      {:excoveralls, "~> 0.14", only: :test, runtime: false},
+      {:gproc, "~> 0.9.0"},
+      {:protox, "~> 1.7"},
+      {:gun, "~> 2.0.0-rc.2"},
+      {:cowboy, "~> 2.9.0"},
+      {:gen_stage, "~> 1.1.2"}
     ]
   end
 

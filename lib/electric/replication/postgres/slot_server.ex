@@ -22,77 +22,119 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   alias Electric.Replication.DownstreamProducer
 
-  defstruct current_lsn: %Lsn{segment: 0, offset: 1},
-            send_fn: nil,
-            slot_name: nil,
-            publication: nil,
-            timer: nil,
-            socket_process_ref: nil,
-            producer: nil,
-            producer_pid: nil,
-            sent_relations: %{},
-            current_vx_offset: nil,
-            opts: []
+  defmodule State do
+    defstruct current_lsn: %Lsn{segment: 0, offset: 1},
+              send_fn: nil,
+              slot_name: nil,
+              publication: nil,
+              timer: nil,
+              socket_process_ref: nil,
+              producer: nil,
+              producer_name: nil,
+              producer_pid: nil,
+              sent_relations: %{},
+              current_vx_offset: nil,
+              opts: []
+  end
 
   defguardp replication_started?(state) when not is_nil(state.send_fn)
 
   @type server :: pid() | String.t()
   @type send_fn :: (binary() -> none())
 
+  @type slot_name :: String.t()
+  @type slot_reg :: Electric.reg_name()
+
   # Public interface
 
-  @spec start_link(%{
-          replication: %{subscription: binary()},
-          downstream: %{producer: module(), producer_opts: keyword()}
-        }) :: GenServer.on_start()
-  def start_link(init_args) do
-    slot_name = init_args.replication.subscription
-    GenStage.start_link(__MODULE__, init_args, name: name(slot_name))
+  @spec start_link(
+          String.t(),
+          %{
+            replication: %{subscription: binary()},
+            downstream: %{producer: module()}
+          },
+          Electric.reg_name()
+        ) :: GenServer.on_start()
+  def start_link(reg_name, init_args, producer) do
+    GenStage.start_link(__MODULE__, [reg_name, init_args, producer])
   end
 
-  def connected?(slot_name), do: GenStage.call(name(slot_name), :connected?)
-
-  def downstream_connected?(pid) do
-    GenStage.call(pid, :downstream_connected?)
+  @spec get_name(String.t()) :: Electric.reg_name()
+  def get_name(name) do
+    {:via, :gproc, name(name)}
   end
 
-  def get_producer_pid(pid) do
-    GenStage.call(pid, :get_producer_pid)
+  @spec get_slot_reg(slot_name()) :: Electric.reg_name()
+  def get_slot_reg(slot_name) do
+    {:via, :gproc, name({:slot_name, slot_name})}
   end
 
-  def stop(slot_name), do: GenStage.stop(name(slot_name))
+  defp name(name) do
+    {:n, :l, {__MODULE__, name}}
+  end
 
-  def get_current_lsn(slot_name), do: GenStage.call(name(slot_name), :get_current_lsn)
+  defp producer_info() do
+    [min_demand: 10, max_demand: 50]
+  end
 
-  @spec start_replication(server(), send_fn(), String.t(), Lsn.t()) :: :ok | {:error, term()}
-  def start_replication(slot_name, send_fn, publication, lsn),
-    do: GenStage.call(name(slot_name), {:start_replication, send_fn, publication, lsn})
+  #  @spec connected?(slot_name()) :: boolean()
+  def connected?(server) do
+    GenStage.call(server, :connected?)
+  end
 
-  @spec stop_replication(server()) :: :ok
-  def stop_replication(slot_name), do: GenStage.call(name(slot_name), {:stop_replication})
+  def downstream_connected?(server) do
+    GenStage.call(server, :downstream_connected?)
+  end
 
-  def send_keepalive(slot_name),
-    do: name(slot_name) |> GenServer.whereis() |> send(:send_keepalive)
+  @spec stop(server) :: :ok
+  def stop(server) do
+    GenStage.stop(server)
+  end
+
+  @spec get_current_lsn(Electric.reg_name()) :: Lsn.t() | {:error, term()}
+  def get_current_lsn(server) do
+    GenStage.call(server, :get_current_lsn)
+  end
+
+  @spec start_replication(Electric.reg_name(), send_fn(), String.t(), Lsn.t()) ::
+          :ok | {:error, term()}
+  def start_replication(server, send_fn, publication, lsn),
+    do: GenStage.call(server, {:start_replication, send_fn, publication, lsn})
+
+  @spec stop_replication(Electric.reg_name()) :: :ok
+  def stop_replication(server) do
+    GenStage.call(server, {:stop_replication})
+  end
+
+  @spec send_keepalive(Electric.reg_name() | pid()) :: :ok
+  def send_keepalive(pid) when is_pid(pid) do
+    send(pid, :send_keepalive)
+  end
+
+  def send_keepalive(server) do
+    send_keepalive(GenServer.whereis(server))
+  end
 
   # Server callbacks
 
   @impl true
-  def init(args) do
+  def init([origin, args, {:via, :gproc, producer}]) do
     slot = args.replication.subscription
-    producer = args.downstream.producer
 
-    {:ok, producer_pid} = DownstreamProducer.start_link(producer, args.downstream.producer_opts)
+    :gproc.nb_wait(producer)
+    :gproc.reg(name(origin))
+    :gproc.reg(name({:slot_name, slot}))
 
-    Logger.metadata(slot: slot)
+    Logger.metadata(origin: origin, pg_slot: slot)
     Logger.debug("Started slot server")
 
     {:consumer,
-     %__MODULE__{
+     %State{
        slot_name: slot,
-       producer_pid: producer_pid,
-       producer: producer,
+       producer_name: producer,
+       producer: args.downstream.producer,
        opts: Map.get(args.replication, :opts, [])
-     }, subscribe_to: [{producer_pid, min_demand: 10, max_demand: 50}]}
+     }}
   end
 
   @impl true
@@ -111,15 +153,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   def handle_call(:downstream_connected?, _from, state) do
-    {:reply, DownstreamProducer.connected?(state.producer, state.producer_pid), [], state}
-  end
-
-  def handle_call(:get_producer_pid, _from, state) do
-    {:reply, state.producer_pid, [], state}
+    res = DownstreamProducer.connected?(state.producer, state.producer_pid)
+    Logger.debug("Requested downstream connection #{res}")
+    {:reply, res, [], state}
   end
 
   @impl true
   def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
+    Logger.warning("Replication already started #{state.slot_name}")
     {:reply, {:error, :replication_already_started}, [], state}
   end
 
@@ -159,7 +200,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
 
-    DownstreamProducer.start_replication(state.producer, state.producer_pid, vx_offset)
+    DownstreamProducer.start_replication(
+      state.producer,
+      state.producer_pid,
+      vx_offset
+    )
 
     {:noreply, [], %{state | current_lsn: start_lsn}}
   end
@@ -175,6 +220,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   def handle_info(:send_keepalive, state) do
     {:noreply, [], state}
+  end
+
+  def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
+    :ok = GenStage.async_subscribe(self(), [{:to, pid} | producer_info()])
+    {:noreply, [], %State{state | producer_pid: pid}}
   end
 
   @impl true
@@ -199,22 +249,24 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:noreply, [], state}
   end
 
+  @impl true
   def handle_events(_events, _from, state) do
+    {:noreply, [], state}
+  end
+
+  @impl true
+  def handle_cancel({:down, _}, _from, state) do
+    :gproc.nb_wait(state.producer_name)
     {:noreply, [], state}
   end
 
   # Private function
 
-  defp name(slot_name) when is_binary(slot_name),
-    do: {:via, Registry, {Electric.PostgresSlotRegistry, {:slot, slot_name}}}
-
-  defp name(server), do: server
-
-  defp clear_replication(%__MODULE__{} = state) do
+  defp clear_replication(%State{} = state) do
     Process.demonitor(state.socket_process_ref)
     if state.timer, do: :timer.cancel(state.timer)
 
-    %__MODULE__{
+    %State{
       state
       | publication: nil,
         send_fn: nil,

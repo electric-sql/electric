@@ -1,0 +1,182 @@
+// This file defines protobuf protocol for SQLite Tcp Server
+// Messages are send other the wire in the followng format:
+//
+// Size:32, MsgType:8, Msg/binary
+//
+// In this document there is a notation of the Client/Server and
+// Producer/Consumer which are used to annotate messages.
+//
+// Server is expected to be one of the Electric instances, while Client is a
+// client application that talks to Electric via Satellite library, or any other
+// enitty that implements this protocol.
+//
+// Producer and Consumer are the corresponding roles Client and Server play in
+// replication process. Consumer requests replication from the Producer, and
+// periodically answer Ping requests form the Prodicer to acknowledge
+// successfull replication. Consumer may also send such Ping requests, if the
+// bidirectional replication is enabled. If one of the parties is not involved
+// in the replication lsn field may be left empty.
+syntax = "proto3";
+package Electric.SQLite;
+
+// (Client)
+message SQGetServerInfoReq{}
+
+// (Server)
+message SQGetServerInfoResp {
+    string server_version = 1;
+    string node = 2;
+}
+
+// Ping request. Can be send by any party
+message SQPingReq{
+}
+
+// Ping response.
+message SQPingResp{
+    // If LSN is present, it conveys to producer the latest LSN position that
+    // was applied on the consumer side. If there is no active replication
+    // ongoing the field should be left 0
+    optional string lsn = 1;
+}
+
+// (Client) Auth request
+//
+// Client request is the first request that the client should send before
+// executing any other request
+message SQAuthReq {
+    // Identity of the Satelite application. Is expected to be something like
+    // UUID
+    string id = 1;
+    // Authentification token, auth method specific
+    string token = 2;
+}
+
+// (Server) Auth response
+message SQAuthResp {
+    // Identity of the Server
+    string id = 1;
+}
+
+// General purpose error message, that could be sent to any request from any
+// sides. FIXME: We might want to separate that into Client/Server parts
+message SQErrorResp {
+    enum ErrorCode {
+        INTERNAL = 0;
+        AUTH_REQUIRED = 1;
+        AUTH_FAILED = 2;
+    }
+
+    ErrorCode error_type = 1;
+}
+
+// (Consumer) Starts replication stream from producer to consumer
+message SQInStartReplicationReq {
+    enum Option {
+        NONE = 0;
+        // Flag that indicates to Producer, to start replication from the latest
+        // position that have been acknowledged by this Consumer. In such a case
+        // provided lsn will be ignored
+        LAST_ACKNOWLEDGED = 1;
+    }
+    // LSN position of the log on the producer side
+    string lsn = 1;
+    repeated Option options = 2;
+
+}
+
+// (Producer) Acknowledgement that replication have been started
+message SQInStartReplicationResp {
+}
+
+
+// (Consumer) Request to stop replication
+message SQInStopReplicationReq {
+
+}
+
+// (Producer) Acknowledgement that repliation have been stopped
+message SQInStopReplicationResp {
+
+}
+
+message SQRelationColumn {
+    string name = 1;
+    string type = 2;
+}
+
+message SQRelation {
+    enum RelationType {
+        TABLE = 0;
+        INDEX = 1;
+        VIEW = 2;
+        TRIGGER = 3;
+    }
+
+    string schema_name = 1;
+    RelationType table_type = 2;
+    string table_name = 3;
+    // Volatile identity defined at the start of the replication protocol may or
+    // may not be persisted is used in SQTransOp operations, to indicate
+    // relation the operation is working on.
+    uint32 relation_id = 4;
+    repeated SQRelationColumn columns = 5;
+}
+
+// (Producer) Type defines replication messages, that flow from Producer once
+// the replication is established. Message contains operations log. Operations
+// should go in the LSN order. Begin and Commit opetations corresponds to
+// transaction boundaries.
+message SQOpLog {
+    repeated SQTransOp ops = 1;
+}
+
+// (Producer) Single operation, should be only send as part of the SQOplog
+// message
+message SQTransOp {
+    oneof op {
+        SQOpBegin  begin = 1;
+        SQOpCommit commit = 2;
+        SQOpUpdate update = 3;
+        SQOpInsert insert = 4;
+        SQOpDelete delete = 5;
+    }
+}
+
+// (Proucer) Replication message that indicates transaction boundaries
+// should be only send as payload in the SQTransOp message
+message SQOpBegin {
+    uint64 commit_timestamp = 1;
+    string trans_id = 2;
+    string lsn = 3;
+}
+
+// (Proucer) Replication message that indicates transaction boundaries
+// should be only send as payload in the SQTransOp message
+message SQOpCommit {
+    uint64 commit_timestamp = 1;
+    string trans_id = 2;
+    string lsn = 3;
+}
+
+// (Producer) Data manipulation message, that only should be part of the
+// SQTransOp message
+message SQOpInsert {
+    uint32 relation_id = 1;
+    repeated bytes row_data = 3;
+}
+
+// (Producer) Data manipulation message, that only should be part of the
+// SQTransOp message
+message SQOpUpdate {
+    uint32 relation_id = 1;
+    repeated bytes row_data = 2;
+    repeated bytes old_row_data = 3;
+}
+
+// (Producer) Data manipulation message, that only should be part of the
+// SQTransOp message
+message SQOpDelete {
+    uint32 relation_id = 1;
+    repeated bytes old_row_data = 3;
+}

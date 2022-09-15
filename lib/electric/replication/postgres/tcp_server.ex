@@ -118,13 +118,27 @@ defmodule Electric.Replication.Postgres.TcpServer do
   alias Electric.Replication.Postgres.SlotServer
   alias Electric.Postgres.Lsn
 
-  defstruct socket: nil,
-            transport: nil,
-            client: nil,
+  defmodule State do
+    defstruct socket: nil,
+              transport: nil,
+              client: nil,
+              settings: %{},
+              accept_ssl: false,
+              mode: :normal,
+              slot: nil,
+              slot_server: nil
+
+    @type t() :: %__MODULE__{
+            socket: :ranch_transport.socket(),
+            transport: module(),
+            client: String.t() | nil,
             settings: %{},
-            accept_ssl: false,
-            mode: :normal,
-            slot: nil
+            accept_ssl: boolean(),
+            mode: :normal | :copy,
+            slot: SlotServer.slot_name() | nil,
+            slot_server: SlotServer.slot_reg() | nil
+          }
+  end
 
   @impl :ranch_protocol
   def start_link(ref, transport, protocol_options) do
@@ -133,7 +147,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   @impl GenServer
   def init({ref, transport, _}) do
-    {:ok, %__MODULE__{transport: transport}, {:continue, {:handshake, ref}}}
+    {:ok, %State{transport: transport}, {:continue, {:handshake, ref}}}
   end
 
   @impl GenServer
@@ -142,11 +156,10 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:ok, socket} = :ranch.handshake(ref)
     {:ok, {ip, port}} = :inet.peername(socket)
     client = "#{:inet.ntoa(ip)}:#{port}"
-    Logger.metadata(client: client)
+    Logger.metadata(pg_client: client)
     Logger.debug("Connection initialized by #{client}")
 
-    {:noreply, %__MODULE__{state | socket: socket, client: client},
-     {:continue, :establish_connection}}
+    {:noreply, %State{state | socket: socket, client: client}, {:continue, :establish_connection}}
   end
 
   def handle_continue(:establish_connection, state) do
@@ -221,7 +234,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   def handle_info({:tcp, socket, <<?c, 4::32>>}, %{mode: :copy} = state) do
     # End copy mode
 
-    SlotServer.stop_replication(state.slot)
+    SlotServer.stop_replication(state.slot_server)
 
     Messaging.end_copy_mode()
     |> Messaging.command_complete("COPY 0")
@@ -234,14 +247,14 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   @impl true
-  def handle_info({:tcp, socket, <<?d, _::32, ?r, data::binary>>}, %{mode: :copy} = state) do
+  def handle_info({:tcp, socket, <<?d, _::32, ?r, data::binary>>}, %State{mode: :copy} = state) do
     # Copy mode client status report
     # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
     <<_written_wal::64, _flushed_wal::64, _applied_wal::64, _client_timestamp::64,
       immediate_response::8>> = data
 
     if immediate_response == 1 do
-      SlotServer.send_keepalive(state.slot)
+      SlotServer.send_keepalive(state.slot_server)
     end
 
     :ok = state.transport.setopts(socket, active: :once)
@@ -323,7 +336,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:stop, :normal, :state}
   end
 
-  defp initialize_connection(%__MODULE__{} = state, %{"replication" => "database"} = settings) do
+  defp initialize_connection(%State{} = state, %{"replication" => "database"} = settings) do
     if SchemaRegistry.is_origin_ready?(settings["application_name"]) do
       # TODO: Verify the server settings, maybe make them dynamic?
       Messaging.authentication_ok()
@@ -337,14 +350,14 @@ defmodule Electric.Replication.Postgres.TcpServer do
       |> Messaging.ready()
       |> tcp_send(state)
 
-      Logger.metadata(origin: settings["application_name"])
+      Logger.metadata(pg_client: state.client, origin: settings["application_name"])
 
       Logger.debug(
         "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
       )
 
       :ok = state.transport.setopts(state.socket, active: :once)
-      {:noreply, %__MODULE__{state | settings: settings}}
+      {:noreply, %State{state | settings: settings}}
     else
       Messaging.error(:fatal,
         code: "08004",
@@ -362,7 +375,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     end
   end
 
-  defp initialize_connection(%__MODULE__{} = state, _settings) do
+  defp initialize_connection(%State{} = state, _settings) do
     Messaging.error(:fatal,
       code: "08004",
       message: "Electric mesh allows connection only in `replication=database` mode"
@@ -487,6 +500,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
       String.split(args, " ", trim: true, parts: 5)
 
     slot_name = String.trim(slot_name, ~s|"|)
+    slot_server = SlotServer.get_slot_reg(slot_name)
     target_lsn = Lsn.from_string(lsn_string)
 
     options = parse_replication_options(options)
@@ -499,9 +513,10 @@ defmodule Electric.Replication.Postgres.TcpServer do
     Messaging.start_copy_mode()
     |> tcp_send(state)
 
-    SlotServer.start_replication(slot_name, &tcp_send(&1, state), publication, target_lsn)
+    # FIXME: we should handle screnario when slot server is down at this moment
+    SlotServer.start_replication(slot_server, &tcp_send(&1, state), publication, target_lsn)
 
-    {nil, %{state | mode: :copy, slot: slot_name}}
+    {nil, %{state | mode: :copy, slot: slot_name, slot_server: slot_server}}
   end
 
   defp handle_query(["CREATE_REPLICATION_SLOT", _args], _state) do
@@ -518,7 +533,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   defp tcp_send(nil, _), do: :ok
 
-  defp tcp_send(data, %__MODULE__{transport: transport, socket: socket}) when is_binary(data) do
+  defp tcp_send(data, %State{transport: transport, socket: socket}) when is_binary(data) do
     transport.send(socket, data)
   end
 

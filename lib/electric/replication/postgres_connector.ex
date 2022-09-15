@@ -4,13 +4,12 @@ defmodule Electric.Replication.PostgresConnector do
   require Electric.Retry
   require Logger
 
-  alias Electric.Replication.Postgres
   alias Electric.Postgres.SchemaRegistry
 
   @type args :: {:connection, keyword()} | {:replication, keyword()}
   @type init_arg :: [args, ...]
 
-  @spec start_link(init_arg()) :: :ignore | {:error, any} | {:ok, pid}
+  @spec start_link(init_arg()) :: Supervisor.on_start()
   def start_link(init_arg) do
     Supervisor.start_link(__MODULE__, init_arg)
   end
@@ -49,7 +48,7 @@ defmodule Electric.Replication.PostgresConnector do
       match?({{Task, :start_subscription}, _, _, _}, List.last(children)) ->
         {:not_ready, :initialization}
 
-      not child_healthcheck(children, Postgres.SlotServer, :downstream_connected?) ->
+      not child_healthcheck(children, :slot_server) ->
         {:not_ready, {:disconnected, :downstream}}
 
       # TODO: Doesn't really make sense until we ensure `Postgres.LogicalReplicationProducer`
@@ -62,10 +61,13 @@ defmodule Electric.Replication.PostgresConnector do
     end
   end
 
-  defp child_healthcheck(children, module, function) do
-    case List.keyfind(children, module, 0) do
-      {_, pid, _, _} -> apply(module, function, [pid])
-      nil -> false
+  defp child_healthcheck(children, :slot_server = id) do
+    case List.keyfind(children, id, 0) do
+      {_, pid, _, _} ->
+        Electric.Replication.Postgres.SlotServer.downstream_connected?(pid)
+
+      nil ->
+        false
     end
   end
 
@@ -81,6 +83,7 @@ defmodule Electric.Replication.PostgresConnector do
   defp initialize_connector(supervisor, args) when is_pid(supervisor) do
     with :ok <- initialize_connector_with_retries(args),
          :ok <- finish_initialization(supervisor, args) do
+      Logger.info("Successfully initialized connector #{inspect(args.origin)}")
       SchemaRegistry.mark_origin_ready(args.origin)
     else
       error ->
@@ -93,16 +96,34 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp finish_initialization(supervisor, args) do
-    [
-      {Electric.Replication.Postgres.SlotServer, put_name(args, Electric.SlotServer)},
-      {Electric.Replication.Postgres.UpstreamPipeline,
-       put_name(args, Electric.ReplicationSource)},
-      Supervisor.child_spec({Task, fn -> start_subscription(args) end},
-        id: {Task, :start_subscription}
-      )
+    name = args.origin
+
+    vaxine_producer = args.downstream.producer.get_name(name)
+    postgres_producer = args.producer.get_name(name)
+
+    children = [
+      %{
+        id: :slot_server,
+        start:
+          {Electric.Replication.Postgres.SlotServer, :start_link, [name, args, vaxine_producer]}
+      },
+      %{
+        id: :vaxine_consumer,
+        start: {Electric.Replication.Vaxine.LogConsumer, :start_link, [name, postgres_producer]}
+      },
+      %{id: :postgres_producer, start: {args.producer, :start_link, [name, args]}},
+      %{
+        id: :vaxine_producer,
+        start: {args.downstream.producer, :start_link, [name, args.downstream.producer_opts]}
+      },
+      %{
+        id: :start_subscription,
+        start: {Task, :start_link, [fn -> start_subscription(args) end]},
+        restart: :temporary
+      }
     ]
-    |> Enum.map(&Supervisor.child_spec(&1, []))
-    |> Enum.reduce_while(:ok, fn %{id: id} = child_spec, _ ->
+
+    Enum.reduce_while(children, :ok, fn %{id: id} = child_spec, _ ->
       case Supervisor.start_child(supervisor, child_spec) do
         {:ok, _} ->
           {:cont, :ok}
@@ -118,11 +139,6 @@ defmodule Electric.Replication.PostgresConnector do
           {:halt, {:error, reason}}
       end
     end)
-  end
-
-  defp put_name(args, mod) do
-    name = Module.concat([mod, String.to_atom(args.origin)])
-    Map.put(args, :name, name)
   end
 
   defp normalize_args(args) when is_list(args), do: normalize_args(Map.new(args))
