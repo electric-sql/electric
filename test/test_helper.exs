@@ -3,7 +3,14 @@ if System.get_env("INTEGRATION") do
 else
   Mox.defmock(Electric.Replication.MockPostgresClient, for: Electric.Replication.Postgres.Client)
   ExUnit.configure(exclude: :integration)
-  Logger.configure(level: :warn)
+  Logger.configure(level: :info)
 end
+
+File.rm(
+  Keyword.fetch!(
+    Application.get_env(:electric, Electric.Replication.OffsetStorage),
+    :file
+  )
+)
 
 ExUnit.start()

@@ -9,8 +9,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" "dbname=$POSTGRES_DB replica
     content VARCHAR(64) NOT NULL,
     content_b VARCHAR(64)
   );
+  ALTER TABLE entries REPLICA IDENTITY FULL;
 
-CREATE SCHEMA electric;
+  CREATE TABLE entries_default (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    content VARCHAR(64) NOT NULL,
+    content_b VARCHAR(64)
+  );
+  ALTER TABLE entries_default REPLICA IDENTITY DEFAULT;
+
+  CREATE SCHEMA electric;
   CREATE TABLE electric.migrations (
     id SERIAL PRIMARY KEY,
     version VARCHAR(64) NOT NULL,
@@ -19,7 +27,6 @@ CREATE SCHEMA electric;
     UNIQUE(version)
   );
 
-  ALTER TABLE entries REPLICA IDENTITY FULL;
   INSERT INTO electric.migrations (version, hash) VALUES ('1', 'initial');
 
   CREATE PUBLICATION all_tables FOR ALL TABLES;

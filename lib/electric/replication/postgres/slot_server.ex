@@ -18,7 +18,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.Messaging
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
-  alias Electric.Replication.VaxinePostgresOffsetStorage
+  alias Electric.Replication.OffsetStorage
 
   alias Electric.Replication.DownstreamProducer
 
@@ -248,7 +248,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
         %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
       end)
 
-    VaxinePostgresOffsetStorage.put_relation(
+    OffsetStorage.put_pg_relation(
       state.slot_name,
       state.current_lsn,
       state.current_vx_offset
@@ -300,9 +300,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   defp get_vx_offset(slot_name, start_lsn) do
-    case VaxinePostgresOffsetStorage.get_vx_offset(slot_name, start_lsn) do
+    case OffsetStorage.get_vx_offset(slot_name, start_lsn) do
       nil ->
-        case VaxinePostgresOffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
+        case OffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
           {lsn, vx_offset} ->
             Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to #{inspect(lsn)}")
             vx_offset

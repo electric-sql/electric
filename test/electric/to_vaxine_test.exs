@@ -24,6 +24,14 @@ defmodule Electric.Replication.VaxineTest do
     }
   end
 
+  def updated_record_change_old_empty(new_columns) do
+    %Changes.UpdatedRecord{
+      old_record: nil,
+      record: Map.put(new_columns, "id", @id),
+      relation: {"fake", "to_vaxine_test"}
+    }
+  end
+
   def deleted_record_change(old_columns) do
     %Changes.DeletedRecord{
       old_record: Map.put(old_columns, "id", @id),
@@ -59,6 +67,14 @@ defmodule Electric.Replication.VaxineTest do
       assert :ok =
                %{"content" => "a"}
                |> updated_record_change(%{"content" => "b"})
+               |> ToVaxine.handle_change()
+
+      assert %{row: %{"content" => "b"}} = VaxRepo.reload(@row)
+    end
+
+    test "for UpdatedRecord without old row" do
+      assert :ok =
+               updated_record_change_old_empty(%{"content" => "b"})
                |> ToVaxine.handle_change()
 
       assert %{row: %{"content" => "b"}} = VaxRepo.reload(@row)

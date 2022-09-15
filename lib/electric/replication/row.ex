@@ -34,13 +34,19 @@ defmodule Electric.Replication.Row do
     %{changeset | changes: Map.put(changeset.changes, :deleted?, value)}
   end
 
-  defp extract_id(schema, table, keys, record) do
+  defp extract_id(schema, table, keys, record) when keys !== [] do
+    # NOTE: order of keys here is important PK does not contain NULL values, and
+    # we should never get :nil in record map. The order of keys should be
+    # deterministic and is guaranteed by the calling code.
+    #
+    # Code here has been rewritten to provide a simple runtime check that
+    # we do not skip keys that accidently were omitted.
     primary_keys_joined =
-      record
-      |> Map.take(keys)
-      |> Map.values()
-      |> Enum.join(":")
+      Enum.reduce(Enum.reverse(keys), "", fn key, acc ->
+        value = Map.fetch!(record, key)
+        ":" <> value <> acc
+      end)
 
-    schema <> ":" <> table <> ":" <> primary_keys_joined
+    schema <> ":" <> table <> primary_keys_joined
   end
 end

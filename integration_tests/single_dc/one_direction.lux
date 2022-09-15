@@ -6,24 +6,53 @@
 [include shared.luxinc]
 [invoke setup]
 
-[shell pg_1]
-    !INSERT INTO entries (content) VALUES ('Hello from a');
-    ?INSERT 0 1
+[shell vaxine]
+    -$fail_pattern
+[shell electric]
+    -$fail_pattern
 
+[macro validate_insert identity table]
+[shell pg_1]
+    [invoke log "Insert data for identity=${identity}"]
+    !INSERT INTO ${table} (id, content) VALUES ('46ae8d74-ea44-4322-a4f3-9cd1b680a5bf', 'Hello from a');
+    ?INSERT 0 1
 [shell electric]
     ?.* origin=postgres_2 .* \[debug\] Sending \d messages to the subscriber
-
 [shell pg_2]
-    [invoke wait-for "SELECT * FROM entries;" "Hello from a" 10 "electric=#"]
+    [invoke log "Confirm insert operation"]
+    [invoke wait-for "SELECT * FROM ${table};" "Hello from a" 10 "electric=#"]
+[endmacro]
 
-    !SELECT * FROM entries;
-    ?Hello from a
-    ?(1 row)
-
+[macro validate_update identity table]
 [shell pg_1]
-    !SELECT * FROM entries;
-    ?Hello from a
-    ?(1 row)
+    [invoke log "Update data for identity=${identity}"]
+    !UPDATE ${table} SET content = 'other' WHERE id = '46ae8d74-ea44-4322-a4f3-9cd1b680a5bf';
+    ?UPDATE 1
+[shell electric]
+    ?.* origin=postgres_2 .* \[debug\] Sending \d messages to the subscriber
+[shell pg_2]
+    [invoke log "Confirm update operation"]
+    [invoke wait-for "SELECT * FROM ${table};" "other" 10 "electric=#"]
+[endmacro]
+
+[macro validate_delete identity table]
+[shell pg_1]
+    [invoke log "Update data for identity=${identity}"]
+    !DELETE FROM ${table} WHERE id = '46ae8d74-ea44-4322-a4f3-9cd1b680a5bf';
+    ?DELETE 1
+[shell electric]
+    ?.* origin=postgres_2 .* \[debug\] Sending \d messages to the subscriber
+[shell pg_2]
+    [invoke log "Confirm delete operation"]
+    [invoke wait-for "SELECT * FROM ${table};" "(0 rows)" 10 "electric=#"]
+[endmacro]
+
+[invoke validate_insert "FULL" "entries"]
+[invoke validate_insert "DEFAULT" "entries_default"]
+[invoke validate_update "FULL" "entries"]
+[invoke validate_update "DEFAULT" "entries_default"]
+[invoke validate_delete "FULL" "entries"]
+[invoke validate_delete "DEFAULT" "entries_default"]
 
 [cleanup]
     [invoke teardown]

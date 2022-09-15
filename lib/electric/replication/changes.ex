@@ -1,8 +1,22 @@
 defmodule Electric.Replication.Changes do
+  @moduledoc """
+  This module contain rules to convert changes coming from PostgreSQL
+  to Vaxine format.
+
+  Some of the core assumptions in this module:
+  - We require PK always to be present for all tables
+  - For now PK modification is not supported
+  - PG replication protocol is expected to always send the *whole* row
+  when dealing with UPDATE changes, and optionally old row if REPLICA
+  identity is set to FULL.
+  """
+
   alias Electric.Replication.Row
   alias Electric.VaxRepo
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
+
+  require Logger
 
   @type relation() :: {schema :: String.t(), table :: String.t()}
   @type record() :: %{(column_name :: String.t()) => column_data :: binary()}
@@ -59,6 +73,22 @@ defmodule Electric.Replication.Changes do
           }
 
     defimpl Electric.Replication.Vaxine.ToVaxine do
+      def handle_change(%{old_record: old_record, record: new_record, relation: {schema, table}})
+          when old_record == %{} or old_record == nil do
+        %{primary_keys: keys} = SchemaRegistry.fetch_table_info!({schema, table})
+
+        row = Row.new(schema, table, new_record, keys)
+
+        %Row{row | row: %{}}
+        |> Ecto.Changeset.change(row: new_record)
+        |> Row.force_deleted_update(false)
+        |> Electric.VaxRepo.update()
+        |> case do
+          {:ok, _} -> :ok
+          error -> error
+        end
+      end
+
       def handle_change(%{old_record: old_record, record: new_record, relation: {schema, table}}) do
         %{primary_keys: keys} = SchemaRegistry.fetch_table_info!({schema, table})
 

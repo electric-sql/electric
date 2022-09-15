@@ -113,9 +113,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, [], %{state | transaction: {msg.final_lsn, tx}}}
   end
 
-  defp process_message(%Origin{}, state) do
+  defp process_message(%Origin{} = msg, state) do
     # If we got the "origin" message, it means that the Postgres sending the data has got it from Electric already
     # so we just drop the transaction altogether
+    Logger.debug("origin: #{inspect(msg.name)}")
     {:noreply, [], %{state | drop_current_transaction?: true}}
   end
 

@@ -2,8 +2,7 @@ import Config
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
-config :electric, Electric.Replication.VaxinePostgresOffsetStorage,
-  file: "./vx_pg_offset_storage_dev.dat"
+config :electric, Electric.Replication.OffsetStorage, file: "./vx_pg_offset_storage_dev.dat"
 
 config :electric, Electric.Migrations, dir: "./integration_tests/migrations/migration_schemas/"
 
@@ -70,9 +69,5 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_hostname: "localhost",
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
-
-# config :electric, Electric.Satellite.Auth,
-#  auth_url: "http://localhost:1080/auth_success",
-#  cluster_id: "cluster_auth_id"
 
 config :logger, level: :debug

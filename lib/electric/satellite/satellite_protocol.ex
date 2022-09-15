@@ -26,6 +26,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Vaxine
   alias Electric.Replication.Changes
+  alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Replication
   alias Electric.Satellite.ClientManager
 
@@ -98,7 +99,9 @@ defmodule Electric.Satellite.Protocol do
 
   defmodule State do
     defstruct auth_passed: false,
-              client: "",
+              last_msg_time: nil,
+              client: nil,
+              client_id: nil,
               in_rep: %InRep{},
               out_rep: %OutRep{},
               ping_tref: nil,
@@ -107,7 +110,9 @@ defmodule Electric.Satellite.Protocol do
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
+            last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client: String.t(),
+            client_id: String.t() | nil,
             ping_tref: reference() | nil,
             transport: module(),
             socket: :ranch_transport.socket(),
@@ -128,16 +133,14 @@ defmodule Electric.Satellite.Protocol do
     case msg do
       %SatAuthReq{id: id, token: token}
       when id !== "" and token !== "" ->
-        Logger.debug("Received auth request")
+        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(id)}")
 
         with :ok <- Electric.Satellite.Auth.validate_token(id, token) do
-          :ok =
-            ClientManager.register_client(
-              state.client,
-              Electric.Satellite.WsServer.reg_name(state.client)
-            )
+          reg_name = Electric.Satellite.WsServer.reg_name(state.client)
+          Electric.reg(reg_name)
+          :ok = ClientManager.register_client(state.client, reg_name)
 
-          {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true}}
+          {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true, client_id: id}}
         else
           {:error, _} ->
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
@@ -168,7 +171,7 @@ defmodule Electric.Satellite.Protocol do
         %State{in_rep: _in_rep, out_rep: out_rep} = state
       )
       when client_lsn !== "" do
-    # FIXME: only sync_batch_size == 1 is supported at the moment
+    # FIXME: only sync_batch_size == 1 is supported in SYNC_MODE at the moment
     out_rep =
       case Enum.member?(opts, :SYNC_MODE) do
         true ->
@@ -237,34 +240,47 @@ defmodule Electric.Satellite.Protocol do
 
   def process_message(%SatOpLog{} = msg, %State{in_rep: in_rep} = state)
       when in_rep?(state) do
-    case Replication.deserialize_trans(
-           state.client,
-           msg,
-           in_rep.incomplete_trans,
-           in_rep.relations
-         ) do
-      {incomplete, []} ->
-        {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
+    self = self()
 
-      {incomplete, complete} ->
-        complete = Enum.reverse(complete)
+    try do
+      case Replication.deserialize_trans(
+             state.client_id,
+             msg,
+             in_rep.incomplete_trans,
+             in_rep.relations,
+             fn lsn -> report_lsn(state.client_id, self, in_rep.sync_batch_size, lsn) end
+           ) do
+        {incomplete, []} ->
+          {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
 
-        in_rep =
-          send_downstream(%InRep{
-            in_rep
-            | incomplete_trans: incomplete,
-              queue:
-                Utils.add_events_to_queue(
-                  complete,
-                  in_rep.queue
-                )
-          })
+        {incomplete, complete} ->
+          complete = Enum.reverse(complete)
 
-        {nil, %State{state | in_rep: in_rep}}
+          in_rep =
+            send_downstream(%InRep{
+              in_rep
+              | incomplete_trans: incomplete,
+                queue:
+                  Utils.add_events_to_queue(
+                    complete,
+                    in_rep.queue
+                  )
+            })
+
+          {nil, %State{state | in_rep: in_rep}}
+      end
+    rescue
+      e ->
+        Logger.error(Exception.format(:error, e, __STACKTRACE__))
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end
   end
 
   def process_message(%SatOpLog{} = _msg, %State{} = state) do
+    Logger.info(
+      "incoming replication is not active: #{inspect(state.in_rep.status)} ignore transaction"
+    )
+
     # If not in active state, just ignore message without acknowledgement
     {nil, state}
   end
@@ -278,33 +294,27 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def send_downstream(%InRep{} = in_rep) do
-    # FIXME: We should fix acknowledgement
     case Utils.fetch_demand_from_queue(in_rep.demand, in_rep.queue) do
       {_remaining_demand, [], _} ->
         in_rep
 
       {remaining_demand, txns, remaining_txns} ->
-        {in_rep, txns} = set_acknowledge_fun(in_rep, txns)
         msg = {:"$gen_consumer", {in_rep.pid, in_rep.stage_sub}, txns}
         Process.send(in_rep.pid, msg, [])
         %InRep{in_rep | demand: remaining_demand, queue: remaining_txns}
     end
   end
 
-  def set_acknowledge_fun(in_rep = %InRep{sync_batch_size: nil}, txns) do
-    {in_rep, txns}
+  defp report_lsn(satellite, _pid, nil, lsn) do
+    Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
+    OffsetStorage.put_satellite_lsn(satellite, lsn)
+    # We are not operating in a sync mode, so no need to acknowledge lsn in
+    # this call
   end
 
-  def set_acknowledge_fun(in_rep = %InRep{sync_batch_size: 1}, txns) do
-    pid = self()
-
-    {in_rep,
-     Enum.map(txns, fn txn ->
-       %Transaction{txn | ack_fn: fn -> report_lsn(pid, txn.lsn) end}
-     end)}
-  end
-
-  def report_lsn(pid, lsn) do
+  defp report_lsn(satellite, pid, 1, lsn) do
+    Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
+    OffsetStorage.put_satellite_lsn(satellite, lsn)
     Process.send(pid, {__MODULE__, :lsn_report, lsn}, [])
   end
 
