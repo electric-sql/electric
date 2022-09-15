@@ -4,6 +4,12 @@ on:
     branches:
       - main
   pull_request: null
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: test_name
+        default: tests
+        required: false
 
 jobs:
   deps:
