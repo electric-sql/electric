@@ -23,7 +23,7 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:sasl, :logger]
     ]
   end
 
