@@ -1,12 +1,12 @@
 deps:
-	npm ci
+	yarn install --frozen-lockfile
 #	npm install tslint tslint-config-prettier
 
 build:
-	npm run build
+	yarn build
 
 tests:
-	npm test
+	yarn test
 
 # TSModule requires that all source files are under ./src
 
