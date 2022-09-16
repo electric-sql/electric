@@ -81,13 +81,15 @@
     "long": "^5.2.0",
     "protobufjs": "^7.1.1",
     "sqlite-parser": "^1.0.1",
-    "walkjs": "^3.2.4"
+    "walkjs": "^3.2.4",
+    "ws": "^8.8.1"
   },
   "devDependencies": {
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "^40.0.17",
     "@types/node": "^18.7.13",
     "@types/react": "^18.0.18",
+    "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",

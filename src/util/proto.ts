@@ -19,6 +19,42 @@ let msgtypemapping = new Map<string, number>(
         ["Electric.Satellite.SatMigrationNotification", 13]
     ]);
 
+let codemapping = new Map<number, string>(
+    [
+        [0, "Electric.Satellite.SatErrorResp"],
+        [1, "Electric.Satellite.SatAuthReq"],
+        [2, "Electric.Satellite.SatAuthResp"],
+        [3, "Electric.Satellite.SatGetServerInfoReq"],
+        [4, "Electric.Satellite.SatGetServerInfoResp"],
+        [5, "Electric.Satellite.SatPingReq"],
+        [6, "Electric.Satellite.SatPingResp"],
+        [7, "Electric.Satellite.SatInStartReplicationReq"],
+        [8, "Electric.Satellite.SatInStartReplicationResp"],
+        [9, "Electric.Satellite.SatInStopReplicationReq"],
+        [10, "Electric.Satellite.SatInStopReplicationResp"],
+        [11, "Electric.Satellite.SatOpLog"],
+        [12, "Electric.Satellite.SatRelation"],
+        [13, "Electric.Satellite.SatRelationColumn"]
+    ]);
+
+let msgobjemapping = new Map<string, SatPbMsgObj>(
+    [
+        ["Electric.Satellite.SatErrorResp", Pb.SatErrorResp],
+        ["Electric.Satellite.SatAuthReq", Pb.SatAuthReq],
+        ["Electric.Satellite.SatAuthResp", Pb.SatAuthResp],
+        ["Electric.Satellite.SatGetServerInfoReq", Pb.SatGetServerInfoReq],
+        ["Electric.Satellite.SatGetServerInfoResp", Pb.SatGetServerInfoResp],
+        ["Electric.Satellite.SatPingReq", Pb.SatPingReq],
+        ["Electric.Satellite.SatPingResp", Pb.SatPingResp],
+        ["Electric.Satellite.SatInStartReplicationReq", Pb.SatInStartReplicationReq],
+        ["Electric.Satellite.SatInStartReplicationResp", Pb.SatInStartReplicationResp],
+        ["Electric.Satellite.SatInStopReplicationReq", Pb.SatInStopReplicationReq],
+        ["Electric.Satellite.SatInStopReplicationResp", Pb.SatInStopReplicationResp],
+        ["Electric.Satellite.SatOpLog", Pb.SatOpLog],
+        ["Electric.Satellite.SatRelation", Pb.SatRelation],
+        ["Electric.Satellite.SatRelationColumn", Pb.SatRelationColumn]
+    ]);
+
 export type SatPbMsg =
     | Pb.SatErrorResp
     | Pb.SatAuthReq
@@ -42,13 +78,20 @@ export type SatPbMsgObj = {
     fromPartial<I extends Pb.Exact<Pb.DeepPartial<SatPbMsg>, I>>(object: I): SatPbMsg;
 };
 
-// Returns
 export function getMsgType(msg: SatPbMsg) {
     return msgtypemapping.get(msg.$type) ?? 0;
 }
 
+export function getTypeFromCode(code: number): string {
+    return codemapping.get(code) ?? "";
+}
+
 export function getTypeFromString(string_type: string) {
-    return msgtypemapping.get(string_type);
+    return msgtypemapping.get(string_type) ?? "";
+}
+
+export function getObjFromString(string_type: string) {
+    return msgobjemapping.get(string_type);
 }
 
 export function getSizeBuf(msg_type: SatPbMsg) {
