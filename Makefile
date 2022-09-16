@@ -13,7 +13,6 @@ tests:
 PROTO_LOCAL?=./proto/satellite.proto
 update_proto:
 	mkdir -p ./src/_generated
-	
 	protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_opt=outputJsonMethods=false \
 		--ts_proto_opt=outputTypeRegistry=true \

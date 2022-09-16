@@ -16,7 +16,7 @@ let msgtypemapping = new Map<string, number>(
         ["Electric.Satellite.SatInStopReplicationResp", 10],
         ["Electric.Satellite.SatOpLog", 11],
         ["Electric.Satellite.SatRelation", 12],
-        ["Electric.Satellite.SatRelationColumn", 13]
+        ["Electric.Satellite.SatMigrationNotification", 13]
     ]);
 
 export type SatPbMsg =
@@ -33,7 +33,7 @@ export type SatPbMsg =
     | Pb.SatInStopReplicationResp
     | Pb.SatOpLog
     | Pb.SatRelation
-    | Pb.SatRelationColumn
+    | Pb.SatMigrationNotification
 
 export type SatPbMsgObj = {
     $type: string;

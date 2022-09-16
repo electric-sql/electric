@@ -64,11 +64,13 @@ export interface SatAuthReq {
   $type: "Electric.Satellite.SatAuthReq";
   /**
    * Identity of the Satelite application. Is expected to be something like
-   * UUID
+   * UUID. Required field
    */
   id: string;
   /** Authentification token, auth method specific */
   token: string;
+  schemaVersion: string;
+  schemaHash: string;
 }
 
 /** (Server) Auth response */
@@ -92,6 +94,7 @@ export enum SatErrorResp_ErrorCode {
   AUTH_REQUIRED = 1,
   AUTH_FAILED = 2,
   REPLICATION_FAILED = 3,
+  INVALID_REQUEST = 4,
   UNRECOGNIZED = -1,
 }
 
@@ -242,6 +245,20 @@ export interface SatOpDelete {
   $type: "Electric.Satellite.SatOpDelete";
   relationId: number;
   oldRowData: Uint8Array[];
+}
+
+/**
+ * Message is send when server is migrated while client is still connected It's
+ * up to the client to do immediatly performa migration or stop replication
+ * stream if it's ongoing.
+ */
+export interface SatMigrationNotification {
+  $type: "Electric.Satellite.SatMigrationNotification";
+  /** all fields are required */
+  oldSchemaVersion: string;
+  oldSchemaHash: string;
+  newSchemaVersion: string;
+  newSchemaHash: string;
 }
 
 function createBaseSatGetServerInfoReq(): SatGetServerInfoReq {
@@ -402,7 +419,7 @@ export const SatPingResp = {
 messageTypeRegistry.set(SatPingResp.$type, SatPingResp);
 
 function createBaseSatAuthReq(): SatAuthReq {
-  return { $type: "Electric.Satellite.SatAuthReq", id: "", token: "" };
+  return { $type: "Electric.Satellite.SatAuthReq", id: "", token: "", schemaVersion: "", schemaHash: "" };
 }
 
 export const SatAuthReq = {
@@ -414,6 +431,12 @@ export const SatAuthReq = {
     }
     if (message.token !== "") {
       writer.uint32(18).string(message.token);
+    }
+    if (message.schemaVersion !== "") {
+      writer.uint32(26).string(message.schemaVersion);
+    }
+    if (message.schemaHash !== "") {
+      writer.uint32(34).string(message.schemaHash);
     }
     return writer;
   },
@@ -431,6 +454,12 @@ export const SatAuthReq = {
         case 2:
           message.token = reader.string();
           break;
+        case 3:
+          message.schemaVersion = reader.string();
+          break;
+        case 4:
+          message.schemaHash = reader.string();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -443,6 +472,8 @@ export const SatAuthReq = {
     const message = createBaseSatAuthReq();
     message.id = object.id ?? "";
     message.token = object.token ?? "";
+    message.schemaVersion = object.schemaVersion ?? "";
+    message.schemaHash = object.schemaHash ?? "";
     return message;
   },
 };
@@ -1212,6 +1243,74 @@ export const SatOpDelete = {
 };
 
 messageTypeRegistry.set(SatOpDelete.$type, SatOpDelete);
+
+function createBaseSatMigrationNotification(): SatMigrationNotification {
+  return {
+    $type: "Electric.Satellite.SatMigrationNotification",
+    oldSchemaVersion: "",
+    oldSchemaHash: "",
+    newSchemaVersion: "",
+    newSchemaHash: "",
+  };
+}
+
+export const SatMigrationNotification = {
+  $type: "Electric.Satellite.SatMigrationNotification" as const,
+
+  encode(message: SatMigrationNotification, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.oldSchemaVersion !== "") {
+      writer.uint32(10).string(message.oldSchemaVersion);
+    }
+    if (message.oldSchemaHash !== "") {
+      writer.uint32(18).string(message.oldSchemaHash);
+    }
+    if (message.newSchemaVersion !== "") {
+      writer.uint32(26).string(message.newSchemaVersion);
+    }
+    if (message.newSchemaHash !== "") {
+      writer.uint32(34).string(message.newSchemaHash);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatMigrationNotification {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatMigrationNotification();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.oldSchemaVersion = reader.string();
+          break;
+        case 2:
+          message.oldSchemaHash = reader.string();
+          break;
+        case 3:
+          message.newSchemaVersion = reader.string();
+          break;
+        case 4:
+          message.newSchemaHash = reader.string();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatMigrationNotification>, I>>(object: I): SatMigrationNotification {
+    const message = createBaseSatMigrationNotification();
+    message.oldSchemaVersion = object.oldSchemaVersion ?? "";
+    message.oldSchemaHash = object.oldSchemaHash ?? "";
+    message.newSchemaVersion = object.newSchemaVersion ?? "";
+    message.newSchemaHash = object.newSchemaHash ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatMigrationNotification.$type, SatMigrationNotification);
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
