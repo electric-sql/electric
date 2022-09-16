@@ -65,7 +65,7 @@ rm_offset_storage:
 update_protobuf: deps_proto
 	mix protox.generate \
 		--output-path=./lib/electric/satellite/satellite_pb.ex \
-		./proto/satellite/satellite.proto
+		./proto/satellite/proto/satellite.proto
 
 shell:
 	iex -S mix
