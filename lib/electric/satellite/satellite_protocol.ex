@@ -126,7 +126,8 @@ defmodule Electric.Satellite.Protocol do
   def process_message(msg, %State{} = state)
       when not auth_passed?(state) do
     case msg do
-      %SatAuthReq{id: _id, token: _token} ->
+      %SatAuthReq{id: id, token: token}
+      when id !== "" and token !== "" ->
         Logger.debug("Received auth request")
         Logger.emergency("AUTH WILL ACCEPT ANY REQUEST")
 
@@ -138,6 +139,9 @@ defmodule Electric.Satellite.Protocol do
 
         {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true}}
 
+      %SatAuthReq{} ->
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
       _ ->
         {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
     end
@@ -148,7 +152,8 @@ defmodule Electric.Satellite.Protocol do
     {%SatPingResp{lsn: in_rep.lsn}, state}
   end
 
-  def process_message(%SatPingResp{lsn: confirmed_lsn}, %State{out_rep: out_rep} = state) do
+  def process_message(%SatPingResp{lsn: confirmed_lsn}, %State{out_rep: out_rep} = state)
+      when confirmed_lsn !== "" do
     Logger.debug("Received ping response, with clients lsn: #{inspect(confirmed_lsn)}")
     {nil, %{state | out_rep: %OutRep{out_rep | lsn: confirmed_lsn}}}
   end
@@ -157,7 +162,8 @@ defmodule Electric.Satellite.Protocol do
   def process_message(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{in_rep: _in_rep, out_rep: out_rep} = state
-      ) do
+      )
+      when client_lsn !== "" do
     # FIXME: only sync_batch_size == 1 is supported at the moment
     out_rep =
       case Enum.member?(opts, :SYNC_MODE) do
@@ -176,20 +182,7 @@ defmodule Electric.Satellite.Protocol do
     )
 
     out_rep = initiate_subscription(state.client, client_lsn, out_rep)
-
-    # NOTE: Previously we would have started replication when client have requested it
-    # but it creates a complicated logic, so replication is initiated by consumer when
-    # it subscribes
-    #    cond do
-    #      (in_rep.status == :nil or in_rep.status == :paused) and in_rep.pid !== :nil ->
-    #        {[%SatInStartReplicationResp{}, %SatInStartReplicationReq{}],
-    #         %State{state |
-    #                out_rep: out_rep,
-    #                in_rep: %InRep{in_rep | status: :requested}
-    #                }}
-    #      true ->
     {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
-    #    end
   end
 
   # Satelite client confirms replication start
@@ -276,6 +269,10 @@ defmodule Electric.Satellite.Protocol do
     {:stop, state}
   end
 
+  def process_message(_, %State{}) do
+    {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+  end
+
   def send_downstream(%InRep{} = in_rep) do
     # FIXME: We should fix acknowledgement
     case Utils.fetch_demand_from_queue(in_rep.demand, in_rep.queue) do
@@ -314,7 +311,7 @@ defmodule Electric.Satellite.Protocol do
 
   def handle_out_transes([event | events], state, acc) do
     {relations, transaction, out_rep} = handle_out_trans(event, state)
-    acc = relations ++ [transaction | acc]
+    acc = [transaction | relations] ++ acc
     handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
   end
 

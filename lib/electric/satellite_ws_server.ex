@@ -69,21 +69,27 @@ defmodule Electric.Satellite.WsServer do
   def websocket_handle({:binary, msg}, %State{} = state) do
     case handle_data(msg) do
       {:ok, request} ->
-        Logger.warn("ws data received: #{inspect(request)}")
+        Logger.debug("ws data received: #{inspect(request)}")
 
-        case Protocol.process_message(request, state) do
-          {nil, state1} ->
-            {[], state1}
+        try do
+          case Protocol.process_message(request, state) do
+            {nil, state1} ->
+              {[], state1}
 
-          {:error, error} ->
-            frame = binary_frame(error)
+            {:error, error} ->
+              frame = binary_frame(error)
+              {[frame, :close], state}
+
+            {:stop, state} ->
+              {[:close], state}
+
+            {reply, state1} ->
+              {binary_frames(reply), state1}
+          end
+        catch
+          _ ->
+            frame = binary_frame(%SatErrorResp{})
             {[frame, :close], state}
-
-          {:stop, state} ->
-            {[:close], state}
-
-          {reply, state1} ->
-            {binary_frames(reply), state1}
         end
 
       {:error, error} ->

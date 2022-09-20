@@ -60,6 +60,17 @@ defmodule Electric.Satellite.PB.Utils do
     {:error, :unknown_msg_type}
   end
 
+  @spec json_decode(byte(), binary(), list()) :: {:ok, sq_pb_msg()} | {:error, any()}
+  for {module, tag} <- @mapping do
+    def json_decode(unquote(tag), binary, opts) do
+      Protox.json_decode(binary, unquote(module), opts)
+    end
+  end
+
+  def json_decode(_, _, _) do
+    {:error, :unknown_msg_type}
+  end
+
   @spec encode(struct()) :: {:ok, integer(), iodata()} | {:error, any()}
   for {module, tag} <- @mapping do
     def encode(%unquote(module){} = data) do

@@ -49,6 +49,15 @@
           def encode("REPLICATION_FAILED") do
             3
           end
+        ),
+        (
+          def encode(:INVALID_REQUEST) do
+            4
+          end
+
+          def encode("INVALID_REQUEST") do
+            4
+          end
         )
       ]
 
@@ -69,6 +78,9 @@
         end,
         def decode(3) do
           :REPLICATION_FAILED
+        end,
+        def decode(4) do
+          :INVALID_REQUEST
         end
       ]
 
@@ -78,7 +90,13 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :INTERNAL}, {1, :AUTH_REQUIRED}, {2, :AUTH_FAILED}, {3, :REPLICATION_FAILED}]
+        [
+          {0, :INTERNAL},
+          {1, :AUTH_REQUIRED},
+          {2, :AUTH_FAILED},
+          {3, :REPLICATION_FAILED},
+          {4, :INVALID_REQUEST}
+        ]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -94,6 +112,9 @@
             true
           end,
           def has_constant?(:REPLICATION_FAILED) do
+            true
+          end,
+          def has_constant?(:INVALID_REQUEST) do
             true
           end
         ]
@@ -299,7 +320,7 @@
   end,
   defmodule Electric.Satellite.SatAuthReq do
     @moduledoc false
-    defstruct id: "", token: "", __uf__: []
+    defstruct id: "", token: "", schema_version: "", schema_hash: "", __uf__: []
 
     (
       (
@@ -314,7 +335,12 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_id(msg) |> encode_token(msg) |> encode_unknown_fields(msg)
+          []
+          |> encode_id(msg)
+          |> encode_token(msg)
+          |> encode_schema_version(msg)
+          |> encode_schema_hash(msg)
+          |> encode_unknown_fields(msg)
         end
       )
 
@@ -343,6 +369,32 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:token, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_schema_version(acc, msg) do
+          try do
+            if msg.schema_version == "" do
+              acc
+            else
+              [acc, "\x1A", Protox.Encode.encode_string(msg.schema_version)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:schema_version, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_schema_hash(acc, msg) do
+          try do
+            if msg.schema_hash == "" do
+              acc
+            else
+              [acc, "\"", Protox.Encode.encode_string(msg.schema_hash)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:schema_hash, "invalid field value"),
+                      __STACKTRACE__
           end
         end
       ]
@@ -409,6 +461,16 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[token: delimited], rest}
 
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[schema_version: delimited], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[schema_hash: delimited], rest}
+
               {tag, wire_type, rest} ->
                 {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
 
@@ -469,7 +531,12 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:id, {:scalar, ""}, :string}, 2 => {:token, {:scalar, ""}, :string}}
+        %{
+          1 => {:id, {:scalar, ""}, :string},
+          2 => {:token, {:scalar, ""}, :string},
+          3 => {:schema_version, {:scalar, ""}, :string},
+          4 => {:schema_hash, {:scalar, ""}, :string}
+        }
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -477,7 +544,12 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{id: {1, {:scalar, ""}, :string}, token: {2, {:scalar, ""}, :string}}
+        %{
+          id: {1, {:scalar, ""}, :string},
+          schema_hash: {4, {:scalar, ""}, :string},
+          schema_version: {3, {:scalar, ""}, :string},
+          token: {2, {:scalar, ""}, :string}
+        }
       end
     )
 
@@ -501,6 +573,24 @@
             label: :optional,
             name: :token,
             tag: 2,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "schemaVersion",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :schema_version,
+            tag: 3,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "schemaHash",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :schema_hash,
+            tag: 4,
             type: :string
           }
         ]
@@ -566,6 +656,86 @@
 
           []
         ),
+        (
+          def field_def(:schema_version) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          def field_def("schemaVersion") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          def field_def("schema_version") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:schema_hash) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("schemaHash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("schema_hash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -609,6 +779,12 @@
         {:ok, ""}
       end,
       def default(:token) do
+        {:ok, ""}
+      end,
+      def default(:schema_version) do
+        {:ok, ""}
+      end,
+      def default(:schema_hash) do
         {:ok, ""}
       end,
       def default(_) do
@@ -2783,6 +2959,515 @@
 
     [
       @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatMigrationNotification do
+    @moduledoc false
+    defstruct old_schema_version: "",
+              old_schema_hash: "",
+              new_schema_version: "",
+              new_schema_hash: "",
+              __uf__: []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          []
+          |> encode_old_schema_version(msg)
+          |> encode_old_schema_hash(msg)
+          |> encode_new_schema_version(msg)
+          |> encode_new_schema_hash(msg)
+          |> encode_unknown_fields(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_old_schema_version(acc, msg) do
+          try do
+            if msg.old_schema_version == "" do
+              acc
+            else
+              [acc, "\n", Protox.Encode.encode_string(msg.old_schema_version)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:old_schema_version, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_old_schema_hash(acc, msg) do
+          try do
+            if msg.old_schema_hash == "" do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_string(msg.old_schema_hash)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:old_schema_hash, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_new_schema_version(acc, msg) do
+          try do
+            if msg.new_schema_version == "" do
+              acc
+            else
+              [acc, "\x1A", Protox.Encode.encode_string(msg.new_schema_version)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:new_schema_version, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_new_schema_hash(acc, msg) do
+          try do
+            if msg.new_schema_hash == "" do
+              acc
+            else
+              [acc, "\"", Protox.Encode.encode_string(msg.new_schema_hash)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:new_schema_hash, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end
+      ]
+
+      defp encode_unknown_fields(acc, msg) do
+        Enum.reduce(msg.__struct__.unknown_fields(msg), acc, fn {tag, wire_type, bytes}, acc ->
+          case wire_type do
+            0 ->
+              [acc, Protox.Encode.make_key_bytes(tag, :int32), bytes]
+
+            1 ->
+              [acc, Protox.Encode.make_key_bytes(tag, :double), bytes]
+
+            2 ->
+              len_bytes = bytes |> byte_size() |> Protox.Varint.encode()
+              [acc, Protox.Encode.make_key_bytes(tag, :packed), len_bytes, bytes]
+
+            5 ->
+              [acc, Protox.Encode.make_key_bytes(tag, :float), bytes]
+          end
+        end)
+      end
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatMigrationNotification))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[old_schema_version: delimited], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[old_schema_hash: delimited], rest}
+
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[new_schema_version: delimited], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[new_schema_hash: delimited], rest}
+
+              {tag, wire_type, rest} ->
+                {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+
+                {[
+                   {msg.__struct__.unknown_fields_name,
+                    [value | msg.__struct__.unknown_fields(msg)]}
+                 ], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatMigrationNotification,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:old_schema_version, {:scalar, ""}, :string},
+          2 => {:old_schema_hash, {:scalar, ""}, :string},
+          3 => {:new_schema_version, {:scalar, ""}, :string},
+          4 => {:new_schema_hash, {:scalar, ""}, :string}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          new_schema_hash: {4, {:scalar, ""}, :string},
+          new_schema_version: {3, {:scalar, ""}, :string},
+          old_schema_hash: {2, {:scalar, ""}, :string},
+          old_schema_version: {1, {:scalar, ""}, :string}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "oldSchemaVersion",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :old_schema_version,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "oldSchemaHash",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :old_schema_hash,
+            tag: 2,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "newSchemaVersion",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :new_schema_version,
+            tag: 3,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "newSchemaHash",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :new_schema_hash,
+            tag: 4,
+            type: :string
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:old_schema_version) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_version,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("oldSchemaVersion") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_version,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("old_schema_version") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_version,
+               tag: 1,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:old_schema_hash) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_hash,
+               tag: 2,
+               type: :string
+             }}
+          end
+
+          def field_def("oldSchemaHash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_hash,
+               tag: 2,
+               type: :string
+             }}
+          end
+
+          def field_def("old_schema_hash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oldSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :old_schema_hash,
+               tag: 2,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:new_schema_version) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          def field_def("newSchemaVersion") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          def field_def("new_schema_version") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaVersion",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_version,
+               tag: 3,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:new_schema_hash) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("newSchemaHash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("new_schema_hash") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "newSchemaHash",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :new_schema_hash,
+               tag: 4,
+               type: :string
+             }}
+          end
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    (
+      @spec unknown_fields(struct) :: [{non_neg_integer, Protox.Types.tag(), binary}]
+      def unknown_fields(msg) do
+        msg.__uf__
+      end
+
+      @spec unknown_fields_name() :: :__uf__
+      def unknown_fields_name() do
+        :__uf__
+      end
+
+      @spec clear_unknown_fields(struct) :: struct
+      def clear_unknown_fields(msg) do
+        struct!(msg, [{unknown_fields_name(), []}])
+      end
+    )
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:old_schema_version) do
+        {:ok, ""}
+      end,
+      def default(:old_schema_hash) do
+        {:ok, ""}
+      end,
+      def default(:new_schema_version) do
+        {:ok, ""}
+      end,
+      def default(:new_schema_hash) do
+        {:ok, ""}
+      end,
       def default(_) do
         {:error, :no_such_field}
       end

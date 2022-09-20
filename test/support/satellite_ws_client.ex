@@ -4,7 +4,15 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   require Logger
   alias Electric.Satellite.PB.Utils
-  alias Electric.Satellite.{SatAuthReq, SatAuthResp}
+
+  alias Electric.Satellite.{
+    SatAuthReq,
+    SatAuthResp,
+    SatInStartReplicationReq,
+    SatInStartReplicationResp,
+    SatInStopReplicationReq,
+    SatInStopReplicationResp
+  }
 
   defmodule State do
     defstruct conn: nil,
@@ -12,7 +20,9 @@ defmodule Electric.Test.SatelliteWsClient do
               num: 0,
               filter_reply: nil,
               parent: nil,
-              history: nil
+              history: nil,
+              format: :term,
+              debug: false
   end
 
   def connect() do
@@ -32,6 +42,12 @@ defmodule Electric.Test.SatelliteWsClient do
     {:upgrade, [<<"websocket">>], _} = :gun.await(conn, stream_ref)
     {:ok, {conn, stream_ref}}
   end
+
+  @type opts :: [
+          {:auth, boolean}
+          | :auth
+          | {:sub, String.t()}
+        ]
 
   @spec connect_and_spawn([{:auth, boolean()}, {:ignore_in_rep, boolean()}]) :: pid()
   def connect_and_spawn(opts \\ []) do
@@ -100,19 +116,18 @@ defmodule Electric.Test.SatelliteWsClient do
       :proc_lib.init_ack(parent, {:ok, self()})
       Logger.info("started #{inspect(self)}")
 
-      case Keyword.get(opts, :auth, nil) do
-        nil ->
-          :ok
+      maybe_auth(conn, stream_ref, opts)
+      maybe_subscribe(conn, stream_ref, opts)
 
-        true ->
-          auth_req = serialize(%SatAuthReq{token: "token"})
-          :gun.ws_send(conn, stream_ref, {:binary, auth_req})
-          {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)
-          %SatAuthResp{} = deserialize(auth_frame)
-          :ok = :gun.update_flow(conn, stream_ref, 1)
-      end
-
-      loop(%State{conn: conn, stream_ref: stream_ref, parent: parent, history: t, num: 0})
+      loop(%State{
+        conn: conn,
+        stream_ref: stream_ref,
+        parent: parent,
+        history: t,
+        num: 0,
+        debug: Keyword.get(opts, :debug, false),
+        format: Keyword.get(opts, :format, :term)
+      })
     rescue
       e ->
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
@@ -130,12 +145,12 @@ defmodule Electric.Test.SatelliteWsClient do
         {:ok, type, _iodata} = Utils.encode(data)
         :gun.ws_send(conn, stream_ref, {:binary, serialize(data)})
 
-        Logger.debug("send data #{type}: #{inspect(data)}")
+        maybe_debug("send data #{type}: #{inspect(data)}", state)
         loop(%State{state | filter_reply: filter})
 
       {:ctrl_bin, data, filter} ->
         :gun.ws_send(conn, stream_ref, {:binary, data})
-        Logger.debug("send bin data: #{inspect(data)}")
+        maybe_debug("send bin data: #{inspect(data)}", state)
         loop(%State{state | filter_reply: filter})
 
       {:gun_response, ^conn, _, _, status, headers} ->
@@ -153,9 +168,9 @@ defmodule Electric.Test.SatelliteWsClient do
         :gun.close(conn)
         Logger.info("gun_ws: close by the server")
 
-      {:gun_ws, ^conn, ^stream_ref, {:binary, <<type::8, data::binary>>}} ->
-        Logger.info("received bin: #{type} #{inspect(data)}")
-        {:ok, data} = Utils.decode(type, data)
+      {:gun_ws, ^conn, ^stream_ref, {:binary, <<type::8, data::binary>> = bin}} ->
+        maybe_debug("received bin: #{type} #{inspect(data)}", state)
+        data = deserialize(bin, state.format)
         :ets.insert(table, {num, data})
 
         case state.filter_reply do
@@ -166,7 +181,7 @@ defmodule Electric.Test.SatelliteWsClient do
             case fun.(num, data) do
               true ->
                 msg = {__MODULE__, data}
-                Logger.info("sending to: #{inspect(state.parent)} #{inspect(msg)} ")
+                maybe_debug("sending to: #{inspect(state.parent)} #{inspect(msg)}", state)
                 send(state.parent, msg)
 
               false ->
@@ -174,7 +189,7 @@ defmodule Electric.Test.SatelliteWsClient do
             end
         end
 
-        Logger.info("received dec: #{inspect(data)}")
+        Logger.info("rec: #{inspect(data)}")
         loop(%State{state | num: num + 1})
 
       msg ->
@@ -182,14 +197,65 @@ defmodule Electric.Test.SatelliteWsClient do
     end
   end
 
+  def maybe_auth(conn, stream_ref, opts) do
+    case true == :lists.member(:auth, opts) or
+           true == Keyword.get(opts, :auth, false) do
+      true ->
+        auth_req = serialize(%SatAuthReq{id: "id", token: "token"})
+        :gun.ws_send(conn, stream_ref, {:binary, auth_req})
+        {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)
+        %SatAuthResp{} = deserialize(auth_frame)
+        :ok = :gun.update_flow(conn, stream_ref, 1)
+        Logger.debug("Auth passed")
+
+      false ->
+        :ok
+    end
+  end
+
+  def maybe_subscribe(conn, stream_ref, opts) do
+    case Keyword.get(opts, :sub, nil) do
+      nil ->
+        :ok
+
+      lsn ->
+        sub_req = serialize(%SatInStartReplicationReq{lsn: lsn})
+        :gun.ws_send(conn, stream_ref, {:binary, sub_req})
+        {:ws, {:binary, sub_resp}} = :gun.await(conn, stream_ref)
+        # %SatInStartReplicationResp{} = deserialize(sub_resp)
+        :ok = :gun.update_flow(conn, stream_ref, 1)
+        Logger.debug("Subscribed")
+    end
+  end
+
+  def maybe_debug(format, %{debug: true}) do
+    Logger.debug(format)
+  end
+
+  def maybe_debug(_, _) do
+    :ok
+  end
+
   def serialize(data) do
     {:ok, type, iodata} = Utils.encode(data)
     [<<type::8>>, iodata]
   end
 
-  def deserialize(binary) do
+  def deserialize(binary, format \\ :term) do
     <<type::8, data::binary>> = binary
-    {:ok, data} = Utils.decode(type, data)
-    data
+
+    case format do
+      :term ->
+        {:ok, data} = Utils.decode(type, data)
+        data
+
+      :json when data !== <<"">> ->
+        {:ok, data} = Utils.json_decode(type, data, [:return_maps, :use_nil])
+        data
+
+      _ ->
+        {:ok, data} = Utils.decode(type, data)
+        data
+    end
   end
 end

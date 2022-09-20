@@ -52,16 +52,16 @@ defmodule Electric.Satellite.Replication do
                                                                         known_relations1} ->
         relation = record.relation
 
-        {rel_id, new_relations, known_relations1} =
+        {rel_id, rel_cols, new_relations, known_relations1} =
           case fetch_relation_id(relation, known_relations1) do
-            {:new, relation_id, known_relations2} ->
-              {relation_id, [relation | new_relations], known_relations2}
+            {:new, relation_id, columns, known_relations2} ->
+              {relation_id, columns, [relation | new_relations], known_relations2}
 
-            {:existing, relation_id} ->
-              {relation_id, new_relations, known_relations1}
+            {:existing, relation_id, columns} ->
+              {relation_id, columns, new_relations, known_relations1}
           end
 
-        op = mk_trans_op(record, rel_id)
+        op = mk_trans_op(record, rel_id, rel_cols)
 
         {[op | ops], new_relations, known_relations1}
       end)
@@ -69,29 +69,50 @@ defmodule Electric.Satellite.Replication do
     {%SatOpLog{ops: Enum.reverse([tx_end | ops])}, new_relations, known_relations}
   end
 
-  defp mk_trans_op(%NewRecord{}, rel_id) do
-    op_insert = %SatOpInsert{relation_id: rel_id}
+  defp mk_trans_op(%NewRecord{record: data}, rel_id, rel_cols) do
+    op_insert = %SatOpInsert{relation_id: rel_id, row_data: map_to_record(data, rel_cols)}
     %SatTransOp{op: {:insert, op_insert}}
   end
 
-  defp mk_trans_op(%UpdatedRecord{}, rel_id) do
-    op_update = %SatOpUpdate{relation_id: rel_id}
+  defp mk_trans_op(%UpdatedRecord{record: data, old_record: old_data}, rel_id, rel_cols) do
+    op_update = %SatOpUpdate{
+      relation_id: rel_id,
+      row_data: map_to_record(data, rel_cols),
+      old_row_data: map_to_record(old_data, rel_cols)
+    }
+
     %SatTransOp{op: {:update, op_update}}
   end
 
-  defp mk_trans_op(%DeletedRecord{}, rel_id) do
-    op_delete = %SatOpDelete{relation_id: rel_id}
+  defp mk_trans_op(%DeletedRecord{old_record: data}, rel_id, rel_cols) do
+    op_delete = %SatOpDelete{relation_id: rel_id, old_row_data: map_to_record(data, rel_cols)}
     %SatTransOp{op: {:delete, op_delete}}
+  end
+
+  @spec map_to_record(%{String.t() => binary()} | nil, [String.t()]) :: [binary()]
+  defp map_to_record(nil, _rel_cols) do
+    []
+  end
+
+  defp map_to_record(data, rel_cols) do
+    # FIXME: This is ineficient, data should be stored in order, so that we
+    # do not have to do lookup here, but filter columns based on the schema instead
+    Enum.map(rel_cols, fn column_name -> Map.get(data, column_name, <<>>) end)
   end
 
   def fetch_relation_id(relation, known_relations) do
     case Map.get(known_relations, relation, nil) do
       nil ->
         %{oid: relation_id} = SchemaRegistry.fetch_table_info!(relation)
-        {:new, relation_id, Map.put(known_relations, relation, relation_id)}
 
-      relation_id ->
-        {:existing, relation_id}
+        columns =
+          for %{name: column_name} <- SchemaRegistry.fetch_table_columns!(relation),
+              do: column_name
+
+        {:new, relation_id, columns, Map.put(known_relations, relation, {relation_id, columns})}
+
+      {relation_id, columns} ->
+        {:existing, relation_id, columns}
     end
   end
 
