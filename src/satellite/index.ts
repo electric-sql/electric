@@ -21,6 +21,6 @@ export interface Satellite {
   migrator: Migrator
   notifier: Notifier
 
-  start(authState?: AuthState): Promise<void>
+  start(authState?: AuthState): Promise<void | Error>
   stop(): Promise<void>
 }

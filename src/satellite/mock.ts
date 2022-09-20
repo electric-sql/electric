@@ -3,11 +3,13 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
-import { DbName } from '../util/types'
+import { AuthResponse, DbName, SatelliteError } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
+import EventEmitter from 'events'
+import { SatelliteClient, Transaction } from './client'
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -48,5 +50,25 @@ export class MockRegistry extends BaseRegistry {
     await satellite.start(authState)
 
     return satellite
+  }
+}
+
+export class MockSatelliteClient extends EventEmitter implements SatelliteClient {
+  connect(): Promise<void | SatelliteError> {
+    return Promise.resolve();
+  }
+  close(): Promise<void | SatelliteError> {
+    return Promise.resolve();
+  }
+  authenticate(): Promise<SatelliteError | AuthResponse> {
+    return Promise.resolve({});
+  }
+  startReplication(_lsn: string, _resume?: boolean | undefined): Promise<void | SatelliteError> {
+    return Promise.resolve();
+  }
+  stopReplication(): Promise<void | SatelliteError> {
+    return Promise.resolve();
+  }
+  subscribeToTransactions(_callback: (transaction: Transaction) => Promise<void>): void {
   }
 }

@@ -15,10 +15,11 @@ import {
   SatAuthResp,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNode } from '../../src/sockets/node/websocket';
-import { AckCallback, SatelliteClientErrorCode, SatelliteError, SatelliteWSClient, Transaction } from '../../src/satellite/client';
+import { AckCallback, SatelliteWSClient, Transaction } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
+import { SatelliteErrorCode } from '../../src/util/types';
 
 test.beforeEach(t => {
   const server = new SatelliteWSServerStub();
@@ -39,15 +40,20 @@ test.beforeEach(t => {
   }
 });
 
+type Context = {
+  server: SatelliteWSServerStub,
+  client: SatelliteWSClient
+}
+
 test.afterEach.always(async t => {
-  const { server, client } = t.context as any;
+  const { server, client } = t.context as Context;
 
   await client.close();
   server.close();
 });
 
 test.serial('connect success', async t => {
-  const { client } = t.context as any;
+  const { client } = t.context as Context;
 
   await client.connect();
   t.pass();
@@ -64,8 +70,8 @@ async function connectAndAuth({ client, server }) {
 }
 
 test.serial('replication start timeout', async t => {
-  const { client, server } = t.context as any;
-  client.opts.timeout = 10
+  const { client, server } = t.context as Context;
+  client['opts'].timeout = 10
   await client.connect();
 
   // empty response will trigger client timeout
@@ -74,26 +80,26 @@ test.serial('replication start timeout', async t => {
     await client.startReplication("0", false);
     t.fail(`start replication should throw`);
   } catch (error) {
-    t.is((error as SatelliteError).code, SatelliteClientErrorCode.TIMEOUT);
+    t.is(error!.code, SatelliteErrorCode.TIMEOUT);
   }
 });
 
 test.serial('authentication success', async t => {
-  const { client, server } = t.context as any;
+  const { client, server } = t.context as Context;
   await client.connect();
 
-  const authResp = SatAuthResp.fromPartial({ id: "FAKE" });
+  const authResp = SatAuthResp.fromPartial({ id: "server_identity" });
   server.nextResponses([authResp]);
 
   const res = await client.authenticate();
-  t.is(res.serverId, "FAKE");
-  t.is(client.inbound.authenticated, true);
+  t.is(res['serverId'], "server_identity");
+  t.is(client['inbound'].authenticated, true);
 
 });
 
 test.serial('replication start success', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const startResp = SatInStartReplicationResp.fromPartial({});
   server.nextResponses([startResp]);
@@ -103,8 +109,8 @@ test.serial('replication start success', async t => {
 });
 
 test.serial('replication start failure', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const startResp = SatInStartReplicationResp.fromPartial({});
   server.nextResponses([startResp]);
@@ -113,13 +119,13 @@ test.serial('replication start failure', async t => {
     await client.startReplication("0", false);
     await client.startReplication("0", false); // fails
   } catch (error) {
-    t.is((error as any).code, SatelliteClientErrorCode.REPLICATION_ALREADY_STARTED);
+    t.is((error as any).code, SatelliteErrorCode.REPLICATION_ALREADY_STARTED);
   }
 });
 
 test.serial('replication stop success', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
   const stop = SatInStopReplicationResp.fromPartial({});
@@ -132,8 +138,8 @@ test.serial('replication stop success', async t => {
 });
 
 test.serial('replication stop failure', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const stop = SatInStopReplicationResp.fromPartial({});
   server.nextResponses([stop]);
@@ -142,13 +148,13 @@ test.serial('replication stop failure', async t => {
     await client.stopReplication();
     t.fail(`stop replication should throw`);
   } catch (error) {
-    t.is((error as any).code, SatelliteClientErrorCode.REPLICATION_NOT_STARTED);
+    t.is((error as any).code, SatelliteErrorCode.REPLICATION_NOT_STARTED);
   }
 });
 
 test.serial('server pings client', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
   const ping = SatPingReq.fromPartial({});
@@ -167,9 +173,9 @@ test.serial('server pings client', async t => {
   });
 });
 
-test.serial('receive transaction', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+test.serial('receive transaction over multiple messages', async t => {
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
   const begin = SatOpBegin.fromPartial({ lsn: "FAKE", commitTimestamp: Long.ZERO });
@@ -202,10 +208,15 @@ test.serial('receive transaction', async t => {
     oldRowData: [encoder.encode("Hello"), encoder.encode("World!")]
   });
 
-  const opLog = SatOpLog.fromPartial({
+  const firstOpLogMessage = SatOpLog.fromPartial({
     ops: [
       SatTransOp.fromPartial({ begin }),
-      SatTransOp.fromPartial({ insert: insertOp }),
+      SatTransOp.fromPartial({ insert: insertOp }),      
+    ]
+  });
+
+  const secondOpLogMessage = SatOpLog.fromPartial({
+    ops: [
       SatTransOp.fromPartial({ update: updateOp }),
       SatTransOp.fromPartial({ delete: deleteOp }),
       SatTransOp.fromPartial({ commit }),
@@ -214,7 +225,7 @@ test.serial('receive transaction', async t => {
 
   const stop = SatInStopReplicationResp.fromPartial({});
 
-  server.nextResponses([start, relation, opLog]);
+  server.nextResponses([start, relation, firstOpLogMessage, secondOpLogMessage]);
   server.nextResponses([stop]);
 
   await new Promise<void>(async (res) => {
@@ -228,8 +239,8 @@ test.serial('receive transaction', async t => {
 });
 
 test.serial('acknowledge lsn', async t => {
-  await connectAndAuth(t.context as any);
-  const { client, server } = t.context as any;
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
   const begin = SatOpBegin.fromPartial({ lsn: "FAKE", commitTimestamp: Long.ZERO });
@@ -249,13 +260,12 @@ test.serial('acknowledge lsn', async t => {
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: Transaction, ack: AckCallback) => {
-      t.is(client.inbound.lsn, "0");
+      t.is(client['inbound'].ack_lsn, "0");
       ack();
-      t.is(client.inbound.lsn, "FAKE");
+      t.is(client['inbound'].ack_lsn, "FAKE");
       res();
     });
 
     await client.startReplication("0");
   });
 });
-

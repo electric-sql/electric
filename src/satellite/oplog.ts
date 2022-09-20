@@ -1,5 +1,6 @@
 import { QualifiedTablename } from '../util/tablename'
 import { Row, SqlValue } from '../util/types'
+import { Transaction } from '../satellite/client'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -17,7 +18,7 @@ export interface OplogEntry {
 export interface OplogEntryChanges {
   namespace: string,
   tablename: string,
-  primaryKeys: {
+  primaryKeyCols: {
     [key: string]: string | number
   },
   optype: 'DELETE' | 'UPSERT',
@@ -55,13 +56,22 @@ export const OPTYPES: {
   upsert: 'UPSERT'
 }
 
+export const stringToOpType = (opTypeStr: string): OpType => {
+  switch (opTypeStr) {
+    case 'INSERT': return OPTYPES.insert
+    case 'UPDATE': return OPTYPES.update
+    case 'DELETE': return OPTYPES.delete
+  }
+  throw new Error(`unexpected opType string: ${opTypeStr}`)
+}
+
 // Convert an `OplogEntry` to an `OplogEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
 export const entryToChanges = (entry: OplogEntry): OplogEntryChanges => {
   const result: OplogEntryChanges = {
     namespace: entry.namespace,
     tablename: entry.tablename,
-    primaryKeys: JSON.parse(entry.primaryKey),
+    primaryKeyCols: JSON.parse(entry.primaryKey),
     optype: entry.optype === OPTYPES.delete
       ? OPTYPES.delete
       : OPTYPES.upsert,
@@ -92,7 +102,7 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
     const entryChanges = entryToChanges(entry)
 
     // Sort for deterministic key generation.
-    const primaryKeyStr = Object.values(entryChanges.primaryKeys).sort().join('_')
+    const primaryKeyStr = Object.values(entryChanges.primaryKeyCols).sort().join('_')
     const qualifiedTablename = new QualifiedTablename(entryChanges.namespace, entryChanges.tablename)
     const tablenameStr = qualifiedTablename.toString()
 
@@ -114,4 +124,24 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
 
     return acc
   }, initialValue)
+}
+
+export const fromTransaction = (transaction: Transaction, pksForTable: { [k: string]: string[] }): OplogEntry[] => {
+  return transaction.changes.map(t => {
+    const columnValues = t.record ? t.record : t.oldRecord
+    const pk = JSON.stringify(Object.fromEntries(
+      pksForTable[t.relation.table].map(col => [col, columnValues![col]])
+    ))
+
+    return ({
+      namespace: "main", // TODO: how?
+      tablename: t.relation.table,
+      optype: stringToOpType(t.type),
+      newRow: JSON.stringify(t.record),
+      oldRow: JSON.stringify(t.oldRecord),
+      primaryKey: pk,
+      rowid: -1, // not required
+      timestamp: new Date(transaction.commit_timestamp.toNumber()).toISOString() // TODO: check precision
+    })
+  })
 }

@@ -105,7 +105,7 @@ export class SatelliteWSServerStub {
     this.httpServer.close();
   }
 
-  nextResponses(messages: SatPbMsg[]) {
+  nextResponses(messages: (SatPbMsg | (() => void))[]) {
     this.queue.push(messages);
   }
 }
