@@ -230,7 +230,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
         handle_info({:tcp, socket, tail}, new_state)
       else
         :ok = state.transport.setopts(socket, active: :once)
-        {:noreply, state}
+        {:noreply, new_state}
       end
     else
       {:stop, reason, new_state} ->
@@ -313,7 +313,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
       SlotServer.send_keepalive(state.slot_server)
     end
 
-    {:noreply, state}
+    {:ok, state}
   end
 
   defp handle_message(tag, data, state) do
