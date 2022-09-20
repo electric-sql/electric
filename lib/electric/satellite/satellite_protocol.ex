@@ -126,8 +126,8 @@ defmodule Electric.Satellite.Protocol do
   def process_message(msg, %State{} = state)
       when not auth_passed?(state) do
     case msg do
-      %SatAuthReq{id: id, token: token} when
-        id !== "" and token !== "" ->
+      %SatAuthReq{id: id, token: token}
+      when id !== "" and token !== "" ->
         Logger.debug("Received auth request")
         Logger.emergency("AUTH WILL ACCEPT ANY REQUEST")
 
@@ -138,8 +138,10 @@ defmodule Electric.Satellite.Protocol do
           )
 
         {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true}}
+
       %SatAuthReq{} ->
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST} }
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
       _ ->
         {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
     end
@@ -151,7 +153,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatPingResp{lsn: confirmed_lsn}, %State{out_rep: out_rep} = state)
-    when confirmed_lsn !== "" do
+      when confirmed_lsn !== "" do
     Logger.debug("Received ping response, with clients lsn: #{inspect(confirmed_lsn)}")
     {nil, %{state | out_rep: %OutRep{out_rep | lsn: confirmed_lsn}}}
   end
@@ -161,7 +163,7 @@ defmodule Electric.Satellite.Protocol do
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{in_rep: _in_rep, out_rep: out_rep} = state
       )
-  when client_lsn !== "" do
+      when client_lsn !== "" do
     # FIXME: only sync_batch_size == 1 is supported at the moment
     out_rep =
       case Enum.member?(opts, :SYNC_MODE) do
@@ -268,9 +270,8 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(_, %State{}) do
-    {:error, %SatErrorResp{error_type: :INVALID_REQUEST} }
+    {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
   end
-
 
   def send_downstream(%InRep{} = in_rep) do
     # FIXME: We should fix acknowledgement

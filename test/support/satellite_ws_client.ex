@@ -4,8 +4,10 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   require Logger
   alias Electric.Satellite.PB.Utils
+
   alias Electric.Satellite.{
-    SatAuthReq, SatAuthResp,
+    SatAuthReq,
+    SatAuthResp,
     SatInStartReplicationReq,
     SatInStartReplicationResp,
     SatInStopReplicationReq,
@@ -20,7 +22,7 @@ defmodule Electric.Test.SatelliteWsClient do
               parent: nil,
               history: nil,
               format: :term,
-              debug: :false
+              debug: false
   end
 
   def connect() do
@@ -41,10 +43,11 @@ defmodule Electric.Test.SatelliteWsClient do
     {:ok, {conn, stream_ref}}
   end
 
-  @type opts :: [ {:auth, boolean} |
-                  :auth |
-                  {:sub, String.t()}
-                ]
+  @type opts :: [
+          {:auth, boolean}
+          | :auth
+          | {:sub, String.t()}
+        ]
 
   @spec connect_and_spawn([{:auth, boolean()}, {:ignore_in_rep, boolean()}]) :: pid()
   def connect_and_spawn(opts \\ []) do
@@ -116,10 +119,15 @@ defmodule Electric.Test.SatelliteWsClient do
       maybe_auth(conn, stream_ref, opts)
       maybe_subscribe(conn, stream_ref, opts)
 
-      loop(%State{conn: conn, stream_ref: stream_ref, parent: parent, history: t, num: 0,
-                  debug: Keyword.get(opts, :debug, :false),
-                  format: Keyword.get(opts, :format, :term)
-                 })
+      loop(%State{
+        conn: conn,
+        stream_ref: stream_ref,
+        parent: parent,
+        history: t,
+        num: 0,
+        debug: Keyword.get(opts, :debug, false),
+        format: Keyword.get(opts, :format, :term)
+      })
     rescue
       e ->
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
@@ -190,36 +198,40 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def maybe_auth(conn, stream_ref, opts) do
-    case (:true == :lists.member(:auth, opts)) or
-     (:true == Keyword.get(opts, :auth, :false)) do
-      :true ->
+    case true == :lists.member(:auth, opts) or
+           true == Keyword.get(opts, :auth, false) do
+      true ->
         auth_req = serialize(%SatAuthReq{id: "id", token: "token"})
         :gun.ws_send(conn, stream_ref, {:binary, auth_req})
         {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)
         %SatAuthResp{} = deserialize(auth_frame)
         :ok = :gun.update_flow(conn, stream_ref, 1)
         Logger.debug("Auth passed")
-      :false ->
+
+      false ->
         :ok
     end
   end
 
   def maybe_subscribe(conn, stream_ref, opts) do
-    case Keyword.get(opts, :sub, :nil) do
-      :nil -> :ok
+    case Keyword.get(opts, :sub, nil) do
+      nil ->
+        :ok
+
       lsn ->
         sub_req = serialize(%SatInStartReplicationReq{lsn: lsn})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
         {:ws, {:binary, sub_resp}} = :gun.await(conn, stream_ref)
-        #%SatInStartReplicationResp{} = deserialize(sub_resp)
+        # %SatInStartReplicationResp{} = deserialize(sub_resp)
         :ok = :gun.update_flow(conn, stream_ref, 1)
         Logger.debug("Subscribed")
     end
   end
 
-  def maybe_debug(format, %{debug: :true}) do
+  def maybe_debug(format, %{debug: true}) do
     Logger.debug(format)
   end
+
   def maybe_debug(_, _) do
     :ok
   end
@@ -231,13 +243,16 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def deserialize(binary, format \\ :term) do
     <<type::8, data::binary>> = binary
+
     case format do
       :term ->
         {:ok, data} = Utils.decode(type, data)
         data
+
       :json when data !== <<"">> ->
         {:ok, data} = Utils.json_decode(type, data, [:return_maps, :use_nil])
         data
+
       _ ->
         {:ok, data} = Utils.decode(type, data)
         data

@@ -86,9 +86,10 @@ defmodule Electric.Satellite.WsServer do
             {reply, state1} ->
               {binary_frames(reply), state1}
           end
-        catch _ ->
-          frame = binary_frame(%SatErrorResp{})
-          {[frame, :close], state}
+        catch
+          _ ->
+            frame = binary_frame(%SatErrorResp{})
+            {[frame, :close], state}
         end
 
       {:error, error} ->

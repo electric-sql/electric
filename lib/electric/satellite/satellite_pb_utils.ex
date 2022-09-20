@@ -71,8 +71,6 @@ defmodule Electric.Satellite.PB.Utils do
     {:error, :unknown_msg_type}
   end
 
-
-
   @spec encode(struct()) :: {:ok, integer(), iodata()} | {:error, any()}
   for {module, tag} <- @mapping do
     def encode(%unquote(module){} = data) do

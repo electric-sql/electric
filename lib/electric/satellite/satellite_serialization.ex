@@ -70,31 +70,30 @@ defmodule Electric.Satellite.Replication do
   end
 
   defp mk_trans_op(%NewRecord{record: data}, rel_id, rel_cols) do
-    op_insert = %SatOpInsert{relation_id: rel_id,
-                             row_data: map_to_record(data, rel_cols)
-                            }
+    op_insert = %SatOpInsert{relation_id: rel_id, row_data: map_to_record(data, rel_cols)}
     %SatTransOp{op: {:insert, op_insert}}
   end
 
   defp mk_trans_op(%UpdatedRecord{record: data, old_record: old_data}, rel_id, rel_cols) do
-    op_update = %SatOpUpdate{relation_id: rel_id,
-                             row_data: map_to_record(data, rel_cols),
-                             old_row_data: map_to_record(old_data, rel_cols)
-                            }
+    op_update = %SatOpUpdate{
+      relation_id: rel_id,
+      row_data: map_to_record(data, rel_cols),
+      old_row_data: map_to_record(old_data, rel_cols)
+    }
+
     %SatTransOp{op: {:update, op_update}}
   end
 
   defp mk_trans_op(%DeletedRecord{old_record: data}, rel_id, rel_cols) do
-    op_delete = %SatOpDelete{relation_id: rel_id,
-                             old_row_data: map_to_record(data, rel_cols)
-                            }
+    op_delete = %SatOpDelete{relation_id: rel_id, old_row_data: map_to_record(data, rel_cols)}
     %SatTransOp{op: {:delete, op_delete}}
   end
 
-  @spec map_to_record(%{String.t() => binary()} | :nil, [String.t()]) :: [binary()]
-  defp map_to_record(:nil, _rel_cols) do
+  @spec map_to_record(%{String.t() => binary()} | nil, [String.t()]) :: [binary()]
+  defp map_to_record(nil, _rel_cols) do
     []
   end
+
   defp map_to_record(data, rel_cols) do
     # FIXME: This is ineficient, data should be stored in order, so that we
     # do not have to do lookup here, but filter columns based on the schema instead
@@ -105,12 +104,16 @@ defmodule Electric.Satellite.Replication do
     case Map.get(known_relations, relation, nil) do
       nil ->
         %{oid: relation_id} = SchemaRegistry.fetch_table_info!(relation)
-        columns = for %{name: column_name} <- SchemaRegistry.fetch_table_columns!(relation), do: column_name
+
+        columns =
+          for %{name: column_name} <- SchemaRegistry.fetch_table_columns!(relation),
+              do: column_name
+
         {:new, relation_id, columns, Map.put(known_relations, relation, {relation_id, columns})}
 
       {relation_id, columns} ->
         {:existing, relation_id, columns}
-     end
+    end
   end
 
   @spec serialize_relation(String.t(), String.t(), integer(), [SchemaRegistry.column()]) ::
