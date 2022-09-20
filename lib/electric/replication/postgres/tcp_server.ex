@@ -264,6 +264,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:stop, :shutdown, state}
   end
 
+  @spec handle_message(tag :: char(), body :: binary(), state :: State.t()) ::
+          {:ok, State.t()} | {:stop, atom(), State.t()}
   defp handle_message(?X, "", state) do
     # Session termination command
     Logger.debug("Session terminated by the client")
