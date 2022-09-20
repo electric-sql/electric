@@ -97,7 +97,14 @@ defmodule Electric.Satellite.Replication do
   defp map_to_record(data, rel_cols) do
     # FIXME: This is ineficient, data should be stored in order, so that we
     # do not have to do lookup here, but filter columns based on the schema instead
-    Enum.map(rel_cols, fn column_name -> Map.get(data, column_name, <<>>) end)
+    Enum.map(rel_cols, fn column_name ->
+      # FIXME: NULL is stored in Vaxine as :nil, but we should be able to distringuish it
+      # from empty string
+      case Map.get(data, column_name, nil) do
+        nil -> <<>>
+        d -> d
+      end
+    end)
   end
 
   def fetch_relation_id(relation, known_relations) do

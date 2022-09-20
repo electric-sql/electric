@@ -34,4 +34,9 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
+config :electric, Electric.Replication.SQConnectors,
+  vaxine_hostname: "vaxine_1",
+  vaxine_port: 8088,
+  vaxine_connection_timeout: 5000
+
 config :logger, backends: [:console], level: :debug

@@ -22,6 +22,7 @@ services:
       - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
     ports:
       - "5050:5050"
+      - "5133:5133"
     depends_on:
       - pg_1
       - pg_2
@@ -33,6 +34,9 @@ services:
       service: electric
     volumes:
       - ./electric_b.exs:/app/releases/0.1.0/runtime.exs:ro
+    ports:
+      - "5051:5050"
+      - "5134:5133"
     depends_on:
       - pg_3
       - vaxine_1

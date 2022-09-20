@@ -60,8 +60,9 @@ else
 	docker pull ${POSTGRESQL_IMAGE}
 endif
 
+DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password integration_tests_$*_1 psql -h $* -U electric -d electric
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U electric -d electric
 
 docker-attach-%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
