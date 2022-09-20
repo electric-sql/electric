@@ -109,7 +109,7 @@ defmodule Electric.Satellite.WsServerTest do
 
     test "Server will respond to auth request" do
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{token: "token"})
+      MockClient.send_data(%SatAuthReq{id: "id", token: "token"})
 
       assert_receive {MockClient, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
@@ -126,6 +126,15 @@ defmodule Electric.Satellite.WsServerTest do
       assert :ok = MockClient.disconnect()
     end
 
+    test "Server will handle bad requests after auth" do
+      MockClient.connect_and_spawn([{:auth, true}])
+      MockClient.send_bin_data(<<"rubbish">>)
+
+      assert_receive {MockClient, %SatErrorResp{}}, @default_wait
+
+      assert :ok = MockClient.disconnect()
+    end
+
     test "Server will respond with error on attempt to skip auth" do
       MockClient.connect_and_spawn()
       MockClient.send_data(%SatPingReq{})
@@ -134,7 +143,7 @@ defmodule Electric.Satellite.WsServerTest do
       assert :ok = MockClient.disconnect()
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{token: "token"})
+      MockClient.send_data(%SatAuthReq{id: "id", token: "token"})
       assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
 
