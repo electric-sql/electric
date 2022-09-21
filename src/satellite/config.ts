@@ -6,6 +6,8 @@ export interface SatelliteOpts {
   // The database table where change operations are written to by the triggers
   // automatically added to all tables in the user defined DDL schema.
   oplogTable: QualifiedTablename,
+  // The database table that controls active opLog triggers.
+  triggersTable: QualifiedTablename,
   // Polls the database for changes every `pollingInterval` milliseconds.
   pollingInterval: number,
   // Throttle snapshotting to once per `minSnapshotWindow` milliseconds.
@@ -29,6 +31,7 @@ export interface SatelliteOverrides {
 export const satelliteDefaults: SatelliteOpts = {
   metaTable: new QualifiedTablename('main', '_electric_meta'),
   oplogTable: new QualifiedTablename('main', '_electric_oplog'),
+  triggersTable: new QualifiedTablename('main', '_trigger_settings'),
   pollingInterval: 2000,
   minSnapshotWindow: 40,
   lastSentRowId: -1,

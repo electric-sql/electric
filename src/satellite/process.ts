@@ -17,8 +17,6 @@ type ChangeAccumulator = {
   [key: string]: Change
 }
 
-const metaTables = ['trigger_settings', '_electric_oplog']
-
 export class SatelliteProcess implements Satellite {
   dbName: DbName
   adapter: DatabaseAdapter
@@ -344,8 +342,9 @@ export class SatelliteProcess implements Satellite {
     return this._updateTriggerSettings(tablenames, 1)
   }
   async _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Promise<void> {
+    const triggers = this.opts.triggersTable.toString()
     const stmts = tablenames.map((tablenameStr) => `
-      UPDATE trigger_settings
+      UPDATE ${triggers}
          SET flag = ${flag}
        WHERE tablename = '${tablenameStr}'
     `)
@@ -393,8 +392,14 @@ export class SatelliteProcess implements Satellite {
   // Fetch primary keys from local store and use them to identify incoming ops.
   // TODO: Improve this code once with Migrator and consider simplifying oplog.
   async _getPrimaryKeyForTables(): Promise<{ [k: string]: string[] }> {
+    const notIn = [
+      `'${this.opts.metaTable.toString()}'`,
+      `'${this.opts.oplogTable.tablename.toString()}'`,
+      `'${this.opts.triggersTable.tablename.toString()}'`
+    ]
+
     const tables = `SELECT name FROM pragma_table_list() 
-                      WHERE name NOT IN (${metaTables.map(t => `'${t}'`).join(" , ")})
+                      WHERE name NOT IN (${notIn.join(",")})
                     `
     const columnsFor = (table: string) =>
       `SELECT name FROM pragma_table_info('${table}') WHERE pk = 1`

@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS main._electric_meta (
 
 INSERT INTO _electric_meta(key,value) VALUES ('currRowId', '-1'), ('ackRowId','-1'), ('compensations', 0);
 
-DROP TABLE IF EXISTS trigger_settings;
-CREATE TABLE trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
+DROP TABLE IF EXISTS _trigger_settings;
+CREATE TABLE _trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
 
-INSERT INTO trigger_settings(tablename,flag) VALUES ('main.parent', 1);
+INSERT INTO _trigger_settings(tablename,flag) VALUES ('main.parent', 1);
 
 DROP TRIGGER IF EXISTS update_ensure_parent_primarykey;
 CREATE TRIGGER update_ensure_parent_primarykey
@@ -68,7 +68,7 @@ END;
 DROP TRIGGER IF EXISTS insert_main_parent_into_oplog;
 CREATE TRIGGER insert_main_parent_into_oplog
    AFTER INSERT ON main.parent
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'parent', 'INSERT', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), NULL, NULL);
@@ -77,7 +77,7 @@ END;
 DROP TRIGGER IF EXISTS update_main_parent_into_oplog;
 CREATE TRIGGER update_main_parent_into_oplog
    AFTER UPDATE ON main.parent
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'parent', 'UPDATE', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);
@@ -86,7 +86,7 @@ END;
 DROP TRIGGER IF EXISTS delete_main_parent_into_oplog;
 CREATE TRIGGER delete_main_parent_into_oplog
    AFTER DELETE ON main.parent
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'parent', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);
@@ -95,7 +95,7 @@ END;
 DROP TRIGGER IF EXISTS insert_main_child_into_oplog;
 CREATE TRIGGER insert_main_child_into_oplog
    AFTER INSERT ON main.child
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'child', 'INSERT', json_object('id', new.id), json_object('id', new.id, 'value', new.parent), NULL, NULL);
@@ -104,7 +104,7 @@ END;
 DROP TRIGGER IF EXISTS update_main_child_into_oplog;
 CREATE TRIGGER update_main_child_into_oplog
    AFTER UPDATE ON main.child
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.child')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.child')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'child', 'UPDATE', json_object('id', new.id), json_object('id', new.id, 'value', new.parent), json_object('id', old.id, 'value', old.parent), NULL);
@@ -113,7 +113,7 @@ END;
 DROP TRIGGER IF EXISTS delete_main_child_into_oplog;
 CREATE TRIGGER delete_main_child_into_oplog
    AFTER DELETE ON main.child
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.child')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.child')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES  ('main', 'child', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'parent', old.parent), NULL);
@@ -122,7 +122,7 @@ END;
 DROP TRIGGER IF EXISTS compensation_insert_main_child_into_oplog;
 CREATE TRIGGER compensation_insert_main_child_into_oplog
    AFTER INSERT ON main.child
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent') AND
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent') AND
         1 == (SELECT value from _electric_meta WHERE key == 'compensations')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
@@ -133,7 +133,7 @@ END;
 DROP TRIGGER IF EXISTS compensation_update_main_child_into_oplog;
 CREATE TRIGGER compensation_update_main_child_into_oplog
    AFTER UPDATE ON main.child
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.parent') AND
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.parent') AND
         1 == (SELECT value from _electric_meta WHERE key == 'compensations')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
