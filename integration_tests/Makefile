@@ -4,7 +4,7 @@ LUX_DIRS= \
 	single_dc \
 	multi_dc
 
-test: lux build
+test: lux build sysbench
 	${LUX} ${LUX_DIRS}
 
 build:

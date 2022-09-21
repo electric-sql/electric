@@ -1,0 +1,56 @@
+[macro ok]
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?^==0==
+[endmacro]
+
+[macro ok2 prompt]
+    ?$prompt
+    !echo ==$$?==
+    ?^==0==
+[endmacro]
+
+[macro wait-for command match max_time prompt]
+    [loop i 1..$max_time]
+        @$match
+        !$command
+        ??$command
+        ?$prompt
+        [sleep 1]
+    [endloop]
+    # The last prompt won't match since the loop pattern will
+    # match before it, so match it here instead.
+    ?$prompt
+
+    # Sync up after the loop.
+    !$command
+    ??$command
+    ?$prompt
+[endmacro]
+
+[macro wait_name name]
+    [loop iter 1..10]
+          @accepting connections
+          !docker exec -it -e PGPASSWORD=password single_dc_${name}_1 pg_isready -U electric
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+    ?SH-PROMPT:
+[endmacro]
+
+[macro wait_logs name match_spec]
+    [loop iter 1..10]
+          @${match_spec}
+          !docker logs single_dc_${name}_1
+          [sleep 1]
+    [endloop]
+[endmacro]
+
+[macro wait_port host port]
+    [loop iter 1..10]
+          @==0==
+          !nc -z $host $port; echo ==$$?==
+          ?SH-PROMPT:
+          [sleep 1]
+    [endloop]
+[endmacro]
