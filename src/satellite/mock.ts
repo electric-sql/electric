@@ -3,29 +3,31 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
-import { AuthResponse, DbName, SatelliteError } from '../util/types'
+import { AuthResponse, DbName, SatelliteError, Transaction } from '../util/types'
 
-import { Satellite } from './index'
-import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
+import { Client, Satellite } from './index'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults, satelliteClientDefaults, SatelliteClientOpts } from './config'
 import { BaseRegistry } from './registry'
-import EventEmitter from 'events'
-import { SatelliteClient as Client, Transaction } from './client'
+import { Socket } from '../sockets'
+import { EventEmitter } from 'events'
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
-  client: Client
+  socket: Socket
   opts: SatelliteOpts
+  clientOpts: SatelliteClientOpts
 
-  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
+  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socket: Socket, opts: SatelliteOpts, clientOpts: SatelliteClientOpts) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
-    this.client = client
+    this.socket = socket
     this.opts = opts
+    this.clientOpts = clientOpts
   }
 
   async start(_authState?: AuthState): Promise<void> {
@@ -43,13 +45,14 @@ export class MockRegistry extends BaseRegistry {
         adapter: DatabaseAdapter,
         migrator: Migrator,
         notifier: Notifier,
-        client: Client,
+        socket: Socket,
         authState?: AuthState,
         overrides?: SatelliteOverrides
       ): Promise<Satellite> {
     const opts = {...satelliteDefaults, ...overrides}
+    const clientOps = { ...satelliteClientDefaults, ...overrides }
 
-    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
+    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, socket, opts, clientOps)
     await satellite.start(authState)
 
     return satellite

@@ -1,6 +1,5 @@
 import { QualifiedTablename } from '../util/tablename'
-import { Row, SqlValue } from '../util/types'
-import { Transaction } from '../satellite/client'
+import { Row, SqlValue, Transaction } from '../util/types'
 
 // Oplog table schema.
 export interface OplogEntry {

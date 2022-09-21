@@ -15,7 +15,7 @@ import {
   SatAuthResp,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNode } from '../../src/sockets/node/websocket';
-import { AckCallback, SatelliteWSClient, Transaction } from '../../src/satellite/client';
+import { AckCallback, SatelliteClient, Transaction } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
@@ -26,7 +26,7 @@ test.beforeEach(t => {
   server.start();
 
   const socket = new WebSocketNode();
-  const client = new SatelliteWSClient(socket, {
+  const client = new SatelliteClient(socket, {
     appId: "fake_id",
     token: "fake_token",
     address: '127.0.0.1',
@@ -42,7 +42,7 @@ test.beforeEach(t => {
 
 type Context = {
   server: SatelliteWSServerStub,
-  client: SatelliteWSClient
+  client: SatelliteClient
 }
 
 test.afterEach.always(async t => {

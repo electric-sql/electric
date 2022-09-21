@@ -1,5 +1,5 @@
 import EventEmitter from "events";
-import { ConnectionOptions, Socket } from "../socket";
+import { ConnectionOptions, Socket } from "../index";
 import { WebSocket } from 'ws';
 
 export class WebSocketNode extends EventEmitter implements Socket {

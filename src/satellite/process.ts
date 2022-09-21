@@ -4,9 +4,9 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
-import { SatelliteClient as Client, Transaction } from './client'
+import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, SqlValue } from '../util/types'
+import { DbName, SqlValue, Transaction } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
@@ -23,6 +23,7 @@ export class SatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   client: Client
+
   opts: SatelliteOpts
 
   _authState?: AuthState
@@ -42,6 +43,7 @@ export class SatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
+
     this.opts = opts
 
     // The last rowid that was *acknowledged by* the server.
@@ -98,7 +100,7 @@ export class SatelliteProcess implements Satellite {
     // For now, we do it only at initialization
     // Make 'schemaInfo' type to use around
     const pkForTable = await this._getPrimaryKeyForTables()
-    this.client.subscribeToTransactions(async (transaction) => {
+    this.client.subscribeToTransactions(async (transaction: Transaction) => {
       this._applyTransaction(transaction, pkForTable)
     })
 
@@ -119,6 +121,8 @@ export class SatelliteProcess implements Satellite {
       this.notifier.unsubscribeFromPotentialDataChanges(this._potentialDataChangeSubscription)
       this._potentialDataChangeSubscription = undefined
     }
+
+    await this.client.close();
   }
 
   async _verifyTableStructure(): Promise<boolean> {

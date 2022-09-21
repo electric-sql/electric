@@ -11,91 +11,25 @@ import {
   SatOpLog,
   SatPingResp,
   SatRelation,
-  SatRelation_RelationType,
 } from '../_generated/proto/satellite';
 import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util/proto';
-import { Socket } from '../sockets/socket';
+import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
 import Long from 'long';
-import { AuthResponse, SatelliteError, SatelliteErrorCode } from '../util/types';
-
-export interface SatelliteClient extends EventEmitter {
-  connect(): Promise<void | SatelliteError>;
-  close(): Promise<void | SatelliteError>;
-  authenticate(): Promise<AuthResponse | SatelliteError>;
-  startReplication(lsn: string, resume?: boolean): Promise<void | SatelliteError>;
-  stopReplication(): Promise<void | SatelliteError>;
-  subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
-}
-
-export interface SatelliteOptions {
-  appId: string,
-  token: string
-  port: number;
-  address: string;
-  timeout?: number;
-}
+import { AuthResponse, ChangeType, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { Client } from '.';
+import { satelliteClientDefaults, SatelliteClientOpts } from './config';
 
 export type AckCallback = () => void;
 
-export type Transaction = {
-  commit_timestamp: Long,
-  lsn: string
-  changes: Change[],
-};
-
-export enum ChangeType {
-  INSERT = 'INSERT',
-  UPDATE = 'UPDATE',
-  DELETE = 'DELETE'
-}
-
-type Change = {
-  relation: Relation,
-  type: ChangeType,
-  record?: Record,
-  oldRecord?: Record
-}
-
-type Record = { [key: string]: string | number }
-
-type Replication = {
-  authenticated: boolean
-  isReplicating: ReplicationStatus
-  relations: Map<number, Relation>
-  ack_lsn: string
-  transaction: Transaction
-}
-
-type Relation = {
-  id: number
-  schema: string
-  table: string
-  tableType: SatRelation_RelationType
-  columns: RelationColumn[]
-}
-
-type RelationColumn = { name: string, type: string };
-
-enum ReplicationStatus {
-  STOPPED,
-  STARTING,
-  STOPPING,
-  ACTIVE
-}
-
-interface PrivateSatelliteOptions extends SatelliteOptions {
+interface PrivateSatelliteOptions extends SatelliteClientOpts {
   timeout: number;
 }
 
-const defSatelliteOptions = {
-  timeout: 5000,
-};
-
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
-export class SatelliteWSClient extends EventEmitter implements SatelliteClient {
+export class SatelliteClient extends EventEmitter implements Client {
   private opts: PrivateSatelliteOptions;
 
   private socket: Socket;
@@ -116,10 +50,10 @@ export class SatelliteWSClient extends EventEmitter implements SatelliteClient {
     "Electric.Satellite.SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
   }
 
-  constructor(socket: Socket, opts: SatelliteOptions) {
+  constructor(socket: Socket, opts: SatelliteClientOpts) {
     super();
 
-    this.opts = { ...defSatelliteOptions, ...opts };
+    this.opts = { ...satelliteClientDefaults, ...opts };
     this.socket = socket;
 
     this.inbound = this.resetReplication();
@@ -143,7 +77,9 @@ export class SatelliteWSClient extends EventEmitter implements SatelliteClient {
   // TODO: handle connection errors
   connect(): Promise<void | SatelliteError> {
     return new Promise((resolve, reject) => {
-      this.socket.once('open', async () => {
+      // TODO: move the registration to the socket interface so 
+      // that different impl can use different events
+      this.socket.once('open', () => {
         this.socketHandler = message => this.handleIncoming(message);
         this.socket.on('message', this.socketHandler);
         resolve();

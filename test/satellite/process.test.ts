@@ -18,8 +18,8 @@ import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
 import { SatRelation_RelationType } from '../../src/_generated/proto/satellite'
-import { ChangeType, Transaction } from '../../src/satellite/client'
 import Long from 'long'
+import { ChangeType, Transaction } from '../../src/util/types'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {

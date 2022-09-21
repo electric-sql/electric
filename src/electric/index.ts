@@ -3,6 +3,7 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { Registry } from '../satellite/index'
+import { Socket } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
 import { DbName } from '../util/types'
 
@@ -14,6 +15,7 @@ export interface ElectrifyOptions {
   migrationsPath?: string,
   migrator?: Migrator,
   notifier?: Notifier,
+  socket?: Socket,
   registry?: Registry
 }
 

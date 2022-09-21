@@ -37,7 +37,8 @@ let codemapping = new Map<number, string>(
         [13, "Electric.Satellite.SatRelationColumn"]
     ]);
 
-let msgobjemapping = new Map<string, SatPbMsgObj>(
+// TODO: fix type
+let msgobjemapping = new Map<string, any>(
     [
         ["Electric.Satellite.SatErrorResp", Pb.SatErrorResp],
         ["Electric.Satellite.SatAuthReq", Pb.SatAuthReq],

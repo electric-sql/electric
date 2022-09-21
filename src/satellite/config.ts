@@ -37,3 +37,27 @@ export const satelliteDefaults: SatelliteOpts = {
   lastSentRowId: -1,
   lastAckdRowId: -1
 }
+
+export interface SatelliteClientOpts {
+  appId: string,
+  token: string
+  port: number;
+  address: string;
+  timeout?: number;
+}
+
+export interface SatelliteClientOverrides {
+  appId?: string,
+  token?: string
+  port?: number;
+  address?: string;
+  timeout?: number;
+}
+
+export const satelliteClientDefaults = {
+  appId: "",
+  token: "",
+  address: "127.0.0.1",
+  port: 30002,
+  timeout: 100000
+}

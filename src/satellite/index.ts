@@ -2,7 +2,7 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
-import { DbName } from '../util/types'
+import { AuthResponse, DbName, SatelliteError, Transaction } from '../util/types'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
@@ -23,4 +23,13 @@ export interface Satellite {
 
   start(authState?: AuthState): Promise<void | Error>
   stop(): Promise<void>
+}
+
+export interface Client {
+  connect(): Promise<void | SatelliteError>;
+  close(): Promise<void | SatelliteError>;
+  authenticate(): Promise<AuthResponse | SatelliteError>;
+  startReplication(lsn: string, resume?: boolean): Promise<void | SatelliteError>;
+  stopReplication(): Promise<void | SatelliteError>;
+  subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
 }
