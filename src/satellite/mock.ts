@@ -9,20 +9,22 @@ import { Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import EventEmitter from 'events'
-import { SatelliteClient, Transaction } from './client'
+import { SatelliteClient as Client, Transaction } from './client'
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
+  client: Client
   opts: SatelliteOpts
 
-  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, opts: SatelliteOpts) {
+  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
+    this.client = client
     this.opts = opts
   }
 
@@ -41,19 +43,20 @@ export class MockRegistry extends BaseRegistry {
         adapter: DatabaseAdapter,
         migrator: Migrator,
         notifier: Notifier,
+        client: Client,
         authState?: AuthState,
         overrides?: SatelliteOverrides
       ): Promise<Satellite> {
     const opts = {...satelliteDefaults, ...overrides}
 
-    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, opts)
+    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
     await satellite.start(authState)
 
     return satellite
   }
 }
 
-export class MockSatelliteClient extends EventEmitter implements SatelliteClient {
+export class MockSatelliteClient extends EventEmitter implements Client {
   connect(): Promise<void | SatelliteError> {
     return Promise.resolve();
   }
