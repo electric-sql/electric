@@ -45,15 +45,7 @@ defmodule Electric.Replication.VaxinePostgresOffsetStorage do
     @table
     |> :dets.select([{{{:"$1", :"$2"}, :"$3"}, [{:==, :"$1", slot}], [{{:"$2", :"$3"}}]}])
     |> Enum.filter(fn {lsn1, _} -> Lsn.compare(lsn1, max) != :gt end)
-    |> case do
-      [] ->
-        nil
-
-      results ->
-        Enum.max(results, fn {lsn1, _}, {lsn2, _} ->
-          Lsn.compare(lsn1, lsn2) != :lt
-        end)
-    end
+    |> Enum.max(fn {lsn1, _}, {lsn2, _} -> Lsn.compare(lsn1, lsn2) != :lt end, fn -> nil end)
   end
 
   # TODO: :)

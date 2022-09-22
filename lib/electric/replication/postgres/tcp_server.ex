@@ -197,83 +197,55 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:noreply, state, {:continue, :establish_connection}}
   end
 
-  @impl true
-  def handle_info({:tcp, socket, <<?X, 4::32>>}, state) do
-    # Session termination command
-    Logger.debug("Session terminated by the client")
-    state.transport.close(socket)
-    {:stop, :normal, state}
-  end
+  defp get_length_and_maybe_data(<<length::32, data::binary>>, _), do: {:ok, length, data}
 
-  @impl true
-  def handle_info({:tcp, socket, <<?Q, _::32, data::binary>>}, state) do
-    # Query command
-    state =
-      data
-      |> String.trim_trailing(<<0>>)
-      |> String.trim_trailing(";")
-      |> collapse_unquoted_spaces()
-      |> tap(&Logger.debug("Query received: #{inspect(&1)}"))
-      |> String.split(" ", parts: 2, trim: true)
-      |> handle_query(state)
-      |> case do
-        message when is_binary(message) ->
-          tcp_send(message, state)
-          state
+  defp get_length_and_maybe_data(partial_length, state) do
+    expected_size = 4 - byte_size(partial_length)
 
-        {message, new_state} ->
-          tcp_send(message, new_state)
-          new_state
-      end
-
-    :ok = state.transport.setopts(socket, active: :once)
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:tcp, socket, <<?c, 4::32>>}, %{mode: :copy} = state) do
-    # End copy mode
-
-    SlotServer.stop_replication(state.slot_server)
-
-    Messaging.end_copy_mode()
-    |> Messaging.command_complete("COPY 0")
-    |> Messaging.command_complete("START_REPLICATION")
-    |> Messaging.ready()
-    |> tcp_send(state)
-
-    :ok = state.transport.setopts(socket, active: :once)
-    {:noreply, %{state | mode: :normal, slot: nil}}
-  end
-
-  @impl true
-  def handle_info({:tcp, socket, <<?d, _::32, ?r, data::binary>>}, %State{mode: :copy} = state) do
-    # Copy mode client status report
-    # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
-    <<_written_wal::64, _flushed_wal::64, _applied_wal::64, _client_timestamp::64,
-      immediate_response::8>> = data
-
-    if immediate_response == 1 do
-      SlotServer.send_keepalive(state.slot_server)
+    with {:ok, rest_of_length} <- state.transport.recv(state.socket, expected_size, 100),
+         <<length::32>> <- <<partial_length::binary, rest_of_length::binary>> do
+      {:ok, length, <<>>}
     end
+  end
 
-    :ok = state.transport.setopts(socket, active: :once)
-    {:noreply, state}
+  defp get_data_and_tail(length, data, _state) when byte_size(data) == length,
+    do: {:ok, data, <<>>}
+
+  defp get_data_and_tail(length, data, _state) when byte_size(data) > length,
+    do: {:ok, binary_part(data, 0, length), binary_part(data, length, byte_size(data) - length)}
+
+  defp get_data_and_tail(length, data, state) when byte_size(data) < length do
+    with {:ok, rest_of_data} <- state.transport.recv(state.socket, length - byte_size(data), 100) do
+      {:ok, data <> rest_of_data, <<>>}
+    end
   end
 
   @impl true
-  def handle_info({:tcp, socket, data}, state) do
-    # Unknown / unexpected message from the client
-    Logger.warn("Received unexpected message in mode #{state.mode}: #{inspect(data)}")
+  def handle_info({:tcp, socket, <<tag::8, contents::binary>>}, state) do
+    with {:ok, length, data} <- get_length_and_maybe_data(contents, state),
+         {:ok, data, tail} <- get_data_and_tail(length - 4, data, state),
+         {:ok, new_state} <- handle_message(tag, data, state) do
+      if tail != "" do
+        # Beginning of the next message got into this TCP packet, handling the rest
+        handle_info({:tcp, socket, tail}, new_state)
+      else
+        :ok = state.transport.setopts(socket, active: :once)
+        {:noreply, new_state}
+      end
+    else
+      {:stop, reason, new_state} ->
+        state.transport.close(socket)
+        {:stop, reason, new_state}
 
-    Messaging.error(:fatal,
-      code: "08P01",
-      message: "Unexpected message during connection"
-    )
-    |> tcp_send(state)
+      {:error, reason} ->
+        Logger.debug(
+          "Error while handling a TCP message with tag #{inspect(<<tag::8>>)}: #{reason}"
+        )
 
-    state.transport.close(socket)
-    {:stop, :normal, state}
+        state.transport.close(socket)
+        reason = if reason == :closed, do: :normal, else: reason
+        {:stop, reason, state}
+    end
   end
 
   @impl true
@@ -290,6 +262,74 @@ defmodule Electric.Replication.Postgres.TcpServer do
     state.transport.close(state.socket)
     Logger.debug("Socket closed by client #{inspect(state.client)}")
     {:stop, :shutdown, state}
+  end
+
+  @spec handle_message(tag :: char(), body :: binary(), state :: State.t()) ::
+          {:ok, State.t()} | {:stop, atom(), State.t()}
+  defp handle_message(?X, "", state) do
+    # Session termination command
+    Logger.debug("Session terminated by the client")
+    {:stop, :normal, state}
+  end
+
+  defp handle_message(?Q, data, state) do
+    data
+    |> String.trim_trailing(<<0>>)
+    |> String.trim_trailing(";")
+    |> collapse_unquoted_spaces()
+    |> tap(&Logger.debug("Query received: #{inspect(&1)}"))
+    |> String.split(" ", parts: 2, trim: true)
+    |> handle_query(state)
+    |> case do
+      message when is_binary(message) ->
+        tcp_send(message, state)
+        {:ok, state}
+
+      {message, new_state} ->
+        tcp_send(message, new_state)
+        {:ok, new_state}
+    end
+  end
+
+  defp handle_message(?c, "", %{mode: :copy} = state) do
+    # End copy mode
+
+    SlotServer.stop_replication(state.slot_server)
+
+    Messaging.end_copy_mode()
+    |> Messaging.command_complete("COPY 0")
+    |> Messaging.command_complete("START_REPLICATION")
+    |> Messaging.ready()
+    |> tcp_send(state)
+
+    {:ok, %{state | mode: :normal, slot: nil}}
+  end
+
+  defp handle_message(?d, <<?r, data::binary>>, %State{mode: :copy} = state) do
+    # Copy mode client status report
+    # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
+    <<_written_wal::64, _flushed_wal::64, _applied_wal::64, _client_timestamp::64,
+      immediate_response::8>> = data
+
+    if immediate_response == 1 do
+      SlotServer.send_keepalive(state.slot_server)
+    end
+
+    {:ok, state}
+  end
+
+  defp handle_message(tag, data, state) do
+    Logger.warn(
+      "Received unexpected message in mode #{state.mode} (tag #{inspect(<<tag::8>>)}): #{inspect(data)}"
+    )
+
+    Messaging.error(:fatal,
+      code: "08P01",
+      message: "Unexpected message during connection"
+    )
+    |> tcp_send(state)
+
+    {:stop, :normal, state}
   end
 
   defp establish_connection(<<1234::16, 5679::16>>, state) do
@@ -513,7 +553,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     Messaging.start_copy_mode()
     |> tcp_send(state)
 
-    # FIXME: we should handle screnario when slot server is down at this moment
+    # FIXME: we should handle scenario when slot server is down at this moment
     SlotServer.start_replication(slot_server, &tcp_send(&1, state), publication, target_lsn)
 
     {nil, %{state | mode: :copy, slot: slot_name, slot_server: slot_server}}
