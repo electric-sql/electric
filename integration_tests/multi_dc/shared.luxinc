@@ -1,8 +1,4 @@
-[macro ok]
-    ?SH-PROMPT:
-    !echo ==$$?==
-    ?^==0==
-[endmacro]
+[include ../common.luxinc]
 
 [macro start_psql name]
     [loop iter 1..10]
@@ -13,7 +9,7 @@
     [endloop]
 [endmacro]
 
-[macro setup]
+[macro setup_pg_and_vaxine]
 [shell start_env]
     [progress start development environment]
     !make start_dev_env
@@ -55,6 +51,10 @@
 [shell link_cluster]
     !make
 
+[endmacro]
+
+[macro setup_rest]
+
 [shell electric_1]
     [timeout 10]
     !make start_electric_1
@@ -72,29 +72,9 @@
     [invoke ok]
 [endmacro]
 
-[macro wait_name name]
-    [loop iter 1..10]
-          @accepting connections
-          !docker exec -it -e PGPASSWORD=password multi_dc_${name}_1 pg_isready -U electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-    ?SH-PROMPT:
-[endmacro]
+[macro setup]
 
-[macro wait_logs name match_spec]
-    [loop iter 1..10]
-          @${match_spec}
-          !docker logs multi_dc_${name}_1
-          [sleep 1]
-    [endloop]
-[endmacro]
+[invoke setup_pg_and_vaxine]
+[invoke setup_rest]
 
-[macro wait_port host port]
-    [loop iter 1..10]
-          @==0==
-          !nc -z $host $port; echo ==$$?==
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
 [endmacro]

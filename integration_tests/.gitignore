@@ -3,3 +3,4 @@ postgres
 lux
 lux_logs
 .pull
+.sysbench_docker_build

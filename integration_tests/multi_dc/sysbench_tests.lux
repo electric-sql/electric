@@ -1,0 +1,57 @@
+[doc One-direction replication pg_1 -> pg_2]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric]
+[global dprompt=\w+@\w+:(\S+)\#]
+
+[include shared.luxinc]
+
+[invoke setup_pg_and_vaxine]
+
+[shell sysbench_pg1]
+    !make start_sysbench
+    ?$dprompt
+    !sysbench --db-driver=pgsql --table-size=1000 --tables=10 --threads=1 --pgsql-host=pg_1 --pgsql-port=5432 --pgsql-user=electric --pgsql-password=password --pgsql-db=electric oltp_write_only prepare
+    [invoke ok2 $dprompt]
+    !exit
+    [invoke ok]
+
+[shell sysbench_pg2]
+    !make start_sysbench
+    ?$dprompt
+    !sysbench --db-driver=pgsql --table-size=0 --tables=10 --threads=1 --pgsql-host=pg_2 --pgsql-port=5432 --pgsql-user=electric --pgsql-password=password --pgsql-db=electric oltp_write_only prepare
+    [invoke ok2 $dprompt]
+    !exit
+    [invoke ok]
+
+
+[shell vaxine_1]
+    -$fail_pattern
+[shell vaxine_2]
+    -$fail_pattern
+[shell electric_1]
+    -$fail_pattern
+[shell electric_2]
+    -$fail_pattern
+
+[invoke setup_rest]
+
+[macro wait_table table]
+    [invoke wait-for "select count(id) from ${table};" 10 1000 ${psql} ]
+[endmacro]
+
+[shell pg_2]
+    # FIXME: couldn't figure out quickly why loop in the loop was not reliable
+    [invoke wait_table sbtest1]
+    [invoke wait_table sbtest2]
+    [invoke wait_table sbtest3]
+    [invoke wait_table sbtest4]
+    [invoke wait_table sbtest5]
+    [invoke wait_table sbtest6]
+    [invoke wait_table sbtest7]
+    [invoke wait_table sbtest8]
+    [invoke wait_table sbtest9]
+    [invoke wait_table sbtest10]
+
+[cleanup]
+    [invoke teardown]

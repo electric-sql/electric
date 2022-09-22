@@ -1,0 +1,17 @@
+# Copied from official  dbadapt/postgres_sysbench
+FROM debian:11
+
+ARG GIT_CHECKOUT
+
+WORKDIR /
+
+RUN apt-get update \
+  && apt-get install -y git gcc g++ libpq-dev make automake libtool pkg-config\
+  && git clone https://github.com/akopytov/sysbench.git \
+  && cd /sysbench \
+  && git checkout $GIT_CHECKOUT \
+  && ./autogen.sh \
+  && ./configure --without-mysql --with-pgsql \
+  && make \
+  && make install \
+  && make clean
