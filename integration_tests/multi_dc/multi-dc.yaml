@@ -69,9 +69,7 @@ services:
       - vaxine_3
 
   sysbench:
-    image: sysbench:local-build
-
-
+    image: "${SYSBENCH_IMAGE}"
 
   pg_1:
     extends:

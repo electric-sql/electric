@@ -12,9 +12,11 @@ export GID=$(shell id -g)
 ifdef USE_LOCAL_IMAGE
 	export VAXINE_IMAGE?=vaxine:local-build
 	export POSTGRESQL_IMAGE?=postgres:local-build
+	export SYSBENCH_IMAGE?=sysbench:local-build
 else
 	export VAXINE_IMAGE?=${DOCKER_REGISTRY}/vaxine:latest
 	export POSTGRESQL_IMAGE?=${DOCKER_REGISTRY}/postgres:latest
+	export SYSBENCH_IMAGE?=${DOCKER_REGISTRY}/sysbench:latest
 endif
 
 lux: ${LUX}
