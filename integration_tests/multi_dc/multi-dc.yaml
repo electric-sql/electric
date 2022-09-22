@@ -69,7 +69,9 @@ services:
       - vaxine_3
 
   sysbench:
-    image: "${SYSBENCH_IMAGE}"
+    extends:
+      file: ../services_templates.yaml
+      service: sysbench
 
   pg_1:
     extends:

@@ -23,6 +23,9 @@ services:
     image: electric:local-build
     privileged: true
 
+  sysbench:
+    image: "${SYSBENCH_IMAGE}"
+
   postgresql:
     image: "${POSTGRESQL_IMAGE}"
     environment:
