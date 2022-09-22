@@ -14,6 +14,8 @@
     ?pg_slot=postgres_2 origin=postgres_2 \[debug\] Sending \d messages to the subscriber
 
 [shell pg_2]
+    [invoke wait-for "SELECT * FROM entries;" "Hello from a" 10 "electric=#"]
+
     !SELECT * FROM entries;
     ?Hello from a
     ?(1 row)
