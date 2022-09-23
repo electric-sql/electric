@@ -1,19 +1,26 @@
 defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   use ExUnit.Case, async: true
-  import Mox
+  import Mock
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
   alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
-  alias Electric.Replication.MockPostgresClient
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.PostgresConnector
+  # alias Electric.Replication.MockPostgresClient
 
-  setup _ do
-    stub(MockPostgresClient, :connect, fn _ -> {:ok, :conn} end)
-    stub(MockPostgresClient, :start_replication, fn :conn, _, _, _ -> :ok end)
-
-    :ok
+  setup_with_mocks([
+    {Client, [:passthrough],
+     [connect: fn _ -> {:ok, :conn} end, start_replication: fn :conn, _, _, _ -> :ok end]},
+    {PostgresConnector, [:passthrough],
+     [
+       get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
+       get_connection_opts: fn _ -> %{} end
+     ]}
+  ]) do
+    {:ok, %{}}
   end
 
   test "Producer complies a transaction into a single message" do
@@ -75,17 +82,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} =
-      LogicalReplicationProducer.init([
-        "regname",
-        %{
-          client: MockPostgresClient,
-          origin: "mock_postgres",
-          replication: %{publication: "mock_pub", slot: "mock_slot"},
-          connection: %{}
-        }
-      ])
-
+    {:producer, state} = LogicalReplicationProducer.init([:mock_postgres])
     {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state
   end

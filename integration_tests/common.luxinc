@@ -54,3 +54,12 @@
           [sleep 1]
     [endloop]
 [endmacro]
+
+[macro start_psql name]
+    [loop iter 1..10]
+        @electric=#
+        !make docker-psql-${name}
+        ?SH-PROMPT:
+        [sleep 1]
+    [endloop]
+[endmacro]

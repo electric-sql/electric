@@ -8,10 +8,7 @@ defmodule Electric.Test.SatelliteWsClient do
   alias Electric.Satellite.{
     SatAuthReq,
     SatAuthResp,
-    SatInStartReplicationReq,
-    SatInStartReplicationResp,
-    SatInStopReplicationReq,
-    SatInStopReplicationResp
+    SatInStartReplicationReq
   }
 
   defmodule State do
@@ -90,7 +87,7 @@ defmodule Electric.Test.SatelliteWsClient do
       send(conn, {:gun_error, :none, :none, :none})
 
       receive do
-        {:DOWN, ref, :process, _, _} ->
+        {:DOWN, ^ref, :process, _, _} ->
           :ok
       after
         5000 ->
@@ -221,7 +218,7 @@ defmodule Electric.Test.SatelliteWsClient do
       lsn ->
         sub_req = serialize(%SatInStartReplicationReq{lsn: lsn})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        {:ws, {:binary, sub_resp}} = :gun.await(conn, stream_ref)
+        {:ws, {:binary, _sub_resp}} = :gun.await(conn, stream_ref)
         # %SatInStartReplicationResp{} = deserialize(sub_resp)
         :ok = :gun.update_flow(conn, stream_ref, 1)
         Logger.debug("Subscribed")

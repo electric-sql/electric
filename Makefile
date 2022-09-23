@@ -42,6 +42,10 @@ start_dev_env:
 stop_dev_env:
 	docker-compose -f ${DC_CONFIG} down
 
+DOCKER_PREFIX:=$(shell basename $(CURDIR))
+docker-pgsql-%:
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U electric -d electric
+
 docker-build:
 	docker build -t electric:local-build .
 

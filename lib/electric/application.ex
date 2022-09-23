@@ -7,12 +7,12 @@ defmodule Electric.Application do
   use Application
 
   def start(_type, _args) do
+    :ok = Logger.add_translator({Electric.Utils, :translate})
+
     children = [
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.VaxinePostgresOffsetStorage,
-      {Registry, keys: :unique, name: Electric.PostgresSlotRegistry},
-      {Registry, keys: :unique, name: Electric.StatusRegistry},
-      {Plug.Cowboy, scheme: :http, plug: Electric.StatusPlug, options: [port: status_port()]},
+      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
       Electric.VaxRepo,
       Electric.PostgresServer.child_spec(port: postgres_server_port()),
       Electric.Satellite.ClientManager,

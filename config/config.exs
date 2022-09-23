@@ -7,25 +7,25 @@
 # General application configuration
 import Config
 
-config :sasl,
-  errlog_type: :error,
-  sasl_error_logger: false
-
 # Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [
-    :pg_producer,
-    :pg_client,
     :connection,
-    :vx_consumer,
-    :vx_producer,
-    :pg_slot,
     :origin,
-    :sq_client
-  ],
+    :pid,
+    :pg_client,
+    :pg_producer,
+    :pg_slot,
+    :sq_client,
+    :vx_consumer,
+    :vx_producer
+  ]
+
+config :logger,
   handle_otp_reports: true,
-  handle_sasl_reports: true
+  handle_sasl_reports: true,
+  level: :debug
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,

@@ -23,7 +23,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Qualified name of the table - its schema (namespace) and its name.
   """
   @type table_name :: {String.t(), String.t()}
-
+  @type origin :: String.t()
   @type oid :: non_neg_integer()
 
   @typedoc """
@@ -46,6 +46,8 @@ defmodule Electric.Postgres.SchemaRegistry do
           primary_keys: [String.t()],
           replica_identity: :all_columns | :default | :nothing | :index
         }
+
+  @type migration_table :: [%{vsn: String.t(), hash: String.t(), applied_at: DateTime.t()}]
 
   @type registry() :: GenServer.server()
 
@@ -150,9 +152,9 @@ defmodule Electric.Postgres.SchemaRegistry do
   @doc """
   Marks an origin database as ready
   """
-  @spec mark_origin_ready(registry(), String.t()) :: :ok
+  @spec mark_origin_ready(registry(), atom()) :: :ok
   def mark_origin_ready(agent \\ __MODULE__, origin),
-    do: GenServer.call(agent, {:mark_origin_ready, origin})
+    do: GenServer.call(agent, {:mark_origin_ready, to_string(origin)})
 
   @doc """
   Checks if origin is ready
@@ -161,9 +163,26 @@ defmodule Electric.Postgres.SchemaRegistry do
   def is_origin_ready?(agent \\ __MODULE__, origin),
     do: GenServer.call(agent, {:is_origin_ready?, origin})
 
+  @doc """
+  Store migration tables information
+  """
+  @spec put_migration_tables(registry(), origin(), migration_table()) :: :ok
+  def put_migration_tables(agent \\ __MODULE__, origin, table) when is_binary(origin) do
+    GenServer.call(agent, {:migration_tables, origin, table})
+  end
+
+  @spec fetch_table_migration(registry(), origin()) :: migration_table() | nil
+  def fetch_table_migration(agent \\ __MODULE__, origin) when is_binary(origin) do
+    GenServer.call(agent, {:fetch_table_migration, origin})
+  end
+
   @impl true
   def init(_) do
-    ets_table = :ets.new(:postgres_schema_registry, [])
+    ets_table =
+      :ets.new(
+        :postgres_schema_registry,
+        [:named_table, :protected]
+      )
 
     {:ok, %{ets_table: ets_table, pending: []}}
   end
@@ -287,6 +306,21 @@ defmodule Electric.Postgres.SchemaRegistry do
       [] -> {:reply, false, state}
       [[value]] -> {:reply, value, state}
     end
+  end
+
+  def handle_call({:migration_tables, origin, table}, _, state) do
+    :ets.insert(state.ets_table, {{:origin, origin, :migration}, table})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:fetch_table_migration, origin}, _, state) do
+    table =
+      case :ets.lookup(state.ets_table, {:origin, origin, :migration}) do
+        [] -> nil
+        [{_, table}] -> table
+      end
+
+    {:reply, table, state}
   end
 
   @impl true

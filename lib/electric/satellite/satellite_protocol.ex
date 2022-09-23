@@ -98,7 +98,7 @@ defmodule Electric.Satellite.Protocol do
 
   defmodule State do
     defstruct auth_passed: false,
-              client: nil,
+              client: "",
               in_rep: %InRep{},
               out_rep: %OutRep{},
               ping_tref: nil,
@@ -353,7 +353,7 @@ defmodule Electric.Satellite.Protocol do
     {serialized_relations, serialized_log, out_rep}
   end
 
-  @spec initiate_subscription(binary, binary, OutRep.t()) :: OutRep.t()
+  @spec initiate_subscription(String.t(), binary, OutRep.t()) :: OutRep.t()
   def initiate_subscription(client, lsn, out_rep)
       when is_binary(lsn) do
     lsn =

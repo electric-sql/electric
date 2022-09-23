@@ -8,7 +8,7 @@
 [invoke setup]
 
 [shell electric_curl]
-    !curl http://localhost:5050/status
+    !curl http://localhost:5050/api/status
     ?{"connectors":{"postgres_1":true,"postgres_2":true},"vaxine":true}
 
 [cleanup]

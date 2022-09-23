@@ -126,7 +126,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     :gproc.reg(name({:slot_name, slot}))
 
     Logger.metadata(origin: origin, pg_slot: slot)
-    Logger.debug("Started slot server")
+    Logger.debug("slot server started")
 
     {:consumer,
      %State{
@@ -223,7 +223,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
-    :ok = GenStage.async_subscribe(self(), [{:to, pid} | producer_info()])
+    Logger.debug("request subscription")
+
+    :ok =
+      GenStage.async_subscribe(self(), [
+        {:to, pid},
+        {:cancel, :temporary}
+        | producer_info()
+      ])
+
     {:noreply, [], %State{state | producer_pid: pid}}
   end
 
@@ -256,6 +264,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_cancel({:down, _}, _from, state) do
+    Logger.debug("wait for producer")
     :gproc.nb_wait(state.producer_name)
     {:noreply, [], state}
   end

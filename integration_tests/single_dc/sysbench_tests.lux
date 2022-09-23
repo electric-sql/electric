@@ -24,11 +24,9 @@
     !exit
     [invoke ok]
 
-[shell vaxine_1]
+[shell vaxine]
     -$fail_pattern
-[shell vaxine_2]
-    -$fail_pattern
-[shell electric_1]
+[shell electric]
     -$fail_pattern
 
 [invoke setup_rest]

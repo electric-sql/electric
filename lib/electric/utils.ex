@@ -34,4 +34,15 @@ defmodule Electric.Utils do
   def add_events_to_queue(events, queue) when is_list(events) do
     :queue.join(queue, :queue.from_list(events))
   end
+
+  @doc """
+  Translator to ignore progress reports from supervisors on any log level
+  """
+  def translate(_min_level, :info, :report, {{:supervisor, :progress}, _}) do
+    :skip
+  end
+
+  def translate(min_level, level, kind, message) do
+    Logger.Translator.translate(min_level, level, kind, message)
+  end
 end
