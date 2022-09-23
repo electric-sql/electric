@@ -4,6 +4,13 @@ defmodule Electric.Satellite.Auth do
   """
   require Logger
 
+  def child_spec do
+    {Finch,
+     name: __MODULE__,
+     pools: %{:default => [size: 20]}
+    }
+  end
+
   @spec validate_token(String.t(), String.t()) ::
           :ok | {:error, :auth_not_configured | term()}
   def validate_token(id, token) do
@@ -31,16 +38,15 @@ defmodule Electric.Satellite.Auth do
     auth_url = Keyword.get(auth_opts, :auth_url)
     cluster_id = Keyword.get(auth_opts, :cluster_id)
 
-    case HTTPoison.post(
-           auth_url,
-           "{\"token\": \"#{token}\", \"cluster_id\": \"#{cluster_id}\" }",
-           [{"Content-Type", "application/json"}]
-         ) do
-      {:ok, %HTTPoison.Response{status_code: 200}} ->
+    req =  Finch.build(:post, auth_url, [{"Content-Type", "application/json"}],
+           "{\"token\": \"#{token}\", \"cluster_id\": \"#{cluster_id}\" }"
+        )
+    case Finch.request(req, __MODULE__) do
+      {:ok, %Finch.Response{status: 200}} ->
         Logger.info("authorization passed #{id}")
         :ok
 
-      {:ok, %HTTPoison.Response{status_code: 401}} ->
+      {:ok, %Finch.Response{status: 401}} ->
         Logger.warn("authorization failed #{id}")
         {:error, :wrong_auth}
 

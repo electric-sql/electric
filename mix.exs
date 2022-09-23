@@ -23,7 +23,7 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:sasl, :logger, :httpoison]
+      extra_applications: [:sasl, :logger]
     ]
   end
 
@@ -56,7 +56,7 @@ defmodule Electric.MixProject do
       {:gun, "~> 2.0.0-rc.2"},
       {:cowboy, "~> 2.9.0"},
       {:gen_stage, "~> 1.1.2"},
-      {:httpoison, "~> 1.8"}
+      {:finch, "~> 0.13"}
     ]
   end
 

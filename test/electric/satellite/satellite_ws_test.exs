@@ -50,7 +50,7 @@ defmodule Electric.Satellite.WsServerTest do
 
   setup_all _ do
     Application.put_env(:electric, Electric.Satellite.Auth,
-      auth_url: "localhost:1080/auth",
+      auth_url: "http://localhost:1080/auth",
       cluster_id: "cluster_auth_id"
     )
 
