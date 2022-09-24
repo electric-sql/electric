@@ -16,6 +16,7 @@ defmodule Electric.Application do
       Electric.VaxRepo,
       Electric.PostgresServer.child_spec(port: postgres_server_port()),
       Electric.Satellite.ClientManager,
+      Electric.Satellite.Auth.child_spec(),
       Electric.Satellite.WsServer.child_spec([{:port, sqlite_server_port()}]),
       Electric.Replication.Connectors
     ]

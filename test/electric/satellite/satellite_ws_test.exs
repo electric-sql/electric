@@ -49,31 +49,17 @@ defmodule Electric.Satellite.WsServerTest do
   import Mock
 
   setup_all _ do
-    SchemaRegistry.put_replicated_tables(@test_publication, [
-      %{
-        schema: @test_schema,
-        name: @test_table,
-        oid: @test_oid,
-        replica_identity: :all_columns
-      }
-    ])
+    Application.put_env(:electric, Electric.Satellite.Auth,
+      auth_url: "http://localhost:1080/auth",
+      cluster_id: "cluster_auth_id"
+    )
 
-    SchemaRegistry.put_table_columns(
+    columns = [{"id", :uuid}, {"content", :varchar}]
+
+    Electric.Test.SchemaRegistryHelper.initialize_registry(
+      @test_publication,
       {@test_schema, @test_table},
-      [
-        %{
-          name: "id",
-          type: :uuid,
-          type_modifier: 0,
-          part_of_identity?: nil
-        },
-        %{
-          name: "content",
-          type: :varchar,
-          type_modifier: -1,
-          part_of_identity?: nil
-        }
-      ]
+      columns
     )
 
     on_exit(fn -> SchemaRegistry.clear_replicated_tables(@test_publication) end)
@@ -150,6 +136,32 @@ defmodule Electric.Satellite.WsServerTest do
       MockClient.send_data(%SatPingReq{})
       assert_receive {_, %SatPingResp{lsn: ""}}, @default_wait
 
+      assert :ok = MockClient.disconnect()
+    end
+
+    test "Auth is handled" do
+      MockClient.connect_and_spawn()
+      MockClient.send_data(%SatPingReq{})
+
+      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      assert :ok = MockClient.disconnect()
+
+      MockClient.connect_and_spawn()
+      MockClient.send_data(%SatAuthReq{id: "id", token: "token"})
+      assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
+      assert server_id !== ""
+      assert :ok = MockClient.disconnect()
+
+      MockClient.connect_and_spawn()
+      MockClient.send_data(%SatAuthReq{id: "id", token: "invalid_token"})
+      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      assert server_id !== ""
+      assert :ok = MockClient.disconnect()
+
+      MockClient.connect_and_spawn()
+      MockClient.send_data(%SatAuthReq{id: "id", token: "token"})
+      assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
+      assert server_id !== ""
       assert :ok = MockClient.disconnect()
     end
   end

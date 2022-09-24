@@ -129,15 +129,19 @@ defmodule Electric.Satellite.Protocol do
       %SatAuthReq{id: id, token: token}
       when id !== "" and token !== "" ->
         Logger.debug("Received auth request")
-        Logger.emergency("AUTH WILL ACCEPT ANY REQUEST")
 
-        :ok =
-          ClientManager.register_client(
-            state.client,
-            Electric.Satellite.WsServer.reg_name(state.client)
-          )
+        with :ok <- Electric.Satellite.Auth.validate_token(id, token) do
+          :ok =
+            ClientManager.register_client(
+              state.client,
+              Electric.Satellite.WsServer.reg_name(state.client)
+            )
 
-        {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true}}
+          {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true}}
+        else
+          {:error, _} ->
+            {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+        end
 
       %SatAuthReq{} ->
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}

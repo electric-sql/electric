@@ -60,3 +60,12 @@ services:
     privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  auth:
+    image: mockserver/mockserver:mockserver-snapshot
+    ports:
+      - 1080:1080
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /auth_mock.json
+    volumes:
+      - ./integration_tests/auth_mock.json:/auth_mock.json:ro

@@ -69,4 +69,8 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
 
+# config :electric, Electric.Satellite.Auth,
+#  auth_url: "http://localhost:1080/auth_success",
+#  cluster_id: "cluster_auth_id"
+
 config :logger, level: :debug

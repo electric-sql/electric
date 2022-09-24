@@ -39,7 +39,6 @@ defmodule Electric.MixProject do
        git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
       {:vx_client, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vx_client"},
       {:epgsql, "~> 4.2"},
-      {:ranch, "~> 2.1", override: true},
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},
       # TODO: shouldn't be needed, here for convenience
@@ -47,6 +46,7 @@ defmodule Electric.MixProject do
       {:postgrex, "~> 0.16.3"},
       {:postgresql_uri, "~> 0.1.0"},
       {:plug_cowboy, "~> 2.0"},
+      {:ranch, "~> 2.1", override: true},
       {:jason, "~> 1.3.0"},
       {:recon_ex, "~> 0.9.1"},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
@@ -55,7 +55,8 @@ defmodule Electric.MixProject do
       {:protox, "~> 1.7"},
       {:gun, "~> 2.0.0-rc.2"},
       {:cowboy, "~> 2.9.0"},
-      {:gen_stage, "~> 1.1.2"}
+      {:gen_stage, "~> 1.1.2"},
+      {:finch, "~> 0.13"}
     ]
   end
 
