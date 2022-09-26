@@ -1,5 +1,7 @@
+import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
-import { Row, SqlValue, Transaction } from '../util/types'
+import { Change, ChangeType, Relation, Row, SqlValue, Transaction } from '../util/types'
+import { SatRelation_RelationType } from '../_generated/proto/satellite'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -143,4 +145,67 @@ export const fromTransaction = (transaction: Transaction, pksForTable: { [k: str
       timestamp: new Date(transaction.commit_timestamp.toNumber()).toISOString() // TODO: check precision
     })
   })
+}
+
+export const toTransactions = (opLogEntries: OplogEntry[]): Transaction[] => {
+  if (opLogEntries.length == 0) {
+    return []
+  }
+
+  const to_commit_timestamp = (timestamp: string): Long =>
+    Long.fromNumber(new Date(timestamp).getTime())
+
+  const opLogEntryToChange = (entry: OplogEntry): Change => {
+    let record, oldRecord
+    if (entry.newRow != null) {
+      record = JSON.parse(entry.newRow)
+    }
+
+    if (entry.oldRow != null) {
+      oldRecord = JSON.parse(entry.oldRow)
+    }
+
+    // TODO
+    const relation: Relation = {
+      id: 0,
+      schema: 'public',
+      table: entry.tablename,
+      columns: [],
+      tableType: SatRelation_RelationType.TABLE
+    }
+
+    // is it okay to lose UPDATE at this point? Does Vaxine care about it?
+    return {
+      type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
+      relation,
+      record,
+      oldRecord
+    }
+  }
+
+  const init: Transaction = {
+    commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
+    lsn: opLogEntries[0].rowid.toString(),
+    changes: [],
+  }
+
+  return opLogEntries.reduce((acc, txn) => {
+    let currTxn = acc[acc.length - 1]
+
+    const nextTs = to_commit_timestamp(txn.timestamp)
+    if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
+      const nextTxn = {
+        commit_timestamp: to_commit_timestamp(txn.timestamp),
+        lsn: txn.rowid.toString(),
+        changes: [],
+      }
+      acc.push(nextTxn)
+      currTxn = nextTxn
+    }
+
+    const change = opLogEntryToChange(txn)
+    currTxn.changes.push(change)
+    currTxn.lsn = txn.rowid.toString() // LSN is the largest rowId?
+    return acc
+  }, [init])
 }

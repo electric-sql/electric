@@ -12,7 +12,7 @@ import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry } from '../../src/satellite/oplog'
+import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
@@ -597,6 +597,96 @@ test('get oplogEntries from transaction', async t => {
 
   const opLog = fromTransaction(transaction, pks)
   t.deepEqual(opLog[0], expected)
+});
+
+test('get transactions from opLogEntries', async t => {
+  const { runMigrations } = t.context as any
+  await runMigrations()
+
+  const opLogEntries: OplogEntry[] = [{
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":0}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: 1,
+    timestamp: '1970-01-01T00:00:00.000Z'
+  },
+  {
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'UPDATE',
+    newRow: '{"id":1}',
+    oldRow: '{"id":1}',
+    primaryKey: '{"id":1}',
+    rowid: 2,
+    timestamp: '1970-01-01T00:00:00.000Z'
+  },
+  {
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":2}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: 3,
+    timestamp: '1970-01-01T00:00:01.000Z'
+  }
+  ]
+
+  const expected: Transaction[] = [
+    {
+      lsn: "2",
+      commit_timestamp: Long.ZERO,
+      changes: [
+        {
+          relation: {
+            id: 0,
+            schema: 'public',
+            table: 'parent',
+            columns: [],
+            tableType: SatRelation_RelationType.TABLE
+          },
+          type: ChangeType.INSERT,
+          record: { 'id': 0 },
+          oldRecord: undefined
+        },
+        {
+          relation: {
+            id: 0,
+            schema: 'public',
+            table: 'parent',
+            columns: [],
+            tableType: SatRelation_RelationType.TABLE
+          },
+          type: ChangeType.INSERT,
+          record: { 'id': 1 },
+          oldRecord: { 'id': 1 },
+        }]
+    },
+    {
+      lsn: "3",
+      commit_timestamp: Long.ZERO.add(1000),
+      changes: [
+        {
+          relation: {
+            id: 0,
+            schema: 'public',
+            table: 'parent',
+            columns: [],
+            tableType: SatRelation_RelationType.TABLE
+          },
+          type: ChangeType.INSERT,
+          record: { 'id': 2 },
+          oldRecord: undefined
+        },
+      ]
+    }
+  ]
+
+  const opLog = toTransactions(opLogEntries)
+  t.deepEqual(opLog, expected)
 });
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
