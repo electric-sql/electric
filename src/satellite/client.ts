@@ -76,14 +76,12 @@ export class SatelliteClient extends EventEmitter implements Client {
   // TODO: handle connection errors
   connect(): Promise<void | SatelliteError> {
     return new Promise((resolve, reject) => {
-      // TODO: move the registration to the socket interface so 
-      // that different impl can use different events
-      this.socket.once('open', () => {
+      this.socket.onceConnect(() => {
         this.socketHandler = message => this.handleIncoming(message);
-        this.socket.on('message', this.socketHandler);
+        this.socket.onMessage(this.socketHandler);
         resolve();
-      });
-      this.socket.once('error', error => reject(error));
+      })
+      this.socket.onceError(error => reject(error))
 
       const { address, port } = this.opts;
       this.socket.open({ url: `ws://${address}:${port}/ws` });
@@ -92,10 +90,8 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   close(): Promise<void> {
     return new Promise(resolve => {
-      if (this.socketHandler) {
-        this.removeListener('message', this.socketHandler);
-      }
-      this.socket.close();
+      this.socketHandler = undefined;
+      this.socket.closeAndRemoveListeners();
       resolve();
     });
   }
@@ -134,9 +130,8 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>) {
     this.on('transaction', async (txn, ackCb) => {
-      await callback(txn) // calls the callback provided by the subscriber
-      // acknowledge the transaction has been processed
-      // we might want to do this separately or document the behavior
+      // move callback execution outside the message handling path
+      await callback(txn)
       ackCb()
     });
   }
@@ -255,7 +250,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  // TODO: handle multi-message transactions
   private processOpLogMessage(opLogMessage: SatOpLog, replication: Replication) {
     opLogMessage.ops.map((op) => {
       if (op.begin) { 

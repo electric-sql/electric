@@ -1,5 +1,5 @@
 import EventEmitter from "events";
-import { ConnectionOptions, Socket } from "../index";
+import { ConnectionOptions, Data, Socket } from "../index";
 import { WebSocket } from 'ws';
 
 export class WebSocketNode extends EventEmitter implements Socket {
@@ -7,7 +7,7 @@ export class WebSocketNode extends EventEmitter implements Socket {
 
     constructor() {
         super();
-    }
+    }    
 
     open(opts: ConnectionOptions): Socket {
         this.socket = new WebSocket(opts.url);
@@ -25,8 +25,22 @@ export class WebSocketNode extends EventEmitter implements Socket {
         return this;
     }
 
-    close(): Socket {
-        this.socket?.close();
+    closeAndRemoveListeners(): Socket {
+        this.removeAllListeners();
+        this.socket?.removeAllListeners();
+        this.socket?.close();        
         return this;
+    }
+
+    onMessage(cb: (data: Data) => void): void {
+        this.on('message', cb)
+    }
+
+    onceConnect(cb: () => void): void {
+        this.once('open', cb)
+    }
+
+    onceError(cb: (error: Error) => void): void {
+        this.once('error', cb)
     }
 }

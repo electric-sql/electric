@@ -15,11 +15,11 @@ import {
   SatAuthResp,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNode } from '../../src/sockets/node/websocket';
-import { AckCallback, SatelliteClient, Transaction } from '../../src/satellite/client';
+import { AckCallback, SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
-import { SatelliteErrorCode } from '../../src/util/types';
+import { SatelliteErrorCode, Transaction } from '../../src/util/types';
 
 test.beforeEach(t => {
   const server = new SatelliteWSServerStub();
