@@ -6,12 +6,13 @@ import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, SqlValue, Transaction } from '../util/types'
+import { DbName, Relation, RelationsCache, SqlValue, Transaction } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction } from './oplog'
+import { SatRelation_RelationType } from '../_generated/proto/satellite'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -98,10 +99,9 @@ export class SatelliteProcess implements Satellite {
 
     // Need to reload primary keys after schema migration
     // For now, we do it only at initialization
-    // Make 'schemaInfo' type to use around
-    const pkForTable = await this._getPrimaryKeyForTables()
+    const relations = await this._getLocalRelations()
     this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction, pkForTable)
+      this._applyTransaction(transaction, relations)
     })
 
     return this.client.connect()
@@ -332,8 +332,8 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _applyTransaction(transaction: Transaction, pkForTable: { [k: string]: string[] }) {
-    const opLogEntries = fromTransaction(transaction, pkForTable)
+  async _applyTransaction(transaction: Transaction, relations: RelationsCache) {
+    const opLogEntries = fromTransaction(transaction, relations)
 
     await this._apply(opLogEntries)
     this._notifyChanges(opLogEntries)
@@ -395,21 +395,27 @@ export class SatelliteProcess implements Satellite {
 
   // Fetch primary keys from local store and use them to identify incoming ops.
   // TODO: Improve this code once with Migrator and consider simplifying oplog.
-  async _getPrimaryKeyForTables(): Promise<{ [k: string]: string[] }> {
+  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
     const notIn = [
-      `'${this.opts.metaTable.toString()}'`,
+      `'${this.opts.metaTable.tablename.toString()}'`,
       `'${this.opts.oplogTable.tablename.toString()}'`,
-      `'${this.opts.triggersTable.tablename.toString()}'`
+      `'${this.opts.triggersTable.tablename.toString()}'`,
+      `'sqlite_schema'`,
+      `'sqlite_sequence'`,
+      `'sqlite_temp_schema'`,
     ]
 
     const tables = `SELECT name FROM pragma_table_list() 
                       WHERE name NOT IN (${notIn.join(",")})
                     `
     const columnsFor = (table: string) =>
-      `SELECT name FROM pragma_table_info('${table}') WHERE pk = 1`
+      `SELECT * FROM pragma_table_info('${table}')`
     const tableNames = await this.adapter.query(tables)
 
-    const pks = []
+    const relations: RelationsCache = {}
+
+    let id = 0
+    const schema = 'public' // TODO
     for (const table of tableNames) {
       const tableName = table.name as any
       const sql = columnsFor(tableName)
@@ -417,12 +423,19 @@ export class SatelliteProcess implements Satellite {
       if (columnsForTable.length == 0) {
         continue
       }
-      for (const columns of columnsForTable) {
-        pks.push([tableName, Object.values(columns).map(c => (c as any).toString())])
+      const relation: Relation = {
+        id: id++,
+        schema: schema,
+        table: tableName,
+        tableType: SatRelation_RelationType.TABLE,
+        columns: []
       }
-    }
+      for (const c of columnsForTable) {
+        relation.columns.push({ name: c.name!.toString(), type: c.type!.toString(), primaryKey: Boolean(c.pk!.valueOf()) })
+      }
+      relations[`${tableName}`] = relation
+    }    
 
-    const toMap = Object.fromEntries(pks)
-    return Promise.resolve(toMap)
+    return Promise.resolve(relations)
   }
 }

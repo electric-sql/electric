@@ -17,9 +17,9 @@ import { satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
-import { SatRelation_RelationType } from '../../src/_generated/proto/satellite'
 import Long from 'long'
 import { ChangeType, Transaction } from '../../src/util/types'
+import { relations } from './common'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -549,36 +549,18 @@ test('compensations: using triggers with flag 1', async t => {
   t.true(true)
 })
 
-test('get primary keys for tables', async t => {
-  const { runMigrations, satellite } = t.context as any
-  await runMigrations()
-
-  const pks = await satellite._getPrimaryKeyForTables()
-  const expectedPks = {
-    'child': ['id'],
-    'parent': ['id']
-  }
-  t.deepEqual(pks, expectedPks)
-})
-
 test('get oplogEntries from transaction', async t => {
   const { runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  const pks = await satellite._getPrimaryKeyForTables()
+  const relations = await satellite['_getLocalRelations']()
 
   const transaction: Transaction = {
     lsn: "0",
-    commit_timestamp: Long.ZERO,
+    commit_timestamp: Long.UZERO,
     changes: [
       {
-        relation: {
-          id: 0,
-          schema: '',
-          table: 'parent',
-          columns: [],
-          tableType: SatRelation_RelationType.TABLE
-        },
+        relation: relations.parent,
         type: ChangeType.INSERT,
         record: { 'id': 0 }
       }]
@@ -595,7 +577,7 @@ test('get oplogEntries from transaction', async t => {
     timestamp: '1970-01-01T00:00:00.000Z'
   }
 
-  const opLog = fromTransaction(transaction, pks)
+  const opLog = fromTransaction(transaction, relations)
   t.deepEqual(opLog[0], expected)
 });
 
@@ -604,7 +586,7 @@ test('get transactions from opLogEntries', async t => {
   await runMigrations()
 
   const opLogEntries: OplogEntry[] = [{
-    namespace: 'main',
+    namespace: 'public',
     tablename: 'parent',
     optype: 'INSERT',
     newRow: '{"id":0}',
@@ -614,7 +596,7 @@ test('get transactions from opLogEntries', async t => {
     timestamp: '1970-01-01T00:00:00.000Z'
   },
   {
-    namespace: 'main',
+    namespace: 'public',
     tablename: 'parent',
     optype: 'UPDATE',
     newRow: '{"id":1}',
@@ -624,7 +606,7 @@ test('get transactions from opLogEntries', async t => {
     timestamp: '1970-01-01T00:00:00.000Z'
   },
   {
-    namespace: 'main',
+    namespace: 'public',
     tablename: 'parent',
     optype: 'INSERT',
     newRow: '{"id":2}',
@@ -635,31 +617,19 @@ test('get transactions from opLogEntries', async t => {
   }
   ]
 
-  const expected: Transaction[] = [
+  const expected = [
     {
       lsn: "2",
-      commit_timestamp: Long.ZERO,
+      commit_timestamp: Long.UZERO,
       changes: [
-        {
-          relation: {
-            id: 0,
-            schema: 'public',
-            table: 'parent',
-            columns: [],
-            tableType: SatRelation_RelationType.TABLE
-          },
+        {  
+          relation: relations.parent,        
           type: ChangeType.INSERT,
           record: { 'id': 0 },
           oldRecord: undefined
         },
-        {
-          relation: {
-            id: 0,
-            schema: 'public',
-            table: 'parent',
-            columns: [],
-            tableType: SatRelation_RelationType.TABLE
-          },
+        {        
+          relation: relations.parent,  
           type: ChangeType.INSERT,
           record: { 'id': 1 },
           oldRecord: { 'id': 1 },
@@ -667,16 +637,10 @@ test('get transactions from opLogEntries', async t => {
     },
     {
       lsn: "3",
-      commit_timestamp: Long.ZERO.add(1000),
+      commit_timestamp: Long.UZERO.add(1000),
       changes: [
-        {
-          relation: {
-            id: 0,
-            schema: 'public',
-            table: 'parent',
-            columns: [],
-            tableType: SatRelation_RelationType.TABLE
-          },
+        { 
+          relation: relations.parent,
           type: ChangeType.INSERT,
           record: { 'id': 2 },
           oldRecord: undefined
@@ -685,7 +649,7 @@ test('get transactions from opLogEntries', async t => {
     }
   ]
 
-  const opLog = toTransactions(opLogEntries)
+  const opLog = toTransactions(opLogEntries, relations)
   t.deepEqual(opLog, expected)
 });
 

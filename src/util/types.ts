@@ -67,7 +67,7 @@ export type Replication = {
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
     ack_lsn: string
-    transaction: Transaction
+    transactions: Transaction[]
 }
 
 export type Relation = {
@@ -78,7 +78,9 @@ export type Relation = {
     columns: RelationColumn[]
 }
 
-export type RelationColumn = { name: string, type: string };
+export type RelationColumn = { name: string, type: string, primaryKey?: boolean };
+
+export type RelationsCache = { [k: string]: Relation }
 
 export enum ReplicationStatus {
     STOPPED,

@@ -77,4 +77,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   subscribeToTransactions(_callback: (transaction: Transaction) => Promise<void>): void {
   }
+  enqueueTransaction(_transaction: Transaction): void | SatelliteError {
+    return
+  }
 }

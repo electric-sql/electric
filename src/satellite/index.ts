@@ -32,4 +32,5 @@ export interface Client {
   startReplication(lsn: string): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
+  enqueueTransaction(transaction: Transaction): void | SatelliteError
 }

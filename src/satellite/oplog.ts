@@ -1,7 +1,6 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
-import { Change, ChangeType, Relation, Row, SqlValue, Transaction } from '../util/types'
-import { SatRelation_RelationType } from '../_generated/proto/satellite'
+import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -127,11 +126,13 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
   }, initialValue)
 }
 
-export const fromTransaction = (transaction: Transaction, pksForTable: { [k: string]: string[] }): OplogEntry[] => {
+export const fromTransaction = (transaction: Transaction, relations: RelationsCache): OplogEntry[] => {
   return transaction.changes.map(t => {
     const columnValues = t.record ? t.record : t.oldRecord
     const pk = JSON.stringify(Object.fromEntries(
-      pksForTable[t.relation.table].map(col => [col, columnValues![col]])
+      relations[`${t.relation.table}`].columns
+        .filter(c => c.primaryKey)
+        .map(col => [col.name, columnValues![col.name]])
     ))
 
     return ({
@@ -147,13 +148,13 @@ export const fromTransaction = (transaction: Transaction, pksForTable: { [k: str
   })
 }
 
-export const toTransactions = (opLogEntries: OplogEntry[]): Transaction[] => {
+export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsCache): Transaction[] => {
   if (opLogEntries.length == 0) {
     return []
   }
 
   const to_commit_timestamp = (timestamp: string): Long =>
-    Long.fromNumber(new Date(timestamp).getTime())
+    Long.UZERO.add(new Date(timestamp).getTime())
 
   const opLogEntryToChange = (entry: OplogEntry): Change => {
     let record, oldRecord
@@ -165,19 +166,10 @@ export const toTransactions = (opLogEntries: OplogEntry[]): Transaction[] => {
       oldRecord = JSON.parse(entry.oldRow)
     }
 
-    // TODO
-    const relation: Relation = {
-      id: 0,
-      schema: 'public',
-      table: entry.tablename,
-      columns: [],
-      tableType: SatRelation_RelationType.TABLE
-    }
-
     // is it okay to lose UPDATE at this point? Does Vaxine care about it?
     return {
       type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
-      relation,
+      relation: relations[`${entry.tablename}`],
       record,
       oldRecord
     }

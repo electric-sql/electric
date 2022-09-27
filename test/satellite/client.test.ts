@@ -20,6 +20,10 @@ import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
 import { SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
+import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
+import { relations } from './common';
+
 
 test.beforeEach(t => {
   const server = new SatelliteWSServerStub();
@@ -187,8 +191,8 @@ test.serial('receive transaction over multiple messages', async t => {
     tableName: 'table',
     tableType: SatRelation_RelationType.TABLE,
     columns: [
-      SatRelationColumn.fromPartial({ name: 'name1', type: 'varchar' }),
-      SatRelationColumn.fromPartial({ name: 'name2', type: 'varchar' })
+      SatRelationColumn.fromPartial({ name: 'name1', type: 'TEXT' }),
+      SatRelationColumn.fromPartial({ name: 'name2', type: 'TEXT' })
     ]
   });
 
@@ -269,3 +273,105 @@ test.serial('acknowledge lsn', async t => {
     await client.startReplication("0");
   });
 });
+
+test.serial('send transaction', async t => {
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
+
+  const startResp = SatInStartReplicationResp.fromPartial({});
+
+  const opLogEntries: OplogEntry[] = [{
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":0}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: 0,
+    timestamp: '1970-01-01T00:00:01.000Z'
+  },
+  {
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'UPDATE',
+    newRow: '{"id":1}',
+    oldRow: '{"id":1}',
+    primaryKey: '{"id":1}',
+    rowid: 1,
+    timestamp: '1970-01-01T00:00:01.000Z'
+    },
+    {
+      namespace: 'main',
+      tablename: 'parent',
+      optype: 'UPDATE',
+      newRow: '{"id":1}',
+      oldRow: '{"id":1}',
+      primaryKey: '{"id":1}',
+      rowid: 2,
+      timestamp: '1970-01-01T00:00:02.000Z'
+  }
+  ]
+
+  const transaction = toTransactions(opLogEntries, relations)
+
+  return new Promise(async (res) => {
+    server.nextResponses([startResp])
+    server.nextResponses([])
+
+    // first message is a relation
+    server.nextResponses([
+      (data?: Buffer) => {
+        const msgType = data!.readUInt8();
+        if (msgType == getTypeFromString(SatRelation.$type)) {
+          const relation = decode(data!) as SatRelation
+          t.deepEqual(relation.relationId, 1)
+        }
+      }
+    ])
+
+    // second message is a transaction
+    server.nextResponses([
+      (data?: Buffer) => {
+        const msgType = data!.readUInt8();
+        if (msgType == getTypeFromString(SatOpLog.$type)) {
+          const satOpLog = (decode(data!) as SatOpLog).ops
+
+          t.is(satOpLog[0].begin?.lsn, "1")
+          t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
+          // TODO: check values
+        }
+      }
+    ])
+
+    // third message after new enqueue does not send relation
+    server.nextResponses([
+      (data?: Buffer) => {
+        const msgType = data!.readUInt8();
+        if (msgType == getTypeFromString(SatOpLog.$type)) {
+          const satOpLog = (decode(data!) as SatOpLog).ops
+
+          t.is(satOpLog[0].begin?.lsn, "2")
+          t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
+          // TODO: check values
+        }
+        res()
+      }
+    ])
+
+    await client.startReplication("0")
+
+    // wait a little for replication to start in the opposite direction
+    setTimeout(() => {
+      client.enqueueTransaction(transaction[0])
+      client.enqueueTransaction(transaction[1])
+    }, 100)
+  })
+})
+
+
+function decode(data: Buffer): SatPbMsg {
+  const code = data.readUInt8();
+  const type = getTypeFromCode(code);
+  const obj = getObjFromString(type);
+  return obj.decode(data.subarray(1));
+}

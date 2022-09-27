@@ -44,6 +44,7 @@ export interface SatelliteClientOpts {
   port: number;
   address: string;
   timeout?: number;
+  pushPeriod?: number;
 }
 
 export interface SatelliteClientOverrides {
@@ -59,5 +60,6 @@ export const satelliteClientDefaults = {
   token: "",
   address: "127.0.0.1",
   port: 30002,
-  timeout: 100000
+  timeout: 100000,
+  pushPeriod: 500
 }
