@@ -4,7 +4,7 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
-import { Client } from './index'
+import { AckType, Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import { DbName, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 
@@ -37,6 +37,7 @@ export class SatelliteProcess implements Satellite {
 
   _lastAckdRowId: number
   _lastSentRowId: number
+  _lsn: string
 
   relations: RelationsCache
 
@@ -49,10 +50,9 @@ export class SatelliteProcess implements Satellite {
 
     this.opts = opts
 
-    // The last rowid that was *acknowledged by* the server.
-    this._lastAckdRowId = opts.lastAckdRowId
-    // The last rowid that was *sent to* the server.
-    this._lastSentRowId = opts.lastSentRowId
+    this._lastAckdRowId = 0
+    this._lastSentRowId = 0
+    this._lsn = "0"
 
     // Create a throttled function that performs a snapshot at most every
     // `minSnapshotWindow` ms. This function runs immediately when you
@@ -108,10 +108,23 @@ export class SatelliteProcess implements Satellite {
       this._applyTransaction(transaction)
     })
 
+    // When a transaction is sent, or an acknowledgement is 
+    // received, we update the rowid records.
+    this.client.subscribeToAck(async (rowid, type) => {
+      await this._ack(Number(rowid), type == AckType.PERSISTED)
+    })
+
+    const ackRowId = await this._getMeta('ackRowId')
+    const lastSentRowId = await this._getMeta('lastSentRowId')
+    this._lsn = await this._getMeta('lsn')
+
+    this._lastSentRowId = Number(lastSentRowId)
+    this._lastAckdRowId - Number(ackRowId)
+    this.client.setOutboundLogPositions(lastSentRowId, ackRowId)
+
     return this.client.connect()
       .then(() => this.client.authenticate())
-      .then(() => this._getMeta("lsn"))
-      .then((lsn) => this.client.startReplication(lsn)) 
+      .then(() => this.client.startReplication(this._lsn)) 
   }
 
   // Unsubscribe from data changes and stop polling
@@ -220,14 +233,16 @@ export class SatelliteProcess implements Satellite {
     this.notifier.actuallyChanged(this.dbName, changes)
   }
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void | SatelliteError> {
-    const transaction = toTransactions(results, this.relations)
-    return this.client.enqueueTransaction(transaction[0]);
+    const transactions = toTransactions(results, this.relations)
+    for (const txn of transactions) {
+      return this.client.enqueueTransaction(txn);
+    }
   }
 
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  async _apply(incoming: OplogEntry[], lsn: string = "0"): Promise<void> {
+  async _apply(incoming: OplogEntry[], _lsn: string = "0"): Promise<void> {
     // assign timestamp to pending operations before apply
     await this._performSnapshot()
 
@@ -275,11 +290,20 @@ export class SatelliteProcess implements Satellite {
       }
     }
 
+    // TODO: finish storing LSN
+    // const toHexString = (byteArray: string) => {
+    //   var s = '';
+    //   byteArray.split('').forEach(function (byte, i) {
+    //     s += ('0' + (byte.charCodeAt(0) & 0xFF).toString(16)).slice(-2);
+    //   });
+    //   return s;
+    // }
+
     const sql = `
       PRAGMA defer_foreign_keys = ON;
       BEGIN;
         ${stmts.join('; ')};
-        INSERT INTO ${this.opts.metaTable.tablename} (key, value) VALUES ('lsn', '${lsn}');
+        UPDATE ${this.opts.metaTable.tablename} set value=x'0000' WHERE key='lsn';
       COMMIT;
       PRAGMA defer_foreign_keys = OFF;
     `
@@ -361,25 +385,40 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Clean up the oplog and update `this._lastAckdRowId`.
-  async _ack(rowId: number): Promise<void> {
+  async _sent(rowId: number,): Promise<void> {
+    const meta = this.opts.metaTable.toString()
+
+    const sql = `
+      UPDATE ${meta}
+         SET value=${rowId}
+       WHERE key='lastSentRowId'
+    `
+
+    await this.adapter.run(sql)
+    this._lastAckdRowId = rowId
+  }
+
+  async _ack(rowId: number, isAckRowId: boolean): Promise<void> {
     const lastAckd = this._lastAckdRowId
     const lastSent = this._lastSentRowId
 
-    if (rowId < lastAckd || rowId > lastSent) {
+    if (rowId < lastAckd || (rowId > lastSent && isAckRowId)) {
       throw new Error('Invalid position')
     }
 
     const meta = this.opts.metaTable.toString()
-    const oplog = this.opts.oplogTable.toString()
 
-    const sql = `
-      DELETE FROM ${oplog}
-        WHERE rowid <= ${rowId};
+    let sql = `
+      UPDATE ${meta} 
+        SET value='${rowId}' 
+      WHERE key='${ isAckRowId ? 'ackRowId' : 'lastSentRowId'}'`
 
-      UPDATE ${meta}
-         SET value='${rowId}'
-       WHERE key='ackRowId'
-    `
+    if (isAckRowId) {
+      const oplog = this.opts.oplogTable.toString()
+      sql = `DELETE 
+              FROM ${oplog}
+            WHERE rowid <= ${rowId}; ${sql}`
+    }
 
     await this.adapter.run(sql)
     this._lastAckdRowId = rowId
@@ -397,11 +436,14 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.run(sql)
   }
 
+  // TODO: need to support different value types
   async _getMeta(key: string): Promise<string> {
     const meta = this.opts.metaTable.toString()
     const sql = `SELECT value from ${meta} WHERE key='${key}';`
 
-    return await this.adapter.query(sql).then(rows => rows[0].toString())
+    return await this.adapter.query(sql).then(rows => {
+      return rows[0]!.value!.toString()
+    })
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.

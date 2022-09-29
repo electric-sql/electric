@@ -25,6 +25,14 @@ export interface Satellite {
   stop(): Promise<void>
 }
 
+export enum AckType {
+  SENT,
+  PERSISTED
+}
+
+export type AckCallback = (lsn: string, type: AckType) => void
+
+
 export interface Client {
   connect(): Promise<void | SatelliteError>;
   close(): Promise<void | SatelliteError>;
@@ -33,4 +41,7 @@ export interface Client {
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
   enqueueTransaction(transaction: Transaction): void | SatelliteError
+  subscribeToAck(callback: AckCallback): void;
+  unsubscribeToAck(callback: AckCallback): void;
+  setOutboundLogPositions(sent: string, ack: string): void;
 }

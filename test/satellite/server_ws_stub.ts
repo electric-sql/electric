@@ -1,7 +1,7 @@
 import * as http from 'http';
 import { WebSocketServer } from 'ws';
 import { getSizeBuf, getTypeFromString, SatPbMsg } from '../../src/util/proto';
-import { SatAuthResp, SatInStartReplicationReq, SatInStartReplicationResp, SatInStopReplicationResp, SatOpLog, SatPingReq, SatRelation } from '../../src/_generated/proto/satellite';
+import { SatAuthResp, SatInStartReplicationReq, SatInStartReplicationResp, SatInStopReplicationResp, SatOpLog, SatPingReq, SatPingResp, SatRelation } from '../../src/_generated/proto/satellite';
 
 const PORT = 30002;
 const IP = '127.0.0.1';
@@ -96,6 +96,10 @@ export class SatelliteWSServerStub {
 
             if (msgType == getTypeFromString(SatPingReq.$type)) {
               socket.send(Buffer.concat([getSizeBuf(msg), SatPingReq.encode(msg as SatPingReq).finish()]));
+            }
+
+            if (msgType == getTypeFromString(SatPingResp.$type)) {
+              socket.send(Buffer.concat([getSizeBuf(msg), SatPingResp.encode(msg as SatPingResp).finish()]));
             }
           }
         }

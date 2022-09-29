@@ -12,10 +12,6 @@ export interface SatelliteOpts {
   pollingInterval: number,
   // Throttle snapshotting to once per `minSnapshotWindow` milliseconds.
   minSnapshotWindow: number,
-  // The last rowid that was *sent to* the server.
-  lastSentRowId: number,
-  // The last rowid that was *acknowledged by* the server.
-  lastAckdRowId: number
 }
 
 // As above but optional.
@@ -24,8 +20,6 @@ export interface SatelliteOverrides {
   oplogTable?: QualifiedTablename,
   pollingInterval?: number,
   minSnapshotWindow?: number,
-  lastSentRowId?: number,
-  lastAckdRowId?: number
 }
 
 export const satelliteDefaults: SatelliteOpts = {
@@ -33,26 +27,24 @@ export const satelliteDefaults: SatelliteOpts = {
   oplogTable: new QualifiedTablename('main', '_electric_oplog'),
   triggersTable: new QualifiedTablename('main', '_trigger_settings'),
   pollingInterval: 2000,
-  minSnapshotWindow: 40,
-  lastSentRowId: -1,
-  lastAckdRowId: -1
+  minSnapshotWindow: 40
 }
 
 export interface SatelliteClientOpts {
-  appId: string,
+  appId: string
   token: string
-  port: number;
-  address: string;
-  timeout?: number;
-  pushPeriod?: number;
+  port: number
+  address: string
+  timeout?: number
+  pushPeriod?: number
 }
 
 export interface SatelliteClientOverrides {
-  appId?: string,
+  appId?: string
   token?: string
-  port?: number;
-  address?: string;
-  timeout?: number;
+  port?: number
+  address?: string
+  timeout?: number
 }
 
 export const satelliteClientDefaults = {

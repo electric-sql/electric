@@ -5,7 +5,7 @@ import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
 import { AuthResponse, DbName, SatelliteError, Transaction } from '../util/types'
 
-import { Client, Satellite } from './index'
+import { AckCallback, Client, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults, satelliteClientDefaults, SatelliteClientOpts } from './config'
 import { BaseRegistry } from './registry'
 import { Socket } from '../sockets'
@@ -59,7 +59,7 @@ export class MockRegistry extends BaseRegistry {
   }
 }
 
-export class MockSatelliteClient extends EventEmitter implements Client {
+export class MockSatelliteClient extends EventEmitter implements Client { 
   connect(): Promise<void | SatelliteError> {
     return Promise.resolve();
   }
@@ -80,4 +80,15 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   enqueueTransaction(_transaction: Transaction): void | SatelliteError {
     return
   }
+  subscribeToAck(callback: AckCallback): void {
+    this.on('ack_lsn', callback)
+  }
+  unsubscribeToAck(_callback: AckCallback): void {
+    return
+  }
+
+  setOutboundLogPositions(_sent: string, _ack: string): void {
+    return
+  }
+
 }

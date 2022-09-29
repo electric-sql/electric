@@ -13,16 +13,18 @@ import {
   SatOpDelete,
   SatTransOp,
   SatAuthResp,
+  SatPingResp,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNode } from '../../src/sockets/node/websocket';
-import { AckCallback, SatelliteClient } from '../../src/satellite/client';
+import { SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
-import { SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
+import { AckType } from '../../src/satellite';
 
 
 test.beforeEach(t => {
@@ -81,7 +83,7 @@ test.serial('replication start timeout', async t => {
   // empty response will trigger client timeout
   server.nextResponses([]); 
   try {
-    await client.startReplication("0", false);
+    await client.startReplication("0");
     t.fail(`start replication should throw`);
   } catch (error) {
     t.is(error!.code, SatelliteErrorCode.TIMEOUT);
@@ -108,7 +110,7 @@ test.serial('replication start success', async t => {
   const startResp = SatInStartReplicationResp.fromPartial({});
   server.nextResponses([startResp]);
 
-  await client.startReplication("0", false);
+  await client.startReplication("0");
   t.pass();
 });
 
@@ -120,8 +122,8 @@ test.serial('replication start failure', async t => {
   server.nextResponses([startResp]);
 
   try {
-    await client.startReplication("0", false);
-    await client.startReplication("0", false); // fails
+    await client.startReplication("0");
+    await client.startReplication("0"); // fails
   } catch (error) {
     t.is((error as any).code, SatelliteErrorCode.REPLICATION_ALREADY_STARTED);
   }
@@ -263,7 +265,7 @@ test.serial('acknowledge lsn', async t => {
   server.nextResponses([stop]);
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (_t: Transaction, ack: AckCallback) => {
+    client.on('transaction', (_t: Transaction, ack: any) => {
       t.is(client['inbound'].ack_lsn, "0");
       ack();
       t.is(client['inbound'].ack_lsn, "FAKE");
@@ -367,6 +369,46 @@ test.serial('send transaction', async t => {
     }, 100)
   })
 })
+
+test('ack on send and pong', async t => {
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
+
+  const startResp = SatInStartReplicationResp.fromPartial({});
+  const pingResponse = SatPingResp.fromPartial({ lsn: "1" });
+
+  server.nextResponses([startResp])
+  server.nextResponses([(pingResponse)])
+
+  await client.startReplication("0")
+
+  const transaction: Transaction = {
+    lsn: "1",
+    commit_timestamp: Long.UZERO,
+    changes: [
+      {
+        relation: relations.parent,
+        type: ChangeType.INSERT,
+        record: { 'id': 0 }
+      }]
+  }
+
+  await new Promise<void>(res => {
+    let sent = false
+    client.subscribeToAck((lsn, type) => {
+      if (type == AckType.SENT) {
+        t.is(lsn, "1")
+        sent = true
+      } else {
+        t.is(lsn, "1")
+        t.is(sent, true)
+        res()
+      }
+    })
+    client.enqueueTransaction(transaction)
+  })
+})
+
 
 
 function decode(data: Buffer): SatPbMsg {

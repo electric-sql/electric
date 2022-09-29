@@ -43,7 +43,7 @@ export type AuthResponse = {
 
 export type Transaction = {
     commit_timestamp: Long,
-    lsn: string
+    lsn: string,
     changes: Change[],
 };
 
@@ -67,6 +67,7 @@ export type Replication = {
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
     ack_lsn: string
+    sent_lsn: string
     transactions: Transaction[]
 }
 

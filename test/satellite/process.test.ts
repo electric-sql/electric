@@ -20,6 +20,14 @@ import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../su
 import Long from 'long'
 import { ChangeType, Transaction } from '../../src/util/types'
 import { relations } from './common'
+import { Satellite } from '../../src/satellite'
+
+type ContextType = {
+  adapter: DatabaseAdapter,
+  runMigrations: () => Promise<void>,
+  satellite: Satellite,
+  client: MockSatelliteClient
+}
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -50,6 +58,7 @@ test.beforeEach(t => {
     adapter,
     migrator,
     notifier,
+    client,
     runMigrations,
     satellite,
     tableInfo,
@@ -93,7 +102,7 @@ test('load metadata', async t => {
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
-  t.deepEqual(meta, { lsn: '0', ackRowId: '-1', currRowId: '-1', compensations: '0' })
+  t.deepEqual(meta, { lsn: '0', ackRowId: '0', lastSentRowId: '0', compensations: '0' })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -281,13 +290,10 @@ test('apply does not add anything to oplog', async t => {
     value: 'incoming',
     otherValue: 1,
   })
-  try {
+
   await satellite._apply([incomingEntry])
   await satellite._performSnapshot()
-  }
-  catch (error) {
-    console.log(error)
-  }
+
   const [row] = await adapter.query('SELECT * from parent WHERE id=1')
   t.is(row.value, 'incoming')
   t.is(row.otherValue, 1)
@@ -409,7 +415,7 @@ test('advance oplog cursor', async t => {
   t.is(rows[0].num_rows, 2)
 
   // Ack.
-  await satellite._ack(2)
+  await satellite._ack(2, true)
 
   // The oplog is clean.
   rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename}`)
@@ -494,7 +500,7 @@ test('compensations: using triggers with flag 0', async t => {
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
   await satellite._performSnapshot()
-  await satellite._ack(1)
+  await satellite._ack(1, true)
 
   await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
   await satellite._performSnapshot()
@@ -518,7 +524,7 @@ test('compensations: using triggers with flag 1', async t => {
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
   await satellite._performSnapshot()
-  await satellite._ack(1)
+  await satellite._ack(1, true)
 
   await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
   await satellite._performSnapshot()
@@ -634,6 +640,22 @@ test('get transactions from opLogEntries', async t => {
   const opLog = toTransactions(opLogEntries, relations)
   t.deepEqual(opLog, expected)
 });
+
+test('rowid acks updates meta', async t => {
+  const { runMigrations, satellite, client } = t.context as ContextType
+  await runMigrations()
+  await satellite.start()
+
+  client.emit("ack_lsn", "1", false)
+
+  await new Promise<void>(res => {
+    setTimeout(async () => {
+      const lsn = await satellite['_getMeta']('lastSentRowId')
+      t.is(lsn, "1")
+      res()
+    }, 100)
+  })
+})
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
 // Document that we do not maintian the order of execution of incoming operations and therefore we defer foreign key checks to the outermost commit

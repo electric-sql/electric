@@ -6,6 +6,7 @@ import {
   SatErrorResp,
   SatErrorResp_ErrorCode,
   SatInStartReplicationReq,
+  SatInStartReplicationReq_Option,
   SatInStartReplicationResp,
   SatInStopReplicationReq,
   SatInStopReplicationResp,
@@ -20,10 +21,8 @@ import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
 import { AuthResponse, ChangeType, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
-import { Client } from '.';
+import { AckCallback, Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
-
-export type AckCallback = () => void;
 
 interface PrivateSatelliteOptions extends SatelliteClientOpts {
   timeout: number;
@@ -41,6 +40,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socketHandler?: (any: any) => void;
   private throttledPushTransaction?: () => void;
 
+  private ackListeners: AckCallback[] = []
+
   private handlerForMessageType: { [k: string]: IncomingHandler } = {
     "Electric.Satellite.SatAuthResp": { handle: (resp) => this.handleAuthResp(resp), isRpc: true },
     "Electric.Satellite.SatInStartReplicationResp": { handle: () => this.handleStartResp(), isRpc: true },
@@ -48,6 +49,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     "Electric.Satellite.SatInStopReplicationReq": { handle: () => this.handleStopReq(), isRpc: false },
     "Electric.Satellite.SatInStopReplicationResp": { handle: () => this.handleStopResp(), isRpc: true },
     "Electric.Satellite.SatPingReq": { handle: () => this.handlePingReq(), isRpc: true },
+    "Electric.Satellite.SatPingResp": { handle: (req) => this.handlePingResp(req), isRpc: false },
     "Electric.Satellite.SatRelation": { handle: (req) => this.handleRelation(req), isRpc: false },
     "Electric.Satellite.SatOpLog": { handle: (req) => this.handleTransaction(req), isRpc: false },
     "Electric.Satellite.SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
@@ -61,14 +63,15 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication();
     this.outbound = this.resetReplication();
-  }  
+  }    
 
-  private resetReplication(): Replication {
+  private resetReplication(current?: Replication): Replication {
     return {
       authenticated: false,
       isReplicating: ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: "0",
+      ack_lsn: current?.ack_lsn ? current.ack_lsn : "0",
+      sent_lsn: current?.sent_lsn ? current.sent_lsn : "0",
       transactions: []
     }
   }
@@ -91,6 +94,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   close(): Promise<void> {
     return new Promise(resolve => {
       this.socketHandler = undefined;
+      this.removeAllListeners();
       this.socket.closeAndRemoveListeners();
       resolve();
     });
@@ -101,8 +105,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       return Promise.reject(new SatelliteError(
         SatelliteErrorCode.REPLICATION_ALREADY_STARTED, `replication already started`));
     }
-    this.inbound = this.resetReplication();
-    this.outbound = this.resetReplication();
+    this.inbound = this.resetReplication(this.inbound);
 
     this.inbound.isReplicating = ReplicationStatus.STARTING;
     this.inbound.ack_lsn = lsn;
@@ -165,6 +168,21 @@ export class SatelliteClient extends EventEmitter implements Client {
         getSizeBuf(satOpLog),
         SatOpLog.encode(satOpLog, _m0.Writer.create()).finish()]);
       this.socket.write(buffer)
+      this.outbound.sent_lsn = next.lsn
+      this.emit('ack_lsn', next.lsn, false)
+    }
+  }
+
+  subscribeToAck(callback: AckCallback): void {
+    this.ackListeners.push(callback)
+    this.on('ack_lsn', callback)
+  }
+
+  unsubscribeToAck(callback: AckCallback) {
+    const idx = this.ackListeners.findIndex((cb) => cb == callback)
+    if (idx >= 0) {
+      this.ackListeners.splice(idx)
+      this.removeListener('ack_lsn', callback)
     }
   }
 
@@ -272,8 +290,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private handleStartReq(message: SatInStartReplicationReq) {
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
+      this.outbound = this.resetReplication(this.outbound);
       this.outbound.isReplicating = ReplicationStatus.ACTIVE;
-      this.outbound.ack_lsn = message.lsn;
+      if (message.options.find(o =>
+        o == SatInStartReplicationReq_Option.LAST_ACKNOWLEDGED)) {
+        this.outbound.ack_lsn = this.outbound.sent_lsn;
+      } else {
+        this.outbound.ack_lsn = message.lsn;
+      }
 
       const throttleOpts = { leading: true, trailing: true }
       this.throttledPushTransaction = throttle(() => this.pushTransactions(), this.opts.pushPeriod, throttleOpts)
@@ -351,6 +375,21 @@ export class SatelliteClient extends EventEmitter implements Client {
     const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn });
     this.sendMessage(pong);
   }
+
+  // TODO: emit ping request to clear oplog.
+  private handlePingResp(message: SatPingResp) {
+    if (message.lsn) {
+      this.outbound.ack_lsn = message.lsn
+      this.emit('ack_lsn', message.lsn, true)
+    }
+  }
+
+  // It might be unsafe not to clear the log before 
+  // applying incoming operations that are ordered
+  // after the last acked position.
+  // TODO: come back here
+
+
 
   private handleError(error: SatErrorResp) {
     this.emit('error',
@@ -452,7 +491,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
     const columnType = columnInfo.type.toUpperCase();
-    if (columnType == 'TEXT' || columnType == 'UUID') {
+    if (columnType == 'TEXT' || columnType == 'UUID' || columnType == 'VARCHAR') {
       return new String(column).toString();
     }
     if (columnType == 'INTEGER') {
@@ -515,5 +554,10 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       this.sendMessage(request);
     }).finally(() => clearTimeout(waitingFor));
+  }
+
+  setOutboundLogPositions(sent: string, ack: string): void {
+    this.outbound.ack_lsn = ack
+    this.outbound.sent_lsn = sent
   }
 }
