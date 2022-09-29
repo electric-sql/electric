@@ -29,7 +29,7 @@ export interface Client {
   connect(): Promise<void | SatelliteError>;
   close(): Promise<void | SatelliteError>;
   authenticate(): Promise<AuthResponse | SatelliteError>;
-  startReplication(lsn: string, resume?: boolean): Promise<void | SatelliteError>;
+  startReplication(lsn: string): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
 }

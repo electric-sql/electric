@@ -4,7 +4,6 @@ import {
   SatErrorResp,
   SatErrorResp_ErrorCode,
   SatInStartReplicationReq,
-  SatInStartReplicationReq_Option,
   SatInStartReplicationResp,
   SatInStopReplicationReq,
   SatInStopReplicationResp,
@@ -101,7 +100,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     });
   }
 
-  startReplication(lsn: string, resumeFromLast?: boolean): Promise<void | SatelliteError> {
+  startReplication(lsn: string): Promise<void | SatelliteError> {
     if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
       return Promise.reject(new SatelliteError(
         SatelliteErrorCode.REPLICATION_ALREADY_STARTED, `replication already started`));
@@ -112,8 +111,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.inbound.isReplicating = ReplicationStatus.STARTING;
     this.inbound.ack_lsn = lsn;
 
-    const options = resumeFromLast ? [SatInStartReplicationReq_Option.LAST_ACKNOWLEDGED] : [];
-    const request = SatInStartReplicationReq.fromPartial({ lsn, options });
+    const request = SatInStartReplicationReq.fromPartial({ lsn });
     return this.rpc(request);
   }
 
