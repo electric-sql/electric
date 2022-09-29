@@ -293,27 +293,6 @@ test('apply does not add anything to oplog', async t => {
   t.is(localEntries.length, 1)
 })
 
-test('apply incoming DELETE', async t => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
-  await runMigrations()
-
-  await adapter.run(`INSERT INTO parent(id) VALUES (1)`)
-  let rows = await adapter.query('SELECT * from parent WHERE id=1')
-  t.is(rows.length, 1)
-
-  const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.delete, incomingTs, {
-    id: 1,
-    value: 'incoming',
-    otherValue: 1,
-  })
-
-  await satellite._apply([incomingEntry])
-
-  rows = await adapter.query('SELECT * from parent WHERE id=1')
-  t.is(rows.length, 0)
-})
-
 test('apply incoming with no local', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()

@@ -6,12 +6,12 @@ import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, Relation, RelationsCache, SqlValue, Transaction } from '../util/types'
+import { DbName, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
-import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction } from './oplog'
+import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 
 type ChangeAccumulator = {
@@ -38,6 +38,8 @@ export class SatelliteProcess implements Satellite {
   _lastAckdRowId: number
   _lastSentRowId: number
 
+  relations: RelationsCache
+
   constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
     this.dbName = dbName
     this.adapter = adapter
@@ -60,6 +62,8 @@ export class SatelliteProcess implements Satellite {
     const snapshot = this._performSnapshot.bind(this)
     const throttleOpts = {leading: true, trailing: true}
     this._throttledSnapshot = throttle(snapshot, opts.minSnapshotWindow, throttleOpts)
+
+    this.relations = {}
   }
 
   // XXX kick off the satellite process
@@ -99,9 +103,9 @@ export class SatelliteProcess implements Satellite {
 
     // Need to reload primary keys after schema migration
     // For now, we do it only at initialization
-    const relations = await this._getLocalRelations()
+    this.relations = await this._getLocalRelations()
     this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction, relations)
+      this._applyTransaction(transaction)
     })
 
     return this.client.connect()
@@ -171,8 +175,6 @@ export class SatelliteProcess implements Satellite {
         ORDER BY rowid ASC
     `
 
-    // XXX currently this timestamps and fetches the new oplog entries. We still
-    // need to actually replicate the data changes ...
     await this.adapter.run(updateTimestamps)
     const rows = await this.adapter.query(selectChanges, [timestamp])
     const results = rows as unknown as OplogEntry[]
@@ -217,17 +219,18 @@ export class SatelliteProcess implements Satellite {
     const changes = Object.values(results.reduce(reduceFn, acc))
     this.notifier.actuallyChanged(this.dbName, changes)
   }
-  async _replicateSnapshotChanges(_results: OplogEntry[]): Promise<void> {
-    // XXX integrate replication here ...
+  async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void | SatelliteError> {
+    const transaction = toTransactions(results, this.relations)
+    return this.client.enqueueTransaction(transaction[0]);
   }
 
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  //
-  // XXX Todo: enforce that all operations in the oplog have a timestamp
-  // before running apply.
   async _apply(incoming: OplogEntry[]): Promise<void> {
+    // assign timestamp to pending operations before apply
+    await this._performSnapshot()
+
     const local = await this._getEntries()
     const merged = this._mergeEntries(local, incoming)
 
@@ -332,8 +335,8 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _applyTransaction(transaction: Transaction, relations: RelationsCache) {
-    const opLogEntries = fromTransaction(transaction, relations)
+  async _applyTransaction(transaction: Transaction) {
+    const opLogEntries = fromTransaction(transaction, this.relations)
 
     await this._apply(opLogEntries)
     this._notifyChanges(opLogEntries)
