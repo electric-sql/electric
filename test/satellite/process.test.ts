@@ -93,7 +93,7 @@ test('load metadata', async t => {
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
-  t.deepEqual(meta, { ackRowId: '-1', currRowId: '-1', compensations: '0' })
+  t.deepEqual(meta, { lsn: '0', ackRowId: '-1', currRowId: '-1', compensations: '0' })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -281,10 +281,13 @@ test('apply does not add anything to oplog', async t => {
     value: 'incoming',
     otherValue: 1,
   })
-
+  try {
   await satellite._apply([incomingEntry])
   await satellite._performSnapshot()
-
+  }
+  catch (error) {
+    console.log(error)
+  }
   const [row] = await adapter.query('SELECT * from parent WHERE id=1')
   t.is(row.value, 'incoming')
   t.is(row.otherValue, 1)

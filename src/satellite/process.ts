@@ -110,8 +110,8 @@ export class SatelliteProcess implements Satellite {
 
     return this.client.connect()
       .then(() => this.client.authenticate())
-      // need to read LSN from meta
-      .then(() => this.client.startReplication("0")) 
+      .then(() => this._getMeta("lsn"))
+      .then((lsn) => this.client.startReplication(lsn)) 
   }
 
   // Unsubscribe from data changes and stop polling
@@ -227,7 +227,7 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  async _apply(incoming: OplogEntry[]): Promise<void> {
+  async _apply(incoming: OplogEntry[], lsn: string = "0"): Promise<void> {
     // assign timestamp to pending operations before apply
     await this._performSnapshot()
 
@@ -279,8 +279,9 @@ export class SatelliteProcess implements Satellite {
       PRAGMA defer_foreign_keys = ON;
       BEGIN;
         ${stmts.join('; ')};
+        INSERT INTO ${this.opts.metaTable.tablename} (key, value) VALUES ('lsn', '${lsn}');
       COMMIT;
-      PRAGMA defer_foreign_keys = OFF
+      PRAGMA defer_foreign_keys = OFF;
     `
 
     const tablenames = Object.keys(merged)
@@ -338,7 +339,7 @@ export class SatelliteProcess implements Satellite {
   async _applyTransaction(transaction: Transaction) {
     const opLogEntries = fromTransaction(transaction, this.relations)
 
-    await this._apply(opLogEntries)
+    await this._apply(opLogEntries, transaction.lsn)
     this._notifyChanges(opLogEntries)
   }
 
@@ -394,6 +395,13 @@ export class SatelliteProcess implements Satellite {
     `
 
     await this.adapter.run(sql)
+  }
+
+  async _getMeta(key: string): Promise<string> {
+    const meta = this.opts.metaTable.toString()
+    const sql = `SELECT value from ${meta} WHERE key='${key}';`
+
+    return await this.adapter.query(sql).then(rows => rows[0].toString())
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.
