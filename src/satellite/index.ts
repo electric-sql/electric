@@ -2,7 +2,7 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
-import { AuthResponse, DbName, SatelliteError, Transaction } from '../util/types'
+import { AckCallback, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
@@ -25,23 +25,15 @@ export interface Satellite {
   stop(): Promise<void>
 }
 
-export enum AckType {
-  SENT,
-  PERSISTED
-}
-
-export type AckCallback = (lsn: string, type: AckType) => void
-
-
 export interface Client {
   connect(): Promise<void | SatelliteError>;
   close(): Promise<void | SatelliteError>;
   authenticate(): Promise<AuthResponse | SatelliteError>;
-  startReplication(lsn: string): Promise<void | SatelliteError>;
+  startReplication(lsn: LSN): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
   enqueueTransaction(transaction: Transaction): void | SatelliteError
   subscribeToAck(callback: AckCallback): void;
   unsubscribeToAck(callback: AckCallback): void;
-  setOutboundLogPositions(sent: string, ack: string): void;
+  setOutboundLogPositions(sent: LSN, ack: LSN): void;
 }

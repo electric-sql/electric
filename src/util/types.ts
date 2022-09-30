@@ -14,6 +14,10 @@ export type SqlValue = string | number | null | Uint8Array
 export type StatementId = string
 export type Tablename = string
 export type VoidOrPromise = void | Promise<void>
+export type LSN = Uint8Array | Buffer
+
+export const DEFAULT_LSN = new TextEncoder().encode("0")
+
 
 export class SatelliteError extends Error {
     public code: SatelliteErrorCode;
@@ -43,7 +47,7 @@ export type AuthResponse = {
 
 export type Transaction = {
     commit_timestamp: Long,
-    lsn: string,
+    lsn: LSN,
     changes: Change[],
 };
 
@@ -66,8 +70,8 @@ export type Replication = {
     authenticated: boolean
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
-    ack_lsn: string
-    sent_lsn: string
+    ack_lsn: LSN
+    sent_lsn: LSN
     transactions: Transaction[]
 }
 
@@ -89,3 +93,10 @@ export enum ReplicationStatus {
     STOPPING,
     ACTIVE
 }
+
+export enum AckType {
+    LOCAL_SEND,
+    REMOTE_COMMIT
+}
+
+export type AckCallback = (lsn: LSN, type: AckType) => void

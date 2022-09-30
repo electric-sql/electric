@@ -18,7 +18,7 @@ import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
 import Long from 'long'
-import { ChangeType, Transaction } from '../../src/util/types'
+import { ChangeType, DEFAULT_LSN, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
 
@@ -36,6 +36,10 @@ const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 40,
   pollingInterval: 200
 })
+
+const lsnEncoder = new TextEncoder()
+const lsnDecoder = new TextDecoder()
+
 
 test.beforeEach(t => {
   const dbName = `test-${randomValue()}.db`
@@ -195,6 +199,7 @@ test('snapshots on potential data change', async t => {
 // values as in 'INSERT wins over DELETE and restored deleted values'
 test('snapshot of INSERT after DELETE', async t => {
   const { adapter, runMigrations, satellite } = t.context as any
+  try {
   await runMigrations()
 
   await adapter.run(`INSERT INTO parent(id, value) VALUES (1,'val1')`)
@@ -206,9 +211,12 @@ test('snapshot of INSERT after DELETE', async t => {
 
   const merged = operationsToTableChanges(entries)
   const changes = merged['main.parent']['1'].changes
-  const resultingValue = changes.value.value
-
+    const resultingValue = changes.value.value
   t.is(resultingValue, null)
+  } catch (error) {
+    console.log(error)
+  }
+
 })
 
 test('take snapshot and merge local wins', async t => {
@@ -516,7 +524,7 @@ test('compensations: using triggers with flag 1', async t => {
   await runMigrations()
 
   await adapter.run(`PRAGMA foreign_keys = ON`)
-  await satellite._setMeta('compensations', 1)
+  await satellite._setMeta('compensations', '1')
   satellite._lastSentRowId = 1
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
@@ -541,7 +549,7 @@ test('get oplogEntries from transaction', async t => {
   const relations = await satellite['_getLocalRelations']()
 
   const transaction: Transaction = {
-    lsn: "0",
+    lsn: DEFAULT_LSN,
     commit_timestamp: Long.UZERO,
     changes: [
       {
@@ -604,7 +612,7 @@ test('get transactions from opLogEntries', async t => {
 
   const expected = [
     {
-      lsn: "2",
+      lsn: lsnEncoder.encode("2"),
       commit_timestamp: Long.UZERO,
       changes: [
         {  
@@ -621,7 +629,7 @@ test('get transactions from opLogEntries', async t => {
         }]
     },
     {
-      lsn: "3",
+      lsn: lsnEncoder.encode("3"),
       commit_timestamp: Long.UZERO.add(1000),
       changes: [
         { 
@@ -643,7 +651,8 @@ test('rowid acks updates meta', async t => {
   await runMigrations()
   await satellite.start()
 
-  client.emit("ack_lsn", "1", false)
+  const lsn1 = lsnEncoder.encode("1")
+  client.emit("ack_lsn", lsn1, false)
 
   await new Promise<void>(res => {
     setTimeout(async () => {
