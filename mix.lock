@@ -1,6 +1,6 @@
 %{
-  "antidote_pb_codec": {:git, "https://github.com/vaxine-io/vaxine.git", "5f88829a513a076e9928f389995d913ea381ccb6", [sparse: "apps/antidote_pb_codec"]},
-  "antidotec_pb": {:git, "https://github.com/vaxine-io/vaxine.git", "5f88829a513a076e9928f389995d913ea381ccb6", [sparse: "apps/antidotec_pb"]},
+  "antidote_pb_codec": {:git, "https://github.com/electric-sql/vaxine.git", "0c9233fe9189c0c430b382a7f3dec6379569d8bc", [sparse: "apps/antidote_pb_codec"]},
+  "antidotec_pb": {:git, "https://github.com/electric-sql/vaxine.git", "0c9233fe9189c0c430b382a7f3dec6379569d8bc", [sparse: "apps/antidotec_pb"]},
   "backoff": {:hex, :backoff, "1.1.6", "83b72ed2108ba1ee8f7d1c22e0b4a00cfe3593a67dbc792799e8cce9f42f796b", [:rebar3], [], "hexpm", "cf0cfff8995fb20562f822e5cc47d8ccf664c5ecdc26a684cbe85c225f9d7c39"},
   "castore": {:hex, :castore, "0.1.18", "deb5b9ab02400561b6f5708f3e7660fc35ca2d51bfc6a940d2f513f89c2975fc", [:mix], [], "hexpm", "61bbaf6452b782ef80b33cdb45701afbcf0a918a45ebe7e73f1130d661e66a06"},
   "certifi": {:hex, :certifi, "2.9.0", "6f2a475689dd47f19fb74334859d460a2dc4e3252a3324bd2111b8f0429e7e21", [:rebar3], [], "hexpm", "266da46bdb06d6c6d35fde799bcb28d36d985d424ad7c08b5bb48f5b5cdd4641"},
@@ -47,6 +47,6 @@
   "ssl_verify_fun": {:hex, :ssl_verify_fun, "1.1.6", "cf344f5692c82d2cd7554f5ec8fd961548d4fd09e7d22f5b62482e5aeaebd4b0", [:make, :mix, :rebar3], [], "hexpm", "bdb0d2471f453c88ff3908e7686f86f9be327d065cc1ec16fa4540197ea04680"},
   "telemetry": {:hex, :telemetry, "0.4.3", "a06428a514bdbc63293cd9a6263aad00ddeb66f608163bdec7c8995784080818", [:rebar3], [], "hexpm", "eb72b8365ffda5bed68a620d1da88525e326cb82a75ee61354fc24b844768041"},
   "unicode_util_compat": {:hex, :unicode_util_compat, "0.7.0", "bc84380c9ab48177092f43ac89e4dfa2c6d62b40b8bd132b1059ecc7232f9a78", [:rebar3], [], "hexpm", "25eee6d67df61960cf6a794239566599b09e17e668d3700247bc498638152521"},
-  "vax": {:git, "https://github.com/vaxine-io/vaxine.git", "5f88829a513a076e9928f389995d913ea381ccb6", [sparse: "apps/vax"]},
-  "vx_client": {:git, "https://github.com/vaxine-io/vaxine.git", "5f88829a513a076e9928f389995d913ea381ccb6", [sparse: "apps/vx_client"]},
+  "vax": {:git, "https://github.com/electric-sql/vaxine.git", "0c9233fe9189c0c430b382a7f3dec6379569d8bc", [sparse: "apps/vax"]},
+  "vx_client": {:git, "https://github.com/electric-sql/vaxine.git", "0c9233fe9189c0c430b382a7f3dec6379569d8bc", [sparse: "apps/vx_client"]},
 }

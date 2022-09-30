@@ -30,14 +30,16 @@ defmodule Electric.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:vax, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vax"},
+      {:vax, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vax"},
       {:antidote_pb_codec,
-       git: "https://github.com/vaxine-io/vaxine.git",
+       git: "https://github.com/electric-sql/vaxine.git",
        sparse: "apps/antidote_pb_codec",
        override: true},
       {:antidotec_pb,
-       git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/antidotec_pb", override: true},
-      {:vx_client, git: "https://github.com/vaxine-io/vaxine.git", sparse: "apps/vx_client"},
+       git: "https://github.com/electric-sql/vaxine.git",
+       sparse: "apps/antidotec_pb",
+       override: true},
+      {:vx_client, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vx_client"},
       {:epgsql, "~> 4.2"},
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},

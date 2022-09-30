@@ -64,7 +64,7 @@ start_sysbench:
 VAXINE_BRANCH?=main
 vaxine:
 ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/vaxine-io/vaxine.git
+	git clone https://github.com/electric-sql/vaxine.git
 	cd vaxine && git checkout ${VAXINE_BRANCH} && make docker-build
 else
 	docker pull ${VAXINE_IMAGE}
@@ -72,7 +72,7 @@ endif
 
 postgres:
 ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/v0idpwn/postgres.git \
+	git clone https://github.com/electric-sql/postgres.git \
 		--branch replication-upsert --depth 1
 	cd postgres && ./configure && make docker-build
 else
