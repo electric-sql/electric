@@ -5,17 +5,21 @@ import test from 'ava'
 import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 
+import { MockSatelliteClient } from '../../src/satellite/mock'
 import { MockMigrator } from '../../src/migrators/mock'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { OPTYPES, operationsToTableChanges } from '../../src/satellite/oplog'
+import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry } from '../../src/satellite/oplog'
 import { satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
+import { SatRelation_RelationType } from '../../src/_generated/proto/satellite'
+import Long from 'long'
+import { ChangeType, Transaction } from '../../src/util/types'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -29,7 +33,8 @@ test.beforeEach(t => {
   const adapter = new DatabaseAdapter(db)
   const migrator = new MockMigrator()
   const notifier = new MockNotifier(dbName)
-  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, opts)
+  const client = new MockSatelliteClient()
+  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
 
   const tableInfo = initTableInfo()
   const timestamp = new Date().getTime()
@@ -221,7 +226,7 @@ test('take snapshot and merge local wins', async t => {
   t.deepEqual(item, {
     namespace: 'main',
     tablename: 'parent',
-    primaryKeys: {id: 1},
+    primaryKeyCols: { id: 1 },
     optype: OPTYPES.upsert,
     changes: {
       id: {value: 1, timestamp: localTimestamp},
@@ -253,7 +258,7 @@ test('take snapshot and merge incoming wins', async t => {
   t.deepEqual(item, {
     namespace: 'main',
     tablename: 'parent',
-    primaryKeys: {id: 1},
+    primaryKeyCols: { id: 1 },
     optype: OPTYPES.upsert,
     changes: {
       id: {value: 1, timestamp: incomingTs},
@@ -365,7 +370,7 @@ test('INSERT wins over DELETE and restored deleted values', async t => {
   t.deepEqual(item, {
     namespace: 'main',
     tablename: 'parent',
-    primaryKeys: {id: 1},
+    primaryKeyCols: { id: 1 },
     optype: OPTYPES.upsert,
     changes: {
       id: {value: 1, timestamp: incomingTs},
@@ -395,7 +400,7 @@ test('merge incoming with empty local', async t => {
   t.deepEqual(item, {
     namespace: 'main',
     tablename: 'parent',
-    primaryKeys: {id: 1},
+    primaryKeyCols: { id: 1 },
     optype: OPTYPES.upsert,
     changes: {
       id: {value: 1, timestamp: incomingTs}
@@ -543,6 +548,56 @@ test('compensations: using triggers with flag 1', async t => {
   await satellite._apply(incoming)
   t.true(true)
 })
+
+test('get primary keys for tables', async t => {
+  const { runMigrations, satellite } = t.context as any
+  await runMigrations()
+
+  const pks = await satellite._getPrimaryKeyForTables()
+  const expectedPks = {
+    'child': ['id'],
+    'parent': ['id']
+  }
+  t.deepEqual(pks, expectedPks)
+})
+
+test('get oplogEntries from transaction', async t => {
+  const { runMigrations, satellite } = t.context as any
+  await runMigrations()
+
+  const pks = await satellite._getPrimaryKeyForTables()
+
+  const transaction: Transaction = {
+    lsn: "0",
+    commit_timestamp: Long.ZERO,
+    changes: [
+      {
+        relation: {
+          id: 0,
+          schema: '',
+          table: 'parent',
+          columns: [],
+          tableType: SatRelation_RelationType.TABLE
+        },
+        type: ChangeType.INSERT,
+        record: { 'id': 0 }
+      }]
+  }
+
+  const expected: OplogEntry = {
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":0}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: -1,
+    timestamp: '1970-01-01T00:00:00.000Z'
+  }
+
+  const opLog = fromTransaction(transaction, pks)
+  t.deepEqual(opLog[0], expected)
+});
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
 // Document that we do not maintian the order of execution of incoming operations and therefore we defer foreign key checks to the outermost commit

@@ -1,23 +1,25 @@
 import * as Pb from '../_generated/proto/satellite'
 import * as _m0 from 'protobufjs/minimal';
 
-let msgtypemapping = new Map<string, number>(
-    [
-        ["Electric.Satellite.SatErrorResp", 0],
-        ["Electric.Satellite.SatAuthReq", 1],
-        ["Electric.Satellite.SatAuthResp", 2],
-        ["Electric.Satellite.SatGetServerInfoReq", 3],
-        ["Electric.Satellite.SatGetServerInfoResp", 4],
-        ["Electric.Satellite.SatPingReq", 5],
-        ["Electric.Satellite.SatPingResp", 6],
-        ["Electric.Satellite.SatInStartReplicationReq", 7],
-        ["Electric.Satellite.SatInStartReplicationResp", 8],
-        ["Electric.Satellite.SatInStopReplicationReq", 9],
-        ["Electric.Satellite.SatInStopReplicationResp", 10],
-        ["Electric.Satellite.SatOpLog", 11],
-        ["Electric.Satellite.SatRelation", 12],
-        ["Electric.Satellite.SatMigrationNotification", 13]
-    ]);
+let msgtypemapping: { [k: string]: [number, any] } = {
+    "Electric.Satellite.SatErrorResp": [0, Pb.SatErrorResp],
+    "Electric.Satellite.SatAuthReq": [1, Pb.SatAuthReq],
+    "Electric.Satellite.SatAuthResp": [2, Pb.SatAuthResp],
+    "Electric.Satellite.SatGetServerInfoReq": [3, Pb.SatGetServerInfoReq],
+    "Electric.Satellite.SatGetServerInfoResp": [4, Pb.SatGetServerInfoResp],
+    "Electric.Satellite.SatPingReq": [5, Pb.SatPingReq],
+    "Electric.Satellite.SatPingResp": [6, Pb.SatPingResp],
+    "Electric.Satellite.SatInStartReplicationReq": [7, Pb.SatInStartReplicationReq],
+    "Electric.Satellite.SatInStartReplicationResp": [8, Pb.SatInStartReplicationResp],
+    "Electric.Satellite.SatInStopReplicationReq": [9, Pb.SatInStopReplicationReq],
+    "Electric.Satellite.SatInStopReplicationResp": [10, Pb.SatInStopReplicationResp],
+    "Electric.Satellite.SatOpLog": [11, Pb.SatOpLog],
+    "Electric.Satellite.SatRelation": [12, Pb.SatRelation],
+    "Electric.Satellite.SatMigrationNotification": [13, Pb.SatMigrationNotification]
+};
+
+let codemapping = Object.fromEntries(
+    Object.entries(msgtypemapping).map(e => [e[1][0], e[0]]))
 
 export type SatPbMsg =
     | Pb.SatErrorResp
@@ -42,13 +44,24 @@ export type SatPbMsgObj = {
     fromPartial<I extends Pb.Exact<Pb.DeepPartial<SatPbMsg>, I>>(object: I): SatPbMsg;
 };
 
-// Returns
-export function getMsgType(msg: SatPbMsg) {
-    return msgtypemapping.get(msg.$type) ?? 0;
+export function getMsgType(msg: SatPbMsg): number {
+    const mapping = msgtypemapping[msg.$type];
+    if (mapping) {
+        return mapping[0]
+    }
+    return 0;
 }
 
-export function getTypeFromString(string_type: string) {
-    return msgtypemapping.get(string_type);
+export function getTypeFromCode(code: number): string {
+    return codemapping[code] ?? "";
+}
+
+export function getTypeFromString(string_type: string): number {
+    return msgtypemapping[string_type]![0] ?? "";
+}
+
+export function getObjFromString(string_type: string) {
+    return msgtypemapping[string_type]?.[1];
 }
 
 export function getSizeBuf(msg_type: SatPbMsg) {

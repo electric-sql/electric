@@ -31,10 +31,10 @@ CREATE TABLE IF NOT EXISTS main._electric_meta (
 
 INSERT INTO _electric_meta(key,value) VALUES ('currRowId', '-1'), ('ackRowId','-1');
 
-DROP TABLE IF EXISTS trigger_settings;
-CREATE TABLE trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
+DROP TABLE IF EXISTS _trigger_settings;
+CREATE TABLE _trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
 
-INSERT INTO trigger_settings(tablename,flag) VALUES ('main.items', 1);
+INSERT INTO _trigger_settings(tablename,flag) VALUES ('main.items', 1);
 
 /*
   Can't change the primary key with UPDATE.
@@ -56,7 +56,7 @@ END;
 DROP TRIGGER IF EXISTS insert_main_items_into_oplog;
 CREATE TRIGGER insert_main_items_into_oplog
    AFTER INSERT ON main.items
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.items')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'items','INSERT', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), NULL, NULL);
@@ -65,7 +65,7 @@ END;
 DROP TRIGGER IF EXISTS update_main_items_into_oplog;
 CREATE TRIGGER update_main_items_into_oplog
    AFTER UPDATE ON main.items
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.items')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'items','UPDATE', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);
@@ -74,7 +74,7 @@ END;
 DROP TRIGGER IF EXISTS delete_main_items_into_oplog;
 CREATE TRIGGER delete_main_items_into_oplog
    AFTER DELETE ON main.items
-   WHEN 1 == (SELECT flag from trigger_settings WHERE tablename == 'main.items')
+   WHEN 1 == (SELECT flag from _trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   VALUES ('main', 'items','DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);

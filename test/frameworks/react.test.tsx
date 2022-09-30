@@ -43,7 +43,7 @@ test('useElectricQuery returns query results', async t => {
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
 
-  await waitFor(() => assert(result.current.updatedAt !== undefined), {timeout: 105})
+  await waitFor(() => assert(result.current.updatedAt !== undefined), { timeout: 300 })
   t.deepEqual(result.current.results, await adapter.query(query))
 })
 
@@ -69,7 +69,7 @@ test('useElectricQuery returns error when query errors', async t => {
 
   const { result } = renderHook(() => useElectricQuery(query, params), { wrapper })
 
-  await waitFor(() => assert(result.current.updatedAt !== undefined), {timeout: 105})
+  await waitFor(() => assert(result.current.updatedAt !== undefined), { timeout: 200 })
   t.deepEqual(result.current.error, new Error('Mock query error'))
 })
 
@@ -90,7 +90,7 @@ test('useElectricQuery re-runs query when data changes', async t => {
   }
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
-  await waitFor(() => assert(result.current.results !== undefined), {timeout: 105})
+  await waitFor(() => assert(result.current.results !== undefined), { timeout: 300 })
 
   const { results, updatedAt } = result.current
 
@@ -101,7 +101,7 @@ test('useElectricQuery re-runs query when data changes', async t => {
     notifier.actuallyChanged('test.db', changes)
   })
 
-  await waitFor(() => assert(result.current.updatedAt > updatedAt), {timeout: 105})
+  await waitFor(() => assert(result.current.updatedAt > updatedAt), { timeout: 300 })
   t.not(results, result.current.results)
 })
 
@@ -123,7 +123,7 @@ test('useElectricQuery re-runs query when *aliased* data changes', async t => {
   }
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
-  await waitFor(() => assert(result.current.results !== undefined), {timeout: 105})
+  await waitFor(() => assert(result.current.results !== undefined), { timeout: 300 })
 
   const { results, updatedAt } = result.current
 
@@ -134,6 +134,6 @@ test('useElectricQuery re-runs query when *aliased* data changes', async t => {
     notifier.actuallyChanged('baz.db', changes)
   })
 
-  await waitFor(() => assert(result.current.updatedAt > updatedAt), {timeout: 105})
+  await waitFor(() => assert(result.current.updatedAt > updatedAt), { timeout: 300 })
   t.not(results, result.current.results)
 })

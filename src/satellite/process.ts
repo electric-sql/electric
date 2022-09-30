@@ -4,13 +4,14 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
+import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, SqlValue } from '../util/types'
+import { DbName, SqlValue, Transaction } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
-import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges } from './oplog'
+import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction } from './oplog'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -21,6 +22,8 @@ export class SatelliteProcess implements Satellite {
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
+  client: Client
+
   opts: SatelliteOpts
 
   _authState?: AuthState
@@ -34,11 +37,13 @@ export class SatelliteProcess implements Satellite {
   _lastAckdRowId: number
   _lastSentRowId: number
 
-  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, opts: SatelliteOpts) {
+  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
+    this.client = client
+
     this.opts = opts
 
     // The last rowid that was *acknowledged by* the server.
@@ -61,10 +66,10 @@ export class SatelliteProcess implements Satellite {
   // - [x] poll the ops table
   // - [x] subscribe to data changes
   // - [ ] handle auth state
-  // - [ ] establish replication connection
+  // - [x] establish replication connection
   // - [ ] ...
   //
-  async start(authState?: AuthState): Promise<void>{
+  async start(authState?: AuthState): Promise<void | Error> {
     const isVerified = await this._verifyTableStructure()
     if (!isVerified) {
       throw new Error('Invalid database schema. You need to run valid Electric SQL migrations.')
@@ -90,6 +95,19 @@ export class SatelliteProcess implements Satellite {
 
     // Starting now!
     setTimeout(this._throttledSnapshot, 0)
+
+    // Need to reload primary keys after schema migration
+    // For now, we do it only at initialization
+    // Make 'schemaInfo' type to use around
+    const pkForTable = await this._getPrimaryKeyForTables()
+    this.client.subscribeToTransactions(async (transaction: Transaction) => {
+      this._applyTransaction(transaction, pkForTable)
+    })
+
+    return this.client.connect()
+      .then(() => this.client.authenticate())
+      // need to read LSN from meta
+      .then(() => this.client.startReplication("0")) 
   }
 
   // Unsubscribe from data changes and stop polling
@@ -103,6 +121,8 @@ export class SatelliteProcess implements Satellite {
       this.notifier.unsubscribeFromPotentialDataChanges(this._potentialDataChangeSubscription)
       this._potentialDataChangeSubscription = undefined
     }
+
+    await this.client.close();
   }
 
   async _verifyTableStructure(): Promise<boolean> {
@@ -162,11 +182,11 @@ export class SatelliteProcess implements Satellite {
     }
 
     await Promise.all([
-      this._notifySnapshotChanges(results),
+      this._notifyChanges(results),
       this._replicateSnapshotChanges(results)
     ])
   }
-  async _notifySnapshotChanges(results: OplogEntry[]): Promise<void> {
+  async _notifyChanges(results: OplogEntry[]): Promise<void> {
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
@@ -201,7 +221,7 @@ export class SatelliteProcess implements Satellite {
     // XXX integrate replication here ...
   }
 
-  // Apply a set of incoming transactions agains pending local operations,
+  // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
   //
@@ -215,10 +235,10 @@ export class SatelliteProcess implements Satellite {
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
-        const { changes, primaryKeys, optype } = entryChanges
+        const { changes, primaryKeyCols, optype } = entryChanges
 
         if (optype === OPTYPES.delete) {
-          const clauses = Object.entries(primaryKeys).map(([key, value]) => {
+          const clauses = Object.entries(primaryKeyCols).map(([key, value]) => {
             return typeof value === 'number'
               ? `${key} = ${value}`
               : `${key} = '${value}'`
@@ -312,6 +332,13 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
+  async _applyTransaction(transaction: Transaction, pkForTable: { [k: string]: string[] }) {
+    const opLogEntries = fromTransaction(transaction, pkForTable)
+
+    await this._apply(opLogEntries)
+    this._notifyChanges(opLogEntries)
+  }
+
   async _disableTriggers(tablenames: string[]): Promise<void> {
     return this._updateTriggerSettings(tablenames, 0)
   }
@@ -319,8 +346,9 @@ export class SatelliteProcess implements Satellite {
     return this._updateTriggerSettings(tablenames, 1)
   }
   async _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Promise<void> {
+    const triggers = this.opts.triggersTable.toString()
     const stmts = tablenames.map((tablenameStr) => `
-      UPDATE trigger_settings
+      UPDATE ${triggers}
          SET flag = ${flag}
        WHERE tablename = '${tablenameStr}'
     `)
@@ -363,5 +391,38 @@ export class SatelliteProcess implements Satellite {
     `
 
     await this.adapter.run(sql)
+  }
+
+  // Fetch primary keys from local store and use them to identify incoming ops.
+  // TODO: Improve this code once with Migrator and consider simplifying oplog.
+  async _getPrimaryKeyForTables(): Promise<{ [k: string]: string[] }> {
+    const notIn = [
+      `'${this.opts.metaTable.toString()}'`,
+      `'${this.opts.oplogTable.tablename.toString()}'`,
+      `'${this.opts.triggersTable.tablename.toString()}'`
+    ]
+
+    const tables = `SELECT name FROM pragma_table_list() 
+                      WHERE name NOT IN (${notIn.join(",")})
+                    `
+    const columnsFor = (table: string) =>
+      `SELECT name FROM pragma_table_info('${table}') WHERE pk = 1`
+    const tableNames = await this.adapter.query(tables)
+
+    const pks = []
+    for (const table of tableNames) {
+      const tableName = table.name as any
+      const sql = columnsFor(tableName)
+      const columnsForTable = await this.adapter.query(sql)
+      if (columnsForTable.length == 0) {
+        continue
+      }
+      for (const columns of columnsForTable) {
+        pks.push([tableName, Object.values(columns).map(c => (c as any).toString())])
+      }
+    }
+
+    const toMap = Object.fromEntries(pks)
+    return Promise.resolve(toMap)
   }
 }
