@@ -1,12 +1,12 @@
 import * as http from 'http';
 import { WebSocketServer } from 'ws';
 import { getSizeBuf, getTypeFromString, SatPbMsg } from '../../src/util/proto';
-import { SatAuthResp, SatInStartReplicationResp, SatInStopReplicationResp, SatOpLog, SatPingReq, SatRelation } from '../../src/_generated/proto/satellite';
+import { SatAuthResp, SatInStartReplicationReq, SatInStartReplicationResp, SatInStopReplicationResp, SatOpLog, SatPingReq, SatPingResp, SatRelation } from '../../src/_generated/proto/satellite';
 
 const PORT = 30002;
 const IP = '127.0.0.1';
 
-type fakeResponse = SatPbMsg | (() => void);
+type fakeResponse = SatPbMsg | ((data?: Buffer) => void);
 
 export class SatelliteWSServerStub {
   private httpServer: http.Server;
@@ -35,13 +35,17 @@ export class SatelliteWSServerStub {
         } else {
           for (const msgOrFun of next) {
             if (typeof msgOrFun == 'function') {
-              msgOrFun();
+              msgOrFun(data);
               return;
             }
 
             const msg = msgOrFun;
 
             const msgType = getTypeFromString(msg.$type);
+
+            if (msgType == getTypeFromString(SatInStartReplicationResp.$type)) {
+              // do nothing
+            }
 
             if (msgType == getTypeFromString(SatAuthResp.$type)) {
               socket.send(
@@ -57,6 +61,13 @@ export class SatelliteWSServerStub {
                 Buffer.concat([
                   getSizeBuf(msg),
                   SatInStartReplicationResp.encode(msg as SatInStartReplicationResp).finish(),
+                ]),
+              );
+              const req = SatInStartReplicationReq.fromPartial({})
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(req),
+                  SatInStartReplicationReq.encode(req as SatInStartReplicationReq).finish(),
                 ]),
               );
             }
@@ -86,6 +97,10 @@ export class SatelliteWSServerStub {
             if (msgType == getTypeFromString(SatPingReq.$type)) {
               socket.send(Buffer.concat([getSizeBuf(msg), SatPingReq.encode(msg as SatPingReq).finish()]));
             }
+
+            if (msgType == getTypeFromString(SatPingResp.$type)) {
+              socket.send(Buffer.concat([getSizeBuf(msg), SatPingResp.encode(msg as SatPingResp).finish()]));
+            }
           }
         }
       });
@@ -105,7 +120,7 @@ export class SatelliteWSServerStub {
     this.httpServer.close();
   }
 
-  nextResponses(messages: (SatPbMsg | (() => void))[]) {
+  nextResponses(messages: (SatPbMsg | ((data?: Buffer) => void))[]) {
     this.queue.push(messages);
   }
 }

@@ -1,4 +1,6 @@
+import { DatabaseAdapter } from '../../src/electric/adapter'
 import { OPTYPES } from '../../src/satellite/oplog'
+import { Row } from '../../src/util/types'
 
 interface TableInfo {
   [key: string]: TableSchema

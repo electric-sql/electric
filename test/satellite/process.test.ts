@@ -12,14 +12,22 @@ import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry } from '../../src/satellite/oplog'
+import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
-import { SatRelation_RelationType } from '../../src/_generated/proto/satellite'
 import Long from 'long'
 import { ChangeType, Transaction } from '../../src/util/types'
+import { relations } from './common'
+import { Satellite } from '../../src/satellite'
+
+type ContextType = {
+  adapter: DatabaseAdapter,
+  runMigrations: () => Promise<void>,
+  satellite: Satellite,
+  client: MockSatelliteClient
+}
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -50,6 +58,7 @@ test.beforeEach(t => {
     adapter,
     migrator,
     notifier,
+    client,
     runMigrations,
     satellite,
     tableInfo,
@@ -93,7 +102,7 @@ test('load metadata', async t => {
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
-  t.deepEqual(meta, { ackRowId: '-1', currRowId: '-1', compensations: '0' })
+  t.deepEqual(meta, { lsn: '0', ackRowId: '0', lastSentRowId: '0', compensations: '0' })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -293,27 +302,6 @@ test('apply does not add anything to oplog', async t => {
   t.is(localEntries.length, 1)
 })
 
-test('apply incoming DELETE', async t => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
-  await runMigrations()
-
-  await adapter.run(`INSERT INTO parent(id) VALUES (1)`)
-  let rows = await adapter.query('SELECT * from parent WHERE id=1')
-  t.is(rows.length, 1)
-
-  const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.delete, incomingTs, {
-    id: 1,
-    value: 'incoming',
-    otherValue: 1,
-  })
-
-  await satellite._apply([incomingEntry])
-
-  rows = await adapter.query('SELECT * from parent WHERE id=1')
-  t.is(rows.length, 0)
-})
-
 test('apply incoming with no local', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
@@ -427,7 +415,7 @@ test('advance oplog cursor', async t => {
   t.is(rows[0].num_rows, 2)
 
   // Ack.
-  await satellite._ack(2)
+  await satellite._ack(2, true)
 
   // The oplog is clean.
   rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename}`)
@@ -512,7 +500,7 @@ test('compensations: using triggers with flag 0', async t => {
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
   await satellite._performSnapshot()
-  await satellite._ack(1)
+  await satellite._ack(1, true)
 
   await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
   await satellite._performSnapshot()
@@ -536,7 +524,7 @@ test('compensations: using triggers with flag 1', async t => {
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
   await satellite._performSnapshot()
-  await satellite._ack(1)
+  await satellite._ack(1, true)
 
   await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
   await satellite._performSnapshot()
@@ -549,36 +537,18 @@ test('compensations: using triggers with flag 1', async t => {
   t.true(true)
 })
 
-test('get primary keys for tables', async t => {
-  const { runMigrations, satellite } = t.context as any
-  await runMigrations()
-
-  const pks = await satellite._getPrimaryKeyForTables()
-  const expectedPks = {
-    'child': ['id'],
-    'parent': ['id']
-  }
-  t.deepEqual(pks, expectedPks)
-})
-
 test('get oplogEntries from transaction', async t => {
   const { runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  const pks = await satellite._getPrimaryKeyForTables()
+  const relations = await satellite['_getLocalRelations']()
 
   const transaction: Transaction = {
     lsn: "0",
-    commit_timestamp: Long.ZERO,
+    commit_timestamp: Long.UZERO,
     changes: [
       {
-        relation: {
-          id: 0,
-          schema: '',
-          table: 'parent',
-          columns: [],
-          tableType: SatRelation_RelationType.TABLE
-        },
+        relation: relations.parent,
         type: ChangeType.INSERT,
         record: { 'id': 0 }
       }]
@@ -595,9 +565,97 @@ test('get oplogEntries from transaction', async t => {
     timestamp: '1970-01-01T00:00:00.000Z'
   }
 
-  const opLog = fromTransaction(transaction, pks)
+  const opLog = fromTransaction(transaction, relations)
   t.deepEqual(opLog[0], expected)
 });
+
+test('get transactions from opLogEntries', async t => {
+  const { runMigrations } = t.context as any
+  await runMigrations()
+
+  const opLogEntries: OplogEntry[] = [{
+    namespace: 'public',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":0}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: 1,
+    timestamp: '1970-01-01T00:00:00.000Z'
+  },
+  {
+    namespace: 'public',
+    tablename: 'parent',
+    optype: 'UPDATE',
+    newRow: '{"id":1}',
+    oldRow: '{"id":1}',
+    primaryKey: '{"id":1}',
+    rowid: 2,
+    timestamp: '1970-01-01T00:00:00.000Z'
+  },
+  {
+    namespace: 'public',
+    tablename: 'parent',
+    optype: 'INSERT',
+    newRow: '{"id":2}',
+    oldRow: undefined,
+    primaryKey: '{"id":0}',
+    rowid: 3,
+    timestamp: '1970-01-01T00:00:01.000Z'
+  }
+  ]
+
+  const expected = [
+    {
+      lsn: "2",
+      commit_timestamp: Long.UZERO,
+      changes: [
+        {  
+          relation: relations.parent,        
+          type: ChangeType.INSERT,
+          record: { 'id': 0 },
+          oldRecord: undefined
+        },
+        {        
+          relation: relations.parent,  
+          type: ChangeType.INSERT,
+          record: { 'id': 1 },
+          oldRecord: { 'id': 1 },
+        }]
+    },
+    {
+      lsn: "3",
+      commit_timestamp: Long.UZERO.add(1000),
+      changes: [
+        { 
+          relation: relations.parent,
+          type: ChangeType.INSERT,
+          record: { 'id': 2 },
+          oldRecord: undefined
+        },
+      ]
+    }
+  ]
+
+  const opLog = toTransactions(opLogEntries, relations)
+  t.deepEqual(opLog, expected)
+});
+
+test('rowid acks updates meta', async t => {
+  const { runMigrations, satellite, client } = t.context as ContextType
+  await runMigrations()
+  await satellite.start()
+
+  client.emit("ack_lsn", "1", false)
+
+  await new Promise<void>(res => {
+    setTimeout(async () => {
+      const lsn = await satellite['_getMeta']('lastSentRowId')
+      t.is(lsn, "1")
+      res()
+    }, 100)
+  })
+})
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
 // Document that we do not maintian the order of execution of incoming operations and therefore we defer foreign key checks to the outermost commit

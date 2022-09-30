@@ -1,26 +1,28 @@
+import throttle from 'lodash.throttle'
+
 import {
   SatAuthReq,
   SatAuthResp,
   SatErrorResp,
   SatErrorResp_ErrorCode,
   SatInStartReplicationReq,
+  SatInStartReplicationReq_Option,
   SatInStartReplicationResp,
   SatInStopReplicationReq,
   SatInStopReplicationResp,
   SatOpLog,
   SatPingResp,
   SatRelation,
+  SatRelationColumn,
+  SatTransOp,
 } from '../_generated/proto/satellite';
 import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util/proto';
 import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import Long from 'long';
 import { AuthResponse, ChangeType, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
-import { Client } from '.';
+import { AckCallback, Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
-
-export type AckCallback = () => void;
 
 interface PrivateSatelliteOptions extends SatelliteClientOpts {
   timeout: number;
@@ -36,6 +38,9 @@ export class SatelliteClient extends EventEmitter implements Client {
   private outbound: Replication;
 
   private socketHandler?: (any: any) => void;
+  private throttledPushTransaction?: () => void;
+
+  private ackListeners: AckCallback[] = []
 
   private handlerForMessageType: { [k: string]: IncomingHandler } = {
     "Electric.Satellite.SatAuthResp": { handle: (resp) => this.handleAuthResp(resp), isRpc: true },
@@ -44,6 +49,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     "Electric.Satellite.SatInStopReplicationReq": { handle: () => this.handleStopReq(), isRpc: false },
     "Electric.Satellite.SatInStopReplicationResp": { handle: () => this.handleStopResp(), isRpc: true },
     "Electric.Satellite.SatPingReq": { handle: () => this.handlePingReq(), isRpc: true },
+    "Electric.Satellite.SatPingResp": { handle: (req) => this.handlePingResp(req), isRpc: false },
     "Electric.Satellite.SatRelation": { handle: (req) => this.handleRelation(req), isRpc: false },
     "Electric.Satellite.SatOpLog": { handle: (req) => this.handleTransaction(req), isRpc: false },
     "Electric.Satellite.SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
@@ -57,33 +63,28 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication();
     this.outbound = this.resetReplication();
-  }  
+  }    
 
-  private resetReplication(): Replication {
+  private resetReplication(current?: Replication): Replication {
     return {
       authenticated: false,
       isReplicating: ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: "0",
-      transaction: {
-        commit_timestamp: Long.ZERO,
-        lsn: "0",
-        changes: []
-      }
+      ack_lsn: current?.ack_lsn ? current.ack_lsn : "0",
+      sent_lsn: current?.sent_lsn ? current.sent_lsn : "0",
+      transactions: []
     }
   }
 
   // TODO: handle connection errors
   connect(): Promise<void | SatelliteError> {
     return new Promise((resolve, reject) => {
-      // TODO: move the registration to the socket interface so 
-      // that different impl can use different events
-      this.socket.once('open', () => {
+      this.socket.onceConnect(() => {
         this.socketHandler = message => this.handleIncoming(message);
-        this.socket.on('message', this.socketHandler);
+        this.socket.onMessage(this.socketHandler);
         resolve();
-      });
-      this.socket.once('error', error => reject(error));
+      })
+      this.socket.onceError(error => reject(error))
 
       const { address, port } = this.opts;
       this.socket.open({ url: `ws://${address}:${port}/ws` });
@@ -92,10 +93,9 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   close(): Promise<void> {
     return new Promise(resolve => {
-      if (this.socketHandler) {
-        this.removeListener('message', this.socketHandler);
-      }
-      this.socket.close();
+      this.socketHandler = undefined;
+      this.removeAllListeners();
+      this.socket.closeAndRemoveListeners();
       resolve();
     });
   }
@@ -105,8 +105,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       return Promise.reject(new SatelliteError(
         SatelliteErrorCode.REPLICATION_ALREADY_STARTED, `replication already started`));
     }
-    this.inbound = this.resetReplication();
-    this.outbound = this.resetReplication();
+    this.inbound = this.resetReplication(this.inbound);
 
     this.inbound.isReplicating = ReplicationStatus.STARTING;
     this.inbound.ack_lsn = lsn;
@@ -134,11 +133,138 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>) {
     this.on('transaction', async (txn, ackCb) => {
-      await callback(txn) // calls the callback provided by the subscriber
-      // acknowledge the transaction has been processed
-      // we might want to do this separately or document the behavior
+      // move callback execution outside the message handling path
+      await callback(txn)
       ackCb()
     });
+  }
+
+  enqueueTransaction(transaction: Transaction): void | SatelliteError {
+    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+      throw new SatelliteError(SatelliteErrorCode.REPLICATION_NOT_STARTED,
+        "enqueuing a transaction while outbound replication has not started")
+    }
+
+    this.outbound.transactions.push(transaction)
+    if (this.throttledPushTransaction) {
+      this.throttledPushTransaction()
+    }
+  }
+
+  private pushTransactions() {
+    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+      throw new SatelliteError(SatelliteErrorCode.REPLICATION_NOT_STARTED,
+        "sending a transaction while outbound replication has not started")
+    }
+
+    while (this.outbound.transactions.length > 0) {
+      const next = this.outbound.transactions.splice(0)[0]
+
+      // TODO: divide into SatOpLog array with max size
+      this.sendMissingRelations(next, this.outbound)
+      const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
+
+      const buffer = Buffer.concat([
+        getSizeBuf(satOpLog),
+        SatOpLog.encode(satOpLog, _m0.Writer.create()).finish()]);
+      this.socket.write(buffer)
+      this.outbound.sent_lsn = next.lsn
+      this.emit('ack_lsn', next.lsn, false)
+    }
+  }
+
+  subscribeToAck(callback: AckCallback): void {
+    this.ackListeners.push(callback)
+    this.on('ack_lsn', callback)
+  }
+
+  unsubscribeToAck(callback: AckCallback) {
+    const idx = this.ackListeners.findIndex((cb) => cb == callback)
+    if (idx >= 0) {
+      this.ackListeners.splice(idx)
+      this.removeListener('ack_lsn', callback)
+    }
+  }
+
+  private sendMissingRelations(transaction: Transaction, replication: Replication): void {
+    transaction.changes.forEach(change => {
+      const relation = change.relation
+      if (!this.outbound.relations.has(relation.id)) {
+        replication.relations.set(relation.id, relation)
+
+        const satRelation = SatRelation.fromPartial({
+          relationId: relation.id,
+          schemaName: relation.schema, // TODO
+          tableName: relation.table,
+          tableType: relation.tableType,
+          columns: relation.columns.map(c =>
+            SatRelationColumn.fromPartial({ name: c.name, type: c.type }))
+        })
+
+        const buffer = Buffer.concat([
+          getSizeBuf(satRelation),
+          SatRelation.encode(satRelation, _m0.Writer.create()).finish()]);
+        this.socket.write(buffer)
+      }
+    })
+  }
+
+  private transactionToSatOpLog(transaction: Transaction): SatOpLog {
+    const ops: SatTransOp[] = [SatTransOp.fromPartial({
+      begin: {
+        commitTimestamp: transaction.commit_timestamp.toString(),
+        lsn: transaction.lsn
+      }
+    })]
+
+    transaction.changes.forEach(tx => {
+      let txOp, oldRecord, record
+      const relation = this.outbound.relations.get(tx.relation.id)
+      if (tx.oldRecord) {
+        oldRecord = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
+          if (tx.oldRecord![c.name] != undefined) {
+            acc.push(this.serializeColumnData(tx.oldRecord![c.name], c))
+          }
+          return acc
+        }, [])
+      }
+      if (tx.record) {
+        record = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
+          if (tx.record![c.name] != undefined) {
+            acc.push(this.serializeColumnData(tx.record![c.name], c))
+          }
+          return acc
+        }, [])
+      }
+      switch (tx.type) {
+        case ChangeType.DELETE:
+          txOp = SatTransOp.fromPartial({
+            delete: {
+              oldRowData: oldRecord,
+            }
+          })
+          break
+        case ChangeType.INSERT:
+          txOp = SatTransOp.fromPartial({
+            insert: {
+              rowData: record,
+            }
+          })
+          break
+        case ChangeType.UPDATE:
+          txOp = SatTransOp.fromPartial({
+            update: {
+              rowData: record,
+              oldRowData: oldRecord
+            }
+          })
+          break
+      }
+      ops.push(txOp)
+    })
+
+    ops.push(SatTransOp.fromPartial({ commit: {} }))
+    return SatOpLog.fromPartial({ ops })
   }
 
   private handleAuthResp(message: SatAuthResp | SatErrorResp): AuthResponse {
@@ -164,8 +290,17 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private handleStartReq(message: SatInStartReplicationReq) {
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
+      this.outbound = this.resetReplication(this.outbound);
       this.outbound.isReplicating = ReplicationStatus.ACTIVE;
-      this.outbound.ack_lsn = message.lsn;
+      if (message.options.find(o =>
+        o == SatInStartReplicationReq_Option.LAST_ACKNOWLEDGED)) {
+        this.outbound.ack_lsn = this.outbound.sent_lsn;
+      } else {
+        this.outbound.ack_lsn = message.lsn;
+      }
+
+      const throttleOpts = { leading: true, trailing: true }
+      this.throttledPushTransaction = throttle(() => this.pushTransactions(), this.opts.pushPeriod, throttleOpts)
 
       const response = SatInStartReplicationResp.fromPartial({});
       this.sendMessage(response);
@@ -183,6 +318,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleStopReq() {
     if (this.outbound.isReplicating == ReplicationStatus.ACTIVE) {
       this.outbound.isReplicating = ReplicationStatus.STOPPED;
+
+      if (this.throttledPushTransaction) {
+        this.throttledPushTransaction = undefined
+      }
 
       const response = SatInStopReplicationResp.fromPartial({});
       this.sendMessage(response);
@@ -237,6 +376,21 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.sendMessage(pong);
   }
 
+  // TODO: emit ping request to clear oplog.
+  private handlePingResp(message: SatPingResp) {
+    if (message.lsn) {
+      this.outbound.ack_lsn = message.lsn
+      this.emit('ack_lsn', message.lsn, true)
+    }
+  }
+
+  // It might be unsafe not to clear the log before 
+  // applying incoming operations that are ordered
+  // after the last acked position.
+  // TODO: come back here
+
+
+
   private handleError(error: SatErrorResp) {
     this.emit('error',
       new Error(`server replied with error code: ${error.errorType}`))
@@ -255,7 +409,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  // TODO: handle multi-message transactions
   private processOpLogMessage(opLogMessage: SatOpLog, replication: Replication) {
     opLogMessage.ops.map((op) => {
       if (op.begin) { 
@@ -264,18 +417,21 @@ export class SatelliteClient extends EventEmitter implements Client {
           lsn: op.begin.lsn,
           changes: []
         }
-        replication.transaction = transaction;
+        replication.transactions.push(transaction);
       }
 
+      const lastTxnIdx = replication.transactions.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes } = replication.transaction;
+        const { commit_timestamp, lsn, changes } = replication.transactions[lastTxnIdx];
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
           changes
         }
+        // in the future, emitting this event can be decoupled
         this.emit('transaction', transaction,
           () => this.inbound.ack_lsn = transaction.lsn as any);
+        replication.transactions.splice(lastTxnIdx)
       }
 
       if (op.insert) {
@@ -292,7 +448,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           record: Object.fromEntries(rel.columns.map((c, i) =>
             [c.name, this.deserializeColumnData(op.insert?.rowData[i] as any, c)]))
         };
-        replication.transaction.changes.push(change);
+        replication.transactions[lastTxnIdx].changes.push(change);
       }
 
       if (op.update) {
@@ -311,7 +467,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           oldRecord: Object.fromEntries(rel.columns.map((c, i) =>
             [c.name, this.deserializeColumnData(op.update?.oldRowData[i] as any, c)]))
         });
-        replication.transaction.changes.push(change);
+        replication.transactions[lastTxnIdx].changes.push(change);
       }
 
       if (op.delete) {
@@ -328,18 +484,30 @@ export class SatelliteClient extends EventEmitter implements Client {
           oldRecord: Object.fromEntries(rel.columns.map((c, i) =>
             [c.name, this.deserializeColumnData(op.delete?.oldRowData[i] as any, c)]))
         });
-        replication.transaction.changes.push(change);
+        replication.transactions[lastTxnIdx].changes.push(change);
       }
     });    
   }
 
-  // TODO: add type missing types
-  private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string {
-    if (columnInfo.type == 'varchar') {
+  private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
+    const columnType = columnInfo.type.toUpperCase();
+    if (columnType == 'TEXT' || columnType == 'UUID' || columnType == 'VARCHAR') {
       return new String(column).toString();
     }
-    if (columnInfo.type == 'uuid') {
-      return new String(column).toString();
+    if (columnType == 'INTEGER') {
+      return new Number(column).valueOf();
+    }
+    throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
+  }
+
+  private serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
+    const textEncoder = new TextEncoder();
+    const columnType = columnInfo.type.toUpperCase();
+    if (columnType == 'TEXT' || columnType == 'UUID') {
+      return textEncoder.encode(column as string)
+    }
+    if (columnType == 'INTEGER') {
+      return textEncoder.encode(column.toString());
     }
     throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
   }
@@ -386,5 +554,10 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       this.sendMessage(request);
     }).finally(() => clearTimeout(waitingFor));
+  }
+
+  setOutboundLogPositions(sent: string, ack: string): void {
+    this.outbound.ack_lsn = ack
+    this.outbound.sent_lsn = sent
   }
 }

@@ -1,5 +1,6 @@
+import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
-import { Row, SqlValue, Transaction } from '../util/types'
+import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -125,11 +126,13 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
   }, initialValue)
 }
 
-export const fromTransaction = (transaction: Transaction, pksForTable: { [k: string]: string[] }): OplogEntry[] => {
+export const fromTransaction = (transaction: Transaction, relations: RelationsCache): OplogEntry[] => {
   return transaction.changes.map(t => {
     const columnValues = t.record ? t.record : t.oldRecord
     const pk = JSON.stringify(Object.fromEntries(
-      pksForTable[t.relation.table].map(col => [col, columnValues![col]])
+      relations[`${t.relation.table}`].columns
+        .filter(c => c.primaryKey)
+        .map(col => [col.name, columnValues![col.name]])
     ))
 
     return ({
@@ -143,4 +146,58 @@ export const fromTransaction = (transaction: Transaction, pksForTable: { [k: str
       timestamp: new Date(transaction.commit_timestamp.toNumber()).toISOString() // TODO: check precision
     })
   })
+}
+
+export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsCache): Transaction[] => {
+  if (opLogEntries.length == 0) {
+    return []
+  }
+
+  const to_commit_timestamp = (timestamp: string): Long =>
+    Long.UZERO.add(new Date(timestamp).getTime())
+
+  const opLogEntryToChange = (entry: OplogEntry): Change => {
+    let record, oldRecord
+    if (entry.newRow != null) {
+      record = JSON.parse(entry.newRow)
+    }
+
+    if (entry.oldRow != null) {
+      oldRecord = JSON.parse(entry.oldRow)
+    }
+
+    // is it okay to lose UPDATE at this point? Does Vaxine care about it?
+    return {
+      type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
+      relation: relations[`${entry.tablename}`],
+      record,
+      oldRecord
+    }
+  }
+
+  const init: Transaction = {
+    commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
+    lsn: opLogEntries[0].rowid.toString(),
+    changes: [],
+  }
+
+  return opLogEntries.reduce((acc, txn) => {
+    let currTxn = acc[acc.length - 1]
+
+    const nextTs = to_commit_timestamp(txn.timestamp)
+    if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
+      const nextTxn = {
+        commit_timestamp: to_commit_timestamp(txn.timestamp),
+        lsn: txn.rowid.toString(),
+        changes: [],
+      }
+      acc.push(nextTxn)
+      currTxn = nextTxn
+    }
+
+    const change = opLogEntryToChange(txn)
+    currTxn.changes.push(change)
+    currTxn.lsn = txn.rowid.toString() // LSN is the largest rowId?
+    return acc
+  }, [init])
 }

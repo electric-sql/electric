@@ -4,14 +4,15 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
-import { Client } from './index'
+import { AckType, Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, SqlValue, Transaction } from '../util/types'
+import { DbName, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
-import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction } from './oplog'
+import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
+import { SatRelation_RelationType } from '../_generated/proto/satellite'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -36,6 +37,9 @@ export class SatelliteProcess implements Satellite {
 
   _lastAckdRowId: number
   _lastSentRowId: number
+  _lsn: string
+
+  relations: RelationsCache
 
   constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
     this.dbName = dbName
@@ -46,10 +50,9 @@ export class SatelliteProcess implements Satellite {
 
     this.opts = opts
 
-    // The last rowid that was *acknowledged by* the server.
-    this._lastAckdRowId = opts.lastAckdRowId
-    // The last rowid that was *sent to* the server.
-    this._lastSentRowId = opts.lastSentRowId
+    this._lastAckdRowId = 0
+    this._lastSentRowId = 0
+    this._lsn = "0"
 
     // Create a throttled function that performs a snapshot at most every
     // `minSnapshotWindow` ms. This function runs immediately when you
@@ -59,6 +62,8 @@ export class SatelliteProcess implements Satellite {
     const snapshot = this._performSnapshot.bind(this)
     const throttleOpts = {leading: true, trailing: true}
     this._throttledSnapshot = throttle(snapshot, opts.minSnapshotWindow, throttleOpts)
+
+    this.relations = {}
   }
 
   // XXX kick off the satellite process
@@ -98,16 +103,28 @@ export class SatelliteProcess implements Satellite {
 
     // Need to reload primary keys after schema migration
     // For now, we do it only at initialization
-    // Make 'schemaInfo' type to use around
-    const pkForTable = await this._getPrimaryKeyForTables()
+    this.relations = await this._getLocalRelations()
     this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction, pkForTable)
+      this._applyTransaction(transaction)
     })
+
+    // When a transaction is sent, or an acknowledgement is 
+    // received, we update the rowid records.
+    this.client.subscribeToAck(async (rowid, type) => {
+      await this._ack(Number(rowid), type == AckType.PERSISTED)
+    })
+
+    const ackRowId = await this._getMeta('ackRowId')
+    const lastSentRowId = await this._getMeta('lastSentRowId')
+    this._lsn = await this._getMeta('lsn')
+
+    this._lastSentRowId = Number(lastSentRowId)
+    this._lastAckdRowId - Number(ackRowId)
+    this.client.setOutboundLogPositions(lastSentRowId, ackRowId)
 
     return this.client.connect()
       .then(() => this.client.authenticate())
-      // need to read LSN from meta
-      .then(() => this.client.startReplication("0")) 
+      .then(() => this.client.startReplication(this._lsn)) 
   }
 
   // Unsubscribe from data changes and stop polling
@@ -171,8 +188,6 @@ export class SatelliteProcess implements Satellite {
         ORDER BY rowid ASC
     `
 
-    // XXX currently this timestamps and fetches the new oplog entries. We still
-    // need to actually replicate the data changes ...
     await this.adapter.run(updateTimestamps)
     const rows = await this.adapter.query(selectChanges, [timestamp])
     const results = rows as unknown as OplogEntry[]
@@ -217,17 +232,20 @@ export class SatelliteProcess implements Satellite {
     const changes = Object.values(results.reduce(reduceFn, acc))
     this.notifier.actuallyChanged(this.dbName, changes)
   }
-  async _replicateSnapshotChanges(_results: OplogEntry[]): Promise<void> {
-    // XXX integrate replication here ...
+  async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void | SatelliteError> {
+    const transactions = toTransactions(results, this.relations)
+    for (const txn of transactions) {
+      return this.client.enqueueTransaction(txn);
+    }
   }
 
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  //
-  // XXX Todo: enforce that all operations in the oplog have a timestamp
-  // before running apply.
-  async _apply(incoming: OplogEntry[]): Promise<void> {
+  async _apply(incoming: OplogEntry[], _lsn: string = "0"): Promise<void> {
+    // assign timestamp to pending operations before apply
+    await this._performSnapshot()
+
     const local = await this._getEntries()
     const merged = this._mergeEntries(local, incoming)
 
@@ -272,12 +290,22 @@ export class SatelliteProcess implements Satellite {
       }
     }
 
+    // TODO: finish storing LSN
+    // const toHexString = (byteArray: string) => {
+    //   var s = '';
+    //   byteArray.split('').forEach(function (byte, i) {
+    //     s += ('0' + (byte.charCodeAt(0) & 0xFF).toString(16)).slice(-2);
+    //   });
+    //   return s;
+    // }
+
     const sql = `
       PRAGMA defer_foreign_keys = ON;
       BEGIN;
         ${stmts.join('; ')};
+        UPDATE ${this.opts.metaTable.tablename} set value=x'0000' WHERE key='lsn';
       COMMIT;
-      PRAGMA defer_foreign_keys = OFF
+      PRAGMA defer_foreign_keys = OFF;
     `
 
     const tablenames = Object.keys(merged)
@@ -332,10 +360,10 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _applyTransaction(transaction: Transaction, pkForTable: { [k: string]: string[] }) {
-    const opLogEntries = fromTransaction(transaction, pkForTable)
+  async _applyTransaction(transaction: Transaction) {
+    const opLogEntries = fromTransaction(transaction, this.relations)
 
-    await this._apply(opLogEntries)
+    await this._apply(opLogEntries, transaction.lsn)
     this._notifyChanges(opLogEntries)
   }
 
@@ -357,25 +385,40 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Clean up the oplog and update `this._lastAckdRowId`.
-  async _ack(rowId: number): Promise<void> {
+  async _sent(rowId: number,): Promise<void> {
+    const meta = this.opts.metaTable.toString()
+
+    const sql = `
+      UPDATE ${meta}
+         SET value=${rowId}
+       WHERE key='lastSentRowId'
+    `
+
+    await this.adapter.run(sql)
+    this._lastAckdRowId = rowId
+  }
+
+  async _ack(rowId: number, isAckRowId: boolean): Promise<void> {
     const lastAckd = this._lastAckdRowId
     const lastSent = this._lastSentRowId
 
-    if (rowId < lastAckd || rowId > lastSent) {
+    if (rowId < lastAckd || (rowId > lastSent && isAckRowId)) {
       throw new Error('Invalid position')
     }
 
     const meta = this.opts.metaTable.toString()
-    const oplog = this.opts.oplogTable.toString()
 
-    const sql = `
-      DELETE FROM ${oplog}
-        WHERE rowid <= ${rowId};
+    let sql = `
+      UPDATE ${meta} 
+        SET value='${rowId}' 
+      WHERE key='${ isAckRowId ? 'ackRowId' : 'lastSentRowId'}'`
 
-      UPDATE ${meta}
-         SET value='${rowId}'
-       WHERE key='ackRowId'
-    `
+    if (isAckRowId) {
+      const oplog = this.opts.oplogTable.toString()
+      sql = `DELETE 
+              FROM ${oplog}
+            WHERE rowid <= ${rowId}; ${sql}`
+    }
 
     await this.adapter.run(sql)
     this._lastAckdRowId = rowId
@@ -393,23 +436,39 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.run(sql)
   }
 
+  // TODO: need to support different value types
+  async _getMeta(key: string): Promise<string> {
+    const meta = this.opts.metaTable.toString()
+    const sql = `SELECT value from ${meta} WHERE key='${key}';`
+
+    return await this.adapter.query(sql).then(rows => {
+      return rows[0]!.value!.toString()
+    })
+  }
+
   // Fetch primary keys from local store and use them to identify incoming ops.
   // TODO: Improve this code once with Migrator and consider simplifying oplog.
-  async _getPrimaryKeyForTables(): Promise<{ [k: string]: string[] }> {
+  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
     const notIn = [
-      `'${this.opts.metaTable.toString()}'`,
+      `'${this.opts.metaTable.tablename.toString()}'`,
       `'${this.opts.oplogTable.tablename.toString()}'`,
-      `'${this.opts.triggersTable.tablename.toString()}'`
+      `'${this.opts.triggersTable.tablename.toString()}'`,
+      `'sqlite_schema'`,
+      `'sqlite_sequence'`,
+      `'sqlite_temp_schema'`,
     ]
 
     const tables = `SELECT name FROM pragma_table_list() 
                       WHERE name NOT IN (${notIn.join(",")})
                     `
     const columnsFor = (table: string) =>
-      `SELECT name FROM pragma_table_info('${table}') WHERE pk = 1`
+      `SELECT * FROM pragma_table_info('${table}')`
     const tableNames = await this.adapter.query(tables)
 
-    const pks = []
+    const relations: RelationsCache = {}
+
+    let id = 0
+    const schema = 'public' // TODO
     for (const table of tableNames) {
       const tableName = table.name as any
       const sql = columnsFor(tableName)
@@ -417,12 +476,19 @@ export class SatelliteProcess implements Satellite {
       if (columnsForTable.length == 0) {
         continue
       }
-      for (const columns of columnsForTable) {
-        pks.push([tableName, Object.values(columns).map(c => (c as any).toString())])
+      const relation: Relation = {
+        id: id++,
+        schema: schema,
+        table: tableName,
+        tableType: SatRelation_RelationType.TABLE,
+        columns: []
       }
-    }
+      for (const c of columnsForTable) {
+        relation.columns.push({ name: c.name!.toString(), type: c.type!.toString(), primaryKey: Boolean(c.pk!.valueOf()) })
+      }
+      relations[`${tableName}`] = relation
+    }    
 
-    const toMap = Object.fromEntries(pks)
-    return Promise.resolve(toMap)
+    return Promise.resolve(relations)
   }
 }

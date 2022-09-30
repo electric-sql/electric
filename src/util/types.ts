@@ -43,7 +43,7 @@ export type AuthResponse = {
 
 export type Transaction = {
     commit_timestamp: Long,
-    lsn: string
+    lsn: string,
     changes: Change[],
 };
 
@@ -67,7 +67,8 @@ export type Replication = {
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
     ack_lsn: string
-    transaction: Transaction
+    sent_lsn: string
+    transactions: Transaction[]
 }
 
 export type Relation = {
@@ -78,7 +79,9 @@ export type Relation = {
     columns: RelationColumn[]
 }
 
-export type RelationColumn = { name: string, type: string };
+export type RelationColumn = { name: string, type: string, primaryKey?: boolean };
+
+export type RelationsCache = { [k: string]: Relation }
 
 export enum ReplicationStatus {
     STOPPED,

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS main._electric_meta (
   value TEXT
 );
 
-INSERT INTO _electric_meta(key,value) VALUES ('currRowId', '-1'), ('ackRowId','-1'), ('compensations', 0);
+INSERT INTO _electric_meta(key,value) VALUES ('lastSentRowId','0'), ('ackRowId','0'), ('compensations', 0);
 
 DROP TABLE IF EXISTS _trigger_settings;
 CREATE TABLE _trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
