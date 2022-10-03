@@ -75,9 +75,11 @@ export class SatelliteProcess implements Satellite {
   // - [ ] ...
   //
   async start(authState?: AuthState): Promise<void | Error> {
+    await this.migrator.up()
+
     const isVerified = await this._verifyTableStructure()
     if (!isVerified) {
-      throw new Error('Invalid database schema. You need to run valid Electric SQL migrations.')
+      throw new Error('Invalid database schema.')
     }
 
     if (authState !== undefined) {
@@ -114,13 +116,13 @@ export class SatelliteProcess implements Satellite {
       await this._ack(Number(rowid), type == AckType.PERSISTED)
     })
 
-    const ackRowId = await this._getMeta('ackRowId')
+    const lastAckdRowId = await this._getMeta('lastAckdRowId')
     const lastSentRowId = await this._getMeta('lastSentRowId')
     this._lsn = await this._getMeta('lsn')
 
     this._lastSentRowId = Number(lastSentRowId)
-    this._lastAckdRowId - Number(ackRowId)
-    this.client.setOutboundLogPositions(lastSentRowId, ackRowId)
+    this._lastAckdRowId - Number(lastAckdRowId)
+    this.client.setOutboundLogPositions(lastSentRowId, lastAckdRowId)
 
     return this.client.connect()
       .then(() => this.client.authenticate())
@@ -411,7 +413,7 @@ export class SatelliteProcess implements Satellite {
     let sql = `
       UPDATE ${meta} 
         SET value='${rowId}' 
-      WHERE key='${ isAckRowId ? 'ackRowId' : 'lastSentRowId'}'`
+      WHERE key='${ isAckRowId ? 'lastAckdRowId' : 'lastSentRowId'}'`
 
     if (isAckRowId) {
       const oplog = this.opts.oplogTable.toString()

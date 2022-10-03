@@ -1,7 +1,7 @@
 import { Migrator } from './index'
 
 export class MockMigrator implements Migrator {
-  constructor() {
-    // ...
+  async up(): Promise<number> {
+    return 1
   }
 }
