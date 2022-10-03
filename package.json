@@ -1,20 +1,24 @@
 {
   "version": "0.1.0",
-  "name": "electric-sql-ts",
+  "name": "electric-sql",
   "description": "Electric SQL client for edge (node), web and (javscript based) mobile applications.",
-  "repository": "https://github.com/vaxine-io/electric-sql-ts",
+  "repository": "https://github.com/electric-sql/typescript-client",
   "author": "Electric DB Limited",
   "homepage": "https://electric-sql.com",
   "license": "MIT",
   "keywords": [
+    "absurd-sql",
     "active",
     "android",
+    "better-sqlite3",
+    "cordova",
     "crdt",
     "crdts",
     "database",
     "db",
     "electric",
     "electric-sql",
+    "expo",
     "ios",
     "local-first",
     "local-first-sql",
@@ -22,15 +26,15 @@
     "offline",
     "offline-first",
     "react-native",
-    "react-native-electric-sql",
     "sql",
+    "sql.js",
     "sqlite",
     "sqlite3",
     "sync",
     "web"
   ],
   "bugs": {
-    "url": "https://github.com/vaxine-io/electric-sql-ts/issues"
+    "url": "https://github.com/electric-sql/typescript-client/issues"
   },
   "main": "index.js",
   "type": "module",
@@ -110,6 +114,7 @@
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",
+    "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0"
   },
@@ -126,7 +131,13 @@
     "cordova-sqlite-storage": {
       "optional": true
     },
+    "expo-sqlite": {
+      "optional": true
+    },
     "react": {
+      "optional": true
+    },
+    "react-native": {
       "optional": true
     },
     "react-native-sqlite-storage": {

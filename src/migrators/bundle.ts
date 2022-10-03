@@ -109,4 +109,7 @@ export class BundleMigrator implements Migrator {
 
     return this.adapter.run(sql)
   }
+  async up(): Promise<number> {
+    return 1
+  }
 }
