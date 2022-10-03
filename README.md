@@ -158,4 +158,4 @@ See the [usage documentation](https://electric-sql.com/docs/guides/usage) for:
 
 ## Issues
 
-Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/vaxine-io/electric-sql-ts/issues).
+Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/typescript-client/issues).

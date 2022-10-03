@@ -1,8 +1,8 @@
 {
   "version": "0.1.0",
-  "name": "electric-sql-ts",
+  "name": "electric-sql",
   "description": "Electric SQL client for edge (node), web and (javscript based) mobile applications.",
-  "repository": "https://github.com/vaxine-io/electric-sql-ts",
+  "repository": "https://github.com/electric-sql/typescript-client",
   "author": "Electric DB Limited",
   "homepage": "https://electric-sql.com",
   "license": "MIT",
@@ -22,7 +22,6 @@
     "offline",
     "offline-first",
     "react-native",
-    "react-native-electric-sql",
     "sql",
     "sqlite",
     "sqlite3",
@@ -30,7 +29,7 @@
     "web"
   ],
   "bugs": {
-    "url": "https://github.com/vaxine-io/electric-sql-ts/issues"
+    "url": "https://github.com/electric-sql/typescript-client/issues"
   },
   "main": "index.js",
   "type": "module",
