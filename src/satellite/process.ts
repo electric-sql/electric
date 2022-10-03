@@ -5,6 +5,7 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { Client } from './index'
+import { toHexString } from '../util/hex'
 import { QualifiedTablename } from '../util/tablename'
 import { AckType, DbName, DEFAULT_LSN, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 
@@ -295,14 +296,6 @@ export class SatelliteProcess implements Satellite {
           stmts.push(insertStmt)
         }
       }
-    }
-
-    const toHexString = (byteArray: Uint8Array) => {
-      var s = '';
-      byteArray.forEach(function (byte, i) {
-        s += ('0' + (byte & 0xFF).toString(16)).slice(-2);
-      });
-      return s;
     }
 
     const sql = `
