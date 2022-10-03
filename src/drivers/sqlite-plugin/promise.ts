@@ -6,7 +6,7 @@ export const ensurePromise = (candidate: any): Promise<any> => {
   throw new Error(`
     Expecting promises to be enabled.
 
-    Electric SQL does not support disabling promises
+    ElectricSQL does not support disabling promises
     after electrifying your database client.
   `)
 }

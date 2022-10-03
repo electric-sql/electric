@@ -12,7 +12,7 @@ export interface Registry {
   stopAll(): Promise<void>
 }
 
-// `Satellite` is the main process handling Electric SQL replication,
+// `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {
   dbName: DbName

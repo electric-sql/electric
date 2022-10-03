@@ -1,11 +1,11 @@
 {
   "version": "0.1.0",
   "name": "electric-sql",
-  "description": "Electric SQL client for edge (node), web and (javscript based) mobile applications.",
+  "description": "ElectricSQL TypeScript client for developing local-first SQL apps. Supports JavaScript based mobile, web and edge applications.",
   "repository": "https://github.com/electric-sql/typescript-client",
   "author": "Electric DB Limited",
   "homepage": "https://electric-sql.com",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "absurd-sql",
     "active",
