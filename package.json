@@ -114,6 +114,7 @@
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",
+    "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0"
   },
@@ -130,7 +131,13 @@
     "cordova-sqlite-storage": {
       "optional": true
     },
+    "expo-sqlite": {
+      "optional": true
+    },
     "react": {
+      "optional": true
+    },
+    "react-native": {
       "optional": true
     },
     "react-native-sqlite-storage": {

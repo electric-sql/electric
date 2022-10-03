@@ -15,6 +15,12 @@ import {
 } from './cordova-sqlite-storage/database'
 
 import {
+  Database as ExpoSQLiteDatabase,
+  ElectricDatabase as ExpoSQLiteElectricDatabase,
+  ElectricWebSQLDatabase as ExpoSQLiteElectricWebSQLDatabase,
+} from './expo-sqlite/database'
+
+import {
   Database as ReactNativeSQLiteStorageDatabase,
   ElectricDatabase as ReactNativeSQLiteStorageElectricDatabase
 } from './react-native-sqlite-storage/database'
@@ -28,6 +34,7 @@ export type AnyDatabase =
   AbsurdSQLDatabase
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
+  | ExpoSQLiteDatabase
   | ReactNativeSQLiteStorageDatabase
   | GenericDatabase
 
@@ -36,6 +43,8 @@ export type AnyElectricDatabase =
   | AbsurdSQLElectricMainThreadDatabaseProxy
   | BetterSQLite3ElectricDatabase
   | CordovaSQLiteStorageElectricDatabase
+  | ExpoSQLiteElectricDatabase
+  | ExpoSQLiteElectricWebSQLDatabase
   | ReactNativeSQLiteStorageElectricDatabase
   | GenericElectricDatabase
 
