@@ -63,4 +63,9 @@ if config_env() == :prod do
     end)
 
   config :electric, Electric.Replication.Connectors, connectors
+
+  config :electric, Electric.Replication.SQConnectors,
+    vaxine_hostname: vaxine_hostname,
+    vaxine_port: 8088,
+    vaxine_connection_timeout: vaxine_connection_timeout
 end
