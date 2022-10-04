@@ -23,7 +23,6 @@ COPY mix.*  /app/
 COPY config /app/config/
 COPY lib    /app/lib/
 COPY deps   /app/deps
-COPY proto  /app/proto
 RUN make deps compile release
 
 FROM ${RUNNER_IMAGE} AS runner_setup

@@ -5,13 +5,8 @@ build_tools:
 	mix local.hex --force
 	mix local.rebar --force
 
-deps: deps_proto
+deps:
 	mix deps.get
-
-deps_proto: ./proto/satellite
-
-./proto/satellite:
-	./get-proto.sh
 
 dialyzer:
 	mix dialyzer
@@ -66,10 +61,10 @@ endif
 rm_offset_storage:
 	rm vx_pg_offset_storage_*
 
-update_protobuf: deps_proto
+update_protobuf: deps
 	mix protox.generate \
 		--output-path=./lib/electric/satellite/satellite_pb.ex \
-		./proto/satellite/proto/satellite.proto
+		./deps/satellite_proto/proto/satellite.proto
 
 shell:
 	iex -S mix
