@@ -15,7 +15,7 @@ import {
   SatAuthResp,
   SatPingResp,
 } from '../../src/_generated/proto/satellite';
-import { WebSocketNode } from '../../src/sockets/node/websocket';
+import { WebSocketNode } from '../../src/sockets/node';
 import { SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
