@@ -16,10 +16,10 @@ defmodule Electric.Telemetry do
 
   defp metrics(),
     do: [
-      Metrics.counter("electric.postgres_tcp_server.connection.count"),
+      Metrics.counter("electric.postgres_tcp_server.connection.total"),
       Metrics.counter("electric.postgres_slot.replication.start"),
       Metrics.counter("electric.postgres_slot.replication.stop"),
       Metrics.sum("electric.postgres_slot.replication.sent_count"),
-      Metrics.counter("electric.postgres_logical.received.count")
+      Metrics.counter("electric.postgres_logical.received.total")
     ]
 end
