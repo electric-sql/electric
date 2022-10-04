@@ -455,3 +455,5 @@ export class MainThreadStatementProxy implements Statement {
     return true
   }
 }
+
+export type ElectrifiedDatabase = ElectricMainThreadDatabaseProxy

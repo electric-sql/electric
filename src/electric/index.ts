@@ -1,4 +1,4 @@
-import { AnyDatabase, AnyElectricDatabase } from '../drivers/index'
+import { AnyDatabase, AnyElectricDatabase, AnyElectrifiedDatabase } from '../drivers/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migration, Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -42,7 +42,7 @@ export class ElectricNamespace {
 // call once they've constructed their implementations. This function can
 // also be called directly by tests that don't want to go via the adapter
 // entrypoints in order to avoid loading the environment dependencies.
-export const electrify = (
+export const electrify = async (
       dbName: DbName,
       db: AnyDatabase,
       electric: AnyElectricDatabase,
@@ -50,7 +50,8 @@ export const electrify = (
       migrator: Migrator,
       notifier: Notifier,
       registry: Registry
-    ): Promise<any> => {
-  return registry.ensureStarted(dbName, adapter, migrator, notifier)
-    .then(() => proxyOriginal(db, electric))
+    ): Promise<AnyElectrifiedDatabase> => {
+  await registry.ensureStarted(dbName, adapter, migrator, notifier)
+
+  return proxyOriginal(db, electric)
 }

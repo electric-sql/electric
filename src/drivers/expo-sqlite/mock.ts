@@ -2,7 +2,7 @@ import { DbName, } from '../../util/types'
 
 import {
   NamedExpoDatabase,
-  NamedExpoWebSQLDatabase,
+  NamedWebSQLDatabase,
   Query,
   SQLiteCallback,
   TransactionCallback,
@@ -31,7 +31,7 @@ export class MockDatabase implements NamedExpoDatabase {
   }
 }
 
-export class MockWebSQLDatabase extends MockDatabase implements NamedExpoWebSQLDatabase {
+export class MockWebSQLDatabase extends MockDatabase implements NamedWebSQLDatabase {
   exec(_queries: Query[], _readOnly: boolean, callback: SQLiteCallback): void {
     callback(null, [{rowsAffected: 0, rows: []}])
   }

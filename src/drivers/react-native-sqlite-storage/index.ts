@@ -14,9 +14,9 @@ import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase } from './database'
+import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 
-export const electrify = (db: Database, promisesEnabled?: boolean, opts?: ElectrifyOptions): Promise<Database> => {
+export const electrify = (db: Database, promisesEnabled?: boolean, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   if (opts === undefined) {
     opts = {}
   }

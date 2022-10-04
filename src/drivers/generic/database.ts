@@ -3,15 +3,13 @@
 import { ElectricNamespace } from '../../electric/index'
 
 export interface Database {
-  databaseFeatures: {
-    isGenericDatabase: true
-  }
+  isGenericDatabase: true
 }
 
 export interface ElectricDatabase {
-  databaseFeatures: {
-    isGenericElectricDatabase: true
-  }
+  isGenericElectricDatabase: true
 
   electric: ElectricNamespace
 }
+
+export interface ElectrifiedDatabase extends Database, ElectricDatabase {}

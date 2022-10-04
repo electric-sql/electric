@@ -7,14 +7,14 @@ import { proxyOriginal } from '../../proxy/original'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
-import { ElectricMainThreadDatabaseProxy, MainThreadDatabaseProxy } from './database'
+import { ElectrifiedDatabase, MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
 
 export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
 interface SQL {
-  openDatabase(dbName: DbName): Promise<ElectricMainThreadDatabaseProxy>
+  openDatabase(dbName: DbName): Promise<ElectrifiedDatabase>
 }
 
 export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOpts = {}): Promise<SQL> => {
@@ -28,7 +28,7 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
   }
   await workerClient.request(init, locator.serialise())
 
-  const openDatabase = async (dbName: DbName, opts: ElectrifyOptions = {}): Promise<ElectricMainThreadDatabaseProxy> => {
+  const openDatabase = async (dbName: DbName, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
     const open: ServerMethod = {
       target: 'server',
       name: 'open'
@@ -40,7 +40,7 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
     const notifier = opts.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
     const namespace = new ElectricNamespace(adapter, notifier)
 
-    return proxyOriginal(db, {electric: namespace}) as ElectricMainThreadDatabaseProxy
+    return proxyOriginal(db, {electric: namespace}) as ElectrifiedDatabase
   }
 
   return { openDatabase }

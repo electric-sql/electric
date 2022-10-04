@@ -70,13 +70,13 @@ export interface NamedExpoDatabase {
   ): void
 }
 
-export interface NamedExpoWebSQLDatabase extends NamedExpoDatabase {
+export interface NamedWebSQLDatabase extends NamedExpoDatabase {
   exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void
   closeAsync(): void
   deleteAsync(): Promise<void>
 }
 
-export type Database = NamedExpoDatabase | NamedExpoWebSQLDatabase
+export type Database = NamedExpoDatabase | NamedWebSQLDatabase
 
 export class ElectricDatabase implements ProxyWrapper {
   _db: Database
@@ -112,7 +112,7 @@ export class ElectricDatabase implements ProxyWrapper {
 }
 
 export class ElectricWebSQLDatabase extends ElectricDatabase {
-  declare _db: NamedExpoWebSQLDatabase
+  declare _db: NamedWebSQLDatabase
 
   exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void {
     const wrappedCallback: SQLiteCallback = (error?: Error | null, resultSet?: (ResultSetError | ResultSet)[]): void => {
@@ -147,3 +147,7 @@ export class ElectricWebSQLDatabase extends ElectricDatabase {
   //   this.electric.potentiallyChanged()
   // }
 }
+
+interface ElectrifiedExpoDatabase extends NamedExpoDatabase, ElectricDatabase {}
+interface ElectrifiedWebSQLDatabase extends NamedWebSQLDatabase, ElectricWebSQLDatabase {}
+export type ElectrifiedDatabase = ElectrifiedExpoDatabase | ElectrifiedWebSQLDatabase

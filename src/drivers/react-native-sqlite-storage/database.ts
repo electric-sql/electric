@@ -83,3 +83,5 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
     return this._db.detach(dbAlias, successFn, error)
   }
 }
+
+export interface ElectrifiedDatabase extends Database, ElectricDatabase {}

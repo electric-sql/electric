@@ -12,9 +12,9 @@ import { globalRegistry } from '../../satellite/registry'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase } from './database'
+import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 
-export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Database> => {
+export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.name
 
   const adapter = opts.adapter || new DatabaseAdapter(db)

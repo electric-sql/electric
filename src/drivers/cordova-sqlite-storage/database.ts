@@ -22,3 +22,6 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
     this._db = db
   }
 }
+
+
+export interface ElectrifiedDatabase extends Database, ElectricDatabase {}
