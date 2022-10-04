@@ -63,7 +63,7 @@ defmodule Electric.MixProject do
        git: "https://github.com/electric-sql/typescript-client.git",
        runtime: false, app: false,
        compile: false,
-       sparse: "./proto/satellite.proto"}
+       sparse: "proto"}
     ]
   end
 
