@@ -8,7 +8,7 @@ git clone \
   --depth 1  \
   --filter=blob:none  \
   --sparse \
-  git@github.com:electric-sql/typescript-client.git satellite;
+  https://github.com/electric-sql/typescript-client.git satellite;
 cd satellite
 echo "Prepare sparse"
 git sparse-checkout init --no-cone
