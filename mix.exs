@@ -61,7 +61,8 @@ defmodule Electric.MixProject do
       {:finch, "~> 0.13"},
       {:satellite_proto,
        git: "https://github.com/electric-sql/typescript-client.git",
-       runtime: false, app: false,
+       runtime: false,
+       app: false,
        compile: false,
        sparse: "proto"}
     ]

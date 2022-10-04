@@ -1938,7 +1938,7 @@
             if msg.lsn == "" do
               acc
             else
-              [acc, "\n", Protox.Encode.encode_string(msg.lsn)]
+              [acc, "\n", Protox.Encode.encode_bytes(msg.lsn)]
             end
           rescue
             ArgumentError ->
@@ -2137,7 +2137,7 @@
             }
       def defs() do
         %{
-          1 => {:lsn, {:scalar, ""}, :string},
+          1 => {:lsn, {:scalar, ""}, :bytes},
           2 => {:options, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           3 => {:sync_batch_size, {:scalar, 0}, :int32}
         }
@@ -2149,7 +2149,7 @@
             }
       def defs_by_name() do
         %{
-          lsn: {1, {:scalar, ""}, :string},
+          lsn: {1, {:scalar, ""}, :bytes},
           options: {2, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           sync_batch_size: {3, {:scalar, 0}, :int32}
         }
@@ -2167,7 +2167,7 @@
             label: :optional,
             name: :lsn,
             tag: 1,
-            type: :string
+            type: :bytes
           },
           %{
             __struct__: Protox.Field,
@@ -2202,7 +2202,7 @@
                label: :optional,
                name: :lsn,
                tag: 1,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -2215,7 +2215,7 @@
                label: :optional,
                name: :lsn,
                tag: 1,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -3538,7 +3538,7 @@
             if msg.lsn == "" do
               acc
             else
-              [acc, "\x1A", Protox.Encode.encode_string(msg.lsn)]
+              [acc, "\x1A", Protox.Encode.encode_bytes(msg.lsn)]
             end
           rescue
             ArgumentError ->
@@ -3676,7 +3676,7 @@
         %{
           1 => {:commit_timestamp, {:scalar, 0}, :uint64},
           2 => {:trans_id, {:scalar, ""}, :string},
-          3 => {:lsn, {:scalar, ""}, :string}
+          3 => {:lsn, {:scalar, ""}, :bytes}
         }
       end
 
@@ -3687,7 +3687,7 @@
       def defs_by_name() do
         %{
           commit_timestamp: {1, {:scalar, 0}, :uint64},
-          lsn: {3, {:scalar, ""}, :string},
+          lsn: {3, {:scalar, ""}, :bytes},
           trans_id: {2, {:scalar, ""}, :string}
         }
       end
@@ -3722,7 +3722,7 @@
             label: :optional,
             name: :lsn,
             tag: 3,
-            type: :string
+            type: :bytes
           }
         ]
       end
@@ -3819,7 +3819,7 @@
                label: :optional,
                name: :lsn,
                tag: 3,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -3832,7 +3832,7 @@
                label: :optional,
                name: :lsn,
                tag: 3,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -3956,7 +3956,7 @@
             if msg.lsn == "" do
               acc
             else
-              [acc, "\x1A", Protox.Encode.encode_string(msg.lsn)]
+              [acc, "\x1A", Protox.Encode.encode_bytes(msg.lsn)]
             end
           rescue
             ArgumentError ->
@@ -4094,7 +4094,7 @@
         %{
           1 => {:commit_timestamp, {:scalar, 0}, :uint64},
           2 => {:trans_id, {:scalar, ""}, :string},
-          3 => {:lsn, {:scalar, ""}, :string}
+          3 => {:lsn, {:scalar, ""}, :bytes}
         }
       end
 
@@ -4105,7 +4105,7 @@
       def defs_by_name() do
         %{
           commit_timestamp: {1, {:scalar, 0}, :uint64},
-          lsn: {3, {:scalar, ""}, :string},
+          lsn: {3, {:scalar, ""}, :bytes},
           trans_id: {2, {:scalar, ""}, :string}
         }
       end
@@ -4140,7 +4140,7 @@
             label: :optional,
             name: :lsn,
             tag: 3,
-            type: :string
+            type: :bytes
           }
         ]
       end
@@ -4237,7 +4237,7 @@
                label: :optional,
                name: :lsn,
                tag: 3,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -4250,7 +4250,7 @@
                label: :optional,
                name: :lsn,
                tag: 3,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -5988,10 +5988,10 @@
           try do
             case msg.lsn do
               {_, child_field_value} ->
-                [acc, "\n", Protox.Encode.encode_string(child_field_value)]
+                [acc, "\n", Protox.Encode.encode_bytes(child_field_value)]
 
               child_field_value when not is_nil(child_field_value) ->
-                [acc, "\n", Protox.Encode.encode_string(child_field_value)]
+                [acc, "\n", Protox.Encode.encode_bytes(child_field_value)]
 
               _ ->
                 [acc]
@@ -6120,7 +6120,7 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:lsn, {:oneof, :_lsn}, :string}}
+        %{1 => {:lsn, {:oneof, :_lsn}, :bytes}}
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -6128,7 +6128,7 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{lsn: {1, {:oneof, :_lsn}, :string}}
+        %{lsn: {1, {:oneof, :_lsn}, :bytes}}
       end
     )
 
@@ -6143,7 +6143,7 @@
             label: :proto3_optional,
             name: :lsn,
             tag: 1,
-            type: :string
+            type: :bytes
           }
         ]
       end
@@ -6160,7 +6160,7 @@
                label: :proto3_optional,
                name: :lsn,
                tag: 1,
-               type: :string
+               type: :bytes
              }}
           end
 
@@ -6173,7 +6173,7 @@
                label: :proto3_optional,
                name: :lsn,
                tag: 1,
-               type: :string
+               type: :bytes
              }}
           end
 
