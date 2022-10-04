@@ -134,6 +134,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
+    :telemetry.execute(
+      [:electric, :postgres_logical, :received],
+      %{count: 1},
+      %{
+        origin: state.origin,
+        type: "insert"
+      }
+    )
+
     relation = Map.get(state.relations, msg.relation_id)
 
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
@@ -152,6 +161,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
+    :telemetry.execute(
+      [:electric, :postgres_logical, :received],
+      %{count: 1},
+      %{
+        origin: state.origin,
+        type: "update"
+      }
+    )
+
     relation = Map.get(state.relations, msg.relation_id)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
@@ -175,6 +193,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
+    :telemetry.execute(
+      [:electric, :postgres_logical, :received],
+      %{count: 1},
+      %{
+        origin: state.origin,
+        type: "delete"
+      }
+    )
+
     relation = Map.get(state.relations, msg.relation_id)
 
     data =

@@ -24,6 +24,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
+              origin: nil,
               send_fn: nil,
               slot_name: nil,
               publication: nil,
@@ -131,6 +132,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:consumer,
      %State{
        slot_name: slot,
+       origin: origin,
        producer_name: producer,
        producer: args.downstream.producer,
        opts: Map.get(args.replication, :opts, [])
@@ -174,6 +176,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.info("Starting replication to #{state.slot_name}")
 
+    :telemetry.execute([:electric, :postgres_slot, :replication], %{start: 1}, %{
+      origin: state.origin,
+      slot: state.slot_name
+    })
+
     # FIXME: handle_continue should be supported on gen_stage
     send(self(), {:start_from_lsn, start_lsn})
 
@@ -183,6 +190,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_call({:stop_replication}, _, state) do
+    :telemetry.execute([:electric, :postgres_slot, :replication], %{stop: 1}, %{
+      origin: state.origin,
+      slot: state.slot_name
+    })
+
     {:reply, :ok, [], clear_replication(state)}
   end
 
@@ -245,6 +257,16 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
         {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
         send_all(Enum.reverse(wal_messages), state.send_fn)
+
+        :telemetry.execute(
+          [:electric, :postgres_slot, :replication],
+          %{sent_count: length(wal_messages)},
+          %{
+            origin: state.origin,
+            slot: state.slot_name
+          }
+        )
+
         %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
       end)
 
