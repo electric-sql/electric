@@ -1,6 +1,7 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
 import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
+import { lsnEncoder } from '../util/common'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -177,7 +178,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
 
   const init: Transaction = {
     commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
-    lsn: opLogEntries[0].rowid.toString(),
+    lsn: lsnEncoder.encode(opLogEntries[0].rowid.toString()),
     changes: [],
   }
 
@@ -188,7 +189,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
     if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
       const nextTxn = {
         commit_timestamp: to_commit_timestamp(txn.timestamp),
-        lsn: txn.rowid.toString(),
+        lsn: lsnEncoder.encode(txn.rowid.toString()),
         changes: [],
       }
       acc.push(nextTxn)
@@ -197,7 +198,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
 
     const change = opLogEntryToChange(txn)
     currTxn.changes.push(change)
-    currTxn.lsn = txn.rowid.toString() // LSN is the largest rowId?
+    currTxn.lsn = lsnEncoder.encode(txn.rowid.toString())
     return acc
   }, [init])
 }

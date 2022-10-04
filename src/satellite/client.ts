@@ -20,8 +20,9 @@ import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util
 import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import { AuthResponse, ChangeType, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
-import { AckCallback, Client } from '.';
+import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { DEFAULT_LSN } from '../util/common'
+import { Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
 
 interface PrivateSatelliteOptions extends SatelliteClientOpts {
@@ -70,8 +71,8 @@ export class SatelliteClient extends EventEmitter implements Client {
       authenticated: false,
       isReplicating: ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: current?.ack_lsn ? current.ack_lsn : "0",
-      sent_lsn: current?.sent_lsn ? current.sent_lsn : "0",
+      ack_lsn: current?.ack_lsn ? current.ack_lsn : DEFAULT_LSN,
+      sent_lsn: current?.sent_lsn ? current.sent_lsn : DEFAULT_LSN,
       transactions: []
     }
   }
@@ -100,7 +101,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     });
   }
 
-  startReplication(lsn: string): Promise<void | SatelliteError> {
+  startReplication(lsn: LSN = DEFAULT_LSN): Promise<void | SatelliteError> {
     if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
       return Promise.reject(new SatelliteError(
         SatelliteErrorCode.REPLICATION_ALREADY_STARTED, `replication already started`));
@@ -556,7 +557,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }).finally(() => clearTimeout(waitingFor));
   }
 
-  setOutboundLogPositions(sent: string, ack: string): void {
+  setOutboundLogPositions(sent: LSN, ack: LSN): void {
     this.outbound.ack_lsn = ack
     this.outbound.sent_lsn = sent
   }

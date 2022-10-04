@@ -1,4 +1,3 @@
-
 export const relations = {
     child: {
         id: 0,

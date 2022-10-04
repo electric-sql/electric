@@ -3,9 +3,9 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
-import { AuthResponse, DbName, SatelliteError, Transaction } from '../util/types'
+import { AckCallback, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
 
-import { AckCallback, Client, Satellite } from './index'
+import { Client, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults, satelliteClientDefaults, SatelliteClientOpts } from './config'
 import { BaseRegistry } from './registry'
 import { Socket } from '../sockets'
@@ -69,7 +69,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({});
   }
-  startReplication(_lsn: string, _resume?: boolean | undefined): Promise<void | SatelliteError> {
+  startReplication(_lsn: LSN, _resume?: boolean | undefined): Promise<void | SatelliteError> {
     return Promise.resolve();
   }
   stopReplication(): Promise<void | SatelliteError> {
@@ -87,7 +87,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     return
   }
 
-  setOutboundLogPositions(_sent: string, _ack: string): void {
+  setOutboundLogPositions(_sent: LSN, _ack: LSN): void {
     return
   }
 

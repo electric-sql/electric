@@ -4,15 +4,16 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
-import { AckType, Client } from './index'
+import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
-
+import { AckType, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
+import { DEFAULT_LSN, lsnDecoder, lsnEncoder } from '../util/common'
+import { toHexString } from '../util/hex'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -37,7 +38,7 @@ export class SatelliteProcess implements Satellite {
 
   _lastAckdRowId: number
   _lastSentRowId: number
-  _lsn: string
+  _lsn: LSN
 
   relations: RelationsCache
 
@@ -52,7 +53,7 @@ export class SatelliteProcess implements Satellite {
 
     this._lastAckdRowId = 0
     this._lastSentRowId = 0
-    this._lsn = "0"
+    this._lsn = DEFAULT_LSN
 
     // Create a throttled function that performs a snapshot at most every
     // `minSnapshotWindow` ms. This function runs immediately when you
@@ -60,7 +61,7 @@ export class SatelliteProcess implements Satellite {
     // you keep calling it within the window. If you don't call it within
     // the window, it will then run immediately the next time you call it.
     const snapshot = this._performSnapshot.bind(this)
-    const throttleOpts = {leading: true, trailing: true}
+    const throttleOpts = { leading: true, trailing: true }
     this._throttledSnapshot = throttle(snapshot, opts.minSnapshotWindow, throttleOpts)
 
     this.relations = {}
@@ -110,23 +111,25 @@ export class SatelliteProcess implements Satellite {
       this._applyTransaction(transaction)
     })
 
-    // When a transaction is sent, or an acknowledgement is 
-    // received, we update the rowid records.
-    this.client.subscribeToAck(async (rowid, type) => {
-      await this._ack(Number(rowid), type == AckType.PERSISTED)
+    // When a local transaction is sent, or an acknowledgement for 
+    // a remote transaction commit is received, we update lsn records.
+    this.client.subscribeToAck(async (lsn, type) => {
+      const decoded = Number(lsnDecoder.decode(lsn))
+      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
 
-    const lastAckdRowId = await this._getMeta('lastAckdRowId')
-    const lastSentRowId = await this._getMeta('lastSentRowId')
-    this._lsn = await this._getMeta('lsn')
+    this._lastAckdRowId = await this._getMeta('lastAckdRowId') as number
+    this._lastSentRowId = await this._getMeta('lastSentRowId') as number
+    this._lsn = await this._getMeta('lsn') as LSN
 
-    this._lastSentRowId = Number(lastSentRowId)
-    this._lastAckdRowId - Number(lastAckdRowId)
-    this.client.setOutboundLogPositions(lastSentRowId, lastAckdRowId)
+    this.client.setOutboundLogPositions(
+      lsnEncoder.encode(this._lastAckdRowId.toString()),
+      lsnEncoder.encode(this._lastSentRowId.toString())
+    )
 
     return this.client.connect()
       .then(() => this.client.authenticate())
-      .then(() => this.client.startReplication(this._lsn)) 
+      .then(() => this.client.startReplication(this._lsn))
   }
 
   // Unsubscribe from data changes and stop polling
@@ -244,7 +247,7 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  async _apply(incoming: OplogEntry[], _lsn: string = "0"): Promise<void> {
+  async _apply(incoming: OplogEntry[], lsn: LSN = DEFAULT_LSN): Promise<void> {
     // assign timestamp to pending operations before apply
     await this._performSnapshot()
 
@@ -292,20 +295,11 @@ export class SatelliteProcess implements Satellite {
       }
     }
 
-    // TODO: finish storing LSN
-    // const toHexString = (byteArray: string) => {
-    //   var s = '';
-    //   byteArray.split('').forEach(function (byte, i) {
-    //     s += ('0' + (byte.charCodeAt(0) & 0xFF).toString(16)).slice(-2);
-    //   });
-    //   return s;
-    // }
-
     const sql = `
       PRAGMA defer_foreign_keys = ON;
       BEGIN;
         ${stmts.join('; ')};
-        UPDATE ${this.opts.metaTable.tablename} set value=x'0000' WHERE key='lsn';
+        UPDATE ${this.opts.metaTable.tablename} set value=x'${toHexString(lsn)}' WHERE key='lsn';
       COMMIT;
       PRAGMA defer_foreign_keys = OFF;
     `
@@ -328,7 +322,6 @@ export class SatelliteProcess implements Satellite {
           AND rowid > ?
         ORDER BY rowid ASC
     `
-
     const rows = await this.adapter.query(selectEntries, [since])
     return rows as unknown as OplogEntry[]
   }
@@ -386,25 +379,12 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.run(stmts.join('; '))
   }
 
-  // Clean up the oplog and update `this._lastAckdRowId`.
-  async _sent(rowId: number,): Promise<void> {
-    const meta = this.opts.metaTable.toString()
-
-    const sql = `
-      UPDATE ${meta}
-         SET value=${rowId}
-       WHERE key='lastSentRowId'
-    `
-
-    await this.adapter.run(sql)
-    this._lastAckdRowId = rowId
-  }
-
-  async _ack(rowId: number, isAckRowId: boolean): Promise<void> {
+  async _ack(lsn: number, isAck: boolean): Promise<void> {
+    const rowId = lsn
     const lastAckd = this._lastAckdRowId
     const lastSent = this._lastSentRowId
 
-    if (rowId < lastAckd || (rowId > lastSent && isAckRowId)) {
+    if (rowId < lastAckd || (rowId > lastSent && isAck)) {
       throw new Error('Invalid position')
     }
 
@@ -413,9 +393,9 @@ export class SatelliteProcess implements Satellite {
     let sql = `
       UPDATE ${meta} 
         SET value='${rowId}' 
-      WHERE key='${ isAckRowId ? 'lastAckdRowId' : 'lastSentRowId'}'`
+      WHERE key='${isAck ? 'lastAckdRowId' : 'lastSentRowId'}'`
 
-    if (isAckRowId) {
+    if (isAck) {
       const oplog = this.opts.oplogTable.toString()
       sql = `DELETE 
               FROM ${oplog}
@@ -423,7 +403,7 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this.adapter.run(sql)
-    this._lastAckdRowId = rowId
+    this._lastAckdRowId = lsn
   }
 
   async _setMeta(key: string, value: SqlValue): Promise<void> {
@@ -439,12 +419,12 @@ export class SatelliteProcess implements Satellite {
   }
 
   // TODO: need to support different value types
-  async _getMeta(key: string): Promise<string> {
+  async _getMeta(key: string): Promise<Buffer | Uint8Array | string | number | null> {
     const meta = this.opts.metaTable.toString()
     const sql = `SELECT value from ${meta} WHERE key='${key}';`
 
     return await this.adapter.query(sql).then(rows => {
-      return rows[0]!.value!.toString()
+      return rows[0]!.value
     })
   }
 
@@ -490,7 +470,7 @@ export class SatelliteProcess implements Satellite {
         relation.columns.push({ name: c.name!.toString(), type: c.type!.toString(), primaryKey: Boolean(c.pk!.valueOf()) })
       }
       relations[`${tableName}`] = relation
-    }    
+    }
 
     return Promise.resolve(relations)
   }

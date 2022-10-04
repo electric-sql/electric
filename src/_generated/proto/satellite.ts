@@ -51,7 +51,7 @@ export interface SatPingResp {
    * was applied on the consumer side. If there is no active replication
    * ongoing the field should be left 0
    */
-  lsn?: string | undefined;
+  lsn?: Uint8Array | undefined;
 }
 
 /**
@@ -102,7 +102,7 @@ export enum SatErrorResp_ErrorCode {
 export interface SatInStartReplicationReq {
   $type: "Electric.Satellite.SatInStartReplicationReq";
   /** LSN position of the log on the producer side */
-  lsn: string;
+  lsn: Uint8Array;
   options: SatInStartReplicationReq_Option[];
   /**
    * Amount of message after which SatPingResp message is expected to be
@@ -202,7 +202,7 @@ export interface SatOpBegin {
   $type: "Electric.Satellite.SatOpBegin";
   commitTimestamp: Long;
   transId: string;
-  lsn: string;
+  lsn: Uint8Array;
 }
 
 /**
@@ -213,7 +213,7 @@ export interface SatOpCommit {
   $type: "Electric.Satellite.SatOpCommit";
   commitTimestamp: Long;
   transId: string;
-  lsn: string;
+  lsn: Uint8Array;
 }
 
 /**
@@ -386,7 +386,7 @@ export const SatPingResp = {
 
   encode(message: SatPingResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.lsn !== undefined) {
-      writer.uint32(10).string(message.lsn);
+      writer.uint32(10).bytes(message.lsn);
     }
     return writer;
   },
@@ -399,7 +399,7 @@ export const SatPingResp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.lsn = reader.string();
+          message.lsn = reader.bytes();
           break;
         default:
           reader.skipType(tag & 7);
@@ -563,15 +563,15 @@ export const SatErrorResp = {
 messageTypeRegistry.set(SatErrorResp.$type, SatErrorResp);
 
 function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
-  return { $type: "Electric.Satellite.SatInStartReplicationReq", lsn: "", options: [], syncBatchSize: 0 };
+  return { $type: "Electric.Satellite.SatInStartReplicationReq", lsn: new Uint8Array(), options: [], syncBatchSize: 0 };
 }
 
 export const SatInStartReplicationReq = {
   $type: "Electric.Satellite.SatInStartReplicationReq" as const,
 
   encode(message: SatInStartReplicationReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.lsn !== "") {
-      writer.uint32(10).string(message.lsn);
+    if (message.lsn.length !== 0) {
+      writer.uint32(10).bytes(message.lsn);
     }
     writer.uint32(18).fork();
     for (const v of message.options) {
@@ -592,7 +592,7 @@ export const SatInStartReplicationReq = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.lsn = reader.string();
+          message.lsn = reader.bytes();
           break;
         case 2:
           if ((tag & 7) === 2) {
@@ -617,7 +617,7 @@ export const SatInStartReplicationReq = {
 
   fromPartial<I extends Exact<DeepPartial<SatInStartReplicationReq>, I>>(object: I): SatInStartReplicationReq {
     const message = createBaseSatInStartReplicationReq();
-    message.lsn = object.lsn ?? "";
+    message.lsn = object.lsn ?? new Uint8Array();
     message.options = object.options?.map((e) => e) || [];
     message.syncBatchSize = object.syncBatchSize ?? 0;
     return message;
@@ -980,7 +980,7 @@ export const SatTransOp = {
 messageTypeRegistry.set(SatTransOp.$type, SatTransOp);
 
 function createBaseSatOpBegin(): SatOpBegin {
-  return { $type: "Electric.Satellite.SatOpBegin", commitTimestamp: Long.UZERO, transId: "", lsn: "" };
+  return { $type: "Electric.Satellite.SatOpBegin", commitTimestamp: Long.UZERO, transId: "", lsn: new Uint8Array() };
 }
 
 export const SatOpBegin = {
@@ -993,8 +993,8 @@ export const SatOpBegin = {
     if (message.transId !== "") {
       writer.uint32(18).string(message.transId);
     }
-    if (message.lsn !== "") {
-      writer.uint32(26).string(message.lsn);
+    if (message.lsn.length !== 0) {
+      writer.uint32(26).bytes(message.lsn);
     }
     return writer;
   },
@@ -1013,7 +1013,7 @@ export const SatOpBegin = {
           message.transId = reader.string();
           break;
         case 3:
-          message.lsn = reader.string();
+          message.lsn = reader.bytes();
           break;
         default:
           reader.skipType(tag & 7);
@@ -1029,7 +1029,7 @@ export const SatOpBegin = {
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
     message.transId = object.transId ?? "";
-    message.lsn = object.lsn ?? "";
+    message.lsn = object.lsn ?? new Uint8Array();
     return message;
   },
 };
@@ -1037,7 +1037,7 @@ export const SatOpBegin = {
 messageTypeRegistry.set(SatOpBegin.$type, SatOpBegin);
 
 function createBaseSatOpCommit(): SatOpCommit {
-  return { $type: "Electric.Satellite.SatOpCommit", commitTimestamp: Long.UZERO, transId: "", lsn: "" };
+  return { $type: "Electric.Satellite.SatOpCommit", commitTimestamp: Long.UZERO, transId: "", lsn: new Uint8Array() };
 }
 
 export const SatOpCommit = {
@@ -1050,8 +1050,8 @@ export const SatOpCommit = {
     if (message.transId !== "") {
       writer.uint32(18).string(message.transId);
     }
-    if (message.lsn !== "") {
-      writer.uint32(26).string(message.lsn);
+    if (message.lsn.length !== 0) {
+      writer.uint32(26).bytes(message.lsn);
     }
     return writer;
   },
@@ -1070,7 +1070,7 @@ export const SatOpCommit = {
           message.transId = reader.string();
           break;
         case 3:
-          message.lsn = reader.string();
+          message.lsn = reader.bytes();
           break;
         default:
           reader.skipType(tag & 7);
@@ -1086,7 +1086,7 @@ export const SatOpCommit = {
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
     message.transId = object.transId ?? "";
-    message.lsn = object.lsn ?? "";
+    message.lsn = object.lsn ?? new Uint8Array();
     return message;
   },
 };

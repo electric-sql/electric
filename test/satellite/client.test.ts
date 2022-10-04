@@ -20,11 +20,11 @@ import { SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
-import { ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { AckType, ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { DEFAULT_LSN, lsnDecoder, lsnEncoder } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
-import { AckType } from '../../src/satellite';
 
 
 test.beforeEach(t => {
@@ -83,7 +83,7 @@ test.serial('replication start timeout', async t => {
   // empty response will trigger client timeout
   server.nextResponses([]); 
   try {
-    await client.startReplication("0");
+    await client.startReplication();
     t.fail(`start replication should throw`);
   } catch (error) {
     t.is(error!.code, SatelliteErrorCode.TIMEOUT);
@@ -110,7 +110,7 @@ test.serial('replication start success', async t => {
   const startResp = SatInStartReplicationResp.fromPartial({});
   server.nextResponses([startResp]);
 
-  await client.startReplication("0");
+  await client.startReplication();
   t.pass();
 });
 
@@ -122,8 +122,8 @@ test.serial('replication start failure', async t => {
   server.nextResponses([startResp]);
 
   try {
-    await client.startReplication("0");
-    await client.startReplication("0"); // fails
+    await client.startReplication();
+    await client.startReplication(); // fails
   } catch (error) {
     t.is((error as any).code, SatelliteErrorCode.REPLICATION_ALREADY_STARTED);
   }
@@ -138,7 +138,7 @@ test.serial('replication stop success', async t => {
   server.nextResponses([start]);
   server.nextResponses([stop]);
 
-  await client.startReplication("0");
+  await client.startReplication();
   await client.stopReplication();
   t.pass();
 });
@@ -174,7 +174,7 @@ test.serial('server pings client', async t => {
     }]);
     server.nextResponses([stop]);
 
-    await client.startReplication("0");
+    await client.startReplication();
     await client.stopReplication();
   });
 });
@@ -184,7 +184,7 @@ test.serial('receive transaction over multiple messages', async t => {
   const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
-  const begin = SatOpBegin.fromPartial({ lsn: "FAKE", commitTimestamp: Long.ZERO });
+  const begin = SatOpBegin.fromPartial({ lsn: DEFAULT_LSN, commitTimestamp: Long.ZERO });
   const commit = SatOpCommit.fromPartial({});
 
   const relation = SatRelation.fromPartial({
@@ -240,7 +240,7 @@ test.serial('receive transaction over multiple messages', async t => {
       res();
     });
 
-    await client.startReplication("0");
+    await client.startReplication();
   });
 });
 
@@ -248,8 +248,10 @@ test.serial('acknowledge lsn', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
 
+  const lsn = lsnEncoder.encode("FAKE")
+
   const start = SatInStartReplicationResp.fromPartial({});
-  const begin = SatOpBegin.fromPartial({ lsn: "FAKE", commitTimestamp: Long.ZERO });
+  const begin = SatOpBegin.fromPartial({ lsn: lsn, commitTimestamp: Long.ZERO });
   const commit = SatOpCommit.fromPartial({});
 
   const opLog = SatOpLog.fromPartial({
@@ -266,13 +268,15 @@ test.serial('acknowledge lsn', async t => {
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: Transaction, ack: any) => {
-      t.is(client['inbound'].ack_lsn, "0");
+      const lsn0 = client['inbound'].ack_lsn
+      t.is(lsn0, DEFAULT_LSN);
       ack();
-      t.is(client['inbound'].ack_lsn, "FAKE");
+      const lsn1 = lsnDecoder.decode(client['inbound'].ack_lsn)
+      t.is(lsn1, "FAKE");
       res();
     });
 
-    await client.startReplication("0");
+    await client.startReplication();
   });
 });
 
@@ -331,6 +335,8 @@ test.serial('send transaction', async t => {
       }
     ])
 
+    const lsnDecoder = new TextDecoder()
+
     // second message is a transaction
     server.nextResponses([
       (data?: Buffer) => {
@@ -338,7 +344,8 @@ test.serial('send transaction', async t => {
         if (msgType == getTypeFromString(SatOpLog.$type)) {
           const satOpLog = (decode(data!) as SatOpLog).ops
 
-          t.is(satOpLog[0].begin?.lsn, "1")
+          const lsn = satOpLog[0].begin?.lsn
+          t.is(lsnDecoder.decode(lsn), "1")
           t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
           // TODO: check values
         }
@@ -352,7 +359,8 @@ test.serial('send transaction', async t => {
         if (msgType == getTypeFromString(SatOpLog.$type)) {
           const satOpLog = (decode(data!) as SatOpLog).ops
 
-          t.is(satOpLog[0].begin?.lsn, "2")
+          const lsn = satOpLog[0].begin?.lsn
+          t.is(lsnDecoder.decode(lsn), "2")
           t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
           // TODO: check values
         }
@@ -360,7 +368,7 @@ test.serial('send transaction', async t => {
       }
     ])
 
-    await client.startReplication("0")
+    await client.startReplication()
 
     // wait a little for replication to start in the opposite direction
     setTimeout(() => {
@@ -374,16 +382,18 @@ test('ack on send and pong', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
 
+  const lsn_1 = lsnEncoder.encode("1")
+
   const startResp = SatInStartReplicationResp.fromPartial({});
-  const pingResponse = SatPingResp.fromPartial({ lsn: "1" });
+  const pingResponse = SatPingResp.fromPartial({ lsn: lsn_1 });
 
   server.nextResponses([startResp])
   server.nextResponses([(pingResponse)])
 
-  await client.startReplication("0")
+  await client.startReplication()
 
   const transaction: Transaction = {
-    lsn: "1",
+    lsn: lsn_1,
     commit_timestamp: Long.UZERO,
     changes: [
       {
@@ -396,11 +406,11 @@ test('ack on send and pong', async t => {
   await new Promise<void>(res => {
     let sent = false
     client.subscribeToAck((lsn, type) => {
-      if (type == AckType.SENT) {
-        t.is(lsn, "1")
+      if (type == AckType.LOCAL_SEND) {
+        t.is(lsnDecoder.decode(lsn), "1")
         sent = true
       } else {
-        t.is(lsn, "1")
+        t.is(lsnDecoder.decode(lsn), "1")
         t.is(sent, true)
         res()
       }
