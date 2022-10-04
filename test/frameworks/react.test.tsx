@@ -12,7 +12,7 @@ import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock
 
 import { DatabaseAdapter as BetterSQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockDatabase as MockBetterSQLiteDatabase } from '../../src/drivers/better-sqlite3/mock'
-
+import { ElectrifiedDatabase } from '../../src/drivers/generic/database'
 import { ElectricNamespace } from '../../src/electric/index'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
@@ -26,6 +26,14 @@ const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   }
 }
 
+const makeElectrified = (namespace: ElectricNamespace): ElectrifiedDatabase => {
+  return {
+    isGenericDatabase: true,
+    isGenericElectricDatabase: true,
+    electric: namespace
+  }
+}
+
 test('useElectricQuery returns query results', async t => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original)
@@ -35,7 +43,7 @@ test('useElectricQuery returns query results', async t => {
   const query = 'select foo from bars'
   const wrapper = ({ children }) => {
     return (
-      <ElectricProvider db={{electric: namespace}}>
+      <ElectricProvider db={makeElectrified(namespace)}>
         { children }
       </ElectricProvider>
     )
@@ -61,7 +69,7 @@ test('useElectricQuery returns error when query errors', async t => {
 
   const wrapper = ({ children }) => {
     return (
-      <ElectricProvider db={{electric: namespace}}>
+      <ElectricProvider db={makeElectrified(namespace)}>
         { children }
       </ElectricProvider>
     )
@@ -83,7 +91,7 @@ test('useElectricQuery re-runs query when data changes', async t => {
 
   const wrapper = ({ children }) => {
     return (
-      <ElectricProvider db={{electric: namespace}}>
+      <ElectricProvider db={makeElectrified(namespace)}>
         { children }
       </ElectricProvider>
     )
@@ -116,7 +124,7 @@ test('useElectricQuery re-runs query when *aliased* data changes', async t => {
 
   const wrapper = ({ children }) => {
     return (
-      <ElectricProvider db={{electric: namespace}}>
+      <ElectricProvider db={makeElectrified(namespace)}>
         { children }
       </ElectricProvider>
     )

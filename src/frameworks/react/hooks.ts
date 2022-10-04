@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { ElectricNamespace } from '../../electric/index'
 import { ChangeNotification } from '../../notifiers/index'
 import { randomValue } from '../../util/random'
 import { QualifiedTablename, hasIntersection } from '../../util/tablename'
@@ -55,17 +56,26 @@ export const useRandom = () => {
 // Returns an object that provides the `ResultData` interface of
 // `{ results, error, updatedAt }`.
 export const useElectricQuery = (query: Query, params?: BindParams) => {
-  const electric = useElectric()
+  const db = useElectric()
 
   const [ cacheKey, bustCache ] = useRandom()
   const [ changeSubscriptionKey, setChangeSubscriptionKey ] = useState<string>()
+  const [ electric, setElectric ] = useState<ElectricNamespace>()
   const [ paramsKey, setParamsKey ] = useState<string>()
   const [ tablenames, setTablenames ] = useState<QualifiedTablename[]>()
   const [ tablenamesKey, setTablenamesKey ] = useState<string>()
   const [ resultData, setResultData ] = useState<ResultData>({})
 
-  // When the `electric` namespace has been configured on the provider,
-  // we use the `adapter` to parse the tablenames from the SQL query.
+  // When the db is set on the provider, we get the electric namespace from it.
+  useEffect(() => {
+    if (db === undefined) {
+      return
+    }
+
+    setElectric(db.electric)
+  }, [db])
+
+  // Use the `adapter` to parse the tablenames from the SQL query.
   useEffect(() => {
     if (electric === undefined) {
       return
@@ -127,8 +137,8 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
     }
 
     electric.adapter.query(query, params)
-      .then((res) => setResultData(successResult(res)))
-      .catch((err) => setResultData(errorResult(err)))
+      .then((res: Row[]) => setResultData(successResult(res)))
+      .catch((err: any) => setResultData(errorResult(err)))
   }, [electric, changeSubscriptionKey, cacheKey, paramsKey])
 
   return resultData

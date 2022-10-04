@@ -1,19 +1,18 @@
 import React, { createContext, useContext } from 'react'
 
-import { AnyElectricDatabase } from '../../drivers/index'
-import { ElectricNamespace } from '../../electric/index'
+import { AnyElectrifiedDatabase } from '../../drivers/index'
 
 interface Props {
   children?: React.ReactNode,
-  db: AnyElectricDatabase
+  db?: AnyElectrifiedDatabase
 }
 
-export const ElectricContext = createContext<ElectricNamespace | undefined>(undefined)
+export const ElectricContext = createContext<AnyElectrifiedDatabase | undefined>(undefined)
 export const useElectric = () => useContext(ElectricContext)
 
 export const ElectricProvider = ({ children, db }: Props) => {
   return (
-    <ElectricContext.Provider value={ db.electric }>
+    <ElectricContext.Provider value={ db }>
       { children }
     </ElectricContext.Provider>
   )
