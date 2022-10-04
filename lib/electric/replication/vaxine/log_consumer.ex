@@ -56,7 +56,14 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
   @impl true
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
     Logger.debug("request subscription")
-    :ok = GenStage.async_subscribe(self(), [{:to, pid} | producer_info()])
+
+    :ok =
+      GenStage.async_subscribe(self(), [
+        {:to, pid},
+        {:cancel, :temporary}
+        | producer_info()
+      ])
+
     {:noreply, [], state}
   end
 

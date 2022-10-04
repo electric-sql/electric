@@ -12,7 +12,7 @@
     ?INSERT 0 1
 
 [shell electric_2]
-    ?pg_slot=pg_2 origin=pg_2 \[debug\] Sending \d messages to the subscriber
+    ?.* origin=pg_2 .* \[debug\] Sending \d messages to the subscriber
 
 [shell pg_2]
     [invoke wait-for "SELECT * FROM entries;" "Hello from a" 10 "electric=#"]

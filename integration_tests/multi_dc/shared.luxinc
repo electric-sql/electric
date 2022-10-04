@@ -1,14 +1,5 @@
 [include ../common.luxinc]
 
-[macro start_psql name]
-    [loop iter 1..10]
-          @electric=#
-          !docker exec -it -e PGPASSWORD=password multi_dc_${name}_1 psql -h ${name} -U electric -d electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-[endmacro]
-
 [macro setup_pg_and_vaxine]
 [shell start_env]
     [progress start development environment]

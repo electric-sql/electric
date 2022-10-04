@@ -99,12 +99,12 @@ defmodule Electric.Satellite.WsServer do
   end
 
   def websocket_info({:"$gen_consumer", from, msg}, state) do
-    Logger.warn("msg from producer: #{inspect(msg)}")
+    Logger.debug("msg from producer: #{inspect(msg)}")
     handle_producer_msg(from, msg, state)
   end
 
   def websocket_info({:"$gen_producer", from, msg}, state) do
-    Logger.warn("msg from consumer: #{inspect(msg)}")
+    Logger.debug("msg from consumer: #{inspect(msg)}")
     handle_consumer_msg(from, msg, state)
   end
 
@@ -145,7 +145,7 @@ defmodule Electric.Satellite.WsServer do
         {:cancel, reason},
         %State{out_rep: %OutRep{} = out_rep} = state
       ) do
-    Logger.warn("log producer canceled subscription: #{inspect(reason)}")
+    Logger.debug("log producer canceled subscription: #{inspect(reason)}")
 
     {[binary_frame(%SatErrorResp{})],
      %State{state | out_rep: %OutRep{out_rep | pid: nil, stage_sub: nil}}}

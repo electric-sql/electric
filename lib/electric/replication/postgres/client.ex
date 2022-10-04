@@ -29,6 +29,9 @@ defmodule Electric.Replication.Postgres.Client do
           connection: term()
         }
 
+  @type connection :: pid
+  @type publication :: String.t()
+
   @doc """
   Connect to a postgres instance
   """
@@ -97,6 +100,12 @@ defmodule Electric.Replication.Postgres.Client do
   AND    i.indisprimary
   """
 
+  @migrations_query """
+  SELECT version, hash, applied_at FROM electric.migrations ORDER BY applied_at DESC;
+  """
+
+  @spec query_replicated_tables(connection, publication | nil) ::
+          [Electric.Postgres.SchemaRegistry.replicated_table()]
   def query_replicated_tables(conn, publication \\ nil)
 
   def query_replicated_tables(conn, nil) do
@@ -147,6 +156,16 @@ defmodule Electric.Replication.Postgres.Client do
     end)
   end
 
+  @spec query_migration_table(connection) :: [Electric.Postgres.SchemaRegistry.migration_table()]
+  def query_migration_table(conn) do
+    {:ok, _, table_data} = :epgsql.squery(conn, @migrations_query)
+
+    Enum.map(table_data, fn {vsn, hash, applied_at} ->
+      {:ok, datetime, _} = DateTime.from_iso8601(applied_at)
+      %{vsn: vsn, hash: hash, applied_at: datetime}
+    end)
+  end
+
   def start_subscription(conn, name) do
     with {:ok, _, _} <- :epgsql.squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
          {:ok, _, _} <-
@@ -158,6 +177,16 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @spec stop_subscription(connection, String.t()) :: :ok
+  def stop_subscription(conn, name) do
+    with {:ok, _, _} <- :epgsql.squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
+            DISABLE|) do
+      :ok
+    end
+  end
+
+  @spec create_publication(connection(), publication(), :all | binary | [binary]) ::
+          {:ok, String.t()}
   def create_publication(conn, name, :all) do
     # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
     create_publication(conn, name, "ALL TABLES")
@@ -181,11 +210,13 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @spec get_system_id(connection()) :: {:ok, binary}
   def get_system_id(conn) do
     {:ok, _, [{system_id, _, _, _}]} = :epgsql.squery(conn, "IDENTIFY_SYSTEM")
     {:ok, system_id}
   end
 
+  @spec create_slot(connection(), String.t()) :: {:ok, String.t()}
   def create_slot(conn, slot_name) do
     case :epgsql.squery(
            conn,
@@ -252,7 +283,7 @@ defmodule Electric.Replication.Postgres.Client do
     opts = 'proto_version \'1\', publication_names \'#{publication}\''
 
     conn
-    |> :epgsql.start_replication(slot, handler, [], '0/0', opts)
+    |> :epgsql.start_replication(:erlang.binary_to_list(slot), handler, [], '0/0', opts)
   end
 
   @doc """

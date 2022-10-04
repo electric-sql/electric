@@ -4,6 +4,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.PostgresConnector
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -35,7 +37,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               client: nil,
               origin: nil,
               drop_current_transaction?: false,
-              types: %{}
+              types: %{},
+              ignore_relations: []
 
     @type t() :: %__MODULE__{
             conn: pid(),
@@ -44,18 +47,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             relations: %{Messages.relation_id() => %Relation{}},
             transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
             publication: String.t(),
-            client: module(),
-            origin: String.t(),
+            origin: PostgresConnector.origin(),
             drop_current_transaction?: boolean(),
-            types: %{}
+            types: %{},
+            ignore_relations: [term()]
           }
   end
 
-  def start_link(name, opts) do
-    GenStage.start_link(__MODULE__, [name, opts])
+  @spec start_link(PostgresConnector.origin()) :: :ignore | {:error, any} | {:ok, pid}
+  def start_link(origin) do
+    GenStage.start_link(__MODULE__, [origin])
   end
 
-  @spec get_name(String.t()) :: Electric.reg_name()
+  @spec get_name(PostgresConnector.origin()) :: Electric.reg_name()
   def get_name(name) do
     {:via, :gproc, name(name)}
   end
@@ -65,25 +69,27 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   @impl true
-  def init([name, opts]) do
-    :gproc.reg(name(name))
+  def init([origin]) do
+    :gproc.reg(name(origin))
 
-    publication = opts.replication.publication
-    slot = opts.replication.slot
+    conn_config = PostgresConnector.get_connection_opts(origin)
+    repl_config = PostgresConnector.get_replication_opts(origin)
 
-    with {:ok, conn} <- opts.client.connect(opts.connection),
-         :ok <- opts.client.start_replication(conn, publication, slot, self()) do
-      Logger.metadata(pg_producer: opts.origin)
-      Logger.info("Starting replication from #{opts.origin}")
-      Logger.info("Connection settings: #{inspect(opts)}")
+    publication = repl_config.publication
+    slot = repl_config.slot
+
+    with {:ok, conn} <- Client.connect(conn_config),
+         :ok <- Client.start_replication(conn, publication, slot, self()) do
+      Logger.metadata(pg_producer: origin)
+      Logger.info("Starting replication from #{origin}")
+      Logger.info("Connection settings: #{inspect(conn_config)}")
 
       {:producer,
        %State{
          conn: conn,
          queue: :queue.new(),
          publication: publication,
-         client: opts.client,
-         origin: opts.origin
+         origin: origin
        }}
     end
   end
@@ -116,10 +122,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
   defp process_message(%Relation{} = msg, state) do
-    {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
+    case ignore_relations(msg, state) do
+      {true, state} ->
+        Logger.debug("ignore relation from electric schema #{inspect(msg)}")
+        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
+
+      false ->
+        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
+    end
   end
 
-  defp process_message(%Insert{} = msg, state) do
+  defp process_message(%Insert{} = msg, %State{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
@@ -129,10 +142,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [new_record | txn.changes]}
 
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
+    {:noreply, [],
+     %{
+       state
+       | transaction: {lsn, txn},
+         drop_current_transaction?: maybe_drop(msg.relation_id, state)
+     }}
   end
 
-  defp process_message(%Update{} = msg, state) do
+  defp process_message(%Update{} = msg, %State{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
@@ -147,10 +165,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [updated_record | txn.changes]}
 
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
+    {:noreply, [],
+     %{
+       state
+       | transaction: {lsn, txn},
+         drop_current_transaction?: maybe_drop(msg.relation_id, state)
+     }}
   end
 
-  defp process_message(%Delete{} = msg, state) do
+  defp process_message(%Delete{} = msg, %State{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
     data =
@@ -167,7 +190,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [deleted_record | txn.changes]}
 
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
+    {:noreply, [],
+     %{
+       state
+       | transaction: {lsn, txn},
+         drop_current_transaction?: maybe_drop(msg.relation_id, state)
+     }}
   end
 
   defp process_message(%Truncate{} = msg, state) do
@@ -194,6 +222,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          %State{transaction: {current_txn_lsn, _}, drop_current_transaction?: true} = state
        )
        when commit_lsn == current_txn_lsn do
+    Logger.debug("ignoring transaction with lsn #{inspect(commit_lsn)}")
     {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
   end
 
@@ -265,13 +294,43 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       | origin: state.origin,
         publication: state.publication,
         lsn: end_lsn,
-        ack_fn: fn -> ack(state.client, state.conn, state.origin, end_lsn) end
+        ack_fn: fn -> ack(state.conn, state.origin, end_lsn) end
     }
   end
 
-  @spec ack(module(), pid(), String.t(), Electric.Postgres.Lsn.t()) :: :ok
-  def ack(client, conn, origin, lsn) do
+  @spec ack(pid(), PostgresConnector.origin(), Electric.Postgres.Lsn.t()) :: :ok
+  def ack(conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
-    client.acknowledge_lsn(conn, lsn)
+    Client.acknowledge_lsn(conn, lsn)
+  end
+
+  # We use this fun to limit replication, electric.* tables are not expected to be
+  # replicated further from PG
+  defp ignore_relations(msg = %Relation{}, state = %State{}) do
+    case msg.id in state.ignore_relations do
+      false ->
+        # We do not encourage developers to use 'electric' schema, but some
+        # tools like sysbench do that by default, instead of 'public' schema
+
+        with true <- msg.namespace == "electric",
+             true <- msg.name in ["migrations", "meta"] do
+          {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
+        else
+          false ->
+            false
+        end
+
+      true ->
+        {true, state}
+    end
+  end
+
+  @spec maybe_drop(Messages.relation_id(), %State{}) :: boolean
+  defp maybe_drop(_id, %State{drop_current_transaction?: true}) do
+    true
+  end
+
+  defp maybe_drop(id, %State{ignore_relations: ids}) do
+    id in ids
   end
 end

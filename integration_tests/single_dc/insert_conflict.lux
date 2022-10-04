@@ -22,7 +22,7 @@
     ?INSERT 0 1
 
 [shell electric]
-    ?pg_slot=postgres_1 origin=postgres_1 \[debug\] Sending \d messages to the subscriber
+    ?.* origin=postgres_1 .* \[debug\] Sending \d messages to the subscriber
 
 [shell pg_1]
     [loop iter 1..10]

@@ -1,0 +1,62 @@
+[doc Sanity check test that environment starts correctly]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric]
+
+[include shared.luxinc]
+
+[invoke setup]
+
+[shell electric_curl]
+    !curl http://localhost:5050/api/status
+    ?{"connectors":{"postgres_1":true,"postgres_2":true},"vaxine":true}
+
+    !curl http://localhost:5050/api/migrations
+    ?\[{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_1","vsn":"1"},{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_2","vsn":"1"}\]
+
+    !curl http://localhost:5050/api/migrations/postgres_1
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_1","vsn":"1"}
+
+    !curl http://localhost:5050/api/migrations/postgres_2
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_2","vsn":"1"}
+
+[shell electric_migrate]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
+          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+    ?HTTP/1.1 200 OK
+
+[shell electric]
+    ?.* origin=postgres_1 .* \[notice\] ready to migrate to version: 2
+    ?.* origin=postgres_1 .* \[notice\] successfull migration to version: 2
+    ?.* Successfully initialized origin postgres_1
+
+[shell electric_migrate]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+    ?HTTP/1.1 200 OK
+
+[shell electric]
+    ?.* origin=postgres_2 .* \[notice\] ready to migrate to version: 2
+    ?.* origin=postgres_2 .* \[notice\] successfull migration to version: 2
+    ?.* Successfully initialized origin postgres_2
+
+[shell electric_curl]
+    !curl http://localhost:5050/api/migrations/postgres_1
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_1","vsn":"2"}
+
+    !curl http://localhost:5050/api/migrations/postgres_2
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_2","vsn":"2"}
+
+[shell electric_migrate]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
+          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+    ?HTTP/1.1 403 Forbidden
+    ?:already_migrated
+
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"3"}'
+    ?HTTP/1.1 403 Forbidden
+    ?:vsn_not_found
+
+[cleanup]
+    [invoke teardown]

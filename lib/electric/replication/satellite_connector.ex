@@ -1,4 +1,5 @@
 defmodule Electric.Replication.SatelliteConnector do
+  alias Electric.Replication.Vaxine
   use Supervisor
 
   require Logger
@@ -32,11 +33,11 @@ defmodule Electric.Replication.SatelliteConnector do
     children = [
       %{
         id: :vx_consumer,
-        start: {Electric.Replication.Vaxine.LogConsumer, :start_link, [name, producer]}
+        start: {Vaxine.LogConsumer, :start_link, [name, producer]}
       },
       %{
         id: :vx_producer,
-        start: {Electric.Replication.Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
+        start: {Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
       }
     ]
 
