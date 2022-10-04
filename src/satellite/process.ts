@@ -441,12 +441,17 @@ export class SatelliteProcess implements Satellite {
       `'sqlite_temp_schema'`,
     ]
 
-    const tables = `SELECT name FROM pragma_table_list() 
-                      WHERE name NOT IN (${notIn.join(",")})
-                    `
+    // XXX @balegas `pragma_table_list` is >= 3.37.0 and that's quite bleeding edge,
+    // for example not supported by default by react-native-sqlite-storage.
+    const tables = `
+      SELECT name FROM sqlite_master
+        WHERE type = 'table'
+          AND name NOT IN (${notIn.join(",")})
+    `
+    const tableNames = await this.adapter.query(tables)
+
     const columnsFor = (table: string) =>
       `SELECT * FROM pragma_table_info('${table}')`
-    const tableNames = await this.adapter.query(tables)
 
     const relations: RelationsCache = {}
 
