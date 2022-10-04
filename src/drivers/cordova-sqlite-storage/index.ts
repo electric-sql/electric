@@ -20,7 +20,7 @@ export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<Da
   const dbName: DbName = db.dbname
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
-  const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrationsPath)
+  const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
   const notifier = opts.notifier || new EventNotifier(dbName)
   const registry = opts.registry || globalRegistry
 

@@ -1,7 +1,7 @@
 
 export interface Migration {
   body: string,
-  encoding: 'escaped', // | 'base64'
+  encoding: string,
   name: string,
   sha256: string,
   title: string
@@ -17,6 +17,5 @@ export interface Migrator {
 }
 
 export interface MigratorOptions {
-  path: string,
   tableName: string
 }

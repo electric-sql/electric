@@ -12,6 +12,9 @@ import { Satellite } from '../../src/satellite';
 import { SatelliteClient } from '../../src/satellite/client';
 import { randomUUID } from 'crypto';
 
+import { data as testMigrationsData } from '../support/migrations'
+const { migrations } = testMigrationsData
+
 type Context = {
     dbName: string,
     adapter: DatabaseAdapter,
@@ -44,7 +47,7 @@ test.beforeEach(t => {
     const db = new Database(dbName)
     const adapter = new DatabaseAdapter(db)
 
-    const migrator = new BundleMigrator(adapter, '../../test/support/migrations')
+    const migrator = new BundleMigrator(adapter, migrations)
     const notifier = new MockNotifier(dbName)
     const client = new SatelliteClient(socket, clientOpts)
 

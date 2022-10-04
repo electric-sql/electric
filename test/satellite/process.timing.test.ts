@@ -18,6 +18,9 @@ import { SatelliteProcess } from '../../src/satellite/process'
 import { initTableInfo } from '../support/satellite-helpers'
 import { Satellite } from '../../src/satellite'
 
+import { data as testMigrationsData } from '../support/migrations'
+const { migrations } = testMigrationsData
+
 type ContextType = {
   adapter: DatabaseAdapter,
   satellite: Satellite,
@@ -34,7 +37,7 @@ test.beforeEach(t => {
   const dbName = `test-${randomValue()}.db`
   const db = new Database(dbName)
   const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, '../../test/support/migrations')
+  const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, opts)

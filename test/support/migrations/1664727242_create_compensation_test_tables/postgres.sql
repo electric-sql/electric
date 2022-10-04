@@ -1,6 +1,6 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "91625cae6ed25314e26a00987f3e84c198540c4c83caf88f6a370ce8d7191159"}}
+{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "fda9c8a1f86d0c67eec25b1b111c601ee505c1b9eafc32069ce40de4a2d83506"}}
 */
 
 CREATE TABLE main.child (

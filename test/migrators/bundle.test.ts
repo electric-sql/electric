@@ -8,6 +8,9 @@ import { BundleMigrator } from '../../src/migrators/bundle'
 
 import { randomValue } from '../../src/util/random'
 
+import { data as testMigrationsData } from '../support/migrations'
+const { migrations } = testMigrationsData
+
 test.beforeEach(t => {
   const dbName = `bundle-migrator-${randomValue()}.db`
   const db = new Database(dbName)
@@ -29,7 +32,7 @@ test.afterEach.always(async t => {
 test('run the bundle migrator', async t => {
   const { adapter } = t.context as any
 
-  const migrator = new BundleMigrator(adapter, '../../test/support/migrations')
+  const migrator = new BundleMigrator(adapter, migrations)
   t.is(await migrator.up(), 3)
   t.is(await migrator.up(), 0)
 })

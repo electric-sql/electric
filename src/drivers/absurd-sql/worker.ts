@@ -58,7 +58,7 @@ export class ElectricWorker extends WorkerServer {
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
       const adapter = opts.adapter || new DatabaseAdapter(db)
-      const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrationsPath)
+      const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
       const notifier = opts.notifier || new WorkerBridgeNotifier(dbName, this)
       const socket = opts.socket || new MockSocket()
 

@@ -1,6 +1,6 @@
 import { AnyDatabase, AnyElectricDatabase } from '../drivers/index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
+import { Migration, Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { Registry } from '../satellite/index'
 import { Socket } from '../sockets/index'
@@ -11,8 +11,8 @@ import { DbName } from '../util/types'
 // entrypoint. They are all optional to optionally allow different / mock
 // implementations to be passed in to facilitate testing.
 export interface ElectrifyOptions {
+  migrations?: Migration[],
   adapter?: DatabaseAdapter,
-  migrationsPath?: string,
   migrator?: Migrator,
   notifier?: Notifier,
   socket?: Socket,

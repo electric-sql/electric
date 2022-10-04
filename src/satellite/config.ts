@@ -3,6 +3,8 @@ import { QualifiedTablename } from '../util/tablename'
 export interface SatelliteOpts {
   // The database table where Satellite keeps its processing metadata.
   metaTable: QualifiedTablename,
+  // The database table where the bundle migrator keeps its metadata.
+  migrationsTable: QualifiedTablename,
   // The database table where change operations are written to by the triggers
   // automatically added to all tables in the user defined DDL schema.
   oplogTable: QualifiedTablename,
@@ -17,6 +19,7 @@ export interface SatelliteOpts {
 // As above but optional.
 export interface SatelliteOverrides {
   metaTable?: QualifiedTablename,
+  migrationsTable?: QualifiedTablename,
   oplogTable?: QualifiedTablename,
   pollingInterval?: number,
   minSnapshotWindow?: number,
@@ -24,6 +27,7 @@ export interface SatelliteOverrides {
 
 export const satelliteDefaults: SatelliteOpts = {
   metaTable: new QualifiedTablename('main', '_electric_meta'),
+  migrationsTable: new QualifiedTablename('main', '_electric_migrations'),
   oplogTable: new QualifiedTablename('main', '_electric_oplog'),
   triggersTable: new QualifiedTablename('main', '_electric_trigger_settings'),
   pollingInterval: 2000,

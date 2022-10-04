@@ -4,7 +4,5 @@ ElectricDB Migration
 */
 
 CREATE TABLE IF NOT EXISTS main.items (
-  id TEXT PRIMARY KEY,
-  value TEXT,
-  otherValue INTEGER
+  value TEXT PRIMARY KEY
 ) STRICT, WITHOUT ROWID;

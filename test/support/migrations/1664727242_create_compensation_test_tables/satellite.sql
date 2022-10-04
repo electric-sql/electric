@@ -1,6 +1,6 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "91625cae6ed25314e26a00987f3e84c198540c4c83caf88f6a370ce8d7191159"}}
+{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "fda9c8a1f86d0c67eec25b1b111c601ee505c1b9eafc32069ce40de4a2d83506"}}
 */
 
 CREATE TABLE IF NOT EXISTS main.parent (
@@ -105,8 +105,8 @@ CREATE TRIGGER update_ensure_main_items_primarykey
 BEGIN
   SELECT
     CASE
-      WHEN old.id != new.id THEN
-        RAISE (ABORT,'cannot change the value of column id as it belongs to the primary key')
+      WHEN old.value != new.value THEN
+        RAISE (ABORT,'cannot change the value of column value as it belongs to the primary key')
     END;
 END;
 
@@ -118,7 +118,7 @@ CREATE TRIGGER insert_main_items_into_oplog
    WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  VALUES ('main', 'items', 'INSERT', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), NULL, NULL);
+  VALUES ('main', 'items', 'INSERT', json_object('value', new.value), json_object('value', new.value), NULL, NULL);
 END;
 
 DROP TRIGGER IF EXISTS update_main_items_into_oplog;
@@ -127,7 +127,7 @@ CREATE TRIGGER update_main_items_into_oplog
    WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  VALUES ('main', 'items', 'UPDATE', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'otherValue', new.otherValue), json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);
+  VALUES ('main', 'items', 'UPDATE', json_object('value', new.value), json_object('value', new.value), json_object('value', old.value), NULL);
 END;
 
 DROP TRIGGER IF EXISTS delete_main_items_into_oplog;
@@ -136,7 +136,7 @@ CREATE TRIGGER delete_main_items_into_oplog
    WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  VALUES ('main', 'items', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'value', old.value, 'otherValue', old.otherValue), NULL);
+  VALUES ('main', 'items', 'DELETE', json_object('value', old.value), NULL, json_object('value', old.value), NULL);
 END;
 
 

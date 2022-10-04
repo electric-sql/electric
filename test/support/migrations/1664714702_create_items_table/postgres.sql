@@ -1,9 +1,7 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "create_items_table", "name": "1664714702_create_items_table", "sha256": "e24043b5d46a8338ef5a76a4f332a47fd77de57ecbf7d8e6b0587acdc20eb370"}}
+{"metadata": {"title": "create_items_table", "name": "1664714702_create_items_table", "sha256": "f136a45a26caece7e20a4712bb19bed105e9deb72c4c61ed189ca1d571b0f47f"}}
 */
 
 CREATE TABLE main.items (
-  id text PRIMARY KEY,
-  value text,
-  otherValue integer);
+  value text PRIMARY KEY);

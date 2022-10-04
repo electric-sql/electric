@@ -3,7 +3,6 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { overrideDefined } from '../util/options'
 
 const DEFAULTS: MigratorOptions = {
-  path: './migrations',
   tableName: '_electric_migrations'
 }
 
@@ -12,35 +11,28 @@ const VALID_SHA256_EXP = new RegExp('^[a-z0-9]{64}$')
 
 export class BundleMigrator implements Migrator {
   adapter: DatabaseAdapter
+  migrations: Migration[]
 
-  path: string
   tableName: string
 
-  constructor(adapter: DatabaseAdapter, path?: string, tableName?: string) {
-    const overrides = {path: path, tableName: tableName}
+  constructor(adapter: DatabaseAdapter, migrations: Migration[] = [], tableName?: string) {
+    const overrides = {tableName: tableName}
     const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
 
     this.adapter = adapter
-    this.path = opts.path.endsWith('/') ? opts.path.slice(0, -1) : opts.path
+    this.migrations = migrations
     this.tableName = opts.tableName
   }
 
   async up(): Promise<number> {
-    const migrations = await this.loadMigrations()
     const existing = await this.queryApplied()
-    const unapplied = await this.validateApplied(migrations, existing)
+    const unapplied = await this.validateApplied(this.migrations, existing)
 
     unapplied.forEach(async (migration) => {
       await this.apply(migration)
     })
 
     return unapplied.length
-  }
-
-  async loadMigrations(): Promise<Migration[]> {
-    const { data: { migrations } } = await import(`${this.path}/index.js`)
-
-    return migrations
   }
 
   async queryApplied(): Promise<MigrationRecord[]> {

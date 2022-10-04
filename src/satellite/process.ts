@@ -453,6 +453,7 @@ export class SatelliteProcess implements Satellite {
   private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
     const notIn = [
       `'${this.opts.metaTable.tablename.toString()}'`,
+      `'${this.opts.migrationsTable.tablename.toString()}'`,
       `'${this.opts.oplogTable.tablename.toString()}'`,
       `'${this.opts.triggersTable.tablename.toString()}'`,
       `'sqlite_schema'`,
