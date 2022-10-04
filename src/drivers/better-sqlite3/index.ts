@@ -14,7 +14,7 @@ import { DbName } from '../../util/types'
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 
-export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
+export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.name
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
@@ -25,5 +25,6 @@ export const electrify = (db: Database, opts: ElectrifyOptions = {}): Promise<El
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  return baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  return electrified as unknown as ElectrifiedDatabase
 }

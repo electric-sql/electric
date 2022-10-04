@@ -16,7 +16,7 @@ import { globalRegistry } from '../../satellite/registry'
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 
-export const electrify = (db: Database, promisesEnabled?: boolean, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
+export const electrify = async (db: Database, promisesEnabled?: boolean, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   if (opts === undefined) {
     opts = {}
   }
@@ -31,5 +31,6 @@ export const electrify = (db: Database, promisesEnabled?: boolean, opts?: Electr
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace, promisesEnabled)
 
-  return baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  return electrified as unknown as ElectrifiedDatabase
 }

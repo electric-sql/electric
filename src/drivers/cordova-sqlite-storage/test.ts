@@ -10,12 +10,12 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase } from './database'
+import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 import { MockDatabase } from './mock'
 
-type RetVal = Promise<[Database, Notifier, Database]>
+type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 
-export const initTestable = (dbName: DbName, opts: ElectrifyOptions = {}): RetVal => {
+export const initTestable = async (dbName: DbName, opts: ElectrifyOptions = {}): RetVal => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
@@ -26,6 +26,6 @@ export const initTestable = (dbName: DbName, opts: ElectrifyOptions = {}): RetVa
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  return electrify(dbName, db, electric, adapter, migrator, notifier, registry)
-    .then((electrified) => [db, notifier, electrified])
+  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }
