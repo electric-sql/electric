@@ -1,8 +1,7 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
 import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
-
-const lsnEncoder = new TextEncoder()
+import { lsnEncoder } from '../util/common'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -199,7 +198,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
 
     const change = opLogEntryToChange(txn)
     currTxn.changes.push(change)
-    currTxn.lsn = lsnEncoder.encode(txn.rowid.toString()) // LSN is the largest rowId?
+    currTxn.lsn = lsnEncoder.encode(txn.rowid.toString())
     return acc
   }, [init])
 }

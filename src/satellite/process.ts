@@ -5,22 +5,19 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { Client } from './index'
-import { toHexString } from '../util/hex'
 import { QualifiedTablename } from '../util/tablename'
-import { AckType, DbName, DEFAULT_LSN, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
-
+import { AckType, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
+import { DEFAULT_LSN, lsnDecoder, lsnEncoder } from '../util/common'
+import { toHexString } from '../util/hex'
 
 type ChangeAccumulator = {
   [key: string]: Change
 }
-
-const lsnDecoder = new TextDecoder()
-const lsnEncoder = new TextEncoder()
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -121,7 +118,7 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
 
-    this._lastAckdRowId = await this._getMeta('ackRowId') as number
+    this._lastAckdRowId = await this._getMeta('lastAckdRowId') as number
     this._lastSentRowId = await this._getMeta('lastSentRowId') as number
     this._lsn = await this._getMeta('lsn') as LSN
 
@@ -396,7 +393,7 @@ export class SatelliteProcess implements Satellite {
     let sql = `
       UPDATE ${meta} 
         SET value='${rowId}' 
-      WHERE key='${isAck ? 'ackRowId' : 'lastSentRowId'}'`
+      WHERE key='${isAck ? 'lastAckdRowId' : 'lastSentRowId'}'`
 
     if (isAck) {
       const oplog = this.opts.oplogTable.toString()

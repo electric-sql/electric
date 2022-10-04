@@ -1,4 +1,4 @@
-import { readFile, rm as removeFile } from 'node:fs/promises'
+import { rm as removeFile } from 'node:fs/promises'
 
 import test from 'ava'
 
@@ -18,9 +18,10 @@ import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
 import Long from 'long'
-import { ChangeType, DEFAULT_LSN, Transaction } from '../../src/util/types'
+import { ChangeType, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
+import { DEFAULT_LSN, lsnEncoder } from '../../src/util/common'
 
 import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
@@ -29,6 +30,7 @@ type ContextType = {
   adapter: DatabaseAdapter,
   satellite: Satellite,
   client: MockSatelliteClient
+  runMigrations: () => Promise<void>
 }
 
 // Speed up the intervals for testing.
@@ -36,10 +38,6 @@ const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 40,
   pollingInterval: 200
 })
-
-const lsnEncoder = new TextEncoder()
-const lsnDecoder = new TextDecoder()
-
 
 test.beforeEach(t => {
   const dbName = `test-${randomValue()}.db`
@@ -100,7 +98,7 @@ test('load metadata', async t => {
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
-  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: '0' })
+  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: new Buffer(DEFAULT_LSN) })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -436,7 +434,7 @@ test('compensations: referential integrity is enforced', async t => {
   await runMigrations()
 
   await adapter.run(`PRAGMA foreign_keys = ON`)
-  await satellite._setMeta('compensations', 0)
+  await satellite._setMeta('compensations', '0')
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
 
@@ -450,7 +448,7 @@ test('compensations: incoming operation breaks referential integrity', async t =
   await runMigrations()
 
   await adapter.run(`PRAGMA foreign_keys = ON`)
-  await satellite._setMeta('compensations', 0)
+  await satellite._setMeta('compensations', '0')
 
   const incoming = [
     generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
@@ -469,7 +467,7 @@ test('compensations: incoming operations accepted if restore referential integri
   await runMigrations()
 
   await adapter.run(`PRAGMA foreign_keys = ON`)
-  await satellite._setMeta('compensations', 0)
+  await satellite._setMeta('compensations', '0')
 
   const incoming = [
     generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
@@ -500,7 +498,7 @@ test('compensations: using triggers with flag 0', async t => {
   await runMigrations()
 
   await adapter.run(`PRAGMA foreign_keys = ON`)
-  await satellite._setMeta('compensations', 0)
+  await satellite._setMeta('compensations', '0')
   satellite._lastSentRowId = 1
 
   await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)

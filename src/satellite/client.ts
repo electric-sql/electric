@@ -20,7 +20,8 @@ import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util
 import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import { AckCallback, AuthResponse, ChangeType, DEFAULT_LSN, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { DEFAULT_LSN } from '../util/common'
 import { Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
 

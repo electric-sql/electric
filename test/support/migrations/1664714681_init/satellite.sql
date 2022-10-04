@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS _electric_oplog (
 -- Somewhere to keep our metadata
 CREATE TABLE IF NOT EXISTS _electric_meta (
   key TEXT,
-  value TEXT
+  value BLOB
 );
 
 -- Somewhere to track migrations
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS _electric_migrations (
 );
 
 -- Initialisation of the metadata table
-INSERT INTO _electric_meta (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', '0');
+INSERT INTO _electric_meta (key, value) VALUES ('compensations', '0'), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', '0');
 
 
 -- These are toggles for turning the triggers on and off

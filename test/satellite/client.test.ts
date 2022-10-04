@@ -20,7 +20,8 @@ import { SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
-import { AckType, ChangeType, DEFAULT_LSN, SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { AckType, ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { DEFAULT_LSN, lsnDecoder, lsnEncoder } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
@@ -247,8 +248,7 @@ test.serial('acknowledge lsn', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
 
-  const lsn = new TextEncoder().encode("FAKE")
-  const lsnDecoder = new TextDecoder()
+  const lsn = lsnEncoder.encode("FAKE")
 
   const start = SatInStartReplicationResp.fromPartial({});
   const begin = SatOpBegin.fromPartial({ lsn: lsn, commitTimestamp: Long.ZERO });
@@ -268,8 +268,8 @@ test.serial('acknowledge lsn', async t => {
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: Transaction, ack: any) => {
-      const lsn0 = lsnDecoder.decode(client['inbound'].ack_lsn)
-      t.is(lsn0, "0");
+      const lsn0 = client['inbound'].ack_lsn
+      t.is(lsn0, DEFAULT_LSN);
       ack();
       const lsn1 = lsnDecoder.decode(client['inbound'].ack_lsn)
       t.is(lsn1, "FAKE");
@@ -381,9 +381,6 @@ test.serial('send transaction', async t => {
 test('ack on send and pong', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
-
-  const lsnDecoder = new TextDecoder()
-  const lsnEncoder = new TextEncoder()
 
   const lsn_1 = lsnEncoder.encode("1")
 

@@ -16,9 +16,6 @@ export type Tablename = string
 export type VoidOrPromise = void | Promise<void>
 export type LSN = Uint8Array | Buffer
 
-export const DEFAULT_LSN = new TextEncoder().encode("0")
-
-
 export class SatelliteError extends Error {
     public code: SatelliteErrorCode;
 
