@@ -15,7 +15,7 @@ export abstract class SQLitePluginDatabaseAdapter {
     this.promisesEnabled = false
   }
 
-  _transaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction, readOnly: boolean = false): void {
+  _transaction(txFn: AnyFunction, readOnly: boolean, success?: AnyFunction, error?: AnyFunction): void {
     const run = readOnly
       ? this.db.readTransaction.bind(this.db)
       : this.db.transaction.bind(this.db)
@@ -28,35 +28,67 @@ export abstract class SQLitePluginDatabaseAdapter {
     }
   }
 
-  _readTransaction(txFn: AnyFunction, success: AnyFunction, error: AnyFunction): void {
-    this._transaction(txFn, success, error, true)
+  _readTransaction(txFn: AnyFunction, success?: AnyFunction, error?: AnyFunction): void {
+    this._transaction(txFn, true, success, error)
   }
 
   run(sql: string): Promise<void> {
-    const run = this._transaction.bind(this)
+    const promisesEnabled = this.promisesEnabled
+    const runBatch = this.db.sqlBatch.bind(this.db)
 
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const success = ([_tx, _results]: ExecutionResult) => {
+      const success = () => {
+        console.log('SQLitePluginDatabaseAdapter.run success', sql)
+
         resolve()
       }
-      const error = (err: any) => reject(err)
-      const txFn = (tx: SQLitePluginTransaction) => tx.executeSql(sql)
+      const error = (err: any) => {
+        console.log('SQLitePluginDatabaseAdapter.run error', sql, err)
 
-      run(txFn, success, error)
+        reject(err)
+      }
+
+      const stmts: string[] = sql.split(';')
+
+      if (promisesEnabled) {
+        ensurePromise(runBatch(stmts))
+          .then(success)
+          .catch(error)
+      }
+      else {
+        runBatch(stmts, success, error)
+      }
     })
   }
 
   query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
+    const promisesEnabled = this.promisesEnabled
     const read = this._readTransaction.bind(this)
 
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = ([_tx, results]: ExecutionResult) => {
+        console.log('SQLitePluginDatabaseAdapter.query success', sql, bindParams, results)
+
         resolve(rowsFromResults(results))
       }
-      const error = (err: any) => reject(err)
-      const txFn = (tx: SQLitePluginTransaction) => tx.executeSql(sql, bindParams)
+      const error = (err: any) => {
+        console.log('SQLitePluginDatabaseAdapter.query error', err)
 
-      read(txFn, success, error)
+        reject(err)
+      }
+
+      const txFn = (tx: SQLitePluginTransaction) => {
+        if (promisesEnabled) {
+          ensurePromise(tx.executeSql(sql, bindParams))
+            .then(success)
+            .catch(error)
+        }
+        else {
+          tx.executeSql(sql, bindParams, success, error)
+        }
+      }
+
+      read(txFn)
     })
   }
 

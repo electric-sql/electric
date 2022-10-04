@@ -43,6 +43,12 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
   transaction(_txFn: AnyFunction, _error?: AnyFunction, success?: AnyFunction): void {
     this.addTransaction(new MockSQLitePluginTransaction(false, success))
   }
+
+  sqlBatch(_stmts: string[], success?: AnyFunction, _error?: AnyFunction): void {
+    if (success !== undefined) {
+      success()
+    }
+  }
 }
 
 export class MockSQLitePluginTransaction implements SQLitePluginTransaction {

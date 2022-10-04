@@ -27,8 +27,21 @@ export interface SQLitePlugin {
   addTransaction(tx: SQLitePluginTransaction): void
 
   // May be promisified.
+<<<<<<< HEAD
   readTransaction(txFn: SQLitePluginTransactionFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
   transaction(txFn: SQLitePluginTransactionFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
+=======
+  readTransaction(txFn: AnyFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
+  transaction(txFn: AnyFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
+  sqlBatch(stmts: string[], success?: AnyFunction, error?: AnyFunction): VoidOrPromise
+}
+
+// The relevant subset of the SQLitePluginTransaction interface.
+export interface SQLitePluginTransaction {
+  readOnly: boolean
+  success(...args: any[]): any
+  executeSql(sql: string, values?: BindParams, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
+>>>>>>> 5e5490f (sql-plugin: switch `adapter.run` to use `db.sqlBatch`.)
 }
 
 // Abstract class designed to be extended by concrete
