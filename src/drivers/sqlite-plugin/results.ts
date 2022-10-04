@@ -28,3 +28,14 @@ export const rowsFromResults = (results: Results): Row[] => {
 
   return rows
 }
+
+export const mockResults = (rows: Row[]): Results => {
+  return {
+    rows: {
+      item: (i: number) => rows[i],
+      length: rows.length,
+      raw: () => rows
+    },
+    rowsAffected: 0
+  }
+}

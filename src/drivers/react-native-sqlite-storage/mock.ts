@@ -9,6 +9,7 @@ const promisablePatchedMethods: {[key: string]: boolean} = {
   'detach': false,
   'echoTest': false,
   'readTransaction': true,
+  'sqlBatch': false,
   'transaction': true
 }
 
