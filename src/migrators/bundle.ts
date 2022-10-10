@@ -80,6 +80,8 @@ export class BundleMigrator implements Migrator {
   }
 
   async apply({ body, name, sha256 }: Migration): Promise<void> {
+    console.log('applying migration: ', name)
+
     if (!VALID_NAME_EXP.test(name)) {
       throw new Error(`Invalid migration name, must match ${VALID_NAME_EXP}`)
     }
@@ -88,20 +90,34 @@ export class BundleMigrator implements Migrator {
       throw new Error(`Invalid migration sha256, must match ${VALID_SHA256_EXP}`)
     }
 
-    const ts = Date.now()
-    const sql = `
-      PRAGMA defer_foreign_keys = ON;
-      BEGIN;
-        ${body};
+    // XXX temporary
+    const bodyWithoutStricts = body.replace('STRICT, ', '').replace('STRICT', '').trim()
 
-        INSERT INTO ${this.tableName}
-          ('name', 'sha256', 'applied_at')
-        VALUES
-          ('${name}', '${sha256}', '${ts}');
-      COMMIT;
-      PRAGMA defer_foreign_keys = OFF;
+    const ts = Date.now()
+    // const sql = `
+    //   PRAGMA defer_foreign_keys = ON;
+    //   BEGIN;
+    //     ${body};
+
+    //     INSERT INTO ${this.tableName}
+    //       ('name', 'sha256', 'applied_at')
+    //     VALUES
+    //       ('${name}', '${sha256}', '${ts}');
+    //   COMMIT;
+    //   PRAGMA defer_foreign_keys = OFF;
+    // `
+    const sql = `
+      ${bodyWithoutStricts};
+
+      SELECT 1;
+
+      INSERT INTO ${this.tableName}
+        ('name', 'sha256', 'applied_at')
+      VALUES
+        ('${name}', '${sha256}', '${ts}');
     `
 
-    return this.adapter.run(sql)
+    await this.adapter.run(sql)
+    console.log('applied', name)
   }
 }
