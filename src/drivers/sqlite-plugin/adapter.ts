@@ -1,4 +1,4 @@
-import { parseTableNames } from '../../util/parser'
+import { parseSqlIntoStatements, parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
 import { AnyFunction, BindParams, Row } from '../../util/types'
 
@@ -15,15 +15,45 @@ export abstract class SQLitePluginDatabaseAdapter {
     this.promisesEnabled = false
   }
 
-  run(sql: string): Promise<void> {
+  run(sql: string, bindParams: BindParams = []): Promise<void> {
     const promisesEnabled = this.promisesEnabled
-    const runBatch = this.db.sqlBatch.bind(this.db)
-    const stmts: string[] = sql.split(';')
+    const transaction = this.db.transaction.bind(this.db)
+
+    const stmts = parseSqlIntoStatements(sql)
 
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      promisesEnabled
-        ? ensurePromise(runBatch(stmts)).then(resolve).catch(reject)
-        : runBatch(stmts, resolve, reject)
+      const txFn = (tx: SQLitePluginTransaction) => {
+        // stmts.forEach(stmt => tx.addStatement(stmt, bindParams, undefined, reject))
+        for (let i = 0; i < stmts.length; i++) {
+          const stmtSuccess = () => {
+            // console.log('run statement success', i, stmts[i])
+          }
+
+          const stmtfailure = (err: any) => {
+            console.log('run statement failure', i, stmts[i], err)
+
+            reject()
+          }
+
+          tx.addStatement(stmts[i], bindParams, stmtSuccess, stmtfailure)
+        }
+      }
+
+      const success = () => {
+        // console.log('run tx success')
+
+        resolve()
+      }
+
+      const failure = () => {
+        console.log('run tx failure')
+
+        reject()
+      }
+
+      return promisesEnabled
+        ? ensurePromise(transaction(txFn)).then(success).catch(failure)
+        : transaction(txFn, failure, success)
     })
   }
 
