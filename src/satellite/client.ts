@@ -142,8 +142,12 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   enqueueTransaction(transaction: Transaction): void | SatelliteError {
     if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
-      throw new SatelliteError(SatelliteErrorCode.REPLICATION_NOT_STARTED,
-        "enqueuing a transaction while outbound replication has not started")
+
+      // XXX
+      return
+
+      // throw new SatelliteError(SatelliteErrorCode.REPLICATION_NOT_STARTED,
+      //   "enqueuing a transaction while outbound replication has not started")
     }
 
     this.outbound.transactions.push(transaction)
