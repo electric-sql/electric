@@ -112,7 +112,7 @@ test('database adapter run works', async t => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 
-  const result = await adapter.run('drop badgers')
+  const result = await adapter.run('drop table badgers')
 
   t.is(result, undefined)
 })
