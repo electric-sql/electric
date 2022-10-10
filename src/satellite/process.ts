@@ -151,6 +151,12 @@ export class SatelliteProcess implements Satellite {
     const meta = this.opts.metaTable.tablename
     const oplog = this.opts.oplogTable.tablename
 
+    console.log(
+      await this.adapter.query(`SELECT name FROM sqlite_master WHERE type='table'`),
+      meta,
+      oplog
+    )
+
     const tablesExist = `
       SELECT count(name) as numTables FROM sqlite_master
         WHERE type='table'
