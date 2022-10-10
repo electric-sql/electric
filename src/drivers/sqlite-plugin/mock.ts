@@ -19,10 +19,11 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
   }
 
   addTransaction(tx: SQLitePluginTransaction): void {
-    if (!!tx.success) {
+    if (tx.success !== undefined) {
       const results = mockResults([{i: 0}])
+      const arg = tx.readOnly ? [tx, results] : undefined
 
-      tx.success([tx, results])
+      tx.success(arg)
     }
   }
 
@@ -75,8 +76,9 @@ export class MockSQLitePluginTransaction implements SQLitePluginTransaction {
   executeSql(_sql: string, _values?: BindParams, success?: AnyFunction, _error?: AnyFunction): void {
     if (success !== undefined) {
       const results = mockResults([{i: 0}])
+      const arg = this.readOnly ? [this, results] : undefined
 
-      success([this, results])
+      success(arg)
     }
   }
 }
