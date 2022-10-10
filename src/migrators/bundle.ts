@@ -28,9 +28,12 @@ export class BundleMigrator implements Migrator {
     const existing = await this.queryApplied()
     const unapplied = await this.validateApplied(this.migrations, existing)
 
-    unapplied.forEach(async (migration) => {
+    let migration: Migration
+    for (let i = 0; i < unapplied.length; i++) {
+      migration = unapplied[i]
+
       await this.apply(migration)
-    })
+    }
 
     return unapplied.length
   }
