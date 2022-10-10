@@ -56,6 +56,8 @@ export const useRandom = () => {
 // Returns an object that provides the `ResultData` interface of
 // `{ results, error, updatedAt }`.
 export const useElectricQuery = (query: Query, params?: BindParams) => {
+  // console.log('useElectricQuery')
+
   const db = useElectric()
 
   const [ cacheKey, bustCache ] = useRandom()
@@ -72,6 +74,7 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
       return
     }
 
+    // console.log('setElectric')
     setElectric(db.electric)
   }, [db])
 
@@ -85,8 +88,13 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
     const tablenames = electric.adapter.tableNames(query)
     const tablenamesKey = JSON.stringify(tablenames)
 
+    // console.log('setParamsKey', paramsKey)
     setParamsKey(paramsKey)
+
+    // console.log('setTablenames', tablenames)
     setTablenames(tablenames)
+
+    // console.log('setTablenamesKey', tablenamesKey)
     setTablenamesKey(tablenamesKey)
   }, [electric])
 
@@ -114,10 +122,14 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
       }
     }
 
+    // console.log('notifier.subscribeToDataChanges')
     const key = notifier.subscribeToDataChanges(handleChange)
     if (changeSubscriptionKey !== undefined) {
+      // console.log('notifier.unsubscribeFromDataChanges')
       notifier.unsubscribeFromDataChanges(changeSubscriptionKey)
     }
+
+    // console.log('setChangeSubscriptionKey', key)
     setChangeSubscriptionKey(key)
 
     return () => notifier.unsubscribeFromDataChanges(key)
@@ -136,10 +148,20 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
       return
     }
 
+    // console.log('electric.adapter.query', query, params)
     electric.adapter.query(query, params)
-      .then((res: Row[]) => setResultData(successResult(res)))
-      .catch((err: any) => setResultData(errorResult(err)))
+      .then((res: Row[]) => {
+        // console.log('query success result', res)
+
+        setResultData(successResult(res))
+      })
+      .catch((err: any) => {
+        console.log('query error', err)
+
+        setResultData(errorResult(err))
+      })
   }, [electric, changeSubscriptionKey, cacheKey, paramsKey])
 
+  // console.log('returning resultData', resultData)
   return resultData
 }
