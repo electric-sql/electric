@@ -21,7 +21,7 @@ import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
 import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
-import { DEFAULT_LSN } from '../util/common'
+import { decoder, encoder, DEFAULT_LSN } from '../util/common'
 import { Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
 
@@ -169,10 +169,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.sendMissingRelations(next, this.outbound)
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
-      const buffer = Buffer.concat([
-        getSizeBuf(satOpLog),
-        SatOpLog.encode(satOpLog, _m0.Writer.create()).finish()]);
-      this.socket.write(buffer)
+      this.sendMessage(satOpLog)
       this.outbound.sent_lsn = next.lsn
       this.emit('ack_lsn', next.lsn, false)
     }
@@ -206,10 +203,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             SatRelationColumn.fromPartial({ name: c.name, type: c.type }))
         })
 
-        const buffer = Buffer.concat([
-          getSizeBuf(satRelation),
-          SatRelation.encode(satRelation, _m0.Writer.create()).finish()]);
-        this.socket.write(buffer)
+        this.sendMessage(satRelation)
       }
     })
   }
@@ -333,9 +327,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     } else {
       // TODO: what error?
       const response = SatErrorResp.fromPartial({ errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED });
-      const buffer = Buffer.concat(
-        [getSizeBuf(response), SatErrorResp.encode(response, _m0.Writer.create()).finish()]);
-      this.socket.write(buffer);
+      this.sendMessage(response)
 
       this.emit('error', new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
@@ -497,7 +489,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
     const columnType = columnInfo.type.toUpperCase();
     if (columnType == 'TEXT' || columnType == 'UUID' || columnType == 'VARCHAR') {
-      return new String(column).toString();
+      return decoder.decode(column);
     }
     if (columnType == 'INTEGER') {
       return new Number(column).valueOf();
@@ -506,13 +498,12 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
-    const textEncoder = new TextEncoder();
     const columnType = columnInfo.type.toUpperCase();
     if (columnType == 'TEXT' || columnType == 'UUID') {
-      return textEncoder.encode(column as string)
+      return encoder.encode(column as string)
     }
     if (columnType == 'INTEGER') {
-      return textEncoder.encode(column.toString());
+      return encoder.encode(column.toString());
     }
     throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
   }
@@ -533,11 +524,13 @@ export class SatelliteClient extends EventEmitter implements Client {
       throw new SatelliteError(SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE, `${request.$type})`);
     }
 
-    const reqBuf = Buffer.concat([
-      getSizeBuf(request),
-      obj.encode(request, _m0.Writer.create()).finish()
-    ]);
-    this.socket.write(reqBuf);
+    const type = getSizeBuf(request)
+    const msg = obj.encode(request, _m0.Writer.create()).finish()
+    const buffer = new Uint8Array(type.length + msg.length)
+    buffer.set(type, 0)
+    buffer.set(msg, 1)
+
+    this.socket.write(buffer);
   }
 
   private async rpc<T>(request: SatPbMsg): Promise<T | SatelliteError> {

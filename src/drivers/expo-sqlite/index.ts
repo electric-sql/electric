@@ -15,6 +15,7 @@ import { globalRegistry } from '../../satellite/registry'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
+import { WebSocketReactNative } from '../../sockets/reactnative'
 
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
 export type { Database, ElectrifiedDatabase }
@@ -29,6 +30,7 @@ export const electrify = async (db: Database, opts?: ElectrifyOptions): Promise<
   const adapter = opts.adapter || new DatabaseAdapter(db)
   const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
   const notifier = opts.notifier || new EventNotifier(dbName)
+  const socket = opts.socket || new WebSocketReactNative()
   const registry = opts.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
@@ -41,6 +43,6 @@ export const electrify = async (db: Database, opts?: ElectrifyOptions): Promise<
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
   return electrified as unknown as ElectrifiedDatabase
 }

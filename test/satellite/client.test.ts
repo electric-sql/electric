@@ -21,7 +21,7 @@ import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
 import { AckType, ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
-import { DEFAULT_LSN, lsnDecoder, lsnEncoder } from '../../src/util/common'
+import { DEFAULT_LSN, decoder, encoder } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
@@ -198,8 +198,6 @@ test.serial('receive transaction over multiple messages', async t => {
     ]
   });
 
-  const encoder = new TextEncoder();
-
   const insertOp = SatOpInsert.fromPartial({
     relationId: 1,
     rowData: [encoder.encode("Foo"), encoder.encode("Bar")]
@@ -248,7 +246,7 @@ test.serial('acknowledge lsn', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
 
-  const lsn = lsnEncoder.encode("FAKE")
+  const lsn = encoder.encode("FAKE")
 
   const start = SatInStartReplicationResp.fromPartial({});
   const begin = SatOpBegin.fromPartial({ lsn: lsn, commitTimestamp: Long.ZERO });
@@ -271,7 +269,7 @@ test.serial('acknowledge lsn', async t => {
       const lsn0 = client['inbound'].ack_lsn
       t.is(lsn0, DEFAULT_LSN);
       ack();
-      const lsn1 = lsnDecoder.decode(client['inbound'].ack_lsn)
+      const lsn1 = decoder.decode(client['inbound'].ack_lsn)
       t.is(lsn1, "FAKE");
       res();
     });
@@ -335,8 +333,6 @@ test.serial('send transaction', async t => {
       }
     ])
 
-    const lsnDecoder = new TextDecoder()
-
     // second message is a transaction
     server.nextResponses([
       (data?: Buffer) => {
@@ -345,7 +341,7 @@ test.serial('send transaction', async t => {
           const satOpLog = (decode(data!) as SatOpLog).ops
 
           const lsn = satOpLog[0].begin?.lsn
-          t.is(lsnDecoder.decode(lsn), "1")
+          t.is(decoder.decode(lsn), "1")
           t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
           // TODO: check values
         }
@@ -360,7 +356,7 @@ test.serial('send transaction', async t => {
           const satOpLog = (decode(data!) as SatOpLog).ops
 
           const lsn = satOpLog[0].begin?.lsn
-          t.is(lsnDecoder.decode(lsn), "2")
+          t.is(decoder.decode(lsn), "2")
           t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
           // TODO: check values
         }
@@ -382,7 +378,7 @@ test('ack on send and pong', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
 
-  const lsn_1 = lsnEncoder.encode("1")
+  const lsn_1 = encoder.encode("1")
 
   const startResp = SatInStartReplicationResp.fromPartial({});
   const pingResponse = SatPingResp.fromPartial({ lsn: lsn_1 });
@@ -407,10 +403,10 @@ test('ack on send and pong', async t => {
     let sent = false
     client.subscribeToAck((lsn, type) => {
       if (type == AckType.LOCAL_SEND) {
-        t.is(lsnDecoder.decode(lsn), "1")
+        t.is(decoder.decode(lsn), "1")
         sent = true
       } else {
-        t.is(lsnDecoder.decode(lsn), "1")
+        t.is(decoder.decode(lsn), "1")
         t.is(sent, true)
         res()
       }

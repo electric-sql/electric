@@ -62,14 +62,14 @@ test('parse migration body into statements', t => {
       '  oldRow String,\n' +
       '  timestamp TEXT\n' +
       ');',
-    'CREATE TABLE IF NOT EXISTS _electric_meta (\n  key TEXT,\n  value TEXT\n);',
+    'CREATE TABLE IF NOT EXISTS _electric_meta (\n  key TEXT,\n  value BLOB\n);',
     'CREATE TABLE IF NOT EXISTS _electric_migrations (\n' +
       '  id INTEGER PRIMARY KEY AUTOINCREMENT,\n' +
       '  name TEXT NOT NULL UNIQUE,\n' +
       '  sha256 TEXT NOT NULL,\n' +
       '  applied_at TEXT NOT NULL\n' +
       ');',
-    "INSERT INTO _electric_meta (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', '0');",
+    "INSERT INTO _electric_meta (key, value) VALUES ('compensations', '0'), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', x'30');",
     'DROP TABLE IF EXISTS _electric_trigger_settings;',
     'CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);'
   ])

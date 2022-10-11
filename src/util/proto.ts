@@ -67,7 +67,7 @@ export function getObjFromString(string_type: string) {
 export function getSizeBuf(msg_type: SatPbMsg) {
     const msgtype = getMsgType(msg_type)
 
-    var buf = Buffer.alloc(1);
-    buf.writeUInt8(msgtype, 0);
+    var buf = new Uint8Array(1)
+    buf.set([msgtype], 0);
     return buf
 }

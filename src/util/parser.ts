@@ -111,7 +111,7 @@ export const parseSqlIntoStatements = (sql: string): string[] => {
   const statementLineIndexes = []
 
   for (let i = 0; i < statements.length; i++) {
-    const { action, _format, _into, _target, variant } = statements[i]
+    const { action, variant } = statements[i]
 
     let matchString = `${variant}`
     if (variant === "transaction") {

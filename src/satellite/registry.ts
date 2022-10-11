@@ -64,7 +64,7 @@ export abstract class BaseRegistry implements Registry {
     }
 
     // Otherwise we need to fire it up!
-    const startingPromise = this.startProcess(dbName, adapter, migrator, notifier, authState)
+    const startingPromise = this.startProcess(dbName, adapter, migrator, notifier, socket, authState)
       .then((satellite) => {
         delete startingPromises[dbName]
 

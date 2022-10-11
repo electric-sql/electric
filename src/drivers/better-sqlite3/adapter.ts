@@ -16,6 +16,9 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   }
 
   async run(sql: string): Promise<void> {
+    if (!sql.trimStart().startsWith("BEGIN")) {
+      sql = `BEGIN;\n${sql}\nCOMMIT;`
+    }
     await this.db.exec(sql)
   }
 

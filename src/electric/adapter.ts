@@ -7,7 +7,7 @@ import { BindParams, Query, Row } from '../util/types'
 export interface DatabaseAdapter {
   db: AnyDatabase
 
-  // Runs the provided sql.
+  // Runs the provided sql as a transaction
   run(sql: string): Promise<void>
 
   // Query the database.

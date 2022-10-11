@@ -52,10 +52,10 @@ export interface SatelliteClientOverrides {
 }
 
 export const satelliteClientDefaults = {
-  appId: "",
-  token: "",
+  appId: "FAKE",
+  token: "FAKE",
   address: "127.0.0.1",
-  port: 30002,
+  port: 5133,
   timeout: 100000,
   pushPeriod: 500
 }

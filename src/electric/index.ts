@@ -49,9 +49,10 @@ export const electrify = async (
       adapter: DatabaseAdapter,
       migrator: Migrator,
       notifier: Notifier,
+      socket: Socket,
       registry: Registry
     ): Promise<AnyElectrifiedDatabase> => {
-  await registry.ensureStarted(dbName, adapter, migrator, notifier)
+  await registry.ensureStarted(dbName, adapter, migrator, notifier, socket)
 
   return proxyOriginal(db, electric)
 }

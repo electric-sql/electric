@@ -21,7 +21,7 @@ import Long from 'long'
 import { ChangeType, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
-import { DEFAULT_LSN, lsnEncoder } from '../../src/util/common'
+import { DEFAULT_LSN, encoder } from '../../src/util/common'
 
 import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
@@ -105,8 +105,8 @@ test('cannot UPDATE primary key', async t => {
   const { adapter, runMigrations } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2')`)
-  await t.throwsAsync(adapter.run(`UPDATE parent SET id='3' WHERE id = '1'`), {
+  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
+  await t.throwsAsync(adapter.run(`UPDATE parent SET id='3' WHERE id = '1';`), {
     code: 'SQLITE_CONSTRAINT_TRIGGER'
   })
 })
@@ -115,7 +115,7 @@ test('snapshot works', async t => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2')`)
+  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
   await satellite._performSnapshot()
 
   t.is(notifier.notifications.length, 1)
@@ -153,7 +153,7 @@ test('starting and stopping the process works', async t => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2')`)
+  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
 
   await satellite.start()
   t.is(notifier.notifications.length, 0)
@@ -162,13 +162,13 @@ test('starting and stopping the process works', async t => {
 
   t.is(notifier.notifications.length, 1)
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('3'),('4')`)
+  await adapter.run(`INSERT INTO parent(id) VALUES ('3'),('4');`)
   await sleepAsync(opts.pollingInterval)
 
   t.is(notifier.notifications.length, 2)
 
   await satellite.stop()
-  await adapter.run(`INSERT INTO parent(id) VALUES ('5'),('6')`)
+  await adapter.run(`INSERT INTO parent(id) VALUES ('5'),('6');`)
   await sleepAsync(opts.pollingInterval)
 
   t.is(notifier.notifications.length, 2)
@@ -183,7 +183,7 @@ test('snapshots on potential data change', async t => {
   const { adapter, notifier, runMigrations } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2')`)
+  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
 
   t.is(notifier.notifications.length, 0)
 
@@ -200,9 +200,9 @@ test('snapshot of INSERT after DELETE', async t => {
   try {
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id, value) VALUES (1,'val1')`)
-  await adapter.run(`DELETE FROM parent WHERE id=1`)
-  await adapter.run(`INSERT INTO parent(id) VALUES (1)`)
+    await adapter.run(`INSERT INTO parent(id, value) VALUES (1,'val1');`)
+    await adapter.run(`DELETE FROM parent WHERE id=1;`)
+    await adapter.run(`INSERT INTO parent(id) VALUES (1);`)
 
   await satellite._performSnapshot()
   const entries = await satellite._getEntries()
@@ -227,7 +227,7 @@ test('take snapshot and merge local wins', async t => {
     value: 'incoming',
   })
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)`)
+  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1);`)
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -252,7 +252,7 @@ test('take snapshot and merge incoming wins', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)`)
+  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1);`)
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -284,7 +284,7 @@ test('apply does not add anything to oplog', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', null)`)
+  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', null);`)
   await satellite._performSnapshot()
 
   const incomingTs = new Date().getTime()
@@ -297,7 +297,7 @@ test('apply does not add anything to oplog', async t => {
   await satellite._apply([incomingEntry])
   await satellite._performSnapshot()
 
-  const [row] = await adapter.query('SELECT * from parent WHERE id=1')
+  const [row] = await adapter.query('SELECT * from parent WHERE id=1;')
   t.is(row.value, 'incoming')
   t.is(row.otherValue, 1)
 
@@ -318,7 +318,7 @@ test('apply incoming with no local', async t => {
 
   await satellite._apply([incomingEntry])
 
-  const rows = await adapter.query('SELECT * from parent WHERE id=1')
+  const rows = await adapter.query('SELECT * from parent WHERE id=1;')
   t.is(rows.length, 0)
 })
 
@@ -411,21 +411,21 @@ test('advance oplog cursor', async t => {
   const metaTablename = opts.metaTable.tablename
 
   // Insert a couple of rows.
-  await adapter.run(`INSERT INTO main.parent(id) VALUES ('1'),('2')`)
+  await adapter.run(`INSERT INTO main.parent(id) VALUES ('1'),('2');`)
 
   // We have two rows in the oplog.
-  let rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename}`)
+  let rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename};`)
   t.is(rows[0].num_rows, 2)
 
   // Ack.
   await satellite._ack(2, true)
 
   // The oplog is clean.
-  rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename}`)
+  rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename};`)
   t.is(rows[0].num_rows, 0)
 
   // Verify the meta.
-  rows = await adapter.query(`SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId'`)
+  rows = await adapter.query(`SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId';`)
   t.is(rows[0].value, '2')
 })
 
@@ -433,12 +433,12 @@ test('compensations: referential integrity is enforced', async t => {
   const { adapter, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON`)
+  await adapter.run(`PRAGMA foreign_keys = ON;`)
   await satellite._setMeta('compensations', '0')
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
+  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
 
-  await t.throwsAsync(adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 2)`), {
+  await t.throwsAsync(adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 2);`), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
   })
 })
@@ -447,7 +447,7 @@ test('compensations: incoming operation breaks referential integrity', async t =
   const { adapter, runMigrations, satellite, tableInfo, timestamp } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON`)
+  await adapter.run(`PRAGMA foreign_keys = ON;`)
   await satellite._setMeta('compensations', '0')
 
   const incoming = [
@@ -466,7 +466,7 @@ test('compensations: incoming operations accepted if restore referential integri
   const { adapter, runMigrations, satellite, tableInfo, timestamp } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON`)
+  await adapter.run(`PRAGMA foreign_keys = ON;`)
   await satellite._setMeta('compensations', '0')
 
   const incoming = [
@@ -474,17 +474,16 @@ test('compensations: incoming operations accepted if restore referential integri
       id: 1,
       parent: 1
     }),
-    // XXX todo: upsert all parent row attributes if possible.
     generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.insert, timestamp, {
       id: 1
     })
   ]
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
-  await adapter.run(`DELETE FROM main.parent WHERE id=1`)
+  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
+  await adapter.run(`DELETE FROM main.parent WHERE id=1;`)
   await satellite._performSnapshot()
   await satellite._apply(incoming)
-  const rows = await adapter.query(`SELECT * from main.parent WHERE id=1`)
+  const rows = await adapter.query(`SELECT * from main.parent WHERE id=1;`)
 
   // Not only does the parent exist.
   t.is(rows.length, 1)
@@ -497,15 +496,15 @@ test('compensations: using triggers with flag 0', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON`)
+  await adapter.run(`PRAGMA foreign_keys = ON;`)
   await satellite._setMeta('compensations', '0')
   satellite._lastSentRowId = 1
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
+  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
-  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
+  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1);`)
   await satellite._performSnapshot()
 
   const timestamp = new Date().getTime()
@@ -521,15 +520,15 @@ test('compensations: using triggers with flag 1', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON`)
+  await adapter.run(`PRAGMA foreign_keys = ON;`)
   await satellite._setMeta('compensations', '1')
   satellite._lastSentRowId = 1
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1')`)
+  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
-  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1)`)
+  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1);`)
   await satellite._performSnapshot()
 
   const timestamp = new Date().getTime()
@@ -610,7 +609,7 @@ test('get transactions from opLogEntries', async t => {
 
   const expected = [
     {
-      lsn: lsnEncoder.encode("2"),
+      lsn: encoder.encode("2"),
       commit_timestamp: Long.UZERO,
       changes: [
         {  
@@ -627,7 +626,7 @@ test('get transactions from opLogEntries', async t => {
         }]
     },
     {
-      lsn: lsnEncoder.encode("3"),
+      lsn: encoder.encode("3"),
       commit_timestamp: Long.UZERO.add(1000),
       changes: [
         { 
@@ -649,7 +648,7 @@ test('rowid acks updates meta', async t => {
   await runMigrations()
   await satellite.start()
 
-  const lsn1 = lsnEncoder.encode("1")
+  const lsn1 = encoder.encode("1")
   client.emit("ack_lsn", lsn1, false)
 
   await new Promise<void>(res => {

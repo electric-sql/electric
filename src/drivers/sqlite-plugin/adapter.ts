@@ -32,7 +32,7 @@ export abstract class SQLitePluginDatabaseAdapter {
           const stmtfailure = (err: any) => {
             console.log('run statement failure', i, stmts[i], err)
 
-            reject()
+            reject(err)
           }
 
           tx.addStatement(stmts[i], bindParams, stmtSuccess, stmtfailure)
@@ -45,10 +45,10 @@ export abstract class SQLitePluginDatabaseAdapter {
         resolve()
       }
 
-      const failure = () => {
+      const failure = (err: any) => {
         console.log('run tx failure')
 
-        reject()
+        reject(err)
       }
 
       return promisesEnabled
