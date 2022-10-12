@@ -2,7 +2,7 @@ import { DatabaseAdapter as DatabaseAdapterInterface } from '../../electric/adap
 
 import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
-import { BindParams, Row } from '../../util/types'
+import { Row, Statement } from '../../util/types'
 
 import { Database } from './database'
 import { resultToRows } from './result'
@@ -13,18 +13,21 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(db: Database) {
     this.db = db
   }
-
-  async run(sql: string): Promise<void> {
-    await this.db.run(sql)
+  runTransaction(..._statements: Statement[]): Promise<void> {
+    throw Error("not implemented")
   }
 
-  async query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
-    const result = await this.db.exec(sql, bindParams)
+  async run(statement: Statement): Promise<void> {
+    await this.db.run(statement.sql, statement.args)    
+  }
+
+  async query(statement: Statement): Promise<Row[]> {
+    const result = await this.db.exec(statement.sql, statement.args)
 
     return resultToRows(result)
   }
 
-  tableNames(sql: string): QualifiedTablename[] {
+  tableNames({ sql }: Statement): QualifiedTablename[] {
     return parseTableNames(sql)
   }
 }

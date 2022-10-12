@@ -77,7 +77,8 @@ test('throttled snapshot respects window', async t => {
   await satellite._throttledSnapshot()
   const numNotifications = notifier.notifications.length
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
+  const sql = `INSERT INTO parent(id) VALUES ('1'),('2')`
+  await adapter.run({ sql })
   await satellite._throttledSnapshot()
 
   t.is(notifier.notifications.length, numNotifications)

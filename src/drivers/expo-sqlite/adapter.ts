@@ -1,9 +1,9 @@
 import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
-import { AnyFunction, BindParams, Row } from '../../util/types'
+import { AnyFunction, Row, Statement } from '../../util/types'
 
 import { Results, rowsFromResults } from '../sqlite-plugin/results'
-import { Database, Query, Transaction } from './database'
+import { Database, Transaction } from './database'
 
 export class DatabaseAdapter {
   db: Database
@@ -12,34 +12,45 @@ export class DatabaseAdapter {
     this.db = db
   }
 
-  run(sql: string): Promise<void> {
+  runTransaction(...statements: Statement[]): Promise<void> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const txFn = (tx: Transaction) => {
-        tx.executeSql(sql)
+        for (const { sql, args } of statements) {
+          if (!args) {
+            tx.executeSql(sql)
+          }
+          tx.executeSql(
+            sql,
+            args as unknown as (number | string | null)[])
+        }
       }
 
       this.db.transaction(txFn, resolve, reject)
     })
   }
 
-  query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
-    const args = bindParams as unknown as (number | string | null)[]
+  run(statement: Statement): Promise<void> {
+    return this.runTransaction(statement)
+  }
 
+  query({ sql, args }: Statement): Promise<Row[]> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const success = (_tx: Transaction, results: Results) => {
         resolve(rowsFromResults(results))
       }
       const txFn = (tx: Transaction) => {
-        tx.executeSql(sql, args, success, reject)
+        tx.executeSql(
+          sql,
+          args as unknown as (number | string | null)[],
+          success,
+          reject)
       }
 
       this.db.readTransaction(txFn)
     })
   }
 
-  tableNames(query: string | Query): QualifiedTablename[] {
-    const sql = typeof query === 'string' ? query : query.sql
-
+  tableNames({ sql }: Statement): QualifiedTablename[] {
     return parseTableNames(sql)
   }
 }

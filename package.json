@@ -115,7 +115,7 @@
   "devDependencies": {
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "^40.0.17",
-    "@types/node": "^18.7.13",
+    "@types/node": "^18.8.4",
     "@types/react": "^18.0.18",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",

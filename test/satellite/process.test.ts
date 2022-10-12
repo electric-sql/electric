@@ -87,7 +87,8 @@ test('start creates system tables', async t => {
 
   await satellite.start()
 
-  const rows = await adapter.query("select name from sqlite_master where type = 'table'")
+  const sql = "select name from sqlite_master where type = 'table'"
+  const rows = await adapter.query({ sql })
   const names = rows.map(row => row.name)
 
   t.true(names.includes('_electric_oplog'))
@@ -98,6 +99,7 @@ test('load metadata', async t => {
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
+  // not sure why we need the buffer here, but might be a problem
   t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: new Buffer(DEFAULT_LSN) })
 })
 
@@ -105,8 +107,8 @@ test('cannot UPDATE primary key', async t => {
   const { adapter, runMigrations } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
-  await t.throwsAsync(adapter.run(`UPDATE parent SET id='3' WHERE id = '1';`), {
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await t.throwsAsync(adapter.run({ sql: `UPDATE parent SET id='3' WHERE id = '1'` }), {
     code: 'SQLITE_CONSTRAINT_TRIGGER'
   })
 })
@@ -115,7 +117,7 @@ test('snapshot works', async t => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
   await satellite._performSnapshot()
 
   t.is(notifier.notifications.length, 1)
@@ -153,7 +155,7 @@ test('starting and stopping the process works', async t => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
   await satellite.start()
   t.is(notifier.notifications.length, 0)
@@ -162,13 +164,13 @@ test('starting and stopping the process works', async t => {
 
   t.is(notifier.notifications.length, 1)
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('3'),('4');`)
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
   t.is(notifier.notifications.length, 2)
 
   await satellite.stop()
-  await adapter.run(`INSERT INTO parent(id) VALUES ('5'),('6');`)
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
   t.is(notifier.notifications.length, 2)
@@ -183,7 +185,7 @@ test('snapshots on potential data change', async t => {
   const { adapter, notifier, runMigrations } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2');`)
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
   t.is(notifier.notifications.length, 0)
 
@@ -200,9 +202,9 @@ test('snapshot of INSERT after DELETE', async t => {
   try {
   await runMigrations()
 
-    await adapter.run(`INSERT INTO parent(id, value) VALUES (1,'val1');`)
-    await adapter.run(`DELETE FROM parent WHERE id=1;`)
-    await adapter.run(`INSERT INTO parent(id) VALUES (1);`)
+    await adapter.run({ sql: `INSERT INTO parent(id, value) VALUES (1,'val1')` })
+    await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+    await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
 
   await satellite._performSnapshot()
   const entries = await satellite._getEntries()
@@ -227,7 +229,7 @@ test('take snapshot and merge local wins', async t => {
     value: 'incoming',
   })
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1);`)
+  await adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)` })
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -252,7 +254,7 @@ test('take snapshot and merge incoming wins', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1);`)
+  await adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)` })
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -284,7 +286,7 @@ test('apply does not add anything to oplog', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', null);`)
+  await adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', null)` })
   await satellite._performSnapshot()
 
   const incomingTs = new Date().getTime()
@@ -297,7 +299,8 @@ test('apply does not add anything to oplog', async t => {
   await satellite._apply([incomingEntry])
   await satellite._performSnapshot()
 
-  const [row] = await adapter.query('SELECT * from parent WHERE id=1;')
+  const sql = 'SELECT * from parent WHERE id=1'
+  const [row] = await adapter.query({ sql })
   t.is(row.value, 'incoming')
   t.is(row.otherValue, 1)
 
@@ -318,7 +321,8 @@ test('apply incoming with no local', async t => {
 
   await satellite._apply([incomingEntry])
 
-  const rows = await adapter.query('SELECT * from parent WHERE id=1;')
+  const sql = 'SELECT * from parent WHERE id=1'
+  const rows = await adapter.query({ sql })
   t.is(rows.length, 0)
 })
 
@@ -411,21 +415,21 @@ test('advance oplog cursor', async t => {
   const metaTablename = opts.metaTable.tablename
 
   // Insert a couple of rows.
-  await adapter.run(`INSERT INTO main.parent(id) VALUES ('1'),('2');`)
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   // We have two rows in the oplog.
-  let rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename};`)
+  let rows = await adapter.query({ sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}` })
   t.is(rows[0].num_rows, 2)
 
   // Ack.
   await satellite._ack(2, true)
 
   // The oplog is clean.
-  rows = await adapter.query(`SELECT count(rowid) as num_rows FROM ${oplogTablename};`)
+  rows = await adapter.query({ sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}` })
   t.is(rows[0].num_rows, 0)
 
   // Verify the meta.
-  rows = await adapter.query(`SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId';`)
+  rows = await adapter.query({ sql: `SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId'` })
   t.is(rows[0].value, '2')
 })
 
@@ -433,12 +437,12 @@ test('compensations: referential integrity is enforced', async t => {
   const { adapter, runMigrations, satellite } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON;`)
+  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', '0')
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
+  await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
 
-  await t.throwsAsync(adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 2);`), {
+  await t.throwsAsync(adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 2)` }), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
   })
 })
@@ -447,7 +451,7 @@ test('compensations: incoming operation breaks referential integrity', async t =
   const { adapter, runMigrations, satellite, tableInfo, timestamp } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON;`)
+  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', '0')
 
   const incoming = [
@@ -466,7 +470,7 @@ test('compensations: incoming operations accepted if restore referential integri
   const { adapter, runMigrations, satellite, tableInfo, timestamp } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON;`)
+  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', '0')
 
   const incoming = [
@@ -479,11 +483,11 @@ test('compensations: incoming operations accepted if restore referential integri
     })
   ]
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
-  await adapter.run(`DELETE FROM main.parent WHERE id=1;`)
+  await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
   await satellite._performSnapshot()
   await satellite._apply(incoming)
-  const rows = await adapter.query(`SELECT * from main.parent WHERE id=1;`)
+  const rows = await adapter.query({ sql: `SELECT * from main.parent WHERE id=1` })
 
   // Not only does the parent exist.
   t.is(rows.length, 1)
@@ -496,15 +500,15 @@ test('compensations: using triggers with flag 0', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON;`)
+  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', '0')
   satellite._lastSentRowId = 1
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
+  await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
-  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1);`)
+  await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
 
   const timestamp = new Date().getTime()
@@ -520,15 +524,15 @@ test('compensations: using triggers with flag 1', async t => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  await adapter.run(`PRAGMA foreign_keys = ON;`)
+  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', '1')
   satellite._lastSentRowId = 1
 
-  await adapter.run(`INSERT INTO main.parent(id, value) VALUES (1, '1');`)
+  await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
-  await adapter.run(`INSERT INTO main.child(id, parent) VALUES (1, 1);`)
+  await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
 
   const timestamp = new Date().getTime()

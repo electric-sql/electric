@@ -2,11 +2,9 @@ import { DatabaseAdapter as DatabaseAdapterInterface } from '../../electric/adap
 
 import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
-import { BindParams, Row } from '../../util/types'
+import { Statement as DbStatement, Row, Statement } from '../../util/types'
 
-import { Database, Statement } from './database'
-
-type Query = string | Statement
+import { Database } from './database'
 
 export class DatabaseAdapter implements DatabaseAdapterInterface {
   db: Database
@@ -15,26 +13,26 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     this.db = db
   }
 
-  async run(sql: string): Promise<void> {
-    if (!sql.trimStart().startsWith("BEGIN")) {
-      sql = `BEGIN;\n${sql}\nCOMMIT;`
-    }
-    await this.db.exec(sql)
+  async runTransaction(...statements: DbStatement[]): Promise<void> {
+    const txn = this.db.transaction((stmts: DbStatement[]) => {
+      for (const stmt of stmts) {
+        this.run(stmt)
+      }
+    })
+    return txn(statements)
   }
 
-  async query(query: Query, bindParams: BindParams = []): Promise<Row[]> {
-    const stmt: Statement = typeof query === 'string'
-      ? this.db.prepare(query)
-      : query
-
-    return stmt.all(bindParams)
+  // Promise interface, but impl not actually async
+  async run({ sql, args }: DbStatement): Promise<void> {
+    this.db.prepare(sql).run(args ? args : [])
   }
 
-  tableNames(query: Query): QualifiedTablename[] {
-    const sql: string = typeof query === 'string'
-      ? query
-      : query.source
+  async query({ sql, args }: DbStatement): Promise<Row[]> {
+    const stmt = this.db.prepare(sql)
+    return stmt.all(args ? args : [])
+  }
 
+  tableNames({ sql }: Statement): QualifiedTablename[] {    
     return parseTableNames(sql)
   }
 }

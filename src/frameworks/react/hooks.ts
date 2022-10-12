@@ -85,7 +85,7 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
     }
 
     const paramsKey = JSON.stringify(params)
-    const tablenames = electric.adapter.tableNames(query)
+    const tablenames = electric.adapter.tableNames({ sql: query })
     const tablenamesKey = JSON.stringify(tablenames)
 
     // console.log('setParamsKey', paramsKey)
@@ -149,7 +149,7 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
     }
 
     // console.log('electric.adapter.query', query, params)
-    electric.adapter.query(query, params)
+    electric.adapter.query({ sql: query, args: params })
       .then((res: Row[]) => {
         // console.log('query success result', res)
 

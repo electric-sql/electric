@@ -1,6 +1,6 @@
-import { parseSqlIntoStatements, parseTableNames } from '../../util/parser'
+import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
-import { AnyFunction, BindParams, Row } from '../../util/types'
+import { AnyFunction, Row, Statement } from '../../util/types'
 
 import { SQLitePlugin, SQLitePluginTransaction } from './index'
 import { ensurePromise } from './promise'
@@ -15,39 +15,34 @@ export abstract class SQLitePluginDatabaseAdapter {
     this.promisesEnabled = false
   }
 
-  run(sql: string, bindParams: BindParams = []): Promise<void> {
+  // TODO: change all run to runTransaction to avoid errors on React Native
+
+  async run(statement: Statement): Promise<void> {
+    return this.runTransaction(statement)
+  }
+
+  async runTransaction(...statements: Statement[]): Promise<void> {
     const promisesEnabled = this.promisesEnabled
     const transaction = this.db.transaction.bind(this.db)
 
-    const stmts = parseSqlIntoStatements(sql)
-
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const txFn = (tx: SQLitePluginTransaction) => {
-        // stmts.forEach(stmt => tx.addStatement(stmt, bindParams, undefined, reject))
-        for (let i = 0; i < stmts.length; i++) {
-          const stmtSuccess = () => {
-            // console.log('run statement success', i, stmts[i])
-          }
-
-          const stmtfailure = (err: any) => {
-            console.log('run statement failure', i, stmts[i], err)
-
+        for (const { sql, args } of statements) {
+          const stmtFailure = (err: any) => {
+            console.log('run statement failure', sql, err)
             reject(err)
           }
-
-          tx.addStatement(stmts[i], bindParams, stmtSuccess, stmtfailure)
-        }
+          tx.addStatement(sql, args, undefined, stmtFailure)
+        }        
       }
 
       const success = () => {
         // console.log('run tx success')
-
         resolve()
       }
 
       const failure = (err: any) => {
         console.log('run tx failure')
-
         reject(err)
       }
 
@@ -57,7 +52,7 @@ export abstract class SQLitePluginDatabaseAdapter {
     })
   }
 
-  query(sql: string, bindParams: BindParams = []): Promise<Row[]> {
+  query({ sql, args }: Statement): Promise<Row[]> {
     const promisesEnabled = this.promisesEnabled
     const readTransaction = this.db.readTransaction.bind(this.db)
 
@@ -68,15 +63,15 @@ export abstract class SQLitePluginDatabaseAdapter {
 
       const txFn = (tx: SQLitePluginTransaction) => {
         return promisesEnabled
-          ? ensurePromise(tx.executeSql(sql, bindParams)).then(success).catch(reject)
-          : tx.executeSql(sql, bindParams, success, reject)
+          ? ensurePromise(tx.executeSql(sql, args)).then(success).catch(reject)
+          : tx.executeSql(sql, args, success, reject)
       }
 
       readTransaction(txFn)
     })
   }
 
-  tableNames(query: string): QualifiedTablename[] {
-    return parseTableNames(query)
+  tableNames({ sql }: Statement): QualifiedTablename[] {
+    return parseTableNames(sql)
   }
 }

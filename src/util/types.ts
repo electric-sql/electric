@@ -6,7 +6,7 @@ export type DbName = string
 export type DbNamespace = string
 export type EmptyFunction = () => void
 export type FunctionMap = {[key: string]: AnyFunction}
-export type Query = string | object
+export type Query = string
 export type Row = {[key: string]: SqlValue}
 export type RowCallback = (row: Row) => void
 export type RowId = number
@@ -15,6 +15,7 @@ export type StatementId = string
 export type Tablename = string
 export type VoidOrPromise = void | Promise<void>
 export type LSN = Uint8Array | Buffer
+export type Statement = { sql: string, args?: BindParams }
 
 export class SatelliteError extends Error {
     public code: SatelliteErrorCode;

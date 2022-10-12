@@ -46,7 +46,7 @@ export class BundleMigrator implements Migrator {
         WHERE type = 'table'
           AND name = ?
     `
-    const [{ numTables }] = await this.adapter.query(tableExists, [this.tableName])
+    const [{ numTables }] = await this.adapter.query({ sql: tableExists, args: [this.tableName] })
     if (numTables == 0) {
       return []
     }
@@ -57,7 +57,7 @@ export class BundleMigrator implements Migrator {
       SELECT name, sha256 FROM ${this.tableName}
         ORDER BY id ASC
     `
-    const rows = await this.adapter.query(existingRecords)
+    const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
   }
 
@@ -90,34 +90,14 @@ export class BundleMigrator implements Migrator {
       throw new Error(`Invalid migration sha256, must match ${VALID_SHA256_EXP}`)
     }
 
-    // XXX temporary
-    const bodyWithoutStricts = body.replace('STRICT, ', '').replace('STRICT', '').trim()
-
-    const ts = Date.now()
-    // const sql = `
-    //   PRAGMA defer_foreign_keys = ON;
-    //   BEGIN;
-    //     ${body};
-
-    //     INSERT INTO ${this.tableName}
-    //       ('name', 'sha256', 'applied_at')
-    //     VALUES
-    //       ('${name}', '${sha256}', '${ts}');
-    //   COMMIT;
-    //   PRAGMA defer_foreign_keys = OFF;
-    // `
-    const sql = `
-      ${bodyWithoutStricts};
-
-      SELECT 1;
-
-      INSERT INTO ${this.tableName}
+    const applied =
+      `INSERT INTO ${this.tableName}
         ('name', 'sha256', 'applied_at')
       VALUES
-        ('${name}', '${sha256}', '${ts}');
+        ('${name}', '${sha256}', '${Date.now()}');
     `
 
-    await this.adapter.run(sql)
-    console.log('applied', name)
+    await this.adapter.runTransaction(...(body as unknown as string[]).map(sql => ({ sql })), { sql: applied })
+    console.log(`applied, ${name}`)
   }
 }

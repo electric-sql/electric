@@ -112,7 +112,8 @@ test('database adapter run works', async t => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 
-  const result = await adapter.run('drop table badgers')
+  const sql = 'drop table badgers'
+  const result = await adapter.run({ sql })
 
   t.is(result, undefined)
 })
@@ -121,7 +122,8 @@ test('database adapter query works', async t => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 
-  const result = await adapter.query('select foo from bars')
+  const sql = 'select foo from bars'
+  const result = await adapter.query({ sql })
 
   t.deepEqual(result, [{i: 0}])
 })
@@ -131,7 +133,7 @@ test('database adapter tableNames works', async t => {
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'select foo from bar'
-  const r1 = adapter.tableNames(sql)
+  const r1 = adapter.tableNames({ sql })
 
   t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
 })

@@ -6,7 +6,7 @@ import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
 import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { AckType, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Transaction } from '../util/types'
+import { AckType, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
@@ -152,7 +152,7 @@ export class SatelliteProcess implements Satellite {
     const oplog = this.opts.oplogTable.tablename
 
     console.log(
-      await this.adapter.query(`SELECT name FROM sqlite_master WHERE type='table'`),
+      await this.adapter.query({ sql: `SELECT name FROM sqlite_master WHERE type='table'` }),
       meta,
       oplog
     )
@@ -163,7 +163,7 @@ export class SatelliteProcess implements Satellite {
           AND name IN (?, ?)
     `
 
-    const [{ numTables }] = await this.adapter.query(tablesExist, [meta, oplog])
+    const [{ numTables }] = await this.adapter.query({ sql: tablesExist, args: [meta, oplog] })
     return numTables === 2
   }
 
@@ -190,17 +190,17 @@ export class SatelliteProcess implements Satellite {
             WHERE timestamp is NULL
               AND rowid > ${this._lastAckdRowId}
             ORDER BY rowid ASC
-        );
+        )
     `
 
     const selectChanges = `
       SELECT * FROM ${oplog}
         WHERE timestamp = ?
-        ORDER BY rowid ASC;
+        ORDER BY rowid ASC
     `
 
-    await this.adapter.run(updateTimestamps)
-    const rows = await this.adapter.query(selectChanges, [timestamp])
+    await this.adapter.run({ sql: updateTimestamps })
+    const rows = await this.adapter.query({ sql: selectChanges, args: [timestamp] })
     const results = rows as unknown as OplogEntry[]
 
     if (results.length === 0) {
@@ -260,11 +260,11 @@ export class SatelliteProcess implements Satellite {
     const local = await this._getEntries()
     const merged = this._mergeEntries(local, incoming)
 
-    const stmts: string[] = []
+    let stmts: Statement[] = []
     // switches off on transaction commit/abort
-    stmts.push("PRAGMA defer_foreign_keys = ON;")
+    stmts.push({ sql: "PRAGMA defer_foreign_keys = ON" })
     // update lsn
-    stmts.push(`UPDATE ${this.opts.metaTable.tablename} set value=x'${toHexString(lsn)}' WHERE key='lsn';`)
+    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value=x'${toHexString(lsn)}' WHERE key='lsn'` })
 
     // aux function
     const wrapValue = ({ value }: any) => {
@@ -284,8 +284,8 @@ export class SatelliteProcess implements Satellite {
               return acc
             }, [] as string[])
 
-            const deleteStmt = `DELETE FROM ${tablenameStr} WHERE ${clauses.join(' AND ')};`
-            stmts.push(deleteStmt);
+            const deleteStmt = `DELETE FROM ${tablenameStr} WHERE ${clauses.join(' AND ')}`
+            stmts.push({ sql: deleteStmt });
             break
 
           default:
@@ -297,22 +297,23 @@ export class SatelliteProcess implements Satellite {
               .map((c) => `${c} = ${wrapValue(changes[c])}`)
 
             if (updateColumnStmts.length > 0) {
-              insertStmt = `INSERT ${insertStmt} ON CONFLICT DO UPDATE SET ${updateColumnStmts.join(", ")};`;
+              insertStmt = `INSERT ${insertStmt} ON CONFLICT DO UPDATE SET ${updateColumnStmts.join(", ")}`;
             } else {
               // no changes, can ignore statement if exists
-              insertStmt = `INSERT OR IGNORE ${insertStmt};`;
+              insertStmt = `INSERT OR IGNORE ${insertStmt}`;
             }
-            stmts.push(insertStmt);
+            stmts.push({ sql: insertStmt });
         }
       }
     }
 
-    const sql = stmts.join('\n')
-
     const tablenames = Object.keys(merged)
-    await this._disableTriggers(tablenames)
-    await this.adapter.run(sql)      
-    await this._enableTriggers(tablenames)
+
+    await this.adapter.runTransaction(
+      ...this._disableTriggers(tablenames),
+      ...stmts,
+      ...this._enableTriggers(tablenames)
+    )          
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
@@ -327,7 +328,7 @@ export class SatelliteProcess implements Satellite {
           AND rowid > ?
         ORDER BY rowid ASC;
     `
-    const rows = await this.adapter.query(selectEntries, [since])
+    const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
     return rows as unknown as OplogEntry[]
   }
 
@@ -367,21 +368,22 @@ export class SatelliteProcess implements Satellite {
     this._notifyChanges(opLogEntries)
   }
 
-  async _disableTriggers(tablenames: string[]): Promise<void> {
+  _disableTriggers(tablenames: string[]): Statement[] {
     return this._updateTriggerSettings(tablenames, 0)
   }
-  async _enableTriggers(tablenames: string[]): Promise<void> {
+  _enableTriggers(tablenames: string[]): Statement[] {
     return this._updateTriggerSettings(tablenames, 1)
   }
-  async _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Promise<void> {
+  _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Statement[] {
     const triggers = this.opts.triggersTable.toString()
-    const stmts = tablenames.map((tablenameStr) => `
+    const stmts = tablenames.map((tablenameStr) => ({
+      sql:`
       UPDATE ${triggers}
          SET flag = ${flag}
-       WHERE tablename = '${tablenameStr}';
-    `)
+       WHERE tablename = '${tablenameStr}'
+    `}))
 
-    await this.adapter.run(stmts.join('; '))
+    return stmts
   }
 
   async _ack(lsn: number, isAck: boolean): Promise<void> {    
@@ -391,22 +393,23 @@ export class SatelliteProcess implements Satellite {
 
     const meta = this.opts.metaTable.toString()
 
-    let sql = `
+    const updt = `
       UPDATE ${meta} 
         SET value='${lsn}' 
-      WHERE key='${isAck ? 'lastAckdRowId' : 'lastSentRowId'}';`
+      WHERE key='${isAck ? 'lastAckdRowId' : 'lastSentRowId'}'`
 
     if (isAck) {
       const oplog = this.opts.oplogTable.toString()
-      sql = `DELETE 
+      const del = `DELETE 
               FROM ${oplog}
-            WHERE rowid <= ${lsn}; ${sql};`
+            WHERE rowid <= ${lsn}`
+
       this._lastAckdRowId = lsn
+      await this.adapter.runTransaction({ sql: updt }, { sql: del })
     } else {
       this._lastSentRowId = lsn
+      await this.adapter.runTransaction({ sql: updt })
     }
-
-    await this.adapter.run(sql)
   }
 
   async _setMeta(key: string, value: SqlValue): Promise<void> {
@@ -418,7 +421,7 @@ export class SatelliteProcess implements Satellite {
        WHERE key='${key}';
     `
 
-    await this.adapter.run(sql)
+    await this.adapter.run({ sql })
   }
 
   // TODO: need to support different value types
@@ -426,7 +429,7 @@ export class SatelliteProcess implements Satellite {
     const meta = this.opts.metaTable.toString()
     const sql = `SELECT value from ${meta} WHERE key='${key}';`
 
-    return await this.adapter.query(sql).then(rows => {
+    return await this.adapter.query({ sql }).then(rows => {
       return rows[0]!.value
     })
   }
@@ -451,7 +454,7 @@ export class SatelliteProcess implements Satellite {
         WHERE type = 'table'
           AND name NOT IN (${notIn.join(",")})
     `
-    const tableNames = await this.adapter.query(tables)
+    const tableNames = await this.adapter.query({ sql: tables })
 
     const columnsFor = (table: string) =>
       `SELECT * FROM pragma_table_info('${table}')`
@@ -463,7 +466,7 @@ export class SatelliteProcess implements Satellite {
     for (const table of tableNames) {
       const tableName = table.name as any
       const sql = columnsFor(tableName)
-      const columnsForTable = await this.adapter.query(sql)
+      const columnsForTable = await this.adapter.query({ sql })
       if (columnsForTable.length == 0) {
         continue
       }
