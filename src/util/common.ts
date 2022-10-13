@@ -1,9 +1,4 @@
-const TextEncodingPolyfill = require('text-encoding');
-
-Object.assign(global, {
-  TextEncoder: TextEncodingPolyfill.TextEncoder,
-  TextDecoder: TextEncodingPolyfill.TextDecoder,
-});
+require('fastestsmallesttextencoderdecoder');
 
 export const decoder = new TextDecoder()
 export const encoder = new TextEncoder()

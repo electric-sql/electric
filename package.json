@@ -103,12 +103,12 @@
   },
   "dependencies": {
     "events": "^3.3.0",
+    "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
     "lodash.throttle": "^4.1.1",
     "long": "^5.2.0",
     "protobufjs": "^7.1.1",
     "sqlite-parser": "^1.0.1",
-    "text-encoding": "^0.7.0",
     "walkjs": "^3.2.4",
     "ws": "^8.8.1"
   },

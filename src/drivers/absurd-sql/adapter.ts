@@ -13,8 +13,24 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(db: Database) {
     this.db = db
   }
-  runTransaction(..._statements: Statement[]): Promise<void> {
-    throw Error("not implemented")
+  async runTransaction(...statements: Statement[]): Promise<void> {
+    let open = false
+    try {
+      // SQL-js accepts multiple statements in a string and does
+      // not run them as transaction.
+      await this.db.run("BEGIN")
+      open = true
+      for (const stmt of statements) {
+        await this.db.run(stmt.sql, stmt.args)
+      }
+    } catch (error) {
+      await this.db.run("ABORT")
+      open = false
+    } finally {
+      if (open) {
+        await this.db.run("COMMIT")
+      }
+    }
   }
 
   async run(statement: Statement): Promise<void> {

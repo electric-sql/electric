@@ -100,7 +100,7 @@ test('load metadata', async t => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   // not sure why we need the buffer here, but might be a problem
-  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: new Buffer(DEFAULT_LSN) })
+  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: Buffer.from(DEFAULT_LSN) })
 })
 
 test('cannot UPDATE primary key', async t => {

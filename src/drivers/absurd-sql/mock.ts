@@ -22,13 +22,13 @@ export class MockDatabase implements Database {
     this.dbName = dbName
   }
 
-  exec(_sql: string, _params?: BindParams, _config?: Config): QueryExecResult {
+  exec(_sql: string, _params?: BindParams, _config?: Config): QueryExecResult[] {
     const dbName = this.dbName
 
-    return {
+    return [{
       columns: ['db', 'val'],
       values: [[dbName, 1], [dbName, 2]]
-    }
+    }]
   }
   run(_sql: string, _params?: BindParams): Database {
     return this

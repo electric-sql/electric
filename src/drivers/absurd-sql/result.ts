@@ -1,21 +1,26 @@
 import { Row, SqlValue } from '../../util/types'
 import { QueryExecResult } from './database'
 
-export const resultToRows = (result: QueryExecResult): Row[] => {
+export const resultToRows = (result: QueryExecResult[]): Row[] => {
   const rows: Row[] = []
-  const cols = result.columns
+  if (result.length == 0) {
+    return rows
+  }
 
-  result.values.map((values: SqlValue[]) => {
-    const row: Row = {}
+  for (const res of result) {
+    const cols = res.columns
+    res.values.map((values: SqlValue[]) => {
+      const row: Row = {}
 
-    values.map((val: SqlValue, i: number) => {
-      const col = cols[i]
+      values.map((val: SqlValue, i: number) => {
+        const col = cols[i]
 
-      row[col] = val
+        row[col] = val
+      })
+
+      rows.push(row)
     })
-
-    rows.push(row)
-  })
+  }
 
   return rows
 }

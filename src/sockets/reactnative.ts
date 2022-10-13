@@ -1,4 +1,3 @@
-import {Buffer} from 'buffer';
 import { ConnectionOptions, Data, Socket } from '.';
 
 export class WebSocketReactNative implements Socket {
@@ -33,7 +32,7 @@ export class WebSocketReactNative implements Socket {
     this.socket.onmessage = (event: any) => {
       for (const cb of this.messageCallbacks) {
         // no alloc because message.data is ArrayBuffer
-        const buffer = new Buffer(event.data);
+        const buffer = new Uint8Array(event.data);
         cb(buffer);
       }
     };

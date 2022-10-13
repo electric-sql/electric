@@ -1,4 +1,4 @@
-export type Data = string | Buffer | Uint8Array;
+export type Data = string | Uint8Array;
 
 export interface ConnectionOptions {
     url: string;

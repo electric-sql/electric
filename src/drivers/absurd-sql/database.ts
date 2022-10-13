@@ -26,7 +26,7 @@ export interface QueryExecResult {
 // The SQL.js API that we need to proxy -- which in this case
 // is basically the entire interface.
 export interface Database {
-  exec(sql: string, params?: BindParams, config?: Config): QueryExecResult | Promise<QueryExecResult>
+  exec(sql: string, params?: BindParams, config?: Config): QueryExecResult[] | Promise<QueryExecResult[]>
   run(sql: string, params?: BindParams): Database | Promise<Database>
   prepare(sql: string, params?: BindParams): Statement | Promise<Statement>
   each?(sql: string, params: BindParams | RowCallback, callback: RowCallback | EmptyFunction, done?: EmptyFunction, config?: Config): Database | Promise<Database>
@@ -92,7 +92,7 @@ export class ElectricDatabase {
     await Promise.all(keys.map(key => this._releaseStatement(key)))
   }
 
-  async exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult> {
+  async exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult[]> {
     const shouldNotify = isPotentiallyDangerous(sql)
 
     const retval = await this.db.exec(sql, params, config)
@@ -283,7 +283,7 @@ export class MainThreadDatabaseProxy implements Database {
     delete this._statements[id]
   }
 
-  exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult> {
+  exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult[]> {
     return this._request('exec', sql, params, config)
   }
 

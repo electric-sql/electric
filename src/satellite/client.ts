@@ -508,8 +508,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
   }
 
-  private toMessage(data: Buffer): SatPbMsg | Error {
-    const code = data.readUInt8();
+  private toMessage(data: Uint8Array): SatPbMsg | Error {
+    const code = data[0]
     const type = getTypeFromCode(code);
     const obj = getObjFromString(type);
     if (obj == undefined) {

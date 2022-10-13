@@ -12,7 +12,7 @@ import { DbName } from '../../util/types'
 import { DatabaseAdapter } from './adapter'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
-import { MockSocket } from '../../sockets/mock'
+import { WebSocketWeb } from '../../sockets/web'
 
 // Avoid garbage collection.
 const refs = []
@@ -60,7 +60,7 @@ export class ElectricWorker extends WorkerServer {
       const adapter = opts.adapter || new DatabaseAdapter(db)
       const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
       const notifier = opts.notifier || new WorkerBridgeNotifier(dbName, this)
-      const socket = opts.socket || new MockSocket()
+      const socket = opts.socket || new WebSocketWeb()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
