@@ -1,4 +1,4 @@
-require('fastestsmallesttextencoderdecoder');
+import 'fastestsmallesttextencoderdecoder'
 
 export const decoder = new TextDecoder()
 export const encoder = new TextEncoder()
