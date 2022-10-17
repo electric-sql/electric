@@ -14,18 +14,12 @@ export class DatabaseAdapter {
 
   runTransaction(...statements: Statement[]): Promise<void> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const txFn = (tx: Transaction) => {
+      const txFn = (tx: Transaction) => {        
         for (const { sql, args } of statements) {
-          if (!args) {
-            tx.executeSql(sql)
-          }
-          tx.executeSql(
-            sql,
-            args as unknown as (number | string | null)[])
+          tx.executeSql(sql, args ? args as any : [])
         }
       }
-
-      this.db.transaction(txFn, resolve, reject)
+      this.db.transaction(txFn, reject, resolve)
     })
   }
 
