@@ -80,8 +80,6 @@ export class BundleMigrator implements Migrator {
   }
 
   async apply({ body, name, sha256 }: Migration): Promise<void> {
-    console.log('applying migration: ', name)
-
     if (!VALID_NAME_EXP.test(name)) {
       throw new Error(`Invalid migration name, must match ${VALID_NAME_EXP}`)
     }
@@ -98,6 +96,5 @@ export class BundleMigrator implements Migrator {
     `
 
     await this.adapter.runTransaction(...(body as unknown as string[]).map(sql => ({ sql })), { sql: applied })
-    console.log(`applied, ${name}`)
   }
 }

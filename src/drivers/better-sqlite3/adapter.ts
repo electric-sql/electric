@@ -24,7 +24,8 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
   // Promise interface, but impl not actually async
   async run({ sql, args }: DbStatement): Promise<void> {
-    this.db.prepare(sql).run(args ? args : [])
+    const prep = this.db.prepare(sql)
+    prep.run(args ? args : [])
   }
 
   async query({ sql, args }: DbStatement): Promise<Row[]> {

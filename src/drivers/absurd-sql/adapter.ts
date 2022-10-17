@@ -33,8 +33,9 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     }
   }
 
-  async run(statement: Statement): Promise<void> {
-    await this.db.run(statement.sql, statement.args)    
+  async run(statement: Statement): Promise<void> {    
+    const prepared = await this.db.prepare(statement.sql)
+    await prepared.run(statement.args ? statement.args : [])    
   }
 
   async query(statement: Statement): Promise<Row[]> {

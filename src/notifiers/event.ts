@@ -233,7 +233,7 @@ export class EventNotifier implements Notifier {
   }
 
   _emit(eventName: string, notification: Notification) {
-    console.log('emit', eventName, notification)
+    // console.log('emit', eventName, notification)
 
     this.events.emit(eventName, notification)
   }
