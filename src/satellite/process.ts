@@ -13,6 +13,7 @@ import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 import { DEFAULT_LSN, decoder, encoder } from '../util/common'
+import { toHexString } from '../util/hex'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -120,6 +121,11 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = await this._getMeta('lastAckdRowId') as number
     this._lastSentRowId = await this._getMeta('lastSentRowId') as number
     this._lsn = await this._getMeta('lsn') as LSN
+
+    // FIXME: if driver returns a string, encode it
+    if (typeof this._lsn == 'string') {
+      this._lsn = encoder.encode(this._lsn)
+    }
 
     this.client.setOutboundLogPositions(
       encoder.encode(this._lastAckdRowId.toString()),
@@ -257,8 +263,9 @@ export class SatelliteProcess implements Satellite {
     let stmts: Statement[] = []
     // switches off on transaction commit/abort
     stmts.push({ sql: "PRAGMA defer_foreign_keys = ON" })
-    // update lsn
-    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`, args: [lsn, 'lsn'] })
+    // update lsn. 
+    // Note: potential SQL injection. Check how to use bind params for bytes
+    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = x'${toHexString(lsn)}' WHERE key = ?`, args: ['lsn'] })
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
