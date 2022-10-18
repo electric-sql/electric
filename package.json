@@ -48,6 +48,7 @@
     "./browser": "./dist/drivers/absurd-sql/index.js",
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
+    "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
