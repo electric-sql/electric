@@ -16,7 +16,7 @@
 
 [ElectricSQL](https://electric-sql.com) is a local-first SQL system. It provides active-active cloud sync for embedded SQLite databases and a reactive programming model to bind components to live database queries.
 
-The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with *any* SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Cordova](https://electric-sql.com/docs/usage/mobile#cordova), [Expo](https://electric-sql.com/docs/usage/mobile#expo), [React Native](https://electric-sql.com/docs/usage/mobile#react-native), [SQL.js](https://electric-sql.com/docs/usage/web) (with [absurd-sql](https://electric-sql.com/docs/usage/web)), [Node.js](https://electric-sql.com/docs/usage/edge#node) (via [better-sqlite3](https://electric-sql.com/docs/usage/edge#node)), [TypeORM](https://electric-sql.com/docs/usage/frameworks#typeorm) and [Prisma](https://electric-sql.com/docs/usage/frameworks#prisma).
+The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with *any* SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Cordova](https://electric-sql.com/docs/usage/drivers#cordova), [Expo](https://electric-sql.com/docs/usage/drivers#expo), [React Native](https://electric-sql.com/docs/usage/drivers#react-native), [SQL.js](https://electric-sql.com/docs/drivers/web) (with [absurd-sql](https://electric-sql.com/docs/usage/web)), [Node.js](https://electric-sql.com/docs/usage/drivers#edge) (via [better-sqlite3](https://electric-sql.com/docs/usage/drivers#node)), [TypeORM](https://electric-sql.com/docs/usage/frameworks#typeorm) and [Prisma](https://electric-sql.com/docs/usage/frameworks#prisma).
 
 ## Install
 
@@ -90,8 +90,8 @@ most bundlers, including Esbuild (as of [#2508](https://github.com/evanw/esbuild
 
 See the [usage documentation](https://electric-sql.com/docs/guides/usage) for:
 
-- [target environment and driver specific instructions](https://electric-sql.com/docs/guides/usage#targets-and-drivers)
-- [generic instructions for integrating *any* driver](https://electric-sql.com/docs/guides/client-usage#generic-drivers)
+- [target environment and driver specific instructions](https://electric-sql.com/docs/usage/drivers)
+- [generic instructions for integrating *any* driver](https://electric-sql.com/docs/usage/drivers#generic)
 
 ### Reactivity
 
@@ -159,7 +159,7 @@ export const MyComponent = () => {
 }
 ```
 
-See the [usage documentation](https://electric-sql.com/docs/usage) for framework specific instructions and generic instructions for wiring up your own reactive integrations.
+See the [frameworks guide](https://electric-sql.com/docs/usage/frameworks) for more information.
 
 ## Issues
 
