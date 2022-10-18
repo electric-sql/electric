@@ -4,6 +4,9 @@ import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { AckCallback, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
 
+export { SatelliteProcess } from './process'
+export { GlobalRegistry, globalRegistry } from './registry'
+
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
   ensureStarted(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, authState?: AuthState): Promise<Satellite>

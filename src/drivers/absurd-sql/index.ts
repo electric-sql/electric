@@ -10,10 +10,28 @@ import { DatabaseAdapter } from './adapter'
 import { ElectrifiedDatabase, MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
 
+export {
+  Config,
+  QueryExecResult,
+  Database,
+  Statement,
+  StatementIterator,
+  ElectricDatabase,
+  ElectricStatement,
+  ElectricMainThreadDatabaseProxy,
+  MainThreadStatementProxy
+} from './database'
+
 export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
-interface SQL {
+export {
+  DatabaseAdapter,
+  ElectrifiedDatabase,
+  MainThreadDatabaseProxy
+}
+
+export interface SQL {
   openDatabase(dbName: DbName): Promise<ElectrifiedDatabase>
 }
 
@@ -45,14 +63,3 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
 
   return { openDatabase }
 }
-
-// XXX what we really want to do is:
-// - instantiate a ProxyClient
-// - that provides the SQL.js client API
-// - but instead of doing the commands
-// - it calls the worker process
-// - where the API has an instance of the real client
-
-// the query adapter wrapps the proxyclient in the main thread
-// the filesystem and satellite stuff is in the worker thread
-// and the notifier machinery needs to go through this req/resp interface

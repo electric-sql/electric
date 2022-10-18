@@ -2,6 +2,9 @@ import { AuthState } from '../auth/index'
 import { QualifiedTablename } from '../util/tablename'
 import { DbName, RowId } from '../util/types'
 
+export { EventNotifier } from './event'
+export { MockNotifier } from './mock'
+
 export interface AuthStateNotification {
   authState: AuthState
 }

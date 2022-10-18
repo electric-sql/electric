@@ -1,4 +1,7 @@
 
+export { BundleMigrator } from './bundle'
+export { MockMigrator } from './mock'
+
 export interface Migration {
   body: string,
   encoding: string,
