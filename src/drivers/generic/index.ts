@@ -2,6 +2,11 @@
 // `isGenericDatabase` / `isGenericElectricDatabase` feature.
 import { ElectricNamespace } from '../../electric/index'
 
+// Expose so generic drivers can use these.
+export { BundleMigrator } from '../../migrators/bundle'
+export { EventNotifier } from '../../notifiers/event'
+export { globalRegistry } from '../../satellite/registry'
+
 export interface Database {
   isGenericDatabase: true
 }
