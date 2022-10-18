@@ -1,5 +1,5 @@
 name: Release new version
-run-name: Next ${{ inputs.version_increment }} version publish by @${{ github.actor }
+run-name: Next ${{ inputs.version_increment }} version publish by @${{ github.actor }}
 on:
   workflow_dispatch:
     inputs:
