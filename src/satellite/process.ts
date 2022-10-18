@@ -12,8 +12,7 @@ import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
-import { DEFAULT_LSN, decoder, encoder } from '../util/common'
-import { toHexString } from '../util/hex'
+import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../util/common'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -114,23 +113,20 @@ export class SatelliteProcess implements Satellite {
     // When a local transaction is sent, or an acknowledgement for 
     // a remote transaction commit is received, we update lsn records.
     this.client.subscribeToAck(async (lsn, type) => {
-      const decoded = Number(decoder.decode(lsn))
+      const decoded = bytesToNumber(lsn)
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
 
-    this._lastAckdRowId = await this._getMeta('lastAckdRowId') as number
-    this._lastSentRowId = await this._getMeta('lastSentRowId') as number
-    this._lsn = await this._getMeta('lsn') as LSN
-
-    // FIXME: if driver returns a string, encode it
-    if (typeof this._lsn == 'string') {
-      this._lsn = encoder.encode(this._lsn)
-    }
+    this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
+    this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
     this.client.setOutboundLogPositions(
-      encoder.encode(this._lastAckdRowId.toString()),
-      encoder.encode(this._lastSentRowId.toString())
+      numberToBytes(this._lastAckdRowId),
+      numberToBytes(this._lastSentRowId),
     )
+
+    const lsnBase64 = await this._getMeta('lsn')
+    this._lsn = base64.toBytes(lsnBase64)
 
     return this.client.connect()
       .then(() => this.client.authenticate())
@@ -264,8 +260,8 @@ export class SatelliteProcess implements Satellite {
     // switches off on transaction commit/abort
     stmts.push({ sql: "PRAGMA defer_foreign_keys = ON" })
     // update lsn. 
-    // Note: potential SQL injection. Check how to use bind params for bytes
-    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = x'${toHexString(lsn)}' WHERE key = ?`, args: ['lsn'] })
+    const lsnBase64 = base64.fromBytes(lsn)
+    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`, args: [lsnBase64, 'lsn'] })
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
@@ -318,7 +314,7 @@ export class SatelliteProcess implements Satellite {
       ...this._disableTriggers(tablenames),
       ...stmts,
       ...this._enableTriggers(tablenames)
-    )          
+    )
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
@@ -388,7 +384,7 @@ export class SatelliteProcess implements Satellite {
     return stmts
   }
 
-  async _ack(lsn: number, isAck: boolean): Promise<void> {    
+  async _ack(lsn: number, isAck: boolean): Promise<void> {
     if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
       throw new Error('Invalid position')
     }
@@ -396,7 +392,7 @@ export class SatelliteProcess implements Satellite {
     const meta = this.opts.metaTable.toString()
 
     const sql = ` UPDATE ${meta} SET value = ? WHERE key = ?`
-    const args = [`${lsn}`, isAck ? 'lastAckdRowId' : 'lastSentRowId']
+    const args = [`${lsn.toString()}`, isAck ? 'lastAckdRowId' : 'lastSentRowId']
 
     if (isAck) {
       const oplog = this.opts.oplogTable.toString()
@@ -420,15 +416,13 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.run({ sql, args })
   }
 
-  // TODO: need to support different value types
-  async _getMeta(key: string): Promise<Buffer | Uint8Array | string | number | null> {
+  async _getMeta(key: string): Promise<string> {
     const meta = this.opts.metaTable.toString()
 
     const sql = `SELECT value from ${meta} WHERE key = ?`
     const args = [key]
-    return await this.adapter.query({ sql, args }).then(rows => {
-      return rows[0]!.value
-    })
+    const rows = await this.adapter.query({ sql, args })
+    return rows[0]!.value as any
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.

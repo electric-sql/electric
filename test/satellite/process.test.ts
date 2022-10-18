@@ -21,7 +21,7 @@ import Long from 'long'
 import { ChangeType, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
-import { DEFAULT_LSN, encoder } from '../../src/util/common'
+import { base64, DEFAULT_LSN, numberToBytes } from '../../src/util/common'
 
 import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
@@ -100,7 +100,7 @@ test('load metadata', async t => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   // not sure why we need the buffer here, but might be a problem
-  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: Buffer.from(DEFAULT_LSN) })
+  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: base64.fromBytes(DEFAULT_LSN) })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -613,7 +613,7 @@ test('get transactions from opLogEntries', async t => {
 
   const expected = [
     {
-      lsn: encoder.encode("2"),
+      lsn: numberToBytes(2),
       commit_timestamp: Long.UZERO,
       changes: [
         {  
@@ -630,7 +630,7 @@ test('get transactions from opLogEntries', async t => {
         }]
     },
     {
-      lsn: encoder.encode("3"),
+      lsn: numberToBytes(3),
       commit_timestamp: Long.UZERO.add(1000),
       changes: [
         { 
@@ -652,7 +652,7 @@ test('rowid acks updates meta', async t => {
   await runMigrations()
   await satellite.start()
 
-  const lsn1 = encoder.encode("1")
+  const lsn1 = numberToBytes(1)
   client.emit("ack_lsn", lsn1, false)
 
   await new Promise<void>(res => {

@@ -14,7 +14,7 @@ export type SqlValue = string | number | null | Uint8Array
 export type StatementId = string
 export type Tablename = string
 export type VoidOrPromise = void | Promise<void>
-export type LSN = Uint8Array | Buffer
+export type LSN = Uint8Array
 export type Statement = { sql: string, args?: BindParams }
 
 export class SatelliteError extends Error {

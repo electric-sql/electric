@@ -1,7 +1,36 @@
+import BASE64 from 'base-64'
 import 'fastestsmallesttextencoderdecoder'
 
-export const decoder = new TextDecoder()
-export const encoder = new TextEncoder()
 
-// works for both satellite and electric
-export const DEFAULT_LSN = encoder.encode("0")
+export const typeDecoder = {
+    number: bytesToNumber,
+    text: (bytes: Uint8Array) => new TextDecoder().decode(bytes)
+}
+
+export const typeEncoder = {
+    number: numberToBytes,
+    text: (string: string) => new TextEncoder().encode(string)
+}
+
+export const base64 = {
+    fromBytes: (bytes: Uint8Array) => BASE64.encode(String.fromCharCode.apply(null, new Uint8Array(bytes) as any)),
+    toBytes: (string: string) => Uint8Array.from(BASE64.decode(string), c => c.charCodeAt(0))
+}
+
+export const DEFAULT_LSN = new Uint8Array([48])
+
+export function numberToBytes(i: number) {
+    return Uint8Array.of(
+        (i & 0xff000000) >> 24,
+        (i & 0x00ff0000) >> 16,
+        (i & 0x0000ff00) >> 8,
+        (i & 0x000000ff) >> 0);
+}
+
+export function bytesToNumber(bs: Uint8Array) {
+    let n = 0;
+    for (const byte of bs.values()) {
+        n = (n << 8) | byte;
+    }
+    return n;
+}

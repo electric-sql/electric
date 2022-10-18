@@ -1,7 +1,7 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
 import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
-import { encoder } from '../util/common'
+import { numberToBytes } from '../util/common'
 
 // Oplog table schema.
 export interface OplogEntry {
@@ -178,7 +178,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
 
   const init: Transaction = {
     commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
-    lsn: encoder.encode(opLogEntries[0].rowid.toString()),
+    lsn: numberToBytes(opLogEntries[0].rowid),
     changes: [],
   }
 
@@ -189,7 +189,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
     if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
       const nextTxn = {
         commit_timestamp: to_commit_timestamp(txn.timestamp),
-        lsn: encoder.encode(txn.rowid.toString()),
+        lsn: numberToBytes(txn.rowid),
         changes: [],
       }
       acc.push(nextTxn)
@@ -198,7 +198,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
 
     const change = opLogEntryToChange(txn)
     currTxn.changes.push(change)
-    currTxn.lsn = encoder.encode(txn.rowid.toString())
+    currTxn.lsn = numberToBytes(txn.rowid)
     return acc
   }, [init])
 }

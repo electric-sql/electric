@@ -21,7 +21,7 @@ import { Socket } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
 import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
-import { decoder, encoder, DEFAULT_LSN } from '../util/common'
+import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
 import { satelliteClientDefaults, SatelliteClientOpts } from './config';
 
@@ -488,24 +488,27 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
     const columnType = columnInfo.type.toUpperCase();
-    if (columnType == 'TEXT' || columnType == 'UUID' || columnType == 'VARCHAR') {
-      return decoder.decode(column);
-    }
-    if (columnType == 'INTEGER') {
-      return new Number(column).valueOf();
+    switch (columnType) {
+      case 'TEXT':
+      case 'UUID':
+      case 'VARCHAR':
+        return typeDecoder.text(column);
+      case 'INTEGER':
+        return typeDecoder.number(column);
     }
     throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
   }
 
   private serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
     const columnType = columnInfo.type.toUpperCase();
-    if (columnType == 'TEXT' || columnType == 'UUID') {
-      return encoder.encode(column as string)
+    switch (columnType) {
+      case 'TEXT':
+      case 'UUID':
+        return typeEncoder.text(column as string);
+      case 'INTEGER':
+        return typeEncoder.number(column as number);
     }
-    if (columnType == 'INTEGER') {
-      return encoder.encode(column.toString());
-    }
-    throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
+    throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't serialize ${columnInfo.type}`);
   }
 
   private toMessage(data: Uint8Array): SatPbMsg | Error {
