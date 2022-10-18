@@ -12,7 +12,7 @@ import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock
 
 import { DatabaseAdapter as BetterSQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockDatabase as MockBetterSQLiteDatabase } from '../../src/drivers/better-sqlite3/mock'
-import { ElectrifiedDatabase } from '../../src/drivers/generic/database'
+import { ElectrifiedDatabase } from '../../src/drivers/generic/index'
 import { ElectricNamespace } from '../../src/electric/index'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'

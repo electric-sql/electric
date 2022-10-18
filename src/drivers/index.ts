@@ -34,7 +34,7 @@ import {
   Database as GenericDatabase,
   ElectricDatabase as GenericElectricDatabase,
   ElectrifiedDatabase as GenericElectrifiedDatabase
-} from './generic/database'
+} from './generic/index'
 
 export type AnyDatabase =
   AbsurdSQLDatabase
