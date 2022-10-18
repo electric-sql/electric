@@ -257,6 +257,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:noreply, state}
   end
 
+  #def handle_info({:DOWN, _ref, :process, pid, _reason}, %State{})
+
   @impl true
   def handle_info(_, state) do
     state.transport.close(state.socket)
@@ -294,7 +296,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp handle_message(?c, "", %{mode: :copy} = state) do
     # End copy mode
 
-    SlotServer.stop_replication(state.slot_server)
+    :ok = SlotServer.stop_replication(state.slot_server)
 
     Messaging.end_copy_mode()
     |> Messaging.command_complete("COPY 0")
@@ -541,6 +543,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
     slot_name = String.trim(slot_name, ~s|"|)
     slot_server = SlotServer.get_slot_reg(slot_name)
+    Process.monitor(Electric.lookup_pid(slot_server))
     target_lsn = Lsn.from_string(lsn_string)
 
     options = parse_replication_options(options)
@@ -554,7 +557,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> tcp_send(state)
 
     # FIXME: we should handle scenario when slot server is down at this moment
-    SlotServer.start_replication(slot_server, &tcp_send(&1, state), publication, target_lsn)
+    :ok = SlotServer.start_replication(
+      slot_server, &tcp_send(&1, state), publication, target_lsn)
 
     {nil, %{state | mode: :copy, slot: slot_name, slot_server: slot_server}}
   end

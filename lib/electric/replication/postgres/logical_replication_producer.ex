@@ -222,7 +222,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          %State{transaction: {current_txn_lsn, _}, drop_current_transaction?: true} = state
        )
        when commit_lsn == current_txn_lsn do
-    Logger.debug("ignoring transaction with lsn #{inspect(commit_lsn)}")
+    Logger.debug("ignoring transaction with lsn #{inspect(commit_lsn)} #{inspect(state.transaction)}")
     {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
   end
 

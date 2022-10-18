@@ -37,7 +37,7 @@
 [invoke setup_rest]
 
 [macro wait_table table]
-    [invoke wait-for "select count(id) from ${table};" 10 1000 ${psql} ]
+    [invoke wait-for "select count(id) from ${table};" 10 10 ${psql} ]
 [endmacro]
 
 [shell pg_2]

@@ -1,4 +1,4 @@
-[doc Sanity check test that environment starts correctly]
+[doc Sanity check test that electric migrates PG instance]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
