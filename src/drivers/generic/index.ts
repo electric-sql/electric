@@ -17,4 +17,4 @@ export interface ElectricDatabase {
   electric: ElectricNamespace
 }
 
-export interface ElectrifiedDatabase extends Database, ElectricDatabase {}
+export interface ElectrifiedDatabase extends Database, ElectricDatabase { }
