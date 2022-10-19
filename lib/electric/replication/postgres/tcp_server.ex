@@ -126,7 +126,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
               accept_ssl: false,
               mode: :normal,
               slot: nil,
-              slot_server: nil
+              slot_server: nil,
+              slot_proc_ref: nil
 
     @type t() :: %__MODULE__{
             socket: :ranch_transport.socket(),
@@ -136,7 +137,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
             accept_ssl: boolean(),
             mode: :normal | :copy,
             slot: SlotServer.slot_name() | nil,
-            slot_server: SlotServer.slot_reg() | nil
+            slot_server: SlotServer.slot_reg() | nil,
+            slot_proc_ref: reference() | nil
           }
   end
 
@@ -258,9 +260,24 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   @impl true
-  def handle_info(_, state) do
+  def handle_info({:DOWN, ref, :process, :_, reason}, %State{slot_proc_ref: ref} = state) do
+    case reason do
+      :normal ->
+        {:noreply, state}
+
+      {:shutdown, _} ->
+        {:noreply, state}
+
+      _ ->
+        Logger.warning("slot server terminate abnormally, close connection")
+        {:stop, :shutdown, state}
+    end
+  end
+
+  @impl true
+  def handle_info(msg, state) do
     state.transport.close(state.socket)
-    Logger.debug("Socket closed by client #{inspect(state.client)}")
+    Logger.debug("Socket closed by client #{inspect(state.client)}: #{inspect(msg)}")
     {:stop, :shutdown, state}
   end
 
@@ -294,7 +311,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp handle_message(?c, "", %{mode: :copy} = state) do
     # End copy mode
 
-    SlotServer.stop_replication(state.slot_server)
+    :ok = SlotServer.stop_replication(state.slot_server)
 
     Messaging.end_copy_mode()
     |> Messaging.command_complete("COPY 0")
@@ -541,6 +558,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
     slot_name = String.trim(slot_name, ~s|"|)
     slot_server = SlotServer.get_slot_reg(slot_name)
+    proc_ref = Process.monitor(Electric.lookup_pid(slot_server))
     target_lsn = Lsn.from_string(lsn_string)
 
     options = parse_replication_options(options)
@@ -554,9 +572,16 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> tcp_send(state)
 
     # FIXME: we should handle scenario when slot server is down at this moment
-    SlotServer.start_replication(slot_server, &tcp_send(&1, state), publication, target_lsn)
+    :ok =
+      SlotServer.start_replication(
+        slot_server,
+        &tcp_send(&1, state),
+        publication,
+        target_lsn
+      )
 
-    {nil, %{state | mode: :copy, slot: slot_name, slot_server: slot_server}}
+    {nil,
+     %{state | mode: :copy, slot: slot_name, slot_server: slot_server, slot_proc_ref: proc_ref}}
   end
 
   defp handle_query(["CREATE_REPLICATION_SLOT", _args], _state) do

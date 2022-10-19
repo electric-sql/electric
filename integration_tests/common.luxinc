@@ -1,3 +1,17 @@
+[global _global_log_string_counter=0]
+[macro log string]
+    [my old=$LUX_SHELLNAME]
+[shell log]
+    !echo $((${_global_log_string_counter}+1))
+    """?
+    (.*)
+    SH-PROMPT:
+    """
+    [global _global_log_string_counter=$1]
+    [progress \n $_global_log_string_counter. $string \n]
+[shell $old]
+[endmacro]
+
 [macro ok]
     ?SH-PROMPT:
     !echo ==$$?==
