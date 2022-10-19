@@ -20,10 +20,10 @@ COPY Makefile /app/
 RUN make build_tools
 
 COPY mix.*  /app/
+RUN make deps
 COPY config /app/config/
 COPY lib    /app/lib/
-COPY deps   /app/deps
-RUN make deps compile release
+RUN make compile release
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
