@@ -15,13 +15,11 @@ export abstract class SQLitePluginDatabaseAdapter {
     this.promisesEnabled = false
   }
 
-  // TODO: change all run to runTransaction to avoid errors on React Native
-
   async run(statement: Statement): Promise<void> {
-    return this.runTransaction(statement)
+    return this.runInTransaction(statement)
   }
 
-  async runTransaction(...statements: Statement[]): Promise<void> {
+  async runInTransaction(...statements: Statement[]): Promise<void> {
     const promisesEnabled = this.promisesEnabled
     const transaction = this.db.transaction.bind(this.db)
 
@@ -32,12 +30,11 @@ export abstract class SQLitePluginDatabaseAdapter {
             console.log('run statement failure', sql, err)
             reject(err)
           }
-          tx.addStatement(sql, args, undefined, stmtFailure)
+          tx.executeSql(sql, args, undefined, stmtFailure)
         }        
       }
 
       const success = () => {
-        // console.log('run tx success')
         resolve()
       }
 

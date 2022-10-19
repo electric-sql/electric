@@ -13,7 +13,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(db: Database) {
     this.db = db
   }
-  async runTransaction(...statements: Statement[]): Promise<void> {
+  async runInTransaction(...statements: Statement[]): Promise<void> {
     let open = false
     try {
       // SQL-js accepts multiple statements in a string and does

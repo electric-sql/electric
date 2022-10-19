@@ -26,9 +26,6 @@ export class SatelliteWSServerStub {
 
     this.server.on('connection', socket => {
       socket.on('message', (data: Buffer) => {
-        // const msgType = data.readUInt8();
-        // console.log(`${msgType}`);
-
         const next = this.queue.shift();
         if (next == undefined) {
           // do nothing

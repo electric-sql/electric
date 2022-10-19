@@ -15,7 +15,7 @@ import { globalRegistry } from '../../satellite/registry'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
-import { WebSocketReactNative } from '../../sockets/reactnative'
+import { WebSocketReactNative } from '../../sockets/react-native'
 
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database, ElectrifiedDatabase }

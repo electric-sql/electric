@@ -143,7 +143,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   enqueueTransaction(transaction: Transaction): void | SatelliteError {
     if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
 
-      // XXX
+      // TODO: Client should not allow queueing transactions when Satellite 
+      // is working in offline mode
       return
 
       // throw new SatelliteError(SatelliteErrorCode.REPLICATION_NOT_STARTED,

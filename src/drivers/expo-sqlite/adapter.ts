@@ -12,7 +12,7 @@ export class DatabaseAdapter {
     this.db = db
   }
 
-  runTransaction(...statements: Statement[]): Promise<void> {
+  runInTransaction(...statements: Statement[]): Promise<void> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
       const txFn = (tx: Transaction) => {        
         for (const { sql, args } of statements) {
@@ -24,7 +24,7 @@ export class DatabaseAdapter {
   }
 
   run(statement: Statement): Promise<void> {
-    return this.runTransaction(statement)
+    return this.runInTransaction(statement)
   }
 
   query({ sql, args }: Statement): Promise<Row[]> {

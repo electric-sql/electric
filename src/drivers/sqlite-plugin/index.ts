@@ -57,14 +57,10 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
   }
 
   addTransaction(tx: SQLitePluginTransaction): void {
-    console.log('ElectricSQLitePlugin.addTransaction')
-
     const originalSuccessFn = tx.success.bind(tx)
     const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
 
     tx.success = (...args: any[]): any => {
-      console.log('ElectricSQLitePlugin.addTransaction tx.success', args)
-
       if (!tx.readOnly) {
         potentiallyChanged()
       }

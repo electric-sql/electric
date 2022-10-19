@@ -90,11 +90,12 @@ export class BundleMigrator implements Migrator {
 
     const applied =
       `INSERT INTO ${this.tableName}
-        ('name', 'sha256', 'applied_at')
-      VALUES
-        ('${name}', '${sha256}', '${Date.now()}');
-    `
+        ('name', 'sha256', 'applied_at') VALUES (?, ?, ?)
+        `
 
-    await this.adapter.runTransaction(...(body as unknown as string[]).map(sql => ({ sql })), { sql: applied })
+    await this.adapter.runInTransaction(
+      ...(body as unknown as string[]).map(sql => ({ sql })),
+      { sql: applied, args: [name, sha256, Date.now()] }
+    )
   }
 }

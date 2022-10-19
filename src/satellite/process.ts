@@ -310,7 +310,7 @@ export class SatelliteProcess implements Satellite {
 
     const tablenames = Object.keys(merged)
 
-    await this.adapter.runTransaction(
+    await this.adapter.runInTransaction(
       ...this._disableTriggers(tablenames),
       ...stmts,
       ...this._enableTriggers(tablenames)
@@ -327,7 +327,7 @@ export class SatelliteProcess implements Satellite {
       SELECT * FROM ${oplog}
         WHERE timestamp IS NOT NULL
           AND rowid > ?
-        ORDER BY rowid ASC;
+        ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
     return rows as unknown as OplogEntry[]
@@ -400,10 +400,10 @@ export class SatelliteProcess implements Satellite {
       const delArgs = [lsn]
 
       this._lastAckdRowId = lsn
-      await this.adapter.runTransaction({ sql, args }, { sql: del, args: delArgs })
+      await this.adapter.runInTransaction({ sql, args }, { sql: del, args: delArgs })
     } else {
       this._lastSentRowId = lsn
-      await this.adapter.runTransaction({ sql, args })
+      await this.adapter.runInTransaction({ sql, args })
     }
   }
 

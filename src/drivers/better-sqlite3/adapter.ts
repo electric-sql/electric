@@ -13,7 +13,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     this.db = db
   }
 
-  async runTransaction(...statements: DbStatement[]): Promise<void> {
+  async runInTransaction(...statements: DbStatement[]): Promise<void> {
     const txn = this.db.transaction((stmts: DbStatement[]) => {
       for (const stmt of stmts) {
         this.run(stmt)

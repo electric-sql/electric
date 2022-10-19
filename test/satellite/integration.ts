@@ -83,8 +83,7 @@ test('receive data', async t => {
 
     await new Promise<void>((resolve) => {
         setTimeout(async () => {
-            const res = await adapter.query('select * from _electric_meta')
-            console.log(JSON.stringify(res))
+            await adapter.query('select * from _electric_meta')
             t.pass()
             resolve()
         }, 3000)

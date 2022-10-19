@@ -11,7 +11,7 @@ export interface DatabaseAdapter {
   run(statement: Statement): Promise<void>
 
   // Runs the provided sql as a transaction
-  runTransaction(...statements: Statement[]): Promise<void>
+  runInTransaction(...statements: Statement[]): Promise<void>
 
   // Query the database.
   query(statement: Statement): Promise<Row[]>
