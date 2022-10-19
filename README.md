@@ -12,6 +12,8 @@
   </picture>
 </a>
 
+![GitHub](https://img.shields.io/github/license/electric-sql/typescript-client) ![npm](https://img.shields.io/npm/v/electric-sql) [![Tests](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml)
+
 # ElectricSQL Typescript Client
 
 [ElectricSQL](https://electric-sql.com) is a local-first SQL system. It provides active-active cloud sync for embedded SQLite databases and a reactive programming model to bind components to live database queries.
