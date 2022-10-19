@@ -8,6 +8,7 @@
     "emitDeclarationOnly": true,
     "forceConsistentCasingInFileNames": true,
     "incremental": false,
+    "isolatedModules": true,
     "jsx": "preserve",
     "lib": ["ESNext", "DOM"],
     "module": "ESNext",

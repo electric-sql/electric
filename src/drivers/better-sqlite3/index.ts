@@ -17,7 +17,6 @@ import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 export { ElectricDatabase, DatabaseAdapter }
 export type { Database, ElectrifiedDatabase }
 
-
 export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.name
 

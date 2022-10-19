@@ -10,26 +10,27 @@ import { DatabaseAdapter } from './adapter'
 import { ElectrifiedDatabase, MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
 
+export { WasmLocator }
+export type { LocateFileOpts }
+
 export {
+  ElectricDatabase,
+  ElectricStatement,
+  MainThreadDatabaseProxy,
+  MainThreadStatementProxy
+} from './database'
+
+export type {
   Config,
   QueryExecResult,
   Database,
   Statement,
   StatementIterator,
-  ElectricDatabase,
-  ElectricStatement,
-  ElectricMainThreadDatabaseProxy,
-  MainThreadStatementProxy
+  ElectrifiedDatabase
 } from './database'
 
 export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
-
-export {
-  DatabaseAdapter,
-  ElectrifiedDatabase,
-  MainThreadDatabaseProxy
-}
 
 export interface SQL {
   openDatabase(dbName: DbName): Promise<ElectrifiedDatabase>

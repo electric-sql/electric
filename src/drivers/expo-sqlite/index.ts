@@ -16,13 +16,8 @@ import { globalRegistry } from '../../satellite/registry'
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
 
-export {
-  Database,
-  DatabaseAdapter,
-  ElectricDatabase,
-  ElectricWebSQLDatabase,
-  ElectrifiedDatabase
-}
+export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
+export type { Database, ElectrifiedDatabase }
 
 export const electrify = async (db: Database, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   if (opts === undefined) {
