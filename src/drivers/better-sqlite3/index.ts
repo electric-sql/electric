@@ -14,15 +14,9 @@ import { DbName } from '../../util/types'
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 
-// XXX exporting the *interfaces / types* below triggers
-// SyntaxError: The requested module './database.js' does not provide an export named 'Database'
+export { ElectricDatabase, DatabaseAdapter }
+export type { Database, ElectrifiedDatabase }
 
-export {
-  // Database,
-  DatabaseAdapter,
-  ElectricDatabase
-  // ElectrifiedDatabase
-}
 
 export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.name
