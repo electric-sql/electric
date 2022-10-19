@@ -18,7 +18,20 @@ test('electrify returns an equivalent database client', async t => {
   })
 })
 
-test('running a transaction runs potentiallyChanged', async t => {
+test.only('running a transaction runs potentiallyChanged', async t => {
+  const [original, notifier, db] = await initTestable('test.db')
+
+  t.is(notifier.notifications.length, 0)
+
+  const tx = new MockSQLitePluginTransaction()
+  db.transaction((tx) => {
+    tx.executeSql('insert foo into bar')
+  })
+
+  t.is(notifier.notifications.length, 1)
+})
+
+test('adding a transaction runs potentiallyChanged', async t => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
@@ -29,7 +42,7 @@ test('running a transaction runs potentiallyChanged', async t => {
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a read only transaction does not potentiallyChanged', async t => {
+test('adding a read only transaction does not potentiallyChanged', async t => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
