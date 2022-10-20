@@ -315,19 +315,26 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def maybe_auth(conn, stream_ref, opts) do
-    case true == :lists.member(:auth, opts) or
-           true == Keyword.get(opts, :auth, false) do
-      true ->
-        id = Keyword.get(opts, :id, "id")
-        auth_req = serialize(%SatAuthReq{id: id, token: "token"})
+    case Keyword.get(opts, :auth, false) do
+      %{app_id: app_id, user_id: user_id} ->
+        {:ok, token} = Electric.Satellite.Auth.Token.create(app_id, user_id)
+
+        auth_req = serialize(%SatAuthReq{id: app_id, token: token})
+
         :gun.ws_send(conn, stream_ref, {:binary, auth_req})
         {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)
         %SatAuthResp{} = deserialize(auth_frame)
         :ok = :gun.update_flow(conn, stream_ref, 1)
+
         Logger.debug("Auth passed")
 
       false ->
         :ok
+
+      invalid ->
+        raise ArgumentError,
+          message:
+            "use connect_and_spawn(auth: %{app_id: \"...\", user_id: \"...\"}), got: #{inspect(invalid)}"
     end
   end
 

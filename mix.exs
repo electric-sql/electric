@@ -58,14 +58,14 @@ defmodule Electric.MixProject do
       {:gun, "~> 2.0.0-rc.2"},
       {:cowboy, "~> 2.9.0"},
       {:gen_stage, "~> 1.1.2"},
-      {:finch, "~> 0.13"},
       {:satellite_proto,
        git: "https://github.com/electric-sql/typescript-client.git",
        runtime: false,
        app: false,
        ref: "41d059a07938369ac391ed4bfbce1df9f4aea6fe",
        compile: false,
-       sparse: "proto"}
+       sparse: "proto"},
+      {:yajwt, "~> 1.4"}
     ]
   end
 

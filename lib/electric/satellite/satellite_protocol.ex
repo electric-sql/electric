@@ -99,6 +99,7 @@ defmodule Electric.Satellite.Protocol do
 
   defmodule State do
     defstruct auth_passed: false,
+              auth: nil,
               last_msg_time: nil,
               client: nil,
               client_id: nil,
@@ -110,6 +111,7 @@ defmodule Electric.Satellite.Protocol do
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
+            auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client: String.t(),
             client_id: String.t() | nil,
@@ -135,13 +137,15 @@ defmodule Electric.Satellite.Protocol do
       when id !== "" and token !== "" ->
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(id)}")
 
-        with :ok <- Electric.Satellite.Auth.validate_token(id, token) do
-          reg_name = Electric.Satellite.WsServer.reg_name(state.client)
-          Electric.reg(reg_name)
-          :ok = ClientManager.register_client(state.client, reg_name)
+        case Electric.Satellite.Auth.validate_token(id, token) do
+          {:ok, auth} ->
+            reg_name = Electric.Satellite.WsServer.reg_name(state.client)
+            Electric.reg(reg_name)
+            :ok = ClientManager.register_client(state.client, reg_name)
 
-          {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true, client_id: id}}
-        else
+            {%SatAuthResp{id: "server_identity"},
+             %State{state | auth: auth, auth_passed: true, client_id: id}}
+
           {:error, _} ->
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
         end

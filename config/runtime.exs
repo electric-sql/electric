@@ -68,4 +68,11 @@ if config_env() == :prod do
     vaxine_hostname: vaxine_hostname,
     vaxine_port: 8088,
     vaxine_connection_timeout: vaxine_connection_timeout
+
+  # :crypto.strong_rand_bytes(32) |> Base.encode64()
+  # this needs to be the same as configured for the console app
+  # [ElectricWeb.JWTAuth, :secret_key]
+  jwt_secret_key = System.fetch_env!("JWT_SIGNING_KEY")
+
+  config :electric, Electric.Satellite.Auth, secret_key: Base.decode64!(jwt_secret_key)
 end

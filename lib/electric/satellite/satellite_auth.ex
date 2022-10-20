@@ -2,62 +2,109 @@ defmodule Electric.Satellite.Auth do
   @moduledoc """
   Module for authorization for Satellite clients
   """
+
   require Logger
 
-  def child_spec do
-    {Finch, name: __MODULE__, pools: %{:default => [size: 20]}}
+  @enforce_keys [:app_id, :user_id]
+
+  defstruct [:app_id, :user_id]
+
+  @type t() :: %__MODULE__{
+          app_id: binary,
+          user_id: binary
+        }
+
+  defmodule Token do
+    @iss Application.compile_env!(:electric, [Electric.Satellite.Auth, :issuer])
+
+    @spec verify(binary, binary) :: {:ok, %{binary => any}}
+    def verify(app_id, token) do
+      with {:ok, key} <- signing_key(app_id) do
+        JWT.verify(token, %{key: key, iss: @iss})
+      end
+    end
+
+    @spec secret_key() :: binary
+    defp secret_key() do
+      Application.fetch_env!(:electric, Electric.Satellite.Auth)[:secret_key]
+    end
+
+    @spec signing_key(binary) :: {:ok, binary}
+    defp signing_key(app_id) do
+      key =
+        secret_key()
+        |> hmac("EDBv01")
+        |> hmac(app_id)
+
+      {:ok, key}
+    end
+
+    @spec hmac(binary, binary) :: binary
+    defp hmac(key, data) when byte_size(key) == 32 do
+      :crypto.mac(:hmac, :sha256, key, data)
+    end
+
+    # 15 mins
+    @token_max_age 60 * 15
+
+    # For internal use only. Create a valid access token for this app
+    @doc false
+    @spec create(binary, binary) :: {:ok, binary} | no_return
+    def create(app_id, user_id, opts \\ []) do
+      {:ok, key} = signing_key(app_id)
+
+      nonce =
+        :crypto.strong_rand_bytes(16)
+        |> Base.encode16(case: :lower)
+
+      custom_claims = %{
+        "app_id" => app_id,
+        "user_id" => user_id,
+        "nonce" => nonce,
+        "type" => "access"
+      }
+
+      expiry = Keyword.get_lazy(opts, :expiry, &default_expiry/0)
+
+      token_opts = %{
+        alg: "HS256",
+        exp: expiry,
+        iss: @iss
+      }
+
+      claims = Map.merge(custom_claims, token_opts)
+
+      {:ok, JWT.sign(claims, %{key: key})}
+    end
+
+    defp default_expiry do
+      System.os_time(:second) + @token_max_age
+    end
   end
 
   @spec validate_token(String.t(), String.t()) ::
-          :ok | {:error, :auth_not_configured | term()}
-  def validate_token(id, token) do
-    auth_opts = Application.get_env(:electric, __MODULE__, nil)
-
-    case validate_token_int(id, token, auth_opts) do
-      :ok ->
-        :ok
-
-      {:error, :wrong_auth} = error ->
-        error
+          {:ok, t()} | {:error, :auth_not_configured | term()}
+  def validate_token(app_id, token) do
+    case validate_jwt_token(app_id, token) do
+      {:ok, auth} ->
+        {:ok, auth}
 
       {:error, reason} = error ->
-        Logger.error("authorization failed for #{id} with reason: #{inspect(reason)}")
+        Logger.error("authorization failed for #{app_id} with reason: #{inspect(reason)}")
         error
     end
   end
 
-  defp validate_token_int(id, _token, nil) do
-    Logger.emergency("authorization disabled, accept client with id: #{id}")
-    :ok
-  end
+  defp validate_jwt_token(id, token) do
+    with {:ok, claims} <- Token.verify(id, token),
+         {:claims, %{"user_id" => user_id, "type" => "access"}} <- {:claims, claims} do
+      {:ok, %__MODULE__{app_id: id, user_id: user_id}}
+    else
+      {:claims, _claims} ->
+        {:error, "invalid access token"}
 
-  defp validate_token_int(id, token, auth_opts) do
-    auth_url = Keyword.get(auth_opts, :auth_url)
-    cluster_id = Keyword.get(auth_opts, :cluster_id)
-
-    req =
-      Finch.build(
-        :post,
-        auth_url,
-        [{"Content-Type", "application/json"}],
-        "{\"token\": \"#{token}\", \"cluster_id\": \"#{cluster_id}\" }"
-      )
-
-    case Finch.request(req, __MODULE__) do
-      {:ok, %Finch.Response{status: 200}} ->
-        Logger.info("authorization passed #{id}")
-        :ok
-
-      {:ok, %Finch.Response{status: 401}} ->
-        Logger.warn("authorization failed #{id}")
-        {:error, :wrong_auth}
-
-      {:ok, r} ->
-        Logger.emergency("validate: #{inspect(r)}")
-        {:error, :wrong_reponse}
-
-      {:error, _} ->
-        {:error, :auth_failed}
+      {:error, reason} ->
+        {:error, "token verification failed: #{inspect(reason)}"}
     end
   end
 end
