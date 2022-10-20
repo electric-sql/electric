@@ -1,12 +1,15 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "fda9c8a1f86d0c67eec25b1b111c601ee505c1b9eafc32069ce40de4a2d83506"}}
+{"metadata": {"title": "test_schema", "name": "1666287449_test_schema", "sha256": "1f92fe49241a0f270bf61bfcbbe0e1b84f3727011d743ede4e7802c3c3289d81"}}
 */
 
 CREATE TABLE main.child (
   id integer PRIMARY KEY,
   parent integer NOT NULL,
   FOREIGN KEY(parent) REFERENCES parent(id) MATCH SIMPLE);
+
+CREATE TABLE main.items (
+  value text PRIMARY KEY);
 
 CREATE TABLE main.parent (
   id integer PRIMARY KEY,

@@ -33,6 +33,6 @@ test('run the bundle migrator', async t => {
   const { adapter } = t.context as any
 
   const migrator = new BundleMigrator(adapter, migrations)
-  t.is(await migrator.up(), 3)
+  t.is(await migrator.up(), 2)
   t.is(await migrator.up(), 0)
 })

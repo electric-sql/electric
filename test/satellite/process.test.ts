@@ -100,7 +100,7 @@ test('load metadata', async t => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   // not sure why we need the buffer here, but might be a problem
-  t.deepEqual(meta, { compensations: '0', lastAckdRowId: '0', lastSentRowId: '0', lsn: base64.fromBytes(DEFAULT_LSN) })
+  t.deepEqual(meta, { compensations: 0, lastAckdRowId: '0', lastSentRowId: '0', lsn: base64.fromBytes(DEFAULT_LSN) })
 })
 
 test('cannot UPDATE primary key', async t => {
@@ -438,7 +438,7 @@ test('compensations: referential integrity is enforced', async t => {
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
-  await satellite._setMeta('compensations', '0')
+  await satellite._setMeta('compensations', 0)
 
   await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
 
@@ -452,7 +452,7 @@ test('compensations: incoming operation breaks referential integrity', async t =
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
-  await satellite._setMeta('compensations', '0')
+  await satellite._setMeta('compensations', 0)
 
   const incoming = [
     generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
@@ -471,7 +471,7 @@ test('compensations: incoming operations accepted if restore referential integri
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
-  await satellite._setMeta('compensations', '0')
+  await satellite._setMeta('compensations', 0)
 
   const incoming = [
     generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
@@ -501,7 +501,7 @@ test('compensations: using triggers with flag 0', async t => {
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
-  await satellite._setMeta('compensations', '0')
+  await satellite._setMeta('compensations', 0)
   satellite._lastSentRowId = 1
 
   await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })
@@ -525,7 +525,7 @@ test('compensations: using triggers with flag 1', async t => {
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
-  await satellite._setMeta('compensations', '1')
+  await satellite._setMeta('compensations', 1)
   satellite._lastSentRowId = 1
 
   await adapter.run({ sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')` })

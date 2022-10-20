@@ -1,6 +1,6 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "init", "name": "1664714681_init", "sha256": "9a6381937b08ecf9ea3b5bd09741b0860b9f9a885e0154ac1fdea29352b2b5ba"}}
+{"metadata": {"title": "init", "name": "1666287419_init", "sha256": "882b55049d6579c1c66fab25605429a153f9e1af39c634d60041c1afd4696fab"}}
 */
 
 /*---------------------------------------------
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS _electric_migrations (
 );
 
 -- Initialisation of the metadata table
-INSERT INTO _electric_meta (key, value) VALUES ('compensations', '0'), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', 'MA==');
+INSERT INTO _electric_meta (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', 'MA==');
 
 
 -- These are toggles for turning the triggers on and off

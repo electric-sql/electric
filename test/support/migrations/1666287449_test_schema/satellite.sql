@@ -1,19 +1,22 @@
 /*
 ElectricDB Migration
-{"metadata": {"title": "create_compensation_test_tables", "name": "1664727242_create_compensation_test_tables", "sha256": "fda9c8a1f86d0c67eec25b1b111c601ee505c1b9eafc32069ce40de4a2d83506"}}
+{"metadata": {"title": "test_schema", "name": "1666287449_test_schema", "sha256": "1f92fe49241a0f270bf61bfcbbe0e1b84f3727011d743ede4e7802c3c3289d81"}}
 */
+CREATE TABLE IF NOT EXISTS main.items (
+  value TEXT PRIMARY KEY
+);
 
 CREATE TABLE IF NOT EXISTS main.parent (
   id INTEGER PRIMARY KEY,
   value TEXT,
   otherValue INTEGER DEFAULT 0
-) STRICT, WITHOUT ROWID;
+);
 
 CREATE TABLE IF NOT EXISTS main.child (
   id INTEGER PRIMARY KEY,
   parent INTEGER NOT NULL,
   FOREIGN KEY(parent) REFERENCES parent(id)
-) STRICT, WITHOUT ROWID;
+);
 
 /*---------------------------------------------
 Below are templated triggers added by Satellite
@@ -77,7 +80,7 @@ DROP TRIGGER IF EXISTS compensation_insert_main_child_parent_into_oplog;
 CREATE TRIGGER compensation_insert_main_child_parent_into_oplog
    AFTER INSERT ON main.child
    WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent') AND
-        '1' == (SELECT value from _electric_meta WHERE key == 'compensations')
+        1 == (SELECT value from _electric_meta WHERE key == 'compensations')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   SELECT 'main', 'parent', 'UPDATE', json_object('id', id), json_object('id', id, 'value', value, 'otherValue', otherValue), NULL, NULL
@@ -88,7 +91,7 @@ DROP TRIGGER IF EXISTS compensation_update_main_child_parent_into_oplog;
 CREATE TRIGGER compensation_update_main_child_parent_into_oplog
    AFTER UPDATE ON main.child
    WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent') AND
-        '1' == (SELECT value from _electric_meta WHERE key == 'compensations')
+        1 == (SELECT value from _electric_meta WHERE key == 'compensations')
 BEGIN
   INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
   SELECT 'main', 'parent', 'UPDATE', json_object('id', id), json_object('id', id, 'value', value, 'otherValue', otherValue), NULL, NULL
