@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.LogicalReplicationTest do
+defmodule Electric.Postgres.PBTest do
   alias Electric.Satellite.PB.Utils
 
   alias Electric.Satellite.{
