@@ -131,6 +131,7 @@ export class SatelliteProcess implements Satellite {
     return this.client.connect()
       .then(() => this.client.authenticate())
       .then(() => this.client.startReplication(this._lsn))
+      .catch((error) => console.log(`couldn't start replication: ${error}`))
   }
 
   // Unsubscribe from data changes and stop polling

@@ -21,9 +21,10 @@ export class WebSocketWeb implements Socket {
             }
         });
 
-        this.socket.addEventListener('error', (event: any) => {
+        // event doesn't provide much
+        this.socket.addEventListener('error', () => {
             while (this.errorCallbacks.length > 0) {
-                this.errorCallbacks.pop()!(new Error(event.message));
+                this.errorCallbacks.pop()!(new Error('failed to establish connection'));
             }
         });
 
