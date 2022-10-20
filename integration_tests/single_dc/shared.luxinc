@@ -14,8 +14,7 @@
 
 [shell vaxine]
     !make start_vaxine_1
-    ?application: vx_server
-    ?started_at: vaxine@
+    ?vx_server started
 
 [shell vaxine_wait]
     [invoke wait_port localhost 8088]
