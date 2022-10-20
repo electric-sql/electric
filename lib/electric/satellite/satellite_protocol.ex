@@ -107,7 +107,8 @@ defmodule Electric.Satellite.Protocol do
               out_rep: %OutRep{},
               ping_tref: nil,
               transport: nil,
-              socket: nil
+              socket: nil,
+              database_id: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -119,7 +120,8 @@ defmodule Electric.Satellite.Protocol do
             transport: module(),
             socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
-            out_rep: OutRep.t()
+            out_rep: OutRep.t(),
+            database_id: binary()
           }
   end
 
@@ -130,14 +132,14 @@ defmodule Electric.Satellite.Protocol do
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:error, PB.sq_pb_msg()}
-  def process_message(msg, %State{} = state)
-      when not auth_passed?(state) do
-    case msg do
-      %SatAuthReq{id: id, token: token}
-      when id !== "" and token !== "" ->
-        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(id)}")
+  def process_message(msg, %State{} = state) when not auth_passed?(state) do
+    %{database_id: database_id} = state
 
-        case Electric.Satellite.Auth.validate_token(id, token) do
+    case msg do
+      %SatAuthReq{id: ^database_id, token: token} when token !== "" ->
+        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(database_id)}")
+
+        case Electric.Satellite.Auth.validate_token(database_id, token) do
           {:ok, auth} ->
             reg_name = Electric.Satellite.WsServer.reg_name(state.client)
             Electric.reg(reg_name)

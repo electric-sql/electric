@@ -46,12 +46,14 @@ defmodule Electric.Satellite.WsServer do
 
   def init(req, _opts) do
     # FIXME: If we intend to use headers to do authentification
-    # we shoul do it here. For now we purely rely on protobuff auth
+    # we should do it here. For now we purely rely on protobuf auth
     # messages
     {ip, port} = :cowboy_req.peer(req)
     client = "#{:inet.ntoa(ip)}:#{port}"
+    database_id = Electric.database_id()
 
-    {:cowboy_websocket, req, %State{client: client, last_msg_time: :erlang.timestamp()}}
+    {:cowboy_websocket, req,
+     %State{client: client, last_msg_time: :erlang.timestamp(), database_id: database_id}}
   end
 
   def websocket_init(%State{client: client} = state) do

@@ -33,4 +33,14 @@ defmodule Electric do
       [{{{:n, :l, {module, :"$1"}}, :_, :_}, [], [:"$1"]}]
     )
   end
+
+  @doc """
+  Every electric cluster belongs to a particular console database instance
+
+  This is that database instance slug
+  """
+  @spec database_id() :: binary | no_return
+  def database_id do
+    Application.fetch_env!(:electric, :database_id)
+  end
 end

@@ -5,12 +5,12 @@ defmodule Electric.Satellite.Auth do
 
   require Logger
 
-  @enforce_keys [:app_id, :user_id]
+  @enforce_keys [:database_id, :user_id]
 
-  defstruct [:app_id, :user_id]
+  defstruct [:database_id, :user_id]
 
   @type t() :: %__MODULE__{
-          app_id: binary,
+          database_id: binary,
           user_id: binary
         }
 
@@ -18,8 +18,8 @@ defmodule Electric.Satellite.Auth do
     @iss Application.compile_env!(:electric, [Electric.Satellite.Auth, :issuer])
 
     @spec verify(binary, binary) :: {:ok, %{binary => any}}
-    def verify(app_id, token) do
-      with {:ok, key} <- signing_key(app_id) do
+    def verify(database_id, token) do
+      with {:ok, key} <- signing_key(database_id) do
         JWT.verify(token, %{key: key, iss: @iss})
       end
     end
@@ -30,11 +30,11 @@ defmodule Electric.Satellite.Auth do
     end
 
     @spec signing_key(binary) :: {:ok, binary}
-    defp signing_key(app_id) do
+    defp signing_key(database_id) do
       key =
         secret_key()
         |> hmac("EDBv01")
-        |> hmac(app_id)
+        |> hmac(database_id)
 
       {:ok, key}
     end
@@ -50,15 +50,15 @@ defmodule Electric.Satellite.Auth do
     # For internal use only. Create a valid access token for this app
     @doc false
     @spec create(binary, binary) :: {:ok, binary} | no_return
-    def create(app_id, user_id, opts \\ []) do
-      {:ok, key} = signing_key(app_id)
+    def create(database_id, user_id, opts \\ []) do
+      {:ok, key} = signing_key(database_id)
 
       nonce =
         :crypto.strong_rand_bytes(16)
         |> Base.encode16(case: :lower)
 
       custom_claims = %{
-        "app_id" => app_id,
+        "database_id" => database_id,
         "user_id" => user_id,
         "nonce" => nonce,
         "type" => "access"
@@ -84,21 +84,22 @@ defmodule Electric.Satellite.Auth do
 
   @spec validate_token(String.t(), String.t()) ::
           {:ok, t()} | {:error, :auth_not_configured | term()}
-  def validate_token(app_id, token) do
-    case validate_jwt_token(app_id, token) do
+  def validate_token(database_id, token) do
+    case validate_jwt_token(database_id, token) do
       {:ok, auth} ->
         {:ok, auth}
 
       {:error, reason} = error ->
-        Logger.error("authorization failed for #{app_id} with reason: #{inspect(reason)}")
+        Logger.error("authorization failed for #{database_id} with reason: #{inspect(reason)}")
         error
     end
   end
 
-  defp validate_jwt_token(id, token) do
-    with {:ok, claims} <- Token.verify(id, token),
-         {:claims, %{"user_id" => user_id, "type" => "access"}} <- {:claims, claims} do
-      {:ok, %__MODULE__{app_id: id, user_id: user_id}}
+  defp validate_jwt_token(database_id, token) do
+    with {:ok, claims} <- Token.verify(database_id, token),
+         {:claims, %{"database_id" => ^database_id, "user_id" => user_id, "type" => "access"}} <-
+           {:claims, claims} do
+      {:ok, %__MODULE__{database_id: database_id, user_id: user_id}}
     else
       {:claims, _claims} ->
         {:error, "invalid access token"}
