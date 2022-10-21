@@ -16,7 +16,9 @@ import { MockSocket } from '../../sockets/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 
-export const initTestable = async (dbName: DbName, opts: ElectrifyOptions): RetVal => {
+const testOpts = { config: {app: "app", replication: {address: "", port: 0}}}
+
+export const initTestable = async (dbName: DbName, opts: ElectrifyOptions = testOpts): RetVal => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts.adapter || new DatabaseAdapter(db)

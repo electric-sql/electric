@@ -15,11 +15,9 @@ import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocket } from '../../sockets/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
-interface Opts extends ElectrifyOptions {
-  enablePromises?: boolean
-}
+const testOpts = { config: {app: "app", replication: {address: "", port: 0}}}
 
-export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = false, opts: Opts): RetVal => {
+export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = false, opts: ElectrifyOptions = testOpts): RetVal => {
   const db = useWebSQLDatabase
     ? new MockWebSQLDatabase(dbName)
     : new MockDatabase(dbName)

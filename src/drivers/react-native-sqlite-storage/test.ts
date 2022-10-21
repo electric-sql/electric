@@ -11,19 +11,15 @@ import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
-import { MockDatabase, enablePromiseRuntime } from './mock'
+import { MockDatabase} from './mock'
 import { MockSocket } from '../../sockets/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
-interface Opts extends ElectrifyOptions {
-  enablePromises?: boolean
-}
 
-export const initTestable = async (dbName: DbName, opts: Opts): RetVal => {
-  const mockDb = new MockDatabase(dbName)
-  const db = opts.enablePromises === true
-    ? enablePromiseRuntime(mockDb)
-    : mockDb
+const testOpts = { config: {app: "app", replication: {address: "", port: 0}}}
+
+export const initTestable = async (dbName: DbName, opts: ElectrifyOptions = testOpts): RetVal => {
+  const db = new MockDatabase(dbName)
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
   const migrator = opts.migrator || new MockMigrator()

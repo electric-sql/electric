@@ -3,7 +3,6 @@ import test from 'ava'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
-import { SatelliteClient as Client } from '../../src/satellite/client'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { Socket } from '../../src/sockets'
 
@@ -12,7 +11,8 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socket = {} as Socket
-const args = [dbName, adapter, migrator, notifier, socket] as const
+const opts = { config: {app: "app", replication: {address: "", port: 0}}}
+const args = [dbName, adapter, migrator, notifier, socket, opts] as const
 
 test('starting a satellite process works', async t => {
   const mockRegistry = new MockRegistry()
@@ -41,9 +41,9 @@ test('ensure satellite process started works', async t => {
 
 test('ensure starting multiple satellite processes works', async t => {
   const mockRegistry = new MockRegistry()
-  const s1 = await mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket)
-  const s2 = await mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket)
-  const s3 = await mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket)
+  const s1 = await mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket, opts)
+  const s2 = await mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket, opts)
+  const s3 = await mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket, opts)
 
   t.true(s1 instanceof MockSatelliteProcess)
   t.true(s2 instanceof MockSatelliteProcess)
@@ -116,9 +116,9 @@ test('stop works if starting', async t => {
 test('stopAll works', async t => {
   const mockRegistry = new MockRegistry()
   const [s1, s2, s3] = await Promise.all([
-    mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket),
-    mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket),
-    mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket)
+    mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket, opts),
+    mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket, opts),
+    mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket, opts)
   ])
   await mockRegistry.stopAll()
 
@@ -128,9 +128,9 @@ test('stopAll works', async t => {
 test('stopAll works even when starting', async t => {
   const mockRegistry = new MockRegistry()
   const startPromises = [
-    mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket),
-    mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket),
-    mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket)
+    mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket, opts),
+    mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket, opts),
+    mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket, opts)
   ]
 
   await mockRegistry.stopAll()
@@ -142,10 +142,10 @@ test('stopAll works even when starting', async t => {
 
 test('stopAll works across running, stopping and starting', async t => {
   const mockRegistry = new MockRegistry()
-  await mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket)
-  await mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket)
-  const p1 = mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket)
-  const p2 = mockRegistry.ensureStarted('d.db', adapter, migrator, notifier, socket)
+  await mockRegistry.ensureStarted('a.db', adapter, migrator, notifier, socket, opts)
+  await mockRegistry.ensureStarted('b.db', adapter, migrator, notifier, socket, opts)
+  const p1 = mockRegistry.ensureStarted('c.db', adapter, migrator, notifier, socket, opts)
+  const p2 = mockRegistry.ensureStarted('d.db', adapter, migrator, notifier, socket, opts)
 
   const p3 = mockRegistry.stop('a.db')
   const p4 = mockRegistry.stop('c.db')
