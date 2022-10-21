@@ -20,11 +20,7 @@ import { WebSocketReactNative } from '../../sockets/react-native'
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
 export type { Database, ElectrifiedDatabase }
 
-export const electrify = async (db: Database, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
-  if (opts === undefined) {
-    opts = {}
-  }
-
+export const electrify = async (db: Database, opts: ElectrifyOptions): Promise<ElectrifiedDatabase> => {  
   const dbName: DbName = db._name
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
@@ -43,6 +39,6 @@ export const electrify = async (db: Database, opts?: ElectrifyOptions): Promise<
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
   return electrified as unknown as ElectrifiedDatabase
 }

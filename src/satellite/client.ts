@@ -23,16 +23,12 @@ import { EventEmitter } from 'events';
 import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
 import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
-import { satelliteClientDefaults, SatelliteClientOpts } from './config';
-
-interface PrivateSatelliteOptions extends SatelliteClientOpts {
-  timeout: number;
-}
+import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
 
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
 export class SatelliteClient extends EventEmitter implements Client {
-  private opts: PrivateSatelliteOptions;
+  private opts: SatelliteClientOpts;
 
   private socket: Socket;
   private inbound: Replication;
@@ -56,7 +52,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     "Electric.Satellite.SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
   }
 
-  constructor(socket: Socket, opts: SatelliteClientOpts) {
+  constructor(socket: Socket, opts: SatelliteClientOverrides) {
     super();
 
     this.opts = { ...satelliteClientDefaults, ...opts };

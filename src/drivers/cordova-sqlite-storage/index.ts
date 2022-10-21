@@ -20,7 +20,7 @@ import { MockSocket } from '../../sockets/mock'
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database, ElectrifiedDatabase }
 
-export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
+export const electrify = async (db: Database, opts: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.dbname
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
@@ -32,6 +32,6 @@ export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Prom
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
   return electrified as unknown as ElectrifiedDatabase
 }

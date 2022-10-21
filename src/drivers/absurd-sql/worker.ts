@@ -65,7 +65,7 @@ export class ElectricWorker extends WorkerServer {
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, this.opts)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)
@@ -76,7 +76,7 @@ export class ElectricWorker extends WorkerServer {
 
   // Static entrypoint allows us to maintain a reference to the
   // instance. Passing opts allows the user to configure.
-  static start(worker: Worker, opts: ElectrifyOptions = {}):void {
+  static start(worker: Worker, opts: ElectrifyOptions): void {
     const ref = new ElectricWorker(worker, opts)
 
     refs.push(ref)

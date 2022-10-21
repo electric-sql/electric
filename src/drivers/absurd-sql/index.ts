@@ -1,7 +1,7 @@
 import { initBackend } from '@aphro/absurd-sql/dist/indexeddb-main-thread'
 
 import { ServerMethod, WorkerClient } from '../../bridge/index'
-import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
+import { ElectricNamespace } from '../../electric/index'
 import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
 import { proxyOriginal } from '../../proxy/original'
 import { DbName } from '../../util/types'
@@ -47,7 +47,8 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
   }
   await workerClient.request(init, locator.serialise())
 
-  const openDatabase = async (dbName: DbName, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
+  // we remove opts type info here to implement target interface
+  const openDatabase = async (dbName: DbName, opts?: any): Promise<ElectrifiedDatabase> => {
     const open: ServerMethod = {
       target: 'server',
       name: 'open'

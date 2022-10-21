@@ -19,7 +19,7 @@ interface Opts extends ElectrifyOptions {
   enablePromises?: boolean
 }
 
-export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = false, opts: Opts = {}): RetVal => {
+export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = false, opts: Opts): RetVal => {
   const db = useWebSQLDatabase
     ? new MockWebSQLDatabase(dbName)
     : new MockDatabase(dbName)
@@ -40,6 +40,6 @@ export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = 
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
+  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

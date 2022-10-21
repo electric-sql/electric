@@ -284,7 +284,7 @@ export abstract class WorkerServer {
     }
   }
 
-  static start(_worker: Worker, _opts: ElectrifyOptions = {}): void {
+  static start(_worker: Worker, _opts: any = {}): void {
     throw new Error('Sub-classes must implement `WorkerServer.start`')
   }
 }

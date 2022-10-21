@@ -19,7 +19,7 @@ interface Opts extends ElectrifyOptions {
   enablePromises?: boolean
 }
 
-export const initTestable = async (dbName: DbName, opts: Opts = {}): RetVal => {
+export const initTestable = async (dbName: DbName, opts: Opts): RetVal => {
   const mockDb = new MockDatabase(dbName)
   const db = opts.enablePromises === true
     ? enablePromiseRuntime(mockDb)
@@ -34,6 +34,6 @@ export const initTestable = async (dbName: DbName, opts: Opts = {}): RetVal => {
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
+  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

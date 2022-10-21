@@ -3,7 +3,7 @@
 import {
   ElectricNamespace,
   ElectrifyOptions,
-  electrify as baseElectrify
+  electrify as baseElectrify,
 } from '../../electric/index'
 
 import { BundleMigrator } from '../../migrators/bundle'
@@ -18,7 +18,7 @@ import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 export { ElectricDatabase, DatabaseAdapter }
 export type { Database, ElectrifiedDatabase }
 
-export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Promise<ElectrifiedDatabase> => {
+export const electrify = async (db: Database, opts: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.name
 
   const adapter = opts.adapter || new DatabaseAdapter(db)
@@ -30,6 +30,6 @@ export const electrify = async (db: Database, opts: ElectrifyOptions = {}): Prom
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
   return electrified as unknown as ElectrifiedDatabase
 }

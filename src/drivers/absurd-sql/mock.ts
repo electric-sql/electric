@@ -130,7 +130,7 @@ export class MockElectricWorker extends WorkerServer {
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, opts)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)
