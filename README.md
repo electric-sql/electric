@@ -20,7 +20,7 @@ It's an Elixir application that integrates with Postgres over logical replicatio
 
 ## Pre-reqs
 
-Docker and Elixir 1.13.
+Docker and [Elixir 1.14 compiled with Erlang 24](https://thinkingelixir.com/install-elixir-using-asdf/).
 
 ## Usage
 
@@ -48,7 +48,7 @@ And then develop using:
 make shell
 ```
 
-This runs active-active replication with Postgres over logical replication and exposes a protocol buffers API over web sockets on `localhost:30002` for the ElectricSQL client libraries.
+This runs active-active replication with Postgres over logical replication and exposes a protocol buffers API over web sockets on `localhost:5133`.
 
 For example to write some data into one of the Postgres instances:
 
@@ -57,6 +57,38 @@ docker exec -it -e PGPASSWORD=password electric_db_a_1 psql -h 127.0.0.1 -U elec
 ```
 
 There's a second instance, `electric-db_b_1`, if you want to see data being replicated between them.
+
+Note that you can tear down all the containers with:
+
+```sh
+make stop_dev_env
+```
+
+## Migrations
+
+When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `ELECTRIC_MIGRATIONS_DIR` environment variable to the path to the migrations folder:
+
+```sh
+export ELECTRIC_MIGRATIONS_DIR='../path/to/migrations'
+```
+
+Now (re)run the electric service (with the env var set):
+
+```sh
+make shell
+```
+
+You can now apply named migrations using:
+
+```sh
+make apply_migration $MIGRATION_NAME
+```
+
+Where `MIGRATION_NAME` is the name of a migration folder created using [`electric migrations new`](https://electric-sql.com/docs/usage/migrations#2-schema-evolution), for example:
+
+```sh
+make apply_migration 1666288253_create_items
+```
 
 ## OSX
 
