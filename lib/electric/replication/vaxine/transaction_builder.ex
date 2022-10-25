@@ -4,6 +4,8 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   alias Electric.Replication.Metadata
   alias Electric.Replication.Vaxine.LogProducer
 
+  require Logger
+
   @spec build_transaction(LogProducer.vx_wal_txn(), Metadata.t()) ::
           {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   def build_transaction(
@@ -39,9 +41,16 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
   defp build_transaction(entries, commit_timestamp, target) do
     entries
     |> Enum.reduce_while([], fn
-      {nil, _ops}, _acc -> {:halt, {:error, :invalid_materialized_row}}
-      {%{id: nil}, _ops}, _acc -> {:halt, {:error, :invalid_materialized_row}}
-      {row, ops}, acc -> {:cont, [to_dml(row, ops, target) | acc]}
+      {nil, _ops}, _acc ->
+        Logger.error("empty row (nil)")
+        {:halt, {:error, :invalid_materialized_row}}
+
+      {%{id: nil} = row, _ops}, _acc ->
+        Logger.error("empty id for row: #{inspect(row)}")
+        {:halt, {:error, :invalid_materialized_row}}
+
+      {row, ops}, acc ->
+        {:cont, [to_dml(row, ops, target) | acc]}
     end)
     |> case do
       dml_changes when is_list(dml_changes) ->

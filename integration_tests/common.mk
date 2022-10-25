@@ -61,6 +61,12 @@ start_sysbench:
 		--rm --entrypoint=/bin/bash \
 		sysbench
 
+start_elixir_test:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
+		--rm --entrypoint=/bin/bash \
+		--workdir=${PROJECT_ROOT} \
+		test_client
+
 VAXINE_BRANCH?=main
 vaxine:
 ifdef USE_LOCAL_IMAGE

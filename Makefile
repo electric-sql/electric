@@ -21,7 +21,7 @@ pretest_compile: deps
 	MIX_ENV="test" mix compile --force --warnings-as-error
 
 tests:
-	mix test
+	mix test --trace
 
 format:
 	mix format

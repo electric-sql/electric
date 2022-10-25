@@ -243,7 +243,7 @@ defmodule Electric.Satellite.WsServerTest do
         MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
         assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {_, %SatInStartReplicationReq{lsn: ""}}
+        assert_receive {_, %SatInStartReplicationReq{lsn: "0"}}
         MockClient.send_data(%SatInStartReplicationResp{})
 
         columns = [
@@ -304,8 +304,14 @@ defmodule Electric.Satellite.WsServerTest do
                ]
 
         assert tx.origin !== ""
-        assert_receive {_, %SatPingResp{lsn: lsn}}
-        # assert_recieve {_, %SatPingResp{lsn: lsn}} @default_wait
+        assert_receive {_, %SatPingResp{lsn: ^lsn}}, @default_wait
+
+        # After restart we still get same lsn
+        assert :ok = MockClient.disconnect()
+        MockClient.connect_and_spawn([{:auth, true}])
+        MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
+
+        assert_receive {_, %SatInStartReplicationReq{lsn: lsn}}, @default_wait
       end
     end
 
@@ -318,7 +324,7 @@ defmodule Electric.Satellite.WsServerTest do
         MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
         assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {_, %SatInStartReplicationReq{lsn: ""}}
+        assert_receive {_, %SatInStartReplicationReq{}}
         MockClient.send_data(%SatInStartReplicationResp{})
 
         [{client_name, _client_pid}] = active_clients()

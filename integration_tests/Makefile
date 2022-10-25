@@ -13,7 +13,6 @@ build:
 pull:
 	docker-compose -f services_templates.yaml pull sysbench postgresql vaxine
 
-
 clean:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} clean;)
 	rm -rf lux

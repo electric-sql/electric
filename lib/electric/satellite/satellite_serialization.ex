@@ -149,30 +149,41 @@ defmodule Electric.Satellite.Replication do
   @doc """
   Deserialize from Satellite format to internal format
   """
-  @spec deserialize_trans(String.t(), %SatOpLog{}, %Transaction{} | nil, %{
-          PB.relation_id() => %{
-            :schema => String.t(),
-            :table => String.t(),
-            :columns => [String.t()]
-          }
-        }) ::
+  @spec deserialize_trans(
+          String.t(),
+          %SatOpLog{},
+          %Transaction{} | nil,
+          %{
+            PB.relation_id() => %{
+              :schema => String.t(),
+              :table => String.t(),
+              :columns => [String.t()]
+            }
+          },
+          (term -> any)
+        ) ::
           {
             incomplete :: %Transaction{} | nil,
             # Complete transactions are send in reverse order
             complete :: [%Transaction{}]
           }
-  def deserialize_trans(origin, %SatOpLog{} = op_log, nil, relations) do
-    deserialize_op_log(origin, op_log, {nil, []}, relations)
+  def deserialize_trans(origin, %SatOpLog{} = op_log, nil, relations, ack_fun) do
+    deserialize_op_log(origin, op_log, {nil, []}, relations, ack_fun)
   end
 
-  def deserialize_trans(origin, %SatOpLog{} = op_log, %Transaction{} = trans, relations) do
-    deserialize_op_log(origin, op_log, {trans, []}, relations)
+  def deserialize_trans(origin, %SatOpLog{} = op_log, %Transaction{} = trans, relations, ack_fun)
+      when origin !== "" do
+    deserialize_op_log(origin, op_log, {trans, []}, relations, ack_fun)
   end
 
-  defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations) do
+  defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations, ack_fun) do
     Enum.reduce(msg.ops, incomplete, fn
       %SatTransOp{op: {:begin, %SatOpBegin{} = op}}, {nil, complete} ->
         {:ok, dt} = DateTime.from_unix(op.commit_timestamp, :millisecond)
+
+        if op.lsn == "" do
+          raise "lsn is empty in begin operation"
+        end
 
         trans = %Transaction{
           origin: origin,
@@ -180,8 +191,7 @@ defmodule Electric.Satellite.Replication do
           publication: "",
           commit_timestamp: dt,
           lsn: op.lsn,
-          # FIXME: Acknowledge to satellite
-          ack_fn: fn -> :ok end
+          ack_fn: fn -> ack_fun.(op.lsn) end
         }
 
         {trans, complete}
@@ -195,14 +205,14 @@ defmodule Electric.Satellite.Replication do
           case op do
             %SatOpInsert{relation_id: relation_id, row_data: row_data} ->
               relation = fetch_relation(relations, relation_id)
-              data = data_tuple_to_map(relation.columns, row_data)
+              data = data_tuple_to_map(relation.columns, row_data, false)
 
               %NewRecord{relation: {relation.schema, relation.table}, record: data}
 
             %SatOpUpdate{relation_id: relation_id, row_data: row_data, old_row_data: old_row_data} ->
               relation = fetch_relation(relations, relation_id)
-              old_data = data_tuple_to_map(relation.columns, old_row_data)
-              data = data_tuple_to_map(relation.columns, row_data)
+              old_data = data_tuple_to_map(relation.columns, old_row_data, true)
+              data = data_tuple_to_map(relation.columns, row_data, false)
 
               %UpdatedRecord{
                 relation: {relation.schema, relation.table},
@@ -212,7 +222,7 @@ defmodule Electric.Satellite.Replication do
 
             %SatOpDelete{relation_id: relation_id, old_row_data: old_row_data} ->
               relation = fetch_relation(relations, relation_id)
-              old_data = data_tuple_to_map(relation.columns, old_row_data)
+              old_data = data_tuple_to_map(relation.columns, old_row_data, true)
               %DeletedRecord{relation: {relation.schema, relation.table}, old_record: old_data}
           end
 
@@ -224,7 +234,11 @@ defmodule Electric.Satellite.Replication do
     Map.get(relations, relation_id)
   end
 
-  defp data_tuple_to_map(columns, list_data) do
+  defp data_tuple_to_map(_, [], false) do
+    raise "protocol violation, empty row"
+  end
+
+  defp data_tuple_to_map(columns, list_data, _allow_empty) do
     columns
     |> Enum.zip(list_data)
     |> Map.new(fn {column_name, data} -> {column_name, data} end)

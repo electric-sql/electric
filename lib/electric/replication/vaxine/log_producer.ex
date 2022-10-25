@@ -142,13 +142,17 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     case process_message(msg) do
       # Skipping already sent message, we receive one of those on startup
       {:ok, {_tx, ^last_vx_offset_sent}} ->
+        Logger.info("ignore tx with #{inspect(last_vx_offset_sent)} as we already handled it")
         {:noreply, [], state}
 
       {:ok, {tx, offset}} when state.demand > 0 ->
+        Logger.debug("send further tx with #{inspect(offset)}")
+
         {:noreply, [{tx, offset}],
          %{state | last_vx_offset_sent: offset, demand: state.demand - 1}}
 
-      {:ok, {_tx, _offset} = t} ->
+      {:ok, {_tx, offset} = t} ->
+        Logger.debug("put in queue tx with #{inspect(offset)}")
         {:noreply, [], %{state | events: :queue.in(t, state.events)}}
 
       {:error, _reason} ->
@@ -199,7 +203,12 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   def handle_demand(incoming_demand, %State{} = state) do
     demand = incoming_demand + state.demand
     {demand, demanded, remaining} = Utils.fetch_demand_from_queue(demand, state.events)
-    {:noreply, demanded, %State{state | demand: demand, events: remaining}}
+
+    {:noreply, demanded,
+     maybe_get_next_stream_bulk(
+       state.async_wait,
+       %State{state | demand: demand, events: remaining}
+     )}
   end
 
   @impl GenStage
@@ -224,7 +233,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
            ),
          :ok <- :vx_client.start_replication(pid, sync: @starting_demand, offset: offset || 0) do
       Logger.info(
-        "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication from offset #{inspect(offset)}"
+        "VaxineLogProducer #{inspect(self())} connected to Vaxine and started replication from offset #{inspect(offset)}, vx_client pid: #{inspect(pid)}"
       )
 
       # Backoff is not reset here, instead it is reset when first message is received
@@ -257,7 +266,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     else
       {:error, _} = error ->
         "Failed to process Vaxine message with error #{inspect(error)}, no-op done"
-        |> Logger.info(vaxine_tx: vaxine_tx)
+        |> Logger.error(vaxine_tx: vaxine_tx)
 
         error
     end
@@ -267,7 +276,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
     cond do
       await_sync and state.demand > 0 ->
         Logger.debug(
-          "LogProducer #{inspect(self())} requesting next stream bulk for #{state.demand} items"
+          "VaxineLogProducer #{inspect(self())} requesting next stream bulk for #{@starting_demand} items"
         )
 
         :vx_client.get_next_stream_bulk(state.socket_pid, @starting_demand)

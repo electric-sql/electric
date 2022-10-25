@@ -1,4 +1,4 @@
-defmodule Electric.Replication.VaxinePostgresOffsetStorage do
+defmodule Electric.Replication.OffsetStorage do
   @moduledoc """
   Public interface for replication state storage
 
@@ -7,7 +7,8 @@ defmodule Electric.Replication.VaxinePostgresOffsetStorage do
   use GenServer
   require Logger
 
-  alias Electric.Postgres.Lsn
+  alias Electric.Postgres.Lsn, as: PGLsn
+  alias Electric.Satellite.Lsn, as: STLsn
 
   @table Module.concat([__MODULE__, Table])
 
@@ -26,12 +27,34 @@ defmodule Electric.Replication.VaxinePostgresOffsetStorage do
     {:ok, dets}
   end
 
-  def put_relation(slot, lsn, vx_offset) do
-    Logger.info("Saving offset #{inspect(vx_offset)} for lsn #{inspect(lsn)}")
+  @doc "Persist satellite lsn"
+  @spec put_satellite_lsn(String.t(), STLsn.t()) :: :ok
+  def put_satellite_lsn(satellite_client, lsn) do
+    Logger.info("Saving lsn #{inspect(lsn)} for satellite: #{inspect(satellite_client)}")
+    :ok = :dets.insert(@table, {{:st, satellite_client}, lsn})
+    :dets.sync(@table)
+  end
+
+  @spec get_satellite_lsn(String.t()) :: nil | STLsn.t()
+  def get_satellite_lsn(satellite_client) do
+    case :dets.lookup(@table, {:st, satellite_client}) do
+      [] -> nil
+      [{{:st, _}, lsn}] -> lsn
+    end
+  end
+
+  @doc "Store PG <> Vaxine relation mapping"
+  def put_pg_relation(slot, lsn, vx_offset) do
+    Logger.info(
+      "Saving offset #{inspect(vx_offset)} for lsn #{inspect(lsn)} and slot #{inspect(slot)}"
+    )
+
     :ok = :dets.insert(@table, {{slot, lsn}, vx_offset})
     :dets.sync(@table)
   end
 
+  @doc "Get Vaxine offset based on PG slot and lsn"
+  @spec get_vx_offset(String.t(), PGLsn) :: nil | term()
   def get_vx_offset(slot, lsn) do
     case :dets.lookup(@table, {slot, lsn}) do
       [] -> nil
@@ -44,8 +67,8 @@ defmodule Electric.Replication.VaxinePostgresOffsetStorage do
   def get_largest_known_lsn_smaller_than(slot, max) do
     @table
     |> :dets.select([{{{:"$1", :"$2"}, :"$3"}, [{:==, :"$1", slot}], [{{:"$2", :"$3"}}]}])
-    |> Enum.filter(fn {lsn1, _} -> Lsn.compare(lsn1, max) != :gt end)
-    |> Enum.max(fn {lsn1, _}, {lsn2, _} -> Lsn.compare(lsn1, lsn2) != :lt end, fn -> nil end)
+    |> Enum.filter(fn {lsn1, _} -> PGLsn.compare(lsn1, max) != :gt end)
+    |> Enum.max(fn {lsn1, _}, {lsn2, _} -> PGLsn.compare(lsn1, lsn2) != :lt end, fn -> nil end)
   end
 
   # TODO: :)

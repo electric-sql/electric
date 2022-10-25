@@ -3,10 +3,12 @@ defmodule Electric.Satellite.WsServer do
   alias Electric.Satellite.Protocol.{State, InRep, OutRep}
 
   alias Electric.Satellite.PB.Utils, as: PB
+  alias Electric.Replication.OffsetStorage
 
   alias Electric.Satellite.{
     SatErrorResp,
     SatPingResp,
+    SatPingReq,
     SatInStopReplicationReq,
     SatInStartReplicationReq
   }
@@ -16,6 +18,7 @@ defmodule Electric.Satellite.WsServer do
   require Logger
 
   # in milliseconds
+  @ping_interval 5_000
   @inactivity_timeout 10_000_000
 
   def child_spec(opts) do
@@ -38,35 +41,32 @@ defmodule Electric.Satellite.WsServer do
   end
 
   def reg_name(name) do
-    {:via, :gproc, name(name)}
-  end
-
-  def name(name) do
-    {:n, :l, {__MODULE__, name}}
+    Electric.name(__MODULE__, name)
   end
 
   def init(req, _opts) do
-    # FIXME: If we itend to use headers to do authentification
+    # FIXME: If we intend to use headers to do authentification
     # we shoul do it here. For now we purely rely on protobuff auth
     # messages
     {ip, port} = :cowboy_req.peer(req)
     client = "#{:inet.ntoa(ip)}:#{port}"
 
-    {:cowboy_websocket, req, %State{client: client}}
+    {:cowboy_websocket, req, %State{client: client, last_msg_time: :erlang.timestamp()}}
   end
 
   def websocket_init(%State{client: client} = state) do
     # NOTE: Be carefull with registration, init and websocket_init are called
     # in different processes in cowboy 2.9
-    :gproc.reg(name(client))
 
     Logger.metadata(sq_client: client)
     Logger.debug("Satellite ws connection initialized by #{client}")
 
-    {[], state}
+    {[], schedule_ping(state)}
   end
 
   def websocket_handle({:binary, msg}, %State{} = state) do
+    last_msg_time = :os.timestamp()
+
     case handle_data(msg) do
       {:ok, request} ->
         Logger.debug("ws data received: #{inspect(request)}")
@@ -74,7 +74,7 @@ defmodule Electric.Satellite.WsServer do
         try do
           case Protocol.process_message(request, state) do
             {nil, state1} ->
-              {[], state1}
+              {[], %State{state1 | last_msg_time: last_msg_time}}
 
             {:error, error} ->
               frame = binary_frame(error)
@@ -84,7 +84,7 @@ defmodule Electric.Satellite.WsServer do
               {[:close], state}
 
             {reply, state1} ->
-              {binary_frames(reply), state1}
+              {binary_frames(reply), %State{state1 | last_msg_time: last_msg_time}}
           end
         catch
           _ ->
@@ -120,6 +120,32 @@ defmodule Electric.Satellite.WsServer do
     handle_producer_msg({out_rep.pid, out_rep.stage_sub}, {:cancel, :down}, state)
   end
 
+  def websocket_info({:timeout, tref, :ping_timer}, %State{ping_tref: tref1} = state)
+      when tref == tref1 do
+    case state.last_msg_time do
+      nil ->
+        {[binary_frame(%SatPingReq{})],
+         schedule_ping(%State{state | ping_tref: nil, last_msg_time: :ping_sent})}
+
+      :ping_sent ->
+        Logger.info("Client is not responding to ping, disconnecting")
+        {[:close], state}
+
+      last_msg_time ->
+        case :timer.now_diff(:erlang.timestamp(), last_msg_time) >
+               @ping_interval * 1000 do
+          true ->
+            {[binary_frame(%SatPingReq{})],
+             schedule_ping(%State{state | ping_tref: nil, last_msg_time: :ping_sent})}
+
+          false ->
+            {[], schedule_ping(%State{state | ping_tref: nil})}
+        end
+    end
+  end
+
+  # Consumer (Vaxine) has reported that this lsn has been stored succesfully
+  # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}
   end
@@ -193,13 +219,20 @@ defmodule Electric.Satellite.WsServer do
       pid -> Process.monitor(pid)
     end
 
+    lsn =
+      case OffsetStorage.get_satellite_lsn(state.client_id) do
+        nil -> "0"
+        lsn -> lsn
+      end
+
     msgs =
       cond do
         in_rep.status == nil or in_rep.status == :paused ->
           [
             %SatInStartReplicationReq{
-              options: [:LAST_ACKNOWLEDGED, :SYNC_MODE],
-              sync_batch_size: 1
+              options: [:SYNC_MODE],
+              sync_batch_size: 1,
+              lsn: lsn
             }
           ]
 
@@ -207,8 +240,9 @@ defmodule Electric.Satellite.WsServer do
           [
             %SatInStopReplicationReq{},
             %SatInStartReplicationReq{
-              options: [:LAST_ACKNOWLEDGED, :SYNC_MODE],
-              sync_batch_size: 1
+              options: [:SYNC_MODE],
+              sync_batch_size: 1,
+              lsn: lsn
             }
           ]
 
@@ -285,5 +319,10 @@ defmodule Electric.Satellite.WsServer do
     Logger.debug("Responding with: #{inspect(pb_msg)}")
     {:ok, iolist} = PB.encode_with_type(pb_msg)
     {:binary, iolist}
+  end
+
+  defp schedule_ping(%State{ping_tref: nil} = state) do
+    tref = :erlang.start_timer(@ping_interval, self(), :ping_timer)
+    %State{state | ping_tref: tref}
   end
 end

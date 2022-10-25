@@ -11,7 +11,7 @@ defmodule Electric.Application do
 
     children = [
       Electric.Postgres.SchemaRegistry,
-      Electric.Replication.VaxinePostgresOffsetStorage,
+      Electric.Replication.OffsetStorage,
       {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
       Electric.VaxRepo,
       Electric.PostgresServer.child_spec(port: postgres_server_port()),
