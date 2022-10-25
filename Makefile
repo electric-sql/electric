@@ -71,3 +71,6 @@ shell:
 
 shell_clean:
 	iex -S mix run --no-start
+
+apply_migration:
+	./apply-local-migration.sh $(name)
