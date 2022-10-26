@@ -182,8 +182,8 @@ defmodule Electric.Satellite.WsServerTest do
                Electric.Satellite.Auth.Token.create("some-other-cluster-id", cxt.user_id)
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: "some-other-cluster-id", token: invalid_token})
-      assert_receive {_, %SatErrorResp{error_type: :INVALID_REQUEST}}, @default_wait
+      MockClient.send_data(%SatAuthReq{id: "client_id", token: invalid_token})
+      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
     end
   end
 
