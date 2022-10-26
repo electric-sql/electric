@@ -334,7 +334,6 @@ defmodule Electric.Satellite.Protocol do
   def handle_out_transes(events, state, acc \\ [])
 
   def handle_out_transes([event | events], state, acc) do
-    dbg(event)
     {relations, transaction, out_rep} = handle_out_trans(event, state)
     acc = [transaction | relations] ++ acc
     handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
