@@ -7,8 +7,6 @@
 
 import Config
 
-:ok = Logger.add_translator({Electric.Utils, :translate})
-
 if config_env() == :prod do
   config :electric, Electric.StatusPlug,
     port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
