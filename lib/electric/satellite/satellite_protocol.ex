@@ -136,8 +136,8 @@ defmodule Electric.Satellite.Protocol do
     %{database_id: database_id} = state
 
     case msg do
-      %SatAuthReq{id: ^database_id, token: token} when token !== "" ->
-        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(database_id)}")
+      %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
+        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
         case Electric.Satellite.Auth.validate_token(database_id, token) do
           {:ok, auth} ->
@@ -146,7 +146,7 @@ defmodule Electric.Satellite.Protocol do
             :ok = ClientManager.register_client(state.client, reg_name)
 
             {%SatAuthResp{id: "server_identity"},
-             %State{state | auth: auth, auth_passed: true, client_id: id}}
+             %State{state | auth: auth, auth_passed: true, client_id: client_id}}
 
           {:error, _} ->
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
@@ -334,6 +334,7 @@ defmodule Electric.Satellite.Protocol do
   def handle_out_transes(events, state, acc \\ [])
 
   def handle_out_transes([event | events], state, acc) do
+    dbg(event)
     {relations, transaction, out_rep} = handle_out_trans(event, state)
     acc = [transaction | relations] ++ acc
     handle_out_transes(events, %State{state | out_rep: out_rep}, acc)

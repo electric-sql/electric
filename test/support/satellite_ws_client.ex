@@ -317,9 +317,10 @@ defmodule Electric.Test.SatelliteWsClient do
   def maybe_auth(conn, stream_ref, opts) do
     case Keyword.get(opts, :auth, false) do
       %{database_id: database_id, user_id: user_id} ->
+        id = Keyword.get(opts, :id, "id")
         {:ok, token} = Electric.Satellite.Auth.Token.create(database_id, user_id)
 
-        auth_req = serialize(%SatAuthReq{id: database_id, token: token})
+        auth_req = serialize(%SatAuthReq{id: id, token: token})
 
         :gun.ws_send(conn, stream_ref, {:binary, auth_req})
         {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)

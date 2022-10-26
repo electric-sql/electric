@@ -329,7 +329,7 @@ defmodule Electric.Satellite.WsServerTest do
 
         # After restart we still get same lsn
         assert :ok = MockClient.disconnect()
-        MockClient.connect_and_spawn([{:auth, true}])
+        MockClient.connect_and_spawn(auth: cxt)
         MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
 
         assert_receive {_, %SatInStartReplicationReq{lsn: lsn}}, @default_wait
