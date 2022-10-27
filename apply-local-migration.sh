@@ -8,8 +8,5 @@ if [ -z "$1" ]
     exit 1
 fi
 
-data="{\"vsn\":\"$1\"}"
-json='Content-Type: application/json'
-
-curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 -H $json -d $data
-curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 -H $json -d $data
+curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 -H 'Content-Type: application/json' -d "{\"vsn\":\"${1}\"}"
+curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 -H 'Content-Type: application/json' -d "{\"vsn\":\"${1}\"}"

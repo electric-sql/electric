@@ -40,6 +40,9 @@ defmodule Electric.Plug.Migrations do
         {:error, error} ->
           send_resp(conn, 403, Kernel.inspect(error))
       end
+    else
+      _error ->
+        send_resp(conn, 400, "Bad request")
     end
   end
 
