@@ -70,7 +70,7 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
 
-config :electric, database_id: "electric-development-cluster-0000"
+config :electric, database_id: System.get_env("DATABASE_ID", "electric-development-cluster-0000")
 
 config :logger, level: :debug
 
