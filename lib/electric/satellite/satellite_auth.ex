@@ -87,6 +87,7 @@ defmodule Electric.Satellite.Auth do
   def validate_token(database_id, token) do
     case validate_jwt_token(database_id, token) do
       {:ok, auth} ->
+        Logger.info("authenticated user #{auth.user_id} to database #{database_id}")
         {:ok, auth}
 
       {:error, reason} = error ->
