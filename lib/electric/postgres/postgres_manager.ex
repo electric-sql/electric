@@ -60,6 +60,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def init(origin) do
     Electric.reg(name(origin))
     Logger.metadata(origin: origin)
+    Process.flag(:trap_exit, true)
 
     {:ok,
      %State{
@@ -137,6 +138,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
     handle_continue(:subscribe, state)
   end
 
+  def handle_info({:EXIT, _, :econnrefused}, %State{} = state) do
+    {:noreply, state}
+  end
+
   def handle_info(msg, %State{} = state) do
     Logger.error("unhandled info msg: #{inspect(msg)}")
     {:noreply, state}
@@ -147,6 +152,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   defp schedule_retry(msg, %State{backoff: {backoff, _}} = state) do
     {time, backoff} = :backoff.fail(backoff)
     tref = :erlang.start_timer(time, self(), msg)
+    Logger.info("schedule retry: #{inspect(time)}")
     %State{state | backoff: {backoff, tref}}
   end
 
