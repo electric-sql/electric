@@ -1,6 +1,12 @@
 import EventEmitter from "events";
-import { ConnectionOptions, Data, Socket } from "./index";
+import { ConnectionOptions, Data, Socket, SocketFactory } from "./index";
 import { WebSocket } from 'ws';
+
+export class WebSocketNodeFactory implements SocketFactory {
+    create() {
+        return new WebSocketNode()
+    }
+}
 
 export class WebSocketNode extends EventEmitter implements Socket {
     private socket?: WebSocket;

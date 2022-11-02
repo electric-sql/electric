@@ -1,6 +1,6 @@
 import { AuthState } from '../auth/index'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName, RowId } from '../util/types'
+import { ConnectivityStatus, DbName, RowId } from '../util/types'
 
 export { EventNotifier } from './event'
 export { MockNotifier } from './mock'
@@ -21,19 +21,27 @@ export interface PotentialChangeNotification {
   dbName: DbName
 }
 
+export interface ConnectivityChangeNotification {
+  dbName: DbName,
+  status: ConnectivityStatus
+}
+
 export type Notification =
   AuthStateNotification
   | ChangeNotification
   | PotentialChangeNotification
+  | ConnectivityChangeNotification
 
 export type AuthStateCallback = (notification: AuthStateNotification) => void
 export type ChangeCallback = (notification: ChangeNotification) => void
 export type PotentialChangeCallback = (notification: PotentialChangeNotification) => void
+export type ConnectivityChangeCallback = (notification: ConnectivityChangeNotification) => void
 
 export type NotificationCallback =
   AuthStateCallback
   | ChangeCallback
   | PotentialChangeCallback
+  | ConnectivityChangeCallback
 
 export interface Notifier {
   // The name of the primary database that components communicating via this
@@ -92,4 +100,13 @@ export interface Notifier {
   // the query results are actually affected by the data changes.
   subscribeToDataChanges(callback: ChangeCallback): string
   unsubscribeFromDataChanges(key: string): void
+
+  // Tells Satellite about the status of network connectivity.
+  // On 'disconnected', the client stops queueing transactions and closes the
+  // socket. On 'connected', satellite opens a new connection and starts 
+  // replication from the last acknowledged position.
+  connectivityChange(dbName: string, status: ConnectivityStatus): void
+
+  subscribeToConnectivityChanges(callback: ConnectivityChangeCallback): string
+  unsubscribeFromConnectivityChanges(key: string): void
 }

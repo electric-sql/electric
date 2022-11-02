@@ -8,7 +8,7 @@
 // passed into their constructors.
 
 import { NotifyMethod, WorkerClient, WorkerServer } from '../bridge/index'
-import { DbName } from '../util/types'
+import { ConnectivityStatus, DbName } from '../util/types'
 
 import { Change, ChangeCallback, Notifier, PotentialChangeNotification } from './index'
 import { EventNotifier } from './event'
@@ -49,6 +49,19 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
     super.unsubscribeFromDataChanges(key)
 
     return this.workerClient.unsubscribeFromChanges(key)
+  }
+
+  connectivityChange(dbName: string, status: ConnectivityStatus) {
+    const notification = super._emitConnectivityChange(dbName, status)
+    const method: NotifyMethod = {
+      dbName: dbName,
+      name: '_emitConnectivityChange',
+      target: 'notify'
+    }
+
+    this.workerClient.notify(method, notification.dbName, notification.status)
+
+    return notification
   }
 }
 

@@ -3,7 +3,7 @@ import { EventEmitter } from 'events'
 import { AuthState } from '../auth/index'
 import { randomValue } from '../util/random'
 import { QualifiedTablename } from '../util/tablename'
-import { DbName } from '../util/types'
+import { ConnectivityStatus, DbName } from '../util/types'
 
 import {
   AuthStateCallback,
@@ -11,6 +11,8 @@ import {
   Change,
   ChangeCallback,
   ChangeNotification,
+  ConnectivityChangeCallback,
+  ConnectivityChangeNotification,
   Notification,
   NotificationCallback,
   Notifier,
@@ -21,7 +23,8 @@ import {
 const EVENT_NAMES = {
   authChange: 'auth:changed',
   actualDataChange: 'data:actually:changed',
-  potentialDataChange: 'data:potentially:changed'
+  potentialDataChange: 'data:potentially:changed',
+  connectivityChange: 'network:connectivity:changed'
 }
 
 // Global singleton that all event notifiers use by default. Emitting an event
@@ -47,6 +50,10 @@ export class EventNotifier implements Notifier {
     [key: string]: NotificationCallback
   }
 
+  _connectivityChangeCallbacks: {
+    [key: string]: NotificationCallback
+  }
+
   constructor(dbName: DbName, eventEmitter?: EventEmitter) {
     this.dbName = dbName
     this.attachedDbIndex = {
@@ -59,6 +66,7 @@ export class EventNotifier implements Notifier {
       : globalEmitter
 
     this._changeCallbacks = {}
+    this._connectivityChangeCallbacks = {}
   }
 
   attach(dbName: DbName, dbAlias: string): void {
@@ -190,6 +198,42 @@ export class EventNotifier implements Notifier {
     delete this._changeCallbacks[key]
   }
 
+  connectivityChange(dbName: string, status: ConnectivityStatus) {
+    if (!this._hasDbName(dbName)) {
+      return
+    }
+
+    this._emitConnectivityChange(dbName, status)
+  }
+
+  subscribeToConnectivityChanges(callback: ConnectivityChangeCallback) {
+    const key = randomValue()
+    const thisHasDbName = this._hasDbName.bind(this)
+
+    const wrappedCallback = (notification: ConnectivityChangeNotification) => {
+      if (thisHasDbName(notification.dbName)) {
+        callback(notification)
+      }
+    }
+
+    this._connectivityChangeCallbacks[key] = wrappedCallback
+    this._subscribe(EVENT_NAMES.connectivityChange, wrappedCallback)
+
+    return key
+  }
+
+  unsubscribeFromConnectivityChanges(key: string): void {
+    const callback = this._connectivityChangeCallbacks[key]
+
+    if (callback === undefined) {
+      return
+    }
+
+    this._unsubscribe(EVENT_NAMES.connectivityChange, callback)
+
+    delete this._changeCallbacks[key]
+  }
+
   _getDbNames(): DbName[] {
     const idx = this.attachedDbIndex
 
@@ -240,5 +284,16 @@ export class EventNotifier implements Notifier {
   }
   _unsubscribe(eventName: string, callback: NotificationCallback): void {
     this.events.removeListener(eventName, callback)
+  }
+
+  _emitConnectivityChange(dbName: string, status: ConnectivityStatus,): ConnectivityChangeNotification {
+    const notification = {
+      dbName: dbName,
+      status
+    }
+
+    this._emit(EVENT_NAMES.connectivityChange, notification)
+
+    return notification
   }
 }

@@ -13,7 +13,7 @@ import { DbName } from '../../util/types'
 import { DatabaseAdapter } from './adapter'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
-import { WebSocketWeb } from '../../sockets/web'
+import { WebSocketWebFactory } from '../../sockets/web'
 
 // Avoid garbage collection.
 const refs = []
@@ -55,18 +55,18 @@ export class ElectricWorker extends WorkerServer {
         SQL.FS.close(stream)
       }
 
-      const db = new SQL.Database(path, {filename: true})
+      const db = new SQL.Database(path, { filename: true })
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
       const adapter = opts?.adapter || new DatabaseAdapter(db)
       const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
       const notifier = opts?.notifier || new WorkerBridgeNotifier(dbName, this)
-      const socket = opts?.socket || new WebSocketWeb()
+      const socketFactory = opts?.socketFactory || new WebSocketWebFactory()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, config)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)

@@ -16,7 +16,7 @@ import { ElectricConfig } from '../../satellite/config'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
-import { WebSocketReactNative } from '../../sockets/react-native'
+import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
@@ -30,12 +30,12 @@ export const electrify = async (db: Database, promisesEnabled: boolean, config: 
   const adapter = opts?.adapter || new DatabaseAdapter(db, promisesEnabled)
   const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
-  const socket = opts?.socket || new WebSocketReactNative()
+  const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()
   const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace, promisesEnabled)
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, config)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
   return electrified as unknown as ElectrifiedDatabase
 }

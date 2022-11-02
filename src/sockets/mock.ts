@@ -1,5 +1,11 @@
 import { EventEmitter } from "events";
-import { ConnectionOptions, Data, Socket } from "./index";
+import { ConnectionOptions, Data, Socket, SocketFactory } from "./index";
+
+export class MockSocketFactory implements SocketFactory {
+    create() {
+        return new MockSocket()
+    }
+}
 
 export class MockSocket extends EventEmitter implements Socket {
     open(_opts: ConnectionOptions): MockSocket {

@@ -3,10 +3,10 @@ import throttle from 'lodash.throttle'
 import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
-import { AuthStateNotification, Change, Notifier } from '../notifiers/index'
+import { AuthStateNotification, Change, ConnectivityChangeNotification, Notifier } from '../notifiers/index'
 import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { AckType, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
+import { AckType, ConnectivityStatus, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
@@ -35,6 +35,7 @@ export class SatelliteProcess implements Satellite {
   _lastSnapshotTimestamp?: Date
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
+  _connectivityChangeSubscription?: string
   _throttledSnapshot: () => void
 
   _lastAckdRowId: number
@@ -99,6 +100,11 @@ export class SatelliteProcess implements Satellite {
     // Request a snapshot whenever the data in our database potentially changes.
     this._potentialDataChangeSubscription = this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
+    const connectivityChangeCallback = (notification: ConnectivityChangeNotification) => {
+      this._connectivityChange(notification.status)
+    }
+    this._connectivityChangeSubscription = this.notifier.subscribeToConnectivityChanges(connectivityChangeCallback)
+
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(this._throttledSnapshot, this.opts.pollingInterval)
 
@@ -108,16 +114,6 @@ export class SatelliteProcess implements Satellite {
     // Need to reload primary keys after schema migration
     // For now, we do it only at initialization
     this.relations = await this._getLocalRelations()
-    this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction)
-    })
-
-    // When a local transaction is sent, or an acknowledgement for 
-    // a remote transaction commit is received, we update lsn records.
-    this.client.subscribeToAck(async (lsn, type) => {
-      const decoded = bytesToNumber(lsn)
-      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
-    })
 
     const clientId = await this._getClientId()
 
@@ -125,22 +121,35 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
-    this.client.setOutboundLogPositions(
+    this.set_client_listeners()
+    this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
       numberToBytes(this._lastSentRowId),
     )
 
     const lsnBase64 = await this._getMeta('lsn')
     this._lsn = base64.toBytes(lsnBase64)
+    console.log(`retrieved lsn ${this._lsn}`)
 
-    return this.client.connect()
-      .then(() => this.client.authenticate(clientId))
-      .then(() => this.client.startReplication(this._lsn))
-      .catch((error) => console.log(`couldn't start replication: ${error}`))
+    return this._connectAndStartReplication()
+  }
+
+  set_client_listeners(): void {
+    this.client.subscribeToTransactions(async (transaction: Transaction) => {
+      this._applyTransaction(transaction)
+    })
+    // When a local transaction is sent, or an acknowledgement for
+    // a remote transaction commit is received, we update lsn records.
+    this.client.subscribeToAck(async (lsn, type) => {
+      const decoded = bytesToNumber(lsn)
+      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
+    })
+    this.client.subscribeToOutboundEvent('started', () => this._throttledSnapshot())
   }
 
   // Unsubscribe from data changes and stop polling
   async stop(): Promise<void> {
+    console.log('stop polling')
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
       this._pollingInterval = undefined
@@ -152,6 +161,31 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this.client.close();
+  }
+
+  async _connectivityChange(status: ConnectivityStatus): Promise<void | SatelliteError> {
+    console.log(`connectivity status change ${status}`)
+    // TODO: no op if state is the same
+    switch (status) {
+      case "connected": {
+        this.set_client_listeners()
+        return this._connectAndStartReplication()
+      }
+      case "disconnected": {
+        return this.client.close()
+      }
+      default: {
+        throw new Error(`unexpected connectivity state: ${status}`)
+      }
+    }
+  }
+
+  async _connectAndStartReplication(): Promise<void | SatelliteError> {
+    console.log(`connecting and starting replication ${this._lsn}`)
+    return this.client.connect()
+      .then(() => this.client.authenticate(this._clientId!))
+      .then(() => this.client.startReplication(this._lsn))
+      .catch((error) => console.log(`couldn't start replication: ${error}`))
   }
 
   async _verifyTableStructure(): Promise<boolean> {
@@ -205,16 +239,33 @@ export class SatelliteProcess implements Satellite {
     const rows = await this.adapter.query({ sql: selectChanges, args: [timestamp] })
     const results = rows as unknown as OplogEntry[]
 
-    if (results.length === 0) {
-      return
+    const promises: Promise<void | SatelliteError>[] = []
+
+    if (results.length !== 0) {
+      promises.push(this._notifyChanges(results))
     }
 
-    await Promise.all([
-      this._notifyChanges(results),
-      this._replicateSnapshotChanges(results)
-    ])
+    if (!this.client.isClosed()) {
+      const { enqueued } = this.client.getOutboundLogPositions()
+      const enqueuedLogPos = bytesToNumber(enqueued)
+
+      // TODO: take next N transactions instead of all
+      const promise =
+        this._getEntries(enqueuedLogPos)
+          .then((missing) => {
+            if (missing && missing.length > 0) {
+              console.log(`missing ${missing.length}`)
+            }
+
+            this._replicateSnapshotChanges(missing)
+          })
+      promises.push(promise)
+    }
+
+    await Promise.all(promises)
   }
   async _notifyChanges(results: OplogEntry[]): Promise<void> {
+    console.log("notify changes")
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
@@ -246,6 +297,11 @@ export class SatelliteProcess implements Satellite {
     this.notifier.actuallyChanged(this.dbName, changes)
   }
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void | SatelliteError> {
+    if (this.client.isClosed()) {
+      return;
+    }
+
+    console.log("replicate snapshot changes")
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
       return this.client.enqueueTransaction(txn);
@@ -255,8 +311,10 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key
   // before merging, for local and remote operations.
-  async _apply(incoming: OplogEntry[], lsn: LSN = DEFAULT_LSN): Promise<void> {
+  async _apply(incoming: OplogEntry[], lsn: LSN): Promise<void> {
     // assign timestamp to pending operations before apply
+    //
+    console.log("apply incomming changes: ${lsn}")
     await this._performSnapshot()
 
     const local = await this._getEntries()
@@ -266,8 +324,10 @@ export class SatelliteProcess implements Satellite {
     // switches off on transaction commit/abort
     stmts.push({ sql: "PRAGMA defer_foreign_keys = ON" })
     // update lsn. 
-    const lsnBase64 = base64.fromBytes(lsn)
-    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`, args: [lsnBase64, 'lsn'] })
+    this._lsn = lsn
+    const lsn_base64 = base64.fromBytes(lsn)
+    stmts.push({ sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
+                 args: [ lsn_base64, 'lsn'] })
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
@@ -391,6 +451,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _ack(lsn: number, isAck: boolean): Promise<void> {
+    console.log("ack lsn")
     if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
       throw new Error('Invalid position')
     }

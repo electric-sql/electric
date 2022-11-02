@@ -1,4 +1,10 @@
-import { ConnectionOptions, Data, Socket } from '.';
+import { ConnectionOptions, Data, Socket, SocketFactory } from '.';
+
+export class WebSocketReactNativeFactory implements SocketFactory {
+  create() {
+    return new WebSocketReactNative()
+  }
+}
 
 export class WebSocketReactNative implements Socket {
   private socket?: WebSocket;
@@ -14,6 +20,10 @@ export class WebSocketReactNative implements Socket {
   }
 
   open(opts: ConnectionOptions): Socket {
+    this.connectCallbacks = [];
+    this.errorCallbacks = [];
+    this.messageCallbacks = [];
+
     this.socket = new WebSocket(opts.url);
     this.socket.binaryType = 'arraybuffer';
 

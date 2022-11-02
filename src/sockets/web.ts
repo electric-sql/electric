@@ -1,4 +1,10 @@
-import { ConnectionOptions, Data, Socket } from '.';
+import { ConnectionOptions, Data, Socket, SocketFactory } from '.';
+
+export class WebSocketWebFactory implements SocketFactory {
+    create() {
+        return new WebSocketWeb()
+    }
+}
 
 export class WebSocketWeb implements Socket {
     private socket?: WebSocket;

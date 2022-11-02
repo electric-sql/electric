@@ -69,7 +69,7 @@ export type Replication = {
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
     ack_lsn: LSN
-    sent_lsn: LSN
+    enqueued_lsn: LSN
     transactions: Transaction[]
 }
 
@@ -98,3 +98,5 @@ export enum AckType {
 }
 
 export type AckCallback = (lsn: LSN, type: AckType) => void
+
+export type ConnectivityStatus = "connected" | "disconnected"

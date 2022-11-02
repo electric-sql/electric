@@ -9,7 +9,7 @@ import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
 import { Config, Database, ElectricDatabase, QueryExecResult, Statement } from './database'
-import { MockSocket } from '../../sockets/mock'
+import { MockSocketFactory } from '../../sockets/mock'
 import { ElectricConfig } from '../../satellite/config'
 
 interface TestData {
@@ -40,7 +40,7 @@ export class MockDatabase implements Database {
   getRowsModified(): number {
     return 0
   }
-  close(): void {}
+  close(): void { }
   export(): Uint8Array {
     return new Uint8Array(2)
   }
@@ -79,7 +79,7 @@ export class MockStatement implements Statement {
     return ['a']
   }
   getAsObject(_params?: BindParams, _config?: Config): Row {
-    return {a: 1}
+    return { a: 1 }
   }
   getSQL(): string {
     return this.stmt
@@ -126,12 +126,12 @@ export class MockElectricWorker extends WorkerServer {
       const adapter = opts?.adapter || new DatabaseAdapter(db)
       const migrator = opts?.migrator || new MockMigrator()
       const notifier = opts?.notifier || new MockNotifier(dbName)
-      const socket = opts?.socket || new MockSocket()
+      const socketFactory = opts?.socketFactory || new MockSocketFactory()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, config)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)

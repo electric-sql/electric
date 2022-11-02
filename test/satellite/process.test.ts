@@ -16,21 +16,40 @@ import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry, toTrans
 import { satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
-import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry } from '../support/satellite-helpers'
+import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry, TableInfo } from '../support/satellite-helpers'
 import Long from 'long'
-import { ChangeType, Transaction } from '../../src/util/types'
+import { ChangeType, ConnectivityStatus, LSN, SqlValue, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
 import { base64, DEFAULT_LSN, numberToBytes } from '../../src/util/common'
 
 import { data as testMigrationsData } from '../support/migrations'
+import { EventNotifier } from '../../src/notifiers'
 const { migrations } = testMigrationsData
+
+interface TestNotifier extends EventNotifier {
+  notifications: any[]
+}
+
+interface TestSatellite extends Satellite {
+  _lastSentRowId: number
+
+  _performSnapshot(): Promise<void>
+  _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
+  _setMeta(key: string, value: SqlValue): Promise<void>
+  _getMeta(key: string): Promise<string>
+  _ack(lsn: number, isAck: boolean): Promise<void>
+  _connectivityStateChange(status: ConnectivityStatus): void
+
+}
 
 type ContextType = {
   adapter: DatabaseAdapter,
-  satellite: Satellite,
+  notifier: TestNotifier
+  satellite: TestSatellite,
   client: MockSatelliteClient
   runMigrations: () => Promise<void>
+  tableInfo: TableInfo
 }
 
 // Speed up the intervals for testing.
@@ -71,10 +90,12 @@ test.beforeEach(async t => {
 })
 
 test.afterEach.always(async t => {
-  const { dbName } = t.context as any
+  const { dbName, satellite } = t.context as any
 
   await removeFile(dbName, {force: true})
   await removeFile(`${dbName}-journal`, {force: true})
+
+  await satellite.stop()
 })
 
 test('setup starts a satellite process', async t => {
@@ -84,7 +105,7 @@ test('setup starts a satellite process', async t => {
 })
 
 test('start creates system tables', async t => {
-  const { adapter, satellite } = t.context as any
+  const { adapter, satellite } = t.context as ContextType
 
   await satellite.start()
 
@@ -96,7 +117,7 @@ test('start creates system tables', async t => {
 })
 
 test('load metadata', async t => {
-  const { adapter, runMigrations } = t.context as any
+  const { adapter, runMigrations } = t.context as ContextType
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
@@ -135,7 +156,7 @@ test('cannot UPDATE primary key', async t => {
 })
 
 test('snapshot works', async t => {
-  const { adapter, notifier, runMigrations, satellite } = t.context as any
+  const { adapter, notifier, runMigrations, satellite } = t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -542,7 +563,7 @@ test('compensations: using triggers with flag 0', async t => {
 })
 
 test('compensations: using triggers with flag 1', async t => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo } = t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
@@ -565,7 +586,7 @@ test('compensations: using triggers with flag 1', async t => {
 })
 
 test('get oplogEntries from transaction', async t => {
-  const { runMigrations, satellite } = t.context as any
+  const { runMigrations, satellite } = t.context as ContextType
   await runMigrations()
 
   const relations = await satellite['_getLocalRelations']()
@@ -597,7 +618,7 @@ test('get oplogEntries from transaction', async t => {
 });
 
 test('get transactions from opLogEntries', async t => {
-  const { runMigrations } = t.context as any
+  const { runMigrations } = t.context as ContextType
   await runMigrations()
 
   const opLogEntries: OplogEntry[] = [{
@@ -676,13 +697,46 @@ test('rowid acks updates meta', async t => {
   const lsn1 = numberToBytes(1)
   client.emit("ack_lsn", lsn1, false)
 
-  await new Promise<void>(res => {
+  const lsn = await satellite['_getMeta']('lastSentRowId')
+  t.is(lsn, "1")
+})
+
+test('handling connectivity state change stops queueing operations', async t => {
+  const { runMigrations, satellite, adapter } = t.context as ContextType
+  await runMigrations()
+  await satellite.start()
+
+  adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)` })
+
+  await satellite._performSnapshot()
+
+  const lsn = await satellite._getMeta('lastSentRowId')
+  t.is(lsn, "1")
+
+  await new Promise<void>((res) => {
     setTimeout(async () => {
-      const lsn = await satellite['_getMeta']('lastSentRowId')
+      const lsn = await satellite._getMeta('lastAckdRowId')
       t.is(lsn, "1")
       res()
     }, 100)
   })
+
+  satellite._connectivityChange('disconnected')
+
+  adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (2, 'local', 1)` })
+
+  await satellite._performSnapshot()
+
+  const lsn1 = await satellite._getMeta('lastSentRowId')
+  t.is(lsn1, "1")
+
+
+  await satellite._connectivityChange('connected')
+
+  setTimeout(async () => {
+    const lsn2 = await satellite._getMeta('lastSentRowId')
+    t.is(lsn2, "2")
+  }, 200)
 })
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html

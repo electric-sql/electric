@@ -1,4 +1,5 @@
 import test from 'ava'
+import { ConnectivityChangeNotification } from '../../src/notifiers'
 
 import { EventNotifier } from '../../src/notifiers/event'
 import { QualifiedTablename } from '../../src/util/tablename'
@@ -97,4 +98,42 @@ test('actual data change subscriptions are scoped by dbName', async t => {
   t2.attach('foo.db')
   source.actuallyChanged('foo.db', notification)
   t.is(notifications.length, 4)
+})
+
+test('subscribe to connectivity change events is scoped by dbName', async t => {
+  const source = new EventNotifier('test.db')
+  const target = new EventNotifier('test.db')
+
+  const notifications = []
+
+  target.subscribeToConnectivityChanges((x) => {
+    notifications.push(x)
+  })
+
+  source.connectivityChange('test.db', 'connected')
+
+  t.is(notifications.length, 1)
+
+  source.connectivityChange('non-existing-db', 'connected')
+
+  t.is(notifications.length, 1)
+})
+
+test('no more connectivity events after unsubscribe', async t => {
+  const source = new EventNotifier('test.db')
+  const target = new EventNotifier('test.db')
+
+  const notifications = []
+
+  const key = target.subscribeToConnectivityChanges((x) => {
+    notifications.push(x)
+  })
+
+  source.connectivityChange('test.db', 'connected')
+
+  target.unsubscribeFromConnectivityChanges(key)
+
+  source.connectivityChange('test.db', 'connected')
+
+  t.is(notifications.length, 1)
 })

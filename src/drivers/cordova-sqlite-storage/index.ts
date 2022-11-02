@@ -16,7 +16,7 @@ import { ElectricConfig } from '../../satellite/config'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
-import { MockSocket } from '../../sockets/mock'
+import { MockSocketFactory } from '../../sockets/mock'
 
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database, ElectrifiedDatabase }
@@ -27,12 +27,12 @@ export const electrify = async (db: Database, config: ElectricConfig, opts?: Ele
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
-  const socket = opts?.socket || new MockSocket() // TODO
+  const socketFactory = opts?.socketFactory || new MockSocketFactory() // TODO
   const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, config)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
   return electrified as unknown as ElectrifiedDatabase
 }

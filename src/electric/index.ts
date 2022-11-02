@@ -3,9 +3,9 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { Registry } from '../satellite/index'
-import { Socket } from '../sockets/index'
+import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
-import { DbName } from '../util/types'
+import { ConnectivityStatus, DbName } from '../util/types'
 import { ElectricConfig } from '../satellite/config'
 
 // These are the options that should be provided to the adapter's electrify
@@ -15,7 +15,7 @@ export interface ElectrifyOptions {
   adapter?: DatabaseAdapter,
   migrator?: Migrator,
   notifier?: Notifier,
-  socket?: Socket,
+  socketFactory?: SocketFactory,
   registry?: Registry,
 }
 
@@ -36,6 +36,10 @@ export class ElectricNamespace {
   potentiallyChanged(): void {
     this.notifier.potentiallyChanged()
   }
+
+  connectivityChange(status: ConnectivityStatus, dbName: string): void {
+    this.notifier.connectivityChange(dbName, status)
+  }
 }
 
 // This is the primary `electrify()` endpoint that the individal drivers
@@ -43,17 +47,17 @@ export class ElectricNamespace {
 // also be called directly by tests that don't want to go via the adapter
 // entrypoints in order to avoid loading the environment dependencies.
 export const electrify = async (
-      dbName: DbName,
-      db: AnyDatabase,
-      electric: AnyElectricDatabase,
-      adapter: DatabaseAdapter,
-      migrator: Migrator,
-      notifier: Notifier,
-      socket: Socket,
-      registry: Registry,
-      config: ElectricConfig,
-    ): Promise<AnyElectrifiedDatabase> => {
-  await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, config)
+  dbName: DbName,
+  db: AnyDatabase,
+  electric: AnyElectricDatabase,
+  adapter: DatabaseAdapter,
+  migrator: Migrator,
+  notifier: Notifier,
+  socketFactory: SocketFactory,
+  registry: Registry,
+  config: ElectricConfig,
+): Promise<AnyElectrifiedDatabase> => {
+  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
 
   return proxyOriginal(db, electric)
 }

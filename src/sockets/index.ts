@@ -13,3 +13,7 @@ export interface Socket {
     onceConnect(cb: () => void): void
     onceError(cb: (error: Error) => void): void
 }
+
+export interface SocketFactory {
+    create(): Socket
+}

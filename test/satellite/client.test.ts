@@ -15,7 +15,7 @@ import {
   SatAuthResp,
   SatPingResp,
 } from '../../src/_generated/proto/satellite';
-import { WebSocketNode } from '../../src/sockets/node';
+import { WebSocketNodeFactory } from '../../src/sockets/node';
 import { SatelliteClient } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
@@ -31,8 +31,7 @@ test.beforeEach(t => {
   const server = new SatelliteWSServerStub();
   server.start();
 
-  const socket = new WebSocketNode();
-  const client = new SatelliteClient(socket, {
+  const client = new SatelliteClient(new WebSocketNodeFactory(), {
     appId: "fake_id",
     token: "fake_token",
     address: '127.0.0.1',
@@ -65,6 +64,43 @@ test.serial('connect success', async t => {
 
   await client.connect();
   t.pass();
+});
+
+test.serial('connection backoff success', async t => {
+  const { client, server } = t.context as Context;
+
+  server.close()
+
+  const retry = (_e: any, a: number) => {
+    if (a > 0) {
+      t.pass()
+      return false
+    }
+    return true
+  }
+
+  try {
+    await client.connect(retry)
+  } catch (e) { }
+});
+
+test.serial('connection backoff failure', async t => {
+  const { client, server } = t.context as Context;
+
+  server.close()
+
+  const retry = (_e: any, a: number) => {
+    if (a > 0) {
+      return false
+    }
+    return true
+  }
+
+  try {
+    await client.connect(retry)
+  } catch (e) {
+    t.pass()
+  }
 });
 
 // TODO: handle connection errors scenarios
