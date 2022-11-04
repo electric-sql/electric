@@ -1,6 +1,4 @@
 import BASE64 from 'base-64'
-import 'fastestsmallesttextencoderdecoder'
-
 
 export const typeDecoder = {
     number: bytesToNumber,

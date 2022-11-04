@@ -17,6 +17,9 @@ import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
 import { WebSocketReactNative } from '../../sockets/react-native'
 
+// Provide implementation for TextEncoder/TextDecoder
+import 'fastestsmallesttextencoderdecoder'
+
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
 export type { Database, ElectrifiedDatabase }
 
