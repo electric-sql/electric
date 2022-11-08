@@ -180,11 +180,12 @@ defmodule Electric.Replication.VaxineTest do
       spawn(fn ->
         assert_receive {:start, p2}
 
-        VaxRepo.transaction(fn ->
-          operation_set_1.()
-          send(p2, :continue)
-          assert_receive :commit
-        end)
+        :commit =
+          VaxRepo.transaction(fn ->
+            operation_set_1.()
+            send(p2, :continue)
+            assert_receive :commit
+          end)
 
         send(parent, :commited_1)
         send(p2, :commit)
@@ -192,13 +193,14 @@ defmodule Electric.Replication.VaxineTest do
 
     _p2 =
       spawn(fn ->
-        VaxRepo.transaction(fn ->
-          send(p1, {:start, self()})
-          assert_receive :continue
-          operation_set_2.()
-          send(p1, :commit)
-          assert_receive :commit
-        end)
+        :commit =
+          VaxRepo.transaction(fn ->
+            send(p1, {:start, self()})
+            assert_receive :continue
+            operation_set_2.()
+            send(p1, :commit)
+            assert_receive :commit
+          end)
 
         send(parent, :commited_2)
       end)

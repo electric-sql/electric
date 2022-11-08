@@ -138,10 +138,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
     handle_continue(:subscribe, state)
   end
 
-  def handle_info({:EXIT, _, :econnrefused}, %State{} = state) do
-    {:noreply, state}
-  end
-
   def handle_info(msg, %State{} = state) do
     Logger.error("unhandled info msg: #{inspect(msg)}")
     {:noreply, state}
@@ -162,7 +158,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
          md5_hash <- Base.encode16(:erlang.md5(migration_file)) do
       Logger.notice("ready to migrate to version: #{vsn}")
 
-      case with_conn(
+      case Client.with_conn(
              Map.delete(conn_config, :replication),
              fn conn ->
                :epgsql.with_transaction(
@@ -203,7 +199,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case with_conn(
+    case Client.with_conn(
            conn_config,
            fn conn ->
              Client.start_subscription(conn, rep_conf.subscription)
@@ -220,7 +216,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp stop_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case with_conn(
+    case Client.with_conn(
            conn_config,
            fn conn ->
              Client.stop_subscription(conn, rep_conf.subscription)
@@ -246,7 +242,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Logger.debug("attempting to initialize #{origin}")
 
-    with_conn(conn_config, fn conn ->
+    Client.with_conn(conn_config, fn conn ->
       with {:ok, _system_id} <- Client.get_system_id(conn),
            {:ok, publication} <-
              Client.create_publication(conn, publication_name, publication_tables),
@@ -273,21 +269,5 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:ok, state}
       end
     end)
-  end
-
-  def with_conn(conn_config, func) do
-    Logger.debug("connect: #{inspect(conn_config)}")
-
-    case Client.connect(conn_config) do
-      {:ok, conn} ->
-        try do
-          func.(conn)
-        after
-          Client.close(conn)
-        end
-
-      error ->
-        error
-    end
   end
 end

@@ -11,11 +11,12 @@ services:
       ANTIDOTE_TXN_PROT: "clocksi"
       ANTIDOTE_RECOVER_FROM_LOG: "true"
       ANTIDOTE_META_DATA_ON_START: "true"
-      ANTIDOTE_SYNC_LOG: "false"
+      ANTIDOTE_SYNC_LOG: "true"
       ANTIDOTE_ENABLE_LOGGING: "true"
       ANTIDOTE_AUTO_START_READ_SERVERS: "true"
       COOKIE: "secret"
       NODE_NAME: "antidote@dc1n1"
+      DEBUG_LOGGER_LEVEL: "debug"
     ports:
       - "8087:8087"
       - "8088:8088"

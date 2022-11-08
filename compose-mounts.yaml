@@ -1,0 +1,27 @@
+# Run using `docker-compose -f databases.yaml up`.
+version: '3.1'
+
+services:
+  vaxine:
+    extends:
+      file: ./compose.yaml
+      service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_1"
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+      - ./_tmp_vaxine_data:/vaxine-data
+
+  db_a:
+    extends:
+      file: ./compose.yaml
+      service: db_a
+
+  db_b:
+    extends:
+      file: ./compose.yaml
+      service: db_b

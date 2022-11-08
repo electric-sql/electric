@@ -1,7 +1,7 @@
 [doc Test one direction replication from pg_1 to pg_2]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
-[global psql=electric]
+[global psql=electric=#]
 
 [include shared.luxinc]
 [invoke setup]
@@ -22,9 +22,7 @@
     ?.* origin=postgres_3 .* \[debug\] Sending \d messages to the subscriber
 
 [shell pg_3]
-    !SELECT * FROM entries;
-    ?Hello from a
-    ?(1 row)
+    [invoke wait-for "SELECT * FROM entries;" "Hello from a" 10 $psql]
 
 [shell pg_3]
     !INSERT INTO entries (content) VALUES ('Hello from c');
@@ -36,20 +34,10 @@
     [timeout 10]
 
 [shell pg_1]
-    [loop iter 1..10]
-        @Hello from c
-        !select * from entries;
-        ?electric=
-        [sleep 1]
-    [endloop]
+    [invoke wait-for "SELECT * FROM entries;" "Hello from c" 10 $psql]
 
 [shell pg_2]
-    [loop iter 1..10]
-        @Hello from c
-        !select * from entries;
-        ?electric=
-        [sleep 1]
-    [endloop]
+    [invoke wait-for "SELECT * FROM entries;" "Hello from c" 10 $psql]
 
 [cleanup]
     [invoke teardown]
