@@ -243,7 +243,7 @@ defmodule Electric.Satellite.WsServerTest do
         MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
         assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {_, %SatInStartReplicationReq{lsn: "0"}}
+        assert_receive {_, %SatInStartReplicationReq{lsn: ""}}
         MockClient.send_data(%SatInStartReplicationResp{})
 
         columns = [
