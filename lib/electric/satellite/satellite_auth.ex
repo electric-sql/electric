@@ -97,7 +97,7 @@ defmodule Electric.Satellite.Auth do
         {:error, :expired}
 
       {:error, errors} ->
-        {:error, "token verification failed: #{inspect(errors)}", errors}
+        {:error, "token verification failed: #{inspect(errors)}"}
     end
   end
 end
