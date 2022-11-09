@@ -51,7 +51,7 @@
             {:auto_ping, :true} \
             ])
     ?$eprompt
-    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "0", (.*)
+    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
 
 [shell pg_2]
     [invoke log "Make sure we replicate all data from PG1 -> PG2"]

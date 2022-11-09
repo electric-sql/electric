@@ -221,7 +221,7 @@ defmodule Electric.Satellite.WsServer do
 
     lsn =
       case OffsetStorage.get_satellite_lsn(state.client_id) do
-        nil -> "0"
+        nil -> ""
         lsn -> lsn
       end
 

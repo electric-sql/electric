@@ -169,27 +169,31 @@ defmodule Electric.Satellite.Protocol do
   def process_message(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{in_rep: _in_rep, out_rep: out_rep} = state
+      ) do
+    with {:ok, lsn} <- validate_lsn(client_lsn, opts) do
+      out_rep =
+        case Enum.member?(opts, :SYNC_MODE) do
+          true ->
+            sync_batch_size = msg.sync_batch_size
+            true = sync_batch_size > 0
+            %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
+
+          false ->
+            # No confirmation
+            out_rep
+        end
+
+      Logger.debug(
+        "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
       )
-      when client_lsn !== "" do
-    # FIXME: only sync_batch_size == 1 is supported in SYNC_MODE at the moment
-    out_rep =
-      case Enum.member?(opts, :SYNC_MODE) do
-        true ->
-          sync_batch_size = msg.sync_batch_size
-          true = sync_batch_size > 0
-          %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
 
-        false ->
-          # No confirmation
-          out_rep
-      end
-
-    Logger.debug(
-      "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
-    )
-
-    out_rep = initiate_subscription(state.client, client_lsn, out_rep)
-    {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
+      out_rep = initiate_subscription(state.client, lsn, out_rep)
+      {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
+    else
+      error ->
+        Logger.warn("Bad start replication options: #{inspect(error)}")
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end
   end
 
   # Satelite client confirms replication start
@@ -396,5 +400,18 @@ defmodule Electric.Satellite.Protocol do
     GenStage.cancel({out_rep.pid, out_rep.stage_sub}, :cancel)
 
     %OutRep{out_rep | status: nil, pid: nil, stage_sub: nil}
+  end
+
+  defp validate_lsn(client_lsn, opts) do
+    case client_lsn == nil do
+      true ->
+        case Enum.member?(opts, :FIRST_LSN) do
+          true -> {:ok, "0"}
+          false -> {:error, :empty_lsn}
+        end
+
+      false ->
+        {:ok, client_lsn}
+    end
   end
 end
