@@ -63,7 +63,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   close(): Promise<void | SatelliteError> {
     return Promise.resolve();
   }
-  authenticate(): Promise<SatelliteError | AuthResponse> {
+  authenticate(_clientId: string): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({});
   }
   startReplication(_lsn: LSN, _resume?: boolean | undefined): Promise<void | SatelliteError> {

@@ -39,10 +39,12 @@ test.beforeEach(t => {
     port: 30002,
     timeout: 10000
   });
+  const clientId = "91eba0c8-28ba-4a86-a6e8-42731c2c6694"
 
   t.context = {
     server,
-    client
+    client,
+    clientId
   }
 });
 
@@ -67,12 +69,12 @@ test.serial('connect success', async t => {
 
 // TODO: handle connection errors scenarios
 
-async function connectAndAuth({ client, server }) {
+async function connectAndAuth({ client, server, clientId }) {
   await client.connect();
 
   const authResp = SatAuthResp.fromPartial({});
   server.nextResponses([authResp]);
-  await client.authenticate();
+  await client.authenticate(clientId);
 }
 
 test.serial('replication start timeout', async t => {
@@ -91,13 +93,13 @@ test.serial('replication start timeout', async t => {
 });
 
 test.serial('authentication success', async t => {
-  const { client, server } = t.context as Context;
+  const { client, server, clientId } = t.context as Context;
   await client.connect();
 
   const authResp = SatAuthResp.fromPartial({ id: "server_identity" });
   server.nextResponses([authResp]);
 
-  const res = await client.authenticate();
+  const res = await client.authenticate(clientId);
   t.is(res['serverId'], "server_identity");
   t.is(client['inbound'].authenticated, true);
 

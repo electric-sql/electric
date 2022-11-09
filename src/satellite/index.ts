@@ -33,7 +33,7 @@ export interface Satellite {
 export interface Client {
   connect(): Promise<void | SatelliteError>;
   close(): Promise<void | SatelliteError>;
-  authenticate(): Promise<AuthResponse | SatelliteError>;
+  authenticate(clientId: string): Promise<AuthResponse | SatelliteError>;
   startReplication(lsn: LSN): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;

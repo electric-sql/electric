@@ -13,6 +13,7 @@ import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../util/common'
+import { v4 as uuidv4 } from 'uuid';
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -27,6 +28,7 @@ export class SatelliteProcess implements Satellite {
 
   opts: SatelliteOpts
 
+  _clientId?: string
   _authState?: AuthState
   _authStateSubscription?: string
 
@@ -117,6 +119,9 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
 
+    const clientId = await this._getClientId()
+
+    this._clientId = clientId
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
@@ -129,7 +134,7 @@ export class SatelliteProcess implements Satellite {
     this._lsn = base64.toBytes(lsnBase64)
 
     return this.client.connect()
-      .then(() => this.client.authenticate())
+      .then(() => this.client.authenticate(clientId))
       .then(() => this.client.startReplication(this._lsn))
       .catch((error) => console.log(`couldn't start replication: ${error}`))
   }
@@ -423,7 +428,28 @@ export class SatelliteProcess implements Satellite {
     const sql = `SELECT value from ${meta} WHERE key = ?`
     const args = [key]
     const rows = await this.adapter.query({ sql, args })
-    return rows[0]!.value as any
+
+    if (rows.length !== 1) {
+      throw `Invalid metadata table: missing ${key}`
+    }
+
+    return rows[0].value as string
+  }
+
+  private async _getClientId(): Promise<string> {
+    let clientIdKey = "clientId"
+
+    let clientId: string = await this._getMeta(clientIdKey)
+
+    if (clientId === '') {
+      clientId = uuidv4() as string
+      await this._setMeta(clientIdKey, clientId)
+    }
+    return clientId
+  }
+
+  clientId(): string | undefined {
+    return this._clientId
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.

@@ -122,9 +122,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     return this.rpc(request);
   }
 
-  authenticate(): Promise<AuthResponse | SatelliteError> {
-    const { appId: id, token } = this.opts;
-    const request = SatAuthReq.fromPartial({ id, token });
+  authenticate(clientId: string): Promise<AuthResponse | SatelliteError> {
+    const { token } = this.opts;
+    const request = SatAuthReq.fromPartial({ id: clientId, token });
     return this.rpc<AuthResponse>(request);
   }
 
