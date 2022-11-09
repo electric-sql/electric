@@ -85,6 +85,7 @@ message SatInStartReplicationReq {
         // In sync mode consumer of the stream is expected to send SatPingResp
         // message for every committed batch of SatOpLog messages
         SYNC_MODE = 2;
+        FIRST_LSN = 3;
     }
     // LSN position of the log on the producer side
     bytes lsn = 1;

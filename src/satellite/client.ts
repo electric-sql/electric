@@ -294,6 +294,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       } else {
         this.outbound.ack_lsn = message.lsn;
       }
+      if (!message.options.find(o =>
+        o == SatInStartReplicationReq_Option.FIRST_LSN)) {
+        this.outbound.ack_lsn = DEFAULT_LSN;
+      }
 
       const throttleOpts = { leading: true, trailing: true }
       this.throttledPushTransaction = throttle(() => this.pushTransactions(), this.opts.pushPeriod, throttleOpts)

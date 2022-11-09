@@ -124,6 +124,7 @@ export enum SatInStartReplicationReq_Option {
    * message for every committed batch of SatOpLog messages
    */
   SYNC_MODE = 2,
+  FIRST_LSN = 3,
   UNRECOGNIZED = -1,
 }
 
