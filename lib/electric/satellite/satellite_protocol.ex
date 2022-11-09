@@ -153,6 +153,11 @@ defmodule Electric.Satellite.Protocol do
             {%SatAuthResp{id: "server_identity"},
              %State{state | auth: auth, auth_passed: true, client_id: client_id}}
 
+          {:error, :expired} ->
+            Logger.warn("authorization failed for client #{client_id}, expired token")
+
+            {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
           {:error, reason} ->
             Logger.error(
               "authorization failed for client: #{client_id} with reason: #{inspect(reason)}"

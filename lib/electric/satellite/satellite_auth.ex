@@ -16,7 +16,7 @@ defmodule Electric.Satellite.Auth do
   defmodule Token do
     @iss Application.compile_env!(:electric, [Electric.Satellite.Auth, :issuer])
 
-    @spec verify(binary, binary) :: {:ok, %{binary => any}}
+    @spec verify(binary, binary) :: {:ok, %{binary => any}} | {:error, Keyword.t()}
     def verify(global_cluster_id, token) do
       with {:ok, key} <- signing_key(global_cluster_id) do
         JWT.verify(token, %{key: key, iss: @iss})
@@ -82,7 +82,7 @@ defmodule Electric.Satellite.Auth do
   end
 
   @spec validate_token(String.t(), String.t()) ::
-          {:ok, t()} | {:error, :auth_not_configured | term()}
+          {:ok, t()} | {:error, binary()} | {:error, :expired}
   def validate_token(global_cluster_id, token) do
     with {:ok, claims} <- Token.verify(global_cluster_id, token),
          {:claims,
@@ -93,8 +93,11 @@ defmodule Electric.Satellite.Auth do
       {:claims, _claims} ->
         {:error, "invalid access token"}
 
-      {:error, reason} ->
-        {:error, "token verification failed: #{inspect(reason)}"}
+      {:error, [exp: _]} ->
+        {:error, :expired}
+
+      {:error, errors} ->
+        {:error, "token verification failed: #{inspect(errors)}", errors}
     end
   end
 end
