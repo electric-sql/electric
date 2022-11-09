@@ -81,13 +81,13 @@ make shell
 You can now apply named migrations using:
 
 ```sh
-make apply_migration $MIGRATION_NAME
+make apply_migration name=$MIGRATION_NAME
 ```
 
 Where `MIGRATION_NAME` is the name of a migration folder created using [`electric migrations new`](https://electric-sql.com/docs/usage/migrations#2-schema-evolution), for example:
 
 ```sh
-make apply_migration 1666288253_create_items
+make apply_migration name=1666288253_create_items
 ```
 
 ## OSX
