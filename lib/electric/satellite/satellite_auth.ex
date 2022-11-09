@@ -85,18 +85,6 @@ defmodule Electric.Satellite.Auth do
   @spec validate_token(String.t(), String.t()) ::
           {:ok, t()} | {:error, :auth_not_configured | term()}
   def validate_token(database_id, token) do
-    case validate_jwt_token(database_id, token) do
-      {:ok, auth} ->
-        Logger.info("authenticated user #{auth.user_id} to database #{database_id}")
-        {:ok, auth}
-
-      {:error, reason} = error ->
-        Logger.error("authorization failed for #{database_id} with reason: #{inspect(reason)}")
-        error
-    end
-  end
-
-  defp validate_jwt_token(database_id, token) do
     with {:ok, claims} <- Token.verify(database_id, token),
          {:claims, %{"database_id" => ^database_id, "user_id" => user_id, "type" => "access"}} <-
            {:claims, claims} do

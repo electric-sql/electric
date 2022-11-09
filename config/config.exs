@@ -19,7 +19,9 @@ config :logger, :console,
     :pg_slot,
     :sq_client,
     :vx_consumer,
-    :vx_producer
+    :vx_producer,
+    :client_id,
+    :user_id
   ]
 
 config :logger,

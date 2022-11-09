@@ -141,14 +141,25 @@ defmodule Electric.Satellite.Protocol do
 
         case Electric.Satellite.Auth.validate_token(database_id, token) do
           {:ok, auth} ->
+            Logger.metadata(client_id: client_id, user_id: auth.user_id)
+
+            Logger.info(
+              "authenticated client #{client_id} as user #{auth.user_id} to database #{database_id}"
+            )
+
             reg_name = Electric.Satellite.WsServer.reg_name(state.client)
             Electric.reg(reg_name)
+
             :ok = ClientManager.register_client(state.client, reg_name)
 
             {%SatAuthResp{id: "server_identity"},
              %State{state | auth: auth, auth_passed: true, client_id: client_id}}
 
-          {:error, _} ->
+          {:error, reason} ->
+            Logger.error(
+              "authorization failed for client: #{client_id}, database: #{database_id} with reason: #{inspect(reason)}"
+            )
+
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
         end
 
