@@ -316,9 +316,9 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def maybe_auth(conn, stream_ref, opts) do
     case Keyword.get(opts, :auth, false) do
-      %{database_id: database_id, user_id: user_id} ->
+      %{global_cluster_id: global_cluster_id, user_id: user_id} ->
         id = Keyword.get(opts, :id, "id")
-        {:ok, token} = Electric.Satellite.Auth.Token.create(database_id, user_id)
+        {:ok, token} = Electric.Satellite.Auth.Token.create(global_cluster_id, user_id)
 
         auth_req = serialize(%SatAuthReq{id: id, token: token})
 

@@ -39,8 +39,8 @@ defmodule Electric do
 
   This is that database instance slug
   """
-  @spec database_id() :: binary | no_return
-  def database_id do
-    Application.fetch_env!(:electric, :database_id)
+  @spec global_cluster_id() :: binary | no_return
+  def global_cluster_id do
+    Application.fetch_env!(:electric, :global_cluster_id)
   end
 end

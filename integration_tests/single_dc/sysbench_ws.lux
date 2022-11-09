@@ -45,7 +45,7 @@
     [invoke start_elixir_test]
     !Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ \
-            {:auth, %{database_id: Electric.database_id(), user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
+            {:auth, %{global_cluster_id: Electric.global_cluster_id(), user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
             {:id, "ws1"}, \
             {:sub, "0"}, \
             {:auto_in_sub, true}, \

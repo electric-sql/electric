@@ -20,6 +20,7 @@ config :logger, :console,
     :sq_client,
     :vx_consumer,
     :vx_producer,
+    :cluster_id,
     :client_id,
     :user_id
   ]

@@ -74,9 +74,9 @@ if config_env() == :prod do
   # [ElectricWeb.JWTAuth, :secret_key]
   jwt_secret_key = System.fetch_env!("JWT_SIGNING_KEY")
   # set to the database.cluster_slug
-  database_id = System.fetch_env!("DATABASE_ID")
+  global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
 
-  config :electric, Electric.Satellite, database_id: database_id
+  config :electric, Electric.Satellite, global_cluster_id: global_cluster_id
 
   config :electric, Electric.Satellite.Auth, secret_key: Base.decode64!(jwt_secret_key)
 end

@@ -5,12 +5,11 @@ defmodule Electric.Satellite.Auth do
 
   require Logger
 
-  @enforce_keys [:database_id, :user_id]
+  @enforce_keys [:user_id]
 
-  defstruct [:database_id, :user_id]
+  defstruct [:user_id]
 
   @type t() :: %__MODULE__{
-          database_id: binary,
           user_id: binary
         }
 
@@ -18,8 +17,8 @@ defmodule Electric.Satellite.Auth do
     @iss Application.compile_env!(:electric, [Electric.Satellite.Auth, :issuer])
 
     @spec verify(binary, binary) :: {:ok, %{binary => any}}
-    def verify(database_id, token) do
-      with {:ok, key} <- signing_key(database_id) do
+    def verify(global_cluster_id, token) do
+      with {:ok, key} <- signing_key(global_cluster_id) do
         JWT.verify(token, %{key: key, iss: @iss})
       end
     end
@@ -30,11 +29,11 @@ defmodule Electric.Satellite.Auth do
     end
 
     @spec signing_key(binary) :: {:ok, binary}
-    defp signing_key(database_id) do
+    defp signing_key(global_cluster_id) do
       key =
         secret_key()
         |> hmac("EDBv01")
-        |> hmac(database_id)
+        |> hmac(global_cluster_id)
 
       {:ok, key}
     end
@@ -50,15 +49,15 @@ defmodule Electric.Satellite.Auth do
     # For internal use only. Create a valid access token for this app
     @doc false
     @spec create(binary, binary) :: {:ok, binary} | no_return
-    def create(database_id, user_id, opts \\ []) do
-      {:ok, key} = signing_key(database_id)
+    def create(global_cluster_id, user_id, opts \\ []) do
+      {:ok, key} = signing_key(global_cluster_id)
 
       nonce =
         :crypto.strong_rand_bytes(16)
         |> Base.encode16(case: :lower)
 
       custom_claims = %{
-        "database_id" => database_id,
+        "global_cluster_id" => global_cluster_id,
         "user_id" => user_id,
         "nonce" => nonce,
         "type" => "access"
@@ -84,11 +83,12 @@ defmodule Electric.Satellite.Auth do
 
   @spec validate_token(String.t(), String.t()) ::
           {:ok, t()} | {:error, :auth_not_configured | term()}
-  def validate_token(database_id, token) do
-    with {:ok, claims} <- Token.verify(database_id, token),
-         {:claims, %{"database_id" => ^database_id, "user_id" => user_id, "type" => "access"}} <-
+  def validate_token(global_cluster_id, token) do
+    with {:ok, claims} <- Token.verify(global_cluster_id, token),
+         {:claims,
+          %{"global_cluster_id" => ^global_cluster_id, "user_id" => user_id, "type" => "access"}} <-
            {:claims, claims} do
-      {:ok, %__MODULE__{database_id: database_id, user_id: user_id}}
+      {:ok, %__MODULE__{user_id: user_id}}
     else
       {:claims, _claims} ->
         {:error, "invalid access token"}

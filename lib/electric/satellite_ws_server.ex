@@ -50,10 +50,16 @@ defmodule Electric.Satellite.WsServer do
     # messages
     {ip, port} = :cowboy_req.peer(req)
     client = "#{:inet.ntoa(ip)}:#{port}"
-    database_id = Electric.database_id()
+
+    # Add the cluster id to the logger metadata to make filtering easier in the case of global log
+    # aggregation
+    Logger.metadata(cluster_id: Electric.global_cluster_id())
 
     {:cowboy_websocket, req,
-     %State{client: client, last_msg_time: :erlang.timestamp(), database_id: database_id}}
+     %State{
+       client: client,
+       last_msg_time: :erlang.timestamp()
+     }}
   end
 
   def websocket_init(%State{client: client} = state) do

@@ -80,11 +80,11 @@ defmodule Electric.Satellite.WsServerTest do
   setup do
     on_exit(fn -> clean_connections() end)
 
-    database_id = Electric.database_id()
+    global_cluster_id = Electric.global_cluster_id()
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
-    {:ok, token} = Electric.Satellite.Auth.Token.create(database_id, user_id)
+    {:ok, token} = Electric.Satellite.Auth.Token.create(global_cluster_id, user_id)
 
-    {:ok, database_id: database_id, user_id: user_id, token: token}
+    {:ok, global_cluster_id: global_cluster_id, user_id: user_id, token: token}
   end
 
   describe "decode/encode" do
@@ -96,7 +96,7 @@ defmodule Electric.Satellite.WsServerTest do
 
     test "Server will respond to auth request", cxt do
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: cxt.token})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
 
       assert_receive {MockClient, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
@@ -130,7 +130,7 @@ defmodule Electric.Satellite.WsServerTest do
       assert :ok = MockClient.disconnect()
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: cxt.token})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
       assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
 
@@ -148,13 +148,13 @@ defmodule Electric.Satellite.WsServerTest do
       assert :ok = MockClient.disconnect()
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: cxt.token})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
       assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
       assert :ok = MockClient.disconnect()
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: "invalid_token"})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: "invalid_token"})
       assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       assert server_id !== ""
       assert :ok = MockClient.disconnect()
@@ -162,16 +162,18 @@ defmodule Electric.Satellite.WsServerTest do
       past = System.os_time(:second) - 24 * 3600
 
       assert {:ok, expired_token} =
-               Electric.Satellite.Auth.Token.create(cxt.database_id, cxt.user_id, expiry: past)
+               Electric.Satellite.Auth.Token.create(cxt.global_cluster_id, cxt.user_id,
+                 expiry: past
+               )
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: expired_token})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: expired_token})
       assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       assert server_id !== ""
       assert :ok = MockClient.disconnect()
 
       MockClient.connect_and_spawn()
-      MockClient.send_data(%SatAuthReq{id: cxt.database_id, token: cxt.token})
+      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
       assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
       assert server_id !== ""
       assert :ok = MockClient.disconnect()

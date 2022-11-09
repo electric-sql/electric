@@ -107,8 +107,7 @@ defmodule Electric.Satellite.Protocol do
               out_rep: %OutRep{},
               ping_tref: nil,
               transport: nil,
-              socket: nil,
-              database_id: nil
+              socket: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -120,8 +119,7 @@ defmodule Electric.Satellite.Protocol do
             transport: module(),
             socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
-            out_rep: OutRep.t(),
-            database_id: binary()
+            out_rep: OutRep.t()
           }
   end
 
@@ -133,18 +131,18 @@ defmodule Electric.Satellite.Protocol do
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:error, PB.sq_pb_msg()}
   def process_message(msg, %State{} = state) when not auth_passed?(state) do
-    %{database_id: database_id} = state
-
     case msg do
       %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
+        global_cluster_id = Electric.global_cluster_id()
+
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
-        case Electric.Satellite.Auth.validate_token(database_id, token) do
+        case Electric.Satellite.Auth.validate_token(global_cluster_id, token) do
           {:ok, auth} ->
             Logger.metadata(client_id: client_id, user_id: auth.user_id)
 
             Logger.info(
-              "authenticated client #{client_id} as user #{auth.user_id} to database #{database_id}"
+              "authenticated client #{client_id} as user #{auth.user_id} to database #{global_cluster_id}"
             )
 
             reg_name = Electric.Satellite.WsServer.reg_name(state.client)
@@ -157,7 +155,7 @@ defmodule Electric.Satellite.Protocol do
 
           {:error, reason} ->
             Logger.error(
-              "authorization failed for client: #{client_id}, database: #{database_id} with reason: #{inspect(reason)}"
+              "authorization failed for client: #{client_id} with reason: #{inspect(reason)}"
             )
 
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
