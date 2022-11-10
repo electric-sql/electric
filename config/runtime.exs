@@ -69,14 +69,16 @@ if config_env() == :prod do
     vaxine_port: 8088,
     vaxine_connection_timeout: vaxine_connection_timeout
 
-  # :crypto.strong_rand_bytes(32) |> Base.encode64()
-  # this needs to be the same as configured for the console app
-  # [ElectricWeb.JWTAuth, :secret_key]
-  jwt_secret_key = System.fetch_env!("JWT_SIGNING_KEY")
   # set to the database.cluster_slug
   global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
 
   config :electric, Electric.Satellite, global_cluster_id: global_cluster_id
 
-  config :electric, Electric.Satellite.Auth, secret_key: Base.decode64!(jwt_secret_key)
+  # key = :crypto.strong_rand_bytes(32) |> Base.encode64()
+  auth_secret_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY") |> Base.decode64!()
+
+  config :electric, Electric.Satellite.Auth,
+    provider:
+      {Electric.Satellite.Auth.JWT,
+       secret_key: auth_secret_key, global_cluster_id: global_cluster_id}
 end

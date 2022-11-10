@@ -75,6 +75,4 @@ config :electric,
 
 config :logger, level: :debug
 
-# :crypto.strong_rand_bytes(32) |> Base.encode64()
-config :electric, Electric.Satellite.Auth,
-  secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")
+config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}

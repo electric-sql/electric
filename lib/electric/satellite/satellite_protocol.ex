@@ -107,7 +107,8 @@ defmodule Electric.Satellite.Protocol do
               out_rep: %OutRep{},
               ping_tref: nil,
               transport: nil,
-              socket: nil
+              socket: nil,
+              auth_provider: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -119,7 +120,8 @@ defmodule Electric.Satellite.Protocol do
             transport: module(),
             socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
-            out_rep: OutRep.t()
+            out_rep: OutRep.t(),
+            auth_provider: Electric.Satellite.Auth.provider()
           }
   end
 
@@ -133,17 +135,13 @@ defmodule Electric.Satellite.Protocol do
   def process_message(msg, %State{} = state) when not auth_passed?(state) do
     case msg do
       %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
-        global_cluster_id = Electric.global_cluster_id()
-
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
-        case Electric.Satellite.Auth.validate_token(global_cluster_id, token) do
+        case Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
           {:ok, auth} ->
             Logger.metadata(client_id: client_id, user_id: auth.user_id)
 
-            Logger.info(
-              "authenticated client #{client_id} as user #{auth.user_id} to database #{global_cluster_id}"
-            )
+            Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
 
             reg_name = Electric.Satellite.WsServer.reg_name(state.client)
             Electric.reg(reg_name)
