@@ -315,8 +315,8 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def maybe_auth(conn, stream_ref, opts) do
-    case Keyword.get(opts, :auth, false) do
-      %{token: token} ->
+    case auth_token!(opts) do
+      {:ok, token} ->
         id = Keyword.get(opts, :id, "id")
 
         auth_req = serialize(%SatAuthReq{id: id, token: token})
@@ -328,13 +328,31 @@ defmodule Electric.Test.SatelliteWsClient do
 
         Logger.debug("Auth passed")
 
-      false ->
+      :no_auth ->
         :ok
+    end
+  end
+
+  defp auth_token!(opts) do
+    case Keyword.get(opts, :auth, false) do
+      false ->
+        :no_auth
+
+      %{token: token} ->
+        {:ok, token}
+
+      %{auth_provider: provider, user_id: user_id} ->
+        Electric.Satellite.Auth.generate_token(user_id, provider)
+
+      %{user_id: user_id} ->
+        # use the configured provider
+        provider = Electric.Satellite.Auth.provider()
+        Electric.Satellite.Auth.generate_token(user_id, provider)
 
       invalid ->
         raise ArgumentError,
           message:
-            "use connect_and_spawn(auth: %{app_id: \"...\", user_id: \"...\"}), got: #{inspect(invalid)}"
+            "use connect_and_spawn(auth: %{auth_provider: \"...\", user_id: \"...\"} | %{token: \"...\"}), got: #{inspect(invalid)}"
     end
   end
 
