@@ -137,24 +137,32 @@ defmodule Electric.Satellite.Protocol do
       %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
-        case Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
-          {:ok, auth} ->
-            Logger.metadata(client_id: client_id, user_id: auth.user_id)
+        # NOTE: We treat succesfull registration with Electric.safe_reg as an
+        # indication that at least the previously connected WS client is down.
+        # However satellite_client_manager may not necessarily have reacted to that
+        # yet. So as long as safe_reg succeded call to ClientManager should
+        # succeed as well
+        reg_name = Electric.Satellite.WsServer.reg_name(client_id)
 
-            Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
+        with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+             true <- Electric.safe_reg(reg_name, 1000),
+             :ok <- ClientManager.register_client(client_id, reg_name) do
+          Logger.metadata(client_id: client_id, user_id: auth.user_id)
+          Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
 
-            reg_name = Electric.Satellite.WsServer.reg_name(state.client)
-            Electric.reg(reg_name)
-
-            :ok = ClientManager.register_client(state.client, reg_name)
-
-            {%SatAuthResp{id: "server_identity"},
-             %State{state | auth: auth, auth_passed: true, client_id: client_id}}
-
+          {%SatAuthResp{id: Electric.global_cluster_id()},
+           %State{state | auth: auth, auth_passed: true, client_id: client_id}}
+        else
           {:error, :expired} ->
-            Logger.warn("authorization failed for client #{client_id}, expired token")
-
+            Logger.warn("authorization failed for client: #{client_id}, expired token")
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
+          {:error, :already_registered} ->
+            Logger.info(
+              "attempted multiple connections from the client with same id: #{inspect(client_id)}"
+            )
+
+            {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
           {:error, reason} ->
             Logger.error(
@@ -205,7 +213,7 @@ defmodule Electric.Satellite.Protocol do
         "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
       )
 
-      out_rep = initiate_subscription(state.client, lsn, out_rep)
+      out_rep = initiate_subscription(state.client_id, lsn, out_rep)
       {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
     else
       error ->

@@ -75,6 +75,9 @@ defmodule Electric.Test.SatelliteWsClient do
           | {:id, term()}
           # Automatically subscribe to Electric starting from lsn
           | {:sub, String.t()}
+          | {:auto_register, boolean()}
+
+  @type conn() :: atom() | pid()
 
   @spec connect_and_spawn([opt()]) :: pid()
   def connect_and_spawn(opts \\ []) do
@@ -83,11 +86,20 @@ defmodule Electric.Test.SatelliteWsClient do
     :proc_lib.start(__MODULE__, :loop_init, [self, opts])
   end
 
-  def is_alive() do
-    Process.alive?(:erlang.whereis(__MODULE__))
+  def is_alive(conn \\ __MODULE__) do
+    conn =
+      cond do
+        is_pid(conn) ->
+          conn
+
+        is_atom(conn) ->
+          :erlang.whereis(conn)
+      end
+
+    Process.alive?(conn)
   end
 
-  def send_test_relation() do
+  def send_test_relation(conn \\ __MODULE__) do
     relation = %Electric.Satellite.SatRelation{
       columns: [
         %SatRelationColumn{name: "id", type: "uuid"},
@@ -100,35 +112,38 @@ defmodule Electric.Test.SatelliteWsClient do
       table_type: :TABLE
     }
 
-    send_data(relation)
+    send_data(conn, relation)
     :ok
   end
 
-  def send_new_data(lsn, commit_time, id, value) do
+  def send_new_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
     send_tx_data(
+      conn,
       lsn,
       commit_time,
       {:insert, %SatOpInsert{relation_id: 11111, row_data: [id, value, ""]}}
     )
   end
 
-  def send_update_data(lsn, commit_time, id, value) do
+  def send_update_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
     send_tx_data(
+      conn,
       lsn,
       commit_time,
       {:update, %SatOpUpdate{relation_id: 11111, old_row_data: [], row_data: [id, value, ""]}}
     )
   end
 
-  def send_delete_data(lsn, commit_time, id, value) do
+  def send_delete_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
     send_tx_data(
+      conn,
       lsn,
       commit_time,
       {:delete, %SatOpDelete{relation_id: 11111, old_row_data: [id, value, ""]}}
     )
   end
 
-  def send_tx_data(lsn, commit_time, op) do
+  def send_tx_data(conn, lsn, commit_time, op) do
     tx = %SatOpLog{
       ops: [
         %SatTransOp{
@@ -141,34 +156,41 @@ defmodule Electric.Test.SatelliteWsClient do
       ]
     }
 
-    send_data(tx)
+    send_data(conn, tx)
     :ok
   end
 
-  @spec send_data(Electric.Satellite.PB.Utils.sq_pb_msg(), fun() | :default) :: term()
-  def send_data(data, filter \\ :default) do
+  @spec send_data(conn(), Electric.Satellite.PB.Utils.sq_pb_msg(), fun() | :default) :: term()
+  def send_data(conn, data, filter \\ :default) do
     filter =
       case filter do
         :default -> fn _, _ -> true end
         etc -> etc
       end
 
-    send(__MODULE__, {:ctrl_stream, data, filter})
+    send(conn, {:ctrl_stream, data, filter})
   end
 
-  @spec send_bin_data(binary(), fun() | :default) :: term()
-  def send_bin_data(data, filter \\ :default) do
+  @spec send_bin_data(conn(), binary(), fun() | :default) :: term()
+  def send_bin_data(conn, data, filter \\ :default) do
     filter =
       case filter do
         :default -> fn _, _ -> true end
         etc -> etc
       end
 
-    send(__MODULE__, {:ctrl_bin, data, filter})
+    send(conn, {:ctrl_bin, data, filter})
   end
 
-  def disconnect() do
-    conn = :erlang.whereis(__MODULE__)
+  def disconnect(conn \\ __MODULE__) do
+    conn =
+      case conn do
+        conn when is_atom(conn) ->
+          :erlang.whereis(conn)
+
+        conn when is_pid(conn) ->
+          conn
+      end
 
     with true <- :erlang.is_pid(conn) do
       ref = :erlang.monitor(:process, conn)
@@ -197,15 +219,24 @@ defmodule Electric.Test.SatelliteWsClient do
     {:ok, {conn, stream_ref}} = connect(host, port)
 
     self = self()
-    Process.register(self(), __MODULE__)
-    t = :ets.new(__MODULE__, [:named_table, :ordered_set])
+
+    t =
+      case Keyword.get(opts, :auto_register, true) do
+        true ->
+          Process.register(self(), __MODULE__)
+          :ets.new(__MODULE__, [:named_table, :ordered_set])
+
+        false ->
+          :ets.new(__MODULE__, [:ordered_set])
+      end
 
     try do
-      :proc_lib.init_ack(parent, {:ok, self()})
       Logger.info("started #{inspect(self)}")
 
       maybe_auth(conn, stream_ref, opts)
       maybe_subscribe(conn, stream_ref, opts)
+
+      :proc_lib.init_ack(parent, {:ok, self()})
 
       loop(%State{
         conn: conn,
@@ -213,6 +244,7 @@ defmodule Electric.Test.SatelliteWsClient do
         parent: parent,
         history: t,
         num: 0,
+        filter_reply: fn _, _ -> true end,
         debug: Keyword.get(opts, :debug, false),
         format: Keyword.get(opts, :format, :term),
         auto_ping: Keyword.get(opts, :auto_ping, false),
@@ -233,9 +265,9 @@ defmodule Electric.Test.SatelliteWsClient do
 
       {:ctrl_stream, data, filter} ->
         {:ok, type, _iodata} = Utils.encode(data)
-        :gun.ws_send(conn, stream_ref, {:binary, serialize(data)})
-
         maybe_debug("send data #{type}: #{inspect(data)}", state)
+
+        :gun.ws_send(conn, stream_ref, {:binary, serialize(data)})
         loop(%State{state | filter_reply: filter})
 
       {:ctrl_bin, data, filter} ->
@@ -249,6 +281,7 @@ defmodule Electric.Test.SatelliteWsClient do
 
       {:gun_error, _, _, :none} ->
         :gun.close(conn)
+        Logger.info("instructed to close connection")
 
       {:gun_error, _, _, reason} ->
         :gun.close(conn)
@@ -290,7 +323,7 @@ defmodule Electric.Test.SatelliteWsClient do
           fun ->
             case fun.(num, data) do
               true ->
-                msg = {__MODULE__, data}
+                msg = {self(), data}
                 maybe_debug("sending to: #{inspect(state.parent)} #{inspect(msg)}", state)
                 send(state.parent, msg)
 
