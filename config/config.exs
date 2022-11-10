@@ -36,12 +36,7 @@ config :electric, Electric.Replication.Postgres,
 
 config :electric, Electric.StatusPlug, port: 5050
 
-# 🐉 DANGER: this "issuer" configuration *MUST* be the same
-# as the configuration in the console, currently under [:electric, :site_domain]
-# I'm hard-coding this in all envs ATM  for simplicity
-# if these config values do not match, the jwt token verification *will fail*
-# safe option is probably to just remove the `iss` field from the token
-config :electric, Electric.Satellite.Auth, issuer: "electric-sql.com"
+config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
