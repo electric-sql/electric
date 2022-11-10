@@ -41,7 +41,7 @@ defmodule Electric.Satellite.Auth do
   """
   @spec provider() :: provider() | no_return
   def provider do
-    {:ok, config} = Application.fetch_env(:electric, Electric.Satellite.Auth)
+    {:ok, config} = Application.fetch_env(:electric, Electric.Satellite.Auth) |> IO.inspect()
     {:ok, {_module, _params} = provider} = Access.fetch(config, :provider)
     provider
   end
