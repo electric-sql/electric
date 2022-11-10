@@ -58,7 +58,7 @@ defmodule Electric.Satellite.WsServerTest do
     )
 
     global_cluster_id = Electric.global_cluster_id()
-    port = 15133
+    port = 55133
 
     auth_provider =
       {Electric.Satellite.Auth.JWT,
