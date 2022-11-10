@@ -9,7 +9,6 @@ import { satelliteDefaults, ElectricConfig, satelliteClientDefaults, validateCon
 import { SatelliteProcess } from './process'
 import { Socket } from '../sockets'
 import { SatelliteClient } from './client'
-import { ElectrifyOptions } from '../electric'
 
 export abstract class BaseRegistry implements Registry {
   satellites: {
@@ -40,14 +39,14 @@ export abstract class BaseRegistry implements Registry {
     throw `Subclasses must implement startProcess`
   }
 
-  async ensureStarted(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socket: Socket, opts: ElectrifyOptions, authState?: AuthState): Promise<Satellite> {
+  async ensureStarted(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socket: Socket, config: ElectricConfig, authState?: AuthState): Promise<Satellite> {
     // If we're in the process of stopping the satellite process for this
     // dbName, then we wait for the process to be stopped and then we
     // call this function again to retry starting it.
     const stoppingPromises = this.stoppingPromises
     const stopping = stoppingPromises[dbName]
     if (stopping !== undefined) {
-      return stopping.then(() => this.ensureStarted(dbName, adapter, migrator, notifier, socket, opts, authState))
+      return stopping.then(() => this.ensureStarted(dbName, adapter, migrator, notifier, socket, config, authState))
     }
 
     // If we're in the process of starting the satellite process for this
@@ -72,7 +71,7 @@ export abstract class BaseRegistry implements Registry {
     }
 
     // Otherwise we need to fire it up!
-    const startingPromise = this.startProcess(dbName, adapter, migrator, notifier, socket, opts.config, authState)
+    const startingPromise = this.startProcess(dbName, adapter, migrator, notifier, socket, config, authState)
       .then((satellite) => {
         delete startingPromises[dbName]
 
@@ -165,12 +164,17 @@ export class GlobalRegistry extends BaseRegistry {
       throw Error(`invalid config: ${foundErrors}`);
     }    
 
+    // FIXME: what should these be?
+    const defaultAddress = `${config.app}-${config.env}.electric-sql.com`
+    const defaultPort = 5133
+
     const satelliteClientOpts = {
       ...satelliteClientDefaults,
-      appId: config.app,
-      address: config.replication.address,
-      port: config.replication.port,
-      token: "TODO"
+      app: config.app,
+      env: config.env,
+      token: config.token,
+      address: config.replication?.address || defaultAddress,
+      port: config.replication?.port || defaultPort,
     }
 
     const client = new SatelliteClient(socket, satelliteClientOpts)

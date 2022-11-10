@@ -30,7 +30,8 @@ const opts = Object.assign({}, satelliteDefaults, {
 })
 
 const clientOpts = Object.assign({}, satelliteClientDefaults, {
-    appId: "fake_id",
+    app: "fake_id",
+    env: "prod",
     token: "fake_token",
     address: '127.0.0.1',
     port: 5133,

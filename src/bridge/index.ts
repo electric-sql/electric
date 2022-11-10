@@ -176,13 +176,13 @@ export abstract class WorkerServer {
   SQL?: any
 
   worker: Worker
-  opts: ElectrifyOptions
+  opts?: ElectrifyOptions
 
   _dbs: {
     [key: DbName]: AnyWorkerThreadElectricDatabase
   }
 
-  constructor(worker: Worker, opts: ElectrifyOptions) {
+  constructor(worker: Worker, opts?: ElectrifyOptions) {
     this.worker = worker
     this.opts = opts
     this._dbs = {}

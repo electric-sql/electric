@@ -47,7 +47,7 @@ SQLite.enablePromise(true)
 
 // Open a database connection and electrify it.
 SQLite.openDatabase('example.db')
-  .then(db => electrify(db))
+  .then(db => electrify(db, { app: "my-app", env: "prod", token: "token", migrations: [] }))
   .then(db => { // Use as normal, e.g.:
     db.transaction(tx => tx.executeSql('SELECT 1'))
   })
@@ -78,7 +78,7 @@ const worker = new Worker(url, {type: "module"})
 // Electrify the SQL.js / absurd-sql machinery and then open
 // a persistent, named database.
 initElectricSqlJs(worker, {locateFile: file => `/${file}`})
-  .then(SQL => SQL.openDatabase('example.db'))
+  .then(SQL => SQL.openDatabase('example.db', { app: "my-app", env: "prod", token: "token", migrations: [] }))
   .then(db => db.exec('SELECT 1'))
 ```
 
@@ -112,7 +112,7 @@ export default const App = () => {
 
   useEffect(() => {
     SQLite.openDatabase('example.db')
-      .then(db => electrify(db))
+      .then(db => electrify(db, { app: "my-app", env: "prod", token: "token" }))
       .then(db => setDb(db))
   }, [])
 

@@ -1,4 +1,5 @@
 import { QualifiedTablename } from '../util/tablename'
+import { Migration } from '../migrators/index'
 
 export interface SatelliteOpts {
   // The database table where Satellite keeps its processing metadata.
@@ -34,7 +35,8 @@ export const satelliteDefaults: SatelliteOpts = {
 }
 
 export interface SatelliteClientOpts {
-  appId: string
+  app: string
+  env: string
   token: string
   port: number
   address: string
@@ -48,7 +50,8 @@ export const satelliteClientDefaults = {
 }
 
 export interface SatelliteClientOverrides {
-  appId: string
+  app: string
+  env: string
   token: string
   port: number
   address: string
@@ -59,7 +62,10 @@ export interface SatelliteClientOverrides {
 // Config spec
 export interface ElectricConfig {
   app: string
-  replication: {
+  env: string
+  token: string
+  migrations?: Migration[],
+  replication?: {
     address: string
     port: number
   }

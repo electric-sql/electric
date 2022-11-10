@@ -11,7 +11,7 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socket = {} as Socket
-const opts = { config: {app: "app", replication: {address: "", port: 0}}}
+const opts = {app: "app", env: "test", token: "token", replication: {address: "", port: 0}}
 const args = [dbName, adapter, migrator, notifier, socket, opts] as const
 
 test('starting a satellite process works', async t => {

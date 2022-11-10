@@ -7,6 +7,7 @@ import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { BundleMigrator } from '../../migrators/bundle'
 import { WorkerBridgeNotifier } from '../../notifiers/bridge'
 import { globalRegistry } from '../../satellite/registry'
+import { ElectricConfig } from '../../satellite/config'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
@@ -36,13 +37,13 @@ export class ElectricWorker extends WorkerServer {
     return true
   }
 
-  async open(dbName: DbName): Promise<boolean> {
+  async open(dbName: DbName, config: ElectricConfig): Promise<boolean> {
     if (this.SQL === undefined) {
       throw new RequestError(400, 'Must init before opening')
     }
 
     const opts = this.opts
-    const registry = opts.registry || globalRegistry
+    const registry = opts?.registry || globalRegistry
 
     if (!(dbName in this._dbs)) {
       const SQL = this.SQL
@@ -57,15 +58,15 @@ export class ElectricWorker extends WorkerServer {
       const db = new SQL.Database(path, {filename: true})
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
-      const adapter = opts.adapter || new DatabaseAdapter(db)
-      const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
-      const notifier = opts.notifier || new WorkerBridgeNotifier(dbName, this)
-      const socket = opts.socket || new WebSocketWeb()
+      const adapter = opts?.adapter || new DatabaseAdapter(db)
+      const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
+      const notifier = opts?.notifier || new WorkerBridgeNotifier(dbName, this)
+      const socket = opts?.socket || new WebSocketWeb()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, this.opts)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socket, config)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)
@@ -76,7 +77,7 @@ export class ElectricWorker extends WorkerServer {
 
   // Static entrypoint allows us to maintain a reference to the
   // instance. Passing opts allows the user to configure.
-  static start(worker: Worker, opts: ElectrifyOptions): void {
+  static start(worker: Worker, opts?: ElectrifyOptions): void {
     const ref = new ElectricWorker(worker, opts)
 
     refs.push(ref)

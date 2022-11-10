@@ -12,6 +12,7 @@ import {
 import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
+import { ElectricConfig } from '../../satellite/config'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
@@ -23,14 +24,14 @@ import 'fastestsmallesttextencoderdecoder'
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
 export type { Database, ElectrifiedDatabase }
 
-export const electrify = async (db: Database, opts: ElectrifyOptions): Promise<ElectrifiedDatabase> => {  
+export const electrify = async (db: Database, config: ElectricConfig, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db._name
 
-  const adapter = opts.adapter || new DatabaseAdapter(db)
-  const migrator = opts.migrator || new BundleMigrator(adapter, opts.migrations)
-  const notifier = opts.notifier || new EventNotifier(dbName)
-  const socket = opts.socket || new WebSocketReactNative()
-  const registry = opts.registry || globalRegistry
+  const adapter = opts?.adapter || new DatabaseAdapter(db)
+  const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
+  const notifier = opts?.notifier || new EventNotifier(dbName)
+  const socket = opts?.socket || new WebSocketReactNative()
+  const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
 
@@ -42,6 +43,6 @@ export const electrify = async (db: Database, opts: ElectrifyOptions): Promise<E
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, opts)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socket, registry, config)
   return electrified as unknown as ElectrifiedDatabase
 }

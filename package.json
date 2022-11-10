@@ -83,7 +83,8 @@
     "test": "ava",
     "pretest": "yarn build",
     "prepublishOnly": "yarn test",
-    "lint": "eslint src --fix"
+    "lint": "eslint src --fix",
+    "prepare": "npm run build"
   },
   "ava": {
     "timeout": "10m",

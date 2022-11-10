@@ -1,9 +1,10 @@
 import { initBackend } from '@aphro/absurd-sql/dist/indexeddb-main-thread'
 
 import { ServerMethod, WorkerClient } from '../../bridge/index'
-import { ElectricNamespace } from '../../electric/index'
+import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
 import { proxyOriginal } from '../../proxy/original'
+import { ElectricConfig } from '../../satellite/config'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
@@ -33,7 +34,7 @@ export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
 export interface SQL {
-  openDatabase(dbName: DbName): Promise<ElectrifiedDatabase>
+  openDatabase(dbName: DbName, config: ElectricConfig): Promise<ElectrifiedDatabase>
 }
 
 export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOpts = {}): Promise<SQL> => {
@@ -47,17 +48,16 @@ export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOp
   }
   await workerClient.request(init, locator.serialise())
 
-  // we remove opts type info here to implement target interface
-  const openDatabase = async (dbName: DbName, opts?: any): Promise<ElectrifiedDatabase> => {
+  const openDatabase = async (dbName: DbName, config: ElectricConfig, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
     const open: ServerMethod = {
       target: 'server',
       name: 'open'
     }
-    await workerClient.request(open, dbName)
+    await workerClient.request(open, dbName, config)
 
     const db = new MainThreadDatabaseProxy(dbName, workerClient)
-    const adapter = opts && opts.adapter || new DatabaseAdapter(db)
-    const notifier = opts && opts.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
+    const adapter = opts?.adapter || new DatabaseAdapter(db)
+    const notifier = opts?.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
     const namespace = new ElectricNamespace(adapter, notifier)
 
     return proxyOriginal(db, {electric: namespace}) as ElectrifiedDatabase

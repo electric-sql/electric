@@ -10,6 +10,7 @@ const initMethod: ServerMethod = {target: 'server', name: 'init'}
 const openMethod: ServerMethod = {target: 'server', name: 'open'}
 
 const getTestData: ServerMethod = {target: 'server', name: '_get_test_data'}
+const electricConfig = {app: "my-app", env: "my-env", token: "my-token"}
 
 const makeWorker = () => {
   return new Worker('./test/support/mock-worker.js', {type: 'module'})
@@ -19,7 +20,7 @@ const makeDb = async () => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   return new MainThreadDatabaseProxy('test.db', client)
 }
@@ -29,7 +30,7 @@ test('init and open works', async t => {
   const client = new WorkerClient(worker)
 
   t.true(await client.request(initMethod, '<locator pattern>'))
-  t.true(await client.request(openMethod, 'test.db'))
+  t.true(await client.request(openMethod, 'test.db', electricConfig))
 })
 
 test('the main thread proxy provides the expected methods', async t => {
@@ -56,7 +57,7 @@ test('can\'t open before you init', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
 
-  await t.throwsAsync(client.request(openMethod, 'test.db'), {
+  await t.throwsAsync(client.request(openMethod, 'test.db', electricConfig), {
     message: 'Must init before opening'
   })
 })
@@ -77,8 +78,8 @@ test('can open the same database twice', async t => {
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
 
-  await client.request(openMethod, 'test.db')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
+  await client.request(openMethod, 'test.db', electricConfig)
 
   t.assert(true)
 })
@@ -87,7 +88,7 @@ test('must open the right database', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('another.db', client)
   await t.throwsAsync(db.exec('select 1'), {
@@ -110,8 +111,8 @@ test('can query multiple databases', async t => {
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
 
-  await client.request(openMethod, 'foo.db')
-  await client.request(openMethod, 'bar.db')
+  await client.request(openMethod, 'foo.db', electricConfig)
+  await client.request(openMethod, 'bar.db', electricConfig)
 
   const fooDb = new MainThreadDatabaseProxy('foo.db', client)
   const barDb = new MainThreadDatabaseProxy('bar.db', client)
@@ -352,7 +353,7 @@ test('db.exec harmless sql does not notify', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('test.db', client)
   await db.exec('select 1')
@@ -367,7 +368,7 @@ test('db.exec dangerous sql does notify', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('test.db', client)
   await db.exec('insert foo into bar')
@@ -382,7 +383,7 @@ test('db.run harmless sql does not notify', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('test.db', client)
   await db.run('select 1')
@@ -397,7 +398,7 @@ test('db.run dangerous sql notifies', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('test.db', client)
   await db.run('insert foo into bar')
@@ -412,7 +413,7 @@ test('db.each notifies', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
 
   const db = new MainThreadDatabaseProxy('test.db', client)
 
@@ -431,7 +432,7 @@ test('db.iterateStatements doesn\'t notify on its own', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const statements = 'select 1; insert into 2; select 3; insert into 4'
@@ -458,7 +459,7 @@ test('statement run notifies when dangerous', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')
@@ -474,7 +475,7 @@ test('statement step notifies when dangerous', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')
@@ -490,7 +491,7 @@ test('statement step only notifies once', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')
@@ -507,7 +508,7 @@ test('statement bind and reset allows reuse with notify', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')
@@ -527,7 +528,7 @@ test('statement get notifies if called with params', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')
@@ -554,7 +555,7 @@ test('statement getAsObject notifies if called with params', async t => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
   await client.request(initMethod, '<locator pattern>')
-  await client.request(openMethod, 'test.db')
+  await client.request(openMethod, 'test.db', electricConfig)
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const stmt = await db.prepare('insert foo into bar')

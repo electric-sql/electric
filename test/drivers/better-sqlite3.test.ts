@@ -12,7 +12,7 @@ import { QualifiedTablename } from '../../src/util/tablename'
 test('electrify returns an equivalent database client', async t => {
   const original = new Database('test.db')
   const registry = new MockRegistry()
-  const db = await electrify(original, {registry: registry})
+  const db = await electrify(original, {}, {registry: registry})
 
   const originalKeys = Object.getOwnPropertyNames(original)
   const originalPrototype = Object.getPrototypeOf(original)
@@ -25,7 +25,7 @@ test('electrify returns an equivalent database client', async t => {
 test('electrify does not remove non-patched properties and methods', async t => {
   const original = new Database('test.db')
   const registry = new MockRegistry()
-  const db = await electrify(original, {registry: registry})
+  const db = await electrify(original, {}, {registry: registry})
 
   t.is(typeof db.pragma, 'function')
 })
@@ -34,7 +34,7 @@ test('the electrified database has `.electric.potentiallyChanged()`', async t =>
   const original = new Database('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -47,7 +47,7 @@ test('exec\'ing a dangerous statement calls potentiallyChanged', async t => {
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -60,7 +60,7 @@ test('exec\'ing a non dangerous statement doesn\'t call potentiallyChanged', asy
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -73,7 +73,7 @@ test('running a transaction function calls potentiallyChanged', async t => {
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -87,7 +87,7 @@ test('running a transaction sub function calls potentiallyChanged', async t => {
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   const a = db.transaction(() => {})
   const b = db.transaction(() => {})
@@ -109,7 +109,7 @@ test('electrify preserves chainability', async t => {
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -124,7 +124,7 @@ test('running a prepared statement outside of a transaction notifies', async t =
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -138,7 +138,7 @@ test('running a prepared statement *inside* of a transaction does *not* notify',
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
@@ -157,7 +157,7 @@ test('iterating a prepared statement works', async t => {
   const original = new MockDatabase('test.db')
   const notifier = new MockNotifier(original.name)
   const registry = new MockRegistry()
-  const db = await electrify(original, {notifier: notifier, registry: registry})
+  const db = await electrify(original, {}, {notifier: notifier, registry: registry})
 
   t.is(notifier.notifications.length, 0)
 
