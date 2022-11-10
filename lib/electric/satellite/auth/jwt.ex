@@ -4,12 +4,21 @@ defmodule Electric.Satellite.Auth.JWT do
   @behaviour Auth
 
   defmodule Token do
-    @iss Application.compile_env!(:electric, [Electric.Satellite.Auth, :issuer])
-
     @spec verify(binary, binary, binary) :: {:ok, %{binary => any}} | {:error, Keyword.t()}
-    def verify(global_cluster_id, token, shared_key) do
+    def verify(global_cluster_id, token, shared_key, opts \\ []) do
       with {:ok, key} <- signing_key(global_cluster_id, shared_key) do
-        JWT.verify(token, %{key: key, iss: @iss})
+        params = %{key: key}
+
+        params =
+          case Keyword.get(opts, :issuer) do
+            nil ->
+              params
+
+            issuer when is_binary(issuer) ->
+              Map.put(params, :iss, issuer)
+          end
+
+        JWT.verify(token, params)
       end
     end
 
@@ -36,6 +45,7 @@ defmodule Electric.Satellite.Auth.JWT do
     @spec create(binary, binary, binary, Keyword.t()) :: {:ok, binary} | no_return
     def create(global_cluster_id, user_id, shared_key, opts \\ []) do
       {:ok, key} = signing_key(global_cluster_id, shared_key)
+      issuer = Keyword.get(opts, :issuer)
 
       nonce =
         :crypto.strong_rand_bytes(16)
@@ -52,9 +62,15 @@ defmodule Electric.Satellite.Auth.JWT do
 
       token_opts = %{
         alg: "HS256",
-        exp: expiry,
-        iss: @iss
+        exp: expiry
       }
+
+      token_opts =
+        if issuer do
+          Map.put(token_opts, :iss, issuer)
+        else
+          token_opts
+        end
 
       claims = Map.merge(custom_claims, token_opts)
 
@@ -70,8 +86,9 @@ defmodule Electric.Satellite.Auth.JWT do
   def validate_token(token, config) do
     {:ok, global_cluster_id} = Keyword.fetch(config, :global_cluster_id)
     {:ok, key} = Keyword.fetch(config, :secret_key)
+    opts = Keyword.take(config, [:issuer])
 
-    with {:ok, claims} <- Token.verify(global_cluster_id, token, key),
+    with {:ok, claims} <- Token.verify(global_cluster_id, token, key, opts),
          {:claims,
           %{"global_cluster_id" => ^global_cluster_id, "user_id" => user_id, "type" => "access"}} <-
            {:claims, claims} do
@@ -92,6 +109,18 @@ defmodule Electric.Satellite.Auth.JWT do
   def generate_token(user_id, config, opts) do
     {:ok, global_cluster_id} = Keyword.fetch(config, :global_cluster_id)
     {:ok, key} = Keyword.fetch(config, :secret_key)
+
+    # allow the opts to override any configured issuer issuer is problematic as it must be
+    # identical between signer and verifier. not sure how that will play out in a multi-tenant
+    # auth system
+    opts =
+      case Keyword.get(config, :issuer) do
+        nil ->
+          opts
+
+        issuer when is_binary(issuer) ->
+          Keyword.put_new(opts, :issuer, issuer)
+      end
 
     Token.create(global_cluster_id, user_id, key, opts)
   end

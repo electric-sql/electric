@@ -63,6 +63,7 @@ defmodule Electric.Satellite.WsServerTest do
     auth_provider =
       {Electric.Satellite.Auth.JWT,
        global_cluster_id: global_cluster_id,
+       issuer: "electric-sql.com",
        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
 
     start_supervised(

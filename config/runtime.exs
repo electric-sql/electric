@@ -77,8 +77,15 @@ if config_env() == :prod do
   # key = :crypto.strong_rand_bytes(32) |> Base.encode64()
   auth_secret_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY") |> Base.decode64!()
 
+  # 🐉 DANGER: this "issuer" configuration *MUST* be the same
+  # as the configuration in the console, currently under [:electric, :site_domain]
+  # I'm hard-coding this in all envs ATM  for simplicity
+  # if these config values do not match, the jwt token verification *will fail*
+  # safe option is probably to just remove the `iss` field from the token
   config :electric, Electric.Satellite.Auth,
     provider:
       {Electric.Satellite.Auth.JWT,
-       secret_key: auth_secret_key, global_cluster_id: global_cluster_id}
+       issuer: "electric-sql.com",
+       secret_key: auth_secret_key,
+       global_cluster_id: global_cluster_id}
 end
