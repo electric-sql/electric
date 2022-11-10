@@ -9,6 +9,8 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :ok = Logger.add_translator({Electric.Utils, :translate})
 
+    auth_provider = Electric.Satellite.Auth.provider()
+
     children = [
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.OffsetStorage,
@@ -16,8 +18,10 @@ defmodule Electric.Application do
       Electric.VaxRepo,
       Electric.PostgresServer.child_spec(port: postgres_server_port()),
       Electric.Satellite.ClientManager,
-      Electric.Satellite.Auth.child_spec(),
-      Electric.Satellite.WsServer.child_spec([{:port, sqlite_server_port()}]),
+      Electric.Satellite.WsServer.child_spec(
+        port: sqlite_server_port(),
+        auth_provider: auth_provider
+      ),
       Electric.Replication.Connectors
     ]
 

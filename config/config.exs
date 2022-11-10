@@ -19,7 +19,10 @@ config :logger, :console,
     :pg_slot,
     :sq_client,
     :vx_consumer,
-    :vx_producer
+    :vx_producer,
+    :cluster_id,
+    :client_id,
+    :user_id
   ]
 
 config :logger,
@@ -32,6 +35,8 @@ config :electric, Electric.Replication.Postgres,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
 config :electric, Electric.StatusPlug, port: 5050
+
+config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

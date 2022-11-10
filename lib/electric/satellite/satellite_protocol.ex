@@ -99,6 +99,7 @@ defmodule Electric.Satellite.Protocol do
 
   defmodule State do
     defstruct auth_passed: false,
+              auth: nil,
               last_msg_time: nil,
               client: nil,
               client_id: nil,
@@ -106,10 +107,12 @@ defmodule Electric.Satellite.Protocol do
               out_rep: %OutRep{},
               ping_tref: nil,
               transport: nil,
-              socket: nil
+              socket: nil,
+              auth_provider: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
+            auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client: String.t(),
             client_id: String.t() | nil,
@@ -117,7 +120,8 @@ defmodule Electric.Satellite.Protocol do
             transport: module(),
             socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
-            out_rep: OutRep.t()
+            out_rep: OutRep.t(),
+            auth_provider: Electric.Satellite.Auth.provider()
           }
   end
 
@@ -128,21 +132,35 @@ defmodule Electric.Satellite.Protocol do
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:error, PB.sq_pb_msg()}
-  def process_message(msg, %State{} = state)
-      when not auth_passed?(state) do
+  def process_message(msg, %State{} = state) when not auth_passed?(state) do
     case msg do
-      %SatAuthReq{id: id, token: token}
-      when id !== "" and token !== "" ->
-        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(id)}")
+      %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
+        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
-        with :ok <- Electric.Satellite.Auth.validate_token(id, token) do
-          reg_name = Electric.Satellite.WsServer.reg_name(state.client)
-          Electric.reg(reg_name)
-          :ok = ClientManager.register_client(state.client, reg_name)
+        case Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
+          {:ok, auth} ->
+            Logger.metadata(client_id: client_id, user_id: auth.user_id)
 
-          {%SatAuthResp{id: "server_identity"}, %State{state | auth_passed: true, client_id: id}}
-        else
-          {:error, _} ->
+            Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
+
+            reg_name = Electric.Satellite.WsServer.reg_name(state.client)
+            Electric.reg(reg_name)
+
+            :ok = ClientManager.register_client(state.client, reg_name)
+
+            {%SatAuthResp{id: "server_identity"},
+             %State{state | auth: auth, auth_passed: true, client_id: client_id}}
+
+          {:error, :expired} ->
+            Logger.warn("authorization failed for client #{client_id}, expired token")
+
+            {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
+          {:error, reason} ->
+            Logger.error(
+              "authorization failed for client: #{client_id} with reason: #{inspect(reason)}"
+            )
+
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
         end
 

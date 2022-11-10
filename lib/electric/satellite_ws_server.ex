@@ -28,13 +28,21 @@ defmodule Electric.Satellite.WsServer do
   @spec start_link(port: pos_integer()) :: {:ok, pid()} | {:error, any()}
   def start_link(opts) do
     port = Keyword.fetch!(opts, :port)
+    auth_provider = Keyword.fetch!(opts, :auth_provider)
+
+    # cowboy requires a unique name. so allow for configuration for test servers
+    name = Keyword.get(opts, :name, :ws)
+
+    Logger.debug(
+      "Starting WS server #{inspect(name)} on port #{port} with auth provider: #{inspect(elem(auth_provider, 0))}"
+    )
 
     dispatch =
       :cowboy_router.compile([
-        {:_, [{"/ws", __MODULE__, []}]}
+        {:_, [{"/ws", __MODULE__, [auth_provider: auth_provider]}]}
       ])
 
-    :cowboy.start_clear(:ws, [{:port, port}], %{
+    :cowboy.start_clear(name, [port: port], %{
       :env => %{dispatch: dispatch},
       :idle_timeout => @inactivity_timeout
     })
@@ -44,14 +52,24 @@ defmodule Electric.Satellite.WsServer do
     Electric.name(__MODULE__, name)
   end
 
-  def init(req, _opts) do
+  def init(req, opts) do
     # FIXME: If we intend to use headers to do authentification
-    # we shoul do it here. For now we purely rely on protobuff auth
+    # we should do it here. For now we purely rely on protobuf auth
     # messages
     {ip, port} = :cowboy_req.peer(req)
     client = "#{:inet.ntoa(ip)}:#{port}"
+    auth_provider = Keyword.fetch!(opts, :auth_provider)
 
-    {:cowboy_websocket, req, %State{client: client, last_msg_time: :erlang.timestamp()}}
+    # Add the cluster id to the logger metadata to make filtering easier in the case of global log
+    # aggregation
+    Logger.metadata(cluster_id: Electric.global_cluster_id())
+
+    {:cowboy_websocket, req,
+     %State{
+       client: client,
+       last_msg_time: :erlang.timestamp(),
+       auth_provider: auth_provider
+     }}
   end
 
   def websocket_init(%State{client: client} = state) do

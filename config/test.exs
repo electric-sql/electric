@@ -26,3 +26,7 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_hostname: "localhost",
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
+
+config :electric, global_cluster_id: "electric-development-cluster-0000"
+
+config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}

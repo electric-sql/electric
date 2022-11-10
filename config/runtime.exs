@@ -68,4 +68,24 @@ if config_env() == :prod do
     vaxine_hostname: vaxine_hostname,
     vaxine_port: 8088,
     vaxine_connection_timeout: vaxine_connection_timeout
+
+  # set to the database.cluster_slug
+  global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
+
+  config :electric, Electric.Satellite, global_cluster_id: global_cluster_id
+
+  # key = :crypto.strong_rand_bytes(32) |> Base.encode64()
+  auth_secret_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY") |> Base.decode64!()
+
+  # 🐉 DANGER: this "issuer" configuration *MUST* be the same
+  # as the configuration in the console, currently under [:electric, :site_domain]
+  # I'm hard-coding this in all envs ATM  for simplicity
+  # if these config values do not match, the jwt token verification *will fail*
+  # safe option is probably to just remove the `iss` field from the token
+  config :electric, Electric.Satellite.Auth,
+    provider:
+      {Electric.Satellite.Auth.JWT,
+       issuer: "electric-sql.com",
+       secret_key: auth_secret_key,
+       global_cluster_id: global_cluster_id}
 end

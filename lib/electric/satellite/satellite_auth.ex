@@ -1,63 +1,48 @@
 defmodule Electric.Satellite.Auth do
   @moduledoc """
-  Module for authorization for Satellite clients
+  Module for authorization for Satellite clients.
+
+  This provides a simple behaviour that allows for configuration of the authentication
+  requirements.
   """
+
   require Logger
 
-  def child_spec do
-    {Finch, name: __MODULE__, pools: %{:default => [size: 20]}}
+  @enforce_keys [:user_id]
+
+  defstruct [:user_id]
+
+  @type t() :: %__MODULE__{
+          user_id: binary
+        }
+
+  @type provider() :: {module, Access.t()}
+  @type validate_resp() :: {:ok, t()} | {:error, :expired} | {:error, reason :: binary}
+
+  @doc "Validates the given token for the cluster given by `global_cluster_id` using the configuration provided"
+  @callback validate_token(token :: binary, config :: Access.t()) :: validate_resp()
+
+  @doc "Creates a token for the given user id. Only really for testing purposes"
+  @callback generate_token(user_id :: binary, config :: Access.t(), opts :: Keyword.t()) ::
+              {:ok, binary} | {:error, binary()}
+
+  @spec validate_token(binary, provider) :: validate_resp()
+  def validate_token(token, {module, config} = _provider) do
+    module.validate_token(token, config)
   end
 
-  @spec validate_token(String.t(), String.t()) ::
-          :ok | {:error, :auth_not_configured | term()}
-  def validate_token(id, token) do
-    auth_opts = Application.get_env(:electric, __MODULE__, nil)
-
-    case validate_token_int(id, token, auth_opts) do
-      :ok ->
-        :ok
-
-      {:error, :wrong_auth} = error ->
-        error
-
-      {:error, reason} = error ->
-        Logger.error("authorization failed for #{id} with reason: #{inspect(reason)}")
-        error
-    end
+  @spec generate_token(binary, provider) :: {:ok, binary} | {:error, binary}
+  def generate_token(user_id, {module, config} = _provider, opts \\ []) do
+    module.generate_token(user_id, config, opts)
   end
 
-  defp validate_token_int(id, _token, nil) do
-    Logger.emergency("authorization disabled, accept client with id: #{id}")
-    :ok
-  end
-
-  defp validate_token_int(id, token, auth_opts) do
-    auth_url = Keyword.get(auth_opts, :auth_url)
-    cluster_id = Keyword.get(auth_opts, :cluster_id)
-
-    req =
-      Finch.build(
-        :post,
-        auth_url,
-        [{"Content-Type", "application/json"}],
-        "{\"token\": \"#{token}\", \"cluster_id\": \"#{cluster_id}\" }"
-      )
-
-    case Finch.request(req, __MODULE__) do
-      {:ok, %Finch.Response{status: 200}} ->
-        Logger.info("authorization passed #{id}")
-        :ok
-
-      {:ok, %Finch.Response{status: 401}} ->
-        Logger.warn("authorization failed #{id}")
-        {:error, :wrong_auth}
-
-      {:ok, r} ->
-        Logger.emergency("validate: #{inspect(r)}")
-        {:error, :wrong_reponse}
-
-      {:error, _} ->
-        {:error, :auth_failed}
-    end
+  @doc """
+  Retreive the auth provider configuration
+  """
+  @spec provider() :: provider() | no_return
+  def provider do
+    {:ok, config} = Application.fetch_env(:electric, Electric.Satellite.Auth) |> IO.inspect()
+    {:ok, {_module, _params} = provider} = Access.fetch(config, :provider)
+    provider
   end
 end
