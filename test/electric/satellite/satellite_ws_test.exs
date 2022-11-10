@@ -49,21 +49,6 @@ defmodule Electric.Satellite.WsServerTest do
   import Mock
 
   setup_all _ do
-    IO.puts(
-      Enum.join(
-        [
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================",
-          ">>>>>>> setup_all ================================================================================"
-        ],
-        "\n"
-      )
-    )
-
     columns = [{"id", :uuid}, {"content", :varchar}]
 
     Electric.Test.SchemaRegistryHelper.initialize_registry(
@@ -82,25 +67,11 @@ defmodule Electric.Satellite.WsServerTest do
        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
 
     start_supervised(
-      {Electric.Satellite.WsServer, name: :ws_test, port: port, auth_provider: auth_provider}
+      {Electric.Satellite.WsServer, name: :ws_test, port: port, auth_provider: auth_provider},
+      restart: :temporary
     )
 
     on_exit(fn -> SchemaRegistry.clear_replicated_tables(@test_publication) end)
-
-    IO.puts(
-      Enum.join(
-        [
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================",
-          "<<<<<<< setup_all ================================================================================"
-        ],
-        "\n"
-      )
-    )
 
     {:ok, auth_provider: auth_provider, port: port, global_cluster_id: global_cluster_id}
   end
