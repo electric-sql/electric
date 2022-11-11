@@ -72,7 +72,8 @@ if config_env() == :prod do
   # set to the database.cluster_slug
   global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
 
-  config :electric, Electric.Satellite, global_cluster_id: global_cluster_id
+  config :electric,
+    global_cluster_id: global_cluster_id
 
   # key = :crypto.strong_rand_bytes(32) |> Base.encode64()
   auth_secret_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY") |> Base.decode64!()
@@ -86,6 +87,6 @@ if config_env() == :prod do
     provider:
       {Electric.Satellite.Auth.JWT,
        issuer: "electric-sql.com",
-       secret_key: auth_secret_key,
+       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
        global_cluster_id: global_cluster_id}
 end

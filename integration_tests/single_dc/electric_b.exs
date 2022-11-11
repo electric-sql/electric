@@ -40,3 +40,13 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_connection_timeout: 5000
 
 config :logger, backends: [:console], level: :debug
+
+config :electric, Electric.Satellite,
+  global_cluster_id: "fake-global-id-for-tests"
+
+config :electric, Electric.Satellite.Auth,
+    provider:
+    {Electric.Satellite.Auth.JWT,
+      issuer: "dev.electric-sql.com",
+      secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
+      global_cluster_id: "fake-global-id-for-tests"}
