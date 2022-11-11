@@ -1,3 +1,6 @@
+![Erlang CI](https://github.com/electric-sql/vaxine/workflows/CI/badge.svg)
+![Status - Alpha](https://img.shields.io/badge/status-alpha-red)
+
 <a href="https://electric-sql.com">
   <picture>
     <source media="(prefers-color-scheme: dark)"
