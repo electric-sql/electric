@@ -66,12 +66,17 @@ defmodule Electric.Satellite.WsServerTest do
        issuer: "electric-sql.com",
        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
 
-    start_supervised(
-      {Electric.Satellite.WsServer, name: :ws_test, port: port, auth_provider: auth_provider},
-      restart: :temporary
-    )
+    sup_pid =
+      Electric.Satellite.WsServer.start_link(
+        name: :ws_test,
+        port: port,
+        auth_provider: auth_provider
+      )
 
-    on_exit(fn -> SchemaRegistry.clear_replicated_tables(@test_publication) end)
+    on_exit(fn ->
+      SchemaRegistry.clear_replicated_tables(@test_publication)
+      :cowboy.stop_listener(:ws_test)
+    end)
 
     {:ok, auth_provider: auth_provider, port: port, global_cluster_id: global_cluster_id}
   end

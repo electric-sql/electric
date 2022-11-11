@@ -43,9 +43,13 @@
 [shell ws1]
     [invoke log "Start WS client and start consuming data"]
     [invoke start_elixir_test]
+    !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
+                  secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="), \
+                  global_cluster_id: "fake-global-id-for-tests"}
+    ?$eprompt
     !Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ \
-            {:auth, %{user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
+            {:auth, %{auth_provider: provider, user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
             {:id, "ws1"}, \
             {:sub, "0"}, \
             {:auto_in_sub, true}, \
