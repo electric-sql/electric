@@ -32,6 +32,7 @@ defmodule Electric.Satellite.ClientManager do
     GenServer.call(server, {:register, client_name, reg_name})
   end
 
+  @spec get_clients(GenServer.server()) :: {:ok, [{String.t(), pid()}]}
   def get_clients(server \\ __MODULE__) do
     GenServer.call(server, {:get_clients})
   end
@@ -52,22 +53,42 @@ defmodule Electric.Satellite.ClientManager do
   end
 
   def handle_call({:register, client_name, reg_name}, {client_pid, _}, %State{} = state) do
-    with {:ok, sup_pid} <-
-           Connectors.start_connector(
-             SatelliteConnector,
-             %{name: client_name, producer: reg_name}
-           ) do
-      client_ref = Process.monitor(client_pid)
-      resource_ref = Process.monitor(sup_pid)
+    case Map.get(state.reverse, client_name) do
+      nil ->
+        {:ok, sup_pid} =
+          Connectors.start_connector(
+            SatelliteConnector,
+            %{name: client_name, producer: reg_name}
+          )
 
-      clients = Map.put_new(state.clients, client_pid, client_ref)
-      resources = Map.put_new(state.resources, sup_pid, resource_ref)
-      reverse = Map.put_new(state.reverse, client_name, {client_pid, sup_pid})
+        client_ref = Process.monitor(client_pid)
+        resource_ref = Process.monitor(sup_pid)
 
-      {:reply, :ok, %State{state | clients: clients, resources: resources, reverse: reverse}}
-    else
-      error ->
-        {:reply, {:error, error}, state}
+        clients = Map.put_new(state.clients, client_pid, {client_ref, client_name})
+        resources = Map.put_new(state.resources, sup_pid, {resource_ref, client_name})
+        reverse = Map.put_new(state.reverse, client_name, {client_pid, sup_pid})
+        {:reply, :ok, %State{state | clients: clients, resources: resources, reverse: reverse}}
+
+      {old_pid, sup_pid} ->
+        Logger.info("overtook supervisor")
+
+        case Electric.lookup_pid(reg_name) do
+          ^client_pid ->
+            client_ref = Process.monitor(client_pid)
+
+            clients =
+              state.clients
+              |> Map.delete(old_pid)
+              |> Map.put_new(client_pid, {client_ref, client_name})
+
+            reverse = Map.put(state.reverse, client_name, {client_pid, sup_pid})
+
+            {:reply, :ok, %State{state | clients: clients, reverse: reverse}}
+
+          _ ->
+            # Should never happen except when process crashed right after calling manager
+            {:reply, {:error, :wrong_registration}, state}
+        end
     end
   end
 
@@ -77,19 +98,21 @@ defmodule Electric.Satellite.ClientManager do
   end
 
   @impl GenServer
-  def handle_cast(_, state) do
+  def handle_cast(msg, state) do
+    Logger.info("Unhandled cast: #{inspect(msg)}")
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:DOWN, _ref, :process, client_pid, _}, state)
-      when is_map_key(client_pid, state.clients) do
+      when is_map_key(state.clients, client_pid) do
     # client connection have terminated, we can do something smart here if we
     # expect client to be reconnecting soon
 
-    {{client_name, _}, clients} = Map.pop!(state.clients, client_pid)
-
+    {{_client_ref, client_name}, clients} = Map.pop!(state.clients, client_pid)
     {{^client_pid, sup_pid}, reverse} = Map.pop!(state.reverse, client_name)
+
+    Logger.info("cleaning resources for #{inspect(client_name)} #{inspect(client_pid)}")
 
     resources =
       case Map.pop(state.resources, sup_pid) do
@@ -97,7 +120,7 @@ defmodule Electric.Satellite.ClientManager do
         {nil, map} ->
           map
 
-        {{_, sup_ref}, map} ->
+        {{sup_ref, _}, map} ->
           _ = Connectors.stop_connector(sup_pid)
           Process.demonitor(sup_ref, [:flush])
           map
@@ -107,31 +130,32 @@ defmodule Electric.Satellite.ClientManager do
   end
 
   def handle_info({:DOWN, sup_ref, :process, sup_pid, _}, state)
-      when is_map_key(sup_pid, state.resources) do
+      when is_map_key(state.resources, sup_pid) do
     # supervisor with client resources have terminated, if client is still alive
     # - we should restart supervisor, or terminate the client if it's
     # missbehaving
-    {{client_name, ^sup_ref}, resources} = Map.pop!(state.resources, sup_pid)
+    {{^sup_ref, client_name}, resources} = Map.pop!(state.resources, sup_pid)
+    {{client_pid, ^sup_pid}, reverse} = Map.pop(state.reverse, client_name)
 
-    with {{client_pid, _}, reverse} when is_pid(client_pid) <-
-           Map.pop(state.reverse, client_name),
-         {:ok, sup_pid} <- Connectors.start_connector(SatelliteConnector, %{name: client_name}) do
-      resource_ref = Process.monitor(sup_pid)
-      resources = Map.put(resources, sup_pid, resource_ref)
-      reverse = Map.put(reverse, client_name, {client_pid, sup_pid})
+    case Connectors.start_connector(
+           SatelliteConnector,
+           %{name: client_name, producer: Electric.Satellite.WsServer.reg_name(client_name)}
+         ) do
+      {:ok, sup_pid1} ->
+        resource_ref = Process.monitor(sup_pid)
+        resources = Map.put(resources, sup_pid, {resource_ref, client_name})
+        reverse = Map.put(reverse, client_name, {client_pid, sup_pid1})
 
-      {:noreply, %State{state | resources: resources, reverse: reverse}}
-    else
-      {{nil, _}, reverse} ->
-        # client has been disconnected
-        {:noreply, %State{state | reverse: reverse, resources: resources}}
+        {:noreply, %State{state | resources: resources, reverse: reverse}}
 
       error ->
+        Logger.error("failed to start satellite connector, do not recover from it")
         {:stop, {:shutdown, error}, state}
     end
   end
 
-  def handle_info(_, state) do
+  def handle_info(msg, state) do
+    Logger.info("Unhandled msg: #{inspect(msg)} #{inspect(state)}")
     {:noreply, state}
   end
 end

@@ -66,7 +66,7 @@ defmodule Electric.Satellite.WsServerTest do
        issuer: "electric-sql.com",
        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
 
-    sup_pid =
+    _sup_pid =
       Electric.Satellite.WsServer.start_link(
         name: :ws_test,
         port: port,
@@ -101,105 +101,107 @@ defmodule Electric.Satellite.WsServerTest do
     on_exit(fn -> clean_connections() end)
 
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
+    client_id = "device-id-0000"
 
     {:ok, token} = Electric.Satellite.Auth.generate_token(user_id, cxt.auth_provider)
 
-    {:ok, user_id: user_id, token: token}
+    {:ok, user_id: user_id, client_id: client_id, token: token}
   end
 
-  def connect_client(cxt, opts \\ []) do
-    params = Keyword.merge([port: cxt.port], opts)
-    MockClient.connect_and_spawn(params)
+  describe "resource related check" do
+    test "Check that resources are create and removed accordingly", cxt do
+      with_connect(
+        [auth: cxt, port: cxt.port],
+        fn _conn ->
+          [{Electric.Replication.SatelliteConnector, _pid}] = connectors()
+        end
+      )
+
+      drain_active_resources(connectors())
+      assert [] = connectors()
+    end
   end
 
   describe "decode/encode" do
-    test "sanity check", cxt do
-      connect_client(cxt)
-      assert true == MockClient.is_alive()
-      assert :ok = MockClient.disconnect()
+    test "sanity check" do
+      with_connect([], fn conn ->
+        assert true == MockClient.is_alive(conn)
+      end)
     end
 
     test "Server will respond to auth request", cxt do
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
-
-      assert_receive {MockClient, %SatAuthResp{id: server_id}}, @default_wait
-      assert server_id !== ""
-
-      assert :ok = MockClient.disconnect()
+      with_connect(
+        [port: cxt.port],
+        fn conn ->
+          MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+          server_id = cxt.global_cluster_id
+          assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
+        end
+      )
     end
 
-    test "Server will handle bad requests", cxt do
-      connect_client(cxt)
-      MockClient.send_bin_data(<<"rubbish">>)
-
-      assert_receive {MockClient, %SatErrorResp{}}, @default_wait
-
-      assert :ok = MockClient.disconnect()
+    test "Server will handle bad requests", _cxt do
+      with_connect([], fn conn ->
+        MockClient.send_bin_data(conn, <<"rubbish">>)
+        assert_receive {^conn, %SatErrorResp{}}, @default_wait
+      end)
     end
 
     test "Server will handle bad requests after auth", cxt do
-      connect_client(cxt, auth: cxt)
-      MockClient.send_bin_data(<<"rubbish">>)
-
-      assert_receive {MockClient, %SatErrorResp{}}, @default_wait
-
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port, auth: cxt], fn conn ->
+        MockClient.send_bin_data(conn, <<"rubbish">>)
+        assert_receive {^conn, %SatErrorResp{}}, @default_wait
+      end)
     end
 
     test "Server will respond with error on attempt to skip auth", cxt do
-      connect_client(cxt)
-      MockClient.send_data(%SatPingReq{})
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      end)
 
-      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+        server_id = cxt.global_cluster_id
+        assert_receive {_, %SatAuthResp{id: ^server_id}}, @default_wait
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
-      assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
-      assert server_id !== ""
-
-      MockClient.send_data(%SatPingReq{})
-      assert_receive {_, %SatPingResp{lsn: ""}}, @default_wait
-
-      assert :ok = MockClient.disconnect()
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {_, %SatPingResp{lsn: ""}}, @default_wait
+      end)
     end
 
     test "Auth is handled", cxt do
-      connect_client(cxt)
-      MockClient.send_data(%SatPingReq{})
+      server_id = cxt.global_cluster_id
 
-      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      end)
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
-      assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
-      assert server_id !== ""
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+        assert_receive {_, %SatAuthResp{id: ^server_id}}, @default_wait
+      end)
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: "invalid_token"})
-      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
-      assert server_id !== ""
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: "invalid_token"})
+        assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      end)
 
       past = System.os_time(:second) - 24 * 3600
 
       assert {:ok, expired_token} =
                Electric.Satellite.Auth.generate_token(cxt.user_id, cxt.auth_provider, expiry: past)
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: expired_token})
-      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
-      assert server_id !== ""
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: expired_token})
+        assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      end)
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: cxt.global_cluster_id, token: cxt.token})
-      assert_receive {_, %SatAuthResp{id: server_id}}, @default_wait
-      assert server_id !== ""
-      assert :ok = MockClient.disconnect()
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+        assert_receive {_, %SatAuthResp{id: ^server_id}}, @default_wait
+      end)
     end
 
     test "cluster/app id mismatch is detected", cxt do
@@ -209,76 +211,84 @@ defmodule Electric.Satellite.WsServerTest do
       assert {:ok, invalid_token} =
                Electric.Satellite.Auth.JWT.Token.create("some-other-cluster-id", cxt.user_id, key)
 
-      connect_client(cxt)
-      MockClient.send_data(%SatAuthReq{id: "client_id", token: invalid_token})
-      assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      with_connect([port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatAuthReq{id: "client_id", token: invalid_token})
+        assert_receive {_, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+      end)
+    end
+
+    test "Server will forbid two connections that use same id", cxt do
+      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn _conn ->
+        {:ok, pid} = MockClient.connect_and_spawn(auto_register: false, port: cxt.port)
+        MockClient.send_data(pid, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+        assert_receive {^pid, %SatErrorResp{}}, @default_wait
+        :ok = MockClient.disconnect(pid)
+      end)
     end
   end
 
   describe "Outgoing replication (Vaxine -> Satellite)" do
     test "common replication", cxt do
-      connect_client(cxt, auth: cxt)
-      MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
+      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
 
-      assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
+        assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-      [{client_name, _client_pid}] = active_clients()
-      mocked_producer = LogProducer.get_name(client_name)
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = LogProducer.get_name(client_name)
 
-      :ok =
-        DownstreamProducerMock.produce(
-          mocked_producer,
-          simple_transes(10)
-        )
+        :ok =
+          DownstreamProducerMock.produce(
+            mocked_producer,
+            simple_transes(10)
+          )
 
-      Enum.map(0..10, fn n ->
-        %SatOpLog{ops: ops} = receive_trans()
-        [%SatTransOp{op: begin} | _] = ops
-        {:begin, %SatOpBegin{lsn: lsn}} = begin
-        assert :erlang.term_to_binary(n) == lsn
+        Enum.map(0..10, fn n ->
+          %SatOpLog{ops: ops} = receive_trans()
+          [%SatTransOp{op: begin} | _] = ops
+          {:begin, %SatOpBegin{lsn: lsn}} = begin
+          assert :erlang.term_to_binary(n) == lsn
+        end)
       end)
-
-      assert :ok = MockClient.disconnect()
     end
 
     test "Start/stop replication", cxt do
-      limit = 100
+      limit = 10
 
-      connect_client(cxt, auth: cxt)
-      MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
+      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
 
-      assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
+        assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-      [{client_name, _client_pid}] = active_clients()
-      mocked_producer = LogProducer.get_name(client_name)
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = LogProducer.get_name(client_name)
 
-      :ok =
-        DownstreamProducerMock.produce(
-          mocked_producer,
-          simple_transes(limit)
-        )
+        :ok =
+          DownstreamProducerMock.produce(
+            mocked_producer,
+            simple_transes(limit)
+          )
 
-      MockClient.send_data(%SatInStopReplicationReq{})
-      last_received_lsn = consume_till_stop(nil)
-      assert last_received_lsn !== Kernel.inspect(limit)
+        MockClient.send_data(conn, %SatInStopReplicationReq{})
+        last_received_lsn = consume_till_stop(nil)
+        assert last_received_lsn !== Kernel.inspect(limit)
 
-      MockClient.send_data(%SatInStartReplicationReq{lsn: last_received_lsn})
-      num_lsn = :erlang.binary_to_term(last_received_lsn)
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: last_received_lsn})
+        num_lsn = :erlang.binary_to_term(last_received_lsn)
 
-      :ok =
-        DownstreamProducerMock.produce(
-          mocked_producer,
-          simple_transes(limit, num_lsn)
-        )
+        :ok =
+          DownstreamProducerMock.produce(
+            mocked_producer,
+            simple_transes(limit, num_lsn)
+          )
 
-      Enum.map(num_lsn..limit, fn n ->
-        %SatOpLog{ops: ops} = receive_trans()
-        [%SatTransOp{op: begin} | _] = ops
-        {:begin, %SatOpBegin{lsn: lsn}} = begin
-        assert :erlang.term_to_binary(n) == lsn
+        Enum.map(num_lsn..limit, fn n ->
+          %SatOpLog{ops: ops} = receive_trans()
+          [%SatTransOp{op: begin} | _] = ops
+          {:begin, %SatOpBegin{lsn: lsn}} = begin
+          assert :erlang.term_to_binary(n) == lsn
+        end)
       end)
-
-      assert :ok = MockClient.disconnect()
     end
   end
 
@@ -288,80 +298,83 @@ defmodule Electric.Satellite.WsServerTest do
 
       with_mock Vaxine,
         transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
-        connect_client(cxt, auth: cxt)
-        MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
-        assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
+        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {_, %SatInStartReplicationReq{lsn: ""}}
-        MockClient.send_data(%SatInStartReplicationResp{})
+          assert_receive {^conn, %SatInStartReplicationReq{lsn: ""}}, @default_wait
+          MockClient.send_data(conn, %SatInStartReplicationResp{})
 
-        columns = [
-          %SatRelationColumn{name: "satellite-column-1", type: "type1"},
-          %SatRelationColumn{name: "satellite-column-2", type: "type2"}
-        ]
+          columns = [
+            %SatRelationColumn{name: "satellite-column-1", type: "type1"},
+            %SatRelationColumn{name: "satellite-column-2", type: "type2"}
+          ]
 
-        relation = %SatRelation{
-          schema_name: @test_schema,
-          table_type: :TABLE,
-          table_name: @test_table,
-          relation_id: @test_oid,
-          columns: columns
-        }
+          relation = %SatRelation{
+            schema_name: @test_schema,
+            table_type: :TABLE,
+            table_name: @test_table,
+            relation_id: @test_oid,
+            columns: columns
+          }
 
-        MockClient.send_data(relation)
+          MockClient.send_data(conn, relation)
 
-        dt = DateTime.truncate(DateTime.utc_now(), :millisecond)
-        ct = DateTime.to_unix(dt, :millisecond)
-        lsn = "some_long_internal_lsn"
+          dt = DateTime.truncate(DateTime.utc_now(), :millisecond)
+          ct = DateTime.to_unix(dt, :millisecond)
+          lsn = "some_long_internal_lsn"
 
-        op_log1 =
-          build_op_log([
-            %SatOpBegin{commit_timestamp: ct, lsn: lsn},
-            %SatOpInsert{relation_id: @test_oid, row_data: [<<"a">>, <<"b">>]}
-          ])
+          op_log1 =
+            build_op_log([
+              %SatOpBegin{commit_timestamp: ct, lsn: lsn},
+              %SatOpInsert{relation_id: @test_oid, row_data: [<<"a">>, <<"b">>]}
+            ])
 
-        op_log2 =
-          build_op_log([
-            %SatOpInsert{relation_id: @test_oid, row_data: [<<"c">>, <<"d">>]},
-            %SatOpCommit{}
-          ])
+          op_log2 =
+            build_op_log([
+              %SatOpInsert{relation_id: @test_oid, row_data: [<<"c">>, <<"d">>]},
+              %SatOpCommit{}
+            ])
 
-        MockClient.send_data(op_log1)
-        MockClient.send_data(op_log2)
+          MockClient.send_data(conn, op_log1)
+          MockClient.send_data(conn, op_log2)
 
-        {tx, _pub, _origin} =
-          receive do
-            {%Transaction{} = tx, pub, origin} ->
-              {tx, pub, origin}
-          after
-            @default_wait ->
-              flunk("timeout")
-          end
+          {tx, _pub, _origin} =
+            receive do
+              {%Transaction{} = tx, pub, origin} ->
+                {tx, pub, origin}
+            after
+              @default_wait ->
+                flunk("timeout")
+            end
 
-        assert tx.lsn == lsn
-        assert tx.commit_timestamp == dt
+          assert tx.lsn == lsn
+          assert tx.commit_timestamp == dt
 
-        assert tx.changes == [
-                 %NewRecord{
-                   relation: {@test_schema, @test_table},
-                   record: %{"satellite-column-1" => "a", "satellite-column-2" => "b"}
-                 },
-                 %NewRecord{
-                   relation: {@test_schema, @test_table},
-                   record: %{"satellite-column-1" => "c", "satellite-column-2" => "d"}
-                 }
-               ]
+          assert tx.changes == [
+                   %NewRecord{
+                     relation: {@test_schema, @test_table},
+                     record: %{"satellite-column-1" => "a", "satellite-column-2" => "b"}
+                   },
+                   %NewRecord{
+                     relation: {@test_schema, @test_table},
+                     record: %{"satellite-column-1" => "c", "satellite-column-2" => "d"}
+                   }
+                 ]
 
-        assert tx.origin !== ""
-        assert_receive {_, %SatPingResp{lsn: ^lsn}}, @default_wait
+          assert tx.origin !== ""
+          assert_receive {^conn, %SatPingResp{lsn: ^lsn}}, @default_wait
 
-        # After restart we still get same lsn
-        assert :ok = MockClient.disconnect()
+          # After restart we still get same lsn
+        end)
 
-        connect_client(cxt, auth: cxt)
-        MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
+        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+          lsn = "some_long_internal_lsn"
 
-        assert_receive {_, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
+          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+          assert_receive {^conn, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
+        end)
       end
     end
 
@@ -370,44 +383,77 @@ defmodule Electric.Satellite.WsServerTest do
 
       with_mock Vaxine,
         transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
-        connect_client(cxt, auth: cxt)
-        MockClient.send_data(%SatInStartReplicationReq{lsn: "eof"})
-        assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
+        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          assert_receive {_, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {_, %SatInStartReplicationReq{}}
-        MockClient.send_data(%SatInStartReplicationResp{})
+          assert_receive {_, %SatInStartReplicationReq{}}, @default_wait
+          MockClient.send_data(conn, %SatInStartReplicationResp{})
 
-        [{client_name, _client_pid}] = active_clients()
-        {:via, :gproc, mocked_consumer} = LogConsumer.get_name(client_name)
-        pid = :gproc.whereis_name(mocked_consumer)
-        Process.monitor(pid)
-        Process.exit(pid, :terminate)
-        assert_receive {:DOWN, _, :process, ^pid, _}
+          [{client_name, _client_pid}] = active_clients()
+          {:via, :gproc, mocked_consumer} = LogConsumer.get_name(client_name)
+          pid = :gproc.whereis_name(mocked_consumer)
+          Process.monitor(pid)
+          Process.exit(pid, :terminate)
+          assert_receive {:DOWN, _, :process, ^pid, _}
 
-        assert_receive {_, %SatInStopReplicationReq{}}
-        assert_receive {_, %SatInStartReplicationReq{}}
+          assert_receive {_, %SatInStopReplicationReq{}}
+          assert_receive {_, %SatInStartReplicationReq{}}
+        end)
       end
     end
   end
 
   # -------------------------------------------------------------------------------
 
+  defp with_connect(opts, fun) do
+    case MockClient.connect_and_spawn(opts) do
+      {:ok, pid} when is_pid(pid) ->
+        try do
+          fun.(pid)
+        after
+          assert :ok = MockClient.disconnect(pid)
+        end
+
+      error ->
+        error
+    end
+  end
+
   def clean_connections() do
     MockClient.disconnect()
 
-    case active_clients() do
-      [{_client_name, client_pid}] ->
-        ref = Process.monitor(client_pid)
+    :ok = drain_pids(active_clients())
+    :ok = drain_active_resources(connectors())
+  end
 
-        receive do
-          {:DOWN, ^ref, :process, ^client_pid, _} -> :ok
-        after
-          5000 ->
-            flunk("tcp client process didn't termivate")
-        end
+  defp connectors() do
+    for {mod, pid} <- Electric.Replication.Connectors.status(:raw),
+        mod !== Electric.Replication.PostgresConnectorSup,
+        do: {mod, pid}
+  end
 
-      [] ->
-        :ok
+  defp drain_active_resources([]) do
+    :ok
+  end
+
+  defp drain_active_resources([{Electric.Replication.SatelliteConnector, _} | _] = list) do
+    drain_pids(list)
+  end
+
+  defp drain_pids([]) do
+    :ok
+  end
+
+  defp drain_pids([{_client_name, client_pid} | list]) do
+    ref = Process.monitor(client_pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^client_pid, _} ->
+        drain_pids(list)
+    after
+      1000 ->
+        flunk("tcp client process didn't termivate")
     end
   end
 

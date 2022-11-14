@@ -20,9 +20,18 @@ defmodule Electric.Replication.Connectors do
     DynamicSupervisor.terminate_child(__MODULE__, pid)
   end
 
-  def status() do
+  def status(opt \\ :pretty) do
+    map_fun =
+      case opt do
+        :pretty ->
+          fn {_, pid, _, [module]} -> {module.name(pid), module.status(pid)} end
+
+        :raw ->
+          fn {_, pid, _, [module]} -> {module, pid} end
+      end
+
     __MODULE__
     |> DynamicSupervisor.which_children()
-    |> Enum.map(fn {_, pid, _, [module]} -> {module.name(pid), module.status(pid)} end)
+    |> Enum.map(map_fun)
   end
 end

@@ -73,14 +73,34 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
     {:noreply, [], state}
   end
 
+  @impl GenStage
+  def handle_cancel({:down, _}, _from, %State{producer: producer} = state) do
+    Logger.warn("producer is down: #{inspect(producer)}")
+    :gproc.nb_wait(producer)
+    {:noreply, [], state}
+  end
+
+  def handle_cancel(reason, _, state) do
+    Logger.warn("subscription was canceled #{inspect(reason)}")
+    {:noreply, [], state}
+  end
+
   @impl true
   def handle_events(events, _, state) do
-    state =
-      Enum.reduce(events, state, fn event, state1 ->
-        handle_event(event, state1)
-      end)
+    try do
+      state1 =
+        Enum.reduce(events, state, fn event, state1 ->
+          case handle_event(event, state1) do
+            {:noreply, [], state1} -> state1
+            {:stop, error, _state1} -> raise(error)
+          end
+        end)
 
-    {:noreply, [], state}
+      {:noreply, [], state1}
+    rescue
+      error ->
+        {:stop, error, state}
+    end
   end
 
   defp handle_event(%Transaction{changes: []} = tx, state) do

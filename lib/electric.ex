@@ -10,6 +10,29 @@ defmodule Electric do
     :gproc.reg(name)
   end
 
+  def safe_reg({:via, :gproc, name}, timeout) do
+    try do
+      :gproc.reg(name)
+    rescue
+      _ ->
+        case timeout do
+          0 ->
+            {:error, :already_registered}
+
+          _ ->
+            ref = :gproc.monitor(name)
+
+            receive do
+              {:gproc, :unreg, ^ref, _} ->
+                safe_reg({:via, :gproc, name}, 0)
+            after
+              timeout ->
+                {:error, :already_registered}
+            end
+        end
+    end
+  end
+
   @doc """
   Helper function for gproc registration
   """
@@ -21,9 +44,14 @@ defmodule Electric do
   @doc """
   Helper function to lookup pid that corresponds to registered gproc name
   """
-  @spec lookup_pid(reg_name()) :: pid()
+  @spec lookup_pid(reg_name()) :: pid() | nil
   def lookup_pid({:via, :gproc, name}) do
-    :gproc.lookup_pid(name)
+    try do
+      :gproc.lookup_pid(name)
+    rescue
+      _ ->
+        nil
+    end
   end
 
   @spec reg_names(module()) :: [String.t()]
