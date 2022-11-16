@@ -77,5 +77,4 @@ config :electric, Electric.Satellite.Auth,
     provider:
       {Electric.Satellite.Auth.JWT,
        issuer: "dev.electric-sql.com",
-       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
-       global_cluster_id: "fake-global-id-for-tests"}
+       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}

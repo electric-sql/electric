@@ -209,7 +209,7 @@ defmodule Electric.Satellite.WsServerTest do
       key = Keyword.fetch!(config, :secret_key)
 
       assert {:ok, invalid_token} =
-               Electric.Satellite.Auth.JWT.Token.create("some-other-cluster-id", cxt.user_id, key)
+               Electric.Satellite.Auth.JWT.Token.create(cxt.user_id, key, "some-other-cluster-id")
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{id: "client_id", token: invalid_token})

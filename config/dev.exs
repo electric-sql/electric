@@ -77,4 +77,13 @@ config :electric,
 
 config :logger, level: :debug
 
-config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
+with {:ok, auth_key} <- System.fetch_env("SATELLITE_AUTH_SIGNING_KEY"),
+     {:ok, auth_iss} <- System.fetch_env("SATELLITE_AUTH_SIGNING_ISS") do
+  IO.puts("using JWT auth for issuer #{auth_iss}")
+
+  config :electric, Electric.Satellite.Auth,
+    provider: {Electric.Satellite.Auth.JWT, issuer: auth_iss, secret_key: auth_key}
+else
+  :error ->
+    config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
+end
