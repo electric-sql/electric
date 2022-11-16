@@ -78,4 +78,13 @@ defmodule Electric.Satellite.Auth.JWT do
 
     Token.create(user_id, key, iss, opts)
   end
+
+  def generate_token(user_id, opts \\ []) do
+    with {__MODULE__, config} <- Electric.Satellite.Auth.provider() do
+      generate_token(user_id, config, opts)
+    else
+      {provider, _config} ->
+        {:error, "JWT authentication not configured, provider set to #{provider}"}
+    end
+  end
 end
