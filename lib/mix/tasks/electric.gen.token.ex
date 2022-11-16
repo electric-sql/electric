@@ -61,7 +61,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
     end
   end
 
-  @spec format_tokens([map()], atom) :: iodata()
+  @spec format_tokens([map()], atom) :: IO.ANSI.ansilist()
   def format_tokens(tokens, :txt) do
     for %{user_id: user_id, token: token, expiry: expiry} <- tokens do
       [
