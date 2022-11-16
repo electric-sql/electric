@@ -90,7 +90,8 @@ if config_env() == :prod do
   global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
 
   config :electric,
-    global_cluster_id: global_cluster_id
+    instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
+    regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
 
   auth_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY")
   auth_iss = System.fetch_env!("SATELLITE_AUTH_SIGNING_ISS")

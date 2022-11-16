@@ -29,6 +29,8 @@ config :electric, Electric.Replication.SQConnectors,
 
 config :electric, Electric.Migrations, migration_file_name_suffix: "/postgres.sql"
 
-config :electric, global_cluster_id: "electric-development-cluster-0000"
+config :electric,
+  instance_id: "dev.electric-db",
+  regional_id: "local.dev.electric-db"
 
 config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}

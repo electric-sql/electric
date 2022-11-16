@@ -24,7 +24,6 @@ defmodule Electric.Satellite.Auth.JWT do
         |> Base.encode16(case: :lower)
 
       custom_claims = %{
-        "global_cluster_id" => iss,
         "user_id" => user_id,
         "nonce" => nonce,
         "type" => "access"

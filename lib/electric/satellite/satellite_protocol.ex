@@ -150,7 +150,7 @@ defmodule Electric.Satellite.Protocol do
           Logger.metadata(client_id: client_id, user_id: auth.user_id)
           Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
 
-          {%SatAuthResp{id: Electric.global_cluster_id()},
+          {%SatAuthResp{id: Electric.regional_id()},
            %State{state | auth: auth, auth_passed: true, client_id: client_id}}
         else
           {:error, :expired} ->

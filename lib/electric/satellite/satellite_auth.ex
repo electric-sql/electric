@@ -19,7 +19,7 @@ defmodule Electric.Satellite.Auth do
   @type provider() :: {module, Access.t()}
   @type validate_resp() :: {:ok, t()} | {:error, :expired} | {:error, reason :: binary}
 
-  @doc "Validates the given token for the cluster given by `global_cluster_id` using the configuration provided"
+  @doc "Validates the given token against the configuration provided"
   @callback validate_token(token :: binary, config :: Access.t()) :: validate_resp()
 
   @doc "Creates a token for the given user id. Only really for testing purposes"
