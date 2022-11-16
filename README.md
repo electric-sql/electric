@@ -86,8 +86,43 @@ The Electric application is configured using environment variables. Everything t
 | `WEBSOCKET_PORT` | `5133` | Port to expose the `/ws` path for the replication over the websocket |
 | |
 | `OFFSET_STORAGE_FILE` | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
-| `MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
+| |
+| `MIGRATIONS_DIR` | | Directory to read the migration SQL files from (see below) |
 | `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
+| |
+| `SATELLITE_AUTH_SIGNING_KEY` |  | Authentication token signing/validation secret key. See below. |
+| `SATELLITE_AUTH_SIGNING_ISS` |  | Cluster ID which acts as the issuer for the authentication JWT. See below. |
+
+**Authentication**
+
+By default, in dev mode, electric uses insecure authentication. This just
+accepts a user id as the authentication token and authorizes the connection as
+that user.
+
+Token based authentication requires a signed JWT token with a `user_id` claim,
+and a valid issuer.
+
+To turn on token-based authentication in dev mode and when running in
+production, set the following environment variables:
+
+- `SATELLITE_AUTH_SIGNING_KEY` - Some random string used as the HMAC signing
+  key. Must be at least 32 bytes long.
+
+- `SATELLITE_AUTH_SIGNING_ISS` - The JWT issuer (the `iss` field in the JWT). 
+
+You can generate a valid token using these configuration values by running `mix electric.gen.token`, e.g:
+
+``` shell
+$ export SATELLITE_AUTH_SIGNING_KEY=00000000000000000000000000000000 
+$ export SATELLITE_AUTH_SIGNING_ISS=my.electric.server
+$ mix electric.gen.token my_user my_other_user
+```
+
+The generated token(s) must be passed in the `token` field of the `SatAuthReq`
+protocol message.
+
+For them to work, you must run the electric server configured with the same
+`SATELLITE_AUTH_SIGNING_KEY` and `SATELLITE_AUTH_SIGNING_ISS` set.
 
 ## Migrations
 
