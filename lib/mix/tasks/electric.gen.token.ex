@@ -55,7 +55,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
 
     if path = args[:output] do
       File.write!(path, IO.ANSI.format(output, false))
-      Mix.Shell.IO.info(["written token information to ", :green, path])
+      Mix.Shell.IO.info(["Written token information to ", :green, path])
     else
       Mix.Shell.IO.info(["\n" | output])
     end
