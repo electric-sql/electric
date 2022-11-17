@@ -87,4 +87,13 @@ defmodule Electric.Satellite.Auth.JWT do
         {:error, "JWT authentication not configured, provider set to #{provider}"}
     end
   end
+
+  def validate_token(token) do
+    with {__MODULE__, config} <- Electric.Satellite.Auth.provider() do
+      validate_token(token, config)
+    else
+      {provider, _config} ->
+        {:error, "JWT authentication not configured, provider set to #{provider}"}
+    end
+  end
 end

@@ -17,27 +17,40 @@ defmodule Mix.Tasks.Electric.Gen.Token do
 
   ## Command line options
 
-  * `--lifetime` - the lifetime of the token, in seconds. Defaults to 1 year
+  * `--ttl` - the time to life of the token, in seconds. Defaults to 1 year
 
-  * `--json` - output the token details in JSON format
+  * `--format FORMAT` - choose output format, either `json` or `csv`. If no format is specified,
+    then output a human readable summary.
 
   * `--output` - write the token information to a file, not stdout
 
+  If `--output` is specified then the default format will be one comma-separated user id, token
+  and expiry per line.
   """
 
   # these tokens are for testing so give them a long exipry
-  @default_lifetime_seconds 3600 * 24 * 365
+  @default_ttl_seconds 3600 * 24 * 365
+  @valid_formats ~w(json csv)
 
   def run(argv) do
     Logger.configure_backend(:console, level: :error)
 
     {args, user_ids, _} =
-      OptionParser.parse(argv, strict: [lifetime: :integer, json: :boolean, output: :string])
+      OptionParser.parse(argv, strict: [ttl: :integer, format: :string, output: :string])
 
-    lifetime = Keyword.get(args, :lifetime, @default_lifetime_seconds)
-    format = if Keyword.get(args, :json, false), do: :json, else: :txt
+    format = Keyword.get(args, :format, nil)
 
-    expiry = DateTime.add(DateTime.utc_now(), lifetime, :second)
+    if format && format not in @valid_formats do
+      Mix.Shell.IO.error("Invalid format '#{format}'")
+      System.halt(1)
+    end
+
+    path = args[:output]
+    # if we're writing to a file, default to csv format
+    default_text_format = if path, do: "csv", else: "cli"
+    format = String.to_existing_atom(format || default_text_format)
+    ttl = Keyword.get(args, :ttl, @default_ttl_seconds)
+    expiry = DateTime.add(DateTime.utc_now(), ttl, :second)
 
     tokens =
       for user_id <- user_ids do
@@ -53,7 +66,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
 
     output = format_tokens(tokens, format)
 
-    if path = args[:output] do
+    if path do
       File.write!(path, IO.ANSI.format(output, false))
       Mix.Shell.IO.info(["Written token information to ", :green, path])
     else
@@ -61,8 +74,12 @@ defmodule Mix.Tasks.Electric.Gen.Token do
     end
   end
 
+  def default_ttl do
+    @default_ttl_seconds
+  end
+
   @spec format_tokens([map()], atom) :: IO.ANSI.ansilist()
-  def format_tokens(tokens, :txt) do
+  defp format_tokens(tokens, :cli) do
     for %{user_id: user_id, token: token, expiry: expiry} <- tokens do
       [
         "user id: ",
@@ -80,7 +97,15 @@ defmodule Mix.Tasks.Electric.Gen.Token do
     end
   end
 
-  def format_tokens(tokens, :json) do
+  defp format_tokens(tokens, :csv) do
+    sep = ","
+
+    for %{user_id: user_id, token: token, expiry: expiry} <- tokens do
+      [user_id, sep, token, sep, DateTime.to_iso8601(expiry), "\n"]
+    end
+  end
+
+  defp format_tokens(tokens, :json) do
     Application.ensure_all_started(:jason)
 
     Jason.encode!(

@@ -33,4 +33,8 @@ config :electric,
   instance_id: "dev.electric-db",
   regional_id: "local.dev.electric-db"
 
-config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
+config :electric, Electric.Satellite.Auth,
+  provider:
+    {Electric.Satellite.Auth.JWT,
+     issuer: "dev.electric-db",
+     secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
