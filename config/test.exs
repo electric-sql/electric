@@ -30,8 +30,8 @@ config :electric, Electric.Replication.SQConnectors,
 config :electric, Electric.Migrations, migration_file_name_suffix: "/postgres.sql"
 
 config :electric,
-  instance_id: "dev.electric-db",
-  regional_id: "local.dev.electric-db"
+  instance_id: "instance-1.region-1.test.electric-db",
+  regional_id: "region-1.test.electric-db"
 
 config :electric, Electric.Satellite.Auth,
   provider:

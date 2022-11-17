@@ -71,8 +71,8 @@ config :electric, Electric.Replication.SQConnectors,
 config :logger, backends: [:console], level: :debug
 
 config :electric,
-  instance_id: "dev.test-electric-db",
-  regional_id: "local.dev.test-electric-db"
+  instance_id: "instance-a.region-1.test.electric-db",
+  regional_id: "region-1.test.electric-db"
 
 config :electric, Electric.Satellite.Auth,
     provider:

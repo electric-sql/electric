@@ -16,6 +16,7 @@ build:
 			-e "s:{PG_PORT}:5432:g" \
 			-e "s:{EL_HOST}:electric_$${num}:g" \
 			-e "s:{EL_PORT}:5433:g" \
+			-e "s:{REGION}:$${num}:g" \
 		< electric.template > electric_$$num.exs; \
 	done
 
