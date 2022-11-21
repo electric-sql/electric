@@ -20,7 +20,7 @@ services:
       service: electric
     volumes:
       - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
-      - ./migration_schemas:/migration_schemas:ro
+      - ./migrations/:/migrations:ro
     ports:
       - "5050:5050"
       - "5133:5133"
@@ -35,7 +35,7 @@ services:
       service: electric
     volumes:
       - ./electric_b.exs:/app/releases/0.1.0/runtime.exs:ro
-      - ./migration_schemas:/migration_schemas:ro
+      - ./migrations:/migrations:ro
     ports:
       - "5051:5050"
       - "5134:5133"
@@ -52,6 +52,8 @@ services:
     extends:
       file: ../services_templates.yaml
       service: postgresql
+    volumes:
+      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
     ports:
       - "54321:5432"
 
@@ -59,6 +61,8 @@ services:
     extends:
       file: ../services_templates.yaml
       service: postgresql
+    volumes:
+      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
     ports:
       - "54322:5432"
 
@@ -66,5 +70,25 @@ services:
     extends:
       file: ../services_templates.yaml
       service: postgresql
+    volumes:
+      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
     ports:
       - "54323:5432"
+
+  satellite_client_1:
+    extends:
+      file: ../services_templates.yaml
+      service: satellite_client
+    environment:
+      MIGRATION_DIRS: ${MIGRATION_DIRS}
+    volumes:
+       - ${MIGRATION_DIRS}:${MIGRATION_DIRS}:ro
+
+  satellite_client_2:
+    extends:
+      file: ../services_templates.yaml
+      service: satellite_client
+    environment:
+      MIGRATION_DIRS: ${MIGRATION_DIRS}
+    volumes:
+       - ${MIGRATION_DIRS}:${MIGRATION_DIRS}:ro

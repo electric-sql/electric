@@ -22,34 +22,34 @@
 
 [shell electric_migrate]
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
-          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 200 OK
 
-[shell electric]
-    ?.* origin=postgres_1 .* \[notice\] ready to migrate to version: 2
-    ?.* origin=postgres_1 .* \[notice\] successfull migration to version: 2
+[shell electric_1]
+    ?.* origin=postgres_1 .* \[notice\] ready to migrate to version: 1669232573_init
+    ?.* origin=postgres_1 .* \[notice\] successfull migration to version: 1669232573_init
     ?.* Successfully initialized origin postgres_1
 
 [shell electric_migrate]
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
-          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 200 OK
 
-[shell electric]
-    ?.* origin=postgres_2 .* \[notice\] ready to migrate to version: 2
-    ?.* origin=postgres_2 .* \[notice\] successfull migration to version: 2
+[shell electric_1]
+    ?.* origin=postgres_2 .* \[notice\] ready to migrate to version: 1669232573_init
+    ?.* origin=postgres_2 .* \[notice\] successfull migration to version: 1669232573_init
     ?.* Successfully initialized origin postgres_2
 
 [shell electric_curl]
     !curl http://localhost:5050/api/migrations/postgres_1
-    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_1","vsn":"2"}
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_1","vsn":"1669232573_init"}
 
     !curl http://localhost:5050/api/migrations/postgres_2
-    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_2","vsn":"2"}
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_2","vsn":"1669232573_init"}
 
 [shell electric_migrate]
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
-          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 403 Forbidden
     ?:already_migrated
 

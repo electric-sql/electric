@@ -2,16 +2,25 @@ include common.mk
 
 LUX_DIRS= \
 	single_dc \
-	multi_dc
+	multi_dc \
+	migrations
 
-test: lux build pull
+deps: lux
+	make -C satellite_client build
+
+test: deps build pull
 	${LUX} ${LUX_DIRS}
 
 build:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} build;)
 
 pull:
-	docker-compose -f services_templates.yaml pull sysbench postgresql vaxine
+	docker-compose -f services_templates.yaml pull \
+		vaxine \
+		sysbench \
+		elixir_client \
+		postgresql \
+		satellite_client
 
 clean:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} clean;)

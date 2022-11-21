@@ -52,11 +52,7 @@ docker-build:
 	docker build -t electric:local-build .
 
 docker-build-ci:
-	docker pull ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} || true
-	docker pull ${ELECTRIC_IMAGE_NAME}:latest || true
-	docker build --cache-from ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
-      --cache-from ${ELECTRIC_IMAGE_NAME}:latest \
-      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
+	docker build -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
       -t electric:local-build .
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 

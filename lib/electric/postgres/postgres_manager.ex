@@ -175,9 +175,16 @@ defmodule Electric.Replication.PostgresConnectorMng do
                        {:rollback, {:error, :downgrade_not_supported}}
 
                      {:ok, _, []} ->
-                       {:ok, _, _} = :epgsql.squery(conn, migration_file)
-                       {:ok, _} = :epgsql.equery(conn, @update_migration, [vsn, md5_hash])
-                       :ok
+                       res = :epgsql.squery(conn, migration_file)
+
+                       case check_response(res) do
+                         :ok ->
+                           {:ok, _} = :epgsql.equery(conn, @update_migration, [vsn, md5_hash])
+                           :ok
+
+                         error ->
+                           error
+                       end
                    end
                  end
                )
@@ -194,9 +201,23 @@ defmodule Electric.Replication.PostgresConnectorMng do
     else
       error ->
         Logger.error("failed to migrate to version: #{vsn}, reason: #{inspect(error)}")
-        error
+        {:error, error}
     end
   end
+
+  defp check_response({:ok, _, _, _}), do: :ok
+  defp check_response({:ok, _}), do: :ok
+  defp check_response({:ok, _, _}), do: :ok
+  defp check_response({:error, _} = error), do: error
+
+  defp check_response([h | t]) do
+    case check_response(h) do
+      :ok -> check_response(t)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp check_response([]), do: :ok
 
   defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
     case Client.with_conn(

@@ -20,6 +20,12 @@ else
 	export SYSBENCH_IMAGE?=${DOCKER_REGISTRY}/sysbench:latest
 endif
 
+ifeq (${ELECTRIC_IMAGE_NAME}${ELECTRIC_IMAGE_TAG},)
+	export ELECTRIC_IMAGE=electric:local-build
+else
+	export ELECTRIC_IMAGE=${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
+endif
+
 lux: ${LUX}
 
 ${LUX}:
@@ -40,18 +46,20 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 start_dev_env:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} up -d pg_1 pg_2 pg_3
 
-ifndef LUX_EXTRA_LOGS
-export VAXINE_VOLUME=.
+ifdef LUX_EXTRA_LOGS
+export VAXINE_VOLUME=${LUX_EXTRA_LOGS}
+export SATELLITE_DB_PATH=${LUX_EXTRA_LOGS}
 else
-export VAXINE_VOLUME:=${LUX_EXTRA_LOGS}
+export SATELLITE_DB_PATH=.
+export VAXINE_VOLUME=.
 endif
 
 start_vaxine_%:
 	mkdir -p ${VAXINE_VOLUME}/vaxine_$*
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
+	docker-compose --verbose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
 
 start_electric_%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
+	docker-compose --verbose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
 stop_dev_env:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} down
@@ -66,7 +74,13 @@ start_elixir_test:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		--workdir=${PROJECT_ROOT} \
-		test_client
+		elixir_client_1
+
+start_satellite_client_%:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
+		--rm --entrypoint=/bin/bash \
+		--workdir=${PROJECT_ROOT}/integration_tests/satellite_client \
+		satellite_client_$*
 
 VAXINE_BRANCH?=main
 vaxine:
@@ -93,11 +107,17 @@ docker-psql-%:
 docker-attach-%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
 
-echo:
-	echo ${UID}:${GID}
+DOCKER_WORKDIR?=${PROJECT_ROOT}
 
 docker-start-clean-%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh $*
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh \
+		--workdir=${DOCKER_WORKDIR} \
+		$*
+
+docker-make:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm \
+		--workdir=${DOCKER_WORKDIR} ${MK_DOCKER} \
+		make ${MK_TARGET}
 
 single_test:
 	${LUX} ${TEST}

@@ -1,0 +1,5 @@
+.bash_history
+.npm/
+.yarnrc
+dist/
+node_modules/

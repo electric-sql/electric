@@ -1,4 +1,6 @@
 defmodule Electric.Migration.Utils do
+  require Logger
+
   @type vsn() :: String.t()
 
   @spec read_migration_file(vsn()) :: {:ok, binary} | {:error, term}
@@ -10,6 +12,7 @@ defmodule Electric.Migration.Utils do
         File.read(file)
 
       false ->
+        Logger.warn("migration not found: #{file}")
         {:error, :vsn_not_found}
     end
   end

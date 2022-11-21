@@ -2,7 +2,7 @@
 # @version 0.1
 include ../common.mk
 
-DOCKER_COMPOSE_FILE=multi-dc.yaml
+DOCKER_COMPOSE_FILE=compose.yaml
 
 test: build
 	${LUX} *.lux

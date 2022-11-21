@@ -20,13 +20,13 @@ services:
     privileged: true
 
   electric:
-    image: electric:local-build
+    image: "${ELECTRIC_IMAGE}"
     privileged: true
 
   sysbench:
     image: "${SYSBENCH_IMAGE}"
 
-  elixir_test:
+  elixir_client:
     image: "hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
     user: "${UID}:${GID}"
     environment:
@@ -63,3 +63,22 @@ services:
       test: ["CMD-SHELL", "pg_isready -U electric"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  satellite_client:
+    image: "node:18"
+    user: "${UID}:${GID}"
+    environment:
+      HOME: ${PROJECT_ROOT}/integration_tests/satellite_client
+      SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
+      NODE_DISABLE_COLORS: 1
+      TERM: dumb
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      # Deliberately mount folder below root, so that yarn/npm would not try
+      # to access .git directory, as they do not handle git ls-remote properly
+      -  ${PROJECT_ROOT}/integration_tests:${PROJECT_ROOT}/integration_tests:rw
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+    privileged: true

@@ -100,6 +100,7 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
       {:noreply, [], state1}
     rescue
       error ->
+        Logger.error(Exception.format(:error, error, __STACKTRACE__))
         {:stop, error, state}
     end
   end

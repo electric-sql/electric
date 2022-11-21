@@ -1,5 +1,7 @@
 [include ../common.luxinc]
 
+[global dprompt=\w+@\w+:(\S+)\#]
+
 [macro setup_pg_and_vaxine]
 [shell start_env]
     [progress start development environment]
@@ -12,6 +14,9 @@
 [shell pg_2]
     [invoke start_psql pg_2]
 
+[shell pg_3]
+    [invoke start_psql pg_3]
+
 [shell vaxine]
     !make start_vaxine_1
     ?(application: vx_server)|(vx_server started)
@@ -23,16 +28,25 @@
 [endmacro]
 
 [macro setup_rest]
-[shell electric]
+[shell electric_1]
     [timeout 10]
     !make start_electric_1
     ?START_REPLICATION SLOT
     ?START_REPLICATION SLOT
 
+[shell electric_2]
+    [timeout 10]
+    !make start_electric_2
+    ?START_REPLICATION SLOT
 [shell start_env]
     [progress setup finished]
-
 [endmacro]
+
+[macro start_satellite name]
+[shell satellite_${name}]
+    !make start_satellite_client_${name}
+[endmacro]
+
 
 [macro teardown]
     [progress stop development environment]

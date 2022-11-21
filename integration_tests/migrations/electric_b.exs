@@ -41,5 +41,12 @@ config :electric, Electric.Replication.SQConnectors,
 
 config :logger, backends: [:console], level: :debug
 
+config :electric,
+  instance_id: "instance-a.region-1.test.electric-db",
+  regional_id: "region-1.test.electric-db"
+
+config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
+
 config :electric, Electric.Migrations,
-  dir: "/migration_schemas/"
+  dir: "/migrations",
+  migration_file_name_suffix: "/postgres.sql"
