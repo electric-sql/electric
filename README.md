@@ -67,6 +67,26 @@ Note that you can tear down all the containers with:
 make stop_dev_env
 ```
 
+### Running the release or docker container
+
+The Electric application is configured using environment variables. Everything that doesn't have a default is required to run.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VAXINE_HOSTNAME` | | Host of Vaxine instance to connect to |
+| `VAXINE_ANTIDOTE_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
+| `VAXINE_REPLICATION_PORT` | `8088` | Port for the replication API on Vaxine instance |
+| `VAXINE_CONNECTION_TIMEOUT` | `5000` | (ms) Timeout waiting while connecting to a Vaxine instance |
+| `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |
+| `ELECTRIC_PORT` | `5433` | Port of this electric instance |
+| `CONNECTORS` | `""` | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster |
+| `PUBLICATION` | `all_tables` | Name of the publication that will be created on the connected postgres instances |
+| `SLOT` | `all_changes` | Name of the slot that will be created on the connected postgres instances |
+| `STATUS_PORT` | `5050` | Port to expose health and status API endpoint |
+| `OFFSET_STORAGE_FILE` | `./vx_pg_offset_storage_prod.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
+| `ELECTRIC_MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
+| `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
+
 ## Migrations
 
 When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `ELECTRIC_MIGRATIONS_DIR` environment variable to the path to the migrations folder:

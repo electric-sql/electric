@@ -17,9 +17,14 @@ if config_env() == :prod do
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
 
+  vaxine_antidote_port = System.get_env("VAXINE_ANTIDOTE_PORT", "8087") |> String.to_integer()
+
+  vaxine_replication_port =
+    System.get_env("VAXINE_REPLICATION_PORT", "8088") |> String.to_integer()
+
   config :electric, Electric.VaxRepo,
     hostname: vaxine_hostname,
-    port: 8087
+    port: vaxine_antidote_port
 
   publication = System.get_env("PUBLICATION", "all_tables")
   slot = System.get_env("SLOT", "all_changes")
@@ -56,7 +61,7 @@ if config_env() == :prod do
          producer: Electric.Replication.Vaxine.LogProducer,
          producer_opts: [
            vaxine_hostname: vaxine_hostname,
-           vaxine_port: 8088,
+           vaxine_port: vaxine_replication_port,
            vaxine_connection_timeout: vaxine_connection_timeout
          ]
        ]}
@@ -66,8 +71,15 @@ if config_env() == :prod do
 
   config :electric, Electric.Replication.SQConnectors,
     vaxine_hostname: vaxine_hostname,
-    vaxine_port: 8088,
+    vaxine_port: vaxine_replication_port,
     vaxine_connection_timeout: vaxine_connection_timeout
+
+  config :electric, Electric.Replication.OffsetStorage,
+    file: System.get_env("OFFSET_STORAGE_FILE", "./vx_pg_offset_storage_prod.dat")
+
+  config :electric, Electric.Migrations,
+    dir: System.fetch_env!("ELECTRIC_MIGRATIONS_DIR"),
+    migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
 
   # set to the database.cluster_slug
   global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")

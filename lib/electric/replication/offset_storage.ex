@@ -12,16 +12,17 @@ defmodule Electric.Replication.OffsetStorage do
 
   @table Module.concat([__MODULE__, Table])
 
-  @default_file Application.compile_env!(:electric, __MODULE__)
-                |> Keyword.fetch!(:file)
-                |> String.to_charlist()
-
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
   def init(opts) do
-    opts = Keyword.merge([file: @default_file, type: :set], opts)
+    default_file = Application.fetch_env!(:electric, __MODULE__) |> Keyword.fetch!(:file)
+
+    opts =
+      Keyword.merge([file: default_file, type: :set], opts)
+      |> Keyword.update!(:file, &String.to_charlist/1)
+
     dets = :dets.open_file(@table, opts)
 
     {:ok, dets}
