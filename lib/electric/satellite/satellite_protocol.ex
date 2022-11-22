@@ -214,6 +214,7 @@ defmodule Electric.Satellite.Protocol do
       Logger.debug(
         "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
       )
+
       Metrics.satellite_replication_event(%{started: 1})
 
       out_rep = initiate_subscription(state.client_id, lsn, out_rep)

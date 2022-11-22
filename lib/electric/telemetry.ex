@@ -8,6 +8,7 @@ defmodule Electric.Telemetry do
 
   def init(_) do
     children = [
+      {:telemetry_poller, measurements: periodic_measurements(), period: 2_000},
       {TelemetryMetricsPrometheus, [metrics: metrics()]}
     ]
 
@@ -27,5 +28,20 @@ defmodule Electric.Telemetry do
       Metrics.counter("electric.satellite.connection.authorized_connection"),
       Metrics.counter("electric.satellite.replication.started"),
       Metrics.counter("electric.satellite.replication.stopped"),
+      Metrics.last_value("vm.memory.total", unit: :byte),
+      Metrics.last_value("vm.total_run_queue_lengths.total"),
+      Metrics.last_value("vm.total_run_queue_lengths.cpu"),
+      Metrics.last_value("vm.total_run_queue_lengths.io"),
+      Metrics.last_value("vm.system_counts.process_count"),
+      Metrics.last_value("vm.system_counts.atom_count"),
+      Metrics.last_value("vm.system_counts.port_count")
     ]
+
+  defp periodic_measurements do
+    [
+      # A module, function and arguments to be invoked periodically.
+      # This function must call :telemetry.execute/3 and a metric must be added above.
+      # {TestAuthAppWeb, :count_users, []}
+    ]
+  end
 end
