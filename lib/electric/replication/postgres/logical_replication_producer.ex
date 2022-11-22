@@ -2,6 +2,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Electric.Telemetry.Metrics
+
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Postgres.Client
@@ -134,11 +136,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
-    :telemetry.execute(
-      [:electric, :postgres_logical, :received],
-      %{total: 1},
-      %{type: "insert"}
-    )
+    Metrics.pg_producer_received(state.origin, :insert)
 
     relation = Map.get(state.relations, msg.relation_id)
 
@@ -158,11 +156,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
-    :telemetry.execute(
-      [:electric, :postgres_logical, :received],
-      %{total: 1},
-      %{type: "update"}
-    )
+    Metrics.pg_producer_received(state.origin, :update)
 
     relation = Map.get(state.relations, msg.relation_id)
 
@@ -187,11 +181,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
-    :telemetry.execute(
-      [:electric, :postgres_logical, :received],
-      %{total: 1},
-      %{type: "delete"}
-    )
+    Metrics.pg_producer_received(state.origin, :delete)
 
     relation = Map.get(state.relations, msg.relation_id)
 

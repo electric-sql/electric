@@ -13,6 +13,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   use GenStage
 
   require Logger
+  alias Electric.Telemetry.Metrics
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
@@ -167,7 +168,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_call({:start_replication, send_fn, publication, start_lsn}, {from, _}, state) do
+  def handle_call(
+        {:start_replication, send_fn, publication, start_lsn},
+        {from, _},
+        %State{} = state
+      ) do
     ref = Process.monitor(from)
 
     timer =
@@ -176,7 +181,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.info("Starting replication to #{state.slot_name}")
 
-    :telemetry.execute([:electric, :postgres_slot, :replication], %{start: 1})
+    Metrics.pg_slot_replication_event(state.origin, %{start: 1})
 
     # FIXME: handle_continue should be supported on gen_stage
     send(self(), {:start_from_lsn, start_lsn})
@@ -187,7 +192,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_call({:stop_replication}, _, state) do
-    :telemetry.execute([:electric, :postgres_slot, :replication], %{stop: 1})
+    Metrics.pg_slot_replication_event(state.origin, %{stop: 1})
 
     {:reply, :ok, [], clear_replication(state)}
   end
@@ -242,7 +247,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_events(events, _from, state) when replication_started?(state) do
+  def handle_events(events, _from, %State{origin: origin} = state)
+      when replication_started?(state) do
     state =
       Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
         Logger.debug(
@@ -250,11 +256,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
         )
 
         {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
-        send_all(Enum.reverse(wal_messages), state.send_fn)
-
-        :telemetry.execute([:electric, :postgres_slot, :replication], %{
-          sent_total: length(wal_messages)
-        })
+        send_all(wal_messages, state.send_fn, origin)
 
         %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
       end)
@@ -296,13 +298,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
-  defp send_all(messages, send_fn) when is_function(send_fn, 1) do
-    reversed_messages = Enum.reverse(messages)
-    {first_lsn, _} = List.first(messages)
+  defp send_all(reversed_messages, send_fn, origin) when is_function(send_fn, 1) do
+    {{first_lsn, _}, len} = list_last_and_length(reversed_messages)
     {last_lsn, _} = List.first(reversed_messages)
 
+    Metrics.pg_slot_replication_event(origin, %{sent_total: len})
+
     Logger.debug(
-      "Sending #{length(messages)} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}"
+      "Sending #{len} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}"
     )
 
     reversed_messages
@@ -449,4 +452,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.map(&Map.fetch!(record, &1.name))
     |> List.to_tuple()
   end
+
+  # Get last element from the list and the list's length in one pass
+  # If list is empty, default is returned
+  @spec list_last_and_length(list(), any(), non_neg_integer()) :: {any(), non_neg_integer()}
+  defp list_last_and_length(list, default \\ nil, length_acc \\ 0)
+  defp list_last_and_length([], default, 0), do: {default, 0}
+  defp list_last_and_length([elem | []], _, length), do: {elem, length + 1}
+
+  defp list_last_and_length([_ | list], default, length),
+    do: list_last_and_length(list, default, length + 1)
 end

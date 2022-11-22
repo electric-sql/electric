@@ -3,6 +3,7 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Vaxine
+  alias Electric.Telemetry.Metrics
 
   require Logger
   require Electric.Retry
@@ -121,9 +122,11 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
           :ok ->
             # FIXME: Persist LSN from PG to Vaxine
             :ok = ack_fn.()
+            Metrics.vaxine_consumer_replication_event(tx.origin, %{saved: 1})
             {:halt, :ok}
 
           {_change, error} ->
+            Metrics.vaxine_consumer_replication_event(tx.origin, %{failed_to_write: 1})
             Logger.warning("Failure to write change into vaxine #{error}")
             {:cont, tx}
         end
