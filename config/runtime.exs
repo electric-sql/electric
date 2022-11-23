@@ -26,8 +26,8 @@ if config_env() == :prod do
     hostname: vaxine_hostname,
     port: vaxine_antidote_port
 
-  publication = System.get_env("PUBLICATION", "all_tables")
-  slot = System.get_env("SLOT", "all_changes")
+  publication = System.get_env("POSTGRES_PUBLICATION", "all_tables")
+  slot = System.get_env("POSTGRES_SLOT", "all_changes")
   electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
   electric_port = System.get_env("ELECTRIC_PORT", "5433") |> String.to_integer()
 
@@ -78,7 +78,7 @@ if config_env() == :prod do
     file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
 
   config :electric, Electric.Migrations,
-    dir: System.fetch_env!("ELECTRIC_MIGRATIONS_DIR"),
+    dir: System.fetch_env!("MIGRATIONS_DIR"),
     migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
 
   # set to the database.cluster_slug

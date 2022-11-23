@@ -80,19 +80,19 @@ The Electric application is configured using environment variables. Everything t
 | `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |
 | `ELECTRIC_PORT` | `5433` | Port of this electric instance |
 | `CONNECTORS` | `""` | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster |
-| `PUBLICATION` | `all_tables` | Name of the publication that will be created on the connected postgres instances |
-| `SLOT` | `all_changes` | Name of the slot that will be created on the connected postgres instances |
+| `POSTGRES_PUBLICATION` | `all_tables` | Name of the publication that will be created on the connected postgres instances |
+| `POSTGRES_SLOT` | `all_changes` | Name of the slot that will be created on the connected postgres instances |
 | `STATUS_PORT` | `5050` | Port to expose health and status API endpoint |
 | `OFFSET_STORAGE_FILE` | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
-| `ELECTRIC_MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
+| `MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
 | `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
 
 ## Migrations
 
-When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `ELECTRIC_MIGRATIONS_DIR` environment variable to the path to the migrations folder:
+When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `MIGRATIONS_DIR` environment variable to the path to the migrations folder:
 
 ```sh
-export ELECTRIC_MIGRATIONS_DIR='../path/to/migrations'
+export MIGRATIONS_DIR='../path/to/migrations'
 ```
 
 Now (re)run the electric service (with the env var set):
