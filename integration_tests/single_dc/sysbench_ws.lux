@@ -58,7 +58,7 @@
             {:host, "electric_1"}, \
             {:auto_ping, :true} \
             ])
-    ?$eprompt
+    ?+$eprompt
     ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
 
 [shell pg_2]
@@ -160,7 +160,7 @@
 #            {:host, "electric_1"}, \
 #            {:auto_ping, :true} \
 #            ])
-#    ?$eprompt
+#    ?+$eprompt
 #    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "3", (.*)
 
 [cleanup]
