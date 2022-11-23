@@ -90,8 +90,8 @@ The Electric application is configured using environment variables. Everything t
 | `MIGRATIONS_DIR` | | Directory to read the migration SQL files from (see below) |
 | `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
 | |
-| `SATELLITE_AUTH_SIGNING_KEY` |  | Authentication token signing/validation secret key. See below. |
-| `SATELLITE_AUTH_SIGNING_ISS` |  | Cluster ID which acts as the issuer for the authentication JWT. See below. |
+| `SATELLITE_AUTH_SIGNING_KEY` | `""` | Authentication token signing/validation secret key. See below. |
+| `SATELLITE_AUTH_SIGNING_ISS` | `""` | Cluster ID which acts as the issuer for the authentication JWT. See below. |
 
 **Authentication**
 
