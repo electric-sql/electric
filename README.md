@@ -77,14 +77,14 @@ The Electric application is configured using environment variables. Everything t
 | `VAXINE_API_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
 | `VAXINE_REPLICATION_PORT` | `8088` | Port for the replication API on Vaxine instance |
 | `VAXINE_CONNECTION_TIMEOUT` | `5000` | (ms) Timeout waiting while connecting to a Vaxine instance |
-| `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |
 |  |
+| `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |
 | `CONNECTORS` | `""` | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster |
-| `POSTGRES_PUBLICATION` | `all_tables` | Name of the publication that will be created on the connected postgres instances |
-| `POSTGRES_SLOT` | `all_changes` | Name of the slot that will be created on the connected postgres instances |
+| |
 | `POSTGRES_REPLICATION_PORT` | `5433` | Port for connections from PG instances as replication followers |
 | `STATUS_PORT` | `5050` | Port to expose health and status API endpoint |
 | `WEBSOCKET_PORT` | `5133` | Port to expose the `/ws` path for the replication over the websocket |
+| |
 | `OFFSET_STORAGE_FILE` | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
 | `MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
 | `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
