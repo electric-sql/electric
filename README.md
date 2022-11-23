@@ -67,12 +67,34 @@ Note that you can tear down all the containers with:
 make stop_dev_env
 ```
 
+### Running the release or docker container
+
+The Electric application is configured using environment variables. Everything that doesn't have a default is required to run.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VAXINE_HOST` | | Host of Vaxine instance to connect to |
+| `VAXINE_API_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
+| `VAXINE_REPLICATION_PORT` | `8088` | Port for the replication API on Vaxine instance |
+| `VAXINE_CONNECTION_TIMEOUT` | `5000` | (ms) Timeout waiting while connecting to a Vaxine instance |
+|  |
+| `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |
+| `CONNECTORS` | `""` | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster |
+| |
+| `POSTGRES_REPLICATION_PORT` | `5433` | Port for connections from PG instances as replication followers |
+| `STATUS_PORT` | `5050` | Port to expose health and status API endpoint |
+| `WEBSOCKET_PORT` | `5133` | Port to expose the `/ws` path for the replication over the websocket |
+| |
+| `OFFSET_STORAGE_FILE` | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
+| `MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
+| `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
+
 ## Migrations
 
-When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `ELECTRIC_MIGRATIONS_DIR` environment variable to the path to the migrations folder:
+When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `MIGRATIONS_DIR` environment variable to the path to the migrations folder:
 
 ```sh
-export ELECTRIC_MIGRATIONS_DIR='../path/to/migrations'
+export MIGRATIONS_DIR='../path/to/migrations'
 ```
 
 Now (re)run the electric service (with the env var set):
@@ -111,7 +133,7 @@ And then run with the right env vars, e.g.:
 
 ```sh
 docker run -it -p "5433:5433" -p "5133:5133" \
-    -e "VAXINE_HOSTNAME=host.docker.internal"
+    -e "VAXINE_HOST=host.docker.internal"
     -e "ELECTRIC_HOST=host.docker.internal"
     -e "CONNECTORS=pg1=postgresql://electric:password@host.docker.internal:54321/electric;pg2=postgresql://electric:password@host.docker.internal:54322/electric" \
     docker.io/library/electric:local-build

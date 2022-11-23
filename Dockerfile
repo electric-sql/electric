@@ -47,7 +47,7 @@ FROM runner_setup AS runner
 ## Vaxine configuration via environment variables
 COPY --from=builder --chown=nobody:root /app/_build/prod/rel/electric ./
 
-VOLUME ./vx_pg_offset_storage_prod.dat
+VOLUME ./offset_storage_data.dat
 
 USER nobody
 ENTRYPOINT /app/bin/electric start

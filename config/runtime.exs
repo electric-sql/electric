@@ -11,20 +11,30 @@ if config_env() == :prod do
   config :electric, Electric.StatusPlug,
     port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
 
-  vaxine_hostname =
-    System.get_env("VAXINE_HOSTNAME") || raise "Env variable VAXINE_HOSTNAME is not set"
+  vaxine_hostname = System.get_env("VAXINE_HOST") || raise "Env variable VAXINE_HOST is not set"
 
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
 
+  vaxine_antidote_port = System.get_env("VAXINE_API_PORT", "8087") |> String.to_integer()
+
+  vaxine_replication_port =
+    System.get_env("VAXINE_REPLICATION_PORT", "8088") |> String.to_integer()
+
   config :electric, Electric.VaxRepo,
     hostname: vaxine_hostname,
-    port: 8087
+    port: vaxine_antidote_port
 
-  publication = System.get_env("PUBLICATION", "all_tables")
-  slot = System.get_env("SLOT", "all_changes")
+  publication = System.get_env("POSTGRES_PUBLICATION", "all_tables")
+  slot = System.get_env("POSTGRES_SLOT", "all_changes")
   electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
-  electric_port = System.get_env("ELECTRIC_PORT", "5433") |> String.to_integer()
+
+  electric_port = System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
+
+  config :electric, Electric.PostgresServer, port: electric_port
+
+  config :electric, Electric.Satellite.WsServer,
+    port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
 
   connectors =
     System.get_env("CONNECTORS", "")
@@ -56,7 +66,7 @@ if config_env() == :prod do
          producer: Electric.Replication.Vaxine.LogProducer,
          producer_opts: [
            vaxine_hostname: vaxine_hostname,
-           vaxine_port: 8088,
+           vaxine_port: vaxine_replication_port,
            vaxine_connection_timeout: vaxine_connection_timeout
          ]
        ]}
@@ -66,8 +76,15 @@ if config_env() == :prod do
 
   config :electric, Electric.Replication.SQConnectors,
     vaxine_hostname: vaxine_hostname,
-    vaxine_port: 8088,
+    vaxine_port: vaxine_replication_port,
     vaxine_connection_timeout: vaxine_connection_timeout
+
+  config :electric, Electric.Replication.OffsetStorage,
+    file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
+
+  config :electric, Electric.Migrations,
+    dir: System.fetch_env!("MIGRATIONS_DIR"),
+    migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
 
   # set to the database.cluster_slug
   global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")

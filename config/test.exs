@@ -1,6 +1,6 @@
 import Config
 
-config :electric, Electric.Replication.OffsetStorage, file: "./vx_pg_offset_storage_test.dat"
+config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.test.dat"
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
@@ -26,6 +26,8 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_hostname: "localhost",
   vaxine_port: 8088,
   vaxine_connection_timeout: 5000
+
+config :electric, Electric.Migrations, migration_file_name_suffix: "/postgres.sql"
 
 config :electric, global_cluster_id: "electric-development-cluster-0000"
 

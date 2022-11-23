@@ -2,9 +2,11 @@ import Config
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
-config :electric, Electric.Replication.OffsetStorage, file: "./vx_pg_offset_storage_dev.dat"
+config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"
 
-config :electric, Electric.Migrations, dir: "./integration_tests/migrations/migration_schemas/"
+config :electric, Electric.Migrations,
+  migration_file_name_suffix: "/postgres.sql",
+  dir: System.get_env("MIGRATIONS_DIR", "./integration_tests/migrations/migration_schemas/")
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [

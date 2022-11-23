@@ -16,20 +16,15 @@ defmodule Electric.Migration.Utils do
 
   @spec get_migration_path(vsn()) :: binary
   def get_migration_path(vsn) do
-    migration_path = get_migration_dir()
-    Path.join(migration_path, vsn <> "/postgres.sql")
+    migration_dir = fetch_config!(:dir)
+    file_name_suffix = fetch_config!(:migration_file_name_suffix)
+    Path.join(migration_dir, vsn <> file_name_suffix)
   end
 
-  defp get_migration_dir() do
-    case :os.getenv(to_charlist("ELECTRIC_MIGRATIONS_DIR")) do
-      false ->
-        Keyword.fetch!(
-          Application.get_env(:electric, Electric.Migrations),
-          :dir
-        )
-
-      value ->
-        value
-    end
+  defp fetch_config!(key) when key in [:dir, :migration_file_name_suffix] do
+    Keyword.fetch!(
+      Application.get_env(:electric, Electric.Migrations),
+      key
+    )
   end
 end
