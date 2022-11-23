@@ -25,6 +25,4 @@ electric-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 
-vx_pg_offset_storage_dev.dat
-vx_pg_offset_storage_test.dat
-vx_pg_offset_storage_prod.dat
+*offset_storage*.dat

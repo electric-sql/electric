@@ -83,7 +83,7 @@ The Electric application is configured using environment variables. Everything t
 | `PUBLICATION` | `all_tables` | Name of the publication that will be created on the connected postgres instances |
 | `SLOT` | `all_changes` | Name of the slot that will be created on the connected postgres instances |
 | `STATUS_PORT` | `5050` | Port to expose health and status API endpoint |
-| `OFFSET_STORAGE_FILE` | `./vx_pg_offset_storage_prod.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
+| `OFFSET_STORAGE_FILE` | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts. |
 | `ELECTRIC_MIGRATIONS_DIR` | | Directory to read the migration SQL files from |
 | `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql` | Suffix that is appended to the migration name when looking for the migration file |
 

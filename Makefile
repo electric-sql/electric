@@ -66,7 +66,7 @@ ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
 endif
 
 rm_offset_storage:
-	rm vx_pg_offset_storage_*
+	rm offset_storage_*
 
 update_protobuf: deps
 	mix protox.generate \

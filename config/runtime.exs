@@ -75,7 +75,7 @@ if config_env() == :prod do
     vaxine_connection_timeout: vaxine_connection_timeout
 
   config :electric, Electric.Replication.OffsetStorage,
-    file: System.get_env("OFFSET_STORAGE_FILE", "./vx_pg_offset_storage_prod.dat")
+    file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
 
   config :electric, Electric.Migrations,
     dir: System.fetch_env!("ELECTRIC_MIGRATIONS_DIR"),
