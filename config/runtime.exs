@@ -86,10 +86,8 @@ if config_env() == :prod do
     dir: System.fetch_env!("MIGRATIONS_DIR"),
     migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
 
-  # set to the database.cluster_slug
-  global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
-
   config :electric,
+    global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
     instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
     regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
 

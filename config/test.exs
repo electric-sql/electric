@@ -30,6 +30,7 @@ config :electric, Electric.Replication.SQConnectors,
 config :electric, Electric.Migrations, migration_file_name_suffix: "/postgres.sql"
 
 config :electric,
+  global_cluster_id: "test.electric-db",
   instance_id: "instance-1.region-1.test.electric-db",
   regional_id: "region-1.test.electric-db"
 

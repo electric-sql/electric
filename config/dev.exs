@@ -73,8 +73,9 @@ config :electric, Electric.Replication.SQConnectors,
   vaxine_connection_timeout: 5000
 
 config :electric,
-  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "dev.electric-db"),
-  regional_id: System.get_env("ELECTRIC_REGIONAL_ID", "local.dev.electric-db")
+  global_cluster_id: System.get_env("GLOBAL_CLUSTER_ID", "dev.electric-db"),
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "instance-1.region-1.dev.electric-db"),
+  regional_id: System.get_env("ELECTRIC_REGIONAL_ID", "region-1.dev.electric-db")
 
 config :logger, level: :debug
 
