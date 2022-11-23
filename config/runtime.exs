@@ -11,8 +11,7 @@ if config_env() == :prod do
   config :electric, Electric.StatusPlug,
     port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
 
-  vaxine_hostname =
-    System.get_env("VAXINE_HOST") || raise "Env variable VAXINE_HOST is not set"
+  vaxine_hostname = System.get_env("VAXINE_HOST") || raise "Env variable VAXINE_HOST is not set"
 
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
@@ -29,7 +28,13 @@ if config_env() == :prod do
   publication = System.get_env("POSTGRES_PUBLICATION", "all_tables")
   slot = System.get_env("POSTGRES_SLOT", "all_changes")
   electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
-  electric_port = System.get_env("ELECTRIC_PORT", "5433") |> String.to_integer()
+
+  electric_port = System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
+
+  config :electric, Electric.PostgresServer, port: electric_port
+
+  config :electric, Electric.Satellite.WsServer,
+    port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
 
   connectors =
     System.get_env("CONNECTORS", "")
