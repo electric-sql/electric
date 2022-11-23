@@ -74,7 +74,7 @@ The Electric application is configured using environment variables. Everything t
 | Variable | Default | Description |
 | --- | --- | --- |
 | `VAXINE_HOSTNAME` | | Host of Vaxine instance to connect to |
-| `VAXINE_ANTIDOTE_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
+| `VAXINE_API_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
 | `VAXINE_REPLICATION_PORT` | `8088` | Port for the replication API on Vaxine instance |
 | `VAXINE_CONNECTION_TIMEOUT` | `5000` | (ms) Timeout waiting while connecting to a Vaxine instance |
 | `ELECTRIC_HOST` | | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS` |

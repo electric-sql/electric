@@ -17,7 +17,7 @@ if config_env() == :prod do
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
 
-  vaxine_antidote_port = System.get_env("VAXINE_ANTIDOTE_PORT", "8087") |> String.to_integer()
+  vaxine_antidote_port = System.get_env("VAXINE_API_PORT", "8087") |> String.to_integer()
 
   vaxine_replication_port =
     System.get_env("VAXINE_REPLICATION_PORT", "8088") |> String.to_integer()
