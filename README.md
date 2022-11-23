@@ -73,7 +73,7 @@ The Electric application is configured using environment variables. Everything t
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `VAXINE_HOSTNAME` | | Host of Vaxine instance to connect to |
+| `VAXINE_HOST` | | Host of Vaxine instance to connect to |
 | `VAXINE_API_PORT` | `8087` | Port for the regular DB API on Vaxine instance |
 | `VAXINE_REPLICATION_PORT` | `8088` | Port for the replication API on Vaxine instance |
 | `VAXINE_CONNECTION_TIMEOUT` | `5000` | (ms) Timeout waiting while connecting to a Vaxine instance |
@@ -131,7 +131,7 @@ And then run with the right env vars, e.g.:
 
 ```sh
 docker run -it -p "5433:5433" -p "5133:5133" \
-    -e "VAXINE_HOSTNAME=host.docker.internal"
+    -e "VAXINE_HOST=host.docker.internal"
     -e "ELECTRIC_HOST=host.docker.internal"
     -e "CONNECTORS=pg1=postgresql://electric:password@host.docker.internal:54321/electric;pg2=postgresql://electric:password@host.docker.internal:54322/electric" \
     docker.io/library/electric:local-build

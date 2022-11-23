@@ -12,7 +12,7 @@ if config_env() == :prod do
     port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
 
   vaxine_hostname =
-    System.get_env("VAXINE_HOSTNAME") || raise "Env variable VAXINE_HOSTNAME is not set"
+    System.get_env("VAXINE_HOST") || raise "Env variable VAXINE_HOST is not set"
 
   vaxine_connection_timeout =
     System.get_env("VAXINE_CONNECTION_TIMEOUT", "5000") |> String.to_integer()
