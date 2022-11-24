@@ -86,24 +86,14 @@ if config_env() == :prod do
     dir: System.fetch_env!("MIGRATIONS_DIR"),
     migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
 
-  # set to the database.cluster_slug
-  global_cluster_id = System.fetch_env!("GLOBAL_CLUSTER_ID")
-
   config :electric,
-    global_cluster_id: global_cluster_id
+    global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
+    instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
+    regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
 
-  # key = :crypto.strong_rand_bytes(32) |> Base.encode64()
-  auth_secret_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY") |> Base.decode64!()
+  auth_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY")
+  auth_iss = System.fetch_env!("SATELLITE_AUTH_SIGNING_ISS")
 
-  # 🐉 DANGER: this "issuer" configuration *MUST* be the same
-  # as the configuration in the console, currently under [:electric, :site_domain]
-  # I'm hard-coding this in all envs ATM  for simplicity
-  # if these config values do not match, the jwt token verification *will fail*
-  # safe option is probably to just remove the `iss` field from the token
   config :electric, Electric.Satellite.Auth,
-    provider:
-      {Electric.Satellite.Auth.JWT,
-       issuer: "electric-sql.com",
-       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
-       global_cluster_id: global_cluster_id}
+    provider: {Electric.Satellite.Auth.JWT, issuer: auth_iss, secret_key: auth_key}
 end

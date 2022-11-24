@@ -71,11 +71,11 @@ config :electric, Electric.Replication.SQConnectors,
 config :logger, backends: [:console], level: :debug
 
 config :electric,
-  global_cluster_id: "fake-global-id-for-tests"
+  instance_id: "instance-a.region-1.test.electric-db",
+  regional_id: "region-1.test.electric-db"
 
 config :electric, Electric.Satellite.Auth,
     provider:
       {Electric.Satellite.Auth.JWT,
        issuer: "dev.electric-sql.com",
-       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
-       global_cluster_id: "fake-global-id-for-tests"}
+       secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}

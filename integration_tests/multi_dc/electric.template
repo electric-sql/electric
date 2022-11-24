@@ -35,3 +35,7 @@ config :electric, Electric.Replication.Connectors,
   ]
 
 config :logger, backends: [:console], level: :debug
+
+config :electric,
+  instance_id: "instance-a.region-{REGION}.test.electric-db",
+  regional_id: "region-{REGION}.test.electric-db"

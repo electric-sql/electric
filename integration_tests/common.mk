@@ -5,6 +5,7 @@ DOCKER_REGISTRY=europe-docker.pkg.dev/vaxine/vaxine-io
 export ELIXIR_VERSION=1.13.4
 export OTP_VERSION=24.3
 export DEBIAN_VERSION=bullseye-20210902-slim
+export COMPOSE_COMPATIBILITY=true
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)

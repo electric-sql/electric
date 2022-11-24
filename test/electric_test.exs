@@ -1,7 +1,11 @@
 defmodule ElectricTest do
   use ExUnit.Case, async: true
 
-  test "global_cluster_id/0" do
-    assert Electric.global_cluster_id() == "electric-development-cluster-0000"
+  test "regional_id/0" do
+    assert Electric.regional_id() == "region-1.test.electric-db"
+  end
+
+  test "instance_id/0" do
+    assert Electric.instance_id() == "instance-1.region-1.test.electric-db"
   end
 end

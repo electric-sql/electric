@@ -57,12 +57,10 @@ defmodule Electric.Satellite.WsServerTest do
       columns
     )
 
-    global_cluster_id = Electric.global_cluster_id()
     port = 55133
 
     auth_provider =
       {Electric.Satellite.Auth.JWT,
-       global_cluster_id: global_cluster_id,
        issuer: "electric-sql.com",
        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
 
@@ -73,12 +71,14 @@ defmodule Electric.Satellite.WsServerTest do
         auth_provider: auth_provider
       )
 
+    server_id = Electric.regional_id()
+
     on_exit(fn ->
       SchemaRegistry.clear_replicated_tables(@test_publication)
       :cowboy.stop_listener(:ws_test)
     end)
 
-    {:ok, auth_provider: auth_provider, port: port, global_cluster_id: global_cluster_id}
+    {:ok, auth_provider: auth_provider, port: port, server_id: server_id}
   end
 
   setup_with_mocks([
@@ -134,7 +134,7 @@ defmodule Electric.Satellite.WsServerTest do
         [port: cxt.port],
         fn conn ->
           MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
-          server_id = cxt.global_cluster_id
+          server_id = cxt.server_id
           assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
         end
       )
@@ -162,7 +162,7 @@ defmodule Electric.Satellite.WsServerTest do
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
-        server_id = cxt.global_cluster_id
+        server_id = cxt.server_id
         assert_receive {_, %SatAuthResp{id: ^server_id}}, @default_wait
 
         MockClient.send_data(conn, %SatPingReq{})
@@ -171,7 +171,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     test "Auth is handled", cxt do
-      server_id = cxt.global_cluster_id
+      server_id = cxt.server_id
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatPingReq{})
@@ -209,7 +209,7 @@ defmodule Electric.Satellite.WsServerTest do
       key = Keyword.fetch!(config, :secret_key)
 
       assert {:ok, invalid_token} =
-               Electric.Satellite.Auth.JWT.Token.create("some-other-cluster-id", cxt.user_id, key)
+               Electric.Satellite.Auth.JWT.Token.create(cxt.user_id, key, "some-other-cluster-id")
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{id: "client_id", token: invalid_token})

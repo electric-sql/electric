@@ -65,10 +65,20 @@ defmodule Electric do
   @doc """
   Every electric cluster belongs to a particular console database instance
 
-  This is that database instance slug
+  This is that database instance id
   """
-  @spec global_cluster_id() :: binary | no_return
-  def global_cluster_id do
-    Application.fetch_env!(:electric, :global_cluster_id)
+  @spec instance_id() :: binary | no_return
+  def instance_id do
+    Application.fetch_env!(:electric, :instance_id)
+  end
+
+  @doc """
+  Identifier that's unique for every electric cluster instance.
+
+  So basically region + instance_id
+  """
+  @spec regional_id() :: binary | no_return
+  def regional_id do
+    Application.fetch_env!(:electric, :regional_id)
   end
 end

@@ -43,9 +43,10 @@
 [shell ws1]
     [invoke log "Start WS client and start consuming data"]
     [invoke start_elixir_test]
+    # issuer and secret key here must be the same as the issuer in the
+    # config [:electric, Electric.Satellite.Auth, :provider]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                  secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="), \
-                  global_cluster_id: "fake-global-id-for-tests"}
+                  secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
     ?$eprompt
     !Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ \
@@ -57,7 +58,7 @@
             {:host, "electric_1"}, \
             {:auto_ping, :true} \
             ])
-    ?$eprompt
+    ?+$eprompt
     ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
 
 [shell pg_2]
@@ -159,7 +160,7 @@
 #            {:host, "electric_1"}, \
 #            {:auto_ping, :true} \
 #            ])
-#    ?$eprompt
+#    ?+$eprompt
 #    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "3", (.*)
 
 [cleanup]
