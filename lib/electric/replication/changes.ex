@@ -132,4 +132,9 @@ defmodule Electric.Replication.Changes do
   defmodule TruncatedRelation do
     defstruct [:relation]
   end
+
+  @spec belongs_to_user?(Transaction.t(), binary()) :: boolean()
+  def belongs_to_user?(%Transaction{} = tx, user_id) do
+    Changes.Ownership.belongs_to_user?(tx, user_id)
+  end
 end

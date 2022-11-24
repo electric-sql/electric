@@ -358,10 +358,16 @@ defmodule Electric.Satellite.Protocol do
           {[PB.sq_pb_msg()], State.t()}
   def handle_out_transes(events, state, acc \\ [])
 
-  def handle_out_transes([event | events], state, acc) do
-    {relations, transaction, out_rep} = handle_out_trans(event, state)
-    acc = [transaction | relations] ++ acc
-    handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
+  def handle_out_transes([{tx, _offset} = event | events], state, acc) do
+    if Changes.belongs_to_user?(tx, state.auth.user_id) do
+      {relations, transaction, out_rep} = handle_out_trans(event, state)
+      acc = [transaction | relations] ++ acc
+      handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
+    else
+      Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
+
+      handle_out_transes(events, state, acc)
+    end
   end
 
   def handle_out_transes([], state, acc) do
@@ -399,8 +405,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec initiate_subscription(String.t(), binary, OutRep.t()) :: OutRep.t()
-  def initiate_subscription(client, lsn, out_rep)
-      when is_binary(lsn) do
+  def initiate_subscription(client, lsn, out_rep) when is_binary(lsn) do
     lsn =
       case lsn do
         "eof" -> :eof
@@ -412,7 +417,13 @@ defmodule Electric.Satellite.Protocol do
     {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
 
-    opts = [{:to, sub_pid}, {:start_subscription, lsn}, {:min_demand, 5}, {:max_demand, 10}]
+    opts = [
+      to: sub_pid,
+      start_subscription: lsn,
+      min_demand: 5,
+      max_demand: 10
+    ]
+
     msg = {:"$gen_producer", {self(), sub_ref}, {:subscribe, nil, opts}}
 
     Process.send(sub_pid, msg, [])
