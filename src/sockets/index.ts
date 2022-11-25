@@ -10,6 +10,9 @@ export interface Socket {
     closeAndRemoveListeners(): Socket
 
     onMessage(cb: (data: Data) => void): void
+    onError(cb: (error: Error) => void): void
+    onClose(cb: () => void): void
+
     onceConnect(cb: () => void): void
     onceError(cb: (error: Error) => void): void
 }

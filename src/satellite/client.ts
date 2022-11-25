@@ -20,19 +20,24 @@ import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util
 import { Socket, SocketFactory } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import { AckCallback, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
 import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
 import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
 import { backOff, IBackOffOptions } from 'exponential-backoff';
+import { Notifier } from '../notifiers';
 
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: SatelliteClientOpts;
+  private dbName: string;
 
   private socketFactory: SocketFactory;
   private socket?: Socket;
+
+  private notifier: Notifier;
+
   private inbound: Replication;
   private outbound: Replication;
 
@@ -61,11 +66,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     timeMultiple: 2
   }
 
-  constructor(socketFactory: SocketFactory, opts: SatelliteClientOverrides) {
+  constructor(dbName: string, socketFactory: SocketFactory, notifier: Notifier, opts: SatelliteClientOverrides) {
     super();
+
+    this.dbName = dbName
 
     this.opts = { ...satelliteClientDefaults, ...opts };
     this.socketFactory = socketFactory;
+
+    this.notifier = notifier;
 
     this.inbound = this.resetReplication();
     this.outbound = this.resetReplication();
@@ -92,6 +101,12 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.socket.onceConnect(() => {
         this.socketHandler = message => this.handleIncoming(message)
         this.socket!.onMessage(this.socketHandler)
+        this.socket!.onError(() => {
+          this.notifier.connectivityStateChange(this.dbName, 'error')
+        })
+        this.socket!.onClose(() => {
+          this.notifier.connectivityStateChange(this.dbName, 'disconnected')
+        })
         resolve()
       })
 
@@ -102,7 +117,6 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       const { address, port } = this.opts;
       this.socket.open({ url: `ws://${address}:${port}/ws` })
-
     })
 
     const retryPolicy = { ...this.connectionRetryPolicy }
@@ -199,9 +213,9 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.sendMissingRelations(next, this.outbound)
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
-      console.log(`sending message with lsn${JSON.stringify(next.lsn)}`)
+      // console.log(`sending message with lsn ${JSON.stringify(next.lsn)}`)
       this.sendMessage(satOpLog)
-      this.emit('ack_lsn', next.lsn, false)
+      this.emit('ack_lsn', next.lsn, AckType.LOCAL_SEND)
     }
   }
 
@@ -421,7 +435,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handlePingResp(message: SatPingResp) {
     if (message.lsn) {
       this.outbound.ack_lsn = message.lsn
-      this.emit('ack_lsn', message.lsn, true)
+      this.emit('ack_lsn', message.lsn, AckType.REMOTE_COMMIT)
     }
   }
 

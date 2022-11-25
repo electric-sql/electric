@@ -99,4 +99,4 @@ export enum AckType {
 
 export type AckCallback = (lsn: LSN, type: AckType) => void
 
-export type ConnectivityStatus = "connected" | "disconnected"
+export type ConnectivityState = "available" | "connected" | "disconnected" | "error"

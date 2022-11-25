@@ -8,9 +8,9 @@
 // passed into their constructors.
 
 import { NotifyMethod, WorkerClient, WorkerServer } from '../bridge/index'
-import { ConnectivityStatus, DbName } from '../util/types'
+import { ConnectivityState as ConnectivityState, DbName } from '../util/types'
 
-import { Change, ChangeCallback, Notifier, PotentialChangeNotification } from './index'
+import { Change, ChangeCallback, ConnectivityStateChangeCallback, Notifier, PotentialChangeNotification } from './index'
 import { EventNotifier } from './event'
 
 // Extend the default EventNotifier to:
@@ -51,17 +51,30 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
     return this.workerClient.unsubscribeFromChanges(key)
   }
 
-  connectivityChange(dbName: string, status: ConnectivityStatus) {
-    const notification = super._emitConnectivityChange(dbName, status)
+  _emitConnectivityStatus(dbName: string, status: ConnectivityState) {
+    const notification = super._emitConnectivityStatus(dbName, status)
     const method: NotifyMethod = {
       dbName: dbName,
-      name: '_emitConnectivityChange',
+      name: '_emitConnectivityStatus',
       target: 'notify'
     }
 
-    this.workerClient.notify(method, notification.dbName, notification.status)
+    this.workerClient.notify(method, notification.dbName, notification.connectivityState)
 
     return notification
+  }
+
+  subscribeToConnectivityStateChange(callback: ConnectivityStateChangeCallback): string {
+    const key = super.subscribeToConnectivityStateChange(callback)
+    const wrappedCallback = this._connectivityStatusCallbacks[key] as ConnectivityStateChangeCallback
+
+    return this.workerClient.subscribeToConnectivityStateChange(key, wrappedCallback)
+  }
+
+  unsubscribeFromConnectivityStateChange(key: string): void {
+    super.unsubscribeFromConnectivityStateChange(key)
+
+    return this.workerClient.unsubscribeFromConnectivityStateChange(key)
   }
 }
 
@@ -84,4 +97,14 @@ export class WorkerBridgeNotifier extends EventNotifier implements Notifier {
       changes: changes
     })
   }
+
+  connectivityStateChange(dbName: string, connectivityState: ConnectivityState) {
+    super.connectivityStateChange(dbName, connectivityState)
+
+    this.workerServer._dispatchConnectivityStateNotification({
+      dbName: dbName,
+      connectivityState
+    })
+  }
+
 }

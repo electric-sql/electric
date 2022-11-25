@@ -19,6 +19,8 @@ export class MockSocket extends EventEmitter implements Socket {
     }
 
     onMessage(_cb: (data: Data) => void): void { }
+    onError(_cb: (error: Error) => void): void { }
+    onClose(_cb: () => void): void { }
     onceConnect(_cb: () => void): void { }
     onceError(_cb: (error: Error) => void): void { }
 }

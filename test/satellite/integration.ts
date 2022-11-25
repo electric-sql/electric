@@ -13,6 +13,7 @@ import { SatelliteClient } from '../../src/satellite/client';
 import { randomUUID } from 'crypto';
 
 import { data as testMigrationsData } from '../support/migrations'
+import { WebSocketNodeFactory } from '../../src/sockets/node';
 const { migrations } = testMigrationsData
 
 type Context = {
@@ -42,7 +43,7 @@ const clientOpts = Object.assign({}, satelliteClientDefaults, {
 
 test.beforeEach(t => {
     // ensure server is started
-    const socket = new WebSocketNode();
+    const socketFactory = new WebSocketNodeFactory();
 
     const dbName = `integration-${randomValue()}.db`
     const db = new Database(dbName)
@@ -50,7 +51,7 @@ test.beforeEach(t => {
 
     const migrator = new BundleMigrator(adapter, migrations)
     const notifier = new MockNotifier(dbName)
-    const client = new SatelliteClient(socket, clientOpts)
+    const client = new SatelliteClient(dbName, socketFactory, notifier, clientOpts)
 
     const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
 

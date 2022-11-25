@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 
 import { ElectricNamespace } from '../../electric/index'
-import { ChangeNotification } from '../../notifiers/index'
+import { ChangeNotification, ConnectivityStateChangeNotification } from '../../notifiers/index'
 import { randomValue } from '../../util/random'
 import { QualifiedTablename, hasIntersection } from '../../util/tablename'
-import { BindParams, Query, Row } from '../../util/types'
+import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
 
 import { useElectric } from './provider'
 
@@ -152,3 +152,34 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
 
   return resultData
 }
+
+export const useConnectivityState: (init?: ConnectivityState) =>
+  [s: ConnectivityState, setS: (s: ConnectivityState) => void] = (init: ConnectivityState = 'disconnected') => {
+    const db = useElectric()
+
+    const [connectivityState, setConnectivityState] = useState<ConnectivityState>(init)
+    const [electric, setElectric] = useState<ElectricNamespace>()
+
+    useEffect(() => {
+      if (db === undefined) {
+        return
+      }
+
+      setElectric(db.electric)
+    }, [db])
+
+    useEffect(() => {
+      if (db === undefined || electric === undefined) {
+        return
+      }
+
+      const handler = (notification: ConnectivityStateChangeNotification) => {
+        setConnectivityState(notification.connectivityState)
+      }
+      electric.notifier.subscribeToConnectivityStateChange(handler)
+
+      setElectric(db.electric)
+    }, [db, electric])
+
+    return [connectivityState, setConnectivityState]
+  }

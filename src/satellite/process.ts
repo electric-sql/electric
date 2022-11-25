@@ -3,10 +3,10 @@ import throttle from 'lodash.throttle'
 import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
-import { AuthStateNotification, Change, ConnectivityChangeNotification, Notifier } from '../notifiers/index'
+import { AuthStateNotification, Change, ConnectivityStateChangeNotification, Notifier } from '../notifiers/index'
 import { Client } from './index'
 import { QualifiedTablename } from '../util/tablename'
-import { AckType, ConnectivityStatus, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
+import { AckType, ConnectivityState, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
@@ -69,14 +69,6 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
   }
 
-  // XXX kick off the satellite process
-  //
-  // - [x] poll the ops table
-  // - [x] subscribe to data changes
-  // - [ ] handle auth state
-  // - [x] establish replication connection
-  // - [ ] ...
-  //
   async start(authState?: AuthState): Promise<void | Error> {
     await this.migrator.up()
 
@@ -100,10 +92,10 @@ export class SatelliteProcess implements Satellite {
     // Request a snapshot whenever the data in our database potentially changes.
     this._potentialDataChangeSubscription = this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
-    const connectivityChangeCallback = (notification: ConnectivityChangeNotification) => {
-      this._connectivityChange(notification.status)
+    const connectivityChangeCallback = (notification: ConnectivityStateChangeNotification) => {
+      this._connectivityStateChange(notification.connectivityState)
     }
-    this._connectivityChangeSubscription = this.notifier.subscribeToConnectivityChanges(connectivityChangeCallback)
+    this._connectivityChangeSubscription = this.notifier.subscribeToConnectivityStateChange(connectivityChangeCallback)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(this._throttledSnapshot, this.opts.pollingInterval)
@@ -121,7 +113,7 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
-    this.set_client_listeners()
+    this.setClientListeners()
     this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
       numberToBytes(this._lastSentRowId),
@@ -134,7 +126,7 @@ export class SatelliteProcess implements Satellite {
     return this._connectAndStartReplication()
   }
 
-  set_client_listeners(): void {
+  setClientListeners(): void {
     this.client.subscribeToTransactions(async (transaction: Transaction) => {
       this._applyTransaction(transaction)
     })
@@ -163,16 +155,19 @@ export class SatelliteProcess implements Satellite {
     await this.client.close();
   }
 
-  async _connectivityChange(status: ConnectivityStatus): Promise<void | SatelliteError> {
-    console.log(`connectivity status change ${status}`)
+  async _connectivityStateChange(status: ConnectivityState): Promise<void | SatelliteError> {
     // TODO: no op if state is the same
     switch (status) {
-      case "connected": {
-        this.set_client_listeners()
+      case "available": {
+        this.setClientListeners()
         return this._connectAndStartReplication()
       }
+      case "error":
       case "disconnected": {
         return this.client.close()
+      }
+      case "connected": {
+        return
       }
       default: {
         throw new Error(`unexpected connectivity state: ${status}`)
@@ -185,7 +180,11 @@ export class SatelliteProcess implements Satellite {
     return this.client.connect()
       .then(() => this.client.authenticate(this._clientId!))
       .then(() => this.client.startReplication(this._lsn))
-      .catch((error) => console.log(`couldn't start replication: ${error}`))
+      .then(() => this.notifier.connectivityStateChange(this.dbName, 'connected'))
+      .catch((error) => {
+        console.log(`couldn't start replication: ${error}`)
+        this.notifier.connectivityStateChange(this.dbName, "disconnected")
+      })
   }
 
   async _verifyTableStructure(): Promise<boolean> {
@@ -301,7 +300,6 @@ export class SatelliteProcess implements Satellite {
       return;
     }
 
-    console.log("replicate snapshot changes")
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
       return this.client.enqueueTransaction(txn);

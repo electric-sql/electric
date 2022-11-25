@@ -10,7 +10,7 @@ import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
 import { ElectricConfig } from '../../satellite/config'
-import { WebSocketNode } from '../../sockets/node'
+import { WebSocketNodeFactory } from '../../sockets/node'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
@@ -25,7 +25,7 @@ export const electrify = async (db: Database, config: ElectricConfig, opts?: Ele
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
-  const socketFactory = opts?.socketFactory || new WebSocketNode()
+  const socketFactory = opts?.socketFactory || new WebSocketNodeFactory()
   const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)

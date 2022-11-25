@@ -3,7 +3,7 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
-import { AckCallback, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
+import { AckCallback, AckType, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
 
 import { Client, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
@@ -112,12 +112,12 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   enqueueTransaction(transaction: Transaction): void | SatelliteError {
     this.outboundSent = transaction.lsn
 
-    this.emit('ack_lsn', transaction.lsn, false)
+    this.emit('ack_lsn', transaction.lsn, AckType.LOCAL_SEND)
 
     // simulate ping message effect
     const t = setTimeout(() => {
       this.outboundAck = transaction.lsn
-      this.emit('ack_lsn', transaction.lsn, true)
+      this.emit('ack_lsn', transaction.lsn, AckType.REMOTE_COMMIT)
     }, 100)
     this.timeouts.push(t)
   }

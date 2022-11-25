@@ -1,7 +1,8 @@
 import test from 'ava'
-import { ConnectivityChangeNotification } from '../../src/notifiers'
+import { ConnectivityStateChangeNotification } from '../../src/notifiers'
 
 import { EventNotifier } from '../../src/notifiers/event'
+import { ConnectivityState } from '../../src/util'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('subscribe to potential data changes', async t => {
@@ -104,17 +105,17 @@ test('subscribe to connectivity change events is scoped by dbName', async t => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 
-  const notifications = []
+  const notifications: ConnectivityStateChangeNotification[] = []
 
-  target.subscribeToConnectivityChanges((x) => {
+  target.subscribeToConnectivityStateChange((x) => {
     notifications.push(x)
   })
 
-  source.connectivityChange('test.db', 'connected')
+  source.connectivityStateChange('test.db', 'connected')
 
   t.is(notifications.length, 1)
 
-  source.connectivityChange('non-existing-db', 'connected')
+  source.connectivityStateChange('non-existing-db', 'connected')
 
   t.is(notifications.length, 1)
 })
@@ -123,17 +124,17 @@ test('no more connectivity events after unsubscribe', async t => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 
-  const notifications = []
+  const notifications: ConnectivityStateChangeNotification[] = []
 
-  const key = target.subscribeToConnectivityChanges((x) => {
+  const key = target.subscribeToConnectivityStateChange((x) => {
     notifications.push(x)
   })
 
-  source.connectivityChange('test.db', 'connected')
+  source.connectivityStateChange('test.db', 'connected')
 
-  target.unsubscribeFromConnectivityChanges(key)
+  target.unsubscribeFromConnectivityStateChange(key)
 
-  source.connectivityChange('test.db', 'connected')
+  source.connectivityStateChange('test.db', 'connected')
 
   t.is(notifications.length, 1)
 })

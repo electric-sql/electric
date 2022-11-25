@@ -18,7 +18,7 @@ import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry, TableInfo } from '../support/satellite-helpers'
 import Long from 'long'
-import { ChangeType, ConnectivityStatus, LSN, SqlValue, Transaction } from '../../src/util/types'
+import { ChangeType, ConnectivityState, LSN, SqlValue, Transaction } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
 import { base64, DEFAULT_LSN, numberToBytes } from '../../src/util/common'
@@ -39,7 +39,7 @@ interface TestSatellite extends Satellite {
   _setMeta(key: string, value: SqlValue): Promise<void>
   _getMeta(key: string): Promise<string>
   _ack(lsn: number, isAck: boolean): Promise<void>
-  _connectivityStateChange(status: ConnectivityStatus): void
+  _connectivityStateChange(status: ConnectivityState): void
 
 }
 
@@ -200,27 +200,29 @@ test('starting and stopping the process works', async t => {
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
   await satellite.start()
-  t.is(notifier.notifications.length, 0)
+
+  // first notification is the "connected" event
+  t.is(notifier.notifications.length, 1)
 
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 1)
+  t.is(notifier.notifications.length, 2)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications.length, 3)
 
   await satellite.start()
   await sleepAsync(0)
 
-  t.is(notifier.notifications.length, 3)
+  t.is(notifier.notifications.length, 5)
 })
 
 test('snapshots on potential data change', async t => {
@@ -695,7 +697,7 @@ test('rowid acks updates meta', async t => {
   await satellite.start()
 
   const lsn1 = numberToBytes(1)
-  client.emit("ack_lsn", lsn1, false)
+  client['emit']("ack_lsn", lsn1, false)
 
   const lsn = await satellite['_getMeta']('lastSentRowId')
   t.is(lsn, "1")
@@ -721,7 +723,7 @@ test('handling connectivity state change stops queueing operations', async t => 
     }, 100)
   })
 
-  satellite._connectivityChange('disconnected')
+  satellite._connectivityStateChange('disconnected')
 
   adapter.run({ sql: `INSERT INTO parent(id, value, otherValue) VALUES (2, 'local', 1)` })
 
@@ -731,7 +733,7 @@ test('handling connectivity state change stops queueing operations', async t => 
   t.is(lsn1, "1")
 
 
-  await satellite._connectivityChange('connected')
+  await satellite._connectivityStateChange('connected')
 
   setTimeout(async () => {
     const lsn2 = await satellite._getMeta('lastSentRowId')

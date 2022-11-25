@@ -25,19 +25,27 @@ import { base64, DEFAULT_LSN, bytesToNumber, typeEncoder, numberToBytes } from '
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
+import { MockNotifier } from '../../src/notifiers';
 
 
 test.beforeEach(t => {
   const server = new SatelliteWSServerStub();
   server.start();
 
-  const client = new SatelliteClient(new WebSocketNodeFactory(), {
-    appId: "fake_id",
-    token: "fake_token",
-    address: '127.0.0.1',
-    port: 30002,
-    timeout: 10000
-  });
+  const dbName = "dbName"
+
+  const client = new SatelliteClient(
+    dbName,
+    new WebSocketNodeFactory(),
+    new MockNotifier(dbName),
+    {
+      appId: "fake_id",
+      token: "fake_token",
+      address: '127.0.0.1',
+      port: 30002,
+      timeout: 10000
+    }
+  );
   const clientId = "91eba0c8-28ba-4a86-a6e8-42731c2c6694"
 
   t.context = {
@@ -49,7 +57,8 @@ test.beforeEach(t => {
 
 type Context = {
   server: SatelliteWSServerStub,
-  client: SatelliteClient
+  client: SatelliteClient,
+  clientId: string
 }
 
 test.afterEach.always(async t => {
@@ -422,6 +431,7 @@ test('ack on send and pong', async t => {
   const pingResponse = SatPingResp.fromPartial({ lsn: lsn_1 });
 
   server.nextResponses([startResp])
+  server.nextResponses([])
   server.nextResponses([(pingResponse)])
 
   await client.startReplication()
@@ -437,23 +447,26 @@ test('ack on send and pong', async t => {
       }]
   }
 
-  await new Promise<void>(res => {
+  const res = new Promise<void>(res => {
     let sent = false
     client.subscribeToAck((lsn, type) => {
       if (type == AckType.LOCAL_SEND) {
         t.is(bytesToNumber(lsn), 1)
         sent = true
-      } else {
+      } else if (sent && type == AckType.REMOTE_COMMIT) {
         t.is(bytesToNumber(lsn), 1)
         t.is(sent, true)
         res()
       }
     })
-    client.enqueueTransaction(transaction)
   })
+
+  setTimeout(() => {
+    client.enqueueTransaction(transaction)
+  }, 100)
+
+  await res
 })
-
-
 
 function decode(data: Buffer): SatPbMsg {
   const code = data.readUInt8();

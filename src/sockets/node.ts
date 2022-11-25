@@ -42,6 +42,14 @@ export class WebSocketNode extends EventEmitter implements Socket {
         this.on('message', cb)
     }
 
+    onError(cb: (error: Error) => void): void {
+        this.on('error', () => cb(new Error("socket error")))
+    }
+
+    onClose(cb: () => void): void {
+        this.on('close', cb)
+    }
+
     onceConnect(cb: () => void): void {
         this.once('open', cb)
     }

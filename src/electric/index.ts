@@ -5,7 +5,7 @@ import { Notifier } from '../notifiers/index'
 import { Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
-import { ConnectivityStatus, DbName } from '../util/types'
+import { ConnectivityState, DbName } from '../util/types'
 import { ElectricConfig } from '../satellite/config'
 
 // These are the options that should be provided to the adapter's electrify
@@ -37,8 +37,8 @@ export class ElectricNamespace {
     this.notifier.potentiallyChanged()
   }
 
-  connectivityChange(status: ConnectivityStatus, dbName: string): void {
-    this.notifier.connectivityChange(dbName, status)
+  changeConnectivityState(status: ConnectivityState, dbName: string): void {
+    this.notifier.connectivityStateChange(dbName, status)
   }
 }
 

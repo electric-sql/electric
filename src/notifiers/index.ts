@@ -1,6 +1,6 @@
 import { AuthState } from '../auth/index'
 import { QualifiedTablename } from '../util/tablename'
-import { ConnectivityStatus, DbName, RowId } from '../util/types'
+import { ConnectivityState, DbName, RowId } from '../util/types'
 
 export { EventNotifier } from './event'
 export { MockNotifier } from './mock'
@@ -21,27 +21,27 @@ export interface PotentialChangeNotification {
   dbName: DbName
 }
 
-export interface ConnectivityChangeNotification {
+export interface ConnectivityStateChangeNotification {
   dbName: DbName,
-  status: ConnectivityStatus
+  connectivityState: ConnectivityState
 }
 
 export type Notification =
   AuthStateNotification
   | ChangeNotification
   | PotentialChangeNotification
-  | ConnectivityChangeNotification
+  | ConnectivityStateChangeNotification
 
 export type AuthStateCallback = (notification: AuthStateNotification) => void
 export type ChangeCallback = (notification: ChangeNotification) => void
 export type PotentialChangeCallback = (notification: PotentialChangeNotification) => void
-export type ConnectivityChangeCallback = (notification: ConnectivityChangeNotification) => void
+export type ConnectivityStateChangeCallback = (notification: ConnectivityStateChangeNotification) => void
 
 export type NotificationCallback =
   AuthStateCallback
   | ChangeCallback
   | PotentialChangeCallback
-  | ConnectivityChangeCallback
+  | ConnectivityStateChangeCallback
 
 export interface Notifier {
   // The name of the primary database that components communicating via this
@@ -101,12 +101,15 @@ export interface Notifier {
   subscribeToDataChanges(callback: ChangeCallback): string
   unsubscribeFromDataChanges(key: string): void
 
-  // Tells Satellite about the status of network connectivity.
-  // On 'disconnected', the client stops queueing transactions and closes the
-  // socket. On 'connected', satellite opens a new connection and starts 
-  // replication from the last acknowledged position.
-  connectivityChange(dbName: string, status: ConnectivityStatus): void
+  // Notification for network connectivity state changes.
+  // A connectivity change s can be triggered manually,
+  // or automatically in consequence of internal client events.
+  // 'available': network is, or has become, available
+  // 'connected': connection to Electric established
+  // 'disconnected': Electric is unreachable, or network is unavailable
+  // 'error': disconnected with an error (TODO: add error info)
+  connectivityStateChange(dbName: string, state: ConnectivityState): void
 
-  subscribeToConnectivityChanges(callback: ConnectivityChangeCallback): string
-  unsubscribeFromConnectivityChanges(key: string): void
+  subscribeToConnectivityStateChange(callback: ConnectivityStateChangeCallback): string
+  unsubscribeFromConnectivityStateChange(key: string): void
 }

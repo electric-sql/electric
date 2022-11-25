@@ -64,6 +64,22 @@ export class WebSocketReactNative implements Socket {
     this.messageCallbacks.push(cb);
   }
 
+  onError(cb: (error: Error) => void): void {
+    if (this.socket) {
+      this.socket.onerror = () => {
+        cb(new Error("socket error"))
+      }
+    }
+  }
+
+  onClose(cb: () => void): void {
+    if (this.socket) {
+      this.socket.onclose = () => {
+        cb()
+      }
+    }
+  }
+
   onceConnect(cb: () => void): void {
     this.connectCallbacks.push(cb);
   }

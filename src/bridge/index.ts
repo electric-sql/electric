@@ -1,6 +1,6 @@
 import { AnyWorkerThreadElectricDatabase } from '../drivers/index'
 import { ElectrifyOptions } from '../electric/index'
-import { ChangeCallback, ChangeNotification } from '../notifiers/index'
+import { ChangeCallback, ChangeNotification, ConnectivityStateChangeCallback, ConnectivityStateChangeNotification } from '../notifiers/index'
 import { randomValue } from '../util/random'
 import { AnyFunction, DbName, StatementId } from '../util/types'
 
@@ -66,6 +66,12 @@ export interface ChangeNotificationResponse {
   isChangeNotification: true
 }
 
+export interface ConnectivityStateChangeNotificationResponse {
+  status: 'changed'
+  result: ConnectivityStateChangeNotification
+  isConnectivityStateChangeNotification: true
+}
+
 // Used by the main thread to send requests to the the worker.
 export class WorkerClient {
   worker: Worker
@@ -78,6 +84,10 @@ export class WorkerClient {
     [key: string]: ChangeCallback
   }
 
+  _connectivityStateChangeCallbacks: {
+    [key: string]: ConnectivityStateChangeCallback
+  }
+
   constructor(worker: Worker) {
     this.worker = worker
 
@@ -86,6 +96,7 @@ export class WorkerClient {
     this.postMessage = worker.postMessage.bind(worker)
 
     this._changeCallbacks = {}
+    this._connectivityStateChangeCallbacks = {}
 
     this.addListener('message', this.handleMessage.bind(this))
   }
@@ -146,15 +157,36 @@ export class WorkerClient {
     delete this._changeCallbacks[key]
   }
 
+  subscribeToConnectivityStateChange(key: string, callback: ConnectivityStateChangeCallback): string {
+    if (key in this._connectivityStateChangeCallbacks) {
+      throw new Error(`Subscription key clash -- \`key\` must be unique.`)
+    }
+
+    this._connectivityStateChangeCallbacks[key] = callback
+
+    return key
+  }
+
+  unsubscribeFromConnectivityStateChange(key: string): void {
+    delete this._connectivityStateChangeCallbacks[key]
+  }
+
   handleMessage({ data }: MessageEvent): void {
-    if (data.isChangeNotification !== true) {
+    if (data.isChangeNotification == true) {
+      const callbacks = Object.values(this._changeCallbacks)
+      const notification = data.result
+      callbacks.forEach((callback) => callback(notification))
       return
     }
 
-    const callbacks = Object.values(this._changeCallbacks)
-    const notification = data.result as ChangeNotification
+    if (data.isConnectivityStateChangeNotification == true) {
+      const callbacks = Object.values(this._connectivityStateChangeCallbacks)
+      const notification = data.result
+      callbacks.forEach((callback) => callback(notification))
+      return
+    }
 
-    callbacks.forEach((callback) => callback(notification))
+    // console.error("unhandled worker to main thread message")
   }
 }
 
@@ -234,6 +266,16 @@ export abstract class WorkerServer {
       status: 'changed',
       result: notification,
       isChangeNotification: true
+    }
+
+    this.worker.postMessage(resp)
+  }
+
+  _dispatchConnectivityStateNotification(notification: ConnectivityStateChangeNotification): void {
+    const resp: ConnectivityStateChangeNotificationResponse = {
+      status: 'changed',
+      result: notification,
+      isConnectivityStateChangeNotification: true
     }
 
     this.worker.postMessage(resp)

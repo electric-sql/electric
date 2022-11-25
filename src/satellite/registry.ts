@@ -177,9 +177,9 @@ export class GlobalRegistry extends BaseRegistry {
       port: config.replication?.port || defaultPort,
     }
 
-    const client = new SatelliteClient(socketFactory, satelliteClientOpts)
+    const client = new SatelliteClient(dbName, socketFactory, notifier, satelliteClientOpts)
     const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, satelliteDefaults)
-    await satellite.start(authState)
+    satellite.start(authState)
 
     return satellite
   }

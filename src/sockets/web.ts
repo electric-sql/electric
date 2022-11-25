@@ -54,6 +54,16 @@ export class WebSocketWeb implements Socket {
         })
     }
 
+    onError(cb: (error: Error) => void): void {
+        this.socket?.addEventListener('error', () =>
+            cb(new Error("socket error"))
+        );
+    }
+
+    onClose(cb: () => void): void {
+        this.socket?.addEventListener('close', cb);
+    }
+
     onceConnect(cb: () => void): void {
         this.connectCallbacks.push(cb);
     }
