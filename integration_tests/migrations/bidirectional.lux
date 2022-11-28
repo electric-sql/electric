@@ -28,25 +28,33 @@
     !curl http://localhost:5050/api/migrations/postgres_2
     ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_2","vsn":"1"}
 
+[shell electric_migrate]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
+    ?HTTP/1.1 200 OK
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
+    ?HTTP/1.1 200 OK
+
 [shell pg_1]
     [invoke log "Insert data into postgres_1"]
-    !INSERT INTO entries (id, content) VALUES ('${pg_id}', 'hello from pg_1');
+    !INSERT INTO public.items (id, content) VALUES ('${pg_id}', 'hello from pg_1');
     ?$psql
 
 [shell pg_2]
     [invoke log "Validate that postgresql_2 have received an update"]
-    [invoke wait-for "SELECT * FROM entries;" "hello from pg_1" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "hello from pg_1" 10 ${psql}]
 
 
 [shell electric_migrate]
     [invoke log "Migrate postgres_1 instance 1 -> 2"]
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
-          -H 'Content-Type: application/json' -d '{"vsn":"2"}'
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232634_add_column"}'
     ?HTTP/1.1 200 OK
 
 [shell pg_1]
     [invoke log "Insert data that postgres_2 is not able to store"]
-    !UPDATE entries \
+    !UPDATE public.items \
     SET content = 'hej pg_1 new data', \
         added_column = 'new data added' \
     WHERE id = '${pg_id}';
@@ -54,20 +62,20 @@
 
 [shell pg_2]
     [invoke log "Validate that postgresql_2 have received an update"]
-    [invoke wait-for "SELECT * FROM entries;" "hej pg_1 new data" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "hej pg_1 new data" 10 ${psql}]
 
     [invoke log "Store data in old schema on postgresql_2"]
-    !UPDATE entries \
+    !UPDATE public.items \
     SET content = 'hej pg_2 old data' \
     WHERE id = '${pg_id}';
     ?$psql
 
-[shell electric]
+[shell electric_1]
     ?"content" => "hej pg_2 old data"
 
 [shell pg_1]
     [invoke log "Read data update"]
-    [invoke wait-for "SELECT * FROM entries;" "hej pg_2 old data" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "hej pg_2 old data" 10 ${psql}]
 
 [cleanup]
     [invoke teardown]

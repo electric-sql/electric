@@ -46,10 +46,10 @@ services:
       file: ../services_templates.yaml
       service: sysbench
 
-  test_client:
+  elixir_client_1:
     extends:
       file: ../services_templates.yaml
-      service: elixir_test
+      service: elixir_client
 
   pg_1:
     extends:

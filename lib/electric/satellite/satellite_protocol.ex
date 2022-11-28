@@ -256,7 +256,7 @@ defmodule Electric.Satellite.Protocol do
   def process_message(%SatInStopReplicationResp{} = _msg, state) do
     Logger.debug("Received stop replication response")
 
-    in_rep = %InRep{state.in_rep | status: nil}
+    in_rep = %InRep{state.in_rep | status: :paused}
     {nil, %State{state | in_rep: in_rep}}
   end
 
