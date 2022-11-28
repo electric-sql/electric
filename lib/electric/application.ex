@@ -12,6 +12,7 @@ defmodule Electric.Application do
     auth_provider = Electric.Satellite.Auth.provider()
 
     children = [
+      Electric.Telemetry,
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.OffsetStorage,
       {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},

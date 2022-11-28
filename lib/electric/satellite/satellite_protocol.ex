@@ -29,6 +29,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Replication
   alias Electric.Satellite.ClientManager
+  alias Electric.Telemetry.Metrics
 
   @type lsn() :: non_neg_integer
   @producer_timeout 5_000
@@ -149,6 +150,7 @@ defmodule Electric.Satellite.Protocol do
              :ok <- ClientManager.register_client(client_id, reg_name) do
           Logger.metadata(client_id: client_id, user_id: auth.user_id)
           Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
+          Metrics.satellite_connection_event(%{authorized_connection: 1})
 
           {%SatAuthResp{id: Electric.regional_id()},
            %State{state | auth: auth, auth_passed: true, client_id: client_id}}
@@ -213,6 +215,8 @@ defmodule Electric.Satellite.Protocol do
         "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
       )
 
+      Metrics.satellite_replication_event(%{started: 1})
+
       out_rep = initiate_subscription(state.client_id, lsn, out_rep)
       {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
     else
@@ -240,6 +244,7 @@ defmodule Electric.Satellite.Protocol do
   def process_message(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
       when out_rep?(state) do
     Logger.debug("Received stop replication request")
+    Metrics.satellite_replication_event(%{stopped: 1})
     # FIXME: We do not know whether the client intend to start from last LSN, or
     # optional lsn, so we should just restart producer if the client would
     # request different LSN than we are about to send.

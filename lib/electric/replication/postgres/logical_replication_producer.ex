@@ -2,6 +2,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Electric.Telemetry.Metrics
+
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Postgres.Client
@@ -134,6 +136,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
+    Metrics.pg_producer_received(state.origin, :insert)
+
     relation = Map.get(state.relations, msg.relation_id)
 
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
@@ -152,6 +156,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
+    Metrics.pg_producer_received(state.origin, :update)
+
     relation = Map.get(state.relations, msg.relation_id)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
@@ -175,6 +181,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
+    Metrics.pg_producer_received(state.origin, :delete)
+
     relation = Map.get(state.relations, msg.relation_id)
 
     data =

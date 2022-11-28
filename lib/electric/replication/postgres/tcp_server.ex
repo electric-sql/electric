@@ -167,6 +167,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   def handle_continue(:establish_connection, state) do
     with {:ok, <<length::32>>} <- state.transport.recv(state.socket, 4, 100),
          {:ok, data} <- state.transport.recv(state.socket, length - 4, 100) do
+      :telemetry.execute([:electric, :postgres_tcp_server, :connection], %{total: 1})
       establish_connection(data, state)
     else
       {:error, :timeout} ->
