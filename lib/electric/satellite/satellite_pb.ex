@@ -12,7 +12,7 @@
         end
       )
 
-      @spec encode(atom()) :: integer() | atom()
+      @spec encode(atom() | String.t()) :: integer() | atom()
       [
         (
           def encode(:INTERNAL) do
@@ -137,7 +137,7 @@
         end
       )
 
-      @spec encode(atom()) :: integer() | atom()
+      @spec encode(atom() | String.t()) :: integer() | atom()
       [
         (
           def encode(:NONE) do
@@ -241,7 +241,7 @@
         end
       )
 
-      @spec encode(atom()) :: integer() | atom()
+      @spec encode(atom() | String.t()) :: integer() | atom()
       [
         (
           def encode(:TABLE) do
@@ -5989,27 +5989,14 @@
         end
       )
 
-      [
-        defp encode__lsn(acc, msg) do
-          case msg.lsn do
-            nil -> acc
-            {:lsn, _field_value} -> encode_lsn(acc, msg)
-          end
-        end
-      ]
+      []
 
       [
         defp encode_lsn(acc, msg) do
           try do
             case msg.lsn do
-              {_, child_field_value} ->
-                [acc, "\n", Protox.Encode.encode_bytes(child_field_value)]
-
-              child_field_value when not is_nil(child_field_value) ->
-                [acc, "\n", Protox.Encode.encode_bytes(child_field_value)]
-
-              _ ->
-                [acc]
+              nil -> [acc]
+              child_field_value -> [acc, "\n", Protox.Encode.encode_bytes(child_field_value)]
             end
           rescue
             ArgumentError ->
