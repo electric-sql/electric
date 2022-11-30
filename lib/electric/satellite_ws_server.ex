@@ -53,7 +53,7 @@ defmodule Electric.Satellite.WsServer do
   end
 
   def init(req, opts) do
-    # FIXME: If we intend to use headers to do authentification
+    # NOTE: If we intend to use headers to do authentification
     # we should do it here. For now we purely rely on protobuf auth
     # messages
     {ip, port} = :cowboy_req.peer(req)
