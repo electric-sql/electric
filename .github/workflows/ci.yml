@@ -99,6 +99,7 @@ jobs:
     name: dialyzer and formatting
     runs-on: ubuntu-latest
     needs: deps
+    steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
