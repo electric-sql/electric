@@ -10,10 +10,18 @@ defmodule Electric.Replication.Changes.Ownership do
   # FIXME: this requires that all tables in the schema have a `user_id` column.
   @spec change_belongs_to_user?(Changes.change(), binary(), binary()) :: boolean()
   defp change_belongs_to_user?(%Changes.DeletedRecord{old_record: record}, user_id, owner_column) do
-    record[owner_column] == user_id
+    validate_record(record, user_id, owner_column)
   end
 
   defp change_belongs_to_user?(%{record: record}, user_id, owner_column) do
-    record[owner_column] == user_id
+    validate_record(record, user_id, owner_column)
+  end
+
+  defp validate_record(record, user_id, owner_column) do
+    case record do
+      %{^owner_column => ^user_id} -> true
+      %{^owner_column => _other_id} -> false
+      _global -> true
+    end
   end
 end

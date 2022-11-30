@@ -61,16 +61,16 @@ defmodule Electric.Replication.Changes.OwnershipTest do
       refute Ownership.belongs_to_user?(transaction, user_id1)
     end
 
-    test "rejects any tables without a user_id column" do
+    test "accepts any tables without a user_id column" do
       user_id = Ecto.UUID.generate()
 
       transaction = %Transaction{
-        changes:
-          change_list([user_id], 5) ++
-            [%NewRecord{relation: {"public", "bad_table"}, record: %{"value" => "something"}}]
+        changes: [
+          %NewRecord{relation: {"public", "global_table"}, record: %{"value" => "something"}}
+        ]
       }
 
-      refute Ownership.belongs_to_user?(transaction, user_id)
+      assert Ownership.belongs_to_user?(transaction, user_id)
     end
   end
 end
