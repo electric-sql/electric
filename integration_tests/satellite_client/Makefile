@@ -20,3 +20,6 @@ run_node:
 
 clean:
 	rm -rf node_modules
+	rm -rf .npm*
+	rm -rf .yarn*
+	rm -rf .cache

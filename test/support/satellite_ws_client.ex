@@ -4,6 +4,7 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   require Logger
   alias Electric.Satellite.PB.Utils
+  alias Electric.Satellite.Serialization
 
   alias Electric.Satellite.{
     SatAuthReq,
@@ -138,7 +139,7 @@ defmodule Electric.Test.SatelliteWsClient do
       conn,
       lsn,
       commit_time,
-      {:insert, %SatOpInsert{relation_id: 11111, row_data: [id, value, ""]}}
+      {:insert, %SatOpInsert{relation_id: 11111, row_data: map_to_row([id, value, ""])}}
     )
   end
 
@@ -147,7 +148,7 @@ defmodule Electric.Test.SatelliteWsClient do
       conn,
       lsn,
       commit_time,
-      {:insert, %SatOpInsert{relation_id: 22222, row_data: [id, user_id, value]}}
+      {:insert, %SatOpInsert{relation_id: 22222, row_data: map_to_row([id, user_id, value])}}
     )
   end
 
@@ -156,7 +157,8 @@ defmodule Electric.Test.SatelliteWsClient do
       conn,
       lsn,
       commit_time,
-      {:update, %SatOpUpdate{relation_id: 11111, old_row_data: [], row_data: [id, value, ""]}}
+      {:update,
+       %SatOpUpdate{relation_id: 11111, old_row_data: nil, row_data: map_to_row([id, value, ""])}}
     )
   end
 
@@ -166,7 +168,11 @@ defmodule Electric.Test.SatelliteWsClient do
       lsn,
       commit_time,
       {:update,
-       %SatOpUpdate{relation_id: 22222, old_row_data: [], row_data: [id, user_id, value]}}
+       %SatOpUpdate{
+         relation_id: 22222,
+         old_row_data: nil,
+         row_data: map_to_row([id, user_id, value])
+       }}
     )
   end
 
@@ -175,7 +181,7 @@ defmodule Electric.Test.SatelliteWsClient do
       conn,
       lsn,
       commit_time,
-      {:delete, %SatOpDelete{relation_id: 11111, old_row_data: [id, value, ""]}}
+      {:delete, %SatOpDelete{relation_id: 11111, old_row_data: map_to_row([id, value, ""])}}
     )
   end
 
@@ -184,7 +190,7 @@ defmodule Electric.Test.SatelliteWsClient do
       conn,
       lsn,
       commit_time,
-      {:delete, %SatOpDelete{relation_id: 22222, old_row_data: [id, user_id, value]}}
+      {:delete, %SatOpDelete{relation_id: 22222, old_row_data: map_to_row([id, user_id, value])}}
     )
   end
 
@@ -504,5 +510,11 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def compact(other) do
     other
+  end
+
+  defp map_to_row([a, b, c]) do
+    map = %{"id" => a, "content" => b, "content_b" => c}
+    columns = ["id", "content", "content_b"]
+    Serialization.map_to_row(map, columns)
   end
 end

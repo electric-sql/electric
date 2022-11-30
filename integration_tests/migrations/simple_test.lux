@@ -2,10 +2,11 @@
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
+[global migration_dir=m_sanity_check]
 
 [include shared.luxinc]
 
-[invoke setup]
+[invoke setup $migration_dir]
 
 [shell electric_curl]
     !curl http://localhost:5050/api/status

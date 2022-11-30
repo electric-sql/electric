@@ -56,10 +56,10 @@ endif
 
 start_vaxine_%:
 	mkdir -p ${VAXINE_VOLUME}/vaxine_$*
-	docker-compose --verbose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
+	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
 
 start_electric_%:
-	docker-compose --verbose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
+	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
 stop_dev_env:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} down

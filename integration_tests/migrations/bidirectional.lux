@@ -3,12 +3,13 @@
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric=]
 [global pg_id=f989b58b-980d-4d3c-b178-adb6ae8222f1]
+[global migration_dir=m_sanity_check]
 
 [include shared.luxinc]
 
-[invoke setup]
+[invoke setup $migration_dir]
 
-[shell electric]
+[shell electric_1]
     -$fail_pattern
 [shell vaxine]
     -$fail_pattern

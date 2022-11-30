@@ -5,6 +5,7 @@ defmodule Electric.Postgres.PBTest do
     SatAuthReq,
     SatPingReq,
     SatAuthReq,
+    SatOpRow,
     SatOpLog,
     SatTransOp,
     SatOpBegin,
@@ -40,18 +41,30 @@ defmodule Electric.Postgres.PBTest do
 
       data1 = %SatOpInsert{
         relation_id: 10,
-        row_data: [<<"1">>, <<"2">>, <<"10">>]
+        row_data: %SatOpRow{
+          nulls_bitmask: <<0::1, 0::1, 0::1, 0::5>>,
+          values: [<<"1">>, <<"2">>, <<"10">>]
+        }
       }
 
       data2 = %SatOpUpdate{
         relation_id: 10,
-        row_data: [<<"1">>, <<"2">>, <<"10">>],
-        old_row_data: [<<"21">>, <<"22">>, <<"101">>]
+        row_data: %SatOpRow{
+          nulls_bitmask: <<0::1, 0::1, 0::1, 0::5>>,
+          values: [<<"1">>, <<"2">>, <<"10">>]
+        },
+        old_row_data: %SatOpRow{
+          nulls_bitmask: <<0::1, 0::1, 0::1, 0::5>>,
+          values: [<<"21">>, <<"22">>, <<"101">>]
+        }
       }
 
       data3 = %SatOpDelete{
         relation_id: 10,
-        old_row_data: [<<"21">>, <<"22">>, <<"101">>]
+        old_row_data: %SatOpRow{
+          nulls_bitmask: <<0::1, 0::1, 0::1, 0::5>>,
+          values: [<<"21">>, <<"22">>, <<"101">>]
+        }
       }
 
       commit = %SatOpCommit{

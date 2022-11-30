@@ -12,10 +12,15 @@ defmodule Electric.Satellite.PB.Utils do
     SatInStopReplicationReq,
     SatInStopReplicationResp,
     SatOpLog,
+    SatOpRow,
     SatRelation,
     SatRelationColumn
   }
 
+  require Logger
+
+  # This mapping should be kept in sync with Satellite repo. Message is present
+  # in the mapping ONLY if it could be send as an individual message.
   @mapping %{
     SatErrorResp => 0,
     SatAuthReq => 1,
@@ -76,6 +81,10 @@ defmodule Electric.Satellite.PB.Utils do
     def encode(%unquote(module){} = data) do
       with {:ok, encoded} <- Protox.encode(data) do
         {:ok, unquote(tag), encoded}
+      else
+        error ->
+          Logger.warn("failed to encode: #{inspect(data)}")
+          error
       end
     end
   end

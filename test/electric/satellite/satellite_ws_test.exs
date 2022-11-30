@@ -318,6 +318,15 @@ defmodule Electric.Satellite.WsServerTest do
             columns: columns
           }
 
+          serialize = fn [a, b] ->
+            map = %{"satellite-column-1" => a, "satellite-column-2" => b}
+
+            Electric.Satellite.Serialization.map_to_row(map, [
+              "satellite-column-1",
+              "satellite-column-2"
+            ])
+          end
+
           MockClient.send_data(conn, relation)
 
           dt = DateTime.truncate(DateTime.utc_now(), :millisecond)
@@ -327,12 +336,12 @@ defmodule Electric.Satellite.WsServerTest do
           op_log1 =
             build_op_log([
               %SatOpBegin{commit_timestamp: ct, lsn: lsn},
-              %SatOpInsert{relation_id: @test_oid, row_data: [<<"a">>, <<"b">>]}
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"a">>, <<"b">>])}
             ])
 
           op_log2 =
             build_op_log([
-              %SatOpInsert{relation_id: @test_oid, row_data: [<<"c">>, <<"d">>]},
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"c">>, <<"d">>])},
               %SatOpCommit{}
             ])
 
