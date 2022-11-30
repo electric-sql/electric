@@ -5,7 +5,7 @@ import { Notifier } from '../notifiers/index'
 import { Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
-import { ConnectivityState, DbName } from '../util/types'
+import { DbName } from '../util/types'
 import { ElectricConfig } from '../satellite/config'
 
 // These are the options that should be provided to the adapter's electrify
@@ -24,10 +24,19 @@ export interface ElectrifyOptions {
 export class ElectricNamespace {
   adapter: DatabaseAdapter
   notifier: Notifier
+  isConnected: boolean
 
   constructor(adapter: DatabaseAdapter, notifier: Notifier) {
     this.adapter = adapter
     this.notifier = notifier
+    this.isConnected = false
+
+    // we need to set isConnected before the first event is emitted,
+    // otherwise application might be out of sync with satellite state.
+    this.notifier.subscribeToConnectivityStateChange((notification) => {
+      this.isConnected = notification.connectivityState == 'connected'
+    })
+
   }
 
   // We lift this function a level so the user can call
@@ -37,9 +46,6 @@ export class ElectricNamespace {
     this.notifier.potentiallyChanged()
   }
 
-  changeConnectivityState(status: ConnectivityState, dbName: string): void {
-    this.notifier.connectivityStateChange(dbName, status)
-  }
 }
 
 // This is the primary `electrify()` endpoint that the individal drivers

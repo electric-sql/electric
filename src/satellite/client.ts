@@ -103,6 +103,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.socket = this.socketFactory.create()
       this.socket.onceConnect(() => {
         this.socketHandler = message => this.handleIncoming(message)
+        this.notifier.connectivityStateChange(this.dbName, 'connected')
         this.socket!.onMessage(this.socketHandler)
         this.socket!.onError(() => {
           this.notifier.connectivityStateChange(this.dbName, 'error')
@@ -115,6 +116,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       this.socket.onceError(error => {
         this.socket = undefined
+        this.notifier.connectivityStateChange(this.dbName, "disconnected")
         reject(error)
       })
 

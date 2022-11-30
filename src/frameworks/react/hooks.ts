@@ -153,11 +153,13 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
   return resultData
 }
 
-export const useConnectivityState: (init?: ConnectivityState) =>
-  [s: ConnectivityState, setS: (s: ConnectivityState) => void] = (init: ConnectivityState = 'disconnected') => {
+export const useConnectivityState: () => {
+  connectivityState: ConnectivityState,
+  toggleConnectivityState: () => void
+} = () => {
     const db = useElectric()
 
-    const [connectivityState, setConnectivityState] = useState<ConnectivityState>(init)
+  const [connectivityState, setConnectivityState] = useState<ConnectivityState>('disconnected')
     const [electric, setElectric] = useState<ElectricNamespace>()
 
     useEffect(() => {
@@ -173,13 +175,31 @@ export const useConnectivityState: (init?: ConnectivityState) =>
         return
       }
 
+      setConnectivityState(electric.isConnected ? 'connected' : 'disconnected')
+
       const handler = (notification: ConnectivityStateChangeNotification) => {
-        setConnectivityState(notification.connectivityState)
+        const state = notification.connectivityState
+
+        // externally map states to disconnected/connected
+        const nextState = ['available', 'error', 'disconnected'].find((x) => x == state) ? 'disconnected' : 'connected'
+        setConnectivityState(nextState)
       }
+
       electric.notifier.subscribeToConnectivityStateChange(handler)
 
       setElectric(db.electric)
-    }, [db, electric])
+    }, [db, electric])  
 
-    return [connectivityState, setConnectivityState]
+  const toggleConnectivityState = () => {
+    if (db === undefined || electric === undefined) {
+      return
+    }
+
+    const nextState: ConnectivityState = connectivityState == 'connected' ? 'disconnected' : 'available'
+    const dbName = db.electric.notifier.dbName
+    electric.notifier.connectivityStateChange(dbName, nextState)
+    setConnectivityState(nextState)
+  }
+
+  return { connectivityState, setConnectivityState, toggleConnectivityState }
   }

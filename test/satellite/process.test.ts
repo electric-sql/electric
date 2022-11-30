@@ -201,28 +201,25 @@ test('starting and stopping the process works', async t => {
 
   await satellite.start()
 
-  // first notification is the "connected" event
-  t.is(notifier.notifications.length, 1)
-
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications.length, 1)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 3)
+  t.is(notifier.notifications.length, 2)
 
   await satellite.stop()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 3)
+  t.is(notifier.notifications.length, 2)
 
   await satellite.start()
   await sleepAsync(0)
 
-  t.is(notifier.notifications.length, 5)
+  t.is(notifier.notifications.length, 3)
 })
 
 test('snapshots on potential data change', async t => {

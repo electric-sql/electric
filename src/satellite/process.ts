@@ -180,10 +180,8 @@ export class SatelliteProcess implements Satellite {
     return this.client.connect()
       .then(() => this.client.authenticate(this._clientId!))
       .then(() => this.client.startReplication(this._lsn))
-      .then(() => this.notifier.connectivityStateChange(this.dbName, 'connected'))
       .catch((error) => {
         console.log(`couldn't start replication: ${error}`)
-        this.notifier.connectivityStateChange(this.dbName, "disconnected")
       })
   }
 
@@ -296,6 +294,7 @@ export class SatelliteProcess implements Satellite {
     this.notifier.actuallyChanged(this.dbName, changes)
   }
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void | SatelliteError> {
+    // TODO: Don't try replicating when outbound is inactive
     if (this.client.isClosed()) {
       return;
     }
