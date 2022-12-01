@@ -78,8 +78,8 @@
     [endloop]
 [endmacro]
 
-[macro start_elixir_test]
-    !make start_elixir_test
+[macro start_elixir_test id]
+    !make start_elixir_test_${id}
     [invoke ok2 $dprompt]
     !mix local.hex --force --no-color
     ?archives

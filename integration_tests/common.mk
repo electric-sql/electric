@@ -70,11 +70,11 @@ start_sysbench:
 		--rm --entrypoint=/bin/bash \
 		sysbench
 
-start_elixir_test:
+start_elixir_test_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		--workdir=${PROJECT_ROOT} \
-		elixir_client_1
+		elixir_client_$*
 
 start_satellite_client_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \

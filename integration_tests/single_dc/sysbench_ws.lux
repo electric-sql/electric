@@ -42,7 +42,7 @@
 
 [shell ws1]
     [invoke log "Start WS client and start consuming data"]
-    [invoke start_elixir_test]
+    [invoke start_elixir_test 1]
     # issuer and secret key here must be the same as the issuer in the
     # config [:electric, Electric.Satellite.Auth, :provider]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
