@@ -49,7 +49,7 @@ defmodule Electric.Satellite.WsServerTest do
   import Mock
 
   setup_all _ do
-    columns = [{"id", :uuid}, {"user_id", :varchar}, {"content", :varchar}]
+    columns = [{"id", :uuid}, {"electric_user_id", :varchar}, {"content", :varchar}]
 
     Electric.Test.SchemaRegistryHelper.initialize_registry(
       @test_publication,
@@ -512,7 +512,7 @@ defmodule Electric.Satellite.WsServerTest do
   defp simple_trans(user_id, n, lim, acc) when n >= lim do
     [trans] =
       %Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid", "user_id" => user_id},
+        record: %{"content" => "a", "id" => "fakeid", "electric_user_id" => user_id},
         relation: {@test_schema, @test_table}
       }
       |> build_events(n)

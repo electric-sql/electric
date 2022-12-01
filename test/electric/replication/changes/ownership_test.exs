@@ -9,7 +9,7 @@ defmodule Electric.Replication.Changes.OwnershipTest do
     Ownership
   }
 
-  @user_id_col "user_id"
+  @user_id_col Ownership.id_column_name()
 
   defp owned_change(DeletedRecord, user_id) do
     change(DeletedRecord, old_record: owned_record(user_id))
