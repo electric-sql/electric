@@ -35,7 +35,7 @@
 
  [shell ${electric}]
     ?.* origin=${pg} .* \[notice\] ready to migrate to version: ${vsn}
-    ?.* origin=${pg} .* \[notice\] successfull migration to version: ${vsn}
+    ?.* origin=${pg} .* \[notice\] successful migration to version: ${vsn}
     ?.* Successfully initialized origin ${pg}
 [endmacro]
 

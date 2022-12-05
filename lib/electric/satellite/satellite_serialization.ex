@@ -95,7 +95,7 @@ defmodule Electric.Satellite.Replication do
   end
 
   defp map_to_record(data, rel_cols) do
-    # FIXME: This is ineficient, data should be stored in order, so that we
+    # FIXME: This is inefficient, data should be stored in order, so that we
     # do not have to do lookup here, but filter columns based on the schema instead
     Enum.map(rel_cols, fn column_name ->
       # FIXME: NULL is stored in Vaxine as :nil, but we should be able to distringuish it

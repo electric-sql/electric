@@ -107,7 +107,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def handle_call({:migrate, vsn}, _from, state) do
     case state.state do
       :ready ->
-        # FIXME: How to recover after unsuccesfull migration ?
+        # FIXME: How to recover after unsuccessful migration ?
         :ok = stop_subscription(state)
         :ok = PostgresConnector.stop_children(state.origin)
 
@@ -191,7 +191,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
              end
            ) do
         :ok ->
-          Logger.notice("successfull migration to version: #{vsn} md5: #{md5_hash}")
+          Logger.notice("successful migration to version: #{vsn} md5: #{md5_hash}")
           {:ok, state}
 
         {:rollback, error} ->

@@ -27,7 +27,7 @@
 
 [shell electric_1]
     ?.* origin=postgres_1 .* \[notice\] ready to migrate to version: 1669232573_init
-    ?.* origin=postgres_1 .* \[notice\] successfull migration to version: 1669232573_init
+    ?.* origin=postgres_1 .* \[notice\] successful migration to version: 1669232573_init
     ?.* Successfully initialized origin postgres_1
 
 [shell electric_migrate]
@@ -37,7 +37,7 @@
 
 [shell electric_1]
     ?.* origin=postgres_2 .* \[notice\] ready to migrate to version: 1669232573_init
-    ?.* origin=postgres_2 .* \[notice\] successfull migration to version: 1669232573_init
+    ?.* origin=postgres_2 .* \[notice\] successful migration to version: 1669232573_init
     ?.* Successfully initialized origin postgres_2
 
 [shell electric_curl]

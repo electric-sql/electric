@@ -187,7 +187,7 @@ defmodule Electric.Replication.VaxineTest do
             assert_receive :commit
           end)
 
-        send(parent, :commited_1)
+        send(parent, :committed_1)
         send(p2, :commit)
       end)
 
@@ -202,10 +202,10 @@ defmodule Electric.Replication.VaxineTest do
             assert_receive :commit
           end)
 
-        send(parent, :commited_2)
+        send(parent, :committed_2)
       end)
 
-    assert_receive :commited_1
-    assert_receive :commited_2
+    assert_receive :committed_1
+    assert_receive :committed_2
   end
 end

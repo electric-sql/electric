@@ -61,7 +61,7 @@ jobs:
         with:
           otp-version: "24.3"
           elixir-version: "1.13"
-      - name: Prepare auxillary services
+      - name: Prepare auxiliary services
         run: make start_dev_env
 
       - name: Try to reuse cached deps
