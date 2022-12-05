@@ -22,9 +22,12 @@ defmodule Electric.Replication.Changes.Ownership do
     validate_record(record, user_id, owner_column)
   end
 
+  @empty [nil, ""]
+
   defp validate_record(record, user_id, owner_column) do
     case record do
       %{^owner_column => ^user_id} -> true
+      %{^owner_column => empty} when empty in @empty -> true
       %{^owner_column => _other_id} -> false
       _global -> true
     end
