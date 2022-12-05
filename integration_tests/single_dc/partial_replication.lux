@@ -79,7 +79,7 @@
     [invoke log "user 1: receive data session 1"]
     [local lsn=1]
     ?+%{.*commit_timestamp: 1666371111516
-    ?+%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
+    ?%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
 
 [shell user_2_ws1]
     [invoke log "user 2: not receive user 1 data"]
@@ -101,7 +101,7 @@
     )
     ?:ok
     ?+%{.*commit_timestamp: 1666371333516
-    ?+%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
+    ?%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
 
 [shell user_1_ws1]
     [invoke log "user 1: not receive user 2 data"]
