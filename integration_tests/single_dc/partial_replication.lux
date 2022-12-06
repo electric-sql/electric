@@ -2,10 +2,12 @@
 
 [global dprompt=\w+@\w+:(\S+)[\#\$]]
 [global eprompt=iex\(\d+\)>\s]
-[global user_id_1=5a9a8b1d-263d-4cad-90f8-9190396161d7]
-[global user_id_2=cf415e79-9bc6-4452-b4a0-863c2ccc1d72]
+[global user_id_1=1]
+[global user_id_2=2]
 
-[macro client_session client_id user_id]
+[macro client_session user_id session_id]
+    [invoke log "user ${user_id}: start session ${session_id}"]
+    [local client_id=client_${user_id}_${session_id}]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
                     secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
     ?$eprompt
@@ -32,27 +34,16 @@
 [invoke setup]
 
 [shell user_1_ws1]
-    [invoke log "user 1: start session 1"]
     [invoke start_elixir_test 1]
-
-    [local client_id=client_1_ws1]
-    [invoke client_session $client_id $user_id_1]
+    [invoke client_session $user_id_1 1]
 
 [shell user_1_ws2]
-    [invoke log "user 1: start session 2"]
     [invoke start_elixir_test 2]
-
-    [local client_id=client_1_ws2]
-
-    [invoke client_session $client_id $user_id_1]
+    [invoke client_session $user_id_1 2]
 
 [shell user_2_ws1]
-    [invoke log "user 2: start session 1"]
     [invoke start_elixir_test 3]
-
-    [local client_id=client_2_ws1]
-
-    [invoke client_session $client_id $user_id_2]
+    [invoke client_session $user_id_2 1]
 
 [shell user_1_ws1]
     [invoke log "user 1: send data session 1"]
