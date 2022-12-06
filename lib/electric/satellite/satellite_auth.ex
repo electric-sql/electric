@@ -12,8 +12,10 @@ defmodule Electric.Satellite.Auth do
 
   defstruct [:user_id]
 
+  @type user_id() :: binary()
+
   @type t() :: %__MODULE__{
-          user_id: binary
+          user_id: user_id()
         }
 
   @type provider() :: {module, Access.t()}

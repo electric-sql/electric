@@ -18,8 +18,9 @@ defmodule Electric.Replication.Changes do
 
   require Logger
 
-  @type relation() :: {schema :: String.t(), table :: String.t()}
-  @type record() :: %{(column_name :: String.t()) => column_data :: binary()}
+  @type db_identifier() :: String.t()
+  @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
+  @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type change() ::
           Changes.NewRecord.t()
           | Changes.UpdatedRecord.t()
