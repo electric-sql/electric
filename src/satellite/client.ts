@@ -21,8 +21,9 @@ import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util
 import { Socket, SocketFactory } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import { AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction, Record, Relation
-       } from '../util/types';
+import {
+  AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction, Record, Relation
+} from '../util/types';
 import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
 import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
@@ -279,13 +280,15 @@ export class SatelliteClient extends EventEmitter implements Client {
           txOp = SatTransOp.fromPartial({
             delete: {
               oldRowData: oldRecord,
+              relationId: relation?.id
             }
           })
           break
         case ChangeType.INSERT:
           txOp = SatTransOp.fromPartial({
             insert: {
-              rowData: record,
+              rowData: record,      
+              relationId: relation?.id
             }
           })
           break
@@ -293,7 +296,8 @@ export class SatelliteClient extends EventEmitter implements Client {
           txOp = SatTransOp.fromPartial({
             update: {
               rowData: record,
-              oldRowData: oldRecord
+              oldRowData: oldRecord,
+              relationId: relation?.id
             }
           })
           break
@@ -659,6 +663,8 @@ function deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): 
     case 'UUID':
     case 'VARCHAR':
       return typeDecoder.text(column);
+    case 'INT':
+    case 'INT4':
     case 'INTEGER':
       return typeDecoder.number(column);
   }
