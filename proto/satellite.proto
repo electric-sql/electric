@@ -173,22 +173,22 @@ message SatOpCommit {
 // SatTransOp message
 message SatOpInsert {
     uint32 relation_id = 1;
-    repeated bytes row_data = 3;
+    SatOpRow row_data = 3;
 }
 
 // (Producer) Data manipulation message, that only should be part of the
 // SatTransOp message
 message SatOpUpdate {
     uint32 relation_id = 1;
-    repeated bytes row_data = 2;
-    repeated bytes old_row_data = 3;
+    SatOpRow row_data = 2;
+    SatOpRow old_row_data = 3;
 }
 
 // (Producer) Data manipulation message, that only should be part of the
 // SatTransOp message
 message SatOpDelete {
     uint32 relation_id = 1;
-    repeated bytes old_row_data = 3;
+    SatOpRow old_row_data = 3;
 }
 
 // Message is send when server is migrated while client is still connected It's
@@ -200,4 +200,12 @@ message SatMigrationNotification {
     string old_schema_hash = 2;
     string new_schema_version = 3;
     string new_schema_hash = 4;
+}
+
+// Message that corresponds to the single row.
+message SatOpRow {
+    bytes nulls_bitmask = 1;
+    // values may contain binaries with size 0 for NULLs and empty values
+    // check nulls_bitmask to differentiate between the two
+    repeated bytes values = 2;
 }

@@ -10,17 +10,19 @@ import {
   SatInStartReplicationResp,
   SatInStopReplicationReq,
   SatInStopReplicationResp,
+  SatTransOp,
+  SatOpRow,
   SatOpLog,
   SatPingResp,
   SatRelation,
   SatRelationColumn,
-  SatTransOp,
 } from '../_generated/proto/satellite';
 import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util/proto';
 import { Socket, SocketFactory } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
-import { AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction } from '../util/types';
+import { AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction, Record, Relation
+       } from '../util/types';
 import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
 import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
@@ -267,20 +269,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       let txOp, oldRecord, record
       const relation = this.outbound.relations.get(tx.relation.id)
       if (tx.oldRecord) {
-        oldRecord = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
-          if (tx.oldRecord![c.name] != undefined) {
-            acc.push(this.serializeColumnData(tx.oldRecord![c.name], c))
-          }
-          return acc
-        }, [])
+        oldRecord = serializeRow(tx.oldRecord, relation!)
       }
       if (tx.record) {
-        record = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
-          if (tx.record![c.name] != undefined) {
-            acc.push(this.serializeColumnData(tx.record![c.name], c))
-          }
-          return acc
-        }, [])
+        record = serializeRow(tx.record, relation!)
       }
       switch (tx.type) {
         case ChangeType.DELETE:
@@ -312,6 +304,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     ops.push(SatTransOp.fromPartial({ commit: {} }))
     return SatOpLog.fromPartial({ ops })
   }
+
 
   private handleAuthResp(message: SatAuthResp | SatErrorResp): AuthResponse {
     let error, serverId;
@@ -501,8 +494,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = {
           relation: rel,
           type: ChangeType.INSERT,
-          record: Object.fromEntries(rel.columns.map((c, i) =>
-            [c.name, this.deserializeColumnData(op.insert?.rowData[i] as any, c)]))
+          record: deserializeRow(op.insert.rowData!, rel)
         };
         replication.transactions[lastTxnIdx].changes.push(change);
       }
@@ -518,11 +510,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = ({
           relation: rel,
           type: ChangeType.UPDATE,
-          record: Object.fromEntries(rel.columns.map((c, i) =>
-            [c.name, this.deserializeColumnData(op.update?.rowData[i] as any, c)])),
-          oldRecord: Object.fromEntries(rel.columns.map((c, i) =>
-            [c.name, this.deserializeColumnData(op.update?.oldRowData[i] as any, c)]))
-        });
+          record: deserializeRow(op.update.rowData!, rel),
+          oldRecord: deserializeRow(op.update.oldRowData, rel)
+       });
         replication.transactions[lastTxnIdx].changes.push(change);
       }
 
@@ -537,37 +527,11 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = ({
           relation: rel,
           type: ChangeType.DELETE,
-          oldRecord: Object.fromEntries(rel.columns.map((c, i) =>
-            [c.name, this.deserializeColumnData(op.delete?.oldRowData[i] as any, c)]))
+          oldRecord: deserializeRow(op.delete.oldRowData!, rel)
         });
         replication.transactions[lastTxnIdx].changes.push(change);
       }
     });
-  }
-
-  private deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
-    const columnType = columnInfo.type.toUpperCase();
-    switch (columnType) {
-      case 'TEXT':
-      case 'UUID':
-      case 'VARCHAR':
-        return typeDecoder.text(column);
-      case 'INTEGER':
-        return typeDecoder.number(column);
-    }
-    throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
-  }
-
-  private serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
-    const columnType = columnInfo.type.toUpperCase();
-    switch (columnType) {
-      case 'TEXT':
-      case 'UUID':
-        return typeEncoder.text(column as string);
-      case 'INTEGER':
-        return typeEncoder.number(column as number);
-    }
-    throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't serialize ${columnInfo.type}`);
   }
 
   private toMessage(data: Uint8Array): SatPbMsg | Error {
@@ -626,4 +590,93 @@ export class SatelliteClient extends EventEmitter implements Client {
   getOutboundLogPositions(): { enqueued: LSN, ack: LSN } {
     return { ack: this.outbound.ack_lsn, enqueued: this.outbound.enqueued_lsn }
   }
+}
+
+export function serializeRow(rec: Record, relation: Relation) : SatOpRow {
+  var recordNumColumn = 0
+  var recordNullBitMask = new Uint8Array(calculateNumBytes(relation.columns.length))
+  var recordValues = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
+    if (rec[c.name] != undefined) {
+      acc.push(serializeColumnData(rec[c.name]!, c))
+    }
+    else {
+      acc.push(serializeNullData())
+      setBit(recordNullBitMask, recordNumColumn)
+    }
+    recordNumColumn = recordNumColumn + 1
+    return acc
+  }, [])
+  return SatOpRow.fromPartial({
+    nullsBitmask: recordNullBitMask,
+    values: recordValues
+  })
+}
+
+export function deserializeRow(row: SatOpRow | undefined, relation: Relation): Record | undefined {
+  if (row == undefined) { return undefined }
+  return Object.fromEntries(relation!.columns.map(
+    (c, i) => {
+      var value;
+      if ( getBit(row.nullsBitmask, i) == 1 ) {
+        value = undefined
+      }
+      else {
+        value = deserializeColumnData(row.values[i], c);
+      }
+      return [c.name, value]
+    }))
+}
+
+function setBit(array: Uint8Array, index: number): void {
+  var byteIndex = Math.floor(index / 8)
+  var bitIndex = index - (byteIndex * 8)
+
+  var mask = 0x01 << bitIndex
+  array[byteIndex] = array[byteIndex] | mask
+}
+
+function getBit(array: Uint8Array, index: number): number {
+  var byteIndex = Math.floor(index / 8)
+  var bitIndex = index - (byteIndex * 8)
+
+  return (array[byteIndex] >>> bitIndex) & 0x01;
+}
+
+function calculateNumBytes(column_num: number): number {
+  let rem = column_num % 8
+  if (rem == 0) {
+    return column_num / 8;
+  }
+  else {
+    return 1 + ((column_num - rem) / 8);
+  }
+}
+
+function deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
+  const columnType = columnInfo.type.toUpperCase();
+  switch (columnType) {
+    case 'TEXT':
+    case 'UUID':
+    case 'VARCHAR':
+      return typeDecoder.text(column);
+    case 'INTEGER':
+      return typeDecoder.number(column);
+  }
+  throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
+}
+
+function serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
+  const columnType = columnInfo.type.toUpperCase();
+  switch (columnType) {
+    case 'TEXT':
+    case 'UUID':
+      return typeEncoder.text(column as string);
+    case 'INTEGER':
+      return typeEncoder.number(column as number);
+  }
+  throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't serialize ${columnInfo.type}`);
+}
+
+function serializeNullData(): Uint8Array {
+  return typeEncoder.text("");
 }

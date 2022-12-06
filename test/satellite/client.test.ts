@@ -16,11 +16,11 @@ import {
   SatPingResp,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNodeFactory } from '../../src/sockets/node';
-import { SatelliteClient } from '../../src/satellite/client';
+import { SatelliteClient, serializeRow, deserializeRow } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
-import { AckType, ChangeType, SatelliteErrorCode, Transaction } from '../../src/util/types';
+import { AckType, ChangeType, SatelliteErrorCode, Transaction, Relation } from '../../src/util/types';
 import { base64, DEFAULT_LSN, bytesToNumber, typeEncoder, numberToBytes } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
@@ -234,6 +234,16 @@ test.serial('receive transaction over multiple messages', async t => {
   const begin = SatOpBegin.fromPartial({ lsn: DEFAULT_LSN, commitTimestamp: Long.ZERO });
   const commit = SatOpCommit.fromPartial({});
 
+  const rel: Relation = {
+    id: 1,
+    schema: 'schema',
+    table: 'table',
+    tableType: SatRelation_RelationType.TABLE,
+    columns: [
+      { name: 'name1', type: 'TEXT' },
+      { name: 'name2', type: 'TEXT' }
+  ]}
+
   const relation = SatRelation.fromPartial({
     relationId: 1,
     schemaName: 'schema',
@@ -247,16 +257,17 @@ test.serial('receive transaction over multiple messages', async t => {
 
   const insertOp = SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: [typeEncoder.text("Foo"), typeEncoder.text("Bar")]
+    rowData: serializeRow({name1: "Foo", 'name2': "Bar"}, rel)
   });
+
   const updateOp = SatOpUpdate.fromPartial({
     relationId: 1,
-    rowData: [typeEncoder.text("Hello"), typeEncoder.text("World!")],
-    oldRowData: [typeEncoder.text(""), typeEncoder.text("")]
+    rowData: serializeRow({name1: "Hello", 'name2': "World!"}, rel),
+    oldRowData: serializeRow({name1: "", name2: ""}, rel)
   });
   const deleteOp = SatOpDelete.fromPartial({
     relationId: 1,
-    oldRowData: [typeEncoder.text("Hello"), typeEncoder.text("World!")]
+    oldRowData: serializeRow({name1: "Hello", 'name2': "World!"}, rel)
   });
 
   const firstOpLogMessage = SatOpLog.fromPartial({
@@ -331,7 +342,8 @@ test.serial('send transaction', async t => {
 
   const startResp = SatInStartReplicationResp.fromPartial({});
 
-  const opLogEntries: OplogEntry[] = [{
+  const opLogEntries: OplogEntry[] = [
+  {
     namespace: 'main',
     tablename: 'parent',
     optype: 'INSERT',
@@ -350,16 +362,16 @@ test.serial('send transaction', async t => {
     primaryKey: '{"id":1}',
     rowid: 1,
     timestamp: '1970-01-01T00:00:01.000Z'
-    },
-    {
-      namespace: 'main',
-      tablename: 'parent',
-      optype: 'UPDATE',
-      newRow: '{"id":1}',
-      oldRow: '{"id":1}',
-      primaryKey: '{"id":1}',
-      rowid: 2,
-      timestamp: '1970-01-01T00:00:02.000Z'
+  },
+  {
+    namespace: 'main',
+    tablename: 'parent',
+    optype: 'UPDATE',
+    newRow: '{"id":1}',
+    oldRow: '{"id":1}',
+    primaryKey: '{"id":1}',
+    rowid: 2,
+    timestamp: '1970-01-01T00:00:02.000Z'
   }
   ]
 
@@ -467,6 +479,7 @@ test('ack on send and pong', async t => {
 
   await res
 })
+
 
 function decode(data: Buffer): SatPbMsg {
   const code = data.readUInt8();

@@ -62,7 +62,7 @@ export type Change = {
     oldRecord?: Record
 }
 
-export type Record = { [key: string]: string | number }
+export type Record = { [key: string]: string | number | undefined }
 
 export type Replication = {
     authenticated: boolean

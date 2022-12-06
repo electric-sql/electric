@@ -224,7 +224,7 @@ export interface SatOpCommit {
 export interface SatOpInsert {
   $type: "Electric.Satellite.SatOpInsert";
   relationId: number;
-  rowData: Uint8Array[];
+  rowData: SatOpRow | undefined;
 }
 
 /**
@@ -234,8 +234,8 @@ export interface SatOpInsert {
 export interface SatOpUpdate {
   $type: "Electric.Satellite.SatOpUpdate";
   relationId: number;
-  rowData: Uint8Array[];
-  oldRowData: Uint8Array[];
+  rowData: SatOpRow | undefined;
+  oldRowData: SatOpRow | undefined;
 }
 
 /**
@@ -245,7 +245,7 @@ export interface SatOpUpdate {
 export interface SatOpDelete {
   $type: "Electric.Satellite.SatOpDelete";
   relationId: number;
-  oldRowData: Uint8Array[];
+  oldRowData: SatOpRow | undefined;
 }
 
 /**
@@ -260,6 +260,17 @@ export interface SatMigrationNotification {
   oldSchemaHash: string;
   newSchemaVersion: string;
   newSchemaHash: string;
+}
+
+/** Message that corresponds to the single row. */
+export interface SatOpRow {
+  $type: "Electric.Satellite.SatOpRow";
+  nullsBitmask: Uint8Array;
+  /**
+   * values may contain binaries with size 0 for NULLs and empty values
+   * check nulls_bitmask to differentiate between the two
+   */
+  values: Uint8Array[];
 }
 
 function createBaseSatGetServerInfoReq(): SatGetServerInfoReq {
@@ -1095,7 +1106,7 @@ export const SatOpCommit = {
 messageTypeRegistry.set(SatOpCommit.$type, SatOpCommit);
 
 function createBaseSatOpInsert(): SatOpInsert {
-  return { $type: "Electric.Satellite.SatOpInsert", relationId: 0, rowData: [] };
+  return { $type: "Electric.Satellite.SatOpInsert", relationId: 0, rowData: undefined };
 }
 
 export const SatOpInsert = {
@@ -1105,8 +1116,8 @@ export const SatOpInsert = {
     if (message.relationId !== 0) {
       writer.uint32(8).uint32(message.relationId);
     }
-    for (const v of message.rowData) {
-      writer.uint32(26).bytes(v!);
+    if (message.rowData !== undefined) {
+      SatOpRow.encode(message.rowData, writer.uint32(26).fork()).ldelim();
     }
     return writer;
   },
@@ -1122,7 +1133,7 @@ export const SatOpInsert = {
           message.relationId = reader.uint32();
           break;
         case 3:
-          message.rowData.push(reader.bytes());
+          message.rowData = SatOpRow.decode(reader, reader.uint32());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1135,7 +1146,9 @@ export const SatOpInsert = {
   fromPartial<I extends Exact<DeepPartial<SatOpInsert>, I>>(object: I): SatOpInsert {
     const message = createBaseSatOpInsert();
     message.relationId = object.relationId ?? 0;
-    message.rowData = object.rowData?.map((e) => e) || [];
+    message.rowData = (object.rowData !== undefined && object.rowData !== null)
+      ? SatOpRow.fromPartial(object.rowData)
+      : undefined;
     return message;
   },
 };
@@ -1143,7 +1156,7 @@ export const SatOpInsert = {
 messageTypeRegistry.set(SatOpInsert.$type, SatOpInsert);
 
 function createBaseSatOpUpdate(): SatOpUpdate {
-  return { $type: "Electric.Satellite.SatOpUpdate", relationId: 0, rowData: [], oldRowData: [] };
+  return { $type: "Electric.Satellite.SatOpUpdate", relationId: 0, rowData: undefined, oldRowData: undefined };
 }
 
 export const SatOpUpdate = {
@@ -1153,11 +1166,11 @@ export const SatOpUpdate = {
     if (message.relationId !== 0) {
       writer.uint32(8).uint32(message.relationId);
     }
-    for (const v of message.rowData) {
-      writer.uint32(18).bytes(v!);
+    if (message.rowData !== undefined) {
+      SatOpRow.encode(message.rowData, writer.uint32(18).fork()).ldelim();
     }
-    for (const v of message.oldRowData) {
-      writer.uint32(26).bytes(v!);
+    if (message.oldRowData !== undefined) {
+      SatOpRow.encode(message.oldRowData, writer.uint32(26).fork()).ldelim();
     }
     return writer;
   },
@@ -1173,10 +1186,10 @@ export const SatOpUpdate = {
           message.relationId = reader.uint32();
           break;
         case 2:
-          message.rowData.push(reader.bytes());
+          message.rowData = SatOpRow.decode(reader, reader.uint32());
           break;
         case 3:
-          message.oldRowData.push(reader.bytes());
+          message.oldRowData = SatOpRow.decode(reader, reader.uint32());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1189,8 +1202,12 @@ export const SatOpUpdate = {
   fromPartial<I extends Exact<DeepPartial<SatOpUpdate>, I>>(object: I): SatOpUpdate {
     const message = createBaseSatOpUpdate();
     message.relationId = object.relationId ?? 0;
-    message.rowData = object.rowData?.map((e) => e) || [];
-    message.oldRowData = object.oldRowData?.map((e) => e) || [];
+    message.rowData = (object.rowData !== undefined && object.rowData !== null)
+      ? SatOpRow.fromPartial(object.rowData)
+      : undefined;
+    message.oldRowData = (object.oldRowData !== undefined && object.oldRowData !== null)
+      ? SatOpRow.fromPartial(object.oldRowData)
+      : undefined;
     return message;
   },
 };
@@ -1198,7 +1215,7 @@ export const SatOpUpdate = {
 messageTypeRegistry.set(SatOpUpdate.$type, SatOpUpdate);
 
 function createBaseSatOpDelete(): SatOpDelete {
-  return { $type: "Electric.Satellite.SatOpDelete", relationId: 0, oldRowData: [] };
+  return { $type: "Electric.Satellite.SatOpDelete", relationId: 0, oldRowData: undefined };
 }
 
 export const SatOpDelete = {
@@ -1208,8 +1225,8 @@ export const SatOpDelete = {
     if (message.relationId !== 0) {
       writer.uint32(8).uint32(message.relationId);
     }
-    for (const v of message.oldRowData) {
-      writer.uint32(26).bytes(v!);
+    if (message.oldRowData !== undefined) {
+      SatOpRow.encode(message.oldRowData, writer.uint32(26).fork()).ldelim();
     }
     return writer;
   },
@@ -1225,7 +1242,7 @@ export const SatOpDelete = {
           message.relationId = reader.uint32();
           break;
         case 3:
-          message.oldRowData.push(reader.bytes());
+          message.oldRowData = SatOpRow.decode(reader, reader.uint32());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1238,7 +1255,9 @@ export const SatOpDelete = {
   fromPartial<I extends Exact<DeepPartial<SatOpDelete>, I>>(object: I): SatOpDelete {
     const message = createBaseSatOpDelete();
     message.relationId = object.relationId ?? 0;
-    message.oldRowData = object.oldRowData?.map((e) => e) || [];
+    message.oldRowData = (object.oldRowData !== undefined && object.oldRowData !== null)
+      ? SatOpRow.fromPartial(object.oldRowData)
+      : undefined;
     return message;
   },
 };
@@ -1312,6 +1331,54 @@ export const SatMigrationNotification = {
 };
 
 messageTypeRegistry.set(SatMigrationNotification.$type, SatMigrationNotification);
+
+function createBaseSatOpRow(): SatOpRow {
+  return { $type: "Electric.Satellite.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
+}
+
+export const SatOpRow = {
+  $type: "Electric.Satellite.SatOpRow" as const,
+
+  encode(message: SatOpRow, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.nullsBitmask.length !== 0) {
+      writer.uint32(10).bytes(message.nullsBitmask);
+    }
+    for (const v of message.values) {
+      writer.uint32(18).bytes(v!);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpRow {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpRow();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.nullsBitmask = reader.bytes();
+          break;
+        case 2:
+          message.values.push(reader.bytes());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpRow>, I>>(object: I): SatOpRow {
+    const message = createBaseSatOpRow();
+    message.nullsBitmask = object.nullsBitmask ?? new Uint8Array();
+    message.values = object.values?.map((e) => e) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpRow.$type, SatOpRow);
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
