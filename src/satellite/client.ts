@@ -268,19 +268,20 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     transaction.changes.forEach(tx => {
       let txOp, oldRecord, record
-      const relation = this.outbound.relations.get(tx.relation.id)
+      const relation = this.outbound.relations.get(tx.relation.id)!
+
       if (tx.oldRecord) {
-        oldRecord = serializeRow(tx.oldRecord, relation!)
+        oldRecord = serializeRow(tx.oldRecord, relation)
       }
       if (tx.record) {
-        record = serializeRow(tx.record, relation!)
+        record = serializeRow(tx.record, relation)
       }
       switch (tx.type) {
         case ChangeType.DELETE:
           txOp = SatTransOp.fromPartial({
             delete: {
               oldRowData: oldRecord,
-              relationId: relation?.id
+              relationId: relation.id
             }
           })
           break
@@ -288,7 +289,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           txOp = SatTransOp.fromPartial({
             insert: {
               rowData: record,      
-              relationId: relation?.id
+              relationId: relation.id
             }
           })
           break
@@ -297,7 +298,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             update: {
               rowData: record,
               oldRowData: oldRecord,
-              relationId: relation?.id
+              relationId: relation.id
             }
           })
           break
