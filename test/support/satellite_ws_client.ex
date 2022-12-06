@@ -116,12 +116,38 @@ defmodule Electric.Test.SatelliteWsClient do
     :ok
   end
 
+  def send_test_relation_owned(conn \\ __MODULE__) do
+    relation = %Electric.Satellite.SatRelation{
+      columns: [
+        %SatRelationColumn{name: "id", type: "uuid"},
+        %SatRelationColumn{name: "electric_user_id", type: "varchar"},
+        %SatRelationColumn{name: "content", type: "varchar"}
+      ],
+      relation_id: 22222,
+      schema_name: "public",
+      table_name: "owned_entries",
+      table_type: :TABLE
+    }
+
+    send_data(conn, relation)
+    :ok
+  end
+
   def send_new_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
     send_tx_data(
       conn,
       lsn,
       commit_time,
       {:insert, %SatOpInsert{relation_id: 11111, row_data: [id, value, ""]}}
+    )
+  end
+
+  def send_new_owned_data(conn \\ __MODULE__, lsn, commit_time, id, user_id, value) do
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:insert, %SatOpInsert{relation_id: 22222, row_data: [id, user_id, value]}}
     )
   end
 
@@ -134,12 +160,31 @@ defmodule Electric.Test.SatelliteWsClient do
     )
   end
 
+  def send_update_owned_data(conn \\ __MODULE__, lsn, commit_time, id, user_id, value) do
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:update,
+       %SatOpUpdate{relation_id: 22222, old_row_data: [], row_data: [id, user_id, value]}}
+    )
+  end
+
   def send_delete_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
     send_tx_data(
       conn,
       lsn,
       commit_time,
       {:delete, %SatOpDelete{relation_id: 11111, old_row_data: [id, value, ""]}}
+    )
+  end
+
+  def send_delete_owned_data(conn \\ __MODULE__, lsn, commit_time, id, user_id, value) do
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:delete, %SatOpDelete{relation_id: 22222, old_row_data: [id, user_id, value]}}
     )
   end
 

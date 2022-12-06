@@ -49,7 +49,7 @@ defmodule Electric.Satellite.WsServerTest do
   import Mock
 
   setup_all _ do
-    columns = [{"id", :uuid}, {"content", :varchar}]
+    columns = [{"id", :uuid}, {"electric_user_id", :varchar}, {"content", :varchar}]
 
     Electric.Test.SchemaRegistryHelper.initialize_registry(
       @test_publication,
@@ -240,7 +240,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(10)
+            simple_transes(cxt.user_id, 10)
           )
 
         Enum.map(0..10, fn n ->
@@ -266,7 +266,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(limit)
+            simple_transes(cxt.user_id, limit)
           )
 
         MockClient.send_data(conn, %SatInStopReplicationReq{})
@@ -279,7 +279,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(limit, num_lsn)
+            simple_transes(cxt.user_id, limit, num_lsn)
           )
 
         Enum.map(num_lsn..limit, fn n ->
@@ -505,22 +505,22 @@ defmodule Electric.Satellite.WsServerTest do
     ]
   end
 
-  defp simple_transes(n, lim \\ 0) do
-    simple_trans(n, lim, [])
+  defp simple_transes(user_id, n, lim \\ 0) do
+    simple_trans(user_id, n, lim, [])
   end
 
-  defp simple_trans(n, lim, acc) when n >= lim do
+  defp simple_trans(user_id, n, lim, acc) when n >= lim do
     [trans] =
       %Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid"},
+        record: %{"content" => "a", "id" => "fakeid", "electric_user_id" => user_id},
         relation: {@test_schema, @test_table}
       }
       |> build_events(n)
 
-    simple_trans(n - 1, lim, [trans | acc])
+    simple_trans(user_id, n - 1, lim, [trans | acc])
   end
 
-  defp simple_trans(_n, _lim, acc) do
+  defp simple_trans(_user_id, _n, _lim, acc) do
     acc
   end
 

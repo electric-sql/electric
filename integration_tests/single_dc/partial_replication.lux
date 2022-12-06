@@ -1,0 +1,119 @@
+[doc partial replication via electric_user_id filtering]
+
+[global dprompt=\w+@\w+:(\S+)[\#\$]]
+[global eprompt=iex\(\d+\)>\s]
+[global user_id_1=1]
+[global user_id_2=2]
+
+[macro client_session user_id session_id]
+    [invoke log "user ${user_id}: session ${session_id}: start"]
+    [local client_id=client_${user_id}_${session_id}]
+    !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
+                    secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
+    ?$eprompt
+    !{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn( \
+            [ auth: %{auth_provider: provider, user_id: "$user_id"}, \
+                id: "$client_id", \
+                debug: true, \
+                sub: "0", \
+                auto_in_sub: true, \
+                format: :compact, \
+                host: "electric_1", \
+                auto_ping: :true \
+            ])
+    ?+$eprompt
+    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %Electric.Satellite.SatInStartReplicationResp{(.*)
+
+    !Electric.Test.SatelliteWsClient.send_test_relation_owned(conn)
+    ?:ok
+[endmacro]
+
+[include shared.luxinc]
+
+[invoke setup]
+
+[shell user_1_ws1]
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id_1 1]
+
+[shell user_1_ws2]
+    [invoke start_elixir_test 2]
+    [invoke client_session $user_id_1 2]
+
+[shell user_2_ws1]
+    [invoke start_elixir_test 3]
+    [invoke client_session $user_id_2 1]
+
+[shell user_1_ws1]
+    [invoke log "user 1: session 1: send owned data"]
+
+    [local lsn=1]
+
+    !Electric.Test.SatelliteWsClient.send_new_owned_data( \
+        conn, \
+        "$lsn", \
+        1666371_111_516, \
+        "60aa740d-5e54-46d8-8ff8-be3beed6ca98", \
+        "$user_id_1", \
+        "user 1 data 1" \
+    )
+    ?:ok
+
+[shell user_1_ws2]
+    [invoke log "user 1: session 2: receive data"]
+    [timeout 20]
+    ?%{.*commit_timestamp: 1666371111516
+    # ?%Electric.Satellite.SatOpUpdate{.*row_data: \["60aa740d-5e54-46d8-8ff8-be3beed6ca98", "5a9a8b1d-263d-4cad-90f8-9190396161d7", "user 1 data 1"
+
+[shell user_1_ws1]
+    [invoke log "user 1: session 1: receive data"]
+    [local lsn=1]
+    ?+%{.*commit_timestamp: 1666371111516
+    ?%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
+
+[shell user_2_ws1]
+    [invoke log "user 2: session 1: not receive user 1 data"]
+    -%{.*commit_timestamp: 1666371111516
+
+[shell user_2_ws1]
+    [invoke log "user 2: session 1: send owned data"]
+    [timeout 10]
+
+    !Electric.Test.SatelliteWsClient.send_new_owned_data( \
+        conn, \
+        "3", \
+        1666371_333_516, \
+        "1f922fbb-016b-40c3-aeb1-e52682f82241", \
+        "$user_id_2", \
+        "Hello from Satellite" \
+    )
+    ?:ok
+    ?+%{.*commit_timestamp: 1666371333516
+    ?%Electric.Satellite.SatPingResp{.* lsn: "3"}
+
+    [invoke log "user 2: session 1: send global data"]
+    !Electric.Test.SatelliteWsClient.send_new_owned_data( \
+        conn, \
+        "4", \
+        1666371_444_516, \
+        "2e8a766e-a6ee-485d-bf52-0d4ca9c46b54", \
+        "", \
+        "Everyone gets this" \
+    )
+    ?:ok
+    ?+%{.*commit_timestamp: 1666371444516
+    ?%Electric.Satellite.SatPingResp{.* lsn: "4"}
+
+[shell user_1_ws1]
+    [invoke log "user 1: session 1: receive only global data"]
+    -%{.*commit_timestamp: 1666371333516
+    ?%{.*commit_timestamp: 1666371444516
+
+[shell user_1_ws2]
+    [invoke log "user 1: session 2: receive only global data"]
+    -%{.*commit_timestamp: 1666371333516
+    ?%{.*commit_timestamp: 1666371444516
+
+[cleanup]
+    [invoke teardown]

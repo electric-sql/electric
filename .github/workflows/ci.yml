@@ -47,7 +47,7 @@ jobs:
           key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
 
   tests:
-    name: elixir tests and dialyzer
+    name: elixir tests
     runs-on: ubuntu-latest
     needs: deps
     steps:
@@ -95,10 +95,44 @@ jobs:
           artifact-name: code-coverage-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  dialyzer:
+    name: dialyzer and formatting
+    runs-on: ubuntu-latest
+    needs: deps
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.3"
+          elixir-version: "1.13"
+
+      - name: Try to reuse cached deps
+        id: cache-deps
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
+
+      - name: Cache compiled code
+        id: cache-build
+        uses: actions/cache@v3
+        with:
+          path: _build
+          key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
+
+      - uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
+      - run: make pretest_compile
       - name: Dialyzer
         run: make dialyzer
-
-      - run: make check-format
+      - name: Check formatting
+        run: make check-format
 
   e2e_tests:
     name: E2E tests

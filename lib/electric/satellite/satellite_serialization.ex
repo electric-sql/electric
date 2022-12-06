@@ -200,17 +200,17 @@ defmodule Electric.Satellite.Replication do
         trans = %Transaction{trans | changes: Enum.reverse(trans.changes)}
         {nil, [trans | complete]}
 
-      %SatTransOp{op: {_, op}}, {trans, complete} ->
+      %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
+        relation = fetch_relation(relations, relation_id)
+
         transop =
           case op do
-            %SatOpInsert{relation_id: relation_id, row_data: row_data} ->
-              relation = fetch_relation(relations, relation_id)
+            %SatOpInsert{row_data: row_data} ->
               data = data_tuple_to_map(relation.columns, row_data, false)
 
               %NewRecord{relation: {relation.schema, relation.table}, record: data}
 
-            %SatOpUpdate{relation_id: relation_id, row_data: row_data, old_row_data: old_row_data} ->
-              relation = fetch_relation(relations, relation_id)
+            %SatOpUpdate{row_data: row_data, old_row_data: old_row_data} ->
               old_data = data_tuple_to_map(relation.columns, old_row_data, true)
               data = data_tuple_to_map(relation.columns, row_data, false)
 
@@ -220,8 +220,7 @@ defmodule Electric.Satellite.Replication do
                 old_record: old_data
               }
 
-            %SatOpDelete{relation_id: relation_id, old_row_data: old_row_data} ->
-              relation = fetch_relation(relations, relation_id)
+            %SatOpDelete{old_row_data: old_row_data} ->
               old_data = data_tuple_to_map(relation.columns, old_row_data, true)
               %DeletedRecord{relation: {relation.schema, relation.table}, old_record: old_data}
           end

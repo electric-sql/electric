@@ -51,6 +51,16 @@ services:
       file: ../services_templates.yaml
       service: elixir_client
 
+  elixir_client_2:
+    extends:
+      file: ../services_templates.yaml
+      service: elixir_client
+
+  elixir_client_3:
+    extends:
+      file: ../services_templates.yaml
+      service: elixir_client
+
   pg_1:
     extends:
       file: ../services_templates.yaml

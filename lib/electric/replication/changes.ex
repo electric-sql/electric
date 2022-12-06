@@ -18,8 +18,9 @@ defmodule Electric.Replication.Changes do
 
   require Logger
 
-  @type relation() :: {schema :: String.t(), table :: String.t()}
-  @type record() :: %{(column_name :: String.t()) => column_data :: binary()}
+  @type db_identifier() :: String.t()
+  @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
+  @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type change() ::
           Changes.NewRecord.t()
           | Changes.UpdatedRecord.t()
@@ -131,5 +132,10 @@ defmodule Electric.Replication.Changes do
 
   defmodule TruncatedRelation do
     defstruct [:relation]
+  end
+
+  @spec belongs_to_user?(Transaction.t(), binary()) :: boolean()
+  def belongs_to_user?(%Transaction{} = tx, user_id) do
+    Changes.Ownership.belongs_to_user?(tx, user_id)
   end
 end
