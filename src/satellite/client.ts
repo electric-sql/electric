@@ -667,7 +667,7 @@ function deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): 
     case 'INT':
     case 'INT4':
     case 'INTEGER':
-      return typeDecoder.number(column);
+      return Number(typeDecoder.text(column));
   }
   throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
 }
@@ -677,9 +677,8 @@ function serializeColumnData(column: string | number, columnInfo: RelationColumn
   switch (columnType) {
     case 'TEXT':
     case 'UUID':
-      return typeEncoder.text(column as string);
     case 'INTEGER':
-      return typeEncoder.number(column as number);
+      return typeEncoder.text(column as string);
   }
   throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't serialize ${columnInfo.type}`);
 }
