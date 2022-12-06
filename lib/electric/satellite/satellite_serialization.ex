@@ -1,6 +1,7 @@
-defmodule Electric.Satellite.Replication do
+defmodule Electric.Satellite.Serialization do
   alias Electric.Satellite.{
     SatOpLog,
+    SatOpRow,
     SatTransOp,
     SatOpBegin,
     SatOpUpdate,
@@ -27,7 +28,7 @@ defmodule Electric.Satellite.Replication do
           %{Changes.relation() => PB.relation_id()}
 
   @doc """
-  Serialize from internal format to Satellite format
+  Serialize from internal format to Satellite PB format
   """
   @spec serialize_trans(Transaction.t(), term(), relation_mapping()) ::
           {%SatOpLog{}, [Changes.relation()], relation_mapping()}
@@ -70,41 +71,54 @@ defmodule Electric.Satellite.Replication do
   end
 
   defp mk_trans_op(%NewRecord{record: data}, rel_id, rel_cols) do
-    op_insert = %SatOpInsert{relation_id: rel_id, row_data: map_to_record(data, rel_cols)}
+    op_insert = %SatOpInsert{relation_id: rel_id, row_data: map_to_row(data, rel_cols)}
     %SatTransOp{op: {:insert, op_insert}}
   end
 
   defp mk_trans_op(%UpdatedRecord{record: data, old_record: old_data}, rel_id, rel_cols) do
     op_update = %SatOpUpdate{
       relation_id: rel_id,
-      row_data: map_to_record(data, rel_cols),
-      old_row_data: map_to_record(old_data, rel_cols)
+      row_data: map_to_row(data, rel_cols),
+      old_row_data: map_to_row(old_data, rel_cols)
     }
 
     %SatTransOp{op: {:update, op_update}}
   end
 
   defp mk_trans_op(%DeletedRecord{old_record: data}, rel_id, rel_cols) do
-    op_delete = %SatOpDelete{relation_id: rel_id, old_row_data: map_to_record(data, rel_cols)}
+    op_delete = %SatOpDelete{relation_id: rel_id, old_row_data: map_to_row(data, rel_cols)}
     %SatTransOp{op: {:delete, op_delete}}
   end
 
-  @spec map_to_record(%{String.t() => binary()} | nil, [String.t()]) :: [binary()]
-  defp map_to_record(nil, _rel_cols) do
-    []
-  end
+  @spec map_to_row(%{String.t() => binary()} | nil, [String.t()]) :: %SatOpRow{}
+  def map_to_row(nil, _), do: nil
 
-  defp map_to_record(data, rel_cols) do
-    # FIXME: This is ineficient, data should be stored in order, so that we
-    # do not have to do lookup here, but filter columns based on the schema instead
-    Enum.map(rel_cols, fn column_name ->
-      # FIXME: NULL is stored in Vaxine as :nil, but we should be able to distringuish it
-      # from empty string
-      case Map.get(data, column_name, nil) do
-        nil -> <<>>
-        d -> d
+  def map_to_row(data, rel_cols) when is_list(rel_cols) and is_map(data) do
+    bitmask = []
+    values = []
+
+    {num_columns, bitmask, values} =
+      Enum.reduce(rel_cols, {0, bitmask, values}, fn column_name, {num, bitmask0, values0} ->
+        # FIXME: This is ineficient, data should be stored in order, so that we
+        # do not have to do lookup here, but filter columns based on the schema instead
+        case Map.get(data, column_name, nil) do
+          nil ->
+            {num + 1, [1 | bitmask0], [<<>> | values0]}
+
+          value when is_binary(value) ->
+            {num + 1, [0 | bitmask0], [value | values0]}
+        end
+      end)
+
+    bitmask =
+      case rem(num_columns, 8) do
+        0 -> bitmask
+        n -> :lists.duplicate(8 - n, 0) ++ bitmask
       end
-    end)
+
+    bitmask = for i <- Enum.reverse(bitmask), do: <<i::1>>, into: <<>>
+
+    %SatOpRow{nulls_bitmask: bitmask, values: Enum.reverse(values)}
   end
 
   def fetch_relation_id(relation, known_relations) do
@@ -123,6 +137,9 @@ defmodule Electric.Satellite.Replication do
     end
   end
 
+  @doc """
+  Serialize internal relation representation to Satellite PB format
+  """
   @spec serialize_relation(String.t(), String.t(), integer(), [SchemaRegistry.column()]) ::
           %SatRelation{}
   def serialize_relation(schema, name, oid, columns) do
@@ -147,7 +164,7 @@ defmodule Electric.Satellite.Replication do
   end
 
   @doc """
-  Deserialize from Satellite format to internal format
+  Deserialize from Satellite PB format to internal format
   """
   @spec deserialize_trans(
           String.t(),
@@ -206,13 +223,12 @@ defmodule Electric.Satellite.Replication do
         transop =
           case op do
             %SatOpInsert{row_data: row_data} ->
-              data = data_tuple_to_map(relation.columns, row_data, false)
-
+              data = row_to_map(relation.columns, row_data, false)
               %NewRecord{relation: {relation.schema, relation.table}, record: data}
 
             %SatOpUpdate{row_data: row_data, old_row_data: old_row_data} ->
-              old_data = data_tuple_to_map(relation.columns, old_row_data, true)
-              data = data_tuple_to_map(relation.columns, row_data, false)
+              old_data = row_to_map(relation.columns, old_row_data, true)
+              data = row_to_map(relation.columns, row_data, false)
 
               %UpdatedRecord{
                 relation: {relation.schema, relation.table},
@@ -221,7 +237,7 @@ defmodule Electric.Satellite.Replication do
               }
 
             %SatOpDelete{old_row_data: old_row_data} ->
-              old_data = data_tuple_to_map(relation.columns, old_row_data, true)
+              old_data = row_to_map(relation.columns, old_row_data, true)
               %DeletedRecord{relation: {relation.schema, relation.table}, old_record: old_data}
           end
 
@@ -233,13 +249,29 @@ defmodule Electric.Satellite.Replication do
     Map.get(relations, relation_id)
   end
 
-  defp data_tuple_to_map(_, [], false) do
+  @spec row_to_map([String.t()], %SatOpRow{}) :: %{String.t() => nil | String.t()}
+  def row_to_map(columns, row) do
+    row_to_map(columns, row, false)
+  end
+
+  defp row_to_map(_columns, nil, false) do
     raise "protocol violation, empty row"
   end
 
-  defp data_tuple_to_map(columns, list_data, _allow_empty) do
-    columns
-    |> Enum.zip(list_data)
-    |> Map.new(fn {column_name, data} -> {column_name, data} end)
+  defp row_to_map(_columns, nil, true), do: nil
+
+  defp row_to_map(columns, %SatOpRow{nulls_bitmask: bitmask, values: values}, _) do
+    bitmask_list = for <<x::1 <- bitmask>>, do: x
+
+    {row, _, []} =
+      Enum.reduce(columns, {%{}, bitmask_list, values}, fn
+        column, {map0, [0 | bitmask_list0], [value | values0]} ->
+          {Map.put(map0, column, value), bitmask_list0, values0}
+
+        column, {map0, [1 | bitmask_list0], [_ | values0]} ->
+          {Map.put(map0, column, nil), bitmask_list0, values0}
+      end)
+
+    row
   end
 end

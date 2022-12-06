@@ -27,23 +27,26 @@
 
 [endmacro]
 
-[macro setup_rest]
+[macro setup_rest migration_dir]
 [shell electric_1]
     [timeout 10]
+    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_electric_1
     ?START_REPLICATION SLOT
     ?START_REPLICATION SLOT
 
 [shell electric_2]
     [timeout 10]
+    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_electric_2
     ?START_REPLICATION SLOT
 [shell start_env]
     [progress setup finished]
 [endmacro]
 
-[macro start_satellite name]
+[macro start_satellite name migration_dir]
 [shell satellite_${name}]
+    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_satellite_client_${name}
 [endmacro]
 
@@ -54,10 +57,10 @@
     [invoke ok]
 [endmacro]
 
-[macro setup]
+[macro setup migration_dir]
 
 [invoke setup_pg_and_vaxine]
-[invoke setup_rest]
+[invoke setup_rest $migration_dir]
 
 [endmacro]
 

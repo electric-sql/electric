@@ -1,0 +1,109 @@
+[doc Sanity check test that electric migrates PG instance]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric=]
+[global pg_id=f989b58b-980d-4d3c-b178-adb6ae8222f1]
+[global migration_dir=m_null_support]
+
+[include shared.luxinc]
+
+[invoke setup $migration_dir]
+
+[shell electric_1]
+    -$fail_pattern
+[shell vaxine]
+    -$fail_pattern
+
+[shell electric_curl]
+    [invoke log "init PGS with initial schema"]
+
+    !curl http://localhost:5050/api/status
+    ?{"connectors":{"postgres_1":true,"postgres_2":true},"vaxine":true}
+
+    !curl http://localhost:5050/api/migrations
+    ?\[{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_1","vsn":"1"},{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_2","vsn":"1"}\]
+
+    !curl http://localhost:5050/api/migrations/postgres_1
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_1","vsn":"1"}
+
+    !curl http://localhost:5050/api/migrations/postgres_2
+    ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"initial","origin":"postgres_2","vsn":"1"}
+
+[shell electric_migrate]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
+    ?HTTP/1.1 200 OK
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
+    ?HTTP/1.1 200 OK
+
+# Start test
+
+[shell pg_1]
+    [invoke log "Insert data into postgres_1 with null values"]
+    !INSERT INTO public.items_full (id, content) \
+        VALUES ('${pg_id}', 'hello from pg_1_f');
+    !INSERT INTO public.items_default (id, content) \
+        VALUES ('${pg_id}', 'hello from pg_1_d');
+    ?$psql
+
+[shell pg_1]
+    [invoke log "Validate that postgresql_1 have received an update"]
+    [invoke wait-for "SELECT * FROM public.items_full;" "hello from pg_1_f" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items_default;" "hello from pg_1_d" 10 ${psql}]
+
+    !SELECT * FROM public.items_full;
+    ?f989b58b-980d-4d3c-b178-adb6ae8222f1 | hello from pg_1_f | <NULL>
+    !SELECT * FROM public.items_default;
+    ?f989b58b-980d-4d3c-b178-adb6ae8222f1 | hello from pg_1_d | <NULL>
+
+[shell pg_2]
+    [invoke log "Validate that postgresql_2 have received an update"]
+    [invoke wait-for "SELECT * FROM public.items_full;" "hello from pg_1_f" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items_default;" "hello from pg_1_d" 10 ${psql}]
+
+    !SELECT * FROM public.items_full;
+    ?f989b58b-980d-4d3c-b178-adb6ae8222f1 | hello from pg_1_f | <NULL>
+    !SELECT * FROM public.items_default;
+    ?f989b58b-980d-4d3c-b178-adb6ae8222f1 | hello from pg_1_d | <NULL>
+
+[shell pg_1]
+    [invoke log "Validate that postgresql_2 have received an update"]
+    [invoke wait-for "SELECT * FROM public.items_full;" "hello from pg_1_f" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items_default;" "hello from pg_1_d" 10 ${psql}]
+
+[shell electric_migrate]
+    [invoke log "Migrate postgres_1 instance 1 -> 2"]
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232634_add_column"}'
+    ?HTTP/1.1 200 OK
+
+[shell pg_1]
+    [invoke log "Insert data that postgres_2 is not able to store"]
+    !UPDATE public.items_full SET content = 'hej pg_1 new data', added_column = 'new data added' WHERE id = '${pg_id}';
+    ?$psql
+    !UPDATE public.items_default SET content = 'hej pg_1 new data', added_column = 'new data added' WHERE id = '${pg_id}';
+    ?$psql
+
+[shell pg_2]
+    [invoke log "Validate that postgresql_2 have received an update"]
+    [invoke wait-for "SELECT * FROM public.items_full;" "hej pg_1 new data" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items_default;" "hej pg_1 new data" 10 ${psql}]
+
+    [invoke log "Store data in old schema on postgresql_2"]
+    !UPDATE public.items_full SET content = 'hej pg_2 old data full' WHERE id = '${pg_id}';
+    ?$psql
+    !UPDATE public.items_default SET content = 'hej pg_2 old data default' WHERE id = '${pg_id}';
+    ?$psql
+
+[shell electric_1]
+    ?"content" => "hej pg_2 old data full"
+    ?"content" => "hej pg_2 old data default"
+
+[shell pg_1]
+    [invoke log "Read data update"]
+    [invoke wait-for "SELECT * FROM public.items_full;" "hej pg_2 old data full" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items_default;" "hej pg_2 old data default" 10 ${psql}]
+
+[cleanup]
+    [invoke teardown]

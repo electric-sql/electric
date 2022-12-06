@@ -1,9 +1,10 @@
-[doc Sanity check test that electric migrates PG instance]
+[doc Test for basic Satellite <> Electric interaction]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 [global node=>]
 [global pg_id=f989b58b-980d-4d3c-b178-adb6ae8222f1]
+[global migration_dir=m_sanity_check]
 
 [include shared.luxinc]
 
@@ -20,7 +21,7 @@
 [endmacro]
 
 [macro setup_client satellite_number electric]
-    [invoke start_satellite $satellite_number]
+    [invoke start_satellite $satellite_number $migration_dir]
     !yarn node
     ?$node
     [invoke connect_to_electric $electric 5133]
@@ -53,7 +54,7 @@
 # Setup test
 #===============================================================================
 #
-[invoke setup]
+[invoke setup $migration_dir]
 
 [shell electric_1]
     -$fail_pattern

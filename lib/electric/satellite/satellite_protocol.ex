@@ -27,7 +27,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Replication.Vaxine
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
-  alias Electric.Satellite.Replication
+  alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
   alias Electric.Telemetry.Metrics
 
@@ -278,7 +278,7 @@ defmodule Electric.Satellite.Protocol do
     self = self()
 
     try do
-      case Replication.deserialize_trans(
+      case Serialization.deserialize_trans(
              state.client_id,
              msg,
              in_rep.incomplete_trans,
@@ -380,7 +380,7 @@ defmodule Electric.Satellite.Protocol do
     Logger.debug("trans: #{inspect(trans)} with offset #{inspect(vx_offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Replication.serialize_trans(trans, vx_offset, out_rep.relations)
+      Serialization.serialize_trans(trans, vx_offset, out_rep.relations)
 
     serialized_relations =
       Enum.map(
@@ -389,7 +389,7 @@ defmodule Electric.Satellite.Protocol do
           table_info = SchemaRegistry.fetch_table_info!(relation)
           columns = SchemaRegistry.fetch_table_columns!(relation)
 
-          Replication.serialize_relation(
+          Serialization.serialize_relation(
             table_info.schema,
             table_info.name,
             table_info.oid,

@@ -29,20 +29,19 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   @spec start_children(origin()) :: :ok | {:error, term}
-  def start_children(origin, type \\ :init) do
+  def start_children(origin) do
     connector = name(origin)
 
     {:ok, _} =
-      case type do
-        :init ->
-          Supervisor.start_child(
-            connector,
-            %{id: :sup, start: {PostgresConnectorSup, :start_link, [origin]}, type: :supervisor}
-          )
-
-        :reinit ->
-          Supervisor.restart_child(connector, :sup)
-      end
+      Supervisor.start_child(
+        connector,
+        %{
+          id: :sup,
+          start: {PostgresConnectorSup, :start_link, [origin]},
+          type: :supervisor,
+          restart: :temporary
+        }
+      )
 
     :ok
   end

@@ -76,6 +76,7 @@
         ?SH-PROMPT:
         [sleep 1]
     [endloop]
+    !\pset null '<NULL>'
 [endmacro]
 
 [macro start_elixir_test id]

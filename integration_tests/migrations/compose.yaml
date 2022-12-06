@@ -20,7 +20,7 @@ services:
       service: electric
     volumes:
       - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
-      - ./migrations/:/migrations:ro
+      - ${MIGRATION_DIRS}:/migrations:ro
     ports:
       - "5050:5050"
       - "5133:5133"
@@ -35,7 +35,7 @@ services:
       service: electric
     volumes:
       - ./electric_b.exs:/app/releases/0.1.0/runtime.exs:ro
-      - ./migrations:/migrations:ro
+      - ${MIGRATION_DIRS}:/migrations:ro
     ports:
       - "5051:5050"
       - "5134:5133"

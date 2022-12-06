@@ -77,7 +77,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       when init == :init or init == :reinit do
     case initialize_postgres(state) do
       {:ok, state1} ->
-        :ok = PostgresConnector.start_children(state.origin, init)
+        :ok = PostgresConnector.start_children(state.origin)
         Logger.info("successfully initialized connector #{inspect(origin)}")
         SchemaRegistry.mark_origin_ready(origin)
 

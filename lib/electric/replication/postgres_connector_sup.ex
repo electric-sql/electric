@@ -50,30 +50,4 @@ defmodule Electric.Replication.PostgresConnectorSup do
 
     Supervisor.init(children, strategy: :one_for_one)
   end
-
-  #  @spec stop_children(atom) :: :ok
-  #  def stop_children(origin) do
-  #    name = name(origin)
-  #    # terminate replication from PG to Vaxine
-  #   :ok = Supervisor.terminate_child(name, :vaxine_consumer)
-  #    :ok = Supervisor.terminate_child(name, :postgres_producer)
-
-  # with {:ok, conn} <- Client.connect(conn_config),
-  #     :ok <- Client.stop_subscription(conn, subscription_name)
-  # do
-  #    :ok = Supervisor.terminate_child(name, :vaxine_producer)
-  #    :ok = Supervisor.terminate_child(name, :slot_server)
-
-  #  end
-
-  # Order in which we should stop postgresql connection
-  # vaxine_log_consumer
-  # postgresl_producer
-
-  # -- stop subscription --
-  # we want to do that before terminating SlotServer, to avoud PG reconnects
-  # and retriggering SlotServer
-
-  # vaxine_log_producer
-  # slot_server
 end
