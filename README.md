@@ -166,3 +166,11 @@ See the [frameworks guide](https://electric-sql.com/docs/usage/frameworks) for m
 ## Issues
 
 Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/typescript-client/issues).
+
+## Contributing
+
+See the [Community Guidelines](https://github.com/electric-sql/meta) including the [Guide to Contributing](https://github.com/electric-sql/meta/blob/main/CONTRIBUTING.md) and [Contributor License Agreement](https://github.com/electric-sql/meta/blob/main/CLA.md).
+
+## Support
+
+We have an [open community Discord](https://discord.gg/B7kHGwDcbj). If you’re interested in the project, please come and say hello and let us know if you have any questions or need any help or support getting things running.
