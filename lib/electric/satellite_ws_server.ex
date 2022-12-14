@@ -1,17 +1,9 @@
 defmodule Electric.Satellite.WsServer do
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.{State, InRep, OutRep}
-
-  alias Electric.Satellite.PB.Utils, as: PB
   alias Electric.Replication.OffsetStorage
 
-  alias Electric.Satellite.{
-    SatErrorResp,
-    SatPingResp,
-    SatPingReq,
-    SatInStopReplicationReq,
-    SatInStartReplicationReq
-  }
+  use Electric.Satellite.Protobuf
 
   import Protocol, only: [out_rep?: 1]
 

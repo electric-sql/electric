@@ -1,10 +1,10 @@
-defmodule Electric.Satellite.PB.Utils do
-  alias Electric.Satellite.{
+defmodule Electric.Satellite.Protobuf do
+  import Electric.Satellite.V01
+
+  alias Electric.Satellite.V01.{
     SatErrorResp,
     SatAuthReq,
     SatAuthResp,
-    SatGetServerInfoReq,
-    SatGetServerInfoResp,
     SatPingReq,
     SatPingResp,
     SatInStartReplicationReq,
@@ -12,9 +12,8 @@ defmodule Electric.Satellite.PB.Utils do
     SatInStopReplicationReq,
     SatInStopReplicationResp,
     SatOpLog,
-    SatOpRow,
     SatRelation,
-    SatRelationColumn
+    SatMigrationNotification
   }
 
   require Logger
@@ -25,16 +24,15 @@ defmodule Electric.Satellite.PB.Utils do
     SatErrorResp => 0,
     SatAuthReq => 1,
     SatAuthResp => 2,
-    SatGetServerInfoReq => 3,
-    SatGetServerInfoResp => 4,
-    SatPingReq => 5,
-    SatPingResp => 6,
-    SatInStartReplicationReq => 7,
-    SatInStartReplicationResp => 8,
-    SatInStopReplicationReq => 9,
-    SatInStopReplicationResp => 10,
-    SatOpLog => 11,
-    SatRelation => 12
+    SatPingReq => 3,
+    SatPingResp => 4,
+    SatInStartReplicationReq => 5,
+    SatInStartReplicationResp => 6,
+    SatInStopReplicationReq => 7,
+    SatInStopReplicationResp => 8,
+    SatOpLog => 9,
+    SatRelation => 10,
+    SatMigrationNotification => 11
   }
 
   @type relation_id() :: non_neg_integer()
@@ -42,8 +40,6 @@ defmodule Electric.Satellite.PB.Utils do
           %SatErrorResp{}
           | %SatAuthReq{}
           | %SatAuthResp{}
-          | %SatGetServerInfoReq{}
-          | %SatGetServerInfoResp{}
           | %SatPingReq{}
           | %SatPingResp{}
           | %SatInStartReplicationReq{}
@@ -52,7 +48,46 @@ defmodule Electric.Satellite.PB.Utils do
           | %SatInStopReplicationResp{}
           | %SatOpLog{}
           | %SatRelation{}
-          | %SatRelationColumn{}
+          | %SatMigrationNotification{}
+
+  defmacro __using__(_opts) do
+    quote do
+      alias Electric.Satellite.Protobuf, as: PB
+
+      alias Electric.Satellite.V01.{
+        SatErrorResp,
+        SatAuthReq,
+        SatAuthHeaderPair,
+        SatAuthResp,
+        SatPingReq,
+        SatPingResp,
+        SatInStartReplicationReq,
+        SatInStartReplicationResp,
+        SatInStopReplicationReq,
+        SatInStopReplicationResp,
+        SatOpLog,
+        SatOpRow,
+        SatOpBegin,
+        SatOpCommit,
+        SatOpDelete,
+        SatOpInsert,
+        SatOpUpdate,
+        SatTransOp,
+        SatRelation,
+        SatRelationColumn,
+        SatMigrationNotification
+      }
+    end
+  end
+
+  defmodule Version do
+    defstruct major: nil, minor: nil
+
+    @type t() :: %__MODULE__{
+            major: integer,
+            minor: integer
+          }
+  end
 
   @spec decode(byte(), binary()) :: {:ok, sq_pb_msg()} | {:error, any()}
   for {module, tag} <- @mapping do
@@ -92,5 +127,56 @@ defmodule Electric.Satellite.PB.Utils do
   def encode_with_type(msg) do
     {:ok, type, iodata} = encode(msg)
     {:ok, [<<type::size(8)>> | iodata]}
+  end
+
+  @spec get_long_proto_vsn() :: String.t()
+  def get_long_proto_vsn() do
+    package()
+  end
+
+  @spec get_proto_vsn() :: {:ok, Version.t()} | {:error, term()}
+  def get_proto_vsn() do
+    parse_proto_vsn(package())
+  end
+
+  @doc """
+    Version is expected to be of the following format:
+    "Namespace.vMajor_Minor"
+    where:
+      - Namespace is one or multiple napespaces joined by dot
+      - MAJOR is a major version, integers only
+      - MINOR is a minor version, integers only
+  """
+  @spec parse_proto_vsn(String.t()) :: {:ok, Version.t()} | {:error, term()}
+  def parse_proto_vsn(version) do
+    try do
+      version =
+        version
+        |> String.split(".")
+        |> List.last()
+
+      parse = Regex.named_captures(~r/^v(?<major>\d*)_(?<minor>\d*)$/, version)
+
+      {:ok,
+       %Version{
+         major: String.to_integer(parse["major"]),
+         minor: String.to_integer(parse["minor"])
+       }}
+    rescue
+      _ ->
+        Logger.warn("failed to encode: #{inspect(version)}")
+        {:error, :bad_version}
+    end
+  end
+
+  @doc """
+    Check if client's version of protocol is compatible with current version
+  """
+  @spec is_compatible(Version.t(), Version.t()) :: boolean()
+  def is_compatible(
+        %Version{major: srv_maj, minor: srv_min},
+        %Version{major: cli_maj, minor: cli_min}
+      ) do
+    srv_maj == cli_maj and srv_min >= cli_min
   end
 end

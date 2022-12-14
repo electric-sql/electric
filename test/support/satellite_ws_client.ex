@@ -2,28 +2,10 @@ defmodule Electric.Test.SatelliteWsClient do
   @moduledoc """
 
   """
-  require Logger
-  alias Electric.Satellite.PB.Utils
   alias Electric.Satellite.Serialization
+  use Electric.Satellite.Protobuf
 
-  alias Electric.Satellite.{
-    SatAuthReq,
-    SatAuthResp,
-    SatPingReq,
-    SatPingResp,
-    SatInStartReplicationReq,
-    SatInStartReplicationResp,
-    # SatInStopReplicationReq,
-    # SatInStopReplicationResp,
-    SatOpLog,
-    SatOpBegin,
-    SatOpInsert,
-    SatOpUpdate,
-    SatOpDelete,
-    SatOpCommit,
-    SatTransOp,
-    SatRelationColumn
-  }
+  require Logger
 
   defmodule State do
     defstruct auto_in_sub: false,
@@ -101,7 +83,7 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def send_test_relation(conn \\ __MODULE__) do
-    relation = %Electric.Satellite.SatRelation{
+    relation = %SatRelation{
       columns: [
         %SatRelationColumn{name: "id", type: "uuid"},
         %SatRelationColumn{name: "content", type: "varchar"},
@@ -118,7 +100,7 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def send_test_relation_owned(conn \\ __MODULE__) do
-    relation = %Electric.Satellite.SatRelation{
+    relation = %SatRelation{
       columns: [
         %SatRelationColumn{name: "id", type: "uuid"},
         %SatRelationColumn{name: "electric_user_id", type: "varchar"},
@@ -211,7 +193,7 @@ defmodule Electric.Test.SatelliteWsClient do
     :ok
   end
 
-  @spec send_data(conn(), Electric.Satellite.PB.Utils.sq_pb_msg(), fun() | :default) :: term()
+  @spec send_data(conn(), PB.sq_pb_msg(), fun() | :default) :: term()
   def send_data(conn, data, filter \\ :default) do
     filter =
       case filter do
@@ -315,7 +297,7 @@ defmodule Electric.Test.SatelliteWsClient do
         loop(state)
 
       {:ctrl_stream, data, filter} ->
-        {:ok, type, _iodata} = Utils.encode(data)
+        {:ok, type, _iodata} = PB.encode(data)
         maybe_debug("send data #{type}: #{inspect(data)}", state)
 
         :gun.ws_send(conn, stream_ref, {:binary, serialize(data)})
@@ -403,7 +385,8 @@ defmodule Electric.Test.SatelliteWsClient do
       {:ok, token} ->
         id = Keyword.get(opts, :id, "id")
 
-        auth_req = serialize(%SatAuthReq{id: id, token: token})
+        headers = [%SatAuthHeaderPair{key: :PROTO_VERSION, value: PB.get_long_proto_vsn()}]
+        auth_req = serialize(%SatAuthReq{id: id, token: token, headers: headers})
 
         :gun.ws_send(conn, stream_ref, {:binary, auth_req})
         {:ws, {:binary, auth_frame}} = :gun.await(conn, stream_ref)
@@ -464,7 +447,7 @@ defmodule Electric.Test.SatelliteWsClient do
   end
 
   def serialize(data) do
-    {:ok, type, iodata} = Utils.encode(data)
+    {:ok, type, iodata} = PB.encode(data)
     [<<type::8>>, iodata]
   end
 
@@ -473,19 +456,19 @@ defmodule Electric.Test.SatelliteWsClient do
 
     case format do
       :compact ->
-        {:ok, data} = Utils.decode(type, data)
+        {:ok, data} = PB.decode(type, data)
         compact(data)
 
       :term ->
-        {:ok, data} = Utils.decode(type, data)
+        {:ok, data} = PB.decode(type, data)
         data
 
       :json when data !== <<"">> ->
-        {:ok, data} = Utils.json_decode(type, data, [:return_maps, :use_nil])
+        {:ok, data} = PB.json_decode(type, data, [:return_maps, :use_nil])
         data
 
       _ ->
-        {:ok, data} = Utils.decode(type, data)
+        {:ok, data} = PB.decode(type, data)
         data
     end
   end

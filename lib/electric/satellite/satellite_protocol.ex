@@ -5,22 +5,7 @@ defmodule Electric.Satellite.Protocol do
   require Logger
 
   alias Electric.Utils
-  alias Electric.Satellite.PB.Utils, as: PB
-
-  alias Electric.Satellite.{
-    SatAuthReq,
-    SatAuthResp,
-    SatPingReq,
-    SatPingResp,
-    SatInStartReplicationReq,
-    SatInStartReplicationResp,
-    SatInStopReplicationReq,
-    SatInStopReplicationResp,
-    SatRelation,
-    SatRelationColumn,
-    SatOpLog,
-    SatErrorResp
-  }
+  use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SchemaRegistry
@@ -135,7 +120,8 @@ defmodule Electric.Satellite.Protocol do
           | {:error, PB.sq_pb_msg()}
   def process_message(msg, %State{} = state) when not auth_passed?(state) do
     case msg do
-      %SatAuthReq{id: client_id, token: token} when client_id !== "" and token !== "" ->
+      %SatAuthReq{id: client_id, token: token, headers: headers}
+      when client_id !== "" and token !== "" ->
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
         # NOTE: We treat succesfull registration with Electric.safe_reg as an
@@ -146,6 +132,7 @@ defmodule Electric.Satellite.Protocol do
         reg_name = Electric.Satellite.WsServer.reg_name(client_id)
 
         with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+             :ok <- validate_headers(headers),
              true <- Electric.safe_reg(reg_name, 1000),
              :ok <- ClientManager.register_client(client_id, reg_name) do
           Logger.metadata(client_id: client_id, user_id: auth.user_id)
@@ -155,6 +142,9 @@ defmodule Electric.Satellite.Protocol do
           {%SatAuthResp{id: Electric.regional_id()},
            %State{state | auth: auth, auth_passed: true, client_id: client_id}}
         else
+          {:error, %SatErrorResp{}} = error ->
+            error
+
           {:error, :expired} ->
             Logger.warn("authorization failed for client: #{client_id}, expired token")
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
@@ -454,6 +444,48 @@ defmodule Electric.Satellite.Protocol do
 
       false ->
         {:ok, client_lsn}
+    end
+  end
+
+  defp validate_headers([]), do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+  defp validate_headers(nil), do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+  defp validate_headers(headers) do
+    headers =
+      headers
+      |> Enum.map(fn %SatAuthHeaderPair{key: key, value: value} -> {key, value} end)
+      |> Map.new()
+
+    with :ok <-
+           require_header(headers, :PROTO_VERSION, :PROTO_VSN_MISSMATCH, &compare_proto_version/1) do
+      :ok
+    else
+      {:error, status} ->
+        {:error, %SatErrorResp{error_type: status}}
+    end
+  end
+
+  defp require_header(headers, header, error, cmp_fun) do
+    case Map.get(headers, header) do
+      nil ->
+        {:error, error}
+
+      value ->
+        case cmp_fun.(value) do
+          :ok -> :ok
+          {:error, _} -> {:error, error}
+        end
+    end
+  end
+
+  defp compare_proto_version(client_proto_version) do
+    with {:ok, server_vsn} <- PB.get_proto_vsn(),
+         {:ok, client_vsn} <- PB.parse_proto_vsn(client_proto_version),
+         true <- PB.is_compatible(server_vsn, client_vsn) do
+      :ok
+    else
+      {:error, _} = e -> e
+      false -> {:error, :not_compatible}
     end
   end
 end
