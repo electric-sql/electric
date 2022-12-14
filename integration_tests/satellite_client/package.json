@@ -14,7 +14,9 @@
     "lint": "eslint src --fix"
   },
   "dependencies": {
+    "@types/uuid": "^9.0.0",
     "electric-sql": "https://github.com/electric-sql/typescript-client.git",
+    "loglevel": "^1.8.1",
     "tslint": "^6.1.3",
     "tslint-config-prettier": "^1.18.0",
     "uuid": "^9.0.0"

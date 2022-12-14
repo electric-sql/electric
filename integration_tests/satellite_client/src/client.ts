@@ -11,7 +11,7 @@ export const read_migrations = (migration_file: string) => {
 }
 
 export const open_db = (name: string,
-                        address: string,
+                        host: string,
                         port: number,
                         migrations: any
                        ) => {
@@ -21,8 +21,9 @@ export const open_db = (name: string,
     app: 'satellite_client',
     migrations: migrations,
     replication: {
-      address: address,
-      port: port
+      host: host,
+      port: port,
+      insecure: true,
     },
     token: "token"
   }
