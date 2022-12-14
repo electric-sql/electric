@@ -59,7 +59,7 @@
             {:auto_ping, :true} \
             ])
     ?+$eprompt
-    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
 
 [shell pg_2]
     [invoke log "Make sure we replicate all data from PG1 -> PG2"]
@@ -106,7 +106,7 @@
     ?:ok
     !Electric.Test.SatelliteWsClient.send_new_data("1", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "Hello from Satellite")
     ?:ok
-    ?%Electric.Satellite.SatPingResp{.* lsn: "1"}
+    ?%(.*).SatPingResp{.* lsn: "1"}
 
 [shell electric]
     ?Hello from Satellite
@@ -119,7 +119,7 @@
     [invoke log "Send transaction with update from Satellite"]
     !Electric.Test.SatelliteWsClient.send_update_data("2", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
     ?:ok
-    ?%Electric.Satellite.SatPingResp{.* lsn: "2"}
+    ?%(.*).SatPingResp{.* lsn: "2"}
 
 [shell electric]
     ?How are you?
@@ -132,7 +132,7 @@
     [invoke log "Send transaction with delete from Satellite"]
     !Electric.Test.SatelliteWsClient.send_delete_data("3", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
     ?:ok
-    ?%Electric.Satellite.SatPingResp{.* lsn: "3"}
+    ?%(.*).SatPingResp{.* lsn: "3"}
 
 [shell electric]
     ?How are you?
@@ -161,7 +161,7 @@
 #            {:auto_ping, :true} \
 #            ])
 #    ?+$eprompt
-#    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "3", (.*)
+#    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "3", (.*)
 
 [cleanup]
     [invoke teardown]

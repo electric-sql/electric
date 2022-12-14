@@ -22,8 +22,8 @@
                 auto_ping: :true \
             ])
     ?+$eprompt
-    ?(.*) %Electric.Satellite.SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
-    ?(.*) %Electric.Satellite.SatInStartReplicationResp{(.*)
+    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %(.*).SatInStartReplicationResp{(.*)
 
     !Electric.Test.SatelliteWsClient.send_test_relation_owned(conn)
     ?:ok
@@ -64,13 +64,13 @@
     [invoke log "user 1: session 2: receive data"]
     [timeout 20]
     ?%{.*commit_timestamp: 1666371111516
-    # ?%Electric.Satellite.SatOpUpdate{.*row_data: \["60aa740d-5e54-46d8-8ff8-be3beed6ca98", "5a9a8b1d-263d-4cad-90f8-9190396161d7", "user 1 data 1"
+    # ?%(.*).SatOpUpdate{.*row_data: \["60aa740d-5e54-46d8-8ff8-be3beed6ca98", "5a9a8b1d-263d-4cad-90f8-9190396161d7", "user 1 data 1"
 
 [shell user_1_ws1]
     [invoke log "user 1: session 1: receive data"]
     [local lsn=1]
     ?+%{.*commit_timestamp: 1666371111516
-    ?%Electric.Satellite.SatPingResp{.* lsn: "$lsn"}
+    ?%(.*).SatPingResp{.* lsn: "$lsn"}
 
 [shell user_2_ws1]
     [invoke log "user 2: session 1: not receive user 1 data"]
@@ -90,7 +90,7 @@
     )
     ?:ok
     ?+%{.*commit_timestamp: 1666371333516
-    ?%Electric.Satellite.SatPingResp{.* lsn: "3"}
+    ?%(.*).SatPingResp{.* lsn: "3"}
 
     [invoke log "user 2: session 1: send global data"]
     !Electric.Test.SatelliteWsClient.send_new_owned_data( \
@@ -103,7 +103,7 @@
     )
     ?:ok
     ?+%{.*commit_timestamp: 1666371444516
-    ?%Electric.Satellite.SatPingResp{.* lsn: "4"}
+    ?%(.*).SatPingResp{.* lsn: "4"}
 
 [shell user_1_ws1]
     [invoke log "user 1: session 1: receive only global data"]
