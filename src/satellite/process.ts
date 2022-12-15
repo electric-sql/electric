@@ -14,6 +14,7 @@ import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromT
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../util/common'
 import { v4 as uuidv4 } from 'uuid';
+import Log from 'loglevel'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -121,7 +122,7 @@ export class SatelliteProcess implements Satellite {
 
     const lsnBase64 = await this._getMeta('lsn')
     this._lsn = base64.toBytes(lsnBase64)
-    console.log(`retrieved lsn ${this._lsn}`)
+    Log.info(`retrieved lsn ${this._lsn}`)
 
     return this._connectAndStartReplication()
   }
@@ -141,7 +142,7 @@ export class SatelliteProcess implements Satellite {
 
   // Unsubscribe from data changes and stop polling
   async stop(): Promise<void> {
-    console.log('stop polling')
+    Log.info('stop polling')
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
       this._pollingInterval = undefined
@@ -176,12 +177,12 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectAndStartReplication(): Promise<void | SatelliteError> {
-    console.log(`connecting and starting replication ${this._lsn}`)
+    Log.info(`connecting and starting replication ${this._lsn}`)
     return this.client.connect()
       .then(() => this.client.authenticate(this._clientId!))
       .then(() => this.client.startReplication(this._lsn))
       .catch((error) => {
-        console.log(`couldn't start replication: ${error}`)
+        Log.warn(`couldn't start replication: ${error}`)
       })
   }
 
@@ -249,20 +250,14 @@ export class SatelliteProcess implements Satellite {
       // TODO: take next N transactions instead of all
       const promise =
         this._getEntries(enqueuedLogPos)
-          .then((missing) => {
-            if (missing && missing.length > 0) {
-              console.log(`missing ${missing.length}`)
-            }
-
-            this._replicateSnapshotChanges(missing)
-          })
+          .then((missing) => this._replicateSnapshotChanges(missing))
       promises.push(promise)
     }
 
     await Promise.all(promises)
   }
   async _notifyChanges(results: OplogEntry[]): Promise<void> {
-    console.log("notify changes")
+    Log.info("notify changes")
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
@@ -311,7 +306,7 @@ export class SatelliteProcess implements Satellite {
   async _apply(incoming: OplogEntry[], lsn: LSN): Promise<void> {
     // assign timestamp to pending operations before apply
     //
-    console.log("apply incomming changes: ${lsn}")
+    Log.info(`apply incoming changes for LSN: ${lsn}`)
     await this._performSnapshot()
 
     const local = await this._getEntries()
@@ -448,7 +443,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _ack(lsn: number, isAck: boolean): Promise<void> {
-    console.log("ack lsn")
     if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
       throw new Error('Invalid position')
     }

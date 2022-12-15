@@ -32,6 +32,7 @@ import { Client } from '.';
 import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
 import { backOff, IBackOffOptions } from 'exponential-backoff';
 import { Notifier } from '../notifiers';
+import Log from 'loglevel';
 
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
@@ -139,7 +140,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   close(): Promise<void> {
-    console.log("closing client")
+    Log.info("closing client")
 
     this.outbound = this.resetReplication(this.outbound.enqueued_lsn, this.outbound.ack_lsn)
     this.inbound = this.resetReplication(this.inbound.enqueued_lsn, this.inbound.ack_lsn)
@@ -166,7 +167,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
 
-    console.log(`starting replication with lsn ${lsn}`)
+    Log.info(`starting replication with lsn ${lsn}`)
 
     const request = SatInStartReplicationReq.fromPartial({ lsn });
     return this.rpc(request);
@@ -348,7 +349,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleStartReq(message: SatInStartReplicationReq) {
-    console.log(`received replication request ${JSON.stringify(message)}`)
+    Log.info(`received replication request ${JSON.stringify(message)}`)
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
       const replication = { ...this.outbound }
       if (!message.options.find(o =>
@@ -439,7 +440,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handlePingReq() {
-    console.log(`respond to ping with last ack ${this.inbound.ack_lsn}`)
+    Log.info(`respond to ping with last ack ${this.inbound.ack_lsn}`)
     const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn });
     this.sendMessage(pong);
   }

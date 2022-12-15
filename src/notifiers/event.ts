@@ -4,6 +4,7 @@ import { AuthState } from '../auth/index'
 import { randomValue } from '../util/random'
 import { QualifiedTablename } from '../util/tablename'
 import { ConnectivityState, DbName } from '../util/types'
+import Log from 'loglevel'
 
 import {
   AuthStateCallback,
@@ -137,7 +138,7 @@ export class EventNotifier implements Notifier {
     dbNames.forEach(emitPotentialChange)
   }
   actuallyChanged(dbName: DbName, changes: Change[]): void {
-    console.log("actually changed notifier")
+    Log.info("actually changed notifier")
     if (!this._hasDbName(dbName)) {
       return
     }

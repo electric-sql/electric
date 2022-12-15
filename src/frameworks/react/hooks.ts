@@ -144,8 +144,6 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
         setResultData(successResult(res))
       })
       .catch((err: any) => {
-        console.log('query error', err)
-
         setResultData(errorResult(err))
       })
   }, [electric, changeSubscriptionKey, cacheKey, paramsKey])

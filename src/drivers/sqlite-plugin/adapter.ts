@@ -5,6 +5,7 @@ import { AnyFunction, Row, Statement } from '../../util/types'
 import { SQLitePlugin, SQLitePluginTransaction } from './index'
 import { ensurePromise } from './promise'
 import { ExecutionResult, rowsFromResults } from './results'
+import Log from 'loglevel'
 
 export abstract class SQLitePluginDatabaseAdapter {
   db: SQLitePlugin
@@ -27,7 +28,7 @@ export abstract class SQLitePluginDatabaseAdapter {
       const txFn = (tx: SQLitePluginTransaction) => {
         for (const { sql, args } of statements) {
           const stmtFailure = (err: any) => {
-            console.log('run statement failure', sql, err)
+            Log.info('run statement failure', sql, err)
             reject(err)
           }
           tx.executeSql(sql, args, undefined, stmtFailure)
@@ -39,7 +40,7 @@ export abstract class SQLitePluginDatabaseAdapter {
       }
 
       const failure = (err: any) => {
-        console.log('run tx failure')
+        Log.info('run tx failure')
         reject(err)
       }
 

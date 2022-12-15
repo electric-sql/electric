@@ -52,6 +52,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./debug": "./dist/util/debug/index.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -74,6 +75,9 @@
       ],
       "react-native": [
         "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "debug": [
+        "./dist/util/debug/index.d.ts"
       ]
     }
   },
@@ -109,13 +113,13 @@
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
     "lodash.throttle": "^4.1.1",
+    "loglevel": "^1.8.1",
     "long": "^5.2.0",
     "protobufjs": "^7.1.1",
     "sqlite-parser": "^1.0.1",
     "uuid": "^9.0.0",
     "walkjs": "^3.2.4",
-    "ws": "^8.8.1",
-    "yalc": "^1.0.0-pre.53"
+    "ws": "^8.8.1"
   },
   "devDependencies": {
     "@testing-library/react": "^13.4.0",

@@ -14,6 +14,7 @@ import { DatabaseAdapter } from './adapter'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
 import { WebSocketWebFactory } from '../../sockets/web'
+import { setDebugLogLevel } from '../../util/debug'
 
 // Avoid garbage collection.
 const refs = []
@@ -40,6 +41,10 @@ export class ElectricWorker extends WorkerServer {
   async open(dbName: DbName, config: ElectricConfig): Promise<boolean> {
     if (this.SQL === undefined) {
       throw new RequestError(400, 'Must init before opening')
+    }
+
+    if (config.debug) {
+      setDebugLogLevel()
     }
 
     const opts = this.opts

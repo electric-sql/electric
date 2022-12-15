@@ -69,6 +69,7 @@ export interface ElectricConfig {
     address: string
     port: number
   }
+  debug?: boolean,
 }
 
 
@@ -79,7 +80,7 @@ export const validateConfig = (config : any) => {
     return errors
   }
   
-  const {replication, app} = config
+  const { app, replication } = config
   
   if(!app){
     errors.push(`please provide an app identifier: ${config}`)
@@ -90,10 +91,17 @@ export const validateConfig = (config : any) => {
     errors.push("Please provide config.replication = {address, port} details to connect to dev infra")
     errors.push("We're still working to make ElectricSQL service live. You can join the wait list: https://console.electric-sql.com/join/waitlist")
   } else{
-    const {address, port } = replication
-    if(!address) {errors.push(`Please provide config.replication.address`)}
-    if(!port) {errors.push(`Please provide config.replication.port`)}
-    if(port && typeof port != 'number') {errors.push(`Please provide correct type for config.replication.port`)}
+    const { address, port } = replication
+
+    if (!address) {
+      errors.push(`Please provide config.replication.address`)
+    }
+    if (!port) {
+      errors.push(`Please provide config.replication.port`)
+    }
+    if (port && typeof port != 'number') {
+      errors.push(`Please provide correct type for config.replication.port`)
+    }    
   }
 
   return errors
