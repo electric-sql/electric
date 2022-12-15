@@ -8,7 +8,6 @@ import { MockMigrator } from '../../migrators/mock'
 import { Notifier } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
-import { ElectricConfig } from '../../satellite/config'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
@@ -17,9 +16,9 @@ import { MockSocketFactory } from '../../sockets/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 
-const testConfig = { app: "app", env: "test", token: "token", replication: { address: "", port: 0 } }
+const testConfig = { app: "app", token: "token" }
 
-export const initTestable = async (dbName: DbName, config: ElectricConfig = testConfig, opts?: ElectrifyOptions): RetVal => {
+export const initTestable = async (dbName: DbName, config = testConfig, opts?: ElectrifyOptions): RetVal => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)

@@ -6,7 +6,7 @@ import { Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
 import { DbName } from '../util/types'
-import { ElectricConfig } from '../satellite/config'
+import { addDefaultsToElectricConfig, ElectricConfig } from '../satellite/config'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock
@@ -63,7 +63,8 @@ export const electrify = async (
   registry: Registry,
   config: ElectricConfig,
 ): Promise<AnyElectrifiedDatabase> => {
-  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
+  const configWithDefaults = addDefaultsToElectricConfig(config)
+  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, configWithDefaults)
 
   return proxyOriginal(db, electric)
 }

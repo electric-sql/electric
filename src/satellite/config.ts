@@ -34,67 +34,79 @@ export const satelliteDefaults: SatelliteOpts = {
   minSnapshotWindow: 40
 }
 
+export const satelliteClientDefaults = {
+  env: "default",
+  timeout: 3000,
+  pushPeriod: 500,
+  insecure: false
+}
+
+const baseDomain = "electric-sql.com"
+
 export interface SatelliteClientOpts {
   app: string
-  env: string
+  env?: string
   token: string
+  host: string
   port: number
-  address: string
-  timeout: number
-  pushPeriod: number
-}
-
-export const satelliteClientDefaults = {
-  timeout: 3000,
-  pushPeriod: 500
-}
-
-export interface SatelliteClientOverrides {
-  app: string
-  env: string
-  token: string
-  port: number
-  address: string
   timeout?: number
   pushPeriod?: number
+  insecure?: boolean
 }
+
 
 // Config spec
 export interface ElectricConfig {
   app: string
-  env: string
+  env?: string
   token: string
   migrations?: Migration[],
   replication?: {
-    address: string
+    host: string
     port: number
+    insecure: boolean
   }
   debug?: boolean,
 }
 
+const electricConfigDefaults: Partial<ElectricConfig> = {
+  env: "default"
+}
 
-export const validateConfig = (config : any) => {
+export const addDefaultsToElectricConfig = (config: ElectricConfig): ElectricConfig => {
+  const host = (config.replication?.host) ?? `${config.env}.${config.app}.${baseDomain}`
+  const port = (config.replication?.port) ?? 443
+  const insecure = (config.replication?.insecure) ?? false
+
+  const newConfig = {
+    ...electricConfigDefaults,
+    ...config
+  }
+  newConfig.replication = { ...config.replication, host, port, insecure }
+
+  return newConfig
+}
+
+
+export const validateConfig = (config: any) => {
   const errors = []
-  if(!config){
+  if (!config) {
     errors.push(`config not defined: ${config}`)
     return errors
   }
-  
+
   const { app, replication } = config
-  
-  if(!app){
+
+  if (!app) {
     errors.push(`please provide an app identifier: ${config}`)
     return errors
-  }  
-  
-  if(!replication){
-    errors.push("Please provide config.replication = {address, port} details to connect to dev infra")
-    errors.push("We're still working to make ElectricSQL service live. You can join the wait list: https://console.electric-sql.com/join/waitlist")
-  } else{
-    const { address, port } = replication
+  }
 
-    if (!address) {
-      errors.push(`Please provide config.replication.address`)
+  if (replication) {
+    const { host, port } = replication
+
+    if (!host) {
+      errors.push(`Please provide config.replication.host`)
     }
     if (!port) {
       errors.push(`Please provide config.replication.port`)

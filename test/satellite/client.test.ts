@@ -21,7 +21,7 @@ import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
 import { AckType, ChangeType, SatelliteErrorCode, Transaction, Relation } from '../../src/util/types';
-import { base64, DEFAULT_LSN, bytesToNumber, typeEncoder, numberToBytes } from '../../src/util/common'
+import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
@@ -39,11 +39,12 @@ test.beforeEach(t => {
     new WebSocketNodeFactory(),
     new MockNotifier(dbName),
     {
-      appId: "fake_id",
+      app: "fake_id",
       token: "fake_token",
-      address: '127.0.0.1',
+      host: '127.0.0.1',
       port: 30002,
-      timeout: 10000
+      timeout: 10000,
+      insecure: true   
     }
   );
   const clientId = "91eba0c8-28ba-4a86-a6e8-42731c2c6694"

@@ -29,7 +29,7 @@ import {
 } from '../util/types';
 import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
-import { SatelliteClientOverrides, SatelliteClientOpts, satelliteClientDefaults } from './config';
+import { SatelliteClientOpts, satelliteClientDefaults } from './config';
 import { backOff, IBackOffOptions } from 'exponential-backoff';
 import { Notifier } from '../notifiers';
 import Log from 'loglevel';
@@ -37,7 +37,7 @@ import Log from 'loglevel';
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
 export class SatelliteClient extends EventEmitter implements Client {
-  private opts: SatelliteClientOpts;
+  private opts: Required<SatelliteClientOpts>;
   private dbName: string;
 
   private socketFactory: SocketFactory;
@@ -76,7 +76,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     timeMultiple: 2
   }
 
-  constructor(dbName: string, socketFactory: SocketFactory, notifier: Notifier, opts: SatelliteClientOverrides) {
+  constructor(dbName: string, socketFactory: SocketFactory, notifier: Notifier, opts: SatelliteClientOpts) {
     super();
 
     this.dbName = dbName
@@ -127,8 +127,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         reject(error)
       })
 
-      const { address, port } = this.opts;
-      this.socket.open({ url: `ws://${address}:${port}/ws` })
+      const { host, port, insecure } = this.opts
+      const url = `${insecure ? "ws" : "wss"}://${host}:${port}/ws`
+      this.socket.open({ url })
     })
 
     const retryPolicy = { ...this.connectionRetryPolicy }
