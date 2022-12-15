@@ -1,32 +1,42 @@
 import * as Pb from '../_generated/proto/satellite'
 import * as _m0 from 'protobufjs/minimal';
 
-let msgtypemapping: { [k: string]: [number, any] } = {
-    "Electric.Satellite.SatErrorResp": [0, Pb.SatErrorResp],
-    "Electric.Satellite.SatAuthReq": [1, Pb.SatAuthReq],
-    "Electric.Satellite.SatAuthResp": [2, Pb.SatAuthResp],
-    "Electric.Satellite.SatGetServerInfoReq": [3, Pb.SatGetServerInfoReq],
-    "Electric.Satellite.SatGetServerInfoResp": [4, Pb.SatGetServerInfoResp],
-    "Electric.Satellite.SatPingReq": [5, Pb.SatPingReq],
-    "Electric.Satellite.SatPingResp": [6, Pb.SatPingResp],
-    "Electric.Satellite.SatInStartReplicationReq": [7, Pb.SatInStartReplicationReq],
-    "Electric.Satellite.SatInStartReplicationResp": [8, Pb.SatInStartReplicationResp],
-    "Electric.Satellite.SatInStopReplicationReq": [9, Pb.SatInStopReplicationReq],
-    "Electric.Satellite.SatInStopReplicationResp": [10, Pb.SatInStopReplicationResp],
-    "Electric.Satellite.SatOpLog": [11, Pb.SatOpLog],
-    "Electric.Satellite.SatRelation": [12, Pb.SatRelation],
-    "Electric.Satellite.SatMigrationNotification": [13, Pb.SatMigrationNotification]
-};
+type GetName<T extends {"$type": string}> = T["$type"] extends `Electric.Satellite.v0_1.${infer K}` ? K : never
+type MappingTuples = {[k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]}
 
-let codemapping = Object.fromEntries(
-    Object.entries(msgtypemapping).map(e => [e[1][0], e[0]]))
+// NOTE: This mapping should be kept in sync with Electric message mapping.
+// Take into account that this mapping is dependent on the protobuf
+// protocol version.
+let msgtypetuples: MappingTuples =
+    {
+        "SatErrorResp": [0, Pb.SatErrorResp],
+        "SatAuthReq": [1, Pb.SatAuthReq],
+        "SatAuthResp": [2, Pb.SatAuthResp],
+        "SatPingReq": [3, Pb.SatPingReq],
+        "SatPingResp": [4, Pb.SatPingResp],
+        "SatInStartReplicationReq": [5, Pb.SatInStartReplicationReq],
+        "SatInStartReplicationResp": [6, Pb.SatInStartReplicationResp],
+        "SatInStopReplicationReq": [7, Pb.SatInStopReplicationReq],
+        "SatInStopReplicationResp": [8, Pb.SatInStopReplicationResp],
+        "SatOpLog": [9, Pb.SatOpLog],
+        "SatRelation": [10, Pb.SatRelation],
+        "SatMigrationNotification": [11, Pb.SatMigrationNotification]
+    }
+
+let msgtypemapping =
+    Object.fromEntries(
+        Object.entries(msgtypetuples).map(
+            e => [ getFullTypeName(e[0]), e[1]] ))
+
+let codemapping =
+    Object.fromEntries(
+        Object.entries(msgtypetuples).map(
+            e => [e[1][0], getFullTypeName(e[0]) ] ))
 
 export type SatPbMsg =
     | Pb.SatErrorResp
     | Pb.SatAuthReq
     | Pb.SatAuthResp
-    | Pb.SatGetServerInfoReq
-    | Pb.SatGetServerInfoResp
     | Pb.SatPingReq
     | Pb.SatPingResp
     | Pb.SatInStartReplicationReq
@@ -37,8 +47,8 @@ export type SatPbMsg =
     | Pb.SatRelation
     | Pb.SatMigrationNotification
 
-export type SatPbMsgObj = {
-    $type: string;
+export type SatPbMsgObj<Type extends string = string> = {
+    $type: Type;
     encode(message: SatPbMsg, writer: _m0.Writer): _m0.Writer;
     decode(input: _m0.Reader | Uint8Array, length?: number): SatPbMsg;
     fromPartial<I extends Pb.Exact<Pb.DeepPartial<SatPbMsg>, I>>(object: I): SatPbMsg;
@@ -70,4 +80,12 @@ export function getSizeBuf(msg_type: SatPbMsg) {
     var buf = new Uint8Array(1)
     buf.set([msgtype], 0);
     return buf
+}
+
+export function getProtocolVersion(): string {
+    return Pb.protobufPackage;
+}
+
+export function getFullTypeName(message: string): string{
+    return getProtocolVersion() + "." + message
 }

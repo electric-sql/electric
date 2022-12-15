@@ -16,8 +16,11 @@ import {
   SatPingResp,
   SatRelation,
   SatRelationColumn,
+  SatAuthHeader,
+  SatAuthHeaderPair,
 } from '../_generated/proto/satellite';
-import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg } from '../util/proto';
+import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg,
+         getProtocolVersion, getFullTypeName} from '../util/proto';
 import { Socket, SocketFactory } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
@@ -47,18 +50,21 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socketHandler?: (any: any) => void;
   private throttledPushTransaction?: () => void;
 
-  private handlerForMessageType: { [k: string]: IncomingHandler } = {
-    "Electric.Satellite.SatAuthResp": { handle: (resp) => this.handleAuthResp(resp), isRpc: true },
-    "Electric.Satellite.SatInStartReplicationResp": { handle: () => this.handleStartResp(), isRpc: true },
-    "Electric.Satellite.SatInStartReplicationReq": { handle: (req) => this.handleStartReq(req), isRpc: false },
-    "Electric.Satellite.SatInStopReplicationReq": { handle: () => this.handleStopReq(), isRpc: false },
-    "Electric.Satellite.SatInStopReplicationResp": { handle: () => this.handleStopResp(), isRpc: true },
-    "Electric.Satellite.SatPingReq": { handle: () => this.handlePingReq(), isRpc: true },
-    "Electric.Satellite.SatPingResp": { handle: (req) => this.handlePingResp(req), isRpc: false },
-    "Electric.Satellite.SatRelation": { handle: (req) => this.handleRelation(req), isRpc: false },
-    "Electric.Satellite.SatOpLog": { handle: (req) => this.handleTransaction(req), isRpc: false },
-    "Electric.Satellite.SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
-  }
+  private handlerForMessageType: { [k: string]: IncomingHandler } =
+    Object.fromEntries(
+      Object.entries(
+        {
+          "SatAuthResp": { handle: (resp: any) => this.handleAuthResp(resp), isRpc: true },
+          "SatInStartReplicationResp": { handle: () => this.handleStartResp(), isRpc: true },
+          "SatInStartReplicationReq": { handle: (req: any) => this.handleStartReq(req), isRpc: false },
+          "SatInStopReplicationReq": { handle: () => this.handleStopReq(), isRpc: false },
+          "SatInStopReplicationResp": { handle: () => this.handleStopResp(), isRpc: true },
+          "SatPingReq": { handle: () => this.handlePingReq(), isRpc: true },
+          "SatPingResp": { handle: (req: any) => this.handlePingResp(req), isRpc: false },
+          "SatRelation": { handle: (req: any) => this.handleRelation(req), isRpc: false },
+          "SatOpLog": { handle: (req: any) => this.handleTransaction(req), isRpc: false },
+          "SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
+        }).map( e => [getFullTypeName(e[0]), e[1]] ))
 
   connectionRetryPolicy: Partial<IBackOffOptions> = {
     delayFirstAttempt: false,
@@ -179,7 +185,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   authenticate(clientId: string): Promise<AuthResponse | SatelliteError> {
     const { token } = this.opts;
-    const request = SatAuthReq.fromPartial({ id: clientId, token });
+    const headers = [ SatAuthHeaderPair.fromPartial(
+      { key: SatAuthHeader.PROTO_VERSION,
+        value: getProtocolVersion()
+      }) ]
+    const request = SatAuthReq.fromPartial({ id: clientId,
+                                             token: token,
+                                             headers: headers
+                                           });
     return this.rpc<AuthResponse>(request);
   }
 
@@ -573,6 +586,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     let waitingFor: NodeJS.Timeout;
     return new Promise<T | SatelliteError>((resolve, reject) => {
       waitingFor = setTimeout(() => {
+        console.log(`${request.$type}`)
         const error = new SatelliteError(SatelliteErrorCode.TIMEOUT, `${request.$type}`);
         return reject(error);
       }, this.opts.timeout);

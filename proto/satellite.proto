@@ -17,16 +17,13 @@
 // bidirectional replication is enabled. If one of the parties is not involved
 // in the replication lsn field may be left empty.
 syntax = "proto3";
-package Electric.Satellite;
 
-// (Client)
-message SatGetServerInfoReq{}
-
-// (Server)
-message SatGetServerInfoResp {
-    string server_version = 1;
-    string node = 2;
-}
+// NOTE: Part after Electric.Satellite is used as a version of the protocol
+// itseld where the format vMAJOR.MINOR is treated in the following way:
+// MAJOR version when incompatible API changes are introduced
+// MINOR version when functionality or bugfix in a backwards compatible manner
+// are introduced.
+package Electric.Satellite.v0_1;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -40,24 +37,46 @@ message SatPingResp{
     optional bytes lsn = 1;
 }
 
+enum SatAuthHeader {
+    // protobuff required to have this by default
+    UNSPECIFIED = 0;
+    // required header
+    // protobuf protocol version, this version is picked from
+    // the package statement of this protobuf file, for example "Electric.Satellite.v10_13"
+    PROTO_VERSION = 1;
+
+    // required header
+    // last schema version applied on the client. Is prepended with the hash
+    // algorithm type, for example: "sha256:71c9f..."
+    SCHEMA_VERSION = 2;
+}
+
+message SatAuthHeaderPair {
+    SatAuthHeader key = 1;
+    string value = 2;
+}
+
 // (Client) Auth request
 //
 // Client request is the first request that the client should send before
 // executing any other request
 message SatAuthReq {
+
     // Identity of the Satelite application. Is expected to be something like
     // UUID. Required field
     string id = 1;
-    // Authentification token, auth method specific
+    // Authentification token, auth method specific, required
     string token = 2;
-    string schema_version = 3;
-    string schema_hash = 4;
+    // Headers, required
+    repeated SatAuthHeaderPair headers = 3;
 }
 
 // (Server) Auth response
 message SatAuthResp {
     // Identity of the Server
     string id = 1;
+    // Headers optional
+    repeated SatAuthHeaderPair headers = 3;
 }
 
 // General purpose error message, that could be sent to any request from any
@@ -69,6 +88,8 @@ message SatErrorResp {
         AUTH_FAILED = 2;
         REPLICATION_FAILED = 3;
         INVALID_REQUEST = 4;
+        PROTO_VSN_MISSMATCH = 5;
+        SCHEMA_VSN_MISSMATCH = 6;
     }
 
     ErrorCode error_type = 1;
