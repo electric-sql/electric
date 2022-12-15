@@ -1,17 +1,4 @@
 defmodule Electric.Satellite.Serialization do
-  alias Electric.Satellite.{
-    SatOpLog,
-    SatOpRow,
-    SatTransOp,
-    SatOpBegin,
-    SatOpUpdate,
-    SatOpDelete,
-    SatOpInsert,
-    SatOpCommit,
-    SatRelation,
-    SatRelationColumn
-  }
-
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
 
@@ -22,7 +9,7 @@ defmodule Electric.Satellite.Serialization do
     DeletedRecord
   }
 
-  alias Electric.Satellite.PB.Utils, as: PB
+  use Electric.Satellite.Protobuf
 
   @type relation_mapping() ::
           %{Changes.relation() => PB.relation_id()}

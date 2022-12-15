@@ -1,10 +1,7 @@
 defmodule Electric.Satellite.SerializationTest do
   alias Electric.Satellite.Serialization
 
-  alias Electric.Satellite.{
-    SatOpRow
-  }
-
+  use Electric.Satellite.Protobuf
   use ExUnit.Case, async: true
 
   test "test row serialization" do
