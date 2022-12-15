@@ -113,7 +113,7 @@ export const validateConfig = (config: any) => {
     }
     if (port && typeof port != 'number') {
       errors.push(`Please provide correct type for config.replication.port`)
-    }    
+    }
   }
 
   return errors

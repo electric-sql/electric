@@ -3,7 +3,7 @@ export { BundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
 
 export interface Migration {
-  body: string[],
+  satellite_body: string[],
   encoding: string,
   name: string,
   sha256: string,

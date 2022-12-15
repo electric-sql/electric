@@ -1,6 +1,8 @@
 import { Migration, MigrationRecord, Migrator, MigratorOptions } from './index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { overrideDefined } from '../util/options'
+import { data as baseMigration } from './schema'
+import Log from 'loglevel'
 
 const DEFAULTS: MigratorOptions = {
   tableName: '_electric_migrations'
@@ -20,7 +22,7 @@ export class BundleMigrator implements Migrator {
     const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
 
     this.adapter = adapter
-    this.migrations = migrations
+    this.migrations = [...baseMigration.migrations, ...migrations]
     this.tableName = opts.tableName
   }
 
@@ -31,7 +33,7 @@ export class BundleMigrator implements Migrator {
     let migration: Migration
     for (let i = 0; i < unapplied.length; i++) {
       migration = unapplied[i]
-
+      Log.info(`applying migration: ${migration.name} ${migration.sha256}`)
       await this.apply(migration)
     }
 
@@ -79,7 +81,7 @@ export class BundleMigrator implements Migrator {
     return migrations.slice(existing.length)
   }
 
-  async apply({ body, name, sha256 }: Migration): Promise<void> {
+  async apply({ satellite_body, name, sha256 }: Migration): Promise<void> {
     if (!VALID_NAME_EXP.test(name)) {
       throw new Error(`Invalid migration name, must match ${VALID_NAME_EXP}`)
     }
@@ -94,7 +96,7 @@ export class BundleMigrator implements Migrator {
         `
 
     await this.adapter.runInTransaction(
-      ...(body as unknown as string[]).map(sql => ({ sql })),
+      ...(satellite_body as unknown as string[]).map(sql => ({ sql })),
       { sql: applied, args: [name, sha256, Date.now()] }
     )
   }
