@@ -68,9 +68,6 @@ defmodule Mix.Tasks.Electric.Gen.Proto.Package do
       package
       |> String.split(".")
       |> Enum.map(&Macro.camelize(&1))
-      |> Enum.join(".")
-      |> String.to_atom()
-      |> List.wrap()
       |> Module.concat()
 
     module_ast =
