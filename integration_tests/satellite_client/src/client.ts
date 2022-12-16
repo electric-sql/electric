@@ -70,6 +70,26 @@ export const delete_item = (db: ElectrifiedDatabase, keys: [ string ]) => {
   }
 }
 
+export const get_other_items = (db: ElectrifiedDatabase) => {
+  const stmt = db.prepare('SELECT * FROM main.other_items;')
+  return stmt.all([])
+}
+
+export const insert_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
+  const st = db.prepare('INSERT INTO main.other_items (id, content) VALUES ( @uuid, @key )');
+  for (var key of keys) {
+    let myuuid = uuidv4();
+    st.run({ key: key, uuid: myuuid });
+  }
+}
+
+export const delete_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
+  const st = db.prepare("DELETE FROM main.other_items WHERE content = ?")
+  for (var key of keys) {
+    st.run({ sql: key });
+  }
+}
+
 export const run = (db: ElectrifiedDatabase) => {
   const stmt = db.prepare('select 1')
   return db.transaction((bind) => {

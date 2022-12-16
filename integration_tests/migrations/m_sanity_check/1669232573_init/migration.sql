@@ -9,3 +9,9 @@ CREATE TABLE IF NOT EXISTS public.items (
     content_b TEXT
 );
 
+CREATE TABLE IF NOT EXISTS public.other_items (
+    id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    content_b TEXT
+);
+
