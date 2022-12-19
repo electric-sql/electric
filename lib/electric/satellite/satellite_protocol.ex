@@ -429,15 +429,19 @@ defmodule Electric.Satellite.Protocol do
 
   defp validate_lsn(client_lsn, opts) do
     case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
-      {true, _} -> {:ok, 0}
-      {_, true} -> {:ok, :eof}
+      {true, _} ->
+        {:ok, 0}
+
+      {_, true} ->
+        {:ok, :eof}
+
       {false, false} ->
         try do
           # FIXME: We need to verify that LSN corresponds to Vaxine internal format
           lsn = :erlang.binary_to_term(client_lsn)
           {:ok, lsn}
         rescue
-        _ ->
+          _ ->
             {:error, :bad_lsn}
         end
     end
