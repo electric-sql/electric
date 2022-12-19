@@ -12,7 +12,7 @@ import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
-import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../util/common'
+import { base64, bytesToNumber, numberToBytes } from '../util/common'
 import { v4 as uuidv4 } from 'uuid';
 import Log from 'loglevel'
 
@@ -41,7 +41,7 @@ export class SatelliteProcess implements Satellite {
 
   _lastAckdRowId: number
   _lastSentRowId: number
-  _lsn: LSN
+  _lsn?: LSN
 
   relations: RelationsCache
 
@@ -55,8 +55,7 @@ export class SatelliteProcess implements Satellite {
     this.opts = opts
 
     this._lastAckdRowId = 0
-    this._lastSentRowId = 0
-    this._lsn = DEFAULT_LSN
+    this._lastSentRowId = 0    
 
     // Create a throttled function that performs a snapshot at most every
     // `minSnapshotWindow` ms. This function runs immediately when you
@@ -121,8 +120,12 @@ export class SatelliteProcess implements Satellite {
     )
 
     const lsnBase64 = await this._getMeta('lsn')
-    this._lsn = base64.toBytes(lsnBase64)
-    Log.info(`retrieved lsn ${this._lsn}`)
+    if (lsnBase64 && lsnBase64.length > 0) {
+      Log.info(`retrieved lsn ${this._lsn}`)
+      this._lsn = base64.toBytes(lsnBase64)
+    } else {
+      Log.info(`no lsn retrieved from store`)
+    }
 
     return this._connectAndStartReplication()
   }
@@ -177,7 +180,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectAndStartReplication(): Promise<void | SatelliteError> {
-    Log.info(`connecting and starting replication ${this._lsn}`)
+    Log.info(`connecting and starting replication`)
     return this.client.connect()
       .then(() => this.client.authenticate(this._clientId!))
       .then(() => this.client.startReplication(this._lsn))

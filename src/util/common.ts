@@ -15,7 +15,7 @@ export const base64 = {
     toBytes: (string: string) => Uint8Array.from(BASE64.decode(string), c => c.charCodeAt(0))
 }
 
-export const DEFAULT_LSN = numberToBytes(0);
+export const DEFAULT_LOG_POS = numberToBytes(0);
 
 export function numberToBytes(i: number) {
     return Uint8Array.of(

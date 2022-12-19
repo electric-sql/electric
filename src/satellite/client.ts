@@ -27,7 +27,7 @@ import { EventEmitter } from 'events';
 import {
   AckCallback, AckType, AuthResponse, ChangeType, LSN, RelationColumn, Replication, ReplicationStatus, SatelliteError, SatelliteErrorCode, Transaction, Record, Relation
 } from '../util/types';
-import { DEFAULT_LSN, typeEncoder, typeDecoder } from '../util/common'
+import { base64, DEFAULT_LOG_POS, typeEncoder, typeDecoder } from '../util/common'
 import { Client } from '.';
 import { SatelliteClientOpts, satelliteClientDefaults } from './config';
 import { backOff, IBackOffOptions } from 'exponential-backoff';
@@ -95,8 +95,8 @@ export class SatelliteClient extends EventEmitter implements Client {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: ack ? ack : DEFAULT_LSN,
-      enqueued_lsn: enqueued ? enqueued : DEFAULT_LSN,
+      ack_lsn: ack,
+      enqueued_lsn: enqueued,
       transactions: []
     }
   }
@@ -160,7 +160,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  startReplication(lsn: LSN = DEFAULT_LSN): Promise<void | SatelliteError> {
+  startReplication(lsn?: LSN): Promise<void | SatelliteError> {
     if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
       return Promise.reject(new SatelliteError(
         SatelliteErrorCode.REPLICATION_ALREADY_STARTED, `replication already started`));
@@ -168,9 +168,15 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
 
-    Log.info(`starting replication with lsn ${lsn}`)
+    let request;
+    if (!lsn || lsn.length == 0) {
+      Log.info(`no previous LSN, start replication with option FIRST_LSN`)
+      request = SatInStartReplicationReq.fromPartial({ options: [SatInStartReplicationReq_Option.FIRST_LSN] })
+    } else {
+      Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
+      request = SatInStartReplicationReq.fromPartial({ lsn })
+    }
 
-    const request = SatInStartReplicationReq.fromPartial({ lsn });
     return this.rpc(request);
   }
 
@@ -360,8 +366,8 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
       if (!message.options.find(o =>
         o == SatInStartReplicationReq_Option.FIRST_LSN)) {
-        replication.ack_lsn = DEFAULT_LSN;
-        replication.enqueued_lsn = DEFAULT_LSN;
+        replication.ack_lsn = DEFAULT_LOG_POS;
+        replication.enqueued_lsn = DEFAULT_LOG_POS;
       }
 
       this.outbound = this.resetReplication(
@@ -376,7 +382,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.sendMessage(response);
       this.emit('outbound_started', replication.enqueued_lsn)
     } else {
-      // TODO: what error?
       const response = SatErrorResp.fromPartial({ errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED });
       this.sendMessage(response);
 
@@ -397,7 +402,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       const response = SatInStopReplicationResp.fromPartial({});
       this.sendMessage(response);
     } else {
-      // TODO: what error?
       const response = SatErrorResp.fromPartial({ errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED });
       this.sendMessage(response)
 
@@ -469,6 +473,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
     const messageOrError = this.toMessage(data);
+    Log.info(`Received message ${JSON.stringify(messageOrError)}`)
     if (messageOrError instanceof Error) {
       this.emit('error', messageOrError);
     } else {
@@ -567,6 +572,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMessage(request: SatPbMsg) {
+    Log.info(`Sending message ${JSON.stringify(request)}`)
     if (!this.socket) {
       throw new SatelliteError(SatelliteErrorCode.UNEXPECTED_STATE, "trying to send message, but no socket exists")
     }
@@ -611,7 +617,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   getOutboundLogPositions(): { enqueued: LSN, ack: LSN } {
-    return { ack: this.outbound.ack_lsn, enqueued: this.outbound.enqueued_lsn }
+    return {
+      ack: this.outbound.ack_lsn ?? DEFAULT_LOG_POS,
+      enqueued: this.outbound.enqueued_lsn ?? DEFAULT_LOG_POS
+    }
   }
 }
 

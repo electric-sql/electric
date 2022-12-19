@@ -3,7 +3,7 @@ import Long from "long";
 import _m0 from "protobufjs/minimal.js";
 import { messageTypeRegistry } from "../typeRegistry.js";
 
-export const protobufPackage = "Electric.Satellite.v0_1";
+export const protobufPackage = "Electric.Satellite.v0_2";
 
 /**
  * This file defines protobuf protocol for Satellite <> Electric replication
@@ -46,12 +46,12 @@ export enum SatAuthHeader {
 
 /** Ping request. Can be send by any party */
 export interface SatPingReq {
-  $type: "Electric.Satellite.v0_1.SatPingReq";
+  $type: "Electric.Satellite.v0_2.SatPingReq";
 }
 
 /** Ping response. */
 export interface SatPingResp {
-  $type: "Electric.Satellite.v0_1.SatPingResp";
+  $type: "Electric.Satellite.v0_2.SatPingResp";
   /**
    * If LSN is present, it conveys to producer the latest LSN position that
    * was applied on the consumer side. If there is no active replication
@@ -61,7 +61,7 @@ export interface SatPingResp {
 }
 
 export interface SatAuthHeaderPair {
-  $type: "Electric.Satellite.v0_1.SatAuthHeaderPair";
+  $type: "Electric.Satellite.v0_2.SatAuthHeaderPair";
   key: SatAuthHeader;
   value: string;
 }
@@ -73,7 +73,7 @@ export interface SatAuthHeaderPair {
  * executing any other request
  */
 export interface SatAuthReq {
-  $type: "Electric.Satellite.v0_1.SatAuthReq";
+  $type: "Electric.Satellite.v0_2.SatAuthReq";
   /**
    * Identity of the Satelite application. Is expected to be something like
    * UUID. Required field
@@ -87,7 +87,7 @@ export interface SatAuthReq {
 
 /** (Server) Auth response */
 export interface SatAuthResp {
-  $type: "Electric.Satellite.v0_1.SatAuthResp";
+  $type: "Electric.Satellite.v0_2.SatAuthResp";
   /** Identity of the Server */
   id: string;
   /** Headers optional */
@@ -99,7 +99,7 @@ export interface SatAuthResp {
  * sides. FIXME: We might want to separate that into Client/Server parts
  */
 export interface SatErrorResp {
-  $type: "Electric.Satellite.v0_1.SatErrorResp";
+  $type: "Electric.Satellite.v0_2.SatErrorResp";
   errorType: SatErrorResp_ErrorCode;
 }
 
@@ -116,7 +116,7 @@ export enum SatErrorResp_ErrorCode {
 
 /** (Consumer) Starts replication stream from producer to consumer */
 export interface SatInStartReplicationReq {
-  $type: "Electric.Satellite.v0_1.SatInStartReplicationReq";
+  $type: "Electric.Satellite.v0_2.SatInStartReplicationReq";
   /** LSN position of the log on the producer side */
   lsn: Uint8Array;
   options: SatInStartReplicationReq_Option[];
@@ -140,33 +140,42 @@ export enum SatInStartReplicationReq_Option {
    * message for every committed batch of SatOpLog messages
    */
   SYNC_MODE = 2,
+  /**
+   * FIRST_LSN - Asks receiver to start replication from the first transaction in the log
+   * without necessity to know about the actual internal format of the LSN
+   */
   FIRST_LSN = 3,
+  /**
+   * LAST_LSN - Asks receiver to start replication from the last position in the log,
+   * whatever this position is. Used for tests only.
+   */
+  LAST_LSN = 4,
   UNRECOGNIZED = -1,
 }
 
 /** (Producer) Acknowledgement that replication have been started */
 export interface SatInStartReplicationResp {
-  $type: "Electric.Satellite.v0_1.SatInStartReplicationResp";
+  $type: "Electric.Satellite.v0_2.SatInStartReplicationResp";
 }
 
 /** (Consumer) Request to stop replication */
 export interface SatInStopReplicationReq {
-  $type: "Electric.Satellite.v0_1.SatInStopReplicationReq";
+  $type: "Electric.Satellite.v0_2.SatInStopReplicationReq";
 }
 
 /** (Producer) Acknowledgement that repliation have been stopped */
 export interface SatInStopReplicationResp {
-  $type: "Electric.Satellite.v0_1.SatInStopReplicationResp";
+  $type: "Electric.Satellite.v0_2.SatInStopReplicationResp";
 }
 
 export interface SatRelationColumn {
-  $type: "Electric.Satellite.v0_1.SatRelationColumn";
+  $type: "Electric.Satellite.v0_2.SatRelationColumn";
   name: string;
   type: string;
 }
 
 export interface SatRelation {
-  $type: "Electric.Satellite.v0_1.SatRelation";
+  $type: "Electric.Satellite.v0_2.SatRelation";
   schemaName: string;
   tableType: SatRelation_RelationType;
   tableName: string;
@@ -194,7 +203,7 @@ export enum SatRelation_RelationType {
  * transaction boundaries.
  */
 export interface SatOpLog {
-  $type: "Electric.Satellite.v0_1.SatOpLog";
+  $type: "Electric.Satellite.v0_2.SatOpLog";
   ops: SatTransOp[];
 }
 
@@ -203,7 +212,7 @@ export interface SatOpLog {
  * message
  */
 export interface SatTransOp {
-  $type: "Electric.Satellite.v0_1.SatTransOp";
+  $type: "Electric.Satellite.v0_2.SatTransOp";
   begin: SatOpBegin | undefined;
   commit: SatOpCommit | undefined;
   update: SatOpUpdate | undefined;
@@ -216,7 +225,7 @@ export interface SatTransOp {
  * should be only send as payload in the SatTransOp message
  */
 export interface SatOpBegin {
-  $type: "Electric.Satellite.v0_1.SatOpBegin";
+  $type: "Electric.Satellite.v0_2.SatOpBegin";
   commitTimestamp: Long;
   transId: string;
   lsn: Uint8Array;
@@ -227,7 +236,7 @@ export interface SatOpBegin {
  * should be only send as payload in the SatTransOp message
  */
 export interface SatOpCommit {
-  $type: "Electric.Satellite.v0_1.SatOpCommit";
+  $type: "Electric.Satellite.v0_2.SatOpCommit";
   commitTimestamp: Long;
   transId: string;
   lsn: Uint8Array;
@@ -238,7 +247,7 @@ export interface SatOpCommit {
  * SatTransOp message
  */
 export interface SatOpInsert {
-  $type: "Electric.Satellite.v0_1.SatOpInsert";
+  $type: "Electric.Satellite.v0_2.SatOpInsert";
   relationId: number;
   rowData: SatOpRow | undefined;
 }
@@ -248,7 +257,7 @@ export interface SatOpInsert {
  * SatTransOp message
  */
 export interface SatOpUpdate {
-  $type: "Electric.Satellite.v0_1.SatOpUpdate";
+  $type: "Electric.Satellite.v0_2.SatOpUpdate";
   relationId: number;
   rowData: SatOpRow | undefined;
   oldRowData: SatOpRow | undefined;
@@ -259,7 +268,7 @@ export interface SatOpUpdate {
  * SatTransOp message
  */
 export interface SatOpDelete {
-  $type: "Electric.Satellite.v0_1.SatOpDelete";
+  $type: "Electric.Satellite.v0_2.SatOpDelete";
   relationId: number;
   oldRowData: SatOpRow | undefined;
 }
@@ -270,7 +279,7 @@ export interface SatOpDelete {
  * stream if it's ongoing.
  */
 export interface SatMigrationNotification {
-  $type: "Electric.Satellite.v0_1.SatMigrationNotification";
+  $type: "Electric.Satellite.v0_2.SatMigrationNotification";
   /** all fields are required */
   oldSchemaVersion: string;
   oldSchemaHash: string;
@@ -280,7 +289,7 @@ export interface SatMigrationNotification {
 
 /** Message that corresponds to the single row. */
 export interface SatOpRow {
-  $type: "Electric.Satellite.v0_1.SatOpRow";
+  $type: "Electric.Satellite.v0_2.SatOpRow";
   nullsBitmask: Uint8Array;
   /**
    * values may contain binaries with size 0 for NULLs and empty values
@@ -290,11 +299,11 @@ export interface SatOpRow {
 }
 
 function createBaseSatPingReq(): SatPingReq {
-  return { $type: "Electric.Satellite.v0_1.SatPingReq" };
+  return { $type: "Electric.Satellite.v0_2.SatPingReq" };
 }
 
 export const SatPingReq = {
-  $type: "Electric.Satellite.v0_1.SatPingReq" as const,
+  $type: "Electric.Satellite.v0_2.SatPingReq" as const,
 
   encode(_: SatPingReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     return writer;
@@ -324,11 +333,11 @@ export const SatPingReq = {
 messageTypeRegistry.set(SatPingReq.$type, SatPingReq);
 
 function createBaseSatPingResp(): SatPingResp {
-  return { $type: "Electric.Satellite.v0_1.SatPingResp", lsn: undefined };
+  return { $type: "Electric.Satellite.v0_2.SatPingResp", lsn: undefined };
 }
 
 export const SatPingResp = {
-  $type: "Electric.Satellite.v0_1.SatPingResp" as const,
+  $type: "Electric.Satellite.v0_2.SatPingResp" as const,
 
   encode(message: SatPingResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.lsn !== undefined) {
@@ -365,11 +374,11 @@ export const SatPingResp = {
 messageTypeRegistry.set(SatPingResp.$type, SatPingResp);
 
 function createBaseSatAuthHeaderPair(): SatAuthHeaderPair {
-  return { $type: "Electric.Satellite.v0_1.SatAuthHeaderPair", key: 0, value: "" };
+  return { $type: "Electric.Satellite.v0_2.SatAuthHeaderPair", key: 0, value: "" };
 }
 
 export const SatAuthHeaderPair = {
-  $type: "Electric.Satellite.v0_1.SatAuthHeaderPair" as const,
+  $type: "Electric.Satellite.v0_2.SatAuthHeaderPair" as const,
 
   encode(message: SatAuthHeaderPair, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.key !== 0) {
@@ -413,11 +422,11 @@ export const SatAuthHeaderPair = {
 messageTypeRegistry.set(SatAuthHeaderPair.$type, SatAuthHeaderPair);
 
 function createBaseSatAuthReq(): SatAuthReq {
-  return { $type: "Electric.Satellite.v0_1.SatAuthReq", id: "", token: "", headers: [] };
+  return { $type: "Electric.Satellite.v0_2.SatAuthReq", id: "", token: "", headers: [] };
 }
 
 export const SatAuthReq = {
-  $type: "Electric.Satellite.v0_1.SatAuthReq" as const,
+  $type: "Electric.Satellite.v0_2.SatAuthReq" as const,
 
   encode(message: SatAuthReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.id !== "") {
@@ -468,11 +477,11 @@ export const SatAuthReq = {
 messageTypeRegistry.set(SatAuthReq.$type, SatAuthReq);
 
 function createBaseSatAuthResp(): SatAuthResp {
-  return { $type: "Electric.Satellite.v0_1.SatAuthResp", id: "", headers: [] };
+  return { $type: "Electric.Satellite.v0_2.SatAuthResp", id: "", headers: [] };
 }
 
 export const SatAuthResp = {
-  $type: "Electric.Satellite.v0_1.SatAuthResp" as const,
+  $type: "Electric.Satellite.v0_2.SatAuthResp" as const,
 
   encode(message: SatAuthResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.id !== "") {
@@ -516,11 +525,11 @@ export const SatAuthResp = {
 messageTypeRegistry.set(SatAuthResp.$type, SatAuthResp);
 
 function createBaseSatErrorResp(): SatErrorResp {
-  return { $type: "Electric.Satellite.v0_1.SatErrorResp", errorType: 0 };
+  return { $type: "Electric.Satellite.v0_2.SatErrorResp", errorType: 0 };
 }
 
 export const SatErrorResp = {
-  $type: "Electric.Satellite.v0_1.SatErrorResp" as const,
+  $type: "Electric.Satellite.v0_2.SatErrorResp" as const,
 
   encode(message: SatErrorResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.errorType !== 0) {
@@ -558,7 +567,7 @@ messageTypeRegistry.set(SatErrorResp.$type, SatErrorResp);
 
 function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
   return {
-    $type: "Electric.Satellite.v0_1.SatInStartReplicationReq",
+    $type: "Electric.Satellite.v0_2.SatInStartReplicationReq",
     lsn: new Uint8Array(),
     options: [],
     syncBatchSize: 0,
@@ -566,7 +575,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
 }
 
 export const SatInStartReplicationReq = {
-  $type: "Electric.Satellite.v0_1.SatInStartReplicationReq" as const,
+  $type: "Electric.Satellite.v0_2.SatInStartReplicationReq" as const,
 
   encode(message: SatInStartReplicationReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.lsn.length !== 0) {
@@ -626,11 +635,11 @@ export const SatInStartReplicationReq = {
 messageTypeRegistry.set(SatInStartReplicationReq.$type, SatInStartReplicationReq);
 
 function createBaseSatInStartReplicationResp(): SatInStartReplicationResp {
-  return { $type: "Electric.Satellite.v0_1.SatInStartReplicationResp" };
+  return { $type: "Electric.Satellite.v0_2.SatInStartReplicationResp" };
 }
 
 export const SatInStartReplicationResp = {
-  $type: "Electric.Satellite.v0_1.SatInStartReplicationResp" as const,
+  $type: "Electric.Satellite.v0_2.SatInStartReplicationResp" as const,
 
   encode(_: SatInStartReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     return writer;
@@ -660,11 +669,11 @@ export const SatInStartReplicationResp = {
 messageTypeRegistry.set(SatInStartReplicationResp.$type, SatInStartReplicationResp);
 
 function createBaseSatInStopReplicationReq(): SatInStopReplicationReq {
-  return { $type: "Electric.Satellite.v0_1.SatInStopReplicationReq" };
+  return { $type: "Electric.Satellite.v0_2.SatInStopReplicationReq" };
 }
 
 export const SatInStopReplicationReq = {
-  $type: "Electric.Satellite.v0_1.SatInStopReplicationReq" as const,
+  $type: "Electric.Satellite.v0_2.SatInStopReplicationReq" as const,
 
   encode(_: SatInStopReplicationReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     return writer;
@@ -694,11 +703,11 @@ export const SatInStopReplicationReq = {
 messageTypeRegistry.set(SatInStopReplicationReq.$type, SatInStopReplicationReq);
 
 function createBaseSatInStopReplicationResp(): SatInStopReplicationResp {
-  return { $type: "Electric.Satellite.v0_1.SatInStopReplicationResp" };
+  return { $type: "Electric.Satellite.v0_2.SatInStopReplicationResp" };
 }
 
 export const SatInStopReplicationResp = {
-  $type: "Electric.Satellite.v0_1.SatInStopReplicationResp" as const,
+  $type: "Electric.Satellite.v0_2.SatInStopReplicationResp" as const,
 
   encode(_: SatInStopReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     return writer;
@@ -728,11 +737,11 @@ export const SatInStopReplicationResp = {
 messageTypeRegistry.set(SatInStopReplicationResp.$type, SatInStopReplicationResp);
 
 function createBaseSatRelationColumn(): SatRelationColumn {
-  return { $type: "Electric.Satellite.v0_1.SatRelationColumn", name: "", type: "" };
+  return { $type: "Electric.Satellite.v0_2.SatRelationColumn", name: "", type: "" };
 }
 
 export const SatRelationColumn = {
-  $type: "Electric.Satellite.v0_1.SatRelationColumn" as const,
+  $type: "Electric.Satellite.v0_2.SatRelationColumn" as const,
 
   encode(message: SatRelationColumn, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.name !== "") {
@@ -777,7 +786,7 @@ messageTypeRegistry.set(SatRelationColumn.$type, SatRelationColumn);
 
 function createBaseSatRelation(): SatRelation {
   return {
-    $type: "Electric.Satellite.v0_1.SatRelation",
+    $type: "Electric.Satellite.v0_2.SatRelation",
     schemaName: "",
     tableType: 0,
     tableName: "",
@@ -787,7 +796,7 @@ function createBaseSatRelation(): SatRelation {
 }
 
 export const SatRelation = {
-  $type: "Electric.Satellite.v0_1.SatRelation" as const,
+  $type: "Electric.Satellite.v0_2.SatRelation" as const,
 
   encode(message: SatRelation, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.schemaName !== "") {
@@ -852,11 +861,11 @@ export const SatRelation = {
 messageTypeRegistry.set(SatRelation.$type, SatRelation);
 
 function createBaseSatOpLog(): SatOpLog {
-  return { $type: "Electric.Satellite.v0_1.SatOpLog", ops: [] };
+  return { $type: "Electric.Satellite.v0_2.SatOpLog", ops: [] };
 }
 
 export const SatOpLog = {
-  $type: "Electric.Satellite.v0_1.SatOpLog" as const,
+  $type: "Electric.Satellite.v0_2.SatOpLog" as const,
 
   encode(message: SatOpLog, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     for (const v of message.ops) {
@@ -894,7 +903,7 @@ messageTypeRegistry.set(SatOpLog.$type, SatOpLog);
 
 function createBaseSatTransOp(): SatTransOp {
   return {
-    $type: "Electric.Satellite.v0_1.SatTransOp",
+    $type: "Electric.Satellite.v0_2.SatTransOp",
     begin: undefined,
     commit: undefined,
     update: undefined,
@@ -904,7 +913,7 @@ function createBaseSatTransOp(): SatTransOp {
 }
 
 export const SatTransOp = {
-  $type: "Electric.Satellite.v0_1.SatTransOp" as const,
+  $type: "Electric.Satellite.v0_2.SatTransOp" as const,
 
   encode(message: SatTransOp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.begin !== undefined) {
@@ -980,7 +989,7 @@ messageTypeRegistry.set(SatTransOp.$type, SatTransOp);
 
 function createBaseSatOpBegin(): SatOpBegin {
   return {
-    $type: "Electric.Satellite.v0_1.SatOpBegin",
+    $type: "Electric.Satellite.v0_2.SatOpBegin",
     commitTimestamp: Long.UZERO,
     transId: "",
     lsn: new Uint8Array(),
@@ -988,7 +997,7 @@ function createBaseSatOpBegin(): SatOpBegin {
 }
 
 export const SatOpBegin = {
-  $type: "Electric.Satellite.v0_1.SatOpBegin" as const,
+  $type: "Electric.Satellite.v0_2.SatOpBegin" as const,
 
   encode(message: SatOpBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (!message.commitTimestamp.isZero()) {
@@ -1042,7 +1051,7 @@ messageTypeRegistry.set(SatOpBegin.$type, SatOpBegin);
 
 function createBaseSatOpCommit(): SatOpCommit {
   return {
-    $type: "Electric.Satellite.v0_1.SatOpCommit",
+    $type: "Electric.Satellite.v0_2.SatOpCommit",
     commitTimestamp: Long.UZERO,
     transId: "",
     lsn: new Uint8Array(),
@@ -1050,7 +1059,7 @@ function createBaseSatOpCommit(): SatOpCommit {
 }
 
 export const SatOpCommit = {
-  $type: "Electric.Satellite.v0_1.SatOpCommit" as const,
+  $type: "Electric.Satellite.v0_2.SatOpCommit" as const,
 
   encode(message: SatOpCommit, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (!message.commitTimestamp.isZero()) {
@@ -1103,11 +1112,11 @@ export const SatOpCommit = {
 messageTypeRegistry.set(SatOpCommit.$type, SatOpCommit);
 
 function createBaseSatOpInsert(): SatOpInsert {
-  return { $type: "Electric.Satellite.v0_1.SatOpInsert", relationId: 0, rowData: undefined };
+  return { $type: "Electric.Satellite.v0_2.SatOpInsert", relationId: 0, rowData: undefined };
 }
 
 export const SatOpInsert = {
-  $type: "Electric.Satellite.v0_1.SatOpInsert" as const,
+  $type: "Electric.Satellite.v0_2.SatOpInsert" as const,
 
   encode(message: SatOpInsert, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.relationId !== 0) {
@@ -1153,11 +1162,11 @@ export const SatOpInsert = {
 messageTypeRegistry.set(SatOpInsert.$type, SatOpInsert);
 
 function createBaseSatOpUpdate(): SatOpUpdate {
-  return { $type: "Electric.Satellite.v0_1.SatOpUpdate", relationId: 0, rowData: undefined, oldRowData: undefined };
+  return { $type: "Electric.Satellite.v0_2.SatOpUpdate", relationId: 0, rowData: undefined, oldRowData: undefined };
 }
 
 export const SatOpUpdate = {
-  $type: "Electric.Satellite.v0_1.SatOpUpdate" as const,
+  $type: "Electric.Satellite.v0_2.SatOpUpdate" as const,
 
   encode(message: SatOpUpdate, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.relationId !== 0) {
@@ -1212,11 +1221,11 @@ export const SatOpUpdate = {
 messageTypeRegistry.set(SatOpUpdate.$type, SatOpUpdate);
 
 function createBaseSatOpDelete(): SatOpDelete {
-  return { $type: "Electric.Satellite.v0_1.SatOpDelete", relationId: 0, oldRowData: undefined };
+  return { $type: "Electric.Satellite.v0_2.SatOpDelete", relationId: 0, oldRowData: undefined };
 }
 
 export const SatOpDelete = {
-  $type: "Electric.Satellite.v0_1.SatOpDelete" as const,
+  $type: "Electric.Satellite.v0_2.SatOpDelete" as const,
 
   encode(message: SatOpDelete, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.relationId !== 0) {
@@ -1263,7 +1272,7 @@ messageTypeRegistry.set(SatOpDelete.$type, SatOpDelete);
 
 function createBaseSatMigrationNotification(): SatMigrationNotification {
   return {
-    $type: "Electric.Satellite.v0_1.SatMigrationNotification",
+    $type: "Electric.Satellite.v0_2.SatMigrationNotification",
     oldSchemaVersion: "",
     oldSchemaHash: "",
     newSchemaVersion: "",
@@ -1272,7 +1281,7 @@ function createBaseSatMigrationNotification(): SatMigrationNotification {
 }
 
 export const SatMigrationNotification = {
-  $type: "Electric.Satellite.v0_1.SatMigrationNotification" as const,
+  $type: "Electric.Satellite.v0_2.SatMigrationNotification" as const,
 
   encode(message: SatMigrationNotification, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.oldSchemaVersion !== "") {
@@ -1330,11 +1339,11 @@ export const SatMigrationNotification = {
 messageTypeRegistry.set(SatMigrationNotification.$type, SatMigrationNotification);
 
 function createBaseSatOpRow(): SatOpRow {
-  return { $type: "Electric.Satellite.v0_1.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
+  return { $type: "Electric.Satellite.v0_2.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
 }
 
 export const SatOpRow = {
-  $type: "Electric.Satellite.v0_1.SatOpRow" as const,
+  $type: "Electric.Satellite.v0_2.SatOpRow" as const,
 
   encode(message: SatOpRow, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.nullsBitmask.length !== 0) {

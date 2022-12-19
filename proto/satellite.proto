@@ -23,7 +23,7 @@ syntax = "proto3";
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v0_1;
+package Electric.Satellite.v0_2;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -106,7 +106,12 @@ message SatInStartReplicationReq {
         // In sync mode consumer of the stream is expected to send SatPingResp
         // message for every committed batch of SatOpLog messages
         SYNC_MODE = 2;
+        // Asks receiver to start replication from the first transaction in the log
+        // without necessity to know about the actual internal format of the LSN
         FIRST_LSN = 3;
+        // Asks receiver to start replication from the last position in the log,
+        // whatever this position is. Used for tests only.
+        LAST_LSN = 4;
     }
     // LSN position of the log on the producer side
     bytes lsn = 1;

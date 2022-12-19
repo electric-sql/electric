@@ -36,13 +36,13 @@ export interface Client {
   close(): Promise<void | SatelliteError>;
   authenticate(clientId: string): Promise<AuthResponse | SatelliteError>;
   isClosed(): boolean;
-  startReplication(lsn: LSN): Promise<void | SatelliteError>;
+  startReplication(lsn?: LSN): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
   subscribeToTransactions(callback: (transaction: Transaction) => Promise<void>): void;
   enqueueTransaction(transaction: Transaction): void | SatelliteError
   subscribeToAck(callback: AckCallback): void;
   unsubscribeToAck(callback: AckCallback): void;
-  resetOutboundLogPositions(sent: LSN, ack: LSN): void;
+  resetOutboundLogPositions(sent?: LSN, ack?: LSN): void;
   getOutboundLogPositions(): { enqueued: LSN, ack: LSN };
   subscribeToOutboundEvent(event: 'started', callback: () => void): void;
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void;

@@ -83,7 +83,7 @@
   },
   "scripts": {
     "dev": "tsmodule dev",
-    "build": "rm -rf ./dist && tsmodule build",
+    "build": "rm -rf ./dist && tsc && tsmodule build",
     "test": "ava",
     "pretest": "yarn build",
     "prepublishOnly": "yarn test",

@@ -14,6 +14,8 @@ import {
   SatTransOp,
   SatAuthResp,
   SatPingResp,
+  SatInStartReplicationReq,
+  SatInStartReplicationReq_Option,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNodeFactory } from '../../src/sockets/node';
 import { SatelliteClient, serializeRow, deserializeRow } from '../../src/satellite/client';
@@ -21,7 +23,7 @@ import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
 import { AckType, ChangeType, SatelliteErrorCode, Transaction, Relation } from '../../src/util/types';
-import { base64, DEFAULT_LSN, bytesToNumber, numberToBytes } from '../../src/util/common'
+import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
 import { getObjFromString, getTypeFromCode, getTypeFromString, SatPbMsg } from '../../src/util/proto';
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog';
 import { relations } from './common';
@@ -162,6 +164,24 @@ test.serial('replication start success', async t => {
   t.pass();
 });
 
+test.serial('replication start sends FIRST_LSN', async t => {
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
+
+  return new Promise(async (resolve) => {
+    server.nextResponses([(data?: Buffer) => {
+      const msgType = data!.readUInt8();
+      if (msgType == getTypeFromString(SatInStartReplicationReq.$type)) {
+        const req = decode(data!) as SatInStartReplicationReq
+        t.deepEqual(req.options[0], SatInStartReplicationReq_Option.FIRST_LSN)
+        t.pass()
+        resolve()
+      }
+    }]);
+    await client.startReplication();
+  })
+});
+
 test.serial('replication start failure', async t => {
   await connectAndAuth(t.context as Context);
   const { client, server } = t.context as Context;
@@ -232,7 +252,7 @@ test.serial('receive transaction over multiple messages', async t => {
   const { client, server } = t.context as Context;
 
   const start = SatInStartReplicationResp.fromPartial({});
-  const begin = SatOpBegin.fromPartial({ lsn: DEFAULT_LSN, commitTimestamp: Long.ZERO });
+  const begin = SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO });
   const commit = SatOpCommit.fromPartial({});
 
   const rel: Relation = {
@@ -326,9 +346,9 @@ test.serial('acknowledge lsn', async t => {
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: Transaction, ack: any) => {
       const lsn0 = client['inbound'].ack_lsn
-      t.is(lsn0, DEFAULT_LSN);
+      t.is(lsn0, undefined);
       ack();
-      const lsn1 = base64.fromBytes(client['inbound'].ack_lsn)
+      const lsn1 = base64.fromBytes(client['inbound'].ack_lsn!)
       t.is(lsn1, "FAKE");
       res();
     });

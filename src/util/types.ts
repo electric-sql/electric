@@ -68,8 +68,8 @@ export type Replication = {
     authenticated: boolean
     isReplicating: ReplicationStatus
     relations: Map<number, Relation>
-    ack_lsn: LSN
-    enqueued_lsn: LSN
+    ack_lsn?: LSN
+    enqueued_lsn?: LSN
     transactions: Transaction[]
 }
 

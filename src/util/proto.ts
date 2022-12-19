@@ -1,7 +1,7 @@
 import * as Pb from '../_generated/proto/satellite'
 import * as _m0 from 'protobufjs/minimal';
 
-type GetName<T extends {"$type": string}> = T["$type"] extends `Electric.Satellite.v0_1.${infer K}` ? K : never
+type GetName<T extends {"$type": string}> = T["$type"] extends `Electric.Satellite.v0_2.${infer K}` ? K : never
 type MappingTuples = {[k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]}
 
 // NOTE: This mapping should be kept in sync with Electric message mapping.
@@ -31,7 +31,7 @@ let msgtypemapping =
 let codemapping =
     Object.fromEntries(
         Object.entries(msgtypetuples).map(
-            e => [e[1][0], getFullTypeName(e[0]) ] ))
+            e => [ e[1][0], getFullTypeName(e[0]) ] ))
 
 export type SatPbMsg =
     | Pb.SatErrorResp

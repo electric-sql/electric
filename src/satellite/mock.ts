@@ -10,7 +10,7 @@ import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
-import { DEFAULT_LSN } from '../util'
+import { DEFAULT_LOG_POS } from '../util'
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -60,10 +60,10 @@ export class MockRegistry extends BaseRegistry {
 export class MockSatelliteClient extends EventEmitter implements Client {  
   replicating = false
   closed = true
-  inboundAck: Uint8Array = DEFAULT_LSN
+  inboundAck: Uint8Array = DEFAULT_LOG_POS
 
-  outboundSent: Uint8Array = DEFAULT_LSN
-  outboundAck: Uint8Array = DEFAULT_LSN
+  outboundSent: Uint8Array = DEFAULT_LOG_POS
+  outboundAck: Uint8Array = DEFAULT_LOG_POS
 
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
