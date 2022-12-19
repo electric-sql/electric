@@ -1,6 +1,6 @@
 # credo:disable-for-this-file
 [
-  defmodule Electric.Satellite.V01.SatAuthHeader do
+  defmodule Electric.Satellite.V02.SatAuthHeader do
     @moduledoc false
     (
       defstruct []
@@ -89,7 +89,7 @@
       )
     )
   end,
-  defmodule Electric.Satellite.V01.SatErrorResp.ErrorCode do
+  defmodule Electric.Satellite.V02.SatErrorResp.ErrorCode do
     @moduledoc false
     (
       defstruct []
@@ -246,7 +246,7 @@
       )
     )
   end,
-  defmodule Electric.Satellite.V01.SatInStartReplicationReq.Option do
+  defmodule Electric.Satellite.V02.SatInStartReplicationReq.Option do
     @moduledoc false
     (
       defstruct []
@@ -295,6 +295,15 @@
           def encode("FIRST_LSN") do
             3
           end
+        ),
+        (
+          def encode(:LAST_LSN) do
+            4
+          end
+
+          def encode("LAST_LSN") do
+            4
+          end
         )
       ]
 
@@ -315,6 +324,9 @@
         end,
         def decode(3) do
           :FIRST_LSN
+        end,
+        def decode(4) do
+          :LAST_LSN
         end
       ]
 
@@ -324,7 +336,7 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :NONE}, {1, :LAST_ACKNOWLEDGED}, {2, :SYNC_MODE}, {3, :FIRST_LSN}]
+        [{0, :NONE}, {1, :LAST_ACKNOWLEDGED}, {2, :SYNC_MODE}, {3, :FIRST_LSN}, {4, :LAST_LSN}]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -341,6 +353,9 @@
           end,
           def has_constant?(:FIRST_LSN) do
             true
+          end,
+          def has_constant?(:LAST_LSN) do
+            true
           end
         ]
 
@@ -350,7 +365,7 @@
       )
     )
   end,
-  defmodule Electric.Satellite.V01.SatRelation.RelationType do
+  defmodule Electric.Satellite.V02.SatRelation.RelationType do
     @moduledoc false
     (
       defstruct []
@@ -454,7 +469,7 @@
       )
     )
   end,
-  defmodule Electric.Satellite.V01.SatAuthHeaderPair do
+  defmodule Electric.Satellite.V02.SatAuthHeaderPair do
     @moduledoc false
     defstruct key: :UNSPECIFIED, value: "", __uf__: []
 
@@ -487,7 +502,7 @@
                 acc,
                 "\b",
                 msg.key
-                |> Electric.Satellite.V01.SatAuthHeader.encode()
+                |> Electric.Satellite.V02.SatAuthHeader.encode()
                 |> Protox.Encode.encode_enum()
               ]
             end
@@ -545,7 +560,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatAuthHeaderPair))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatAuthHeaderPair))
           end
         )
       )
@@ -564,7 +579,7 @@
 
               {1, _, bytes} ->
                 {value, rest} =
-                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V01.SatAuthHeader)
+                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V02.SatAuthHeader)
 
                 {[key: value], rest}
 
@@ -606,7 +621,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatAuthHeaderPair,
+          Electric.Satellite.V02.SatAuthHeaderPair,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -634,7 +649,7 @@
             }
       def defs() do
         %{
-          1 => {:key, {:scalar, :UNSPECIFIED}, {:enum, Electric.Satellite.V01.SatAuthHeader}},
+          1 => {:key, {:scalar, :UNSPECIFIED}, {:enum, Electric.Satellite.V02.SatAuthHeader}},
           2 => {:value, {:scalar, ""}, :string}
         }
       end
@@ -645,7 +660,7 @@
             }
       def defs_by_name() do
         %{
-          key: {1, {:scalar, :UNSPECIFIED}, {:enum, Electric.Satellite.V01.SatAuthHeader}},
+          key: {1, {:scalar, :UNSPECIFIED}, {:enum, Electric.Satellite.V02.SatAuthHeader}},
           value: {2, {:scalar, ""}, :string}
         }
       end
@@ -662,7 +677,7 @@
             label: :optional,
             name: :key,
             tag: 1,
-            type: {:enum, Electric.Satellite.V01.SatAuthHeader}
+            type: {:enum, Electric.Satellite.V02.SatAuthHeader}
           },
           %{
             __struct__: Protox.Field,
@@ -688,7 +703,7 @@
                label: :optional,
                name: :key,
                tag: 1,
-               type: {:enum, Electric.Satellite.V01.SatAuthHeader}
+               type: {:enum, Electric.Satellite.V02.SatAuthHeader}
              }}
           end
 
@@ -701,7 +716,7 @@
                label: :optional,
                name: :key,
                tag: 1,
-               type: {:enum, Electric.Satellite.V01.SatAuthHeader}
+               type: {:enum, Electric.Satellite.V02.SatAuthHeader}
              }}
           end
 
@@ -793,7 +808,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatAuthReq do
+  defmodule Electric.Satellite.V02.SatAuthReq do
     @moduledoc false
     defstruct id: "", token: "", headers: [], __uf__: []
 
@@ -901,7 +916,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatAuthReq))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatAuthReq))
           end
         )
       )
@@ -934,7 +949,7 @@
 
                 {[
                    headers:
-                     msg.headers ++ [Electric.Satellite.V01.SatAuthHeaderPair.decode!(delimited)]
+                     msg.headers ++ [Electric.Satellite.V02.SatAuthHeaderPair.decode!(delimited)]
                  ], rest}
 
               {tag, wire_type, rest} ->
@@ -970,7 +985,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatAuthReq,
+          Electric.Satellite.V02.SatAuthReq,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -1000,7 +1015,7 @@
         %{
           1 => {:id, {:scalar, ""}, :string},
           2 => {:token, {:scalar, ""}, :string},
-          3 => {:headers, :unpacked, {:message, Electric.Satellite.V01.SatAuthHeaderPair}}
+          3 => {:headers, :unpacked, {:message, Electric.Satellite.V02.SatAuthHeaderPair}}
         }
       end
 
@@ -1010,7 +1025,7 @@
             }
       def defs_by_name() do
         %{
-          headers: {3, :unpacked, {:message, Electric.Satellite.V01.SatAuthHeaderPair}},
+          headers: {3, :unpacked, {:message, Electric.Satellite.V02.SatAuthHeaderPair}},
           id: {1, {:scalar, ""}, :string},
           token: {2, {:scalar, ""}, :string}
         }
@@ -1046,7 +1061,7 @@
             label: :repeated,
             name: :headers,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+            type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
           }
         ]
       end
@@ -1121,7 +1136,7 @@
                label: :repeated,
                name: :headers,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+               type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
              }}
           end
 
@@ -1134,7 +1149,7 @@
                label: :repeated,
                name: :headers,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+               type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
              }}
           end
 
@@ -1200,7 +1215,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatAuthResp do
+  defmodule Electric.Satellite.V02.SatAuthResp do
     @moduledoc false
     defstruct id: "", headers: [], __uf__: []
 
@@ -1292,7 +1307,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatAuthResp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatAuthResp))
           end
         )
       )
@@ -1320,7 +1335,7 @@
 
                 {[
                    headers:
-                     msg.headers ++ [Electric.Satellite.V01.SatAuthHeaderPair.decode!(delimited)]
+                     msg.headers ++ [Electric.Satellite.V02.SatAuthHeaderPair.decode!(delimited)]
                  ], rest}
 
               {tag, wire_type, rest} ->
@@ -1356,7 +1371,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatAuthResp,
+          Electric.Satellite.V02.SatAuthResp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -1385,7 +1400,7 @@
       def defs() do
         %{
           1 => {:id, {:scalar, ""}, :string},
-          3 => {:headers, :unpacked, {:message, Electric.Satellite.V01.SatAuthHeaderPair}}
+          3 => {:headers, :unpacked, {:message, Electric.Satellite.V02.SatAuthHeaderPair}}
         }
       end
 
@@ -1395,7 +1410,7 @@
             }
       def defs_by_name() do
         %{
-          headers: {3, :unpacked, {:message, Electric.Satellite.V01.SatAuthHeaderPair}},
+          headers: {3, :unpacked, {:message, Electric.Satellite.V02.SatAuthHeaderPair}},
           id: {1, {:scalar, ""}, :string}
         }
       end
@@ -1421,7 +1436,7 @@
             label: :repeated,
             name: :headers,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+            type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
           }
         ]
       end
@@ -1467,7 +1482,7 @@
                label: :repeated,
                name: :headers,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+               type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
              }}
           end
 
@@ -1480,7 +1495,7 @@
                label: :repeated,
                name: :headers,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatAuthHeaderPair}
+               type: {:message, Electric.Satellite.V02.SatAuthHeaderPair}
              }}
           end
 
@@ -1543,7 +1558,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatErrorResp do
+  defmodule Electric.Satellite.V02.SatErrorResp do
     @moduledoc false
     defstruct error_type: :INTERNAL, __uf__: []
 
@@ -1576,7 +1591,7 @@
                 acc,
                 "\b",
                 msg.error_type
-                |> Electric.Satellite.V01.SatErrorResp.ErrorCode.encode()
+                |> Electric.Satellite.V02.SatErrorResp.ErrorCode.encode()
                 |> Protox.Encode.encode_enum()
               ]
             end
@@ -1622,7 +1637,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatErrorResp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatErrorResp))
           end
         )
       )
@@ -1641,7 +1656,7 @@
 
               {1, _, bytes} ->
                 {value, rest} =
-                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V01.SatErrorResp.ErrorCode)
+                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V02.SatErrorResp.ErrorCode)
 
                 {[error_type: value], rest}
 
@@ -1678,7 +1693,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatErrorResp,
+          Electric.Satellite.V02.SatErrorResp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -1708,7 +1723,7 @@
         %{
           1 =>
             {:error_type, {:scalar, :INTERNAL},
-             {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}}
+             {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}}
         }
       end
 
@@ -1719,7 +1734,7 @@
       def defs_by_name() do
         %{
           error_type:
-            {1, {:scalar, :INTERNAL}, {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}}
+            {1, {:scalar, :INTERNAL}, {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}}
         }
       end
     )
@@ -1735,7 +1750,7 @@
             label: :optional,
             name: :error_type,
             tag: 1,
-            type: {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}
+            type: {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}
           }
         ]
       end
@@ -1752,7 +1767,7 @@
                label: :optional,
                name: :error_type,
                tag: 1,
-               type: {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}
+               type: {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}
              }}
           end
 
@@ -1765,7 +1780,7 @@
                label: :optional,
                name: :error_type,
                tag: 1,
-               type: {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}
+               type: {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}
              }}
           end
 
@@ -1778,7 +1793,7 @@
                label: :optional,
                name: :error_type,
                tag: 1,
-               type: {:enum, Electric.Satellite.V01.SatErrorResp.ErrorCode}
+               type: {:enum, Electric.Satellite.V02.SatErrorResp.ErrorCode}
              }}
           end
         ),
@@ -1836,7 +1851,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatInStartReplicationReq do
+  defmodule Electric.Satellite.V02.SatInStartReplicationReq do
     @moduledoc false
     defstruct lsn: "", options: [], sync_batch_size: 0, __uf__: []
 
@@ -1892,7 +1907,7 @@
                         value_bytes =
                           :binary.list_to_bin([
                             value
-                            |> Electric.Satellite.V01.SatInStartReplicationReq.Option.encode()
+                            |> Electric.Satellite.V02.SatInStartReplicationReq.Option.encode()
                             |> Protox.Encode.encode_enum()
                           ])
 
@@ -1958,7 +1973,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatInStartReplicationReq))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatInStartReplicationReq))
           end
         )
       )
@@ -1990,7 +2005,7 @@
                        Protox.Decode.parse_repeated_enum(
                          [],
                          delimited,
-                         Electric.Satellite.V01.SatInStartReplicationReq.Option
+                         Electric.Satellite.V02.SatInStartReplicationReq.Option
                        )
                  ], rest}
 
@@ -1998,7 +2013,7 @@
                 {value, rest} =
                   Protox.Decode.parse_enum(
                     bytes,
-                    Electric.Satellite.V01.SatInStartReplicationReq.Option
+                    Electric.Satellite.V02.SatInStartReplicationReq.Option
                   )
 
                 {[options: msg.options ++ [value]], rest}
@@ -2040,7 +2055,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatInStartReplicationReq,
+          Electric.Satellite.V02.SatInStartReplicationReq,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -2070,7 +2085,7 @@
         %{
           1 => {:lsn, {:scalar, ""}, :bytes},
           2 =>
-            {:options, :packed, {:enum, Electric.Satellite.V01.SatInStartReplicationReq.Option}},
+            {:options, :packed, {:enum, Electric.Satellite.V02.SatInStartReplicationReq.Option}},
           3 => {:sync_batch_size, {:scalar, 0}, :int32}
         }
       end
@@ -2082,7 +2097,7 @@
       def defs_by_name() do
         %{
           lsn: {1, {:scalar, ""}, :bytes},
-          options: {2, :packed, {:enum, Electric.Satellite.V01.SatInStartReplicationReq.Option}},
+          options: {2, :packed, {:enum, Electric.Satellite.V02.SatInStartReplicationReq.Option}},
           sync_batch_size: {3, {:scalar, 0}, :int32}
         }
       end
@@ -2108,7 +2123,7 @@
             label: :repeated,
             name: :options,
             tag: 2,
-            type: {:enum, Electric.Satellite.V01.SatInStartReplicationReq.Option}
+            type: {:enum, Electric.Satellite.V02.SatInStartReplicationReq.Option}
           },
           %{
             __struct__: Protox.Field,
@@ -2163,7 +2178,7 @@
                label: :repeated,
                name: :options,
                tag: 2,
-               type: {:enum, Electric.Satellite.V01.SatInStartReplicationReq.Option}
+               type: {:enum, Electric.Satellite.V02.SatInStartReplicationReq.Option}
              }}
           end
 
@@ -2176,7 +2191,7 @@
                label: :repeated,
                name: :options,
                tag: 2,
-               type: {:enum, Electric.Satellite.V01.SatInStartReplicationReq.Option}
+               type: {:enum, Electric.Satellite.V02.SatInStartReplicationReq.Option}
              }}
           end
 
@@ -2282,7 +2297,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatInStartReplicationResp do
+  defmodule Electric.Satellite.V02.SatInStartReplicationResp do
     @moduledoc false
     defstruct __uf__: []
 
@@ -2341,7 +2356,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatInStartReplicationResp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatInStartReplicationResp))
           end
         )
       )
@@ -2391,7 +2406,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatInStartReplicationResp,
+          Electric.Satellite.V02.SatInStartReplicationResp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -2489,7 +2504,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatInStopReplicationReq do
+  defmodule Electric.Satellite.V02.SatInStopReplicationReq do
     @moduledoc false
     defstruct __uf__: []
 
@@ -2548,7 +2563,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatInStopReplicationReq))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatInStopReplicationReq))
           end
         )
       )
@@ -2598,7 +2613,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatInStopReplicationReq,
+          Electric.Satellite.V02.SatInStopReplicationReq,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -2696,7 +2711,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatInStopReplicationResp do
+  defmodule Electric.Satellite.V02.SatInStopReplicationResp do
     @moduledoc false
     defstruct __uf__: []
 
@@ -2755,7 +2770,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatInStopReplicationResp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatInStopReplicationResp))
           end
         )
       )
@@ -2805,7 +2820,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatInStopReplicationResp,
+          Electric.Satellite.V02.SatInStopReplicationResp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -2903,7 +2918,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatMigrationNotification do
+  defmodule Electric.Satellite.V02.SatMigrationNotification do
     @moduledoc false
     defstruct old_schema_version: "",
               old_schema_hash: "",
@@ -3025,7 +3040,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatMigrationNotification))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatMigrationNotification))
           end
         )
       )
@@ -3095,7 +3110,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatMigrationNotification,
+          Electric.Satellite.V02.SatMigrationNotification,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -3412,7 +3427,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpBegin do
+  defmodule Electric.Satellite.V02.SatOpBegin do
     @moduledoc false
     defstruct commit_timestamp: 0, trans_id: "", lsn: "", __uf__: []
 
@@ -3514,7 +3529,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpBegin))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpBegin))
           end
         )
       )
@@ -3578,7 +3593,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpBegin,
+          Electric.Satellite.V02.SatOpBegin,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -3830,7 +3845,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpCommit do
+  defmodule Electric.Satellite.V02.SatOpCommit do
     @moduledoc false
     defstruct commit_timestamp: 0, trans_id: "", lsn: "", __uf__: []
 
@@ -3932,7 +3947,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpCommit))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpCommit))
           end
         )
       )
@@ -3996,7 +4011,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpCommit,
+          Electric.Satellite.V02.SatOpCommit,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -4248,7 +4263,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpDelete do
+  defmodule Electric.Satellite.V02.SatOpDelete do
     @moduledoc false
     defstruct relation_id: 0, old_row_data: nil, __uf__: []
 
@@ -4335,7 +4350,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpDelete))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpDelete))
           end
         )
       )
@@ -4364,7 +4379,7 @@
                    old_row_data:
                      Protox.MergeMessage.merge(
                        msg.old_row_data,
-                       Electric.Satellite.V01.SatOpRow.decode!(delimited)
+                       Electric.Satellite.V02.SatOpRow.decode!(delimited)
                      )
                  ], rest}
 
@@ -4401,7 +4416,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpDelete,
+          Electric.Satellite.V02.SatOpDelete,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -4430,7 +4445,7 @@
       def defs() do
         %{
           1 => {:relation_id, {:scalar, 0}, :uint32},
-          3 => {:old_row_data, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}}
+          3 => {:old_row_data, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}}
         }
       end
 
@@ -4440,7 +4455,7 @@
             }
       def defs_by_name() do
         %{
-          old_row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}},
+          old_row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}},
           relation_id: {1, {:scalar, 0}, :uint32}
         }
       end
@@ -4466,7 +4481,7 @@
             label: :optional,
             name: :old_row_data,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatOpRow}
+            type: {:message, Electric.Satellite.V02.SatOpRow}
           }
         ]
       end
@@ -4523,7 +4538,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -4536,7 +4551,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -4549,7 +4564,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
         ),
@@ -4610,7 +4625,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpInsert do
+  defmodule Electric.Satellite.V02.SatOpInsert do
     @moduledoc false
     defstruct relation_id: 0, row_data: nil, __uf__: []
 
@@ -4696,7 +4711,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpInsert))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpInsert))
           end
         )
       )
@@ -4725,7 +4740,7 @@
                    row_data:
                      Protox.MergeMessage.merge(
                        msg.row_data,
-                       Electric.Satellite.V01.SatOpRow.decode!(delimited)
+                       Electric.Satellite.V02.SatOpRow.decode!(delimited)
                      )
                  ], rest}
 
@@ -4762,7 +4777,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpInsert,
+          Electric.Satellite.V02.SatOpInsert,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -4791,7 +4806,7 @@
       def defs() do
         %{
           1 => {:relation_id, {:scalar, 0}, :uint32},
-          3 => {:row_data, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}}
+          3 => {:row_data, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}}
         }
       end
 
@@ -4802,7 +4817,7 @@
       def defs_by_name() do
         %{
           relation_id: {1, {:scalar, 0}, :uint32},
-          row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}}
+          row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}}
         }
       end
     )
@@ -4827,7 +4842,7 @@
             label: :optional,
             name: :row_data,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatOpRow}
+            type: {:message, Electric.Satellite.V02.SatOpRow}
           }
         ]
       end
@@ -4884,7 +4899,7 @@
                label: :optional,
                name: :row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -4897,7 +4912,7 @@
                label: :optional,
                name: :row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -4910,7 +4925,7 @@
                label: :optional,
                name: :row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
         ),
@@ -4971,7 +4986,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpLog do
+  defmodule Electric.Satellite.V02.SatOpLog do
     @moduledoc false
     defstruct ops: [], __uf__: []
 
@@ -5051,7 +5066,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpLog))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpLog))
           end
         )
       )
@@ -5071,7 +5086,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[ops: msg.ops ++ [Electric.Satellite.V01.SatTransOp.decode!(delimited)]], rest}
+                {[ops: msg.ops ++ [Electric.Satellite.V02.SatTransOp.decode!(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -5106,7 +5121,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpLog,
+          Electric.Satellite.V02.SatOpLog,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -5133,7 +5148,7 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:ops, :unpacked, {:message, Electric.Satellite.V01.SatTransOp}}}
+        %{1 => {:ops, :unpacked, {:message, Electric.Satellite.V02.SatTransOp}}}
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -5141,7 +5156,7 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{ops: {1, :unpacked, {:message, Electric.Satellite.V01.SatTransOp}}}
+        %{ops: {1, :unpacked, {:message, Electric.Satellite.V02.SatTransOp}}}
       end
     )
 
@@ -5156,7 +5171,7 @@
             label: :repeated,
             name: :ops,
             tag: 1,
-            type: {:message, Electric.Satellite.V01.SatTransOp}
+            type: {:message, Electric.Satellite.V02.SatTransOp}
           }
         ]
       end
@@ -5173,7 +5188,7 @@
                label: :repeated,
                name: :ops,
                tag: 1,
-               type: {:message, Electric.Satellite.V01.SatTransOp}
+               type: {:message, Electric.Satellite.V02.SatTransOp}
              }}
           end
 
@@ -5186,7 +5201,7 @@
                label: :repeated,
                name: :ops,
                tag: 1,
-               type: {:message, Electric.Satellite.V01.SatTransOp}
+               type: {:message, Electric.Satellite.V02.SatTransOp}
              }}
           end
 
@@ -5246,7 +5261,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpRow do
+  defmodule Electric.Satellite.V02.SatOpRow do
     @moduledoc false
     defstruct nulls_bitmask: "", values: [], __uf__: []
 
@@ -5339,7 +5354,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpRow))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpRow))
           end
         )
       )
@@ -5399,7 +5414,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpRow,
+          Electric.Satellite.V02.SatOpRow,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -5591,7 +5606,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatOpUpdate do
+  defmodule Electric.Satellite.V02.SatOpUpdate do
     @moduledoc false
     defstruct relation_id: 0, row_data: nil, old_row_data: nil, __uf__: []
 
@@ -5694,7 +5709,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatOpUpdate))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatOpUpdate))
           end
         )
       )
@@ -5723,7 +5738,7 @@
                    row_data:
                      Protox.MergeMessage.merge(
                        msg.row_data,
-                       Electric.Satellite.V01.SatOpRow.decode!(delimited)
+                       Electric.Satellite.V02.SatOpRow.decode!(delimited)
                      )
                  ], rest}
 
@@ -5735,7 +5750,7 @@
                    old_row_data:
                      Protox.MergeMessage.merge(
                        msg.old_row_data,
-                       Electric.Satellite.V01.SatOpRow.decode!(delimited)
+                       Electric.Satellite.V02.SatOpRow.decode!(delimited)
                      )
                  ], rest}
 
@@ -5772,7 +5787,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatOpUpdate,
+          Electric.Satellite.V02.SatOpUpdate,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -5801,8 +5816,8 @@
       def defs() do
         %{
           1 => {:relation_id, {:scalar, 0}, :uint32},
-          2 => {:row_data, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}},
-          3 => {:old_row_data, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}}
+          2 => {:row_data, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}},
+          3 => {:old_row_data, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}}
         }
       end
 
@@ -5812,9 +5827,9 @@
             }
       def defs_by_name() do
         %{
-          old_row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}},
+          old_row_data: {3, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}},
           relation_id: {1, {:scalar, 0}, :uint32},
-          row_data: {2, {:scalar, nil}, {:message, Electric.Satellite.V01.SatOpRow}}
+          row_data: {2, {:scalar, nil}, {:message, Electric.Satellite.V02.SatOpRow}}
         }
       end
     )
@@ -5839,7 +5854,7 @@
             label: :optional,
             name: :row_data,
             tag: 2,
-            type: {:message, Electric.Satellite.V01.SatOpRow}
+            type: {:message, Electric.Satellite.V02.SatOpRow}
           },
           %{
             __struct__: Protox.Field,
@@ -5848,7 +5863,7 @@
             label: :optional,
             name: :old_row_data,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatOpRow}
+            type: {:message, Electric.Satellite.V02.SatOpRow}
           }
         ]
       end
@@ -5905,7 +5920,7 @@
                label: :optional,
                name: :row_data,
                tag: 2,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -5918,7 +5933,7 @@
                label: :optional,
                name: :row_data,
                tag: 2,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -5931,7 +5946,7 @@
                label: :optional,
                name: :row_data,
                tag: 2,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
         ),
@@ -5945,7 +5960,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -5958,7 +5973,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
 
@@ -5971,7 +5986,7 @@
                label: :optional,
                name: :old_row_data,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpRow}
+               type: {:message, Electric.Satellite.V02.SatOpRow}
              }}
           end
         ),
@@ -6035,7 +6050,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatPingReq do
+  defmodule Electric.Satellite.V02.SatPingReq do
     @moduledoc false
     defstruct __uf__: []
 
@@ -6094,7 +6109,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatPingReq))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatPingReq))
           end
         )
       )
@@ -6144,7 +6159,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatPingReq,
+          Electric.Satellite.V02.SatPingReq,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -6242,7 +6257,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatPingResp do
+  defmodule Electric.Satellite.V02.SatPingResp do
     @moduledoc false
     defstruct lsn: nil, __uf__: []
 
@@ -6314,7 +6329,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatPingResp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatPingResp))
           end
         )
       )
@@ -6369,7 +6384,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatPingResp,
+          Electric.Satellite.V02.SatPingResp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -6509,7 +6524,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatRelation do
+  defmodule Electric.Satellite.V02.SatRelation do
     @moduledoc false
     defstruct schema_name: "",
               table_type: :TABLE,
@@ -6566,7 +6581,7 @@
                 acc,
                 "\x10",
                 msg.table_type
-                |> Electric.Satellite.V01.SatRelation.RelationType.encode()
+                |> Electric.Satellite.V02.SatRelation.RelationType.encode()
                 |> Protox.Encode.encode_enum()
               ]
             end
@@ -6656,7 +6671,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatRelation))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatRelation))
           end
         )
       )
@@ -6680,7 +6695,7 @@
 
               {2, _, bytes} ->
                 {value, rest} =
-                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V01.SatRelation.RelationType)
+                  Protox.Decode.parse_enum(bytes, Electric.Satellite.V02.SatRelation.RelationType)
 
                 {[table_type: value], rest}
 
@@ -6699,7 +6714,7 @@
 
                 {[
                    columns:
-                     msg.columns ++ [Electric.Satellite.V01.SatRelationColumn.decode!(delimited)]
+                     msg.columns ++ [Electric.Satellite.V02.SatRelationColumn.decode!(delimited)]
                  ], rest}
 
               {tag, wire_type, rest} ->
@@ -6735,7 +6750,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatRelation,
+          Electric.Satellite.V02.SatRelation,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -6766,10 +6781,10 @@
           1 => {:schema_name, {:scalar, ""}, :string},
           2 =>
             {:table_type, {:scalar, :TABLE},
-             {:enum, Electric.Satellite.V01.SatRelation.RelationType}},
+             {:enum, Electric.Satellite.V02.SatRelation.RelationType}},
           3 => {:table_name, {:scalar, ""}, :string},
           4 => {:relation_id, {:scalar, 0}, :uint32},
-          5 => {:columns, :unpacked, {:message, Electric.Satellite.V01.SatRelationColumn}}
+          5 => {:columns, :unpacked, {:message, Electric.Satellite.V02.SatRelationColumn}}
         }
       end
 
@@ -6779,12 +6794,12 @@
             }
       def defs_by_name() do
         %{
-          columns: {5, :unpacked, {:message, Electric.Satellite.V01.SatRelationColumn}},
+          columns: {5, :unpacked, {:message, Electric.Satellite.V02.SatRelationColumn}},
           relation_id: {4, {:scalar, 0}, :uint32},
           schema_name: {1, {:scalar, ""}, :string},
           table_name: {3, {:scalar, ""}, :string},
           table_type:
-            {2, {:scalar, :TABLE}, {:enum, Electric.Satellite.V01.SatRelation.RelationType}}
+            {2, {:scalar, :TABLE}, {:enum, Electric.Satellite.V02.SatRelation.RelationType}}
         }
       end
     )
@@ -6809,7 +6824,7 @@
             label: :optional,
             name: :table_type,
             tag: 2,
-            type: {:enum, Electric.Satellite.V01.SatRelation.RelationType}
+            type: {:enum, Electric.Satellite.V02.SatRelation.RelationType}
           },
           %{
             __struct__: Protox.Field,
@@ -6836,7 +6851,7 @@
             label: :repeated,
             name: :columns,
             tag: 5,
-            type: {:message, Electric.Satellite.V01.SatRelationColumn}
+            type: {:message, Electric.Satellite.V02.SatRelationColumn}
           }
         ]
       end
@@ -6893,7 +6908,7 @@
                label: :optional,
                name: :table_type,
                tag: 2,
-               type: {:enum, Electric.Satellite.V01.SatRelation.RelationType}
+               type: {:enum, Electric.Satellite.V02.SatRelation.RelationType}
              }}
           end
 
@@ -6906,7 +6921,7 @@
                label: :optional,
                name: :table_type,
                tag: 2,
-               type: {:enum, Electric.Satellite.V01.SatRelation.RelationType}
+               type: {:enum, Electric.Satellite.V02.SatRelation.RelationType}
              }}
           end
 
@@ -6919,7 +6934,7 @@
                label: :optional,
                name: :table_type,
                tag: 2,
-               type: {:enum, Electric.Satellite.V01.SatRelation.RelationType}
+               type: {:enum, Electric.Satellite.V02.SatRelation.RelationType}
              }}
           end
         ),
@@ -7013,7 +7028,7 @@
                label: :repeated,
                name: :columns,
                tag: 5,
-               type: {:message, Electric.Satellite.V01.SatRelationColumn}
+               type: {:message, Electric.Satellite.V02.SatRelationColumn}
              }}
           end
 
@@ -7026,7 +7041,7 @@
                label: :repeated,
                name: :columns,
                tag: 5,
-               type: {:message, Electric.Satellite.V01.SatRelationColumn}
+               type: {:message, Electric.Satellite.V02.SatRelationColumn}
              }}
           end
 
@@ -7098,7 +7113,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatRelationColumn do
+  defmodule Electric.Satellite.V02.SatRelationColumn do
     @moduledoc false
     defstruct name: "", type: "", __uf__: []
 
@@ -7183,7 +7198,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatRelationColumn))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatRelationColumn))
           end
         )
       )
@@ -7243,7 +7258,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatRelationColumn,
+          Electric.Satellite.V02.SatRelationColumn,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -7424,7 +7439,7 @@
       end
     )
   end,
-  defmodule Electric.Satellite.V01.SatTransOp do
+  defmodule Electric.Satellite.V02.SatTransOp do
     @moduledoc false
     defstruct op: nil, __uf__: []
 
@@ -7541,7 +7556,7 @@
         (
           @spec decode!(binary) :: struct | no_return
           def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.V01.SatTransOp))
+            parse_key_value(bytes, struct(Electric.Satellite.V02.SatTransOp))
           end
         )
       )
@@ -7569,11 +7584,11 @@
                         {:begin,
                          Protox.MergeMessage.merge(
                            previous_value,
-                           Electric.Satellite.V01.SatOpBegin.decode!(delimited)
+                           Electric.Satellite.V02.SatOpBegin.decode!(delimited)
                          )}}
 
                      _ ->
-                       {:op, {:begin, Electric.Satellite.V01.SatOpBegin.decode!(delimited)}}
+                       {:op, {:begin, Electric.Satellite.V02.SatOpBegin.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7588,11 +7603,11 @@
                         {:commit,
                          Protox.MergeMessage.merge(
                            previous_value,
-                           Electric.Satellite.V01.SatOpCommit.decode!(delimited)
+                           Electric.Satellite.V02.SatOpCommit.decode!(delimited)
                          )}}
 
                      _ ->
-                       {:op, {:commit, Electric.Satellite.V01.SatOpCommit.decode!(delimited)}}
+                       {:op, {:commit, Electric.Satellite.V02.SatOpCommit.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7607,11 +7622,11 @@
                         {:update,
                          Protox.MergeMessage.merge(
                            previous_value,
-                           Electric.Satellite.V01.SatOpUpdate.decode!(delimited)
+                           Electric.Satellite.V02.SatOpUpdate.decode!(delimited)
                          )}}
 
                      _ ->
-                       {:op, {:update, Electric.Satellite.V01.SatOpUpdate.decode!(delimited)}}
+                       {:op, {:update, Electric.Satellite.V02.SatOpUpdate.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7626,11 +7641,11 @@
                         {:insert,
                          Protox.MergeMessage.merge(
                            previous_value,
-                           Electric.Satellite.V01.SatOpInsert.decode!(delimited)
+                           Electric.Satellite.V02.SatOpInsert.decode!(delimited)
                          )}}
 
                      _ ->
-                       {:op, {:insert, Electric.Satellite.V01.SatOpInsert.decode!(delimited)}}
+                       {:op, {:insert, Electric.Satellite.V02.SatOpInsert.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7645,11 +7660,11 @@
                         {:delete,
                          Protox.MergeMessage.merge(
                            previous_value,
-                           Electric.Satellite.V01.SatOpDelete.decode!(delimited)
+                           Electric.Satellite.V02.SatOpDelete.decode!(delimited)
                          )}}
 
                      _ ->
-                       {:op, {:delete, Electric.Satellite.V01.SatOpDelete.decode!(delimited)}}
+                       {:op, {:delete, Electric.Satellite.V02.SatOpDelete.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7686,7 +7701,7 @@
 
         Protox.JsonDecode.decode!(
           input,
-          Electric.Satellite.V01.SatTransOp,
+          Electric.Satellite.V02.SatTransOp,
           &json_library_wrapper.decode!(json_library, &1)
         )
       end
@@ -7714,11 +7729,11 @@
             }
       def defs() do
         %{
-          1 => {:begin, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpBegin}},
-          2 => {:commit, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpCommit}},
-          3 => {:update, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpUpdate}},
-          4 => {:insert, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpInsert}},
-          5 => {:delete, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpDelete}}
+          1 => {:begin, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpBegin}},
+          2 => {:commit, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpCommit}},
+          3 => {:update, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpUpdate}},
+          4 => {:insert, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpInsert}},
+          5 => {:delete, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpDelete}}
         }
       end
 
@@ -7728,11 +7743,11 @@
             }
       def defs_by_name() do
         %{
-          begin: {1, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpBegin}},
-          commit: {2, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpCommit}},
-          delete: {5, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpDelete}},
-          insert: {4, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpInsert}},
-          update: {3, {:oneof, :op}, {:message, Electric.Satellite.V01.SatOpUpdate}}
+          begin: {1, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpBegin}},
+          commit: {2, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpCommit}},
+          delete: {5, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpDelete}},
+          insert: {4, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpInsert}},
+          update: {3, {:oneof, :op}, {:message, Electric.Satellite.V02.SatOpUpdate}}
         }
       end
     )
@@ -7748,7 +7763,7 @@
             label: :optional,
             name: :begin,
             tag: 1,
-            type: {:message, Electric.Satellite.V01.SatOpBegin}
+            type: {:message, Electric.Satellite.V02.SatOpBegin}
           },
           %{
             __struct__: Protox.Field,
@@ -7757,7 +7772,7 @@
             label: :optional,
             name: :commit,
             tag: 2,
-            type: {:message, Electric.Satellite.V01.SatOpCommit}
+            type: {:message, Electric.Satellite.V02.SatOpCommit}
           },
           %{
             __struct__: Protox.Field,
@@ -7766,7 +7781,7 @@
             label: :optional,
             name: :update,
             tag: 3,
-            type: {:message, Electric.Satellite.V01.SatOpUpdate}
+            type: {:message, Electric.Satellite.V02.SatOpUpdate}
           },
           %{
             __struct__: Protox.Field,
@@ -7775,7 +7790,7 @@
             label: :optional,
             name: :insert,
             tag: 4,
-            type: {:message, Electric.Satellite.V01.SatOpInsert}
+            type: {:message, Electric.Satellite.V02.SatOpInsert}
           },
           %{
             __struct__: Protox.Field,
@@ -7784,7 +7799,7 @@
             label: :optional,
             name: :delete,
             tag: 5,
-            type: {:message, Electric.Satellite.V01.SatOpDelete}
+            type: {:message, Electric.Satellite.V02.SatOpDelete}
           }
         ]
       end
@@ -7801,7 +7816,7 @@
                label: :optional,
                name: :begin,
                tag: 1,
-               type: {:message, Electric.Satellite.V01.SatOpBegin}
+               type: {:message, Electric.Satellite.V02.SatOpBegin}
              }}
           end
 
@@ -7814,7 +7829,7 @@
                label: :optional,
                name: :begin,
                tag: 1,
-               type: {:message, Electric.Satellite.V01.SatOpBegin}
+               type: {:message, Electric.Satellite.V02.SatOpBegin}
              }}
           end
 
@@ -7830,7 +7845,7 @@
                label: :optional,
                name: :commit,
                tag: 2,
-               type: {:message, Electric.Satellite.V01.SatOpCommit}
+               type: {:message, Electric.Satellite.V02.SatOpCommit}
              }}
           end
 
@@ -7843,7 +7858,7 @@
                label: :optional,
                name: :commit,
                tag: 2,
-               type: {:message, Electric.Satellite.V01.SatOpCommit}
+               type: {:message, Electric.Satellite.V02.SatOpCommit}
              }}
           end
 
@@ -7859,7 +7874,7 @@
                label: :optional,
                name: :update,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpUpdate}
+               type: {:message, Electric.Satellite.V02.SatOpUpdate}
              }}
           end
 
@@ -7872,7 +7887,7 @@
                label: :optional,
                name: :update,
                tag: 3,
-               type: {:message, Electric.Satellite.V01.SatOpUpdate}
+               type: {:message, Electric.Satellite.V02.SatOpUpdate}
              }}
           end
 
@@ -7888,7 +7903,7 @@
                label: :optional,
                name: :insert,
                tag: 4,
-               type: {:message, Electric.Satellite.V01.SatOpInsert}
+               type: {:message, Electric.Satellite.V02.SatOpInsert}
              }}
           end
 
@@ -7901,7 +7916,7 @@
                label: :optional,
                name: :insert,
                tag: 4,
-               type: {:message, Electric.Satellite.V01.SatOpInsert}
+               type: {:message, Electric.Satellite.V02.SatOpInsert}
              }}
           end
 
@@ -7917,7 +7932,7 @@
                label: :optional,
                name: :delete,
                tag: 5,
-               type: {:message, Electric.Satellite.V01.SatOpDelete}
+               type: {:message, Electric.Satellite.V02.SatOpDelete}
              }}
           end
 
@@ -7930,7 +7945,7 @@
                label: :optional,
                name: :delete,
                tag: 5,
-               type: {:message, Electric.Satellite.V01.SatOpDelete}
+               type: {:message, Electric.Satellite.V02.SatOpDelete}
              }}
           end
 

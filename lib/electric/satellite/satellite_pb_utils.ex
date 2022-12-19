@@ -1,7 +1,7 @@
 defmodule Electric.Satellite.Protobuf do
-  import Electric.Satellite.V01
+  import Electric.Satellite.V02
 
-  alias Electric.Satellite.V01.{
+  alias Electric.Satellite.V02.{
     SatErrorResp,
     SatAuthReq,
     SatAuthResp,
@@ -54,7 +54,7 @@ defmodule Electric.Satellite.Protobuf do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
 
-      alias Electric.Satellite.V01.{
+      alias Electric.Satellite.V02.{
         SatErrorResp,
         SatAuthReq,
         SatAuthHeaderPair,

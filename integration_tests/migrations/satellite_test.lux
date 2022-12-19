@@ -131,8 +131,6 @@
 
 [shell satellite_1]
     [invoke node_await_insert "['hello from satellite_1']"]
-    [invoke node_await_get ${pg_id1}]
-
 
 [shell satellite_2]
     [invoke node_await_insert "['hello from satellite_2']"]
@@ -150,8 +148,6 @@
 
 [shell satellite_1]
     [invoke node_await_insert_other "['hello from satellite_1 other']"]
-    [invoke node_await_get ${pg_id1}]
-
 
 [shell satellite_2]
     [invoke node_await_insert_other "['hello from satellite_2 other']"]
