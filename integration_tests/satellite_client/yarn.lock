@@ -255,7 +255,7 @@ diff@^4.0.1:
 
 "electric-sql@https://github.com/electric-sql/typescript-client.git":
   version "0.3.1"
-  resolved "https://github.com/electric-sql/typescript-client.git#f806b18f9a6a1f011abe2ee7913e7277063a1c63"
+  resolved "https://github.com/electric-sql/typescript-client.git#5277bc23d4e9fe60d3769d0e88546b4f3a90f3a8"
   dependencies:
     base-64 "^1.0.0"
     events "^3.3.0"
