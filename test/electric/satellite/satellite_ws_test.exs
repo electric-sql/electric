@@ -280,7 +280,7 @@ defmodule Electric.Satellite.WsServerTest do
   describe "Outgoing replication (Vaxine -> Satellite)" do
     test "common replication", cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
@@ -306,7 +306,7 @@ defmodule Electric.Satellite.WsServerTest do
       limit = 10
 
       with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
@@ -349,7 +349,7 @@ defmodule Electric.Satellite.WsServerTest do
       with_mock Vaxine,
         transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
           assert_receive {^conn, %SatInStartReplicationReq{lsn: ""}}, @default_wait
@@ -430,7 +430,7 @@ defmodule Electric.Satellite.WsServerTest do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
           lsn = "some_long_internal_lsn"
 
-          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
           assert_receive {^conn, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
         end)
@@ -443,7 +443,7 @@ defmodule Electric.Satellite.WsServerTest do
       with_mock Vaxine,
         transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "eof"})
+          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
           assert_receive {^conn, %SatInStartReplicationReq{}}, @default_wait

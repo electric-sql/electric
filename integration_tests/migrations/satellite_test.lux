@@ -49,6 +49,15 @@
     ?$node
 [endmacro]
 
+[macro node_await_get_other match]
+    [invoke wait-for "client.get_other_items(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_insert_other keys]
+    !client.insert_other_item(db, ${keys})
+    ?$node
+[endmacro]
+
 
 #===============================================================================
 # Setup test
@@ -122,8 +131,6 @@
 
 [shell satellite_1]
     [invoke node_await_insert "['hello from satellite_1']"]
-    [invoke node_await_get ${pg_id1}]
-
 
 [shell satellite_2]
     [invoke node_await_insert "['hello from satellite_2']"]
@@ -135,6 +142,22 @@
     [invoke wait-for "SELECT * FROM public.items;" "hello from satellite_2" 10 ${psql}]
 [endloop]
 
+#===============================================================================
+# Verify that replication works for multiple tables
+#===============================================================================
+
+[shell satellite_1]
+    [invoke node_await_insert_other "['hello from satellite_1 other']"]
+
+[shell satellite_2]
+    [invoke node_await_insert_other "['hello from satellite_2 other']"]
+
+[loop pg pg_1 pg_2 pg_3]
+  [shell ${pg}]
+    [invoke log "Verify that ${pg} have received data from both Satellites"]
+    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_1 other" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_2 other" 10 ${psql}]
+[endloop]
 
 [cleanup]
     [invoke teardown]

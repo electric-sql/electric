@@ -395,14 +395,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec initiate_subscription(String.t(), binary, OutRep.t()) :: OutRep.t()
-  def initiate_subscription(client, lsn, out_rep) when is_binary(lsn) do
-    lsn =
-      case lsn do
-        "eof" -> :eof
-        "0" -> 0
-        _ -> :erlang.binary_to_term(lsn)
-      end
-
+  def initiate_subscription(client, lsn, out_rep) do
     {:via, :gproc, vaxine_producer} = Vaxine.LogProducer.get_name(client)
     {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
@@ -435,15 +428,22 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp validate_lsn(client_lsn, opts) do
-    case client_lsn == nil do
-      true ->
-        case Enum.member?(opts, :FIRST_LSN) do
-          true -> {:ok, "0"}
-          false -> {:error, :empty_lsn}
-        end
+    case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
+      {true, _} ->
+        {:ok, 0}
 
-      false ->
-        {:ok, client_lsn}
+      {_, true} ->
+        {:ok, :eof}
+
+      {false, false} ->
+        try do
+          # FIXME: We need to verify that LSN corresponds to Vaxine internal format
+          lsn = :erlang.binary_to_term(client_lsn)
+          {:ok, lsn}
+        rescue
+          _ ->
+            {:error, :bad_lsn}
+        end
     end
   end
 
