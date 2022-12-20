@@ -27,8 +27,10 @@
     ?HTTP/1.1 200 OK
 
 [shell electric_1]
-    ?.* origin=postgres_1 .* \[notice\] ready to migrate to version: 1669232573_init
-    ?.* origin=postgres_1 .* \[notice\] successfull migration to version: 1669232573_init
+    ?.* origin=postgres_1 .* \[notice\] migration: prepare to migrate to vsn: 1669232573_init
+    ?.* origin=postgres_1 .* \[notice\] migration: about to stop postgresql replication and subscriptions
+    ?.* origin=postgres_1 .* \[notice\] migration: about to apply migration
+    ?.* origin=postgres_1 .* \[notice\] migration: successfully migrated to version: 1669232573_init
     ?.* Successfully initialized origin postgres_1
 
 [shell electric_migrate]
@@ -37,8 +39,10 @@
     ?HTTP/1.1 200 OK
 
 [shell electric_1]
-    ?.* origin=postgres_2 .* \[notice\] ready to migrate to version: 1669232573_init
-    ?.* origin=postgres_2 .* \[notice\] successfull migration to version: 1669232573_init
+    ?.* origin=postgres_2 .* \[notice\] migration: prepare to migrate to vsn: 1669232573_init
+    ?.* origin=postgres_2 .* \[notice\] migration: about to stop postgresql replication and subscriptions
+    ?.* origin=postgres_2 .* \[notice\] migration: about to apply migration
+    ?.* origin=postgres_2 .* \[notice\] migration: successfully migrated to version: 1669232573_init
     ?.* Successfully initialized origin postgres_2
 
 [shell electric_curl]
@@ -53,6 +57,11 @@
           -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 403 Forbidden
     ?:already_migrated
+
+    !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"3"}'
+    ?HTTP/1.1 403 Forbidden
+    ?:vsn_not_found
 
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
           -H 'Content-Type: application/json' -d '{"vsn":"3"}'

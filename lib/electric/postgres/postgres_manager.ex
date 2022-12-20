@@ -104,24 +104,22 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_call({:migrate, vsn}, _from, state) do
-    case state.state do
-      :ready ->
-        # FIXME: How to recover after unsuccesfull migration ?
-        :ok = stop_subscription(state)
-        :ok = PostgresConnector.stop_children(state.origin)
+  def handle_call({:migrate, vsn}, _from, %State{state: :ready} = state) do
+    case migrate_internal(vsn, state) do
+      {:ok, state} ->
+        {:reply, :ok, %State{state | state: :reinit}, {:continue, :reinit}}
 
-        case migrate_internal(vsn, state) do
-          {:ok, state1} ->
-            {:reply, :ok, %State{state1 | state: :reinit}, {:continue, :reinit}}
+      {{:aborted, error}, state} ->
+        # We did not stop any subscriptions in this case, nothing to recover from
+        {:reply, {:error, error}, state}
 
-          {:error, error} ->
-            {:reply, {:error, error}, state}
-        end
-
-      _ ->
-        {:reply, {:error, {:invalid_state, state.state}}, state}
+      {{:error, _} = error, state} ->
+        {:reply, error, %State{state | state: :reinit}, {:continue, :reinit}}
     end
+  end
+
+  def handle_call({:migrate, _vsn}, _, state) do
+    {:reply, {:error, {:invalid_state, state.state}}, state}
   end
 
   @impl GenServer
@@ -151,73 +149,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.info("schedule retry: #{inspect(time)}")
     %State{state | backoff: {backoff, tref}}
   end
-
-  # FIXME: Before initiating migration we need to check current migration version
-  defp migrate_internal(vsn, %State{conn_config: conn_config} = state) do
-    with {:ok, migration_file} <- Utils.read_migration_file(vsn),
-         md5_hash <- Base.encode16(:erlang.md5(migration_file)) do
-      Logger.notice("ready to migrate to version: #{vsn}")
-
-      case Client.with_conn(
-             Map.delete(conn_config, :replication),
-             fn conn ->
-               :epgsql.with_transaction(
-                 conn,
-                 fn conn ->
-                   case :epgsql.equery(conn, @select_migration, [vsn]) do
-                     {:ok, _, [{{^vsn, ^md5_hash}}]} ->
-                       {:rollback, {:error, :already_migrated}}
-
-                     {:ok, _, [{{^vsn, _}}]} ->
-                       {:rollback, {:error, :already_migrated_bad_md5}}
-
-                     {:ok, _, [{_}]} ->
-                       {:rollback, {:error, :downgrade_not_supported}}
-
-                     {:ok, _, []} ->
-                       res = :epgsql.squery(conn, migration_file)
-
-                       case check_response(res) do
-                         :ok ->
-                           {:ok, _} = :epgsql.equery(conn, @update_migration, [vsn, md5_hash])
-                           :ok
-
-                         error ->
-                           error
-                       end
-                   end
-                 end
-               )
-             end
-           ) do
-        :ok ->
-          Logger.notice("successfull migration to version: #{vsn} md5: #{md5_hash}")
-          {:ok, state}
-
-        {:rollback, error} ->
-          Logger.error("failed to migrate to version: #{vsn}, reason #{inspect(error)}")
-          error
-      end
-    else
-      error ->
-        Logger.error("failed to migrate to version: #{vsn}, reason: #{inspect(error)}")
-        {:error, error}
-    end
-  end
-
-  defp check_response({:ok, _, _, _}), do: :ok
-  defp check_response({:ok, _}), do: :ok
-  defp check_response({:ok, _, _}), do: :ok
-  defp check_response({:error, _} = error), do: error
-
-  defp check_response([h | t]) do
-    case check_response(h) do
-      :ok -> check_response(t)
-      {:error, _} = error -> error
-    end
-  end
-
-  defp check_response([]), do: :ok
 
   defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
     case Client.with_conn(
@@ -291,4 +222,94 @@ defmodule Electric.Replication.PostgresConnectorMng do
       end
     end)
   end
+
+  defp migrate_internal(vsn, state) do
+    Logger.notice("migration: prepare to migrate to vsn: #{vsn}")
+
+    with {:ok, migration, hash} <- read_migration(vsn) do
+      # NOTE: If during migration we end in a unrecoverable state, the
+      # process will crash causing corresponding subtree to restart.
+      Logger.notice("migration: about to stop postgresql replication and subscriptions")
+      :ok = stop_subscription(state)
+      :ok = PostgresConnector.stop_children(state.origin)
+
+      Logger.notice("migration: about to apply migration")
+
+      case apply_migration(vsn, hash, state.conn_config, migration) do
+        :ok ->
+          Logger.notice("migration: successfully migrated to version: #{vsn} md5: #{hash}")
+          {:ok, state}
+
+        {:rollback, error} ->
+          Logger.error(
+            "migration: failed to migrate to version: #{vsn}, md5: #{hash} reason #{inspect(error)}"
+          )
+
+          {{:error, error}, state}
+      end
+    else
+      {:error, reason} ->
+        Logger.error("migration: bad migration vsn: #{vsn} reason: #{inspect(reason)}")
+        {{:aborted, reason}, state}
+    end
+  end
+
+  defp read_migration(vsn) do
+    try do
+      {:ok, migration_file} = Utils.read_migration_file(vsn)
+      md5 = Base.encode16(:erlang.md5(migration_file))
+      {:ok, migration_file, md5}
+    rescue
+      _ ->
+        {:error, :vsn_not_found}
+    end
+  end
+
+  defp apply_migration(vsn, hash, conn_config, migration_file) do
+    options = Map.delete(conn_config, :replication)
+
+    Client.with_conn(
+      options,
+      fn conn ->
+        :epgsql.with_transaction(
+          conn,
+          fn conn ->
+            case :epgsql.equery(conn, @select_migration, [vsn]) do
+              {:ok, _, [{{^vsn, ^hash}}]} ->
+                {:rollback, {:error, :already_migrated}}
+
+              {:ok, _, [{{^vsn, _}}]} ->
+                {:rollback, {:error, :already_migrated_bad_md5}}
+
+              {:ok, _, []} ->
+                res = :epgsql.squery(conn, migration_file)
+
+                with :ok <- check_response(res),
+                     {:ok, _} <- :epgsql.equery(conn, @update_migration, [vsn, hash]) do
+                  :ok
+                else
+                  _error ->
+                    {:rollback, {:error, :bad_migration_stms}}
+                end
+            end
+          end,
+          [{:ensure_committed, true}, {:reraise, false}]
+        )
+      end
+    )
+  end
+
+  defp check_response({:ok, _, _, _}), do: :ok
+  defp check_response({:ok, _}), do: :ok
+  defp check_response({:ok, _, _}), do: :ok
+  defp check_response({:error, _} = error), do: error
+
+  defp check_response([h | t]) do
+    case check_response(h) do
+      :ok -> check_response(t)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp check_response([]), do: :ok
 end
