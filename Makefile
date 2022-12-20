@@ -66,11 +66,11 @@ rm_offset_storage:
 	rm offset_storage_*
 
 update_protobuf: deps
-	mix protox.generate \
-		--output-path=./lib/electric/satellite/satellite_pb.ex \
-		./deps/satellite_proto/proto/satellite.proto
 	mix electric.gen.proto.package \
-		--output-path=./lib/electric/satellite/satellite_pb_package.ex \
+		--output-path=./lib/electric/satellite/protobuf_package.ex \
+		./deps/satellite_proto/proto/satellite.proto
+	mix protox.generate \
+		--output-path=./lib/electric/satellite/protobuf_messages.ex \
 		./deps/satellite_proto/proto/satellite.proto
 shell:
 	iex -S mix
