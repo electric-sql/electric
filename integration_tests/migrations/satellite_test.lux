@@ -35,8 +35,8 @@
     ?HTTP/1.1 200 OK
 
  [shell ${electric}]
-    ?.* origin=${pg} .* \[notice\] ready to migrate to version: ${vsn}
-    ?.* origin=${pg} .* \[notice\] successfull migration to version: ${vsn}
+    ?.* origin=${pg} .* \[notice\] migration: prepare to migrate to vsn: ${vsn}
+    ?.* origin=${pg} .* \[notice\] migration: successfully migrated to version: ${vsn}
     ?.* Successfully initialized origin ${pg}
 [endmacro]
 
