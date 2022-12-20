@@ -24,6 +24,8 @@ COPY deps /app/deps/
 RUN make deps
 COPY config /app/config/
 COPY lib    /app/lib/
+
+ARG ELECTRIC_VERSION=local
 RUN make compile release
 
 FROM ${RUNNER_IMAGE} AS runner_setup
