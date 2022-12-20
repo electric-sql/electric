@@ -19,7 +19,7 @@ services:
       file: ../services_templates.yaml
       service: electric
     volumes:
-      - ./electric.exs:/app/releases/0.1.0/runtime.exs:ro
+      - ./electric.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
       - ${MIGRATION_DIRS}:/migrations:ro
     ports:
       - "5050:5050"
@@ -34,7 +34,7 @@ services:
       file: ../services_templates.yaml
       service: electric
     volumes:
-      - ./electric_b.exs:/app/releases/0.1.0/runtime.exs:ro
+      - ./electric_b.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
       - ${MIGRATION_DIRS}:/migrations:ro
     ports:
       - "5051:5050"

@@ -53,7 +53,8 @@ docker-build:
 
 docker-build-ci:
 	mkdir -p deps
-	docker build -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
+	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_IMAGE_TAG} \
+      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
       -t electric:local-build .
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 

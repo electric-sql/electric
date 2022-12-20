@@ -43,7 +43,7 @@ services:
       file: ../services_templates.yaml
       service: electric
     volumes:
-      - ./electric_1.exs:/app/releases/0.1.0/runtime.exs:ro
+      - ./electric_1.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
     depends_on:
       - pg_1
       - vaxine_1
@@ -53,7 +53,7 @@ services:
       file: ../services_templates.yaml
       service: electric
     volumes:
-      - ./electric_2.exs:/app/releases/0.1.0/runtime.exs:ro
+      - ./electric_2.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
     depends_on:
       - pg_2
       - vaxine_2
@@ -63,7 +63,7 @@ services:
       file: ../services_templates.yaml
       service: electric
     volumes:
-      - ./electric_3.exs:/app/releases/0.1.0/runtime.exs:ro
+      - ./electric_3.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
     depends_on:
       - pg_3
       - vaxine_3
