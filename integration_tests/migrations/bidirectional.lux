@@ -9,11 +9,6 @@
 
 [invoke setup $migration_dir]
 
-[shell electric_1]
-    -$fail_pattern
-[shell vaxine]
-    -$fail_pattern
-
 [shell electric_curl]
     [invoke log "sanity check"]
 
@@ -34,6 +29,12 @@
           -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 200 OK
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_2 \
+          -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
+    ?HTTP/1.1 200 OK
+
+    # FIXME: We update electric 2 as well, as we are not handling at the moment
+    # two electric with different schema versions
+    !curl -v -X PUT http://localhost:5051/api/migrations/postgres_3 \
           -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
     ?HTTP/1.1 200 OK
 

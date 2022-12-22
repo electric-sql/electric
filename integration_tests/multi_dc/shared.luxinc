@@ -1,4 +1,5 @@
 [include ../common.luxinc]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 
 [macro setup_pg_and_vaxine]
 [shell start_env]
@@ -14,10 +15,12 @@
 
 [shell vaxine_1]
     !make start_vaxine_1
+    -$fail_pattern
     ?(application: vx_server)|(vx_server started)
 
 [shell vaxine_2]
     !make start_vaxine_2
+     -$fail_pattern
     ?(application: vx_server)|(vx_server started)
 
 [shell vaxine_wait]
@@ -47,11 +50,13 @@
 [shell electric_1]
     [timeout 10]
     !make start_electric_1
+    -$fail_pattern
     ?START_REPLICATION SLOT
 
 [shell electric_2]
     [timeout 10]
     !make start_electric_2
+     -$fail_pattern
     ?START_REPLICATION SLOT
 [endmacro]
 

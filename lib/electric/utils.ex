@@ -42,6 +42,16 @@ defmodule Electric.Utils do
     :skip
   end
 
+  def translate(min_level, level, :report = kind, {{:supervisor, _}, message}) do
+    case Keyword.get(message, :reason) do
+      :normal ->
+        :skip
+
+      _ ->
+        Logger.Translator.translate(min_level, level, kind, message)
+    end
+  end
+
   def translate(min_level, level, kind, message) do
     Logger.Translator.translate(min_level, level, kind, message)
   end

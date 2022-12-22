@@ -7,15 +7,6 @@
 [invoke setup]
 [timeout 10000]
 
-[shell vaxine_1]
-    -$fail_pattern
-[shell electric_1]
-    -$fail_pattern
-[shell vaxine_2]
-    -$fail_pattern
-[shell electric_2]
-    -$fail_pattern
-
 [macro validate_insert identity table]
 [shell pg_1]
     [invoke log "Insert data for identity=${identity}"]

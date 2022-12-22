@@ -1,6 +1,5 @@
 [doc Sanity check test that environment starts correctly]
 
-[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 
 [include shared.luxinc]

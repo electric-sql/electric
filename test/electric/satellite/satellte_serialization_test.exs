@@ -53,4 +53,33 @@ defmodule Electric.Satellite.SerializationTest do
 
     assert deserialized_data == expected
   end
+
+  test "test row serialization 2" do
+    data = %{
+      "content" => "hello from pg_1",
+      "content_text_null" => nil,
+      "content_text_null_default" => "",
+      "id" => "f989b58b-980d-4d3c-b178-adb6ae8222f1",
+      "intvalue_null" => nil,
+      "intvalue_null_default" => "10"
+    }
+
+    columns = [
+      "id",
+      "content",
+      "content_text_null",
+      "content_text_null_default",
+      "intvalue_null",
+      "intvalue_null_default"
+    ]
+
+    serialized_data = Serialization.map_to_row(data, columns)
+
+    expected = %SatOpRow{
+      nulls_bitmask: <<0::1, 0::1, 1::1, 0::1, 1::1, 0::3>>,
+      values: ["f989b58b-980d-4d3c-b178-adb6ae8222f1", "hello from pg_1", "", "", "", "10"]
+    }
+
+    assert serialized_data == expected
+  end
 end

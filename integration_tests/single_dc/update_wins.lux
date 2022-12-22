@@ -1,6 +1,5 @@
 [doc Test one direction replication from pg_2 to pg_1, when pg_1 already has a deleted a record that existed previously. We can force this conflict by disabling replication consumption on pg_2]
 
-[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 
 [include shared.luxinc]

@@ -1,9 +1,9 @@
-[doc Test for basic Satellite <> Electric interaction]
+[doc Test for basic Satellite <> Electric interaction with nulls]
 
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 [global node=>]
-[global migration_dir=m_sanity_check]
+[global migration_dir=m_null_default_support]
 
 [include shared.luxinc]
 [include satellite.luxinc]
@@ -24,7 +24,7 @@
 #===============================================================================
 # Setup test
 #===============================================================================
-#
+
 [invoke setup $migration_dir]
 
 #===============================================================================
@@ -35,10 +35,7 @@
 
 [invoke migrate electric_1 5050 postgres_1 1669232573_init]
 [invoke migrate electric_1 5050 postgres_2 1669232573_init]
-[invoke migrate electric_1 5050 postgres_1 1669232634_add_column]
-[invoke migrate electric_1 5050 postgres_2 1669232634_add_column]
 [invoke migrate electric_2 5051 postgres_3 1669232573_init]
-[invoke migrate electric_2 5051 postgres_3 1669232634_add_column]
 
 [invoke log "Electric migrated"]
 
@@ -53,8 +50,8 @@
 [invoke log "Both satellites connected"]
 
 #===============================================================================
-# Verify that PG -> Satellite works
-#==============================================================================
+# Verify that PG -> Satellite nulls and default values
+#===============================================================================
 
 [global pg_id1=f989b58b-980d-4d3c-b178-adb6ae8222f1]
 [global pg_id2=a7a7d9be-a51c-4f86-a4ff-dfdc0c016fe2]
@@ -67,30 +64,65 @@
 
 [shell satellite_1]
     [invoke node_await_get ${pg_id1}]
+    !client.get_items(db)
+
+    ?id: 'f989b58b-980d-4d3c-b178-adb6ae8222f1',
+    ?content: 'hello from pg_1',
+    ?content_text_null: null,
+    ?content_text_null_default: '',
+    ?intvalue_null: null,
+    ?intvalue_null_default: 10
+
 
 [shell satellite_2]
     [invoke node_await_get ${pg_id1}]
+    !client.get_items(db)
 
-[shell pg_3]
-    [invoke log "Insert data into postgres_3"]
-    !INSERT INTO public.items (id, content) VALUES ('${pg_id3}', 'hello from pg_3');
-    ?$psql
-
-[shell satellite_1]
-    [invoke node_await_get ${pg_id3}]
-
-[shell satellite_2]
-    [invoke node_await_get ${pg_id3}]
+    ?id: 'f989b58b-980d-4d3c-b178-adb6ae8222f1',
+    ?content: 'hello from pg_1',
+    ?content_text_null: null,
+    ?content_text_null_default: '',
+    ?intvalue_null: null,
+    ?intvalue_null_default: 10
 
 #===============================================================================
-# Verify that Satellite -> PG works
+# Verify that PG -> Satellite nulls and default values
 #===============================================================================
 
+[macro insert_map map]
+    !db.prepare("INSERT INTO main.items \
+    (id, content, content_text_null, content_text_null_default, intvalue_null, intvalue_null_default) \
+    VALUES ( @id, @content, @content_text_null, @content_text_null_default, @intvalue_null, \ @intvalue_null_default)").run($map)
+    ?$node
+[endmacro]
+
 [shell satellite_1]
-    [invoke node_await_insert "['hello from satellite_1']"]
+    [local Var1=
+    """
+ {
+    id: '${pg_id2}',
+    content: 'hello from satellite_1',
+    content_text_null: null,
+    content_text_null_default: '',
+    intvalue_null: null,
+    intvalue_null_default: 10
+  }
+    """]
+    [invoke insert_map $Var1]
 
 [shell satellite_2]
-    [invoke node_await_insert "['hello from satellite_2']"]
+    [local Var2=
+    """
+ {
+    id: '${pg_id3}',
+    content: 'hello from satellite_2',
+    content_text_null: null,
+    content_text_null_default: '',
+    intvalue_null: null,
+    intvalue_null_default: 10
+  }
+    """]
+    [invoke insert_map $Var2]
 
 [loop pg pg_1 pg_2 pg_3]
   [shell ${pg}]
@@ -99,22 +131,25 @@
     [invoke wait-for "SELECT * FROM public.items;" "hello from satellite_2" 10 ${psql}]
 [endloop]
 
+[shell pg_1]
+    !SELECT * FROM public.items;
+    """?
+                  id                  |        content         | content_text_nu
+ll | content_text_null_default | intvalue_null | intvalue_null_default
+--------------------------------------+------------------------+----------------
+---+---------------------------+---------------+-----------------------
+ f989b58b-980d-4d3c-b178-adb6ae8222f1 | hello from pg_1        | <NULL>
+   |                           |        <NULL> |                    10
+ 4bc27df5-0a7e-4695-b386-e39ddab231a4 | hello from satellite_2 | <NULL>
+   |                           |        <NULL> |                    10
+ a7a7d9be-a51c-4f86-a4ff-dfdc0c016fe2 | hello from satellite_1 | <NULL>
+   |                           |        <NULL> |                    10
+(3 rows)
+    """
+    ?$psql
 #===============================================================================
-# Verify that replication works for multiple tables
+# Cleanup
 #===============================================================================
-
-[shell satellite_1]
-    [invoke node_await_insert_other "['hello from satellite_1 other']"]
-
-[shell satellite_2]
-    [invoke node_await_insert_other "['hello from satellite_2 other']"]
-
-[loop pg pg_1 pg_2 pg_3]
-  [shell ${pg}]
-    [invoke log "Verify that ${pg} have received data from both Satellites"]
-    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_1 other" 10 ${psql}]
-    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_2 other" 10 ${psql}]
-[endloop]
 
 [cleanup]
     [invoke teardown]
