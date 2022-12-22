@@ -19,8 +19,10 @@ import {
   SatAuthHeader,
   SatAuthHeaderPair,
 } from '../_generated/proto/satellite';
-import { getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg,
-         getProtocolVersion, getFullTypeName} from '../util/proto';
+import {
+  getObjFromString, getSizeBuf, getTypeFromCode, SatPbMsg,
+  getProtocolVersion, getFullTypeName
+} from '../util/proto';
 import { Socket, SocketFactory } from '../sockets/index';
 import _m0 from 'protobufjs/minimal.js';
 import { EventEmitter } from 'events';
@@ -65,7 +67,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           "SatRelation": { handle: (req: any) => this.handleRelation(req), isRpc: false },
           "SatOpLog": { handle: (req: any) => this.handleTransaction(req), isRpc: false },
           "SatErrorResp": { handle: (error: SatErrorResp) => this.handleError(error), isRpc: false },
-        }).map( e => [getFullTypeName(e[0]), e[1]] ))
+        }).map(e => [getFullTypeName(e[0]), e[1]]))
 
   connectionRetryPolicy: Partial<IBackOffOptions> = {
     delayFirstAttempt: false,
@@ -193,14 +195,16 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   authenticate(clientId: string): Promise<AuthResponse | SatelliteError> {
     const { token } = this.opts;
-    const headers = [ SatAuthHeaderPair.fromPartial(
-      { key: SatAuthHeader.PROTO_VERSION,
+    const headers = [SatAuthHeaderPair.fromPartial(
+      {
+        key: SatAuthHeader.PROTO_VERSION,
         value: getProtocolVersion()
-      }) ]
-    const request = SatAuthReq.fromPartial({ id: clientId,
-                                             token: token,
-                                             headers: headers
-                                           });
+      })]
+    const request = SatAuthReq.fromPartial({
+      id: clientId,
+      token: token,
+      headers: headers
+    });
     return this.rpc<AuthResponse>(request);
   }
 
@@ -311,7 +315,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         case ChangeType.INSERT:
           txOp = SatTransOp.fromPartial({
             insert: {
-              rowData: record,      
+              rowData: record,
               relationId: relation.id
             }
           })
@@ -540,7 +544,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           type: ChangeType.UPDATE,
           record: deserializeRow(op.update.rowData!, rel),
           oldRecord: deserializeRow(op.update.oldRowData, rel)
-       });
+        });
 
         replication.transactions[lastTxnIdx].changes.push(change);
       }
@@ -627,12 +631,12 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 }
 
-export function serializeRow(rec: Record, relation: Relation) : SatOpRow {
+export function serializeRow(rec: Record, relation: Relation): SatOpRow {
   var recordNumColumn = 0
   var recordNullBitMask = new Uint8Array(calculateNumBytes(relation.columns.length))
   var recordValues = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
     if (rec[c.name] != null) {
-      acc.push(serializeColumnData(rec[c.name]!, c))
+      acc.push(serializeColumnData(rec[c.name]!))
     }
     else {
       acc.push(serializeNullData())
@@ -652,7 +656,7 @@ export function deserializeRow(row: SatOpRow | undefined, relation: Relation): R
   return Object.fromEntries(relation!.columns.map(
     (c, i) => {
       var value;
-      if ( getMaskBit(row.nullsBitmask, i) == 1 ) {
+      if (getMaskBit(row.nullsBitmask, i) == 1) {
         value = null
       }
       else {
@@ -724,27 +728,26 @@ function calculateNumBytes(column_num: number): number {
 function deserializeColumnData(column: Uint8Array, columnInfo: RelationColumn): string | number {
   const columnType = columnInfo.type.toUpperCase();
   switch (columnType) {
+    case 'CHAR':
     case 'TEXT':
     case 'UUID':
     case 'VARCHAR':
       return typeDecoder.text(column);
+    case 'FLOAT4':
+    case 'FLOAT8':
     case 'INT':
+    case 'INT2':
     case 'INT4':
+    case 'INT8':
     case 'INTEGER':
       return Number(typeDecoder.text(column));
   }
   throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't deserialize ${columnInfo.type}`);
 }
 
-function serializeColumnData(column: string | number, columnInfo: RelationColumn): Uint8Array {
-  const columnType = columnInfo.type.toUpperCase();
-  switch (columnType) {
-    case 'TEXT':
-    case 'UUID':
-    case 'INTEGER':
-      return typeEncoder.text(column as string);
-  }
-  throw new SatelliteError(SatelliteErrorCode.UNKNOWN_DATA_TYPE, `can't serialize ${columnInfo.type}`);
+// All values serialized as textual representation
+function serializeColumnData(column: string | number): Uint8Array {
+  return typeEncoder.text(column as string);
 }
 
 function serializeNullData(): Uint8Array {
