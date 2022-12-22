@@ -20,6 +20,10 @@ export const initTableInfo = (): TableInfo => {
     'main.child': {
       primaryKey: ['id'],
       columns: ['id', 'parent'],
+    },
+    'main.items': {
+      primaryKey: ['value'],
+      columns: ['value', 'otherValue'],
     }
   }
 }

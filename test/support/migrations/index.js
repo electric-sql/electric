@@ -2,7 +2,7 @@ export const data = {
   migrations: [
     {
       satellite_body: [
-        "CREATE TABLE IF NOT EXISTS main.items (\n  value TEXT PRIMARY KEY\n);",
+        "CREATE TABLE IF NOT EXISTS main.items (\n  value TEXT PRIMARY KEY,\n otherValue TEXT DEFAULT ''\n);",
         "CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY,\n  value TEXT,\n  otherValue INTEGER DEFAULT 0\n);",
         "CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n);",
         "-- These are toggles for turning the triggers on and off\nDROP TABLE IF EXISTS _electric_trigger_settings;",

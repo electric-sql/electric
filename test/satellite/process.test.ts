@@ -375,6 +375,43 @@ test('apply empty incoming', async t => {
   t.true(true)
 })
 
+test('apply incoming with null on column with default', async t => {
+  const { runMigrations, satellite, adapter, tableInfo } = t.context as any
+  await runMigrations()
+
+  const incomingTs = new Date().getTime()
+  const incomingEntry = generateOplogEntry(tableInfo, 'main', 'items', OPTYPES.insert, incomingTs, {
+    value: 'incoming',
+    otherValue: null,
+  })
+
+  await satellite._apply([incomingEntry])
+
+  const sql = `SELECT * from main.items WHERE value='incoming'`
+  const rows = await adapter.query({ sql })
+
+  t.is(rows[0].otherValue, null)
+  t.pass()
+})
+
+test('apply incoming with undefined on column with default', async t => {
+  const { runMigrations, satellite, adapter, tableInfo } = t.context as any
+  await runMigrations()
+
+  const incomingTs = new Date().getTime()
+  const incomingEntry = generateOplogEntry(tableInfo, 'main', 'items', OPTYPES.insert, incomingTs, {
+    value: 'incoming'
+  })
+
+  await satellite._apply([incomingEntry])
+
+  const sql = `SELECT * from main.items WHERE value='incoming'`
+  const rows = await adapter.query({ sql })
+
+  t.is(rows[0].otherValue, '')
+  t.pass()
+})
+
 test('INSERT wins over DELETE and restored deleted values', async t => {
   const { satellite, tableInfo } = t.context as any
 
