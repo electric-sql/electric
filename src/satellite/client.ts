@@ -129,8 +129,8 @@ export class SatelliteClient extends EventEmitter implements Client {
         reject(error)
       })
 
-      const { host, port, insecure } = this.opts
-      const url = `${insecure ? "ws" : "wss"}://${host}:${port}/ws`
+      const { host, port, ssl } = this.opts
+      const url = `${ssl ? "wss" : "ws"}://${host}:${port}/ws`
       this.socket.open({ url })
     })
 

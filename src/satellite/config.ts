@@ -38,7 +38,6 @@ export const satelliteClientDefaults = {
   env: "default",
   timeout: 3000,
   pushPeriod: 500,
-  insecure: false
 }
 
 const baseDomain = "electric-sql.com"
@@ -49,9 +48,9 @@ export interface SatelliteClientOpts {
   token: string
   host: string
   port: number
+  ssl: boolean
   timeout?: number
   pushPeriod?: number
-  insecure?: boolean
 }
 
 
@@ -64,7 +63,7 @@ export interface ElectricConfig {
   replication?: {
     host: string
     port: number
-    insecure: boolean
+    ssl: boolean
   }
   debug?: boolean,
 }
@@ -76,13 +75,13 @@ const electricConfigDefaults: Partial<ElectricConfig> = {
 export const addDefaultsToElectricConfig = (config: ElectricConfig): ElectricConfig => {
   const host = (config.replication?.host) ?? `${config.env}.${config.app}.${baseDomain}`
   const port = (config.replication?.port) ?? 443
-  const insecure = (config.replication?.insecure) ?? false
+  const ssl = (config.replication?.ssl) ?? true
 
   const newConfig = {
     ...electricConfigDefaults,
     ...config
   }
-  newConfig.replication = { ...config.replication, host, port, insecure }
+  newConfig.replication = { ...config.replication, host, port, ssl }
 
   return newConfig
 }

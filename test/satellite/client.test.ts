@@ -46,7 +46,7 @@ test.beforeEach(t => {
       host: '127.0.0.1',
       port: 30002,
       timeout: 10000,
-      insecure: true   
+      ssl: false   
     }
   );
   const clientId = "91eba0c8-28ba-4a86-a6e8-42731c2c6694"

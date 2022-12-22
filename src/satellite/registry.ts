@@ -171,7 +171,7 @@ export class GlobalRegistry extends BaseRegistry {
       token: config.token,
       host: config.replication.host,
       port: config.replication.port,
-      insecure: config.replication.insecure
+      ssl: config.replication.ssl
     }
 
     const client = new SatelliteClient(dbName, socketFactory, notifier, satelliteClientOpts)
