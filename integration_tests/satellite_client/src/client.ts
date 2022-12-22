@@ -26,7 +26,7 @@ export const open_db = (name: string,
     replication: {
       host: host,
       port: port,
-      insecure: true,
+      ssl: false,
     },
     token: "token",
     debug: true
