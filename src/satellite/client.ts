@@ -523,6 +523,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           type: ChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel)
         };
+
         replication.transactions[lastTxnIdx].changes.push(change);
       }
 
@@ -540,6 +541,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           record: deserializeRow(op.update.rowData!, rel),
           oldRecord: deserializeRow(op.update.oldRowData, rel)
        });
+
         replication.transactions[lastTxnIdx].changes.push(change);
       }
 
@@ -556,6 +558,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           type: ChangeType.DELETE,
           oldRecord: deserializeRow(op.delete.oldRowData!, rel)
         });
+
         replication.transactions[lastTxnIdx].changes.push(change);
       }
     });
@@ -628,12 +631,12 @@ export function serializeRow(rec: Record, relation: Relation) : SatOpRow {
   var recordNumColumn = 0
   var recordNullBitMask = new Uint8Array(calculateNumBytes(relation.columns.length))
   var recordValues = relation!.columns.reduce((acc: Uint8Array[], c: RelationColumn) => {
-    if (rec[c.name] != undefined) {
+    if (rec[c.name] != null) {
       acc.push(serializeColumnData(rec[c.name]!, c))
     }
     else {
       acc.push(serializeNullData())
-      setBit(recordNullBitMask, recordNumColumn)
+      setBit(recordNullBitMask, recordNumColumn + 1)
     }
     recordNumColumn = recordNumColumn + 1
     return acc
@@ -649,8 +652,8 @@ export function deserializeRow(row: SatOpRow | undefined, relation: Relation): R
   return Object.fromEntries(relation!.columns.map(
     (c, i) => {
       var value;
-      if ( getBit(row.nullsBitmask, i) == 1 ) {
-        value = undefined
+      if ( getBit(row.nullsBitmask, i + 1 ) == 1 ) {
+        value = null
       }
       else {
         value = deserializeColumnData(row.values[i], c);

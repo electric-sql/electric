@@ -17,7 +17,7 @@ test("serialize/deserialize row data", async t => {
       { name: 'name3', type: 'TEXT' }
   ]}
 
-  const record: Record = {name1: "Hello", 'name2': "World!", 'name3': undefined }
+  const record: Record = {name1: "Hello", 'name2': "World!", 'name3': null }
   const s_row = serializeRow(record, rel)
   const d_row = deserializeRow(s_row, rel)
 

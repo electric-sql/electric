@@ -501,6 +501,100 @@ test('ack on send and pong', async t => {
   await res
 })
 
+test.serial('default and null test', async t => {
+  await connectAndAuth(t.context as Context);
+  const { client, server } = t.context as Context;
+
+  const start = SatInStartReplicationResp.fromPartial({});
+  const begin = SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO });
+  const commit = SatOpCommit.fromPartial({});
+  const stop = SatInStopReplicationResp.fromPartial({});
+
+  const rel: Relation = {
+    id: 1,
+    schema: 'schema',
+    table: 'items',
+    tableType: SatRelation_RelationType.TABLE,
+    columns: [
+      { name: 'id', type: 'uuid' },
+      { name: 'content', type: 'text' },
+      { name: 'text_null', type: 'text' },
+      { name: 'text_null_default', type: 'text' },
+      { name: 'intvalue_null', type: 'integer' },
+      { name: 'intvalue_null_default', type: 'integer' }
+    ]
+  }
+
+  const relation = SatRelation.fromPartial({
+    relationId: 1,
+    schemaName: 'schema',
+    tableName: 'table',
+    tableType: SatRelation_RelationType.TABLE,
+    columns: [
+      SatRelationColumn.fromPartial({ name: 'id', type: 'uuid' }),
+      SatRelationColumn.fromPartial({ name: 'content', type: 'varchar' }),
+      SatRelationColumn.fromPartial({ name: 'text_null', type: 'text' }),
+      SatRelationColumn.fromPartial({ name: 'text_null_default', type: 'text' }),
+      SatRelationColumn.fromPartial({ name: 'intvalue_null', type: 'int4' }),
+      SatRelationColumn.fromPartial({ name: 'intvalue_null_default', type: 'int4' })
+    ]
+  });
+
+
+  const insertOp = SatOpInsert.fromPartial({
+    relationId: 1,
+    rowData: serializeRow({
+      'id': "f989b58b-980d-4d3c-b178-adb6ae8222f1",
+      'content': "hello from pg_1",
+      'text_null': null,
+      'text_null_default': "",
+      'intvalue_null': null,
+      'intvalue_null_default': "10"
+    }, rel)
+  });
+
+  const serializedRow: SatOpRow = {
+    "$type": "Electric.Satellite.v0_2.SatOpRow",
+    "nullsBitmask": new Uint8Array([40]),
+    "values": [
+      new Uint8Array([102, 57, 56, 57, 98, 53, 56, 98, 45, 57, 56, 48, 100, 45, 52, 100, 51, 99, 45, 98, 49, 55, 56, 45, 97, 100, 98, 54, 97, 101, 56, 50, 50, 50, 102, 49]),
+      new Uint8Array([104, 101, 108, 108, 111, 32, 102, 114, 111, 109, 32, 112, 103, 95, 49]),
+      new Uint8Array([]),
+      new Uint8Array([]),
+      new Uint8Array([]),
+      new Uint8Array([49, 48])
+    ]
+  }
+
+  const record: any = deserializeRow(serializedRow, rel)!
+
+  console.log(`record: ${JSON.stringify(record)}`)
+
+  console.log(`insert: ${JSON.stringify(insertOp)}`)
+
+
+  const firstOpLogMessage = SatOpLog.fromPartial({
+    ops: [
+      SatTransOp.fromPartial({ begin }),
+      SatTransOp.fromPartial({ insert: insertOp }),
+      SatTransOp.fromPartial({ commit }),
+    ]
+  });
+
+  server.nextResponses([start, relation, firstOpLogMessage]);
+  server.nextResponses([stop]);
+
+  await new Promise<void>(async (res) => {
+    client.on('transaction', (transaction: any) => {
+      t.is(record["id"] as any, transaction.changes[0].record["id"] as any)
+      t.is(record["content"] as any, transaction.changes[0].record["content"] as any)
+      t.is(record["text_null"] as any, transaction.changes[0].record["text_null"] as any)
+      res();
+    });
+
+    await client.startReplication();
+  });
+});
 
 function decode(data: Buffer): SatPbMsg {
   const code = data.readUInt8();
