@@ -9,6 +9,7 @@ defmodule Electric.Satellite.Serialization do
     DeletedRecord
   }
 
+  require Logger
   use Electric.Satellite.Protobuf
 
   @type relation_mapping() ::
@@ -83,6 +84,8 @@ defmodule Electric.Satellite.Serialization do
   def map_to_row(data, rel_cols) when is_list(rel_cols) and is_map(data) do
     bitmask = []
     values = []
+
+    Logger.info("#{inspect(data)} #{inspect(rel_cols)}")
 
     {num_columns, bitmask, values} =
       Enum.reduce(rel_cols, {0, bitmask, values}, fn column_name, {num, bitmask0, values0} ->

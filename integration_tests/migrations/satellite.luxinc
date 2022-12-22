@@ -1,0 +1,36 @@
+[macro connect_to_electric host port]
+    !client = await import('./dist/client.js')
+    ?$node
+    !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
+    ?$node
+    !db = await client.open_db( process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME", \
+                                "$host", \
+                                $port, \
+                                migrations)
+    ?$node
+[endmacro]
+
+[macro setup_client satellite_number electric port]
+    [invoke start_satellite $satellite_number $migration_dir]
+    !yarn node
+    ?$node
+    [invoke connect_to_electric $electric $port]
+[endmacro]
+
+[macro node_await_get match]
+    [invoke wait-for "client.get_items(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_insert keys]
+    !client.insert_item(db, ${keys})
+    ?$node
+[endmacro]
+
+[macro node_await_get_other match]
+    [invoke wait-for "client.get_other_items(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_insert_other keys]
+    !client.insert_other_item(db, ${keys})
+    ?$node
+[endmacro]
