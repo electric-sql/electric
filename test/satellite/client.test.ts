@@ -18,7 +18,7 @@ import {
   SatInStartReplicationReq_Option,
 } from '../../src/_generated/proto/satellite';
 import { WebSocketNodeFactory } from '../../src/sockets/node';
-import { SatelliteClient, serializeRow } from '../../src/satellite/client';
+import { deserializeRow, SatelliteClient, serializeRow } from '../../src/satellite/client';
 import { SatelliteWSServerStub } from './server_ws_stub';
 import test from 'ava'
 import Long from 'long';
