@@ -12,7 +12,7 @@
   </picture>
 </a>
 
-![GitHub](https://img.shields.io/github/license/electric-sql/typescript-client) ![npm](https://img.shields.io/npm/v/electric-sql) [![Tests](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml)
+![GitHub](https://img.shields.io/github/license/electric-sql/typescript-client) [![npm](https://img.shields.io/npm/v/electric-sql)](https://www.npmjs.com/package/electric-sql) [![Tests](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml)
 
 # ElectricSQL Typescript Client
 
