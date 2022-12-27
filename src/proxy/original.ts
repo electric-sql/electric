@@ -37,7 +37,7 @@ export const proxyOriginal = (original: any, electric: any): any => {
 
         if (typeof value === 'function') {
           return (...args: any) => {
-            const retval = Reflect.apply(value, electric, args)
+            const retval: any = Reflect.apply(value, electric, args)
 
             // Preserve chainability.
             if (isInstanceOfSameClass(electric, retval)) {
@@ -55,7 +55,7 @@ export const proxyOriginal = (original: any, electric: any): any => {
 
       if (typeof value === 'function') {
         return (...args: any) => {
-          const retval = Reflect.apply(value, target, args)
+          const retval: any = Reflect.apply(value, target, args)
 
           // Preserve chainability.
           if (isInstanceOfSameClass(target, retval)) {

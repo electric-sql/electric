@@ -17,8 +17,10 @@ export interface Database {
 
 export interface Info {
   changes: number
-  lastInsertRowid: number
+  lastInsertRowid: number | bigint
 }
+
+export type StatementBindParams<T = BindParams> = T extends any[] ? T : [T]
 
 // The relevant subset of the Better-SQLite3 prepared statement.
 export interface Statement {
@@ -26,10 +28,10 @@ export interface Statement {
   readonly: boolean
   source: string
 
-  run(bindParams: BindParams): Info
-  get(bindParams: BindParams): Row | void
-  all(bindParams: BindParams): Row[]
-  iterate(bindParams: BindParams): Iterable<Row>
+  run(...bindParams: StatementBindParams): Info
+  get(...bindParams: StatementBindParams): Row | void
+  all(...bindParams: StatementBindParams): Row[]
+  iterate(...bindParams: StatementBindParams): Iterable<Row>
 }
 
 // `CallableTransaction` wraps the `txFn` returned from `db.transaction(fn)`
@@ -161,9 +163,9 @@ export class ElectricStatement implements ProxyWrapper {
         && !this._stmt.database.inTransaction
   }
 
-  run(bindParams: BindParams): Info {
+  run(...bindParams: StatementBindParams): Info {
     const shouldNotify = this._shouldNotify()
-    const info = this._stmt.run(bindParams)
+    const info = this._stmt.run(...bindParams)
 
     if (shouldNotify) {
       this.electric.potentiallyChanged()
@@ -172,9 +174,9 @@ export class ElectricStatement implements ProxyWrapper {
     return info
   }
 
-  get(bindParams: BindParams): Row | void {
+  get(...bindParams: StatementBindParams): Row | void {
     const shouldNotify = this._shouldNotify()
-    const row = this._stmt.get(bindParams)
+    const row = this._stmt.get(...bindParams)
 
     if (shouldNotify) {
       this.electric.potentiallyChanged()
@@ -183,9 +185,9 @@ export class ElectricStatement implements ProxyWrapper {
     return row
   }
 
-  all(bindParams: BindParams): Row[] {
+  all(...bindParams: StatementBindParams): Row[] {
     const shouldNotify = this._shouldNotify()
-    const rows = this._stmt.all(bindParams)
+    const rows = this._stmt.all(...bindParams)
 
     if (shouldNotify) {
       this.electric.potentiallyChanged()
@@ -194,11 +196,11 @@ export class ElectricStatement implements ProxyWrapper {
     return rows
   }
 
-  iterate(bindParams: BindParams): IterableIterator<Row> {
+  iterate(...bindParams: StatementBindParams): IterableIterator<Row> {
     const shouldNotify = this._shouldNotify()
     const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
 
-    const iterRows = this._stmt.iterate(bindParams)
+    const iterRows = this._stmt.iterate(...bindParams)
 
     function *generator(): IterableIterator<Row> {
       try {

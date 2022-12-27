@@ -1,5 +1,5 @@
-import { BindParams, DbName, Row } from '../../util/types'
-import { Database, Info, Statement } from './database'
+import { DbName, Row } from '../../util/types'
+import { Database, Info, Statement, StatementBindParams } from './database'
 
 export class MockDatabase implements Database {
   name: DbName
@@ -48,26 +48,26 @@ export class MockStatement implements Statement {
     this.database = db
   }
 
-  run(_params: BindParams): Info {
+  run(..._params: StatementBindParams): Info {
     return {
       changes: 0,
       lastInsertRowid: 1234
     }
   }
 
-  get(_params: BindParams): Row | void {
+  get(..._params: StatementBindParams): Row | void {
     return {foo: 'bar'}
   }
 
-  all(params: BindParams): Row[] {
-    if (params && 'shouldError' in params && params.shouldError) {
+  all(...params: StatementBindParams): Row[] {
+    if (typeof params[0] == 'object' && params[0] && 'shouldError' in params[0]) {
       throw new Error('Mock query error')
     }
 
     return [{foo: 'bar'}, {foo: 'baz'}]
   }
 
-  iterate(_params: BindParams): Iterable<Row> {
+  iterate(..._params: StatementBindParams): Iterable<Row> {
     return [{foo: 'bar'}, {foo: 'baz'}]
   }
 }
