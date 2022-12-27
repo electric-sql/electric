@@ -636,7 +636,7 @@ export function serializeRow(rec: Record, relation: Relation) : SatOpRow {
     }
     else {
       acc.push(serializeNullData())
-      setBit(recordNullBitMask, recordNumColumn + 1)
+      setMaskBit(recordNullBitMask, recordNumColumn)
     }
     recordNumColumn = recordNumColumn + 1
     return acc
@@ -652,7 +652,7 @@ export function deserializeRow(row: SatOpRow | undefined, relation: Relation): R
   return Object.fromEntries(relation!.columns.map(
     (c, i) => {
       var value;
-      if ( getBit(row.nullsBitmask, i + 1 ) == 1 ) {
+      if ( getMaskBit(row.nullsBitmask, i) == 1 ) {
         value = null
       }
       else {
@@ -662,17 +662,51 @@ export function deserializeRow(row: SatOpRow | undefined, relation: Relation): R
     }))
 }
 
-function setBit(array: Uint8Array, index: number): void {
-  var byteIndex = Math.floor(index / 8)
-  var bitIndex = index - (byteIndex * 8)
+/**
+ * Sets a bit in the mask. Modifies the mask in place.
+ * 
+ * Mask is represented as a Uint8Array, which will be serialized element-by-element as a mask.
+ * This means that `indexFromStart` enumerates all bits in the mask in the order they will be serialized:
+ * 
+ * @example
+ * setMaskBit(new Uint8Array([0b00000000, 0b00000000]), 0)
+ * // => new Uint8Array([0b10000000, 0b00000000])
+ * 
+ * @example
+ * setMaskBit(new Uint8Array([0b00000000, 0b00000000]), 8)
+ * // => new Uint8Array([0b00000000, 0b10000000])
+ * 
+ * @param array Uint8Array mask
+ * @param indexFromStart bit index in the mask
+ */
+function setMaskBit(array: Uint8Array, indexFromStart: number): void {
+  const byteIndex = Math.floor(indexFromStart / 8)
+  const bitIndex = 7 - (indexFromStart % 8)
 
-  var mask = 0x01 << bitIndex
+  const mask = 0x01 << bitIndex
   array[byteIndex] = array[byteIndex] | mask
 }
 
-function getBit(array: Uint8Array, index: number): number {
-  var byteIndex = Math.floor(index / 8)
-  var bitIndex = index - (byteIndex * 8)
+/**
+ * Reads a bit in the mask
+ * 
+ * Mask is represented as a Uint8Array, which will be serialized element-by-element as a mask.
+ * This means that `indexFromStart` enumerates all bits in the mask in the order they will be serialized:
+ * 
+ * @example
+ * getMaskBit(new Uint8Array([0b10000000, 0b00000000]), 0)
+ * // => 1
+ * 
+ * @example
+ * getMaskBit(new Uint8Array([0b10000000, 0b00000000]), 8)
+ * // => 0
+ * 
+ * @param array Uint8Array mask
+ * @param indexFromStart bit index in the mask
+ */
+function getMaskBit(array: Uint8Array, indexFromStart: number): number {
+  const byteIndex = Math.floor(indexFromStart / 8)
+  const bitIndex = 7 - (indexFromStart % 8)
 
   return (array[byteIndex] >>> bitIndex) & 0x01;
 }
