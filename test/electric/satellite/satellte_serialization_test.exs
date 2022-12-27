@@ -29,4 +29,28 @@ defmodule Electric.Satellite.SerializationTest do
 
     assert deserialized_data == expected
   end
+
+  test "test row deserialization with long bitmask" do
+    mask = <<0b1101000010000000::16>>
+
+    deserialized_data =
+      Serialization.row_to_map(
+        Enum.map(0..8, &"bit#{&1}"),
+        %SatOpRow{nulls_bitmask: mask, values: Enum.map(0..8, fn _ -> "" end)}
+      )
+
+    expected = %{
+      "bit0" => nil,
+      "bit1" => nil,
+      "bit2" => "",
+      "bit3" => nil,
+      "bit4" => "",
+      "bit5" => "",
+      "bit6" => "",
+      "bit7" => "",
+      "bit8" => nil
+    }
+
+    assert deserialized_data == expected
+  end
 end
