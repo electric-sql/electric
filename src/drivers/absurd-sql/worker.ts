@@ -7,7 +7,7 @@ import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { BundleMigrator } from '../../migrators/bundle'
 import { WorkerBridgeNotifier } from '../../notifiers/bridge'
 import { globalRegistry } from '../../satellite/registry'
-import { ElectricConfig } from '../../satellite/config'
+import { addDefaultsToElectricConfig, ElectricConfig } from '../../satellite/config'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
@@ -43,7 +43,9 @@ export class ElectricWorker extends WorkerServer {
       throw new RequestError(400, 'Must init before opening')
     }
 
-    if (config.debug) {
+    const configWithDefaults = addDefaultsToElectricConfig(config)
+
+    if (configWithDefaults.debug) {
       setDebugLogLevel()
     }
 
@@ -64,14 +66,14 @@ export class ElectricWorker extends WorkerServer {
       db.exec(`PRAGMA journal_mode=MEMORY; PRAGMA page_size=8192;`)
 
       const adapter = opts?.adapter || new DatabaseAdapter(db)
-      const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
+      const migrator = opts?.migrator || new BundleMigrator(adapter, configWithDefaults.migrations)
       const notifier = opts?.notifier || new WorkerBridgeNotifier(dbName, this)
       const socketFactory = opts?.socketFactory || new WebSocketWebFactory()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, configWithDefaults)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)
