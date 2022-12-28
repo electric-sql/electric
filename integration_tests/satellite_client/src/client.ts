@@ -28,7 +28,6 @@ export const open_db = (name: string,
       port: port,
       ssl: false,
     },
-    token: "token",
     debug: true
   }
   console.log(`config: ${JSON.stringify(config)}`)
@@ -52,7 +51,7 @@ export const set_subscribers = (db: ElectrifiedDatabase) => {
 
 export const get_items = (db: ElectrifiedDatabase) => {
   const stmt = db.prepare('SELECT * FROM main.items;')
-  return stmt.all([])
+  return stmt.all()
 }
 
 export const insert_item = (db: ElectrifiedDatabase, keys: [ string ] ) => {
@@ -72,7 +71,7 @@ export const delete_item = (db: ElectrifiedDatabase, keys: [ string ]) => {
 
 export const get_other_items = (db: ElectrifiedDatabase) => {
   const stmt = db.prepare('SELECT * FROM main.other_items;')
-  return stmt.all([])
+  return stmt.all()
 }
 
 export const insert_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
