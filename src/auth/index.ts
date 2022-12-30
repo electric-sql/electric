@@ -23,7 +23,13 @@ export class ConsoleHttpClient implements ConsoleClient {
       method: "POST"
     })
 
-    const { data: { token, refreshToken } } = await res.json()
+    const response = await res.json()
+
+    if (response.errors) {
+      throw Error('unable to fetch token')
+    }
+
+    const { data: { token, refreshToken } } = response
     return { token, refreshToken }
   }
 }

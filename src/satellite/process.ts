@@ -216,12 +216,17 @@ export class SatelliteProcess implements Satellite {
 
   // TODO: fetch token every time, must add logic to check if token is still valid
   async refreshAuthState(authState: AuthState): Promise<AuthState> {
-    const { token, refreshToken } = await this.console.token(authState)
+    try {
+      const { token, refreshToken } = await this.console.token(authState)
+      await this._setMeta('token', token)
+      await this._setMeta('refreshToken', token)
+      return { ...authState, token, refreshToken }
+    }
+    catch (error) {
+      Log.warn(`unable to refresh token: ${error}`)
+    }
 
-    await this._setMeta('token', token)
-    await this._setMeta('refreshToken', token)
-
-    return { ...authState, token, refreshToken }
+    return { ...authState }
   }
 
   async _verifyTableStructure(): Promise<boolean> {
