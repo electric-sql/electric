@@ -4,11 +4,11 @@ import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { AuthStateNotification, Change, ConnectivityStateChangeNotification, Notifier } from '../notifiers/index'
-import { Client } from './index'
+import { Client, ConsoleClient } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import { AckType, ConnectivityState, DbName, LSN, Relation, RelationsCache, SatelliteError, SqlValue, Statement, Transaction } from '../util/types'
 import { Satellite } from './index'
-import { SatelliteOpts } from './config'
+import { SatelliteConfig, SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
 import { OPTYPES, OplogEntry, OplogTableChanges, operationsToTableChanges, fromTransaction, toTransactions } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
@@ -26,10 +26,11 @@ export class SatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   client: Client
+  console: ConsoleClient
 
+  config: SatelliteConfig
   opts: SatelliteOpts
 
-  _clientId?: string
   _authState?: AuthState
   _authStateSubscription?: string
 
@@ -45,13 +46,24 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
-  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, client: Client, opts: SatelliteOpts) {
+  constructor(
+    dbName: DbName,
+    adapter: DatabaseAdapter,
+    migrator: Migrator,
+    notifier: Notifier,
+    client: Client,
+    console: ConsoleClient,
+    config: SatelliteConfig,
+    opts: SatelliteOpts
+  ) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
+    this.console = console
 
+    this.config = config
     this.opts = opts
 
     this._lastAckdRowId = 0
@@ -78,7 +90,16 @@ export class SatelliteProcess implements Satellite {
     }
 
     if (authState !== undefined) {
-      this._authState = authState
+      throw new Error('Not implemented')
+      // this._authState = authState
+    } else {
+      const app = this.config.app
+      const env = this.config.env
+      const clientId = await this._getClientId()
+      const token = await this._getMeta('token')
+      const refreshToken = await this._getMeta('refreshToken')
+
+      this._authState = { app, env, clientId, token, refreshToken }
     }
 
     if (this._authStateSubscription === undefined) {
@@ -107,9 +128,6 @@ export class SatelliteProcess implements Satellite {
     // For now, we do it only at initialization
     this.relations = await this._getLocalRelations()
 
-    const clientId = await this._getClientId()
-
-    this._clientId = clientId
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
@@ -181,12 +199,29 @@ export class SatelliteProcess implements Satellite {
 
   async _connectAndStartReplication(): Promise<void | SatelliteError> {
     Log.info(`connecting and starting replication`)
+
+    if (!this._authState) {
+      throw new Error(`trying to connect before authentication`)
+    }
+    const authState = this._authState
+
     return this.client.connect()
-      .then(() => this.client.authenticate(this._clientId!))
+      .then(() => this.refreshAuthState(authState))
+      .then((freshAuthState) => this.client.authenticate(freshAuthState))      
       .then(() => this.client.startReplication(this._lsn))
       .catch((error) => {
         Log.warn(`couldn't start replication: ${error}`)
       })
+  }
+
+  // TODO: fetch token every time, must add logic to check if token is still valid
+  async refreshAuthState(authState: AuthState): Promise<AuthState> {
+    const { token, refreshToken } = await this.console.token(authState)
+
+    await this._setMeta('token', token)
+    await this._setMeta('refreshToken', token)
+
+    return { ...authState, token, refreshToken }
   }
 
   async _verifyTableStructure(): Promise<boolean> {
@@ -501,10 +536,6 @@ export class SatelliteProcess implements Satellite {
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId
-  }
-
-  clientId(): string | undefined {
-    return this._clientId
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.

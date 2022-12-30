@@ -11,7 +11,7 @@ import { ElectricConfig } from './config'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
-  ensureStarted(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socketFactory: SocketFactory, config: ElectricConfig, authState?: AuthState): Promise<Satellite>
+  ensureStarted(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socketFactory: SocketFactory, console: ConsoleClient, config: ElectricConfig, authState?: AuthState): Promise<Satellite>
   ensureAlreadyStarted(dbName: DbName): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
   stopAll(): Promise<void>
@@ -34,7 +34,7 @@ export interface Satellite {
 export interface Client {
   connect(retryHandler?: (error: any, attempt: number) => boolean): Promise<void | SatelliteError>;
   close(): Promise<void | SatelliteError>;
-  authenticate(clientId: string): Promise<AuthResponse | SatelliteError>;
+  authenticate(authState: AuthState): Promise<AuthResponse | SatelliteError>;
   isClosed(): boolean;
   startReplication(lsn?: LSN): Promise<void | SatelliteError>;
   stopReplication(): Promise<void | SatelliteError>;
@@ -46,4 +46,19 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN, ack: LSN };
   subscribeToOutboundEvent(event: 'started', callback: () => void): void;
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void;
+}
+
+export type TokenRequest = {
+  app: string,
+  env: string,
+  clientId: string
+}
+
+export type TokenResponse = {
+  token: string,
+  refreshToken: string
+}
+
+export interface ConsoleClient {
+  token(request: TokenRequest): Promise<TokenResponse>
 }

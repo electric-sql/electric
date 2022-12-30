@@ -8,12 +8,13 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
+import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
 import { OPTYPES, operationsToTableChanges, fromTransaction, OplogEntry, toTransactions } from '../../src/satellite/oplog'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo, loadSatelliteMetaTable, generateOplogEntry, TableInfo } from '../support/satellite-helpers'
@@ -58,6 +59,11 @@ const opts = Object.assign({}, satelliteDefaults, {
   pollingInterval: 200
 })
 
+const config: SatelliteConfig = {
+  app: "test",
+  env: "default",
+}
+
 test.beforeEach(async t => {
   await mkdir(".tmp", {recursive: true})
   const dbName = `.tmp/test-${randomValue()}.db`
@@ -66,7 +72,8 @@ test.beforeEach(async t => {
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
-  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
+  const console = new MockConsoleClient()
+  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, console, config, opts)
 
   const tableInfo = initTableInfo()
   const timestamp = new Date().getTime()
@@ -126,7 +133,9 @@ test('load metadata', async t => {
     lastAckdRowId: '0',
     lastSentRowId: '0',
     lsn: '',
-    clientId: ''
+    clientId: '',
+    token: '',
+    refreshToken: ''
   })
 })
 
@@ -134,14 +143,25 @@ test('set persistent client id', async t => {
   const { satellite } = t.context as any
 
   await satellite.start()
-  const clientId1 = satellite.clientId()
+  const clientId1 = satellite["_authState"]["clientId"]
   await satellite.stop()
 
   await satellite.start()
 
-  const clientId2 = satellite.clientId()
+  const clientId2 = satellite["_authState"]["clientId"]
 
   t.assert(clientId1 === clientId2)
+})
+
+test('connect saves new token', async t => {
+  const { satellite, runMigrations } = t.context as ContextType
+  await runMigrations()
+
+  const initToken = await satellite._getMeta('token')
+  await satellite.start()
+  const receivedToken = await satellite._getMeta('token')
+
+  t.assert(initToken != receivedToken)
 })
 
 test('cannot UPDATE primary key', async t => {

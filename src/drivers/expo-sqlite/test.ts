@@ -13,6 +13,7 @@ import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
 import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
+import { MockConsoleClient } from '../../auth/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 const testConfig = { app: "app", token: "token" }
@@ -26,6 +27,7 @@ export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = 
   const migrator = opts?.migrator || new MockMigrator()
   const notifier = opts?.notifier || new MockNotifier(dbName)
   const socketFactory = opts?.socketFactory || new MockSocketFactory()
+  const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
   const namespace = new ElectricNamespace(adapter, notifier)
@@ -38,6 +40,6 @@ export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = 
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
+  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

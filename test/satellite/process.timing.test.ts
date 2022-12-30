@@ -8,11 +8,11 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
+import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
-import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { satelliteDefaults } from '../../src/satellite/config'
+import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo } from '../support/satellite-helpers'
@@ -22,9 +22,15 @@ import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
 
 type ContextType = {
+  dbName: string,
   adapter: DatabaseAdapter,
   satellite: Satellite,
   client: MockSatelliteClient
+}
+
+const config: SatelliteConfig = {
+  app: "test",
+  env: "default",
 }
 
 // Speed up the intervals for testing.
@@ -41,7 +47,8 @@ test.beforeEach(async t => {
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
-  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, opts)
+  const console = new MockConsoleClient()
+  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, console, config, opts)
 
   const tableInfo = initTableInfo()
   const timestamp = new Date().getTime()
@@ -65,7 +72,7 @@ test.beforeEach(async t => {
 })
 
 test.afterEach.always(async t => {
-  const { dbName } = t.context as any
+  const { dbName } = t.context as ContextType
 
   await removeFile(dbName, {force: true})
   await removeFile(`${dbName}-journal`, {force: true})

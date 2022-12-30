@@ -1,5 +1,5 @@
 import { DatabaseAdapter } from '../../src/electric/adapter'
-import { OPTYPES } from '../../src/satellite/oplog'
+import { OplogEntry, OpType, OPTYPES } from '../../src/satellite/oplog'
 import { Row } from '../../src/util/types'
 
 export interface TableInfo {
@@ -28,8 +28,8 @@ export const initTableInfo = (): TableInfo => {
   }
 }
 
-export const loadSatelliteMetaTable = async (db: DatabaseAdapter, metaTablename = '_electric_meta'): Promise<Row> => {
-  const rows = await db.query({ sql: `SELECT key, value FROM _electric_meta` })
+export const loadSatelliteMetaTable = async (db: DatabaseAdapter, metaTableName = '_electric_meta'): Promise<Row> => {
+  const rows = await db.query({ sql: `SELECT key, value FROM ${metaTableName}` })
   const entries = rows.map(x => [x.key, x.value])
 
   return Object.fromEntries(entries)

@@ -35,6 +35,7 @@ import { SatelliteClientOpts, satelliteClientDefaults } from './config';
 import { backOff, IBackOffOptions } from 'exponential-backoff';
 import { Notifier } from '../notifiers';
 import Log from 'loglevel';
+import { AuthState } from '../auth';
 
 type IncomingHandler = { handle: (msg: any) => any | void, isRpc: boolean }
 
@@ -193,8 +194,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return this.rpc(request);
   }
 
-  authenticate(clientId: string): Promise<AuthResponse | SatelliteError> {
-    const { token } = this.opts;
+  authenticate({ clientId, token }: AuthState): Promise<AuthResponse | SatelliteError> {
     const headers = [SatAuthHeaderPair.fromPartial(
       {
         key: SatAuthHeader.PROTO_VERSION,

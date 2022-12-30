@@ -2,7 +2,7 @@ import { AnyDatabase, AnyElectricDatabase, AnyElectrifiedDatabase } from '../dri
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
-import { Registry } from '../satellite/index'
+import { ConsoleClient, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
 import { DbName } from '../util/types'
@@ -16,6 +16,7 @@ export interface ElectrifyOptions {
   migrator?: Migrator,
   notifier?: Notifier,
   socketFactory?: SocketFactory,
+  console?: ConsoleClient
   registry?: Registry,
 }
 
@@ -60,11 +61,12 @@ export const electrify = async (
   migrator: Migrator,
   notifier: Notifier,
   socketFactory: SocketFactory,
+  console: ConsoleClient,
   registry: Registry,
   config: ElectricConfig,
 ): Promise<AnyElectrifiedDatabase> => {
   const configWithDefaults = addDefaultsToElectricConfig(config)
-  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, configWithDefaults)
+  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, configWithDefaults)
 
   return proxyOriginal(db, electric)
 }

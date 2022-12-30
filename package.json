@@ -108,6 +108,7 @@
   },
   "dependencies": {
     "base-64": "^1.0.0",
+    "cross-fetch": "^3.1.5",
     "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",

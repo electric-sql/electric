@@ -11,6 +11,7 @@ import { DatabaseAdapter } from './adapter'
 import { Config, Database, ElectricDatabase, QueryExecResult, Statement } from './database'
 import { MockSocketFactory } from '../../sockets/mock'
 import { ElectricConfig } from '../../satellite/config'
+import { MockConsoleClient } from '../../auth/mock'
 
 interface TestData {
   notifications: Notification[]
@@ -127,11 +128,12 @@ export class MockElectricWorker extends WorkerServer {
       const migrator = opts?.migrator || new MockMigrator()
       const notifier = opts?.notifier || new MockNotifier(dbName)
       const socketFactory = opts?.socketFactory || new MockSocketFactory()
+      const console = opts?.console || new MockConsoleClient()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, config)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, config)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)

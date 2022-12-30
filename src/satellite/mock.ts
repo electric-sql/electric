@@ -5,27 +5,40 @@ import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
 import { AckCallback, AckType, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
 
-import { Client, Satellite } from './index'
-import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
+import { Client, ConsoleClient, Satellite } from './index'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults, SatelliteConfig } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
 
 export class MockSatelliteProcess implements Satellite {
+  config: SatelliteConfig
   dbName: DbName
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
   socketFactory: SocketFactory
+  console: ConsoleClient
   opts: SatelliteOpts
 
-  constructor(dbName: DbName, adapter: DatabaseAdapter, migrator: Migrator, notifier: Notifier, socketFactory: SocketFactory, opts: SatelliteOpts) {
+  constructor(
+    dbName: DbName,
+    adapter: DatabaseAdapter,
+    migrator: Migrator,
+    notifier: Notifier,
+    socketFactory: SocketFactory,
+    console: ConsoleClient,
+    config: SatelliteConfig,
+    opts: SatelliteOpts
+  ) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
     this.socketFactory = socketFactory
+    this.console = console
+    this.config = config
     this.opts = opts
   }
 
@@ -40,17 +53,19 @@ export class MockSatelliteProcess implements Satellite {
 
 export class MockRegistry extends BaseRegistry {
   async startProcess(
-        dbName: DbName,
-        adapter: DatabaseAdapter,
-        migrator: Migrator,
-        notifier: Notifier,
+    dbName: DbName,
+    adapter: DatabaseAdapter,
+    migrator: Migrator,
+    notifier: Notifier,
     socketFactory: SocketFactory,
-        authState?: AuthState,
-        overrides?: SatelliteOverrides
-      ): Promise<Satellite> {
+    console: ConsoleClient,
+    config: SatelliteConfig,
+    authState?: AuthState,
+    overrides?: SatelliteOverrides
+  ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
 
-    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, socketFactory, opts)
+    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, socketFactory, console, config, opts)
     await satellite.start(authState)
 
     return satellite
@@ -89,7 +104,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     }
     return Promise.resolve()
   }
-  authenticate(_clientId: string): Promise<SatelliteError | AuthResponse> {
+  authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({});
   }
   startReplication(lsn: LSN, _resume?: boolean | undefined): Promise<void | SatelliteError> {
@@ -141,5 +156,4 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   unsubscribeToOutboundEvent(_event: 'started', callback: () => void): void {
     this.removeListener('outbound_started', callback)
   }
-
 }

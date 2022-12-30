@@ -15,6 +15,7 @@ import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
+import { ConsoleHttpClient } from '../../auth'
 
 export { ElectricDatabase, DatabaseAdapter }
 export type { Database, ElectrifiedDatabase }
@@ -26,11 +27,12 @@ export const electrify = async (db: Database, config: ElectricConfig, opts?: Ele
   const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const socketFactory = opts?.socketFactory || new WebSocketNodeFactory()
+  const console = opts?.console || new ConsoleHttpClient()
   const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
   return electrified as unknown as ElectrifiedDatabase
 }

@@ -15,6 +15,7 @@ import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
 import { WebSocketWebFactory } from '../../sockets/web'
 import { setDebugLogLevel } from '../../util/debug'
+import { ConsoleHttpClient } from '../../auth'
 
 // Avoid garbage collection.
 const refs = []
@@ -69,11 +70,12 @@ export class ElectricWorker extends WorkerServer {
       const migrator = opts?.migrator || new BundleMigrator(adapter, configWithDefaults.migrations)
       const notifier = opts?.notifier || new WorkerBridgeNotifier(dbName, this)
       const socketFactory = opts?.socketFactory || new WebSocketWebFactory()
+      const console = opts?.console || new ConsoleHttpClient()
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, configWithDefaults)
+      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, configWithDefaults)
     }
     else {
       await registry.ensureAlreadyStarted(dbName)

@@ -13,6 +13,7 @@ import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 import { MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
+import { MockConsoleClient } from '../../auth/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 
@@ -25,11 +26,12 @@ export const initTestable = async (dbName: DbName, config = testConfig, opts?: E
   const notifier = opts?.notifier || new MockNotifier(dbName)
   const migrator = opts?.migrator || new MockMigrator()
   const socketFactory = opts?.socketFactory || new MockSocketFactory()
+  const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
+  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

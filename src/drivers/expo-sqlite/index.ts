@@ -20,6 +20,7 @@ import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
+import { ConsoleHttpClient } from '../../auth'
 
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
 export type { Database, ElectrifiedDatabase }
@@ -31,6 +32,7 @@ export const electrify = async (db: Database, config: ElectricConfig, opts?: Ele
   const migrator = opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()
+  const console = opts?.console || new ConsoleHttpClient()
   const registry = opts?.registry || globalRegistry
 
   const namespace = new ElectricNamespace(adapter, notifier)
@@ -43,6 +45,6 @@ export const electrify = async (db: Database, config: ElectricConfig, opts?: Ele
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, registry, config)
+  const electrified = await baseElectrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
   return electrified as unknown as ElectrifiedDatabase
 }

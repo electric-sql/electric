@@ -1,6 +1,11 @@
 import { QualifiedTablename } from '../util/tablename'
 import { Migration } from '../migrators/index'
 
+export interface SatelliteConfig {
+  app: string,
+  env: string
+}
+
 export interface SatelliteOpts {
   // The database table where Satellite keeps its processing metadata.
   metaTable: QualifiedTablename,
@@ -35,17 +40,13 @@ export const satelliteDefaults: SatelliteOpts = {
 }
 
 export const satelliteClientDefaults = {
-  env: "default",
   timeout: 3000,
   pushPeriod: 500,
 }
 
-const baseDomain = "electric-sql.com"
+export const baseDomain = "electric-sql.com"
 
 export interface SatelliteClientOpts {
-  app: string
-  env?: string
-  token: string
   host: string
   port: number
   ssl: boolean
@@ -58,7 +59,6 @@ export interface SatelliteClientOpts {
 export interface ElectricConfig {
   app: string
   env?: string
-  token: string
   migrations?: Migration[],
   replication?: {
     host: string
