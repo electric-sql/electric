@@ -76,7 +76,9 @@ const electricConfigDefaults: { env: string } = {
 }
 
 export const addDefaultsToElectricConfig = (config: ElectricConfig): Required<ElectricConfig> => {
-  const host = (config.replication?.host) ?? `${config.env}.${config.app}.db.${baseDomain}`
+  const env = config.env ?? electricConfigDefaults.env
+
+  const host = (config.replication?.host) ?? `${env}.${config.app}.db.${baseDomain}`
   const port = (config.replication?.port) ?? 443
   const ssl = (config.replication?.ssl) ?? true
   const replication = { ...config.replication, host, port, ssl }
@@ -86,7 +88,7 @@ export const addDefaultsToElectricConfig = (config: ElectricConfig): Required<El
 
   return {
     app: config.app,
-    env: config.env ?? electricConfigDefaults.env,
+    env,
     migrations: config.migrations ?? [],
     replication: config.replication ?? replication,
     console: config.console ?? console,
