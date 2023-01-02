@@ -134,7 +134,7 @@ test('load metadata', async t => {
     lastSentRowId: '0',
     lsn: '',
     clientId: '',
-    token: '',
+    token: 'INITIAL_INVALID_TOKEN', // we need some value here for auth service
     refreshToken: ''
   })
 })
