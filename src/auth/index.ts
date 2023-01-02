@@ -18,7 +18,7 @@ export class ConsoleHttpClient implements ConsoleClient {
   constructor(config: ElectricConfig) {
     this.config = config
 
-    if (!!config.console?.host) {
+    if (!config.console?.host) {
       // we always set the default, if not set it's an error
       throw Error("config.console must be set")
     }
