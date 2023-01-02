@@ -44,7 +44,7 @@ export const satelliteClientDefaults = {
   pushPeriod: 500,
 }
 
-export const baseDomain = "electric-sql.com"
+const baseDomain = "electric-sql.com"
 
 export interface SatelliteClientOpts {
   host: string
@@ -64,27 +64,34 @@ export interface ElectricConfig {
     host: string
     port: number
     ssl: boolean
+  },
+  console?: {
+    host: string
   }
   debug?: boolean,
 }
 
-const electricConfigDefaults: Partial<ElectricConfig> = {
+const electricConfigDefaults: { env: string } = {
   env: "default"
 }
 
-export const addDefaultsToElectricConfig = (config: ElectricConfig): ElectricConfig => {
-  const newConfig = {
-    ...electricConfigDefaults,
-    ...config
+export const addDefaultsToElectricConfig = (config: ElectricConfig): Required<ElectricConfig> => {
+  const host = (config.replication?.host) ?? `${config.env}.${config.app}.db.${baseDomain}`
+  const port = (config.replication?.port) ?? 443
+  const ssl = (config.replication?.ssl) ?? true
+  const replication = { ...config.replication, host, port, ssl }
+
+  const consoleHost = (config.console?.host) ?? `console.${baseDomain}`
+  const console = { ...config.console, host: consoleHost }
+
+  return {
+    app: config.app,
+    env: config.env ?? electricConfigDefaults.env,
+    migrations: config.migrations ?? [],
+    replication: config.replication ?? replication,
+    console: config.console ?? console,
+    debug: config.debug ?? false
   }
-
-  const host = (newConfig.replication?.host) ?? `${newConfig.env}.${newConfig.app}.db.${baseDomain}`
-  const port = (newConfig.replication?.port) ?? 443
-  const ssl = (newConfig.replication?.ssl) ?? true
-
-  newConfig.replication = { ...config.replication, host, port, ssl }
-
-  return newConfig
 }
 
 

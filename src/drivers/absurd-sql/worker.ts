@@ -70,7 +70,7 @@ export class ElectricWorker extends WorkerServer {
       const migrator = opts?.migrator || new BundleMigrator(adapter, configWithDefaults.migrations)
       const notifier = opts?.notifier || new WorkerBridgeNotifier(dbName, this)
       const socketFactory = opts?.socketFactory || new WebSocketWebFactory()
-      const console = opts?.console || new ConsoleHttpClient()
+      const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
 
       const namespace = new ElectricNamespace(adapter, notifier)
       this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
