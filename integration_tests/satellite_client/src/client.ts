@@ -7,6 +7,11 @@ import {v4 as uuidv4} from 'uuid';
 
 setDebugLogLevel()
 
+// Console client throws an error when unable to fetch token which causes test to fail
+export class MockConsoleClient {
+  token = () => Promise.resolve({ token: "MOCK_TOKEN", refreshToken: "MOCK_REFRESH_TOKEN" })
+}
+
 export const read_migrations = (migration_file: string) => {
   const data = fs.readFileSync(migration_file)
   const json_data = JSON.parse(data.toString());
@@ -32,7 +37,7 @@ export const open_db = (name: string,
     debug: true
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return electrify(original as any, config)
+  return electrify(original as any, config, { console: new MockConsoleClient() })
 }
 
 export const set_subscribers = (db: ElectrifiedDatabase) => {
