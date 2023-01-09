@@ -62,6 +62,7 @@ start_electric_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
 stop_dev_env:
+	docker ps --filter name=elixir_client --format '{{.Names}}' | xargs docker kill
 	docker-compose -f ${DOCKER_COMPOSE_FILE} down
 	docker-compose -f ${DOCKER_COMPOSE_FILE} stop
 
