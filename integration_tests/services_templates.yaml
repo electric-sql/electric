@@ -1,6 +1,7 @@
 services:
   vaxine:
     image: "${VAXINE_IMAGE}"
+    init: true
     environment:
       RING_SIZE: "1"
       ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
@@ -21,6 +22,7 @@ services:
 
   electric:
     image: "${ELECTRIC_IMAGE}"
+    init: true
     privileged: true
 
   sysbench:
