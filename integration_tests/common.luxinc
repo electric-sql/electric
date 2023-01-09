@@ -13,9 +13,11 @@
 [endmacro]
 
 [macro ok]
+    [timeout 1]
     ?SH-PROMPT:
     !echo ==$$?==
     ?^==0==
+    [timeout]
 [endmacro]
 
 [macro ok2 prompt]
