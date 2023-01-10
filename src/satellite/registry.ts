@@ -5,7 +5,15 @@ import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'
 
 import { Satellite, Registry, ConsoleClient } from './index'
-import { satelliteDefaults, ElectricConfig, satelliteClientDefaults, validateConfig, SatelliteClientOpts, SatelliteOverrides, SatelliteConfig } from './config'
+import {
+  satelliteDefaults,
+  ElectricConfig,
+  satelliteClientDefaults,
+  validateConfig,
+  SatelliteClientOpts,
+  SatelliteOverrides,
+  SatelliteConfig,
+} from './config'
 import { SatelliteProcess } from './process'
 import { SocketFactory } from '../sockets'
 import { SatelliteClient } from './client'
@@ -37,7 +45,8 @@ export abstract class BaseRegistry implements Registry {
     _console: ConsoleClient,
     _config: ElectricConfig,
     _authState?: AuthState,
-    _opts?: SatelliteOverrides): Promise<Satellite> {
+    _opts?: SatelliteOverrides
+  ): Promise<Satellite> {
     throw `Subclasses must implement startProcess`
   }
 
@@ -58,7 +67,19 @@ export abstract class BaseRegistry implements Registry {
     const stoppingPromises = this.stoppingPromises
     const stopping = stoppingPromises[dbName]
     if (stopping !== undefined) {
-      return stopping.then(() => this.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, config, authState, opts))
+      return stopping.then(() =>
+        this.ensureStarted(
+          dbName,
+          adapter,
+          migrator,
+          notifier,
+          socketFactory,
+          console,
+          config,
+          authState,
+          opts
+        )
+      )
     }
 
     // If we're in the process of starting the satellite process for this
@@ -83,14 +104,22 @@ export abstract class BaseRegistry implements Registry {
     }
 
     // Otherwise we need to fire it up!
-    const startingPromise = this.startProcess(dbName, adapter, migrator, notifier, socketFactory, console, config, authState)
-      .then((satellite) => {
-        delete startingPromises[dbName]
+    const startingPromise = this.startProcess(
+      dbName,
+      adapter,
+      migrator,
+      notifier,
+      socketFactory,
+      console,
+      config,
+      authState
+    ).then((satellite) => {
+      delete startingPromises[dbName]
 
-        satellites[dbName] = satellite
+      satellites[dbName] = satellite
 
-        return satellite
-      })
+      return satellite
+    })
 
     startingPromises[dbName] = startingPromise
     return startingPromise
@@ -110,7 +139,10 @@ export abstract class BaseRegistry implements Registry {
     throw new Error(`Satellite not running for db: ${dbName}`)
   }
 
-  async stop(dbName: DbName, shouldIncludeStarting: boolean = true): Promise<void> {
+  async stop(
+    dbName: DbName,
+    shouldIncludeStarting: boolean = true
+  ): Promise<void> {
     // If in the process of starting, wait for it to start and then stop it.
     if (shouldIncludeStarting) {
       const stop = this.stop.bind(this)
@@ -150,8 +182,9 @@ export abstract class BaseRegistry implements Registry {
 
     let promisesToStop = running.concat(stopping)
     if (shouldIncludeStarting) {
-      const starting = Object.entries(this.startingPromises)
-        .map(([dbName, started]) => started.then(() => stop(dbName)))
+      const starting = Object.entries(this.startingPromises).map(
+        ([dbName, started]) => started.then(() => stop(dbName))
+      )
 
       promisesToStop = promisesToStop.concat(starting)
     }
@@ -169,28 +202,41 @@ export class GlobalRegistry extends BaseRegistry {
     socketFactory: SocketFactory,
     console: ConsoleClient,
     config: Required<ElectricConfig>,
-    authState?: AuthState,
+    authState?: AuthState
   ): Promise<Satellite> {
-
-    const foundErrors = validateConfig(config);
+    const foundErrors = validateConfig(config)
     if (foundErrors.length > 0) {
-      throw Error(`invalid config: ${foundErrors}`);
+      throw Error(`invalid config: ${foundErrors}`)
     }
 
     const satelliteConfig: SatelliteConfig = {
       app: config.app,
-      env: config.env
+      env: config.env,
     }
 
     const satelliteClientOpts: SatelliteClientOpts = {
       ...satelliteClientDefaults,
       host: config.replication.host,
       port: config.replication.port,
-      ssl: config.replication.ssl
+      ssl: config.replication.ssl,
     }
 
-    const client = new SatelliteClient(dbName, socketFactory, notifier, satelliteClientOpts)
-    const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, console, satelliteConfig, satelliteDefaults)
+    const client = new SatelliteClient(
+      dbName,
+      socketFactory,
+      notifier,
+      satelliteClientOpts
+    )
+    const satellite = new SatelliteProcess(
+      dbName,
+      adapter,
+      migrator,
+      notifier,
+      client,
+      console,
+      satelliteConfig,
+      satelliteDefaults
+    )
     satellite.start(authState)
 
     return satellite

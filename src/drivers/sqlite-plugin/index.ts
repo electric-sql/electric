@@ -1,6 +1,11 @@
 import { ElectricNamespace } from '../../electric/index'
 import { ProxyWrapper } from '../../proxy/index'
-import { AnyFunction, BindParams, DbName, VoidOrPromise } from '../../util/types'
+import {
+  AnyFunction,
+  BindParams,
+  DbName,
+  VoidOrPromise,
+} from '../../util/types'
 
 import { ensurePromise } from './promise'
 export { ensurePromise }
@@ -9,10 +14,17 @@ export { ensurePromise }
 export interface SQLitePluginTransaction {
   readOnly: boolean
   success(...args: any[]): any
-  executeSql(sql: string, values?: BindParams, success?: AnyFunction, error?: AnyFunction): VoidOrPromise
+  executeSql(
+    sql: string,
+    values?: BindParams,
+    success?: AnyFunction,
+    error?: AnyFunction
+  ): VoidOrPromise
 }
 
-export type SQLitePluginTransactionFunction = (tx: SQLitePluginTransaction) => void
+export type SQLitePluginTransactionFunction = (
+  tx: SQLitePluginTransaction
+) => void
 
 // The common subset of the SQLitePlugin database client API.
 export interface SQLitePlugin {
@@ -27,8 +39,16 @@ export interface SQLitePlugin {
   addTransaction(tx: SQLitePluginTransaction): void
 
   // May be promisified.
-  readTransaction(txFn: SQLitePluginTransactionFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
-  transaction(txFn: SQLitePluginTransactionFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise
+  readTransaction(
+    txFn: SQLitePluginTransactionFunction,
+    error?: AnyFunction,
+    success?: AnyFunction
+  ): VoidOrPromise
+  transaction(
+    txFn: SQLitePluginTransactionFunction,
+    error?: AnyFunction,
+    success?: AnyFunction
+  ): VoidOrPromise
 }
 
 // Abstract class designed to be extended by concrete
@@ -58,7 +78,9 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
 
   addTransaction(tx: SQLitePluginTransaction): void {
     const originalSuccessFn = tx.success.bind(tx)
-    const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
+    const potentiallyChanged = this.electric.potentiallyChanged.bind(
+      this.electric
+    )
 
     tx.success = (...args: any[]): any => {
       if (!tx.readOnly) {
@@ -73,7 +95,11 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
     return this._db.addTransaction(tx)
   }
 
-  transaction(txFn: SQLitePluginTransactionFunction, error?: AnyFunction, success?: AnyFunction): VoidOrPromise {
+  transaction(
+    txFn: SQLitePluginTransactionFunction,
+    error?: AnyFunction,
+    success?: AnyFunction
+  ): VoidOrPromise {
     const wrappedSuccess = (): void => {
       this.electric.potentiallyChanged()
 

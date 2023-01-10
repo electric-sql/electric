@@ -51,23 +51,27 @@ export class MockStatement implements Statement {
   run(..._params: StatementBindParams): Info {
     return {
       changes: 0,
-      lastInsertRowid: 1234
+      lastInsertRowid: 1234,
     }
   }
 
   get(..._params: StatementBindParams): Row | void {
-    return {foo: 'bar'}
+    return { foo: 'bar' }
   }
 
   all(...params: StatementBindParams): Row[] {
-    if (typeof params[0] == 'object' && params[0] && 'shouldError' in params[0]) {
+    if (
+      typeof params[0] == 'object' &&
+      params[0] &&
+      'shouldError' in params[0]
+    ) {
       throw new Error('Mock query error')
     }
 
-    return [{foo: 'bar'}, {foo: 'baz'}]
+    return [{ foo: 'bar' }, { foo: 'baz' }]
   }
 
   iterate(..._params: StatementBindParams): Iterable<Row> {
-    return [{foo: 'bar'}, {foo: 'baz'}]
+    return [{ foo: 'bar' }, { foo: 'baz' }]
   }
 }

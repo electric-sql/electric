@@ -1,6 +1,9 @@
 import { hasPublicKey, publicKeys } from '../util/keys'
 
-const isInstanceOfSameClass = (instance: object, candidate?: object): boolean => {
+const isInstanceOfSameClass = (
+  instance: object,
+  candidate?: object
+): boolean => {
   if (!candidate) {
     return false
   }
@@ -20,7 +23,7 @@ export const proxyOriginal = (original: any, electric: any): any => {
       return Reflect.has(target, key) || hasPublicKey(electric, key)
     },
     ownKeys(target) {
-      return Reflect.ownKeys(target).concat(publicKeys(electric));
+      return Reflect.ownKeys(target).concat(publicKeys(electric))
     },
     getOwnPropertyDescriptor(target, key) {
       if (hasPublicKey(electric, key)) {
@@ -69,6 +72,6 @@ export const proxyOriginal = (original: any, electric: any): any => {
       }
 
       return value
-    }
+    },
   })
 }

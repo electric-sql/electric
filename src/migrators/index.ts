@@ -1,17 +1,16 @@
-
 export { BundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
 
 export interface Migration {
-  satellite_body: string[],
-  encoding: string,
-  name: string,
-  sha256: string,
+  satellite_body: string[]
+  encoding: string
+  name: string
+  sha256: string
   title: string
 }
 
 export interface MigrationRecord {
-  name: string,
+  name: string
   sha256: string
 }
 

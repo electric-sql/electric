@@ -14,9 +14,9 @@ export class DatabaseAdapter {
 
   runInTransaction(...statements: Statement[]): Promise<void> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const txFn = (tx: Transaction) => {        
+      const txFn = (tx: Transaction) => {
         for (const { sql, args } of statements) {
-          tx.executeSql(sql, args ? args as any : [])
+          tx.executeSql(sql, args ? (args as any) : [])
         }
       }
       this.db.transaction(txFn, reject, resolve)
@@ -37,7 +37,8 @@ export class DatabaseAdapter {
           sql,
           args as unknown as (number | string | null)[],
           success,
-          reject)
+          reject
+        )
       }
 
       this.db.readTransaction(txFn)

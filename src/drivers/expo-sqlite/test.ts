@@ -2,7 +2,11 @@
 // specific dependencies.
 import { DbName } from '../../util/types'
 
-import { ElectricNamespace, ElectrifyOptions, electrify } from '../../electric/index'
+import {
+  ElectricNamespace,
+  ElectrifyOptions,
+  electrify,
+} from '../../electric/index'
 
 import { MockMigrator } from '../../migrators/mock'
 import { Notifier } from '../../notifiers/index'
@@ -10,15 +14,25 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase, ElectricWebSQLDatabase, ElectrifiedDatabase } from './database'
+import {
+  Database,
+  ElectricDatabase,
+  ElectricWebSQLDatabase,
+  ElectrifiedDatabase,
+} from './database'
 import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
-const testConfig = { app: "app", token: "token" }
+const testConfig = { app: 'app', token: 'token' }
 
-export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = false, config = testConfig, opts?: ElectrifyOptions): RetVal => {
+export const initTestable = async (
+  dbName: DbName,
+  useWebSQLDatabase: boolean = false,
+  config = testConfig,
+  opts?: ElectrifyOptions
+): RetVal => {
   const db = useWebSQLDatabase
     ? new MockWebSQLDatabase(dbName)
     : new MockDatabase(dbName)
@@ -35,11 +49,21 @@ export const initTestable = async (dbName: DbName, useWebSQLDatabase: boolean = 
   let electric: ElectricDatabase | ElectricWebSQLDatabase
   if ('exec' in db) {
     electric = new ElectricWebSQLDatabase(db, namespace)
-  }
-  else {
+  } else {
     electric = new ElectricDatabase(db, namespace)
   }
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
+  const electrified = await electrify(
+    dbName,
+    db,
+    electric,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    console,
+    registry,
+    config
+  )
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

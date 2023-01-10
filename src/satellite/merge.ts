@@ -2,7 +2,10 @@ import { OPTYPES, OplogColumnChanges, OpType } from './oplog'
 
 // Merge two sets of changes, using the timestamp to abitrate conflicts
 // so that the last write wins.
-export const mergeChangesLastWriteWins = (first: OplogColumnChanges, second: OplogColumnChanges): OplogColumnChanges => {
+export const mergeChangesLastWriteWins = (
+  first: OplogColumnChanges,
+  second: OplogColumnChanges
+): OplogColumnChanges => {
   const allKeys = Object.keys(first).concat(Object.keys(second))
   const uniqueKeys = Array.from(new Set(allKeys))
 
@@ -18,16 +21,11 @@ export const mergeChangesLastWriteWins = (first: OplogColumnChanges, second: Opl
 
     if (firstValue === undefined) {
       acc[key] = secondValue
-    }
-    else if (secondValue === undefined) {
+    } else if (secondValue === undefined) {
       acc[key] = firstValue
-    }
-    else {
+    } else {
       acc[key] =
-        firstValue.timestamp > secondValue.timestamp
-        ? firstValue
-        : secondValue
-
+        firstValue.timestamp > secondValue.timestamp ? firstValue : secondValue
     }
 
     return acc

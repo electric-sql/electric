@@ -50,7 +50,7 @@ class CallableTransaction extends Function {
     this.notifier = notifier
 
     return new Proxy(this, {
-      apply: (target, _thisArg, args) => target._call(...args)
+      apply: (target, _thisArg, args) => target._call(...args),
     })
   }
 
@@ -159,8 +159,7 @@ export class ElectricStatement implements ProxyWrapper {
   }
 
   _shouldNotify() {
-    return !this._stmt.readonly
-        && !this._stmt.database.inTransaction
+    return !this._stmt.readonly && !this._stmt.database.inTransaction
   }
 
   run(...bindParams: StatementBindParams): Info {
@@ -198,17 +197,18 @@ export class ElectricStatement implements ProxyWrapper {
 
   iterate(...bindParams: StatementBindParams): IterableIterator<Row> {
     const shouldNotify = this._shouldNotify()
-    const potentiallyChanged = this.electric.potentiallyChanged.bind(this.electric)
+    const potentiallyChanged = this.electric.potentiallyChanged.bind(
+      this.electric
+    )
 
     const iterRows = this._stmt.iterate(...bindParams)
 
-    function *generator(): IterableIterator<Row> {
+    function* generator(): IterableIterator<Row> {
       try {
         for (const row of iterRows) {
           yield row
         }
-      }
-      finally {
+      } finally {
         if (shouldNotify) {
           potentiallyChanged()
         }
@@ -225,5 +225,7 @@ export const proxy = (db: Database, namespace: ElectricNamespace): Database => {
   return proxyOriginal(db, electric)
 }
 
-type UnpatchedDatabase = Omit<Database, "exec" | "prepare" | "transaction">
-export interface ElectrifiedDatabase extends UnpatchedDatabase, ElectricDatabase {}
+type UnpatchedDatabase = Omit<Database, 'exec' | 'prepare' | 'transaction'>
+export interface ElectrifiedDatabase
+  extends UnpatchedDatabase,
+    ElectricDatabase {}

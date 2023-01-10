@@ -7,7 +7,7 @@ export interface TableInfo {
 }
 
 interface TableSchema {
-  primaryKey: string[],
+  primaryKey: string[]
   columns: string[]
 }
 
@@ -24,26 +24,31 @@ export const initTableInfo = (): TableInfo => {
     'main.items': {
       primaryKey: ['value'],
       columns: ['value', 'otherValue'],
-    }
+    },
   }
 }
 
-export const loadSatelliteMetaTable = async (db: DatabaseAdapter, metaTableName = '_electric_meta'): Promise<Row> => {
-  const rows = await db.query({ sql: `SELECT key, value FROM ${metaTableName}` })
-  const entries = rows.map(x => [x.key, x.value])
+export const loadSatelliteMetaTable = async (
+  db: DatabaseAdapter,
+  metaTableName = '_electric_meta'
+): Promise<Row> => {
+  const rows = await db.query({
+    sql: `SELECT key, value FROM ${metaTableName}`,
+  })
+  const entries = rows.map((x) => [x.key, x.value])
 
   return Object.fromEntries(entries)
 }
 
 export const generateOplogEntry = (
-      info: TableInfo,
-      namespace: string,
-      tablename: string,
-      optype: OpType,
-      timestamp: number,
-      newValues: Row = {},
-      oldValues: Row = {}
-    ): OplogEntry => {
+  info: TableInfo,
+  namespace: string,
+  tablename: string,
+  optype: OpType,
+  timestamp: number,
+  newValues: Row = {},
+  oldValues: Row = {}
+): OplogEntry => {
   const schema = info[namespace + '.' + tablename]
   if (schema === undefined) {
     throw new Error('Schema is undefined')
@@ -62,21 +67,21 @@ export const generateOplogEntry = (
     optype,
     newRow: JSON.stringify(newRow.columns),
     oldRow: JSON.stringify(oldRow.columns),
-    primaryKey: JSON.stringify({...oldRow.primaryKey, ...newRow.primaryKey}),
-    timestamp: new Date(timestamp).toISOString()
+    primaryKey: JSON.stringify({ ...oldRow.primaryKey, ...newRow.primaryKey }),
+    timestamp: new Date(timestamp).toISOString(),
   }
 
   return result
 }
 
 const generateFrom = (schema: TableSchema, values: Row) => {
-  const columnValues = schema.columns.map(column => {
+  const columnValues = schema.columns.map((column) => {
     const columnValue = values[column]
 
     return columnValue !== undefined ? [column, columnValue] : []
   })
 
-  const pkValues = schema.primaryKey.map(pk => {
+  const pkValues = schema.primaryKey.map((pk) => {
     const pkValue = values[pk]
 
     return pkValue !== undefined ? [pk, pkValue] : []
@@ -84,6 +89,6 @@ const generateFrom = (schema: TableSchema, values: Row) => {
 
   return {
     columns: Object.fromEntries(columnValues),
-    primaryKey: Object.fromEntries(pkValues)
+    primaryKey: Object.fromEntries(pkValues),
   }
 }

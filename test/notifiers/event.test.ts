@@ -5,7 +5,7 @@ import { EventNotifier } from '../../src/notifiers/event'
 import { ConnectivityState } from '../../src/util'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-test('subscribe to potential data changes', async t => {
+test('subscribe to potential data changes', async (t) => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 
@@ -20,7 +20,7 @@ test('subscribe to potential data changes', async t => {
   t.is(notifications.length, 1)
 })
 
-test('potential data change subscriptions are scoped by dbName(s)', async t => {
+test('potential data change subscriptions are scoped by dbName(s)', async (t) => {
   const source = new EventNotifier('foo.db')
   const t1 = new EventNotifier('foo.db')
   const t2 = new EventNotifier('bar.db')
@@ -44,7 +44,7 @@ test('potential data change subscriptions are scoped by dbName(s)', async t => {
   t.is(notifications.length, 3)
 })
 
-test('subscribe to actual data changes', async t => {
+test('subscribe to actual data changes', async (t) => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 
@@ -56,7 +56,7 @@ test('subscribe to actual data changes', async t => {
 
   const qualifiedTablename = new QualifiedTablename('main', 'items')
   const notification = {
-    changes: [{ qualifiedTablename }]
+    changes: [{ qualifiedTablename }],
   }
 
   source.actuallyChanged('test.db', notification)
@@ -64,7 +64,7 @@ test('subscribe to actual data changes', async t => {
   t.is(notifications.length, 1)
 })
 
-test('actual data change subscriptions are scoped by dbName', async t => {
+test('actual data change subscriptions are scoped by dbName', async (t) => {
   const source = new EventNotifier('foo.db')
   const t1 = new EventNotifier('foo.db')
   const t2 = new EventNotifier('bar.db')
@@ -80,7 +80,7 @@ test('actual data change subscriptions are scoped by dbName', async t => {
 
   const qualifiedTablename = new QualifiedTablename('main', 'items')
   const notification = {
-    changes: [{ qualifiedTablename }]
+    changes: [{ qualifiedTablename }],
   }
 
   source.actuallyChanged('foo.db', notification)
@@ -101,7 +101,7 @@ test('actual data change subscriptions are scoped by dbName', async t => {
   t.is(notifications.length, 4)
 })
 
-test('subscribe to connectivity change events is scoped by dbName', async t => {
+test('subscribe to connectivity change events is scoped by dbName', async (t) => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 
@@ -120,7 +120,7 @@ test('subscribe to connectivity change events is scoped by dbName', async t => {
   t.is(notifications.length, 1)
 })
 
-test('no more connectivity events after unsubscribe', async t => {
+test('no more connectivity events after unsubscribe', async (t) => {
   const source = new EventNotifier('test.db')
   const target = new EventNotifier('test.db')
 

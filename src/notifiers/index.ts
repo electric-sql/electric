@@ -10,7 +10,7 @@ export interface AuthStateNotification {
 }
 
 export interface Change {
-  qualifiedTablename: QualifiedTablename,
+  qualifiedTablename: QualifiedTablename
   rowids?: RowId[]
 }
 export interface ChangeNotification {
@@ -22,23 +22,27 @@ export interface PotentialChangeNotification {
 }
 
 export interface ConnectivityStateChangeNotification {
-  dbName: DbName,
+  dbName: DbName
   connectivityState: ConnectivityState
 }
 
 export type Notification =
-  AuthStateNotification
+  | AuthStateNotification
   | ChangeNotification
   | PotentialChangeNotification
   | ConnectivityStateChangeNotification
 
 export type AuthStateCallback = (notification: AuthStateNotification) => void
 export type ChangeCallback = (notification: ChangeNotification) => void
-export type PotentialChangeCallback = (notification: PotentialChangeNotification) => void
-export type ConnectivityStateChangeCallback = (notification: ConnectivityStateChangeNotification) => void
+export type PotentialChangeCallback = (
+  notification: PotentialChangeNotification
+) => void
+export type ConnectivityStateChangeCallback = (
+  notification: ConnectivityStateChangeNotification
+) => void
 
 export type NotificationCallback =
-  AuthStateCallback
+  | AuthStateCallback
   | ChangeCallback
   | PotentialChangeCallback
   | ConnectivityStateChangeCallback
@@ -61,7 +65,7 @@ export interface Notifier {
   attachedDbIndex: {
     byAlias: {
       [key: string]: DbName
-    },
+    }
     byName: {
       [key: DbName]: string
     }
@@ -110,6 +114,8 @@ export interface Notifier {
   // 'error': disconnected with an error (TODO: add error info)
   connectivityStateChange(dbName: string, state: ConnectivityState): void
 
-  subscribeToConnectivityStateChange(callback: ConnectivityStateChangeCallback): string
+  subscribeToConnectivityStateChange(
+    callback: ConnectivityStateChangeCallback
+  ): string
   unsubscribeFromConnectivityStateChange(key: string): void
 }

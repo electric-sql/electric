@@ -2,7 +2,10 @@ import { DatabaseAdapter as DatabaseAdapterInterface } from '../../electric/adap
 import { SQLitePluginDatabaseAdapter } from '../sqlite-plugin/adapter'
 import { Database } from './database'
 
-export class DatabaseAdapter extends SQLitePluginDatabaseAdapter implements DatabaseAdapterInterface {
+export class DatabaseAdapter
+  extends SQLitePluginDatabaseAdapter
+  implements DatabaseAdapterInterface
+{
   db: Database
 
   constructor(db: Database) {

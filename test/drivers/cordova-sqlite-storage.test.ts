@@ -6,7 +6,7 @@ import { initTestable } from '../../src/drivers/cordova-sqlite-storage/test'
 import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-test('electrify returns an equivalent database client', async t => {
+test('electrify returns an equivalent database client', async (t) => {
   const [original, _notifier, db] = await initTestable('test.db')
 
   const originalKeys = Object.getOwnPropertyNames(original)
@@ -18,7 +18,7 @@ test('electrify returns an equivalent database client', async t => {
   })
 })
 
-test('running a transaction runs potentiallyChanged', async t => {
+test('running a transaction runs potentiallyChanged', async (t) => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
@@ -29,7 +29,7 @@ test('running a transaction runs potentiallyChanged', async t => {
   t.is(notifier.notifications.length, 1)
 })
 
-test('running a read only transaction does not potentiallyChanged', async t => {
+test('running a read only transaction does not potentiallyChanged', async (t) => {
   const [original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
@@ -40,7 +40,7 @@ test('running a read only transaction does not potentiallyChanged', async t => {
   t.is(notifier.notifications.length, 0)
 })
 
-test('database adapter run works', async t => {
+test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 
@@ -50,17 +50,17 @@ test('database adapter run works', async t => {
   t.is(result, undefined)
 })
 
-test('database adapter query works', async t => {
+test('database adapter query works', async (t) => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'select foo from bars'
   const result = await adapter.query({ sql })
 
-  t.deepEqual(result, [{i: 0}])
+  t.deepEqual(result, [{ i: 0 }])
 })
 
-test('database adapter tableNames works', async t => {
+test('database adapter tableNames works', async (t) => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db)
 

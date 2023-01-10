@@ -7,10 +7,13 @@ import { MockRegistry } from '../../src/satellite/mock'
 self.user_defined_functions = {
   addTwoNumbers: (a, b) => {
     return a + b
-  }
+  },
 }
 
 const notifier = new MockNotifier('test.db')
 const registry = new MockRegistry()
 
-const ref = new MockElectricWorker(self, {notifier: notifier, registry: registry})
+const ref = new MockElectricWorker(self, {
+  notifier: notifier,
+  registry: registry,
+})

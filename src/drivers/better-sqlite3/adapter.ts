@@ -33,7 +33,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     return stmt.all(...(args ? args : []))
   }
 
-  tableNames({ sql }: Statement): QualifiedTablename[] {    
+  tableNames({ sql }: Statement): QualifiedTablename[] {
     return parseTableNames(sql)
   }
 }

@@ -32,7 +32,7 @@ export abstract class SQLitePluginDatabaseAdapter {
             reject(err)
           }
           tx.executeSql(sql, args, undefined, stmtFailure)
-        }        
+        }
       }
 
       const success = () => {

@@ -22,25 +22,25 @@ import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
 
 type ContextType = {
-  dbName: string,
-  adapter: DatabaseAdapter,
-  satellite: Satellite,
+  dbName: string
+  adapter: DatabaseAdapter
+  satellite: Satellite
   client: MockSatelliteClient
 }
 
 const config: SatelliteConfig = {
-  app: "test",
-  env: "default",
+  app: 'test',
+  env: 'default',
 }
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 80,
-  pollingInterval: 500
+  pollingInterval: 500,
 })
 
-test.beforeEach(async t => {
-  await mkdir(".tmp", {recursive: true})
+test.beforeEach(async (t) => {
+  await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new Database(dbName)
   const adapter = new DatabaseAdapter(db)
@@ -48,7 +48,16 @@ test.beforeEach(async t => {
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
   const console = new MockConsoleClient()
-  const satellite = new SatelliteProcess(dbName, adapter, migrator, notifier, client, console, config, opts)
+  const satellite = new SatelliteProcess(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    client,
+    console,
+    config,
+    opts
+  )
 
   const tableInfo = initTableInfo()
   const timestamp = new Date().getTime()
@@ -67,18 +76,18 @@ test.beforeEach(async t => {
     runMigrations,
     satellite,
     tableInfo,
-    timestamp
+    timestamp,
   }
 })
 
-test.afterEach.always(async t => {
+test.afterEach.always(async (t) => {
   const { dbName } = t.context as ContextType
 
-  await removeFile(dbName, {force: true})
-  await removeFile(`${dbName}-journal`, {force: true})
+  await removeFile(dbName, { force: true })
+  await removeFile(`${dbName}-journal`, { force: true })
 })
 
-test('throttled snapshot respects window', async t => {
+test('throttled snapshot respects window', async (t) => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
@@ -95,5 +104,3 @@ test('throttled snapshot respects window', async t => {
 
   t.is(notifier.notifications.length, numNotifications + 1)
 })
-
-

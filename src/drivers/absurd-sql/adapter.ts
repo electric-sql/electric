@@ -18,24 +18,24 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     try {
       // SQL-js accepts multiple statements in a string and does
       // not run them as transaction.
-      await this.db.run("BEGIN")
+      await this.db.run('BEGIN')
       open = true
       for (const stmt of statements) {
         await this.db.run(stmt.sql, stmt.args)
       }
     } catch (error) {
-      await this.db.run("ABORT")
+      await this.db.run('ABORT')
       open = false
     } finally {
       if (open) {
-        await this.db.run("COMMIT")
+        await this.db.run('COMMIT')
       }
     }
   }
 
-  async run(statement: Statement): Promise<void> {    
+  async run(statement: Statement): Promise<void> {
     const prepared = await this.db.prepare(statement.sql)
-    await prepared.run(statement.args ? statement.args : [])    
+    await prepared.run(statement.args ? statement.args : [])
   }
 
   async query(statement: Statement): Promise<Row[]> {

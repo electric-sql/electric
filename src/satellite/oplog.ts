@@ -1,35 +1,42 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
-import { Change, ChangeType, RelationsCache, Row, SqlValue, Transaction } from '../util/types'
+import {
+  Change,
+  ChangeType,
+  RelationsCache,
+  Row,
+  SqlValue,
+  Transaction,
+} from '../util/types'
 import { numberToBytes } from '../util/common'
 
 // Oplog table schema.
 export interface OplogEntry {
-  namespace: string,
-  tablename: string,
-  primaryKey: string,
-  rowid: number,
-  optype: OpType,
-  timestamp: string, // ISO string
-  newRow?: string,
+  namespace: string
+  tablename: string
+  primaryKey: string
+  rowid: number
+  optype: OpType
+  timestamp: string // ISO string
+  newRow?: string
   oldRow?: string
 }
 
 // Representation of a change operation.
 export interface OplogEntryChanges {
-  namespace: string,
-  tablename: string,
+  namespace: string
+  tablename: string
   primaryKeyCols: {
     [key: string]: string | number
-  },
-  optype: 'DELETE' | 'UPSERT',
+  }
+  optype: 'DELETE' | 'UPSERT'
   changes: OplogColumnChanges
 }
 
 export interface OplogColumnChanges {
   [columnName: string]: {
-    value: SqlValue,
-    timestamp: number, // ms since epoch
+    value: SqlValue
+    timestamp: number // ms since epoch
   }
 }
 
@@ -39,29 +46,28 @@ export interface OplogTableChanges {
   }
 }
 
-export type OpType =
-  'DELETE'
-  | 'INSERT'
-  | 'UPDATE'
-  | 'UPSERT'
+export type OpType = 'DELETE' | 'INSERT' | 'UPDATE' | 'UPSERT'
 
 export const OPTYPES: {
-  insert: 'INSERT',
-  update: 'UPDATE',
-  delete: 'DELETE',
+  insert: 'INSERT'
+  update: 'UPDATE'
+  delete: 'DELETE'
   upsert: 'UPSERT'
 } = {
   insert: 'INSERT',
   update: 'UPDATE',
   delete: 'DELETE',
-  upsert: 'UPSERT'
+  upsert: 'UPSERT',
 }
 
 export const stringToOpType = (opTypeStr: string): OpType => {
   switch (opTypeStr) {
-    case 'INSERT': return OPTYPES.insert
-    case 'UPDATE': return OPTYPES.update
-    case 'DELETE': return OPTYPES.delete
+    case 'INSERT':
+      return OPTYPES.insert
+    case 'UPDATE':
+      return OPTYPES.update
+    case 'DELETE':
+      return OPTYPES.delete
   }
   throw new Error(`unexpected opType string: ${opTypeStr}`)
 }
@@ -73,10 +79,8 @@ export const entryToChanges = (entry: OplogEntry): OplogEntryChanges => {
     namespace: entry.namespace,
     tablename: entry.tablename,
     primaryKeyCols: JSON.parse(entry.primaryKey),
-    optype: entry.optype === OPTYPES.delete
-      ? OPTYPES.delete
-      : OPTYPES.upsert,
-    changes: {}
+    optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
+    changes: {},
   }
 
   const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
@@ -96,15 +100,22 @@ export const entryToChanges = (entry: OplogEntry): OplogEntryChanges => {
 // Convert a list of `OplogEntry`s into a nested `OplogTableChanges` map of
 // `{tableName: {primaryKey: entryChanges}}` where the entryChanges has the
 // most recent `optype` and column `value`` from all of the operations.
-export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableChanges => {
+export const operationsToTableChanges = (
+  operations: OplogEntry[]
+): OplogTableChanges => {
   const initialValue: OplogTableChanges = {}
 
   return operations.reduce((acc, entry) => {
     const entryChanges = entryToChanges(entry)
 
     // Sort for deterministic key generation.
-    const primaryKeyStr = Object.values(entryChanges.primaryKeyCols).sort().join('_')
-    const qualifiedTablename = new QualifiedTablename(entryChanges.namespace, entryChanges.tablename)
+    const primaryKeyStr = Object.values(entryChanges.primaryKeyCols)
+      .sort()
+      .join('_')
+    const qualifiedTablename = new QualifiedTablename(
+      entryChanges.namespace,
+      entryChanges.tablename
+    )
     const tablenameStr = qualifiedTablename.toString()
 
     if (acc[tablenameStr] === undefined) {
@@ -113,13 +124,12 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
 
     if (acc[tablenameStr][primaryKeyStr] === undefined) {
       acc[tablenameStr][primaryKeyStr] = entryChanges
-    }
-    else {
+    } else {
       const existing = acc[tablenameStr][primaryKeyStr]
 
       existing.optype = entryChanges.optype
       for (const [key, value] of Object.entries(entryChanges.changes)) {
-        existing.changes[key] = value;
+        existing.changes[key] = value
       }
     }
 
@@ -127,29 +137,39 @@ export const operationsToTableChanges = (operations: OplogEntry[]): OplogTableCh
   }, initialValue)
 }
 
-export const fromTransaction = (transaction: Transaction, relations: RelationsCache): OplogEntry[] => {
-  return transaction.changes.map(t => {
+export const fromTransaction = (
+  transaction: Transaction,
+  relations: RelationsCache
+): OplogEntry[] => {
+  return transaction.changes.map((t) => {
     const columnValues = t.record ? t.record : t.oldRecord
-    const pk = JSON.stringify(Object.fromEntries(
-      relations[`${t.relation.table}`].columns
-        .filter(c => c.primaryKey)
-        .map(col => [col.name, columnValues![col.name]])
-    ))
+    const pk = JSON.stringify(
+      Object.fromEntries(
+        relations[`${t.relation.table}`].columns
+          .filter((c) => c.primaryKey)
+          .map((col) => [col.name, columnValues![col.name]])
+      )
+    )
 
-    return ({
-      namespace: "main", // TODO: how?
+    return {
+      namespace: 'main', // TODO: how?
       tablename: t.relation.table,
       optype: stringToOpType(t.type),
       newRow: JSON.stringify(t.record),
       oldRow: JSON.stringify(t.oldRecord),
       primaryKey: pk,
       rowid: -1, // not required
-      timestamp: new Date(transaction.commit_timestamp.toNumber()).toISOString() // TODO: check precision
-    })
+      timestamp: new Date(
+        transaction.commit_timestamp.toNumber()
+      ).toISOString(), // TODO: check precision
+    }
   })
 }
 
-export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsCache): Transaction[] => {
+export const toTransactions = (
+  opLogEntries: OplogEntry[],
+  relations: RelationsCache
+): Transaction[] => {
   if (opLogEntries.length == 0) {
     return []
   }
@@ -172,7 +192,7 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
       type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
       relation: relations[`${entry.tablename}`],
       record,
-      oldRecord
+      oldRecord,
     }
   }
 
@@ -182,23 +202,26 @@ export const toTransactions = (opLogEntries: OplogEntry[], relations: RelationsC
     changes: [],
   }
 
-  return opLogEntries.reduce((acc, txn) => {
-    let currTxn = acc[acc.length - 1]
+  return opLogEntries.reduce(
+    (acc, txn) => {
+      let currTxn = acc[acc.length - 1]
 
-    const nextTs = to_commit_timestamp(txn.timestamp)
-    if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
-      const nextTxn = {
-        commit_timestamp: to_commit_timestamp(txn.timestamp),
-        lsn: numberToBytes(txn.rowid),
-        changes: [],
+      const nextTs = to_commit_timestamp(txn.timestamp)
+      if (nextTs.notEquals(currTxn.commit_timestamp as Long)) {
+        const nextTxn = {
+          commit_timestamp: to_commit_timestamp(txn.timestamp),
+          lsn: numberToBytes(txn.rowid),
+          changes: [],
+        }
+        acc.push(nextTxn)
+        currTxn = nextTxn
       }
-      acc.push(nextTxn)
-      currTxn = nextTxn
-    }
 
-    const change = opLogEntryToChange(txn)
-    currTxn.changes.push(change)
-    currTxn.lsn = numberToBytes(txn.rowid)
-    return acc
-  }, [init])
+      const change = opLogEntryToChange(txn)
+      currTxn.changes.push(change)
+      currTxn.lsn = numberToBytes(txn.rowid)
+      return acc
+    },
+    [init]
+  )
 }

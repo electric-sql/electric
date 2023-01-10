@@ -23,5 +23,4 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
   }
 }
 
-
 export interface ElectrifiedDatabase extends Database, ElectricDatabase {}

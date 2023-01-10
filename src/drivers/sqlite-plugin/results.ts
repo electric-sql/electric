@@ -1,16 +1,13 @@
 import { Row } from '../../util/types'
 import { SQLitePluginTransaction } from './index'
 
-export type ExecutionResult = [
-  SQLitePluginTransaction,
-  Results
-]
+export type ExecutionResult = [SQLitePluginTransaction, Results]
 
 export interface Results {
   rows: {
     item(i: number): Row
     length: number
-    raw?() : Row[]
+    raw?(): Row[]
   }
   rowsAffected: number
   insertId?: number
@@ -34,8 +31,8 @@ export const mockResults = (rows: Row[]): Results => {
     rows: {
       item: (i: number) => rows[i],
       length: rows.length,
-      raw: () => rows
+      raw: () => rows,
     },
-    rowsAffected: 0
+    rowsAffected: 0,
   }
 }

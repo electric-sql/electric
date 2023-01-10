@@ -35,23 +35,34 @@ interface SQLResultSetRowList {
   item(index: number): any
   _array: any[]
 }
-type SQLStatementCallback = (transaction: Transaction, resultSet: SQLResultSet) => void
-type SQLStatementErrorCallback = (transaction: Transaction, error: SQLError) => boolean
+type SQLStatementCallback = (
+  transaction: Transaction,
+  resultSet: SQLResultSet
+) => void
+type SQLStatementErrorCallback = (
+  transaction: Transaction,
+  error: SQLError
+) => boolean
 
 export type TransactionCallback = (transaction: Transaction) => void
 export type TransactionErrorCallback = (error: SQLError) => void
 
 export type Query = {
-  sql: string,
+  sql: string
   args: (number | string | null)[]
 }
-export type SQLiteCallback = (error?: Error | null, resultSet?: (ResultSetError | ResultSet)[]) => void
+export type SQLiteCallback = (
+  error?: Error | null,
+  resultSet?: (ResultSetError | ResultSet)[]
+) => void
 
 export interface Transaction {
   executeSql(
-    sqlStatement: string, args?: (number | string | null)[],
+    sqlStatement: string,
+    args?: (number | string | null)[],
     callback?: SQLStatementCallback,
-    errorCallback?: SQLStatementErrorCallback): void
+    errorCallback?: SQLStatementErrorCallback
+  ): void
 }
 
 export interface NamedExpoDatabase {
@@ -98,7 +109,11 @@ export class ElectricDatabase implements ProxyWrapper {
     return this._db
   }
 
-  transaction(callback: TransactionCallback, error?: TransactionErrorCallback, success?: () => void): void {
+  transaction(
+    callback: TransactionCallback,
+    error?: TransactionErrorCallback,
+    success?: () => void
+  ): void {
     const wrappedSuccess = (): void => {
       this.electric.potentiallyChanged()
 
@@ -115,12 +130,18 @@ export class ElectricWebSQLDatabase extends ElectricDatabase {
   declare _db: NamedWebSQLDatabase
 
   exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void {
-    const wrappedCallback: SQLiteCallback = (error?: Error | null, resultSet?: (ResultSetError | ResultSet)[]): void => {
+    const wrappedCallback: SQLiteCallback = (
+      error?: Error | null,
+      resultSet?: (ResultSetError | ResultSet)[]
+    ): void => {
       const isPotentiallyDangerous = readOnly === false
       const mayHaveRunQueryBeforeError = queries.length > 1
       const didNotError = error === undefined || error === null
 
-      if (isPotentiallyDangerous && (didNotError || mayHaveRunQueryBeforeError)) {
+      if (
+        isPotentiallyDangerous &&
+        (didNotError || mayHaveRunQueryBeforeError)
+      ) {
         this.electric.potentiallyChanged()
       }
 
@@ -149,5 +170,9 @@ export class ElectricWebSQLDatabase extends ElectricDatabase {
 }
 
 interface ElectrifiedExpoDatabase extends NamedExpoDatabase, ElectricDatabase {}
-interface ElectrifiedWebSQLDatabase extends NamedWebSQLDatabase, ElectricWebSQLDatabase {}
-export type ElectrifiedDatabase = ElectrifiedExpoDatabase | ElectrifiedWebSQLDatabase
+interface ElectrifiedWebSQLDatabase
+  extends NamedWebSQLDatabase,
+    ElectricWebSQLDatabase {}
+export type ElectrifiedDatabase =
+  | ElectrifiedExpoDatabase
+  | ElectrifiedWebSQLDatabase

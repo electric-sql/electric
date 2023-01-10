@@ -3,10 +3,23 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
-import { AckCallback, AckType, AuthResponse, DbName, LSN, SatelliteError, Transaction } from '../util/types'
+import {
+  AckCallback,
+  AckType,
+  AuthResponse,
+  DbName,
+  LSN,
+  SatelliteError,
+  Transaction,
+} from '../util/types'
 
 import { Client, ConsoleClient, Satellite } from './index'
-import { SatelliteOpts, SatelliteOverrides, satelliteDefaults, SatelliteConfig } from './config'
+import {
+  SatelliteOpts,
+  SatelliteOverrides,
+  satelliteDefaults,
+  SatelliteConfig,
+} from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
@@ -65,14 +78,23 @@ export class MockRegistry extends BaseRegistry {
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
 
-    const satellite = new MockSatelliteProcess(dbName, adapter, migrator, notifier, socketFactory, console, config, opts)
+    const satellite = new MockSatelliteProcess(
+      dbName,
+      adapter,
+      migrator,
+      notifier,
+      socketFactory,
+      console,
+      config,
+      opts
+    )
     await satellite.start(authState)
 
     return satellite
   }
 }
 
-export class MockSatelliteClient extends EventEmitter implements Client {  
+export class MockSatelliteClient extends EventEmitter implements Client {
   replicating = false
   closed = true
   inboundAck: Uint8Array = DEFAULT_LOG_POS
@@ -92,7 +114,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   getOutboundLogPositions(): { enqueued: Uint8Array; ack: Uint8Array } {
     return { enqueued: this.outboundSent, ack: this.outboundAck }
-  } 
+  }
   connect(): Promise<void | SatelliteError> {
     this.closed = false
     return Promise.resolve()
@@ -105,24 +127,28 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     return Promise.resolve()
   }
   authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
-    return Promise.resolve({});
+    return Promise.resolve({})
   }
-  startReplication(lsn: LSN, _resume?: boolean | undefined): Promise<void | SatelliteError> {
+  startReplication(
+    lsn: LSN,
+    _resume?: boolean | undefined
+  ): Promise<void | SatelliteError> {
     this.replicating = true
     this.inboundAck = lsn
 
     const t = setTimeout(() => this.emit('outbound_started'), 100)
     this.timeouts.push(t)
 
-    return Promise.resolve();
+    return Promise.resolve()
   }
   stopReplication(): Promise<void | SatelliteError> {
     this.replicating = false
-    return Promise.resolve();
+    return Promise.resolve()
   }
 
-  subscribeToTransactions(_callback: (transaction: Transaction) => Promise<void>): void {
-  }
+  subscribeToTransactions(
+    _callback: (transaction: Transaction) => Promise<void>
+  ): void {}
 
   enqueueTransaction(transaction: Transaction): void | SatelliteError {
     this.outboundSent = transaction.lsn

@@ -2,7 +2,11 @@
 // specific dependencies.
 import { DbName } from '../../util/types'
 
-import { ElectricNamespace, ElectrifyOptions, electrify } from '../../electric/index'
+import {
+  ElectricNamespace,
+  ElectrifyOptions,
+  electrify,
+} from '../../electric/index'
 
 import { MockMigrator } from '../../migrators/mock'
 import { Notifier } from '../../notifiers/index'
@@ -17,9 +21,13 @@ import { MockConsoleClient } from '../../auth/mock'
 
 type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
 
-const testConfig = { app: "app", token: "token" }
+const testConfig = { app: 'app', token: 'token' }
 
-export const initTestable = async (dbName: DbName, config = testConfig, opts?: ElectrifyOptions): RetVal => {
+export const initTestable = async (
+  dbName: DbName,
+  config = testConfig,
+  opts?: ElectrifyOptions
+): RetVal => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
@@ -32,6 +40,17 @@ export const initTestable = async (dbName: DbName, config = testConfig, opts?: E
   const namespace = new ElectricNamespace(adapter, notifier)
   const electric = new ElectricDatabase(db, namespace)
 
-  const electrified = await electrify(dbName, db, electric, adapter, migrator, notifier, socketFactory, console, registry, config)
+  const electrified = await electrify(
+    dbName,
+    db,
+    electric,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    console,
+    registry,
+    config
+  )
   return [db, notifier, electrified as unknown as ElectrifiedDatabase]
 }

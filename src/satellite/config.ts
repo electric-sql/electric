@@ -2,32 +2,32 @@ import { QualifiedTablename } from '../util/tablename'
 import { Migration } from '../migrators/index'
 
 export interface SatelliteConfig {
-  app: string,
+  app: string
   env: string
 }
 
 export interface SatelliteOpts {
   // The database table where Satellite keeps its processing metadata.
-  metaTable: QualifiedTablename,
+  metaTable: QualifiedTablename
   // The database table where the bundle migrator keeps its metadata.
-  migrationsTable: QualifiedTablename,
+  migrationsTable: QualifiedTablename
   // The database table where change operations are written to by the triggers
   // automatically added to all tables in the user defined DDL schema.
-  oplogTable: QualifiedTablename,
+  oplogTable: QualifiedTablename
   // The database table that controls active opLog triggers.
-  triggersTable: QualifiedTablename,
+  triggersTable: QualifiedTablename
   // Polls the database for changes every `pollingInterval` milliseconds.
-  pollingInterval: number,
+  pollingInterval: number
   // Throttle snapshotting to once per `minSnapshotWindow` milliseconds.
-  minSnapshotWindow: number,
+  minSnapshotWindow: number
 }
 
 export interface SatelliteOverrides {
-  metaTable?: QualifiedTablename,
-  migrationsTable?: QualifiedTablename,
-  oplogTable?: QualifiedTablename,
-  pollingInterval?: number,
-  minSnapshotWindow?: number,
+  metaTable?: QualifiedTablename
+  migrationsTable?: QualifiedTablename
+  oplogTable?: QualifiedTablename
+  pollingInterval?: number
+  minSnapshotWindow?: number
 }
 
 export const satelliteDefaults: SatelliteOpts = {
@@ -36,7 +36,7 @@ export const satelliteDefaults: SatelliteOpts = {
   oplogTable: new QualifiedTablename('main', '_electric_oplog'),
   triggersTable: new QualifiedTablename('main', '_electric_trigger_settings'),
   pollingInterval: 2000,
-  minSnapshotWindow: 40
+  minSnapshotWindow: 40,
 }
 
 export const satelliteClientDefaults = {
@@ -44,7 +44,7 @@ export const satelliteClientDefaults = {
   pushPeriod: 500,
 }
 
-const baseDomain = "electric-sql.com"
+const baseDomain = 'electric-sql.com'
 
 export interface SatelliteClientOpts {
   host: string
@@ -54,36 +54,38 @@ export interface SatelliteClientOpts {
   pushPeriod?: number
 }
 
-
 // Config spec
 export interface ElectricConfig {
   app: string
   env?: string
-  migrations?: Migration[],
+  migrations?: Migration[]
   replication?: {
     host: string
     port: number
     ssl: boolean
-  },
+  }
   console?: {
     host: string
   }
-  debug?: boolean,
+  debug?: boolean
 }
 
 const electricConfigDefaults: { env: string } = {
-  env: "default"
+  env: 'default',
 }
 
-export const addDefaultsToElectricConfig = (config: ElectricConfig): Required<ElectricConfig> => {
+export const addDefaultsToElectricConfig = (
+  config: ElectricConfig
+): Required<ElectricConfig> => {
   const env = config.env ?? electricConfigDefaults.env
 
-  const host = (config.replication?.host) ?? `${env}.${config.app}.db.${baseDomain}`
-  const port = (config.replication?.port) ?? 443
-  const ssl = (config.replication?.ssl) ?? true
+  const host =
+    config.replication?.host ?? `${env}.${config.app}.db.${baseDomain}`
+  const port = config.replication?.port ?? 443
+  const ssl = config.replication?.ssl ?? true
   const replication = { ...config.replication, host, port, ssl }
 
-  const consoleHost = (config.console?.host) ?? `console.${baseDomain}`
+  const consoleHost = config.console?.host ?? `console.${baseDomain}`
   const console = { ...config.console, host: consoleHost }
 
   return {
@@ -92,10 +94,9 @@ export const addDefaultsToElectricConfig = (config: ElectricConfig): Required<El
     migrations: config.migrations ?? [],
     replication: config.replication ?? replication,
     console: config.console ?? console,
-    debug: config.debug ?? false
+    debug: config.debug ?? false,
   }
 }
-
 
 export const validateConfig = (config: any) => {
   const errors = []
@@ -126,4 +127,4 @@ export const validateConfig = (config: any) => {
   }
 
   return errors
-};
+}

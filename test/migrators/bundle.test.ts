@@ -11,25 +11,25 @@ import { randomValue } from '../../src/util/random'
 import { data as testMigrationsData } from '../support/migrations'
 const { migrations } = testMigrationsData
 
-test.beforeEach(t => {
+test.beforeEach((t) => {
   const dbName = `bundle-migrator-${randomValue()}.db`
   const db = new Database(dbName)
   const adapter = new DatabaseAdapter(db)
 
   t.context = {
     adapter,
-    dbName
+    dbName,
   }
 })
 
-test.afterEach.always(async t => {
+test.afterEach.always(async (t) => {
   const { dbName } = t.context as any
 
-  await removeFile(dbName, {force: true})
-  await removeFile(`${dbName}-journal`, {force: true})
+  await removeFile(dbName, { force: true })
+  await removeFile(`${dbName}-journal`, { force: true })
 })
 
-test('run the bundle migrator', async t => {
+test('run the bundle migrator', async (t) => {
   const { adapter } = t.context as any
 
   const migrator = new BundleMigrator(adapter, migrations)

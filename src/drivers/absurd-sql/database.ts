@@ -11,7 +11,7 @@ import {
   FunctionMap,
   Row,
   RowCallback,
-  SqlValue
+  SqlValue,
 } from '../../util/types'
 
 export interface Config {
@@ -19,22 +19,37 @@ export interface Config {
 }
 
 export interface QueryExecResult {
-  columns: string[],
+  columns: string[]
   values: SqlValue[][]
 }
 
 // The SQL.js API that we need to proxy -- which in this case
 // is basically the entire interface.
 export interface Database {
-  exec(sql: string, params?: BindParams, config?: Config): QueryExecResult[] | Promise<QueryExecResult[]>
+  exec(
+    sql: string,
+    params?: BindParams,
+    config?: Config
+  ): QueryExecResult[] | Promise<QueryExecResult[]>
   run(sql: string, params?: BindParams): Database | Promise<Database>
   prepare(sql: string, params?: BindParams): Statement | Promise<Statement>
-  each?(sql: string, params: BindParams | RowCallback, callback: RowCallback | EmptyFunction, done?: EmptyFunction, config?: Config): Database | Promise<Database>
-  iterateStatements?(sql: string): StatementIterator | Promise<StatementIterator>
+  each?(
+    sql: string,
+    params: BindParams | RowCallback,
+    callback: RowCallback | EmptyFunction,
+    done?: EmptyFunction,
+    config?: Config
+  ): Database | Promise<Database>
+  iterateStatements?(
+    sql: string
+  ): StatementIterator | Promise<StatementIterator>
   getRowsModified(): number | Promise<number>
   close(): void | Promise<void>
   export(): Uint8Array | Promise<Uint8Array>
-  create_function(name: string, func?: AnyFunction | string): Database | Promise<Database>
+  create_function(
+    name: string,
+    func?: AnyFunction | string
+  ): Database | Promise<Database>
 }
 
 export interface Statement {
@@ -67,7 +82,11 @@ export class ElectricDatabase {
   }
   _user_defined_functions: FunctionMap
 
-  constructor(db: Database, namespace: ElectricNamespace, functions: FunctionMap = {}) {
+  constructor(
+    db: Database,
+    namespace: ElectricNamespace,
+    functions: FunctionMap = {}
+  ) {
     this.db = db
     this.electric = namespace
 
@@ -89,10 +108,14 @@ export class ElectricDatabase {
     delete this._statements[key]
   }
   async _releaseStatements(keys: string[]): Promise<void> {
-    await Promise.all(keys.map(key => this._releaseStatement(key)))
+    await Promise.all(keys.map((key) => this._releaseStatement(key)))
   }
 
-  async exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult[]> {
+  async exec(
+    sql: string,
+    params?: BindParams,
+    config?: Config
+  ): Promise<QueryExecResult[]> {
     const shouldNotify = isPotentiallyDangerous(sql)
 
     const retval = await this.db.exec(sql, params, config)
@@ -170,7 +193,11 @@ export class ElectricStatement implements ProxyWrapper {
 
   electric: ElectricNamespace
 
-  constructor(stmt: Statement, electric: ElectricNamespace, isPotentiallyDangerous: boolean) {
+  constructor(
+    stmt: Statement,
+    electric: ElectricNamespace,
+    isPotentiallyDangerous: boolean
+  ) {
     this._hasNotified = false
     this._isPotentiallyDangerous = isPotentiallyDangerous
     this._stmt = stmt
@@ -184,7 +211,7 @@ export class ElectricStatement implements ProxyWrapper {
     return this._stmt
   }
 
-  _conditionallyNotifyCommit () {
+  _conditionallyNotifyCommit() {
     if (!this._isPotentiallyDangerous || this._hasNotified) {
       return
     }
@@ -271,7 +298,7 @@ export class MainThreadDatabaseProxy implements Database {
     const method: DbMethod = {
       target: 'db',
       dbName: this._dbName,
-      name: methodName
+      name: methodName,
     }
 
     return this._workerClient.request(method, ...args)
@@ -283,7 +310,11 @@ export class MainThreadDatabaseProxy implements Database {
     delete this._statements[id]
   }
 
-  exec(sql: string, params?: BindParams, config?: Config): Promise<QueryExecResult[]> {
+  exec(
+    sql: string,
+    params?: BindParams,
+    config?: Config
+  ): Promise<QueryExecResult[]> {
     return this._request('exec', sql, params, config)
   }
 
@@ -299,7 +330,13 @@ export class MainThreadDatabaseProxy implements Database {
     this._statements[id] = stmt
     return stmt
   }
-  async each(sql: string, params: BindParams | RowCallback, callback: RowCallback | EmptyFunction, done?: EmptyFunction, config?: Config): Promise<Database> {
+  async each(
+    sql: string,
+    params: BindParams | RowCallback,
+    callback: RowCallback | EmptyFunction,
+    done?: EmptyFunction,
+    config?: Config
+  ): Promise<Database> {
     const shiftArgs = typeof params === 'function'
 
     const actualParams = (shiftArgs ? [] : params) as BindParams
@@ -321,8 +358,7 @@ export class MainThreadDatabaseProxy implements Database {
         row = await stmt.getAsObject(undefined, config)
         actualCallback(row)
       }
-    }
-    finally {
+    } finally {
       stmt.free()
     }
     if (actualDone !== undefined) {
@@ -334,7 +370,7 @@ export class MainThreadDatabaseProxy implements Database {
   async *iterateStatements(sqlStatements: string): StatementIterator {
     const parts: string[] = sqlStatements
       .split(';')
-      .filter(x => x && x.trim())
+      .filter((x) => x && x.trim())
 
     const stmtIds: string[] = []
 
@@ -345,12 +381,11 @@ export class MainThreadDatabaseProxy implements Database {
     try {
       for (i = 0; i < parts.length; i++) {
         sql = parts[i]
-        stmt = await this.prepare(sql) as MainThreadStatementProxy
+        stmt = (await this.prepare(sql)) as MainThreadStatementProxy
         stmtIds.push(stmt._id)
         yield stmt
       }
-    }
-    finally {
+    } finally {
       if (stmtIds.length) {
         await this._request('_releaseStatements', stmtIds)
       }
@@ -376,9 +411,10 @@ export class MainThreadDatabaseProxy implements Database {
         fnName = name
       }
 
-      const msg = `Failed to create \`${fnName}\. ` +
-                  `Have you added it to \`self.user_defined_functions\` ` +
-                  `in your worker.js?`
+      const msg =
+        `Failed to create \`${fnName}\. ` +
+        `Have you added it to \`self.user_defined_functions\` ` +
+        `in your worker.js?`
       throw new Error(msg)
     }
 
@@ -386,7 +422,8 @@ export class MainThreadDatabaseProxy implements Database {
   }
 }
 
-export interface ElectricMainThreadDatabaseProxy extends MainThreadDatabaseProxy {
+export interface ElectricMainThreadDatabaseProxy
+  extends MainThreadDatabaseProxy {
   electric: ElectricNamespace
 }
 
@@ -397,7 +434,12 @@ export class MainThreadStatementProxy implements Statement {
   _id: string
   _workerClient: WorkerClient
 
-  constructor(id: string, stmt: string, db: MainThreadDatabaseProxy, workerClient: WorkerClient) {
+  constructor(
+    id: string,
+    stmt: string,
+    db: MainThreadDatabaseProxy,
+    workerClient: WorkerClient
+  ) {
     this.db = db
     this.stmt = stmt
 
@@ -410,7 +452,7 @@ export class MainThreadStatementProxy implements Statement {
       target: 'statement',
       dbName: this.db._dbName,
       statementId: this._id,
-      name: methodName
+      name: methodName,
     }
 
     return this._workerClient.request(method, ...args)

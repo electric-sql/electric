@@ -1,4 +1,8 @@
-import { AnyDatabase, AnyElectricDatabase, AnyElectrifiedDatabase } from '../drivers/index'
+import {
+  AnyDatabase,
+  AnyElectricDatabase,
+  AnyElectrifiedDatabase,
+} from '../drivers/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -12,12 +16,12 @@ import { ElectricConfig } from '../satellite/config'
 // entrypoint. They are all optional to optionally allow different / mock
 // implementations to be passed in to facilitate testing.
 export interface ElectrifyOptions {
-  adapter?: DatabaseAdapter,
-  migrator?: Migrator,
-  notifier?: Notifier,
-  socketFactory?: SocketFactory,
+  adapter?: DatabaseAdapter
+  migrator?: Migrator
+  notifier?: Notifier
+  socketFactory?: SocketFactory
   console?: ConsoleClient
-  registry?: Registry,
+  registry?: Registry
 }
 
 // This is the namespace that's patched onto the user's database client
@@ -37,7 +41,6 @@ export class ElectricNamespace {
     this.notifier.subscribeToConnectivityStateChange((notification) => {
       this.isConnected = notification.connectivityState == 'connected'
     })
-
   }
 
   // We lift this function a level so the user can call
@@ -46,7 +49,6 @@ export class ElectricNamespace {
   potentiallyChanged(): void {
     this.notifier.potentiallyChanged()
   }
-
 }
 
 // This is the primary `electrify()` endpoint that the individal drivers
@@ -63,9 +65,17 @@ export const electrify = async (
   socketFactory: SocketFactory,
   console: ConsoleClient,
   registry: Registry,
-  config: ElectricConfig,
+  config: ElectricConfig
 ): Promise<AnyElectrifiedDatabase> => {
-  await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, config)
+  await registry.ensureStarted(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    console,
+    config
+  )
 
   return proxyOriginal(db, electric)
 }

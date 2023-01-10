@@ -1,6 +1,11 @@
 import { AnyWorkerThreadElectricDatabase } from '../drivers/index'
 import { ElectrifyOptions } from '../electric/index'
-import { ChangeCallback, ChangeNotification, ConnectivityStateChangeCallback, ConnectivityStateChangeNotification } from '../notifiers/index'
+import {
+  ChangeCallback,
+  ChangeNotification,
+  ConnectivityStateChangeCallback,
+  ConnectivityStateChangeNotification,
+} from '../notifiers/index'
 import { randomValue } from '../util/random'
 import { AnyFunction, DbName, StatementId } from '../util/types'
 
@@ -32,7 +37,7 @@ export interface NotifyMethod {
 export interface StatementMethod {
   target: 'statement'
   dbName: DbName
-  statementId: StatementId,
+  statementId: StatementId
   name: string
 }
 
@@ -40,7 +45,7 @@ type RequestMethod = ServerMethod | DbMethod | NotifyMethod | StatementMethod
 
 export interface Request {
   args: any[]
-  method: RequestMethod,
+  method: RequestMethod
   requestId: string
 }
 
@@ -48,9 +53,9 @@ export class RequestError extends Error {
   code: number
 
   constructor(code: number, message: string) {
-    super(message);
+    super(message)
     this.code = code
-    this.name = "RequestError"
+    this.name = 'RequestError'
   }
 }
 
@@ -62,7 +67,7 @@ export interface Response {
 
 export interface ChangeNotificationResponse {
   status: 'changed'
-  result: ChangeNotification,
+  result: ChangeNotification
   isChangeNotification: true
 }
 
@@ -106,7 +111,7 @@ export class WorkerClient {
     const data = {
       args: args,
       method: method,
-      requestId: requestId
+      requestId: requestId,
     }
 
     const addListener = this.addListener
@@ -138,7 +143,7 @@ export class WorkerClient {
     const data = {
       args: args,
       method: method,
-      requestId: requestId
+      requestId: requestId,
     }
 
     this.postMessage(data)
@@ -157,7 +162,10 @@ export class WorkerClient {
     delete this._changeCallbacks[key]
   }
 
-  subscribeToConnectivityStateChange(key: string, callback: ConnectivityStateChangeCallback): string {
+  subscribeToConnectivityStateChange(
+    key: string,
+    callback: ConnectivityStateChangeCallback
+  ): string {
     if (key in this._connectivityStateChangeCallbacks) {
       throw new Error(`Subscription key clash -- \`key\` must be unique.`)
     }
@@ -235,8 +243,7 @@ export abstract class WorkerServer {
       const result = await boundTargetFn(...args)
 
       this._dispatchResult(requestId, result)
-    }
-    catch (err) {
+    } catch (err) {
       this._dispatchError(requestId, err)
     }
   }
@@ -245,7 +252,7 @@ export abstract class WorkerServer {
     const resp: Response = {
       status: 'error',
       result: error,
-      requestId: requestId
+      requestId: requestId,
     }
 
     this.worker.postMessage(resp)
@@ -255,7 +262,7 @@ export abstract class WorkerServer {
     const resp: Response = {
       status: 'success',
       result: result,
-      requestId: requestId
+      requestId: requestId,
     }
 
     this.worker.postMessage(resp)
@@ -265,17 +272,19 @@ export abstract class WorkerServer {
     const resp: ChangeNotificationResponse = {
       status: 'changed',
       result: notification,
-      isChangeNotification: true
+      isChangeNotification: true,
     }
 
     this.worker.postMessage(resp)
   }
 
-  _dispatchConnectivityStateNotification(notification: ConnectivityStateChangeNotification): void {
+  _dispatchConnectivityStateNotification(
+    notification: ConnectivityStateChangeNotification
+  ): void {
     const resp: ConnectivityStateChangeNotificationResponse = {
       status: 'changed',
       result: notification,
-      isConnectivityStateChangeNotification: true
+      isConnectivityStateChangeNotification: true,
     }
 
     this.worker.postMessage(resp)

@@ -12,7 +12,7 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
 
   constructor(dbName: DbName) {
     this.databaseFeatures = {
-      isSQLitePluginDatabase: true
+      isSQLitePluginDatabase: true,
     }
     this.openDBs = {}
     this.openDBs[dbName] = 'OPEN'
@@ -20,21 +20,29 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
 
   addTransaction(tx: SQLitePluginTransaction): void {
     if (tx.success !== undefined) {
-      const results = mockResults([{i: 0}])
+      const results = mockResults([{ i: 0 }])
       const arg = tx.readOnly ? [tx, results] : undefined
 
       tx.success(arg)
     }
   }
 
-  readTransaction(txFn: AnyFunction, _error?: AnyFunction, success?: AnyFunction): void {
+  readTransaction(
+    txFn: AnyFunction,
+    _error?: AnyFunction,
+    success?: AnyFunction
+  ): void {
     const tx = new MockSQLitePluginTransaction(true, success)
 
     txFn(tx)
 
     this.addTransaction(tx)
   }
-  transaction(txFn: AnyFunction, _error?: AnyFunction, success?: AnyFunction): void {
+  transaction(
+    txFn: AnyFunction,
+    _error?: AnyFunction,
+    success?: AnyFunction
+  ): void {
     const tx = new MockSQLitePluginTransaction(false, success)
 
     txFn(tx)
@@ -42,7 +50,11 @@ export abstract class MockSQLitePlugin implements SQLitePlugin {
     this.addTransaction(tx)
   }
 
-  sqlBatch(_stmts: string[], success?: AnyFunction, _error?: AnyFunction): void {
+  sqlBatch(
+    _stmts: string[],
+    success?: AnyFunction,
+    _error?: AnyFunction
+  ): void {
     if (success !== undefined) {
       success()
     }
@@ -64,18 +76,28 @@ export class MockSQLitePluginTransaction implements SQLitePluginTransaction {
     }
   }
 
-  addStatement(_sql: string, _values?: BindParams, success?: AnyFunction, _error?: AnyFunction): void {
+  addStatement(
+    _sql: string,
+    _values?: BindParams,
+    success?: AnyFunction,
+    _error?: AnyFunction
+  ): void {
     if (success !== undefined) {
-      const results = mockResults([{i: 0}])
+      const results = mockResults([{ i: 0 }])
       const arg = this.readOnly ? [this, results] : undefined
 
       success(arg)
     }
   }
 
-  executeSql(_sql: string, _values?: BindParams, success?: AnyFunction, _error?: AnyFunction): void {
+  executeSql(
+    _sql: string,
+    _values?: BindParams,
+    success?: AnyFunction,
+    _error?: AnyFunction
+  ): void {
     if (success !== undefined) {
-      const results = mockResults([{i: 0}])
+      const results = mockResults([{ i: 0 }])
       const arg = this.readOnly ? [this, results] : undefined
 
       success(arg)

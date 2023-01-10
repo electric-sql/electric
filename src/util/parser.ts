@@ -16,12 +16,11 @@ const dangerousKeywords = [
   'select into',
   'set',
   'truncate',
-  'update'
+  'update',
 ]
 
 const dangerousKeywordsExp: RegExp = new RegExp(
-  dangerousKeywords.map(keyword => `\\b${keyword}\\b`)
-    .join('|'),
+  dangerousKeywords.map((keyword) => `\\b${keyword}\\b`).join('|'),
   'imu'
 )
 
@@ -36,10 +35,17 @@ export const isPotentiallyDangerous = (stmt: string): boolean => {
   return dangerousKeywordsExp.test(stmt)
 }
 
-export const parseTableNames = (sqlQuery: string, defaultNamespace: DbNamespace = 'main'): QualifiedTablename[] => {
+export const parseTableNames = (
+  sqlQuery: string,
+  defaultNamespace: DbNamespace = 'main'
+): QualifiedTablename[] => {
   const ast = sqliteParser(sqlQuery)
-  if (ast.type !== 'statement') { throw 'Invalid SQL statement' }
-  if (ast.statement.length !== 1) { throw 'Query must be a single SQL statement.' }
+  if (ast.type !== 'statement') {
+    throw 'Invalid SQL statement'
+  }
+  if (ast.statement.length !== 1) {
+    throw 'Query must be a single SQL statement.'
+  }
 
   const statement = ast.statement[0]
   if (statement.type !== 'statement' || statement.variant !== 'select') {
@@ -51,28 +57,39 @@ export const parseTableNames = (sqlQuery: string, defaultNamespace: DbNamespace 
 
   new WalkBuilder()
     .withSimpleCallback((node) => {
-      const result = _ensureQualified(node.val.name, defaultNamespace).toLowerCase()
+      const result = _ensureQualified(
+        node.val.name,
+        defaultNamespace
+      ).toLowerCase()
 
       resultSet.add(result)
     })
     .withGlobalFilter(_isTableIdentifier)
     .walk(statement.from)
 
-  Array.from(resultSet).sort().forEach((value: string) => {
-    const [ namespace, tablename ] = value.split('.')
+  Array.from(resultSet)
+    .sort()
+    .forEach((value: string) => {
+      const [namespace, tablename] = value.split('.')
 
-    results.push(new QualifiedTablename(namespace, tablename))
-  })
+      results.push(new QualifiedTablename(namespace, tablename))
+    })
 
   return results
 }
 
 const _isTableIdentifier = (node: any): boolean => {
-  if (node.nodeType !== 'object') { return false }
+  if (node.nodeType !== 'object') {
+    return false
+  }
 
   const { val } = node
-  if (!val.hasOwnProperty('variant')) { return false }
-  if (!val.hasOwnProperty('type')) { return false }
+  if (!val.hasOwnProperty('variant')) {
+    return false
+  }
+  if (!val.hasOwnProperty('type')) {
+    return false
+  }
 
   if (val.type !== 'identifier' || val.variant !== 'table') {
     return false
@@ -81,7 +98,10 @@ const _isTableIdentifier = (node: any): boolean => {
   return true
 }
 
-const _ensureQualified = (candidate: string, defaultNamespace: DbNamespace = 'main'): string => {
+const _ensureQualified = (
+  candidate: string,
+  defaultNamespace: DbNamespace = 'main'
+): string => {
   if (candidate.includes('.')) {
     return candidate
   }

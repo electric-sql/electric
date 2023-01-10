@@ -10,13 +10,22 @@
 import { NotifyMethod, WorkerClient, WorkerServer } from '../bridge/index'
 import { ConnectivityState as ConnectivityState, DbName } from '../util/types'
 
-import { Change, ChangeCallback, ConnectivityStateChangeCallback, Notifier, PotentialChangeNotification } from './index'
+import {
+  Change,
+  ChangeCallback,
+  ConnectivityStateChangeCallback,
+  Notifier,
+  PotentialChangeNotification,
+} from './index'
 import { EventNotifier } from './event'
 
 // Extend the default EventNotifier to:
 // - send potentiallyChanged notifications to the worker thread
 // - and subscribe to data changes from the worker thread
-export class MainThreadBridgeNotifier extends EventNotifier implements Notifier {
+export class MainThreadBridgeNotifier
+  extends EventNotifier
+  implements Notifier
+{
   workerClient: WorkerClient
 
   constructor(dbName: DbName, workerClient: WorkerClient) {
@@ -31,7 +40,7 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
     const method: NotifyMethod = {
       dbName: dbName,
       name: '_emitPotentialChange',
-      target: 'notify'
+      target: 'notify',
     }
 
     this.workerClient.notify(method, notification)
@@ -56,19 +65,30 @@ export class MainThreadBridgeNotifier extends EventNotifier implements Notifier 
     const method: NotifyMethod = {
       dbName: dbName,
       name: '_emitConnectivityStatus',
-      target: 'notify'
+      target: 'notify',
     }
 
-    this.workerClient.notify(method, notification.dbName, notification.connectivityState)
+    this.workerClient.notify(
+      method,
+      notification.dbName,
+      notification.connectivityState
+    )
 
     return notification
   }
 
-  subscribeToConnectivityStateChange(callback: ConnectivityStateChangeCallback): string {
+  subscribeToConnectivityStateChange(
+    callback: ConnectivityStateChangeCallback
+  ): string {
     const key = super.subscribeToConnectivityStateChange(callback)
-    const wrappedCallback = this._connectivityStatusCallbacks[key] as ConnectivityStateChangeCallback
+    const wrappedCallback = this._connectivityStatusCallbacks[
+      key
+    ] as ConnectivityStateChangeCallback
 
-    return this.workerClient.subscribeToConnectivityStateChange(key, wrappedCallback)
+    return this.workerClient.subscribeToConnectivityStateChange(
+      key,
+      wrappedCallback
+    )
   }
 
   unsubscribeFromConnectivityStateChange(key: string): void {
@@ -94,17 +114,19 @@ export class WorkerBridgeNotifier extends EventNotifier implements Notifier {
 
     this.workerServer._dispatchChangeNotification({
       dbName: dbName,
-      changes: changes
+      changes: changes,
     })
   }
 
-  connectivityStateChange(dbName: string, connectivityState: ConnectivityState) {
+  connectivityStateChange(
+    dbName: string,
+    connectivityState: ConnectivityState
+  ) {
     super.connectivityStateChange(dbName, connectivityState)
 
     this.workerServer._dispatchConnectivityStateNotification({
       dbName: dbName,
-      connectivityState
+      connectivityState,
     })
   }
-
 }

@@ -9,9 +9,8 @@ export class QualifiedTablename {
     this.tablename = tablename
   }
 
-  isEqual({ namespace, tablename}: QualifiedTablename): boolean {
-    return namespace === this.namespace
-        && tablename === this.tablename
+  isEqual({ namespace, tablename }: QualifiedTablename): boolean {
+    return namespace === this.namespace && tablename === this.tablename
   }
 
   toString(): string {
@@ -19,7 +18,10 @@ export class QualifiedTablename {
   }
 }
 
-export const hasIntersection = (tablenames: QualifiedTablename[], candidates: QualifiedTablename[]): boolean => {
+export const hasIntersection = (
+  tablenames: QualifiedTablename[],
+  candidates: QualifiedTablename[]
+): boolean => {
   const tLen = tablenames.length
   const cLen = candidates.length
 

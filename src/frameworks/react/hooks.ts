@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 
 import { ElectricNamespace } from '../../electric/index'
-import { ChangeNotification, ConnectivityStateChangeNotification } from '../../notifiers/index'
+import {
+  ChangeNotification,
+  ConnectivityStateChangeNotification,
+} from '../../notifiers/index'
 import { randomValue } from '../../util/random'
 import { QualifiedTablename, hasIntersection } from '../../util/tablename'
 import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
@@ -9,8 +12,8 @@ import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
 import { useElectric } from './provider'
 
 interface ResultData {
-  error?: any,
-  results?: Row[],
+  error?: any
+  results?: Row[]
   updatedAt?: Date
 }
 
@@ -18,7 +21,7 @@ const successResult = (results: Row[]): ResultData => {
   return {
     error: undefined,
     results: results,
-    updatedAt: new Date()
+    updatedAt: new Date(),
   }
 }
 
@@ -26,7 +29,7 @@ const errorResult = (error: any): ResultData => {
   return {
     error: error,
     results: undefined,
-    updatedAt: new Date()
+    updatedAt: new Date(),
   }
 }
 
@@ -34,10 +37,10 @@ const errorResult = (error: any): ResultData => {
 // string on create and provides an update function that generates
 // and assigns the value to a new random string.
 export const useRandom = () => {
-  const [ value, _setValue ] = useState<string>(randomValue())
+  const [value, _setValue] = useState<string>(randomValue())
   const setRandomValue = () => _setValue(randomValue())
 
-  return [ value, setRandomValue ] as const
+  return [value, setRandomValue] as const
 }
 
 // Main reactive query hook for React applications. It needs to be
@@ -58,13 +61,13 @@ export const useRandom = () => {
 export const useElectricQuery = (query: Query, params?: BindParams) => {
   const db = useElectric()
 
-  const [ cacheKey, bustCache ] = useRandom()
-  const [ changeSubscriptionKey, setChangeSubscriptionKey ] = useState<string>()
-  const [ electric, setElectric ] = useState<ElectricNamespace>()
-  const [ paramsKey, setParamsKey ] = useState<string>()
-  const [ tablenames, setTablenames ] = useState<QualifiedTablename[]>()
-  const [ tablenamesKey, setTablenamesKey ] = useState<string>()
-  const [ resultData, setResultData ] = useState<ResultData>({})
+  const [cacheKey, bustCache] = useRandom()
+  const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
+  const [electric, setElectric] = useState<ElectricNamespace>()
+  const [paramsKey, setParamsKey] = useState<string>()
+  const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
+  const [tablenamesKey, setTablenamesKey] = useState<string>()
+  const [resultData, setResultData] = useState<ResultData>({})
 
   // When the db is set on the provider, we get the electric namespace from it.
   useEffect(() => {
@@ -139,7 +142,8 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
       return
     }
 
-    electric.adapter.query({ sql: query, args: params })
+    electric.adapter
+      .query({ sql: query, args: params })
       .then((res: Row[]) => {
         setResultData(successResult(res))
       })
@@ -152,52 +156,58 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
 }
 
 export const useConnectivityState: () => {
-  connectivityState: ConnectivityState,
+  connectivityState: ConnectivityState
   toggleConnectivityState: () => void
 } = () => {
-    const db = useElectric()
+  const db = useElectric()
 
-  const [connectivityState, setConnectivityState] = useState<ConnectivityState>('disconnected')
-    const [electric, setElectric] = useState<ElectricNamespace>()
+  const [connectivityState, setConnectivityState] =
+    useState<ConnectivityState>('disconnected')
+  const [electric, setElectric] = useState<ElectricNamespace>()
 
-    useEffect(() => {
-      if (db === undefined) {
-        return
-      }
+  useEffect(() => {
+    if (db === undefined) {
+      return
+    }
 
-      setElectric(db.electric)
-    }, [db])
+    setElectric(db.electric)
+  }, [db])
 
-    useEffect(() => {
-      if (db === undefined || electric === undefined) {
-        return
-      }
+  useEffect(() => {
+    if (db === undefined || electric === undefined) {
+      return
+    }
 
-      setConnectivityState(electric.isConnected ? 'connected' : 'disconnected')
+    setConnectivityState(electric.isConnected ? 'connected' : 'disconnected')
 
-      const handler = (notification: ConnectivityStateChangeNotification) => {
-        const state = notification.connectivityState
+    const handler = (notification: ConnectivityStateChangeNotification) => {
+      const state = notification.connectivityState
 
-        // externally map states to disconnected/connected
-        const nextState = ['available', 'error', 'disconnected'].find((x) => x == state) ? 'disconnected' : 'connected'
-        setConnectivityState(nextState)
-      }
+      // externally map states to disconnected/connected
+      const nextState = ['available', 'error', 'disconnected'].find(
+        (x) => x == state
+      )
+        ? 'disconnected'
+        : 'connected'
+      setConnectivityState(nextState)
+    }
 
-      electric.notifier.subscribeToConnectivityStateChange(handler)
+    electric.notifier.subscribeToConnectivityStateChange(handler)
 
-      setElectric(db.electric)
-    }, [db, electric])  
+    setElectric(db.electric)
+  }, [db, electric])
 
   const toggleConnectivityState = () => {
     if (db === undefined || electric === undefined) {
       return
     }
 
-    const nextState: ConnectivityState = connectivityState == 'connected' ? 'disconnected' : 'available'
+    const nextState: ConnectivityState =
+      connectivityState == 'connected' ? 'disconnected' : 'available'
     const dbName = db.electric.notifier.dbName
     electric.notifier.connectivityStateChange(dbName, nextState)
     setConnectivityState(nextState)
   }
 
   return { connectivityState, setConnectivityState, toggleConnectivityState }
-  }
+}

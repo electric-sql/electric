@@ -4,13 +4,13 @@ import { Database } from './database'
 
 // Key is the method name, value is whether the
 // callbacks need to be reversed.
-const promisablePatchedMethods: {[key: string]: boolean} = {
-  'attach': false,
-  'detach': false,
-  'echoTest': false,
-  'readTransaction': true,
-  'sqlBatch': false,
-  'transaction': true
+const promisablePatchedMethods: { [key: string]: boolean } = {
+  attach: false,
+  detach: false,
+  echoTest: false,
+  readTransaction: true,
+  sqlBatch: false,
+  transaction: true,
 }
 
 // This adapts the `mockDb` to behave like the SQLitePlugin does
@@ -25,11 +25,11 @@ export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
 
         return (...args: any): any => {
           return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-            let success = function(...args: any[]): any {
+            let success = function (...args: any[]): any {
               return resolve(...args)
             }
 
-            let error = function(err: any): any {
+            let error = function (err: any): any {
               reject(err)
               return false
             }
@@ -44,7 +44,7 @@ export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
       }
 
       return value
-    }
+    },
   })
 }
 
@@ -57,13 +57,22 @@ export class MockDatabase extends MockSQLitePlugin implements Database {
     this.dbName = dbName
   }
 
-  attach(_dbName: DbName, _dbAlias: DbName, success?: AnyFunction, _error?: AnyFunction): void {
+  attach(
+    _dbName: DbName,
+    _dbAlias: DbName,
+    success?: AnyFunction,
+    _error?: AnyFunction
+  ): void {
     if (!!success) {
       success('mocked!')
     }
   }
 
-  detach(_dbAlias: DbName, success?: (...args: any[]) => any, _error?: (...args: any[]) => any): void {
+  detach(
+    _dbAlias: DbName,
+    success?: (...args: any[]) => any,
+    _error?: (...args: any[]) => any
+  ): void {
     if (!!success) {
       success('mocked!')
     }

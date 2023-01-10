@@ -1,4 +1,10 @@
-import { AnyFunction, BindParams, DbName, Row, SqlValue } from '../../util/types'
+import {
+  AnyFunction,
+  BindParams,
+  DbName,
+  Row,
+  SqlValue,
+} from '../../util/types'
 
 import { WorkerServer, RequestError } from '../../bridge/index'
 import { ElectricNamespace } from '../../electric/index'
@@ -8,7 +14,13 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Config, Database, ElectricDatabase, QueryExecResult, Statement } from './database'
+import {
+  Config,
+  Database,
+  ElectricDatabase,
+  QueryExecResult,
+  Statement,
+} from './database'
 import { MockSocketFactory } from '../../sockets/mock'
 import { ElectricConfig } from '../../satellite/config'
 import { MockConsoleClient } from '../../auth/mock'
@@ -24,13 +36,22 @@ export class MockDatabase implements Database {
     this.dbName = dbName
   }
 
-  exec(_sql: string, _params?: BindParams, _config?: Config): QueryExecResult[] {
+  exec(
+    _sql: string,
+    _params?: BindParams,
+    _config?: Config
+  ): QueryExecResult[] {
     const dbName = this.dbName
 
-    return [{
-      columns: ['db', 'val'],
-      values: [[dbName, 1], [dbName, 2]]
-    }]
+    return [
+      {
+        columns: ['db', 'val'],
+        values: [
+          [dbName, 1],
+          [dbName, 2],
+        ],
+      },
+    ]
   }
   run(_sql: string, _params?: BindParams): Database {
     return this
@@ -41,7 +62,7 @@ export class MockDatabase implements Database {
   getRowsModified(): number {
     return 0
   }
-  close(): void { }
+  close(): void {}
   export(): Uint8Array {
     return new Uint8Array(2)
   }
@@ -131,11 +152,22 @@ export class MockElectricWorker extends WorkerServer {
       const console = opts?.console || new MockConsoleClient()
 
       const namespace = new ElectricNamespace(adapter, notifier)
-      this._dbs[dbName] = new ElectricDatabase(db, namespace, this.worker.user_defined_functions)
+      this._dbs[dbName] = new ElectricDatabase(
+        db,
+        namespace,
+        this.worker.user_defined_functions
+      )
 
-      await registry.ensureStarted(dbName, adapter, migrator, notifier, socketFactory, console, config)
-    }
-    else {
+      await registry.ensureStarted(
+        dbName,
+        adapter,
+        migrator,
+        notifier,
+        socketFactory,
+        console,
+        config
+      )
+    } else {
       await registry.ensureAlreadyStarted(dbName)
     }
 
@@ -148,7 +180,7 @@ export class MockElectricWorker extends WorkerServer {
     const notifications = notifier.notifications
 
     return {
-      notifications: notifications ? notifications : []
+      notifications: notifications ? notifications : [],
     }
   }
 }

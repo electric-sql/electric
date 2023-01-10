@@ -18,7 +18,7 @@ export {
   ElectricDatabase,
   ElectricStatement,
   MainThreadDatabaseProxy,
-  MainThreadStatementProxy
+  MainThreadStatementProxy,
 } from './database'
 
 export type {
@@ -27,40 +27,52 @@ export type {
   Database,
   Statement,
   StatementIterator,
-  ElectrifiedDatabase
+  ElectrifiedDatabase,
 } from './database'
 
 export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
 export interface SQL {
-  openDatabase(dbName: DbName, config: ElectricConfig): Promise<ElectrifiedDatabase>
+  openDatabase(
+    dbName: DbName,
+    config: ElectricConfig
+  ): Promise<ElectrifiedDatabase>
 }
 
-export const initElectricSqlJs = async (worker: Worker, locateOpts: LocateFileOpts = {}): Promise<SQL> => {
+export const initElectricSqlJs = async (
+  worker: Worker,
+  locateOpts: LocateFileOpts = {}
+): Promise<SQL> => {
   initBackend(worker)
 
   const locator = new WasmLocator(locateOpts)
   const workerClient = new WorkerClient(worker)
 
   const init: ServerMethod = {
-    target: 'server', name: 'init'
+    target: 'server',
+    name: 'init',
   }
   await workerClient.request(init, locator.serialise())
 
-  const openDatabase = async (dbName: DbName, config: ElectricConfig, opts?: ElectrifyOptions): Promise<ElectrifiedDatabase> => {
+  const openDatabase = async (
+    dbName: DbName,
+    config: ElectricConfig,
+    opts?: ElectrifyOptions
+  ): Promise<ElectrifiedDatabase> => {
     const open: ServerMethod = {
       target: 'server',
-      name: 'open'
+      name: 'open',
     }
     await workerClient.request(open, dbName, config)
 
     const db = new MainThreadDatabaseProxy(dbName, workerClient)
     const adapter = opts?.adapter || new DatabaseAdapter(db)
-    const notifier = opts?.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
+    const notifier =
+      opts?.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
     const namespace = new ElectricNamespace(adapter, notifier)
 
-    return proxyOriginal(db, {electric: namespace}) as ElectrifiedDatabase
+    return proxyOriginal(db, { electric: namespace }) as ElectrifiedDatabase
   }
 
   return { openDatabase }

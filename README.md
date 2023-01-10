@@ -18,7 +18,7 @@
 
 [ElectricSQL](https://electric-sql.com) is a local-first SQL system. It provides active-active cloud sync for embedded SQLite databases and a reactive programming model to bind components to live database queries.
 
-The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with *any* SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Cordova](https://electric-sql.com/docs/usage/drivers#cordova), [Expo](https://electric-sql.com/docs/usage/drivers#expo), [React Native](https://electric-sql.com/docs/usage/drivers#react-native), [SQL.js](https://electric-sql.com/docs/drivers/web) (with [absurd-sql](https://electric-sql.com/docs/usage/web)), [Node.js](https://electric-sql.com/docs/usage/drivers#edge) (via [better-sqlite3](https://electric-sql.com/docs/usage/drivers#node)), [TypeORM](https://electric-sql.com/docs/usage/frameworks#typeorm) and [Prisma](https://electric-sql.com/docs/usage/frameworks#prisma).
+The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with _any_ SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Cordova](https://electric-sql.com/docs/usage/drivers#cordova), [Expo](https://electric-sql.com/docs/usage/drivers#expo), [React Native](https://electric-sql.com/docs/usage/drivers#react-native), [SQL.js](https://electric-sql.com/docs/drivers/web) (with [absurd-sql](https://electric-sql.com/docs/usage/web)), [Node.js](https://electric-sql.com/docs/usage/drivers#edge) (via [better-sqlite3](https://electric-sql.com/docs/usage/drivers#node)), [TypeORM](https://electric-sql.com/docs/usage/frameworks#typeorm) and [Prisma](https://electric-sql.com/docs/usage/frameworks#prisma).
 
 ## Install
 
@@ -47,9 +47,17 @@ SQLite.enablePromise(true)
 
 // Open a database connection and electrify it.
 SQLite.openDatabase('example.db')
-  .then(db => electrify(db, { app: "my-app", env: "prod", token: "token", migrations: [] }))
-  .then(db => { // Use as normal, e.g.:
-    db.transaction(tx => tx.executeSql('SELECT 1'))
+  .then((db) =>
+    electrify(db, {
+      app: 'my-app',
+      env: 'prod',
+      token: 'token',
+      migrations: [],
+    })
+  )
+  .then((db) => {
+    // Use as normal, e.g.:
+    db.transaction((tx) => tx.executeSql('SELECT 1'))
   })
 ```
 
@@ -73,13 +81,20 @@ import { initElectricSqlJs } from 'electric-sql/browser'
 
 // Start the background worker.
 const url = new URL('./worker.js', import.meta.url)
-const worker = new Worker(url, {type: "module"})
+const worker = new Worker(url, { type: 'module' })
 
 // Electrify the SQL.js / absurd-sql machinery and then open
 // a persistent, named database.
-initElectricSqlJs(worker, {locateFile: file => `/${file}`})
-  .then(SQL => SQL.openDatabase('example.db', { app: "my-app", env: "prod", token: "token", migrations: [] }))
-  .then(db => db.exec('SELECT 1'))
+initElectricSqlJs(worker, { locateFile: (file) => `/${file}` })
+  .then((SQL) =>
+    SQL.openDatabase('example.db', {
+      app: 'my-app',
+      env: 'prod',
+      token: 'token',
+      migrations: [],
+    })
+  )
+  .then((db) => db.exec('SELECT 1'))
 ```
 
 This gives you persistent, local-first SQL with active-active replication
@@ -93,7 +108,7 @@ most bundlers, including Esbuild (as of [#2508](https://github.com/evanw/esbuild
 See the [usage documentation](https://electric-sql.com/docs/guides/usage) for:
 
 - [target environment and driver specific instructions](https://electric-sql.com/docs/usage/drivers)
-- [generic instructions for integrating *any* driver](https://electric-sql.com/docs/usage/drivers#generic)
+- [generic instructions for integrating _any_ driver](https://electric-sql.com/docs/usage/drivers#generic)
 
 ### Reactivity
 
@@ -116,7 +131,7 @@ export default const App = () => {
       .then(db => setDb(db))
   }, [])
 
-  if (!db) { 
+  if (!db) {
     return null
   }
 
@@ -126,7 +141,7 @@ export default const App = () => {
     </ElectricProvider>
   )
 }
-````
+```
 
 You can then bind query results to your reactive component using the [useElectricQuery](https://github.com/electric-sql/typescript-client/blob/main/src/frameworks/react/hooks.ts) hook:
 
@@ -142,15 +157,14 @@ export const MyComponent = () => {
   const { results } = useElectricQuery('SELECT value FROM items')
 
   // Writes are made using standard SQL.
-  const [ sql ] = useElectric()
-  const addItem = () => sql.execute('INSERT INTO items VALUES(?)', [`${Date.now()}`])
+  const [sql] = useElectric()
+  const addItem = () =>
+    sql.execute('INSERT INTO items VALUES(?)', [`${Date.now()}`])
 
   return (
     <View>
       {results.map((item, index) => (
-        <Text key={index}>
-          Item: {item.value}
-        </Text>
+        <Text key={index}>Item: {item.value}</Text>
       ))}
 
       <Pressable onPress={addItem}>

@@ -18,14 +18,14 @@ import {
   NotificationCallback,
   Notifier,
   PotentialChangeCallback,
-  PotentialChangeNotification
+  PotentialChangeNotification,
 } from './index'
 
 const EVENT_NAMES = {
   authChange: 'auth:changed',
   actualDataChange: 'data:actually:changed',
   potentialDataChange: 'data:potentially:changed',
-  connectivityStateChange: 'network:connectivity:changed'
+  connectivityStateChange: 'network:connectivity:changed',
 }
 
 // Global singleton that all event notifiers use by default. Emitting an event
@@ -39,7 +39,7 @@ export class EventNotifier implements Notifier {
   attachedDbIndex: {
     byAlias: {
       [key: string]: DbName
-    },
+    }
     byName: {
       [key: DbName]: string
     }
@@ -59,12 +59,10 @@ export class EventNotifier implements Notifier {
     this.dbName = dbName
     this.attachedDbIndex = {
       byAlias: {},
-      byName: {}
+      byName: {},
     }
 
-    this.events = eventEmitter !== undefined
-      ? eventEmitter
-      : globalEmitter
+    this.events = eventEmitter !== undefined ? eventEmitter : globalEmitter
 
     this._changeCallbacks = {}
     this._connectivityStatusCallbacks = {}
@@ -138,7 +136,7 @@ export class EventNotifier implements Notifier {
     dbNames.forEach(emitPotentialChange)
   }
   actuallyChanged(dbName: DbName, changes: Change[]): void {
-    Log.info("actually changed notifier")
+    Log.info('actually changed notifier')
     if (!this._hasDbName(dbName)) {
       return
     }
@@ -209,11 +207,15 @@ export class EventNotifier implements Notifier {
     this._emitConnectivityStatus(dbName, status)
   }
 
-  subscribeToConnectivityStateChange(callback: ConnectivityStateChangeCallback) {
+  subscribeToConnectivityStateChange(
+    callback: ConnectivityStateChangeCallback
+  ) {
     const key = randomValue()
     const thisHasDbName = this._hasDbName.bind(this)
 
-    const wrappedCallback = (notification: ConnectivityStateChangeNotification) => {
+    const wrappedCallback = (
+      notification: ConnectivityStateChangeNotification
+    ) => {
       if (thisHasDbName(notification.dbName)) {
         callback(notification)
       }
@@ -252,7 +254,7 @@ export class EventNotifier implements Notifier {
   // without duplicating any dbName filter / check logic, etc.
   _emitAuthStateChange(authState: AuthState): AuthStateNotification {
     const notification = {
-      authState: authState
+      authState: authState,
     }
 
     this._emit(EVENT_NAMES.authChange, notification)
@@ -261,7 +263,7 @@ export class EventNotifier implements Notifier {
   }
   _emitPotentialChange(dbName: DbName): PotentialChangeNotification {
     const notification = {
-      dbName: dbName
+      dbName: dbName,
     }
 
     this._emit(EVENT_NAMES.potentialDataChange, notification)
@@ -271,17 +273,20 @@ export class EventNotifier implements Notifier {
   _emitActualChange(dbName: DbName, changes: Change[]): ChangeNotification {
     const notification = {
       dbName: dbName,
-      changes: changes
+      changes: changes,
     }
 
     this._emit(EVENT_NAMES.actualDataChange, notification)
 
     return notification
   }
-  _emitConnectivityStatus(dbName: DbName, connectivityState: ConnectivityState): ConnectivityStateChangeNotification {
+  _emitConnectivityStatus(
+    dbName: DbName,
+    connectivityState: ConnectivityState
+  ): ConnectivityStateChangeNotification {
     const notification = {
       dbName: dbName,
-      connectivityState
+      connectivityState,
     }
 
     this._emit(EVENT_NAMES.connectivityStateChange, notification)

@@ -5,7 +5,7 @@ import { data as baseMigration } from './schema'
 import Log from 'loglevel'
 
 const DEFAULTS: MigratorOptions = {
-  tableName: '_electric_migrations'
+  tableName: '_electric_migrations',
 }
 
 const VALID_NAME_EXP = new RegExp('^[a-z0-9_]+$', 'i')
@@ -17,8 +17,12 @@ export class BundleMigrator implements Migrator {
 
   tableName: string
 
-  constructor(adapter: DatabaseAdapter, migrations: Migration[] = [], tableName?: string) {
-    const overrides = {tableName: tableName}
+  constructor(
+    adapter: DatabaseAdapter,
+    migrations: Migration[] = [],
+    tableName?: string
+  ) {
+    const overrides = { tableName: tableName }
     const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
 
     this.adapter = adapter
@@ -48,7 +52,10 @@ export class BundleMigrator implements Migrator {
         WHERE type = 'table'
           AND name = ?
     `
-    const [{ numTables }] = await this.adapter.query({ sql: tableExists, args: [this.tableName] })
+    const [{ numTables }] = await this.adapter.query({
+      sql: tableExists,
+      args: [this.tableName],
+    })
     if (numTables == 0) {
       return []
     }
@@ -69,11 +76,15 @@ export class BundleMigrator implements Migrator {
       const migration = migrations[i]
 
       if (migration.name !== name) {
-        throw new Error(`Migrations cannot be altered once applied: expecting ${name} at index ${i}.`)
+        throw new Error(
+          `Migrations cannot be altered once applied: expecting ${name} at index ${i}.`
+        )
       }
 
       if (migration.sha256 !== sha256) {
-        throw new Error(`Migrations cannot be altered once applied: expecting ${name} to have sha256 of ${sha256}`)
+        throw new Error(
+          `Migrations cannot be altered once applied: expecting ${name} to have sha256 of ${sha256}`
+        )
       }
     })
 
@@ -87,16 +98,17 @@ export class BundleMigrator implements Migrator {
     }
 
     if (!VALID_SHA256_EXP.test(sha256)) {
-      throw new Error(`Invalid migration sha256, must match ${VALID_SHA256_EXP}`)
+      throw new Error(
+        `Invalid migration sha256, must match ${VALID_SHA256_EXP}`
+      )
     }
 
-    const applied =
-      `INSERT INTO ${this.tableName}
+    const applied = `INSERT INTO ${this.tableName}
         ('name', 'sha256', 'applied_at') VALUES (?, ?, ?)
         `
 
     await this.adapter.runInTransaction(
-      ...(satellite_body as unknown as string[]).map(sql => ({ sql })),
+      ...(satellite_body as unknown as string[]).map((sql) => ({ sql })),
       { sql: applied, args: [name, sha256, Date.now()] }
     )
   }

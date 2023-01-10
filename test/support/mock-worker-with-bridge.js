@@ -3,4 +3,4 @@ import { WorkerBridgeNotifier } from '../../src/notifiers/bridge'
 
 const workerServer = new MockElectricWorker(self, {})
 const bridgeNotifier = new WorkerBridgeNotifier('test.db', workerServer)
-workerServer.opts = {notifier: bridgeNotifier}
+workerServer.opts = { notifier: bridgeNotifier }

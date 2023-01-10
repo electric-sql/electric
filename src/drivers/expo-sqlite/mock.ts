@@ -1,4 +1,4 @@
-import { DbName, } from '../../util/types'
+import { DbName } from '../../util/types'
 
 import {
   NamedExpoDatabase,
@@ -6,7 +6,7 @@ import {
   Query,
   SQLiteCallback,
   TransactionCallback,
-  TransactionErrorCallback
+  TransactionErrorCallback,
 } from './database'
 
 export class MockDatabase implements NamedExpoDatabase {
@@ -18,22 +18,33 @@ export class MockDatabase implements NamedExpoDatabase {
     this.version = '1.0'
   }
 
-  transaction(_txFn: TransactionCallback, _error?: TransactionErrorCallback, successCallback?: () => void): void {
+  transaction(
+    _txFn: TransactionCallback,
+    _error?: TransactionErrorCallback,
+    successCallback?: () => void
+  ): void {
     if (successCallback !== undefined) {
       successCallback()
     }
   }
 
-  readTransaction(_txFn: TransactionCallback, _error?: TransactionErrorCallback, successCallback?: () => void): void {
+  readTransaction(
+    _txFn: TransactionCallback,
+    _error?: TransactionErrorCallback,
+    successCallback?: () => void
+  ): void {
     if (successCallback !== undefined) {
       successCallback()
     }
   }
 }
 
-export class MockWebSQLDatabase extends MockDatabase implements NamedWebSQLDatabase {
+export class MockWebSQLDatabase
+  extends MockDatabase
+  implements NamedWebSQLDatabase
+{
   exec(_queries: Query[], _readOnly: boolean, callback: SQLiteCallback): void {
-    callback(null, [{rowsAffected: 0, rows: []}])
+    callback(null, [{ rowsAffected: 0, rows: [] }])
   }
 
   closeAsync(): void {}
