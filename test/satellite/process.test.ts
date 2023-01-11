@@ -315,7 +315,7 @@ test('take snapshot and merge local wins', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  const incomingTs = new Date().getTime()
+  const incomingTs = new Date().getTime() - 1
   const incomingEntry = generateOplogEntry(
     tableInfo,
     'main',
