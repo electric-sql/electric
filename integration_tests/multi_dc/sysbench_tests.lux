@@ -1,6 +1,5 @@
 [doc One-direction replication pg_1 -> pg_2]
 
-[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 [global dprompt=\w+@\w+:(\S+)\#]
 
@@ -23,16 +22,6 @@
     [invoke ok2 $dprompt]
     !exit
     [invoke ok]
-
-
-[shell vaxine_1]
-    -$fail_pattern
-[shell vaxine_2]
-    -$fail_pattern
-[shell electric_1]
-    -$fail_pattern
-[shell electric_2]
-    -$fail_pattern
 
 [invoke setup_rest]
 

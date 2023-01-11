@@ -19,6 +19,7 @@
 
 [shell vaxine]
     !make start_vaxine_1
+    -$fail_pattern
     ?(application: vx_server)|(vx_server started)
 
 [shell vaxine_wait]
@@ -32,6 +33,7 @@
     [timeout 10]
     !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_electric_1
+    -$fail_pattern
     ?START_REPLICATION SLOT
     ?START_REPLICATION SLOT
 
@@ -39,6 +41,7 @@
     [timeout 10]
     !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_electric_2
+     -$fail_pattern
     ?START_REPLICATION SLOT
 [shell start_env]
     [progress setup finished]
@@ -49,7 +52,6 @@
     !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
     !make start_satellite_client_${name}
 [endmacro]
-
 
 [macro teardown]
     [progress stop development environment]

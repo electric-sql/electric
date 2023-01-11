@@ -1,15 +1,9 @@
 [doc Test one direction replication from pg_1 to pg_2]
 
-[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 
 [include shared.luxinc]
 [invoke setup]
-
-[shell vaxine]
-    -$fail_pattern
-[shell electric]
-    -$fail_pattern
 
 [macro validate_insert identity table]
 [shell pg_1]

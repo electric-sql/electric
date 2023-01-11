@@ -1,6 +1,5 @@
 [doc Bidirectional replication test pg_1 <-> pg_2]
 
-[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric]
 
 [include shared.luxinc]

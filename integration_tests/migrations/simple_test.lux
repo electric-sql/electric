@@ -52,6 +52,10 @@
     !curl http://localhost:5050/api/migrations/postgres_2
     ?{"applied_at":"[0-9-T:\.Z]{0,50}","hash":"[0-9a-zA-Z]{32}","origin":"postgres_2","vsn":"1669232573_init"}
 
+[shell electric_1]
+    # disable error pattern as we expect internal errors for the following calls
+    -
+
 [shell electric_migrate]
     !curl -v -X PUT http://localhost:5050/api/migrations/postgres_1 \
           -H 'Content-Type: application/json' -d '{"vsn":"1669232573_init"}'
@@ -67,6 +71,13 @@
           -H 'Content-Type: application/json' -d '{"vsn":"3"}'
     ?HTTP/1.1 403 Forbidden
     ?:vsn_not_found
+
+[shell electric_1]
+    ?failed to migrate to version
+    ?bad migration
+    ?bad migration
+    # Enable again to check that there are no errors during cleanup phase
+    -$fail_pattern
 
 [cleanup]
     [invoke teardown]
