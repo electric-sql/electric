@@ -1,6 +1,5 @@
-import path from 'path-browserify'
-
 import { Migration } from '../migrators/index'
+import { relativePath, relativeImportPath } from '../util/path'
 import { Path } from '../util/types'
 
 type AppName = string
@@ -36,12 +35,9 @@ export interface ElectricConfig {
   }
   debug?: boolean
 }
+export type HydratedConfig = Required<ElectricConfig>
 
-type Overrides = ElectricConfig & {
-  app?: AppName
-}
-
-const importJsonConfig = async (filePath: Path): Promise<ElectricJson> => {
+const importConfig = async (filePath: Path): Promise<ElectricJson> => {
   const mod: { default: ElectricJson } = await import(filePath)
 
   return mod.default
@@ -51,31 +47,34 @@ const importMigrations = async (
   configPath: Path,
   migrationsPath: Path
 ): Promise<Migration[]> => {
-  const bundlePath = path.join(path.dirname(configPath), migrationsPath)
-  const mod: { data: { migrations: Migration[] } } = await import(bundlePath)
+  const bundlePath = relativePath(configPath, migrationsPath)
+  const {
+    data: { migrations },
+  } = await import(bundlePath)
 
-  return mod.data.migrations
+  return migrations
 }
 
 export const electricConfig = async (
-  filePath: Path,
-  overrides: Overrides
+  configFilePath: Path,
+  importMetaUrl: Path,
+  overrides: Partial<ElectricConfig> = {}
 ): Promise<ElectricConfig> => {
-  const { migrations: migrationsPath, ...jsonConfig } = await importJsonConfig(
-    filePath
+  const configPath = relativeImportPath(configFilePath, importMetaUrl)
+
+  const { migrations: migrationsPath, ...config } = await importConfig(
+    configPath
   )
-  const migrations = await importMigrations(filePath, migrationsPath)
+  const migrations = await importMigrations(configPath, migrationsPath)
 
   return {
-    ...jsonConfig,
+    ...config,
     ...overrides,
     migrations,
   }
 }
 
-export const hydrateConfig = (
-  config: ElectricConfig
-): Required<ElectricConfig> => {
+export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   const domain = DEFAULTS.domain
   const env = config.env ?? DEFAULTS.env
 

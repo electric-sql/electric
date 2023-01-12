@@ -1,0 +1,5 @@
+{
+  "app": "tarragon-envy-5432",
+  "env": "production",
+  "migrations": "./migrations"
+}
