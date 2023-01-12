@@ -1,3 +1,4 @@
+import { ElectricConfig } from '../config/index'
 import {
   AnyDatabase,
   AnyElectricDatabase,
@@ -10,7 +11,6 @@ import { ConsoleClient, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { proxyOriginal } from '../proxy/original'
 import { DbName } from '../util/types'
-import { ElectricConfig } from '../satellite/config'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock

@@ -1,5 +1,5 @@
 import { ConsoleClient, TokenRequest, TokenResponse } from '../satellite'
-import { ElectricConfig } from '../satellite/config'
+import { ElectricConfig } from '../config/index'
 import { fetch } from 'cross-fetch'
 import Log from 'loglevel'
 

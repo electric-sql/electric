@@ -1,10 +1,10 @@
 import { initBackend } from '@aphro/absurd-sql/dist/indexeddb-main-thread'
 
 import { ServerMethod, WorkerClient } from '../../bridge/index'
+import { ElectricConfig } from '../../config/index'
 import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
 import { proxyOriginal } from '../../proxy/original'
-import { ElectricConfig } from '../../satellite/config'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'

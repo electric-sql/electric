@@ -1,5 +1,4 @@
 import { QualifiedTablename } from '../util/tablename'
-import { Migration } from '../migrators/index'
 
 export interface SatelliteConfig {
   app: string
@@ -44,58 +43,12 @@ export const satelliteClientDefaults = {
   pushPeriod: 500,
 }
 
-const baseDomain = 'electric-sql.com'
-
 export interface SatelliteClientOpts {
   host: string
   port: number
   ssl: boolean
   timeout?: number
   pushPeriod?: number
-}
-
-// Config spec
-export interface ElectricConfig {
-  app: string
-  env?: string
-  migrations?: Migration[]
-  replication?: {
-    host: string
-    port: number
-    ssl: boolean
-  }
-  console?: {
-    host: string
-  }
-  debug?: boolean
-}
-
-const electricConfigDefaults: { env: string } = {
-  env: 'default',
-}
-
-export const addDefaultsToElectricConfig = (
-  config: ElectricConfig
-): Required<ElectricConfig> => {
-  const env = config.env ?? electricConfigDefaults.env
-
-  const host =
-    config.replication?.host ?? `${env}.${config.app}.db.${baseDomain}`
-  const port = config.replication?.port ?? 443
-  const ssl = config.replication?.ssl ?? true
-  const replication = { ...config.replication, host, port, ssl }
-
-  const consoleHost = config.console?.host ?? `console.${baseDomain}`
-  const console = { ...config.console, host: consoleHost }
-
-  return {
-    app: config.app,
-    env,
-    migrations: config.migrations ?? [],
-    replication: config.replication ?? replication,
-    console: config.console ?? console,
-    debug: config.debug ?? false,
-  }
 }
 
 export const validateConfig = (config: any) => {

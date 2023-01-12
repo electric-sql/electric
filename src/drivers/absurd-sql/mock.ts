@@ -7,6 +7,7 @@ import {
 } from '../../util/types'
 
 import { WorkerServer, RequestError } from '../../bridge/index'
+import { ElectricConfig } from '../../config/index'
 import { ElectricNamespace } from '../../electric/index'
 import { MockMigrator } from '../../migrators/mock'
 import { Notification } from '../../notifiers/index'
@@ -22,7 +23,6 @@ import {
   Statement,
 } from './database'
 import { MockSocketFactory } from '../../sockets/mock'
-import { ElectricConfig } from '../../satellite/config'
 import { MockConsoleClient } from '../../auth/mock'
 
 interface TestData {

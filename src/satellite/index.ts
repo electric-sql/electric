@@ -1,4 +1,5 @@
 import { AuthState } from '../auth/index'
+import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -14,7 +15,6 @@ import {
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
-import { ElectricConfig } from './config'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {

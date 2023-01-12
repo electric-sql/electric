@@ -1,4 +1,5 @@
 import { AuthState } from '../auth/index'
+import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -6,13 +7,12 @@ import { DbName } from '../util/types'
 
 import { Satellite, Registry, ConsoleClient } from './index'
 import {
-  satelliteDefaults,
-  ElectricConfig,
-  satelliteClientDefaults,
-  validateConfig,
   SatelliteClientOpts,
   SatelliteOverrides,
   SatelliteConfig,
+  satelliteClientDefaults,
+  satelliteDefaults,
+  validateConfig,
 } from './config'
 import { SatelliteProcess } from './process'
 import { SocketFactory } from '../sockets'

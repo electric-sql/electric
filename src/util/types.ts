@@ -6,6 +6,7 @@ export type DbName = string
 export type DbNamespace = string
 export type EmptyFunction = () => void
 export type FunctionMap = { [key: string]: AnyFunction }
+export type Path = string
 export type Query = string
 export type Row = { [key: string]: SqlValue }
 export type RowCallback = (row: Row) => void

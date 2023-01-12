@@ -3,14 +3,11 @@ import { SQLiteFS } from '@aphro/absurd-sql'
 import IndexedDBBackend from '@aphro/absurd-sql/dist/indexeddb-backend'
 
 import { WorkerServer, RequestError } from '../../bridge/index'
+import { ElectricConfig, hydrateConfig } from '../../config/index'
 import { ElectricNamespace, ElectrifyOptions } from '../../electric/index'
 import { BundleMigrator } from '../../migrators/bundle'
 import { WorkerBridgeNotifier } from '../../notifiers/bridge'
 import { globalRegistry } from '../../satellite/registry'
-import {
-  addDefaultsToElectricConfig,
-  ElectricConfig,
-} from '../../satellite/config'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
@@ -47,7 +44,7 @@ export class ElectricWorker extends WorkerServer {
       throw new RequestError(400, 'Must init before opening')
     }
 
-    const configWithDefaults = addDefaultsToElectricConfig(config)
+    const configWithDefaults = hydrateConfig(config)
 
     if (configWithDefaults.debug) {
       setDebugLogLevel()

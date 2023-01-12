@@ -1,15 +1,12 @@
 import test from 'ava'
-import {
-  addDefaultsToElectricConfig,
-  ElectricConfig,
-} from '../../src/satellite/config'
+import { hydrateConfig, ElectricConfig } from '../../src/config'
 
 test('addDefaults adds expected defaults', async (t) => {
   const config: ElectricConfig = {
     app: 'app',
   }
 
-  const configWithDefaults = addDefaultsToElectricConfig(config)
+  const configWithDefaults = hydrateConfig(config)
 
   t.is(configWithDefaults.env, 'default')
   t.deepEqual(configWithDefaults.migrations, [])

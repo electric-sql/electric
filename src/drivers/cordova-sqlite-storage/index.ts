@@ -12,12 +12,9 @@ import {
 import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
-import {
-  addDefaultsToElectricConfig,
-  ElectricConfig,
-} from '../../satellite/config'
 
 import { DatabaseAdapter } from './adapter'
+import { ElectricConfig, hydrateConfig } from '../../config'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
 import { MockSocketFactory } from '../../sockets/mock'
 import { ConsoleHttpClient } from '../../auth'
@@ -31,7 +28,7 @@ export const electrify = async (
   opts?: ElectrifyOptions
 ): Promise<ElectrifiedDatabase> => {
   const dbName: DbName = db.dbname
-  const configWithDefaults = addDefaultsToElectricConfig(config)
+  const configWithDefaults = hydrateConfig(config)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator =

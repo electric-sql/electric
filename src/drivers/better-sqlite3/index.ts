@@ -1,5 +1,8 @@
 // N.b.: importing this module is an entrypoint that imports the better-sqlite3
 // environment dependencies. Specifically the node filesystem.
+
+import { hydrateConfig, ElectricConfig } from '../../config/index'
+
 import {
   ElectricNamespace,
   ElectrifyOptions,
@@ -9,10 +12,7 @@ import {
 import { BundleMigrator } from '../../migrators/bundle'
 import { EventNotifier } from '../../notifiers/event'
 import { globalRegistry } from '../../satellite/registry'
-import {
-  addDefaultsToElectricConfig,
-  ElectricConfig,
-} from '../../satellite/config'
+
 import { WebSocketNodeFactory } from '../../sockets/node'
 import { DbName } from '../../util/types'
 
@@ -29,7 +29,7 @@ export const electrify = async <T extends Database>(
   opts?: ElectrifyOptions
 ): Promise<ElectrifiedDatabase<T>> => {
   const dbName: DbName = db.name
-  const configWithDefaults = addDefaultsToElectricConfig(config)
+  const configWithDefaults = hydrateConfig(config)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator =
