@@ -19,7 +19,7 @@ test('electrify returns an equivalent database client', async (t) => {
 })
 
 test('running a transaction runs potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -30,7 +30,7 @@ test('running a transaction runs potentiallyChanged', async (t) => {
 })
 
 test('running a read only transaction does not potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 

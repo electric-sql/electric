@@ -2,7 +2,6 @@ import test from 'ava'
 import { ConnectivityStateChangeNotification } from '../../src/notifiers'
 
 import { EventNotifier } from '../../src/notifiers/event'
-import { ConnectivityState } from '../../src/util'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('subscribe to potential data changes', async (t) => {
@@ -38,7 +37,7 @@ test('potential data change subscriptions are scoped by dbName(s)', async (t) =>
 
   t.is(notifications.length, 1)
 
-  source.attach('bar.db')
+  source.attach('bar.db', 'bar.db')
   source.potentiallyChanged()
 
   t.is(notifications.length, 3)
@@ -55,11 +54,8 @@ test('subscribe to actual data changes', async (t) => {
   })
 
   const qualifiedTablename = new QualifiedTablename('main', 'items')
-  const notification = {
-    changes: [{ qualifiedTablename }],
-  }
 
-  source.actuallyChanged('test.db', notification)
+  source.actuallyChanged('test.db', [{ qualifiedTablename }])
 
   t.is(notifications.length, 1)
 })
@@ -79,25 +75,23 @@ test('actual data change subscriptions are scoped by dbName', async (t) => {
   })
 
   const qualifiedTablename = new QualifiedTablename('main', 'items')
-  const notification = {
-    changes: [{ qualifiedTablename }],
-  }
+  const changes = [{ qualifiedTablename }]
 
-  source.actuallyChanged('foo.db', notification)
+  source.actuallyChanged('foo.db', changes)
   t.is(notifications.length, 1)
 
-  source.actuallyChanged('lala.db', notification)
+  source.actuallyChanged('lala.db', changes)
   t.is(notifications.length, 1)
 
-  source.actuallyChanged('bar.db', notification)
+  source.actuallyChanged('bar.db', changes)
   t.is(notifications.length, 1)
 
-  source.attach('bar.db')
-  source.actuallyChanged('bar.db', notification)
+  source.attach('bar.db', 'bar.db')
+  source.actuallyChanged('bar.db', changes)
   t.is(notifications.length, 2)
 
-  t2.attach('foo.db')
-  source.actuallyChanged('foo.db', notification)
+  t2.attach('foo.db', 'foo.db')
+  source.actuallyChanged('foo.db', changes)
   t.is(notifications.length, 4)
 })
 

@@ -33,6 +33,7 @@ import {
   operationsToTableChanges,
   fromTransaction,
   toTransactions,
+  OplogEntryChanges,
 } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 import { base64, bytesToNumber, numberToBytes } from '../util/common'
@@ -405,7 +406,7 @@ export class SatelliteProcess implements Satellite {
     const local = await this._getEntries()
     const merged = this._mergeEntries(local, incoming)
 
-    let stmts: Statement[] = []
+    const stmts: Statement[] = []
     // switches off on transaction commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     // update lsn.
@@ -418,55 +419,13 @@ export class SatelliteProcess implements Satellite {
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
-        const { changes, primaryKeyCols, optype } = entryChanges
-        const columnNames = Object.keys(changes)
-        const pkEntries = Object.entries(primaryKeyCols)
-
-        switch (optype) {
+        switch (entryChanges.optype) {
           case OPTYPES.delete:
-            const params = pkEntries.reduce(
-              (acc, [column, value]) => {
-                acc.where.push(`${column} = ?`)
-                acc.values.push(value)
-                return acc
-              },
-              { where: [], values: [] } as { where: string[]; values: any[] }
-            )
-
-            const deleteStmt = `DELETE FROM ${tablenameStr} WHERE ${params.where.join(
-              ' AND '
-            )}`
-            stmts.push({ sql: deleteStmt, args: params.values })
+            stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
             break
 
           default:
-            const columnValues = Object.values(changes).map((c) => c.value)
-            let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
-              ', '
-            )}) VALUES (${columnValues.map((_) => '?').join(',')})`
-
-            const updateColumnStmts = columnNames
-              .filter((c) => !pkEntries.find(([pk]) => c == pk))
-              .reduce(
-                (acc, c) => {
-                  acc.where.push(`${c} = ?`)
-                  acc.values.push(changes[c].value)
-                  return acc
-                },
-                { where: [], values: [] } as { where: string[]; values: any[] }
-              )
-
-            if (updateColumnStmts.values.length > 0) {
-              insertStmt = `
-                INSERT ${insertStmt} 
-                ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
-              `
-              columnValues.push(...updateColumnStmts.values)
-            } else {
-              // no changes, can ignore statement if exists
-              insertStmt = `INSERT OR IGNORE ${insertStmt}`
-            }
-            stmts.push({ sql: insertStmt, args: columnValues })
+            stmts.push(_applyNonDeleteOperation(entryChanges, tablenameStr))
         }
       }
     }
@@ -613,7 +572,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _getClientId(): Promise<string> {
-    let clientIdKey = 'clientId'
+    const clientIdKey = 'clientId'
 
     let clientId: string = await this._getMeta(clientIdKey)
 
@@ -675,4 +634,59 @@ export class SatelliteProcess implements Satellite {
 
     return Promise.resolve(relations)
   }
+}
+
+function _applyDeleteOperation(
+  entryChanges: OplogEntryChanges,
+  tablenameStr: string
+): Statement {
+  const pkEntries = Object.entries(entryChanges.primaryKeyCols)
+  const params = pkEntries.reduce(
+    (acc, [column, value]) => {
+      acc.where.push(`${column} = ?`)
+      acc.values.push(value)
+      return acc
+    },
+    { where: [] as string[], values: [] as SqlValue[] }
+  )
+
+  return {
+    sql: `DELETE FROM ${tablenameStr} WHERE ${params.where.join(' AND ')}`,
+    args: params.values,
+  }
+}
+
+function _applyNonDeleteOperation(
+  { changes, primaryKeyCols }: OplogEntryChanges,
+  tablenameStr: string
+): Statement {
+  const columnNames = Object.keys(changes)
+  const columnValues = Object.values(changes).map((c) => c.value)
+  let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
+    ', '
+  )}) VALUES (${columnValues.map((_) => '?').join(',')})`
+
+  const updateColumnStmts = columnNames
+    .filter((c) => !(c in primaryKeyCols))
+    .reduce(
+      (acc, c) => {
+        acc.where.push(`${c} = ?`)
+        acc.values.push(changes[c].value)
+        return acc
+      },
+      { where: [] as string[], values: [] as SqlValue[] }
+    )
+
+  if (updateColumnStmts.values.length > 0) {
+    insertStmt = `
+                INSERT ${insertStmt} 
+                ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
+              `
+    columnValues.push(...updateColumnStmts.values)
+  } else {
+    // no changes, can ignore statement if exists
+    insertStmt = `INSERT OR IGNORE ${insertStmt}`
+  }
+
+  return { sql: insertStmt, args: columnValues }
 }

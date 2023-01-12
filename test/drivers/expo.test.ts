@@ -1,8 +1,6 @@
 import test from 'ava'
 
-import { DatabaseAdapter } from '../../src/drivers/expo-sqlite/adapter'
 import { NamedWebSQLDatabase } from '../../src/drivers/expo-sqlite/database'
-import { MockDatabase } from '../../src/drivers/expo-sqlite/mock'
 import { initTestable } from '../../src/drivers/expo-sqlite/test'
 
 test('electrify returns an equivalent database client', async (t) => {
@@ -18,11 +16,11 @@ test('electrify returns an equivalent database client', async (t) => {
 })
 
 test('running a transaction runs potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
-  db.transaction((tx) => {
+  db.transaction((_tx) => {
     // ...
   })
 
@@ -30,11 +28,11 @@ test('running a transaction runs potentiallyChanged', async (t) => {
 })
 
 test('running a readTransaction does not notify', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
-  db.readTransaction((tx) => {
+  db.readTransaction((_tx) => {
     // ...
   })
 
@@ -42,23 +40,23 @@ test('running a readTransaction does not notify', async (t) => {
 })
 
 test('exec notifies when readOnly is false', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db', true)
+  const [_original, notifier, db] = await initTestable('test.db', true)
   const webSqlDb = db as unknown as NamedWebSQLDatabase
 
   t.is(notifier.notifications.length, 0)
 
-  db.exec(['drop lalas'], false, () => {})
+  webSqlDb.exec([{ sql: 'drop lalas', args: [] }], false, () => {})
 
   t.is(notifier.notifications.length, 1)
 })
 
 test('exec does not notify when readOnly', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db', true)
+  const [_original, notifier, db] = await initTestable('test.db', true)
   const webSqlDb = db as unknown as NamedWebSQLDatabase
 
   t.is(notifier.notifications.length, 0)
 
-  db.exec(['select 1'], true, () => {})
+  webSqlDb.exec([{ sql: 'select 1', args: [] }], true, () => {})
 
   t.is(notifier.notifications.length, 0)
 })

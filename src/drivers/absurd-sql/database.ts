@@ -56,21 +56,21 @@ export interface Statement {
   db: Database
   stmt: string
 
-  bind(values: BindParams): boolean | Promise<boolean>
+  bind(values?: BindParams): boolean | Promise<boolean>
   step(): boolean | Promise<boolean>
   get(params?: BindParams, config?: Config): SqlValue[] | Promise<SqlValue[]>
   getColumnNames(): string[] | Promise<string[]>
   getAsObject(params?: BindParams, config?: Config): Row | Promise<Row>
   getSQL(): string | Promise<string>
   getNormalizedSQL(): string | Promise<string>
-  run(values: BindParams): boolean | Promise<boolean>
+  run(values?: BindParams): boolean | Promise<boolean>
   bindFromObject(valuesObj: Row): true | Promise<true>
   bindFromArray(values: SqlValue[]): true | Promise<true>
   reset(): boolean | Promise<boolean>
   free(): boolean | Promise<boolean>
 }
 
-export type StatementIterator = AsyncIterator<Statement>
+export type StatementIterator = AsyncGenerator<Statement>
 
 // This is the primary wrapped database client that runs in the
 // worker thread, using SQL.js with absurd-sql.
@@ -412,7 +412,7 @@ export class MainThreadDatabaseProxy implements Database {
       }
 
       const msg =
-        `Failed to create \`${fnName}\. ` +
+        `Failed to create \`${fnName}. ` +
         `Have you added it to \`self.user_defined_functions\` ` +
         `in your worker.js?`
       throw new Error(msg)

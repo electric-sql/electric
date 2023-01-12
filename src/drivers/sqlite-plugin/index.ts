@@ -87,7 +87,7 @@ export abstract class ElectricSQLitePlugin implements ProxyWrapper {
         potentiallyChanged()
       }
 
-      if (!!originalSuccessFn) {
+      if (originalSuccessFn) {
         originalSuccessFn(...args)
       }
     }

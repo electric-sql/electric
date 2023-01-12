@@ -56,7 +56,7 @@ export const generateOplogEntry = (
 
   const newRow = generateFrom(schema, newValues)
 
-  let oldRow: Row = {}
+  let oldRow: ReturnType<typeof generateFrom> = {}
   if (optype === OPTYPES.update || optype === OPTYPES.delete) {
     oldRow = generateFrom(schema, oldValues)
   }
@@ -65,6 +65,7 @@ export const generateOplogEntry = (
     namespace,
     tablename,
     optype,
+    rowid: timestamp,
     newRow: JSON.stringify(newRow.columns),
     oldRow: JSON.stringify(oldRow.columns),
     primaryKey: JSON.stringify({ ...oldRow.primaryKey, ...newRow.primaryKey }),
@@ -74,21 +75,25 @@ export const generateOplogEntry = (
   return result
 }
 
-const generateFrom = (schema: TableSchema, values: Row) => {
-  const columnValues = schema.columns.map((column) => {
-    const columnValue = values[column]
+const generateFrom = (
+  schema: TableSchema,
+  values: Row
+): { columns?: Row; primaryKey?: Row } => {
+  const columns = schema.columns.reduce((acc, column) => {
+    if (values[column] !== undefined) {
+      acc[column] = values[column]
+    }
 
-    return columnValue !== undefined ? [column, columnValue] : []
-  })
+    return acc
+  }, {} as Row)
 
-  const pkValues = schema.primaryKey.map((pk) => {
-    const pkValue = values[pk]
+  const primaryKey = schema.primaryKey.reduce((acc, column) => {
+    if (values[column] !== undefined) {
+      acc[column] = values[column]
+    }
 
-    return pkValue !== undefined ? [pk, pkValue] : []
-  })
+    return acc
+  }, {} as Row)
 
-  return {
-    columns: Object.fromEntries(columnValues),
-    primaryKey: Object.fromEntries(pkValues),
-  }
+  return { columns, primaryKey }
 }

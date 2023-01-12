@@ -181,7 +181,7 @@ test('iterating a prepared statement works', async (t) => {
   t.is(notifier.notifications.length, 0)
 
   const stmt = db.prepare('insert into parent')
-  const results = [...stmt.iterate()]
+  Array.from(stmt.iterate())
 
   t.is(opts.notifier.notifications.length, 1)
 })

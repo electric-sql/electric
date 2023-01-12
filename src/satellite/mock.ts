@@ -121,7 +121,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   close(): Promise<void | SatelliteError> {
     this.closed = true
-    for (let t of this.timeouts) {
+    for (const t of this.timeouts) {
       clearTimeout(t)
     }
     return Promise.resolve()

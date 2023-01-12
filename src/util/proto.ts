@@ -10,7 +10,7 @@ type MappingTuples = {
 // NOTE: This mapping should be kept in sync with Electric message mapping.
 // Take into account that this mapping is dependent on the protobuf
 // protocol version.
-let msgtypetuples: MappingTuples = {
+const msgtypetuples: MappingTuples = {
   SatErrorResp: [0, Pb.SatErrorResp],
   SatAuthReq: [1, Pb.SatAuthReq],
   SatAuthResp: [2, Pb.SatAuthResp],
@@ -25,11 +25,11 @@ let msgtypetuples: MappingTuples = {
   SatMigrationNotification: [11, Pb.SatMigrationNotification],
 }
 
-let msgtypemapping = Object.fromEntries(
+const msgtypemapping = Object.fromEntries(
   Object.entries(msgtypetuples).map((e) => [getFullTypeName(e[0]), e[1]])
 )
 
-let codemapping = Object.fromEntries(
+const codemapping = Object.fromEntries(
   Object.entries(msgtypetuples).map((e) => [e[1][0], getFullTypeName(e[0])])
 )
 
@@ -79,7 +79,7 @@ export function getObjFromString(string_type: string) {
 export function getSizeBuf(msg_type: SatPbMsg) {
   const msgtype = getMsgType(msg_type)
 
-  var buf = new Uint8Array(1)
+  const buf = new Uint8Array(1)
   buf.set([msgtype], 0)
   return buf
 }

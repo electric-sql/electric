@@ -19,19 +19,19 @@ import { MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
 
-type RetVal = Promise<[Database, Notifier, ElectrifiedDatabase]>
+type RetVal<N extends Notifier> = Promise<[Database, N, ElectrifiedDatabase]>
 
 const testConfig = { app: 'app', token: 'token' }
 
-export const initTestable = async (
+export const initTestable = async <N extends Notifier = MockNotifier>(
   dbName: DbName,
   config = testConfig,
   opts?: ElectrifyOptions
-): RetVal => {
+): RetVal<N> => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
-  const notifier = opts?.notifier || new MockNotifier(dbName)
+  const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
   const migrator = opts?.migrator || new MockMigrator()
   const socketFactory = opts?.socketFactory || new MockSocketFactory()
   const console = opts?.console || new MockConsoleClient()

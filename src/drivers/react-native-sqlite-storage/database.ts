@@ -11,17 +11,15 @@ export interface Database extends SQLitePlugin {
   // this is diffferent to Cordova which uses `.dbname`.
   dbName: DbName
 
+  attach(dbName: DbName, dbAlias: DbName): Promise<void>
   attach(
     dbName: DbName,
     dbAlias: DbName,
     success?: AnyFunction,
     error?: AnyFunction
-  ): VoidOrPromise
-  detach(
-    dbAlias: DbName,
-    success?: AnyFunction,
-    error?: AnyFunction
-  ): VoidOrPromise
+  ): void
+  detach(dbName: DbName): Promise<void>
+  detach(dbName: DbName, success?: AnyFunction, error?: AnyFunction): void
 
   // XXX we use `echoTest` to detect whether the promises API is enabled.
   // This could be removed if we require the user to tell us whether they've
@@ -53,12 +51,19 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
   // and running SQL statements against them both, so we also hook
   // into `attach` and `detach` to keep a running tally of all
   // the names of the attached databases.
+  attach(dbName: DbName, dbAlias: DbName): Promise<void>
   attach(
     dbName: DbName,
-    dbAlias: string,
+    dbAlias: DbName,
     success?: AnyFunction,
     error?: AnyFunction
-  ): VoidOrPromise {
+  ): void
+  attach(
+    dbName: DbName,
+    dbAlias: DbName,
+    success?: AnyFunction,
+    error?: AnyFunction
+  ): void | Promise<void> {
     const notifier = this.electric.notifier
     const promisesEnabled = this._promisesEnabled
     const originalSuccessFn = success
@@ -80,6 +85,8 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
     return this._db.attach(dbName, dbAlias, successFn, error)
   }
 
+  detach(dbName: DbName): Promise<void>
+  detach(dbName: DbName, success?: AnyFunction, error?: AnyFunction): void
   detach(
     dbAlias: string,
     success?: AnyFunction,
@@ -92,7 +99,7 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
     const successFn = (...args: any[]): any => {
       notifier.detach(dbAlias)
 
-      if (!!originalSuccessFn) {
+      if (originalSuccessFn) {
         return originalSuccessFn(...args)
       }
     }

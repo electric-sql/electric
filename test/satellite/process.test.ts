@@ -34,6 +34,7 @@ import {
   ChangeType,
   ConnectivityState,
   LSN,
+  Relation,
   SqlValue,
   Transaction,
 } from '../../src/util/types'
@@ -58,6 +59,7 @@ interface TestSatellite extends Satellite {
   _getMeta(key: string): Promise<string>
   _ack(lsn: number, isAck: boolean): Promise<void>
   _connectivityStateChange(status: ConnectivityState): void
+  _getLocalRelations(): Promise<{ [k: string]: Relation }>
 }
 
 type ContextType = {
@@ -583,7 +585,7 @@ test('merge incoming with empty local', async (t) => {
     ),
   ]
 
-  const local = []
+  const local: OplogEntry[] = []
 
   const merged = satellite._mergeEntries(local, incoming)
   const item = merged['main.parent']['1']

@@ -18,12 +18,11 @@ test('electrify returns an equivalent database client', async (t) => {
   })
 })
 
-test.only('running a transaction runs potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+test('running a transaction runs potentiallyChanged', async (t) => {
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
-  const tx = new MockSQLitePluginTransaction()
   db.transaction((tx) => {
     tx.executeSql('insert foo into bar')
   })
@@ -32,7 +31,7 @@ test.only('running a transaction runs potentiallyChanged', async (t) => {
 })
 
 test('adding a transaction runs potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -43,7 +42,7 @@ test('adding a transaction runs potentiallyChanged', async (t) => {
 })
 
 test('adding a read only transaction does not potentiallyChanged', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -54,7 +53,7 @@ test('adding a read only transaction does not potentiallyChanged', async (t) => 
 })
 
 test('attaching a database now notifies for both', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -65,7 +64,7 @@ test('attaching a database now notifies for both', async (t) => {
 })
 
 test('detaching a database notifies for one less', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db')
+  const [_original, notifier, db] = await initTestable('test.db')
 
   t.is(notifier.notifications.length, 0)
 
@@ -80,20 +79,8 @@ test('detaching a database notifies for one less', async (t) => {
   t.is(notifier.notifications.length, 3)
 })
 
-test('enablePromiseRuntime(mockDb) works', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db', {
-    enablePromises: true,
-  })
-
-  return original.attach('lala.db', 'lala').then((arg) => {
-    t.is(arg, 'mocked!')
-  })
-})
-
 test('working with the promise runtime works', async (t) => {
-  const [original, notifier, db] = await initTestable('test.db', {
-    enablePromises: true,
-  })
+  const [_original, notifier, db] = await initTestable('test.db', true)
 
   t.is(notifier.notifications.length, 0)
 

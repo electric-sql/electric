@@ -85,9 +85,11 @@
     "dev": "tsmodule dev",
     "build": "rm -rf ./dist && tsc && tsmodule build",
     "test": "ava",
-    "pretest": "yarn build",
-    "prepublishOnly": "yarn test",
+    "typecheck": "tsc -p tsconfig.tests.json",
+    "posttest": "yarn typecheck",
+    "prepublishOnly": "yarn test && yarn typecheck",
     "lint": "eslint src --fix",
+    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "prepare": "husky install"
   },
   "ava": {
@@ -126,9 +128,11 @@
     "ws": "^8.8.1"
   },
   "devDependencies": {
+    "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "^40.0.17",
     "@types/base-64": "^1.0.0",
+    "@types/better-sqlite3": "^7.6.3",
     "@types/node": "^18.8.4",
     "@types/react": "^18.0.18",
     "@types/ws": "^8.5.3",
@@ -136,7 +140,6 @@
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
     "better-sqlite3": "^7.6.2",
-    "browser-env": "^3.3.0",
     "eslint": "^8.22.0",
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",

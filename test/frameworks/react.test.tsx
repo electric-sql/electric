@@ -1,7 +1,7 @@
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
 import test from 'ava'
 
-import browserEnv from 'browser-env'
+import browserEnv from '@ikscodes/browser-env'
 browserEnv()
 
 import React from 'react'
@@ -34,6 +34,8 @@ const makeElectrified = (namespace: ElectricNamespace): ElectrifiedDatabase => {
   }
 }
 
+type FC = React.FC<React.PropsWithChildren>
+
 test('useElectricQuery returns query results', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original)
@@ -41,7 +43,7 @@ test('useElectricQuery returns query results', async (t) => {
   const namespace = new ElectricNamespace(adapter, notifier)
 
   const query = 'select foo from bars'
-  const wrapper = ({ children }) => {
+  const wrapper: FC = ({ children }) => {
     return (
       <ElectricProvider db={makeElectrified(namespace)}>
         {children}
@@ -69,7 +71,7 @@ test('useElectricQuery returns error when query errors', async (t) => {
   const query = 'select foo from bars'
   const params = { shouldError: 1 }
 
-  const wrapper = ({ children }) => {
+  const wrapper: FC = ({ children }) => {
     return (
       <ElectricProvider db={makeElectrified(namespace)}>
         {children}
@@ -77,7 +79,7 @@ test('useElectricQuery returns error when query errors', async (t) => {
     )
   }
 
-  const { result } = renderHook(() => useElectricQuery(query, [params]), {
+  const { result } = renderHook(() => useElectricQuery(query, params), {
     wrapper,
   })
 
@@ -95,7 +97,7 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
 
   const query = 'select foo from bars'
 
-  const wrapper = ({ children }) => {
+  const wrapper: FC = ({ children }) => {
     return (
       <ElectricProvider db={makeElectrified(namespace)}>
         {children}
@@ -132,7 +134,7 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
   await notifier.attach('baz.db', 'baz')
   const query = 'select foo from baz.bars'
 
-  const wrapper = ({ children }) => {
+  const wrapper: FC = ({ children }) => {
     return (
       <ElectricProvider db={makeElectrified(namespace)}>
         {children}

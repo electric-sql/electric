@@ -4,7 +4,7 @@ on: [push, workflow_call]
 
 jobs:
   verify_formatting:
-    name: Check formatting
+    name: Check formatting & linting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -12,7 +12,17 @@ jobs:
         with:
           node-version: 18
       - run: make deps
-      - run: npx prettier --check .
+      - run: yarn check-styleguide
+  check_types:
+    name: Check types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: make deps
+      - run: yarn typecheck
   test:
     runs-on: ubuntu-latest
     strategy:

@@ -8,6 +8,7 @@ import {
   MainThreadStatementProxy,
 } from '../../src/drivers/absurd-sql/database'
 import { resultToRows } from '../../src/drivers/absurd-sql/result'
+import { Row } from '../../src/util'
 
 const initMethod: ServerMethod = { target: 'server', name: 'init' }
 const openMethod: ServerMethod = { target: 'server', name: 'open' }
@@ -51,7 +52,7 @@ test('the main thread proxy provides the expected methods', async (t) => {
     'iterateStatements',
     'prepare',
     'run',
-  ]
+  ] as const
 
   targetMethods.forEach((key) => t.is(typeof db[key], 'function'))
 })
@@ -149,7 +150,7 @@ test('db.each works', async (t) => {
   const sql = 'select * from lalas'
 
   let isDone = false
-  const results = []
+  const results: Row[] = []
 
   const handleRow = (row: Row) => {
     results.push(row)
@@ -169,7 +170,7 @@ test('db.each works without bindParams', async (t) => {
   const sql = 'select * from lalas'
 
   let isDone = false
-  const results = []
+  const results: Row[] = []
 
   const handleRow = (row: Row) => {
     results.push(row)
@@ -420,10 +421,10 @@ test('db.each notifies', async (t) => {
 
   const db = new MainThreadDatabaseProxy('test.db', client)
 
-  const handleRow = (row: Row) => {}
+  const handleRow = (_row: Row) => {}
   const handleDone = () => {}
 
-  const retval = await db.each('insert into lala', handleRow, handleDone)
+  await db.each('insert into lala', handleRow, handleDone)
 
   const testData = await client.request(getTestData, 'test.db')
   const notifications = testData.notifications
@@ -439,7 +440,7 @@ test("db.iterateStatements doesn't notify on its own", async (t) => {
   const db = new MainThreadDatabaseProxy('test.db', client)
 
   const statements = 'select 1; insert into 2; select 3; insert into 4'
-  for await (const stmt of db.iterateStatements(statements)) {
+  for await (const _stmt of db.iterateStatements(statements)) {
     // we don't do anything here
   }
 

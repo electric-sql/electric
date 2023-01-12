@@ -225,7 +225,9 @@ export const proxy = (db: Database, namespace: ElectricNamespace): Database => {
   return proxyOriginal(db, electric)
 }
 
-type UnpatchedDatabase = Omit<Database, 'exec' | 'prepare' | 'transaction'>
-export interface ElectrifiedDatabase
-  extends UnpatchedDatabase,
-    ElectricDatabase {}
+type UnpatchedDatabase<T extends Database> = Omit<
+  T,
+  'exec' | 'prepare' | 'transaction'
+>
+export type ElectrifiedDatabase<T extends Database = Database> =
+  UnpatchedDatabase<T> & ElectricDatabase

@@ -1,38 +1,14 @@
-import {
-  SatInStopReplicationResp,
-  SatInStartReplicationResp,
-  SatOpCommit,
-  SatOpBegin,
-  SatOpLog,
-  SatPingReq,
-  SatOpInsert,
-  SatRelation,
-  SatRelationColumn,
-  SatRelation_RelationType,
-  SatOpUpdate,
-  SatOpDelete,
-  SatTransOp,
-  SatAuthResp,
-  SatPingResp,
-  SatInStartReplicationReq,
-  SatInStartReplicationReq_Option,
-} from '../../src/_generated/proto/satellite'
-import { WebSocketNodeFactory } from '../../src/sockets/node'
+import anyTest, { TestFn } from 'ava'
+import Long from 'long'
+import { AuthState } from '../../src/auth'
+import { MockNotifier } from '../../src/notifiers'
 import {
   deserializeRow,
   SatelliteClient,
   serializeRow,
 } from '../../src/satellite/client'
-import { SatelliteWSServerStub } from './server_ws_stub'
-import test from 'ava'
-import Long from 'long'
-import {
-  AckType,
-  ChangeType,
-  SatelliteErrorCode,
-  Transaction,
-  Relation,
-} from '../../src/util/types'
+import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
+import { WebSocketNodeFactory } from '../../src/sockets/node'
 import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
 import {
   getObjFromString,
@@ -40,9 +16,24 @@ import {
   getTypeFromString,
   SatPbMsg,
 } from '../../src/util/proto'
-import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
+import {
+  AckType,
+  ChangeType,
+  Relation,
+  SatelliteErrorCode,
+  Transaction,
+} from '../../src/util/types'
+import * as Proto from '../../src/_generated/proto/satellite'
 import { relations } from './common'
-import { MockNotifier } from '../../src/notifiers'
+import { SatelliteWSServerStub } from './server_ws_stub'
+
+interface Context extends AuthState {
+  server: SatelliteWSServerStub
+  client: SatelliteClient
+  clientId: string
+}
+
+const test = anyTest as TestFn<Context>
 
 test.beforeEach((t) => {
   const server = new SatelliteWSServerStub()
@@ -55,8 +46,6 @@ test.beforeEach((t) => {
     new WebSocketNodeFactory(),
     new MockNotifier(dbName),
     {
-      app: 'fake_id',
-      token: 'fake_token',
       host: '127.0.0.1',
       port: 30002,
       timeout: 10000,
@@ -69,31 +58,28 @@ test.beforeEach((t) => {
     server,
     client,
     clientId,
+    app: 'fake_id',
+    env: 'default',
+    token: 'fake_token',
   }
 })
 
-type Context = {
-  server: SatelliteWSServerStub
-  client: SatelliteClient
-  clientId: string
-}
-
 test.afterEach.always(async (t) => {
-  const { server, client } = t.context as Context
+  const { server, client } = t.context
 
   await client.close()
   server.close()
 })
 
 test.serial('connect success', async (t) => {
-  const { client } = t.context as Context
+  const { client } = t.context
 
   await client.connect()
   t.pass()
 })
 
 test.serial('connection backoff success', async (t) => {
-  const { client, server } = t.context as Context
+  const { client, server } = t.context
 
   server.close()
 
@@ -111,7 +97,7 @@ test.serial('connection backoff success', async (t) => {
 })
 
 test.serial('connection backoff failure', async (t) => {
-  const { client, server } = t.context as Context
+  const { client, server } = t.context
 
   server.close()
 
@@ -131,16 +117,16 @@ test.serial('connection backoff failure', async (t) => {
 
 // TODO: handle connection errors scenarios
 
-async function connectAndAuth({ client, server, clientId }) {
-  await client.connect()
+async function connectAndAuth(context: Context) {
+  await context.client.connect()
 
-  const authResp = SatAuthResp.fromPartial({})
-  server.nextResponses([authResp])
-  await client.authenticate(clientId)
+  const authResp = Proto.SatAuthResp.fromPartial({})
+  context.server.nextResponses([authResp])
+  await context.client.authenticate(context)
 }
 
 test.serial('replication start timeout', async (t) => {
-  const { client, server } = t.context as Context
+  const { client, server } = t.context
   client['opts'].timeout = 10
   await client.connect()
 
@@ -149,28 +135,29 @@ test.serial('replication start timeout', async (t) => {
   try {
     await client.startReplication()
     t.fail(`start replication should throw`)
-  } catch (error) {
-    t.is(error!.code, SatelliteErrorCode.TIMEOUT)
+  } catch (error: any) {
+    t.is(error.code, SatelliteErrorCode.TIMEOUT)
   }
 })
 
 test.serial('authentication success', async (t) => {
-  const { client, server, clientId } = t.context as Context
+  const { client, server } = t.context
   await client.connect()
 
-  const authResp = SatAuthResp.fromPartial({ id: 'server_identity' })
+  const authResp = Proto.SatAuthResp.fromPartial({ id: 'server_identity' })
   server.nextResponses([authResp])
 
-  const res = await client.authenticate(clientId)
+  const res = await client.authenticate(t.context)
+  t.assert(res)
   t.is(res['serverId'], 'server_identity')
   t.is(client['inbound'].authenticated, true)
 })
 
 test.serial('replication start success', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const startResp = SatInStartReplicationResp.fromPartial({})
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
   server.nextResponses([startResp])
 
   await client.startReplication()
@@ -178,16 +165,21 @@ test.serial('replication start success', async (t) => {
 })
 
 test.serial('replication start sends FIRST_LSN', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
   return new Promise(async (resolve) => {
     server.nextResponses([
       (data?: Buffer) => {
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(SatInStartReplicationReq.$type)) {
-          const req = decode(data!) as SatInStartReplicationReq
-          t.deepEqual(req.options[0], SatInStartReplicationReq_Option.FIRST_LSN)
+        if (
+          msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
+        ) {
+          const req = decode(data!) as Proto.SatInStartReplicationReq
+          t.deepEqual(
+            req.options[0],
+            Proto.SatInStartReplicationReq_Option.FIRST_LSN
+          )
           t.pass()
           resolve()
         }
@@ -198,10 +190,10 @@ test.serial('replication start sends FIRST_LSN', async (t) => {
 })
 
 test.serial('replication start failure', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const startResp = SatInStartReplicationResp.fromPartial({})
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
   server.nextResponses([startResp])
 
   try {
@@ -213,11 +205,11 @@ test.serial('replication start failure', async (t) => {
 })
 
 test.serial('replication stop success', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const start = SatInStartReplicationResp.fromPartial({})
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
   server.nextResponses([start])
   server.nextResponses([stop])
 
@@ -227,10 +219,10 @@ test.serial('replication stop success', async (t) => {
 })
 
 test.serial('replication stop failure', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
   server.nextResponses([stop])
 
   try {
@@ -242,12 +234,12 @@ test.serial('replication stop failure', async (t) => {
 })
 
 test.serial('server pings client', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const start = SatInStartReplicationResp.fromPartial({})
-  const ping = SatPingReq.fromPartial({})
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const ping = Proto.SatPingReq.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
 
   return new Promise(async (resolve) => {
     server.nextResponses([start, ping])
@@ -265,66 +257,66 @@ test.serial('server pings client', async (t) => {
 })
 
 test.serial('receive transaction over multiple messages', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const start = SatInStartReplicationResp.fromPartial({})
-  const begin = SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
-  const commit = SatOpCommit.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
+  const commit = Proto.SatOpCommit.fromPartial({})
 
   const rel: Relation = {
     id: 1,
     schema: 'schema',
     table: 'table',
-    tableType: SatRelation_RelationType.TABLE,
+    tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
       { name: 'name1', type: 'TEXT' },
       { name: 'name2', type: 'TEXT' },
     ],
   }
 
-  const relation = SatRelation.fromPartial({
+  const relation = Proto.SatRelation.fromPartial({
     relationId: 1,
     schemaName: 'schema',
     tableName: 'table',
-    tableType: SatRelation_RelationType.TABLE,
+    tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      SatRelationColumn.fromPartial({ name: 'name1', type: 'TEXT' }),
-      SatRelationColumn.fromPartial({ name: 'name2', type: 'TEXT' }),
+      Proto.SatRelationColumn.fromPartial({ name: 'name1', type: 'TEXT' }),
+      Proto.SatRelationColumn.fromPartial({ name: 'name2', type: 'TEXT' }),
     ],
   })
 
-  const insertOp = SatOpInsert.fromPartial({
+  const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
     rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel),
   })
 
-  const updateOp = SatOpUpdate.fromPartial({
+  const updateOp = Proto.SatOpUpdate.fromPartial({
     relationId: 1,
     rowData: serializeRow({ name1: 'Hello', name2: 'World!' }, rel),
     oldRowData: serializeRow({ name1: '', name2: '' }, rel),
   })
-  const deleteOp = SatOpDelete.fromPartial({
+  const deleteOp = Proto.SatOpDelete.fromPartial({
     relationId: 1,
     oldRowData: serializeRow({ name1: 'Hello', name2: 'World!' }, rel),
   })
 
-  const firstOpLogMessage = SatOpLog.fromPartial({
+  const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
-      SatTransOp.fromPartial({ begin }),
-      SatTransOp.fromPartial({ insert: insertOp }),
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ insert: insertOp }),
     ],
   })
 
-  const secondOpLogMessage = SatOpLog.fromPartial({
+  const secondOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
-      SatTransOp.fromPartial({ update: updateOp }),
-      SatTransOp.fromPartial({ delete: deleteOp }),
-      SatTransOp.fromPartial({ commit }),
+      Proto.SatTransOp.fromPartial({ update: updateOp }),
+      Proto.SatTransOp.fromPartial({ delete: deleteOp }),
+      Proto.SatTransOp.fromPartial({ commit }),
     ],
   })
 
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
 
   server.nextResponses([start, relation, firstOpLogMessage, secondOpLogMessage])
   server.nextResponses([stop])
@@ -340,23 +332,26 @@ test.serial('receive transaction over multiple messages', async (t) => {
 })
 
 test.serial('acknowledge lsn', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
   const lsn = base64.toBytes('FAKE')
 
-  const start = SatInStartReplicationResp.fromPartial({})
-  const begin = SatOpBegin.fromPartial({ lsn: lsn, commitTimestamp: Long.ZERO })
-  const commit = SatOpCommit.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const begin = Proto.SatOpBegin.fromPartial({
+    lsn: lsn,
+    commitTimestamp: Long.ZERO,
+  })
+  const commit = Proto.SatOpCommit.fromPartial({})
 
-  const opLog = SatOpLog.fromPartial({
+  const opLog = Proto.SatOpLog.fromPartial({
     ops: [
-      SatTransOp.fromPartial({ begin }),
-      SatTransOp.fromPartial({ commit }),
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ commit }),
     ],
   })
 
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
 
   server.nextResponses([start, opLog])
   server.nextResponses([stop])
@@ -376,10 +371,10 @@ test.serial('acknowledge lsn', async (t) => {
 })
 
 test.serial('send transaction', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const startResp = SatInStartReplicationResp.fromPartial({})
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
 
   const opLogEntries: OplogEntry[] = [
     {
@@ -424,8 +419,8 @@ test.serial('send transaction', async (t) => {
     server.nextResponses([
       (data?: Buffer) => {
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(SatRelation.$type)) {
-          const relation = decode(data!) as SatRelation
+        if (msgType == getTypeFromString(Proto.SatRelation.$type)) {
+          const relation = decode(data!) as Proto.SatRelation
           t.deepEqual(relation.relationId, 1)
         }
       },
@@ -435,8 +430,8 @@ test.serial('send transaction', async (t) => {
     server.nextResponses([
       (data?: Buffer) => {
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(SatOpLog.$type)) {
-          const satOpLog = (decode(data!) as SatOpLog).ops
+        if (msgType == getTypeFromString(Proto.SatOpLog.$type)) {
+          const satOpLog = (decode(data!) as Proto.SatOpLog).ops
 
           const lsn = satOpLog[0].begin?.lsn as Uint8Array
           t.is(bytesToNumber(lsn), 1)
@@ -450,8 +445,8 @@ test.serial('send transaction', async (t) => {
     server.nextResponses([
       (data?: Buffer) => {
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(SatOpLog.$type)) {
-          const satOpLog = (decode(data!) as SatOpLog).ops
+        if (msgType == getTypeFromString(Proto.SatOpLog.$type)) {
+          const satOpLog = (decode(data!) as Proto.SatOpLog).ops
 
           const lsn = satOpLog[0].begin?.lsn as Uint8Array
           t.is(bytesToNumber(lsn), 2)
@@ -473,13 +468,13 @@ test.serial('send transaction', async (t) => {
 })
 
 test('ack on send and pong', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
   const lsn_1 = numberToBytes(1)
 
-  const startResp = SatInStartReplicationResp.fromPartial({})
-  const pingResponse = SatPingResp.fromPartial({ lsn: lsn_1 })
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  const pingResponse = Proto.SatPingResp.fromPartial({ lsn: lsn_1 })
 
   server.nextResponses([startResp])
   server.nextResponses([])
@@ -521,19 +516,19 @@ test('ack on send and pong', async (t) => {
 })
 
 test.serial('default and null test', async (t) => {
-  await connectAndAuth(t.context as Context)
-  const { client, server } = t.context as Context
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
 
-  const start = SatInStartReplicationResp.fromPartial({})
-  const begin = SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
-  const commit = SatOpCommit.fromPartial({})
-  const stop = SatInStopReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
+  const commit = Proto.SatOpCommit.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.fromPartial({})
 
   const rel: Relation = {
     id: 1,
     schema: 'schema',
     table: 'items',
-    tableType: SatRelation_RelationType.TABLE,
+    tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
       { name: 'id', type: 'uuid' },
       { name: 'content', type: 'text' },
@@ -544,28 +539,31 @@ test.serial('default and null test', async (t) => {
     ],
   }
 
-  const relation = SatRelation.fromPartial({
+  const relation = Proto.SatRelation.fromPartial({
     relationId: 1,
     schemaName: 'schema',
     tableName: 'table',
-    tableType: SatRelation_RelationType.TABLE,
+    tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      SatRelationColumn.fromPartial({ name: 'id', type: 'uuid' }),
-      SatRelationColumn.fromPartial({ name: 'content', type: 'varchar' }),
-      SatRelationColumn.fromPartial({ name: 'text_null', type: 'text' }),
-      SatRelationColumn.fromPartial({
+      Proto.SatRelationColumn.fromPartial({ name: 'id', type: 'uuid' }),
+      Proto.SatRelationColumn.fromPartial({ name: 'content', type: 'varchar' }),
+      Proto.SatRelationColumn.fromPartial({ name: 'text_null', type: 'text' }),
+      Proto.SatRelationColumn.fromPartial({
         name: 'text_null_default',
         type: 'text',
       }),
-      SatRelationColumn.fromPartial({ name: 'intvalue_null', type: 'int4' }),
-      SatRelationColumn.fromPartial({
+      Proto.SatRelationColumn.fromPartial({
+        name: 'intvalue_null',
+        type: 'int4',
+      }),
+      Proto.SatRelationColumn.fromPartial({
         name: 'intvalue_null_default',
         type: 'int4',
       }),
     ],
   })
 
-  const insertOp = SatOpInsert.fromPartial({
+  const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
     rowData: serializeRow(
       {
@@ -580,7 +578,7 @@ test.serial('default and null test', async (t) => {
     ),
   })
 
-  const serializedRow: SatOpRow = {
+  const serializedRow: Proto.SatOpRow = {
     $type: 'Electric.Satellite.v0_2.SatOpRow',
     nullsBitmask: new Uint8Array([40]),
     values: [
@@ -605,11 +603,11 @@ test.serial('default and null test', async (t) => {
 
   console.log(`insert: ${JSON.stringify(insertOp)}`)
 
-  const firstOpLogMessage = SatOpLog.fromPartial({
+  const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
-      SatTransOp.fromPartial({ begin }),
-      SatTransOp.fromPartial({ insert: insertOp }),
-      SatTransOp.fromPartial({ commit }),
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ insert: insertOp }),
+      Proto.SatTransOp.fromPartial({ commit }),
     ],
   })
 

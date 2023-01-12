@@ -14,7 +14,7 @@ export interface Results {
 }
 
 export const rowsFromResults = (results: Results): Row[] => {
-  if (!!results.rows.raw) {
+  if (results.rows.raw) {
     return results.rows.raw()
   }
 

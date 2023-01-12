@@ -139,15 +139,12 @@ export abstract class BaseRegistry implements Registry {
     throw new Error(`Satellite not running for db: ${dbName}`)
   }
 
-  async stop(
-    dbName: DbName,
-    shouldIncludeStarting: boolean = true
-  ): Promise<void> {
+  async stop(dbName: DbName, shouldIncludeStarting = true): Promise<void> {
     // If in the process of starting, wait for it to start and then stop it.
     if (shouldIncludeStarting) {
       const stop = this.stop.bind(this)
       const startingPromises = this.startingPromises
-      let starting = startingPromises[dbName]
+      const starting = startingPromises[dbName]
       if (starting !== undefined) {
         return starting.then((_satellite) => stop(dbName))
       }
@@ -174,7 +171,7 @@ export abstract class BaseRegistry implements Registry {
     }
   }
 
-  async stopAll(shouldIncludeStarting: boolean = true): Promise<void> {
+  async stopAll(shouldIncludeStarting = true): Promise<void> {
     const stop = this.stop.bind(this)
 
     const running = Object.keys(this.satellites).map((dbName) => stop(dbName))

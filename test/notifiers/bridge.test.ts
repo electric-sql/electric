@@ -7,7 +7,6 @@ import {
   WorkerClient,
 } from '../../src/bridge/index'
 import { MainThreadBridgeNotifier } from '../../src/notifiers/bridge'
-import { QualifiedTablename } from '../../src/util/tablename'
 
 const makeWorker = () => {
   return new Worker('./test/support/mock-worker.js', { type: 'module' })
@@ -56,7 +55,7 @@ const callActuallyChanged: NotifyMethod = {
 test('server is notified about potential data changes', async (t) => {
   const [client, notifier] = await setupWorker()
 
-  notifier.potentiallyChanged('test.db')
+  notifier.potentiallyChanged()
 
   let testData = await client.request(getTestData, 'test.db')
   let notifications = testData.notifications

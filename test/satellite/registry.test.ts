@@ -1,5 +1,4 @@
 import test from 'ava'
-import { AuthState } from '../../src/auth'
 
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
@@ -178,7 +177,7 @@ test('stop works if starting', async (t) => {
 
 test('stopAll works', async (t) => {
   const mockRegistry = new MockRegistry()
-  const [s1, s2, s3] = await Promise.all([
+  const [_s1, _s2, _s3] = await Promise.all([
     mockRegistry.ensureStarted(
       'a.db',
       adapter,

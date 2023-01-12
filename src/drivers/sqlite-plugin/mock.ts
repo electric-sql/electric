@@ -65,7 +65,7 @@ export class MockSQLitePluginTransaction implements SQLitePluginTransaction {
   readOnly: boolean
   successCallback?: AnyFunction
 
-  constructor(readOnly: boolean = false, successCallback?: AnyFunction) {
+  constructor(readOnly = false, successCallback?: AnyFunction) {
     this.readOnly = readOnly
     this.successCallback = successCallback
   }

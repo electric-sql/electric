@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm as removeFile } from 'node:fs/promises'
+import { mkdir, rm as removeFile } from 'node:fs/promises'
 
 import test from 'ava'
 

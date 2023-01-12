@@ -19,7 +19,7 @@ const dangerousKeywords = [
   'update',
 ]
 
-const dangerousKeywordsExp: RegExp = new RegExp(
+const dangerousKeywordsExp = new RegExp(
   dangerousKeywords.map((keyword) => `\\b${keyword}\\b`).join('|'),
   'imu'
 )
@@ -84,10 +84,10 @@ const _isTableIdentifier = (node: any): boolean => {
   }
 
   const { val } = node
-  if (!val.hasOwnProperty('variant')) {
+  if (!Object.prototype.hasOwnProperty.call(val, 'variant')) {
     return false
   }
-  if (!val.hasOwnProperty('type')) {
+  if (!Object.prototype.hasOwnProperty.call(val, 'type')) {
     return false
   }
 
