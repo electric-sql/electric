@@ -55,7 +55,7 @@ const importMigrations = async (
   return migrations
 }
 
-export const electricConfig = async (
+export const configure = async (
   configFilePath: Path,
   importMetaUrl: Path,
   overrides: Partial<ElectricConfig> = {}
