@@ -52,6 +52,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
@@ -75,6 +76,9 @@
       ],
       "react-native": [
         "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "config": [
+        "./dist/config/index.d.ts"
       ],
       "debug": [
         "./dist/util/debug/index.d.ts"
