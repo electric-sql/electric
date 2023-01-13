@@ -51,7 +51,7 @@ export const electrify = async (
     socketFactory,
     console,
     registry,
-    config
+    configWithDefaults
   )
   return electrified as unknown as ElectrifiedDatabase
 }

@@ -36,8 +36,7 @@ import {
   OplogEntryChanges,
 } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
-import { base64, bytesToNumber, numberToBytes } from '../util/common'
-import { v4 as uuidv4 } from 'uuid'
+import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 import Log from 'loglevel'
 
 type ChangeAccumulator = {
@@ -577,7 +576,7 @@ export class SatelliteProcess implements Satellite {
     let clientId: string = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
-      clientId = uuidv4() as string
+      clientId = uuid() as string
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId

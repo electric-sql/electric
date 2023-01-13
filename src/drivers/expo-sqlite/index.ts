@@ -25,6 +25,19 @@ import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
+
+// Provide implementation for global uuid()
+import uuid from 'react-native-uuid'
+;(function (global: any) {
+  global['uuid'] = uuid.v4
+})(
+  typeof global == '' + void 0
+    ? typeof self == '' + void 0
+      ? this || {}
+      : self
+    : global
+)
+
 import { ConsoleHttpClient } from '../../auth'
 
 export { DatabaseAdapter, ElectricDatabase, ElectricWebSQLDatabase }
@@ -65,7 +78,7 @@ export const electrify = async (
     socketFactory,
     console,
     registry,
-    config
+    configWithDefaults
   )
   return electrified as unknown as ElectrifiedDatabase
 }

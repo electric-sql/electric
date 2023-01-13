@@ -1,4 +1,20 @@
 import BASE64 from 'base-64'
+import { v4 } from 'uuid'
+
+// default implementation for uuid()
+// platforms that don't support 'uuid' shall override definition
+const setGlobalUUID = (global: any) => {
+  if (!global['uuid']) {
+    global['uuid'] = v4
+  }
+}
+setGlobalUUID(
+  typeof global == '' + void 0
+    ? typeof self == '' + void 0
+      ? this || {}
+      : self
+    : global
+)
 
 export const typeDecoder = {
   number: bytesToNumber,
@@ -36,4 +52,8 @@ export function bytesToNumber(bs: Uint8Array) {
     n = (n << 8) | byte
   }
   return n
+}
+
+export function uuid() {
+  return (globalThis as any).uuid()
 }
