@@ -18,8 +18,8 @@ import { SatelliteProcess } from '../../src/satellite/process'
 import { initTableInfo } from '../support/satellite-helpers'
 import { Satellite } from '../../src/satellite'
 
-import { data as testMigrationsData } from '../support/migrations'
-const { migrations } = testMigrationsData
+import bundle from '../support/migrations'
+const { migrations } = bundle
 
 type ContextType = {
   dbName: string

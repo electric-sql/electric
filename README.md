@@ -51,10 +51,12 @@ import { electrify } from 'electric-sql/react-native'
 import SQLite from 'react-native-sqlite-storage'
 SQLite.enablePromise(true)
 
-// Import your configuration
-const config = configure('./electric.json', import.meta.url)
+// Configure your app and migrations
+import app from './electric.json'
+import migrations from './migrations/dist'
+const config = configure(app, migrations)
 
-// Open an SQLite database connection.
+// Open an SQLite database connection
 const original = await SQLite.openDatabase('example.db')
 
 // ⚡ Electrify it
@@ -80,21 +82,22 @@ Then, in your main application:
 
 ```ts
 import { initElectricSqlJs } from 'electric-sql/browser'
-import { configure } from 'electric-sql/config'
 
-// Import your configuration
-const config = configure('./electric.json', import.meta.url)
+// Configure your app and migrations
+import app from './electric.json'
+import migrations from './migrations/dist'
+const config = configure(app, migrations)
 
-// Start the background worker.
+// Start the background worker
 const url = new URL('./worker.js', import.meta.url)
 const worker = new Worker(url, { type: 'module' })
 
-// Electrify the SQL.js / absurd-sql machinery.
+// Electrify the SQL.js / absurd-sql machinery
 const SQL = await initElectricSqlJs(worker, {
   locateFile: (file) => `/${file}`,
 })
 
-// Open a named database connection.
+// Open a named database connection
 const db = await SQL.openDatabase('example.db', config)
 ```
 

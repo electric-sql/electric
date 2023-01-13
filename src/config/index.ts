@@ -1,14 +1,9 @@
 import { Migration } from '../migrators/index'
-import { relativePath, relativeImportPath } from '../util/path'
-import { Path } from '../util/types'
 
 type AppName = string
 type EnvName = string
 
-const DEFAULTS: {
-  domain: string
-  env: EnvName
-} = {
+const DEFAULTS = {
   domain: 'electric-sql.com',
   env: 'default',
 }
@@ -18,7 +13,10 @@ const DEFAULTS: {
 interface ElectricJson {
   app: AppName
   env: EnvName
-  migrations: Path
+}
+
+interface MigrationsBundle {
+  migrations: Migration[]
 }
 
 export interface ElectricConfig {
@@ -37,40 +35,15 @@ export interface ElectricConfig {
 }
 export type HydratedConfig = Required<ElectricConfig>
 
-const importConfig = async (filePath: Path): Promise<ElectricJson> => {
-  const mod: { default: ElectricJson } = await import(filePath)
-
-  return mod.default
-}
-
-const importMigrations = async (
-  configPath: Path,
-  migrationsPath: Path
-): Promise<Migration[]> => {
-  const bundlePath = relativePath(configPath, migrationsPath)
-  const {
-    data: { migrations },
-  } = await import(bundlePath)
-
-  return migrations
-}
-
-export const configure = async (
-  configFilePath: Path,
-  importMetaUrl: Path,
+export const configure = (
+  config: ElectricJson,
+  bundle: MigrationsBundle,
   overrides: Partial<ElectricConfig> = {}
-): Promise<ElectricConfig> => {
-  const configPath = relativeImportPath(configFilePath, importMetaUrl)
-
-  const { migrations: migrationsPath, ...config } = await importConfig(
-    configPath
-  )
-  const migrations = await importMigrations(configPath, migrationsPath)
-
+): ElectricConfig => {
   return {
     ...config,
     ...overrides,
-    migrations,
+    migrations: bundle.migrations,
   }
 }
 

@@ -42,9 +42,10 @@ import { relations } from './common'
 import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
 
-import { data as testMigrationsData } from '../support/migrations'
 import { EventNotifier } from '../../src/notifiers'
-const { migrations } = testMigrationsData
+
+import bundle from '../support/migrations'
+const { migrations } = bundle
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]

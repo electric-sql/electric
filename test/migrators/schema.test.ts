@@ -10,8 +10,8 @@ import { satelliteDefaults } from '../../src/satellite/config'
 
 import { randomValue } from '../../src/util/random'
 
-import { data as testMigrationsData } from '../support/migrations'
-const { migrations } = testMigrationsData
+import bundle from '../support/migrations'
+const { migrations } = bundle
 
 type Context = {
   dbName: string

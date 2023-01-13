@@ -1,4 +1,4 @@
-export const data = {
+export default {
   migrations: [
     {
       satellite_body: [

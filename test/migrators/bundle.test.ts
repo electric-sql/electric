@@ -8,8 +8,8 @@ import { BundleMigrator } from '../../src/migrators/bundle'
 
 import { randomValue } from '../../src/util/random'
 
-import { data as testMigrationsData } from '../support/migrations'
-const { migrations } = testMigrationsData
+import bundle from '../support/migrations'
+const { migrations } = bundle
 
 test.beforeEach((t) => {
   const dbName = `bundle-migrator-${randomValue()}.db`
