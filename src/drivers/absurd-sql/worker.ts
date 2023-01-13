@@ -14,7 +14,7 @@ import { DatabaseAdapter } from './adapter'
 import { ElectricDatabase } from './database'
 import { WasmLocator } from './locator'
 import { WebSocketWebFactory } from '../../sockets/web'
-import { setDebugLogLevel } from '../../util/debug'
+import { setLogLevel } from '../../util/debug'
 import { ConsoleHttpClient } from '../../auth'
 
 // Avoid garbage collection.
@@ -46,9 +46,7 @@ export class ElectricWorker extends WorkerServer {
 
     const configWithDefaults = hydrateConfig(config)
 
-    if (configWithDefaults.debug) {
-      setDebugLogLevel()
-    }
+    setLogLevel(configWithDefaults.debug ? 'TRACE' : 'WARN')
 
     const opts = this.opts
     const registry = opts?.registry || globalRegistry

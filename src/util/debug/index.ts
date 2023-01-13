@@ -1,15 +1,15 @@
 import { AnyElectrifiedDatabase } from '../../drivers'
 import { ElectricNamespace } from '../../electric'
 import { Row } from '../types'
-import Log from 'loglevel'
+import Log, { LogLevelDesc } from 'loglevel'
 
 export type DebugContext = {
   query?: (sql: string) => Promise<Row[]>
   electric?: ElectricNamespace
 }
 
-export const setDebugLogLevel = () => {
-  Log.setLevel('TRACE')
+export const setLogLevel = (level: LogLevelDesc = 'TRACE') => {
+  Log.setLevel(level)
 }
 
 export const init = (
@@ -19,5 +19,5 @@ export const init = (
   context.query = (sql: string) => electrified.electric.adapter.query({ sql })
   context.electric = electrified.electric
 
-  setDebugLogLevel()
+  setLogLevel('TRACE')
 }
