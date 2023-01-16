@@ -10,7 +10,7 @@ import { MockNotifier } from '../../src/notifiers/mock'
 import { MockRegistry } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-const config = { app: 'fake', token: 'fake' }
+const config = { app: 'app', env: 'default', migrations: [] }
 const dbFilename = 'test.db'
 
 const getNewOpts = () => ({

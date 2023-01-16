@@ -21,7 +21,7 @@ import { MockConsoleClient } from '../../auth/mock'
 
 type RetVal<N extends Notifier> = Promise<[Database, N, ElectrifiedDatabase]>
 
-const testConfig = { app: 'app', token: 'token' }
+const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export const initTestable = async <N extends Notifier = MockNotifier>(
   dbName: DbName,

@@ -1,10 +1,10 @@
 import test from 'ava'
 
+import { ElectricConfig } from '../../src/config/index'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
 import { ConsoleClient } from '../../src/satellite'
-import { SatelliteConfig } from '../../src/satellite/config'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { SocketFactory } from '../../src/sockets'
 
@@ -17,7 +17,7 @@ const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const console = {} as ConsoleClient
-const config = { app, env } as SatelliteConfig
+const config: ElectricConfig = { app, env, migrations: [] }
 const args = [
   dbName,
   adapter,

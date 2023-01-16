@@ -28,7 +28,7 @@ import { ElectricConfig } from '../../config'
 type RetVal<N extends Notifier, D extends Database = Database> = Promise<
   [D, N, ElectrifiedDatabase<D>]
 >
-const testConfig = { app: 'app', token: 'token' }
+const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export async function initTestable<N extends Notifier = MockNotifier>(
   name: DbName

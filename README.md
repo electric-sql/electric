@@ -44,17 +44,14 @@ npm install --save electric-sql
 Instantiate and use your SQLite driver as normal and call `electrify` when opening a new database connection. For example using `react-native-sqlite-storage`:
 
 ```ts
-import { configure } from 'electric-sql/config'
 import { electrify } from 'electric-sql/react-native'
 
 // Import your SQLite driver
 import SQLite from 'react-native-sqlite-storage'
 SQLite.enablePromise(true)
 
-// Configure your app and migrations
-import app from './electric.json'
-import migrations from './migrations/dist'
-const config = configure(app, migrations)
+// Import your app config and migrations
+import config from '.electric/default'
 
 // Open an SQLite database connection
 const original = await SQLite.openDatabase('example.db')
@@ -83,10 +80,8 @@ Then, in your main application:
 ```ts
 import { initElectricSqlJs } from 'electric-sql/browser'
 
-// Configure your app and migrations
-import app from './electric.json'
-import migrations from './migrations/dist'
-const config = configure(app, migrations)
+// Import your app config and migrations
+import config from '.electric/default'
 
 // Start the background worker
 const url = new URL('./worker.js', import.meta.url)

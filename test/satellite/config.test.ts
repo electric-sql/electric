@@ -4,6 +4,8 @@ import { hydrateConfig, ElectricConfig } from '../../src/config'
 test('addDefaults adds expected defaults', async (t) => {
   const config: ElectricConfig = {
     app: 'app',
+    env: 'default',
+    migrations: [],
   }
 
   const configWithDefaults = hydrateConfig(config)
