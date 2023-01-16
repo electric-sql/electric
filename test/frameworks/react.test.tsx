@@ -38,7 +38,7 @@ type FC = React.FC<React.PropsWithChildren>
 
 test('useElectricQuery returns query results', async (t) => {
   const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original)
+  const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
 
@@ -53,9 +53,7 @@ test('useElectricQuery returns query results', async (t) => {
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
 
-  await waitFor(() => assert(result.current.updatedAt !== undefined), {
-    timeout: 1000,
-  })
+  await waitFor(() => assert(result.current.updatedAt !== undefined))
   t.deepEqual(result.current.results, await adapter.query({ sql: query }))
 })
 
@@ -91,7 +89,7 @@ test('useElectricQuery returns error when query errors', async (t) => {
 
 test('useElectricQuery re-runs query when data changes', async (t) => {
   const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original)
+  const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
 
@@ -127,7 +125,7 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
 
 test('useElectricQuery re-runs query when *aliased* data changes', async (t) => {
   const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original)
+  const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
 

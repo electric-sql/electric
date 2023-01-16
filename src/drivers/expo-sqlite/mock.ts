@@ -1,15 +1,13 @@
 import { DbName } from '../../util/types'
-
-import {
-  NamedExpoDatabase,
-  NamedWebSQLDatabase,
-  Query,
+import type {
+  Database,
+  SQLTransactionCallback,
+  SQLTransactionErrorCallback,
+  WebSQLDatabase,
   SQLiteCallback,
-  TransactionCallback,
-  TransactionErrorCallback,
-} from './database'
-
-export class MockDatabase implements NamedExpoDatabase {
+  Query,
+} from 'expo-sqlite'
+export class MockDatabase implements Database {
   _name: DbName
   version: string
 
@@ -19,8 +17,8 @@ export class MockDatabase implements NamedExpoDatabase {
   }
 
   transaction(
-    _txFn: TransactionCallback,
-    _error?: TransactionErrorCallback,
+    _txFn: SQLTransactionCallback,
+    _error?: SQLTransactionErrorCallback,
     successCallback?: () => void
   ): void {
     if (successCallback !== undefined) {
@@ -29,8 +27,8 @@ export class MockDatabase implements NamedExpoDatabase {
   }
 
   readTransaction(
-    _txFn: TransactionCallback,
-    _error?: TransactionErrorCallback,
+    _txFn: SQLTransactionCallback,
+    _error?: SQLTransactionErrorCallback,
     successCallback?: () => void
   ): void {
     if (successCallback !== undefined) {
@@ -39,10 +37,7 @@ export class MockDatabase implements NamedExpoDatabase {
   }
 }
 
-export class MockWebSQLDatabase
-  extends MockDatabase
-  implements NamedWebSQLDatabase
-{
+export class MockWebSQLDatabase extends MockDatabase implements WebSQLDatabase {
   exec(_queries: Query[], _readOnly: boolean, callback: SQLiteCallback): void {
     callback(null, [{ rowsAffected: 0, rows: [] }])
   }

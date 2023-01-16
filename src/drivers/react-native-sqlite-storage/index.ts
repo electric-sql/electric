@@ -37,12 +37,12 @@ import { ConsoleHttpClient } from '../../auth'
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database, ElectrifiedDatabase }
 
-export const electrify = async (
-  db: Database,
+export const electrify = async <T extends Database>(
+  db: T,
   promisesEnabled: boolean,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<ElectrifiedDatabase> => {
+): Promise<ElectrifiedDatabase<T>> => {
   const dbName: DbName = db.dbName
   const configWithDefaults = hydrateConfig(config)
 
@@ -69,5 +69,5 @@ export const electrify = async (
     registry,
     configWithDefaults
   )
-  return electrified as unknown as ElectrifiedDatabase
+  return electrified as ElectrifiedDatabase<T>
 }

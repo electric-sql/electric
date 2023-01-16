@@ -1,7 +1,4 @@
 import { Row } from '../../util/types'
-import { SQLitePluginTransaction } from './index'
-
-export type ExecutionResult = [SQLitePluginTransaction, Results]
 
 export interface Results {
   rows: {

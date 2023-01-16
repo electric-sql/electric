@@ -1,95 +1,23 @@
 import { ElectricNamespace } from '../../electric/index'
 import { ProxyWrapper } from '../../proxy/index'
-import { DbName } from '../../util/types'
+import type { DbName } from '../../util'
+import type {
+  Database as OriginalDatabase,
+  WebSQLDatabase as OriginalWebSQLDatabase,
+  SQLTransactionCallback,
+  SQLTransactionErrorCallback,
+  SQLiteCallback,
+  Query,
+} from 'expo-sqlite'
+export type { SQLTransaction as Transaction } from 'expo-sqlite'
 
-declare class SQLError {
-  static UNKNOWN_ERR: number
-  static DATABASE_ERR: number
-  static VERSION_ERR: number
-  static TOO_LARGE_ERR: number
-  static QUOTA_ERR: number
-  static SYNTAX_ERR: number
-  static CONSTRAINT_ERR: number
-  static TIMEOUT_ERR: number
-
-  code: number
-  message: string
+export type Database = (OriginalDatabase | OriginalWebSQLDatabase) & {
+  _name?: DbName
 }
 
-type ResultSet = {
-  insertId?: number
-  rowsAffected: number
-  rows: { [column: string]: any }[]
-}
-type ResultSetError = {
-  error: Error
-}
-type SQLResultSet = {
-  insertId?: number
-  rowsAffected: number
-  rows: SQLResultSetRowList
-}
-interface SQLResultSetRowList {
-  length: number
-
-  item(index: number): any
-  _array: any[]
-}
-type SQLStatementCallback = (
-  transaction: Transaction,
-  resultSet: SQLResultSet
-) => void
-type SQLStatementErrorCallback = (
-  transaction: Transaction,
-  error: SQLError
-) => boolean
-
-export type TransactionCallback = (transaction: Transaction) => void
-export type TransactionErrorCallback = (error: SQLError) => void
-
-export type Query = {
-  sql: string
-  args: (number | string | null)[]
-}
-export type SQLiteCallback = (
-  error?: Error | null,
-  resultSet?: (ResultSetError | ResultSet)[]
-) => void
-
-export interface Transaction {
-  executeSql(
-    sqlStatement: string,
-    args?: (number | string | null)[],
-    callback?: SQLStatementCallback,
-    errorCallback?: SQLStatementErrorCallback
-  ): void
-}
-
-export interface NamedExpoDatabase {
-  _name: DbName
-  version: string
-
-  transaction(
-    callback: TransactionCallback,
-    errorCallback?: TransactionErrorCallback,
-    successCallback?: () => void
-  ): void
-  readTransaction(
-    callback: TransactionCallback,
-    errorCallback?: TransactionErrorCallback,
-    successCallback?: () => void
-  ): void
-}
-
-export interface NamedWebSQLDatabase extends NamedExpoDatabase {
-  exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void
-  closeAsync(): void
-  deleteAsync(): Promise<void>
-}
-
-export type Database = NamedExpoDatabase | NamedWebSQLDatabase
-
-export class ElectricDatabase implements ProxyWrapper {
+export class ElectricDatabase
+  implements ProxyWrapper, Pick<OriginalDatabase, 'transaction'>
+{
   _db: Database
 
   // The public property we add to the underlying Database client,
@@ -110,8 +38,8 @@ export class ElectricDatabase implements ProxyWrapper {
   }
 
   transaction(
-    callback: TransactionCallback,
-    error?: TransactionErrorCallback,
+    callback: SQLTransactionCallback,
+    error?: SQLTransactionErrorCallback,
     success?: () => void
   ): void {
     const wrappedSuccess = (): void => {
@@ -126,14 +54,14 @@ export class ElectricDatabase implements ProxyWrapper {
   }
 }
 
-export class ElectricWebSQLDatabase extends ElectricDatabase {
-  declare _db: NamedWebSQLDatabase
+export class ElectricWebSQLDatabase
+  extends ElectricDatabase
+  implements Pick<OriginalWebSQLDatabase, 'exec'>
+{
+  declare _db: OriginalWebSQLDatabase
 
   exec(queries: Query[], readOnly: boolean, callback: SQLiteCallback): void {
-    const wrappedCallback: SQLiteCallback = (
-      error?: Error | null,
-      resultSet?: (ResultSetError | ResultSet)[]
-    ): void => {
+    const wrappedCallback: SQLiteCallback = (error, resultSet) => {
       const isPotentiallyDangerous = readOnly === false
       const mayHaveRunQueryBeforeError = queries.length > 1
       const didNotError = error === undefined || error === null
@@ -169,10 +97,11 @@ export class ElectricWebSQLDatabase extends ElectricDatabase {
   // }
 }
 
-interface ElectrifiedExpoDatabase extends NamedExpoDatabase, ElectricDatabase {}
-interface ElectrifiedWebSQLDatabase
-  extends NamedWebSQLDatabase,
-    ElectricWebSQLDatabase {}
-export type ElectrifiedDatabase =
-  | ElectrifiedExpoDatabase
-  | ElectrifiedWebSQLDatabase
+type ElectrifiedExpoDatabase<T extends OriginalDatabase> = T & ElectricDatabase
+type ElectrifiedWebSQLDatabase<T extends OriginalWebSQLDatabase> = T &
+  ElectricWebSQLDatabase
+export type ElectrifiedDatabase<
+  T extends OriginalDatabase = OriginalDatabase | OriginalWebSQLDatabase
+> = T extends OriginalWebSQLDatabase
+  ? ElectrifiedWebSQLDatabase<T>
+  : ElectrifiedExpoDatabase<T>

@@ -2,7 +2,7 @@ import { parseTableNames } from '../../util/parser'
 import { QualifiedTablename } from '../../util/tablename'
 import { AnyFunction, Row, Statement } from '../../util/types'
 
-import { Results, rowsFromResults } from '../sqlite-plugin/results'
+import { Results, rowsFromResults } from '../generic/results'
 import { Database, Transaction } from './database'
 
 export class DatabaseAdapter {

@@ -15,7 +15,7 @@ import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
-import { MockDatabase } from './mock'
+import { enablePromiseRuntime, MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
 
@@ -29,7 +29,8 @@ export const initTestable = async <N extends Notifier = MockNotifier>(
   config = testConfig,
   opts?: ElectrifyOptions
 ): RetVal<N> => {
-  const db = new MockDatabase(dbName)
+  let db = new MockDatabase(dbName)
+  if (promisesEnabled) db = enablePromiseRuntime(db)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db, promisesEnabled)
   const migrator = opts?.migrator || new MockMigrator()
@@ -53,5 +54,5 @@ export const initTestable = async <N extends Notifier = MockNotifier>(
     registry,
     config
   )
-  return [db, notifier, electrified as ElectrifiedDatabase]
+  return [db, notifier, electrified as ElectrifiedDatabase<MockDatabase>]
 }

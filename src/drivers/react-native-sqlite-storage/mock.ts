@@ -1,6 +1,12 @@
-import { AnyFunction, DbName } from '../../util/types'
-import { MockSQLitePlugin } from '../sqlite-plugin/mock'
-import { Database } from './database'
+import {
+  TransactionErrorCallback,
+  TransactionCallback,
+  ResultSet,
+  StatementCallback,
+  StatementErrorCallback,
+} from 'react-native-sqlite-storage'
+import { AnyFunction, DbName, Row } from '../../util/types'
+import { Database, Transaction } from './database'
 
 // Key is the method name, value is whether the
 // callbacks need to be reversed.
@@ -48,13 +54,60 @@ export const enablePromiseRuntime = (mockDb: MockDatabase): MockDatabase => {
   })
 }
 
-export class MockDatabase extends MockSQLitePlugin implements Database {
-  dbName: DbName
+export class MockDatabase implements Database {
+  constructor(public dbName: DbName) {}
 
-  constructor(dbName: DbName) {
-    super(dbName)
+  transaction(txFn: (tx: Transaction) => void): Promise<Transaction>
+  transaction(
+    txFn: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void
+  transaction(
+    txFn: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void | Promise<Transaction> {
+    const tx = new MockTransaction(false)
+    txFn(tx)
 
-    this.dbName = dbName
+    if (error || success) {
+      success && success(tx)
+    } else {
+      return Promise.resolve(tx)
+    }
+  }
+
+  readTransaction(txFn: (tx: Transaction) => void): Promise<Transaction>
+  readTransaction(
+    txFn: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void
+  readTransaction(
+    txFn: (tx: Transaction) => void,
+    _error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void | Promise<Transaction> {
+    const tx = new MockTransaction(false)
+    txFn(tx)
+    success && success(tx)
+  }
+
+  executeSql(statement: string, params?: any[]): Promise<[ResultSet]>
+  executeSql(
+    statement: string,
+    params?: any[],
+    success?: StatementCallback,
+    error?: StatementErrorCallback
+  ): void
+  executeSql(
+    statement: string,
+    params?: any[],
+    success?: StatementCallback,
+    error?: StatementErrorCallback
+  ): void | Promise<[ResultSet]> {
+    this.transaction((tx) => tx.executeSql(statement, params, success, error))
   }
 
   attach(dbName: DbName, dbAlias: DbName): Promise<void>
@@ -95,5 +148,46 @@ export class MockDatabase extends MockSQLitePlugin implements Database {
     if (success) {
       success('mocked!')
     }
+  }
+}
+
+class MockTransaction implements Transaction {
+  constructor(public readonly: boolean) {}
+
+  executeSql(
+    sqlStatement: string,
+    args?: any[]
+  ): Promise<[Transaction, ResultSet]>
+  executeSql(
+    sqlStatement: string,
+    args?: any[],
+    callback?: StatementCallback,
+    errorCallback?: StatementErrorCallback
+  ): void
+  executeSql(
+    _sqlStatement: string,
+    _args?: any[],
+    callback?: StatementCallback,
+    errorCallback?: StatementErrorCallback
+  ): void | Promise<[Transaction, ResultSet]> {
+    const results = mockResults([{ i: 0 }])
+
+    if (callback) {
+      callback(this, results)
+    } else if (!callback && !errorCallback) {
+      return Promise.resolve([this, results])
+    }
+  }
+}
+
+function mockResults(rows: Row[]): ResultSet {
+  return {
+    insertId: 1,
+    rows: {
+      item: (i: number) => rows[i],
+      length: rows.length,
+      raw: () => rows,
+    },
+    rowsAffected: 0,
   }
 }

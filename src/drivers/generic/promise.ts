@@ -1,4 +1,4 @@
-export const ensurePromise = (candidate: any): Promise<any> => {
+export const ensurePromise = <T extends Promise<any>>(candidate: T): T => {
   if (candidate instanceof Promise) {
     return candidate
   }

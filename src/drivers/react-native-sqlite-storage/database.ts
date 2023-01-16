@@ -1,50 +1,126 @@
+import type {
+  Transaction,
+  SQLiteDatabase as OriginalDatabase,
+  TransactionCallback,
+  TransactionErrorCallback,
+  ResultSet,
+  StatementCallback,
+  StatementErrorCallback,
+} from 'react-native-sqlite-storage'
+
 import { ElectricNamespace } from '../../electric/index'
+import { ProxyWrapper } from '../../proxy'
 import { AnyFunction, DbName, VoidOrPromise } from '../../util/types'
 
-import { ElectricSQLitePlugin, SQLitePlugin } from '../sqlite-plugin/index'
-import { ensurePromise } from '../sqlite-plugin/promise'
+export type { Transaction, StatementCallback }
+
+import { ensurePromise } from '../generic/promise'
 
 // The relevant subset of the SQLitePlugin database client API
 // that we need to ensure the client we're electrifying provides.
-export interface Database extends SQLitePlugin {
-  // React Native calls the database name `.dbName` using camel case.
-  // this is diffferent to Cordova which uses `.dbname`.
+
+// FIXME: pick `readTransaction`, `detach`, and `dbName` when the PR to the upstream types is merged
+//        `dbName` is missing
+//        `readTransaction` has incorrect returned promise type
+//        `detach` is misspelled as `dettach`
+export interface Database
+  extends Pick<OriginalDatabase, 'transaction' | 'attach' | 'executeSql'> {
   dbName: DbName
 
-  attach(dbName: DbName, dbAlias: DbName): Promise<void>
-  attach(
-    dbName: DbName,
-    dbAlias: DbName,
-    success?: AnyFunction,
-    error?: AnyFunction
+  readTransaction(scope: (tx: Transaction) => void): Promise<Transaction>
+  readTransaction(
+    scope: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
   ): void
+
   detach(dbName: DbName): Promise<void>
   detach(dbName: DbName, success?: AnyFunction, error?: AnyFunction): void
-
-  // XXX we use `echoTest` to detect whether the promises API is enabled.
-  // This could be removed if we require the user to tell us whether they've
-  // enabled it or not, e.g.: via `electrify(db, promisesEnabled: true)`.
-  echoTest(success?: AnyFunction, _error?: AnyFunction): VoidOrPromise
 }
 
 // Wrap the database client to automatically notify on commit.
-export class ElectricDatabase extends ElectricSQLitePlugin {
+export class ElectricDatabase
+  implements
+    ProxyWrapper,
+    Pick<Database, 'attach' | 'detach' | 'transaction' | 'executeSql'>
+{
   // Private properties are not exposed via the proxy.
   _db: Database
   _promisesEnabled: boolean
+  electric: ElectricNamespace
 
   constructor(
     db: Database,
     namespace: ElectricNamespace,
-    promisesEnabled?: boolean
+    promisesEnabled: boolean
   ) {
-    super(db, namespace)
-
     this._db = db
-    this._promisesEnabled =
-      promisesEnabled !== undefined
-        ? promisesEnabled
-        : this._db.echoTest() instanceof Promise
+    this._promisesEnabled = promisesEnabled
+    this.electric = namespace
+  }
+
+  _setOriginal(db: Database): void {
+    this._db = db
+  }
+  _getOriginal(): Database {
+    return this._db
+  }
+
+  transaction(txFn: (tx: Transaction) => void): Promise<Transaction>
+  transaction(
+    txFn: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void
+  transaction(
+    txFn: (tx: Transaction) => void,
+    error?: TransactionErrorCallback,
+    success?: TransactionCallback
+  ): void | Promise<Transaction> {
+    const wrappedSuccess = (tx: Transaction): Transaction => {
+      this.electric.notifier.potentiallyChanged()
+      if (success !== undefined) success(tx)
+      return tx
+    }
+
+    if (this._promisesEnabled) {
+      return ensurePromise(this._db.transaction(txFn)).then(wrappedSuccess)
+    }
+
+    return this._db.transaction(txFn, error, wrappedSuccess)
+  }
+
+  executeSql(statement: string, params?: any[]): Promise<[ResultSet]>
+  executeSql(
+    statement: string,
+    params?: any[],
+    success?: StatementCallback,
+    error?: StatementErrorCallback
+  ): void
+  executeSql(
+    statement: string,
+    params?: any[],
+    success?: StatementCallback,
+    error?: StatementErrorCallback
+  ): void | Promise<[ResultSet]> {
+    if (this._promisesEnabled) {
+      return ensurePromise(
+        this._db.executeSql(statement, params).then((results) => {
+          this.electric.notifier.potentiallyChanged()
+          return results
+        })
+      )
+    } else {
+      return this._db.executeSql(
+        statement,
+        params,
+        (tx, results) => {
+          this.electric.potentiallyChanged()
+          if (success) success(tx, results)
+        },
+        error
+      )
+    }
   }
 
   // The React Native plugin also supports attaching multiple databases
@@ -114,4 +190,5 @@ export class ElectricDatabase extends ElectricSQLitePlugin {
   }
 }
 
-export interface ElectrifiedDatabase extends Database, ElectricDatabase {}
+export type ElectrifiedDatabase<T extends Database = Database> = T &
+  ElectricDatabase

@@ -3,7 +3,6 @@ import test from 'ava'
 import { DatabaseAdapter } from '../../src/drivers/cordova-sqlite-storage/adapter'
 import { MockDatabase } from '../../src/drivers/cordova-sqlite-storage/mock'
 import { initTestable } from '../../src/drivers/cordova-sqlite-storage/test'
-import { MockSQLitePluginTransaction } from '../../src/drivers/sqlite-plugin/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 test('electrify returns an equivalent database client', async (t) => {
@@ -16,28 +15,6 @@ test('electrify returns an equivalent database client', async (t) => {
   allKeys.forEach((key) => {
     t.assert(key in db)
   })
-})
-
-test('running a transaction runs potentiallyChanged', async (t) => {
-  const [_original, notifier, db] = await initTestable('test.db')
-
-  t.is(notifier.notifications.length, 0)
-
-  const tx = new MockSQLitePluginTransaction()
-  db.addTransaction(tx)
-
-  t.is(notifier.notifications.length, 1)
-})
-
-test('running a read only transaction does not potentiallyChanged', async (t) => {
-  const [_original, notifier, db] = await initTestable('test.db')
-
-  t.is(notifier.notifications.length, 0)
-
-  const tx = new MockSQLitePluginTransaction(true)
-  db.addTransaction(tx)
-
-  t.is(notifier.notifications.length, 0)
 })
 
 test('database adapter run works', async (t) => {

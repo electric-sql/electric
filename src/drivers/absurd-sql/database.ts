@@ -278,6 +278,12 @@ export class ElectricStatement implements ProxyWrapper {
   }
 }
 
+type ExtractFunctions<T extends object> = {
+  [k in keyof T as T[k] extends (...args: any[]) => Promise<any>
+    ? k
+    : never]: T[k]
+}
+type WorkerFunctions = ExtractFunctions<ElectricDatabase>
 // This is the proxy client that runs in the main thread, using the
 // workerClient to proxy method calls on to the ElectricDatabase in
 // the worker thread.
@@ -294,14 +300,19 @@ export class MainThreadDatabaseProxy implements Database {
     this._statements = {}
   }
 
-  _request(methodName: string, ...args: any[]): Promise<any> {
+  _request<K extends keyof WorkerFunctions>(
+    methodName: K,
+    ...args: Parameters<WorkerFunctions[K]>
+  ): ReturnType<WorkerFunctions[K]> {
     const method: DbMethod = {
       target: 'db',
       dbName: this._dbName,
       name: methodName,
     }
 
-    return this._workerClient.request(method, ...args)
+    return this._workerClient.request(method, ...args) as ReturnType<
+      WorkerFunctions[K]
+    >
   }
 
   async _releaseStatement(id: string): Promise<void> {

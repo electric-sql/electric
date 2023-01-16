@@ -23,16 +23,35 @@ import {
 import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
+import { ElectricConfig } from '../../config'
 
-type RetVal<N extends Notifier> = Promise<[Database, N, ElectrifiedDatabase]>
+type RetVal<N extends Notifier, D extends Database = Database> = Promise<
+  [D, N, ElectrifiedDatabase<D>]
+>
 const testConfig = { app: 'app', token: 'token' }
 
-export const initTestable = async <N extends Notifier = MockNotifier>(
+export async function initTestable<N extends Notifier = MockNotifier>(
+  name: DbName
+): RetVal<N, MockDatabase>
+export async function initTestable<N extends Notifier = MockNotifier>(
+  name: DbName,
+  webSql: false,
+  config?: ElectricConfig,
+  opts?: ElectrifyOptions
+): RetVal<N, MockDatabase>
+export async function initTestable<N extends Notifier = MockNotifier>(
+  name: DbName,
+  webSql: true,
+  config?: ElectricConfig,
+  opts?: ElectrifyOptions
+): RetVal<N, MockWebSQLDatabase>
+
+export async function initTestable<N extends Notifier = MockNotifier>(
   dbName: DbName,
   useWebSQLDatabase = false,
-  config = testConfig,
+  config: ElectricConfig = testConfig,
   opts?: ElectrifyOptions
-): RetVal<N> => {
+): RetVal<N> {
   const db = useWebSQLDatabase
     ? new MockWebSQLDatabase(dbName)
     : new MockDatabase(dbName)
