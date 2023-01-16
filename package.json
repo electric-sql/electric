@@ -91,7 +91,7 @@
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
     "posttest": "yarn typecheck",
-    "prepublishOnly": "yarn test && yarn typecheck",
+    "prepublishOnly": "yarn test && yarn typecheck && yarn build",
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "prepare": "husky install"
