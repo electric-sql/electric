@@ -32,6 +32,7 @@ export const open_db = (name: string,
       host: host,
       port: port,
       ssl: false,
+      insecure: true
     },
     token: "token",
     debug: true
