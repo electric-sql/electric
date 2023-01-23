@@ -1,7 +1,8 @@
 import { electrify } from '../../src/drivers/cordova-sqlite-storage'
 
 const config = {
-  app: '<YOUR APP SLUG>',
+  app: 'app',
+  env: 'env',
   migrations: [],
 }
 

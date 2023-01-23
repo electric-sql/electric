@@ -3,7 +3,8 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 
 const config = {
-  app: '<YOUR APP SLUG>',
+  app: 'app',
+  env: 'env',
   migrations: [],
 }
 

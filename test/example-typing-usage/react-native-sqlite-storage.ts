@@ -11,7 +11,8 @@ const promisesEnabled = true
 SQLite.enablePromise(promisesEnabled)
 
 const config = {
-  app: '<YOUR APP SLUG>',
+  app: 'app',
+  env: 'env',
   migrations: [],
 }
 

@@ -3,7 +3,8 @@ import * as SQLite from 'expo-sqlite'
 import { electrify } from '../../src/drivers/expo-sqlite'
 
 const config = {
-  app: '<YOUR APP SLUG>',
+  app: 'app',
+  env: 'env',
   migrations: [],
 }
 
