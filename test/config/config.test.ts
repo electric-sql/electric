@@ -2,7 +2,7 @@ import test from 'ava'
 
 import { ElectricConfig, hydrateConfig } from '../../src/config/index'
 
-import configModule from '../support/.electric/default/index'
+import configModule from '../support/.electric/@config/index'
 const config: ElectricConfig = configModule
 
 test('configure', async (t) => {
@@ -20,13 +20,13 @@ test('hydrate', async (t) => {
 
   const hydrated = hydrateConfig(config)
 
-  t.is(hydrated.replication, {
+  t.deepEqual(hydrated.replication, {
     host: 'default.tarragon-envy-5432.db.electric-sql.com',
     port: 443,
     ssl: true,
   })
 
-  t.is(hydrated.console, {
+  t.deepEqual(hydrated.console, {
     host: 'console.electric-sql.com',
   })
 

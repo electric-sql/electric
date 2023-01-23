@@ -18,8 +18,8 @@ import { SatelliteProcess } from '../../src/satellite/process'
 import { initTableInfo } from '../support/satellite-helpers'
 import { Satellite } from '../../src/satellite'
 
-import bundle from '../support/migrations'
-const { migrations } = bundle
+import config from '../support/.electric/@config/index'
+const { migrations } = config
 
 type ContextType = {
   dbName: string
@@ -28,7 +28,7 @@ type ContextType = {
   client: MockSatelliteClient
 }
 
-const config: SatelliteConfig = {
+const satelliteConfig: SatelliteConfig = {
   app: 'test',
   env: 'default',
 }
@@ -55,7 +55,7 @@ test.beforeEach(async (t) => {
     notifier,
     client,
     console,
-    config,
+    satelliteConfig,
     opts
   )
 

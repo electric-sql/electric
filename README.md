@@ -51,7 +51,7 @@ import SQLite from 'react-native-sqlite-storage'
 SQLite.enablePromise(true)
 
 // Import your app config and migrations
-import config from '.electric/default'
+import config from '.electric/@config'
 
 // Open an SQLite database connection
 const original = await SQLite.openDatabase('example.db')
@@ -81,7 +81,7 @@ Then, in your main application:
 import { initElectricSqlJs } from 'electric-sql/browser'
 
 // Import your app config and migrations
-import config from '.electric/default'
+import config from '.electric/@config'
 
 // Start the background worker
 const url = new URL('./worker.js', import.meta.url)

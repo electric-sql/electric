@@ -34,7 +34,7 @@ export const relations = {
         primaryKey: false,
       },
       {
-        name: 'otherValue',
+        name: 'other',
         type: 'INTEGER',
         primaryKey: false,
       },

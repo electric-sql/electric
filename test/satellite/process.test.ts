@@ -44,8 +44,8 @@ import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
 
-import bundle from '../support/migrations'
-const { migrations } = bundle
+import config from '../support/.electric/@config/index'
+const { migrations } = config
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]
@@ -78,7 +78,7 @@ const opts = Object.assign({}, satelliteDefaults, {
   pollingInterval: 200,
 })
 
-const config: SatelliteConfig = {
+const satelliteConfig: SatelliteConfig = {
   app: 'test',
   env: 'default',
 }
@@ -99,7 +99,7 @@ test.beforeEach(async (t) => {
     notifier,
     client,
     console,
-    config,
+    satelliteConfig,
     opts
   )
 
@@ -330,7 +330,7 @@ test('take snapshot and merge local wins', async (t) => {
   )
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
   await satellite._performSnapshot()
 
@@ -347,7 +347,7 @@ test('take snapshot and merge local wins', async (t) => {
     changes: {
       id: { value: 1, timestamp: localTimestamp },
       value: { value: 'local', timestamp: localTimestamp },
-      otherValue: { value: 1, timestamp: localTimestamp },
+      other: { value: 1, timestamp: localTimestamp },
     },
   })
 })
@@ -357,7 +357,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
   await satellite._performSnapshot()
 
@@ -388,7 +388,7 @@ test('take snapshot and merge incoming wins', async (t) => {
     changes: {
       id: { value: 1, timestamp: incomingTs },
       value: { value: 'incoming', timestamp: incomingTs },
-      otherValue: { value: 1, timestamp: localTimestamp },
+      other: { value: 1, timestamp: localTimestamp },
     },
   })
 })
@@ -398,7 +398,7 @@ test('apply does not add anything to oplog', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', null)`,
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
   })
   await satellite._performSnapshot()
 
@@ -412,7 +412,7 @@ test('apply does not add anything to oplog', async (t) => {
     {
       id: 1,
       value: 'incoming',
-      otherValue: 1,
+      other: 1,
     }
   )
 
@@ -422,7 +422,7 @@ test('apply does not add anything to oplog', async (t) => {
   const sql = 'SELECT * from parent WHERE id=1'
   const [row] = await adapter.query({ sql })
   t.is(row.value, 'incoming')
-  t.is(row.otherValue, 1)
+  t.is(row.other, 1)
 
   const localEntries = await satellite._getEntries()
   t.is(localEntries.length, 1)
@@ -442,7 +442,7 @@ test('apply incoming with no local', async (t) => {
     {
       id: 1,
       value: 'incoming',
-      otherValue: 1,
+      other: 1,
     }
   )
 
@@ -470,21 +470,22 @@ test('apply incoming with null on column with default', async (t) => {
   const incomingEntry = generateOplogEntry(
     tableInfo,
     'main',
-    'items',
+    'parent',
     OPTYPES.insert,
     incomingTs,
     {
+      id: 1234,
       value: 'incoming',
-      otherValue: null,
+      other: null,
     }
   )
 
   await satellite._apply([incomingEntry])
 
-  const sql = `SELECT * from main.items WHERE value='incoming'`
+  const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
 
-  t.is(rows[0].otherValue, null)
+  t.is(rows[0].other, null)
   t.pass()
 })
 
@@ -496,20 +497,21 @@ test('apply incoming with undefined on column with default', async (t) => {
   const incomingEntry = generateOplogEntry(
     tableInfo,
     'main',
-    'items',
+    'parent',
     OPTYPES.insert,
     incomingTs,
     {
+      id: 1234,
       value: 'incoming',
     }
   )
 
   await satellite._apply([incomingEntry])
 
-  const sql = `SELECT * from main.items WHERE value='incoming'`
+  const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
 
-  t.is(rows[0].otherValue, '')
+  t.is(rows[0].other, 0)
   t.pass()
 })
 
@@ -528,7 +530,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
       incomingTs,
       {
         id: 1,
-        otherValue: 1,
+        other: 1,
       }
     ),
     generateOplogEntry(
@@ -547,7 +549,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
     generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.insert, localTs, {
       id: 1,
       value: 'local',
-      otherValue: null,
+      other: null,
     }),
   ]
 
@@ -562,7 +564,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
     changes: {
       id: { value: 1, timestamp: incomingTs },
       value: { value: 'local', timestamp: localTs },
-      otherValue: { value: 1, timestamp: incomingTs },
+      other: { value: 1, timestamp: incomingTs },
     },
   })
 })
@@ -893,7 +895,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   await satellite.start()
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, otherValue) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
@@ -912,7 +914,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   satellite._connectivityStateChange('disconnected')
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, otherValue) VALUES (2, 'local', 1)`,
+    sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
