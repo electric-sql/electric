@@ -19,13 +19,19 @@ defmodule Electric.Plug.Migrations do
 
   get "/" do
     data = migration_info()
-    send_resp(conn, 200, Jason.encode!(data))
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(data))
   end
 
   get "/:origin" do
     origin = get_origin(conn)
     data = migration_info(origin)
-    send_resp(conn, 200, Jason.encode!(data))
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(data))
   end
 
   put "/:origin" do
