@@ -70,7 +70,7 @@ db.transaction((tx) => tx.executeSql('SELECT 1'))
 
 Electric uses [SQL.js](https://electric-sql.com/docs/usage/web) in the browser with [absurd-sql](https://electric-sql.com/docs/usage/web) for persistence. This runs in a web worker (which we also use to keep background replication off the main thread). As a result, the electrified db client provides an asynchronous version of a subset of the SQL.js driver interface.
 
-First create a `worker.js` file that imports and starts an ElectricWorker process:
+First create a `worker.js` file that imports and starts an `ElectricWorker` process:
 
 ```ts
 import { ElectricWorker } from 'electric-sql/browser'
