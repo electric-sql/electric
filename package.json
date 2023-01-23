@@ -90,11 +90,11 @@
     "build": "rm -rf ./dist && tsc && tsmodule build",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
-    "posttest": "yarn typecheck",
-    "prepublishOnly": "yarn test && yarn typecheck && yarn build",
+    "posttest": "npm run typecheck",
+    "prepublishOnly": "npm run test",
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
-    "prepare": "husky install"
+    "prepare": "husky install; npm run build"
   },
   "ava": {
     "timeout": "10m",
