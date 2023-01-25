@@ -1,5 +1,7 @@
-![Erlang CI](https://github.com/electric-sql/electric/workflows/CI/badge.svg)
+[![CI](https://github.com/electric-sql/electric/workflows/CI/badge.svg)](https://github.com/electric-sql/electric/actions/workflows/ci.yml)
+[![License - Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue)](main/LICENSE)
 ![Status - Alpha](https://img.shields.io/badge/status-alpha-red)
+[![Chat - Discord](https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord)](https://discord.gg/B7kHGwDcbj)
 
 <a href="https://electric-sql.com">
   <picture>
@@ -15,11 +17,31 @@
   </picture>
 </a>
 
-# Electric
+# ElectricSQL
 
-This is the replication service for [ElectricSQL](https://electric-sql.com).
+Local-first. Electrified.
 
-It's an Elixir application that integrates with Postgres over logical replication and Satellite (ElectricSQL's client-side replication component that works with SQLite) via a web socket interface.
+You develop local-first apps. We provide the cloud sync. Without changing your database or your code.
+
+## What is ElectricSQL?
+
+ElectricSQL is a local-first SQL system that adds active-active replication and reactive queries to SQLite and Postgres. Use it to make local-first apps that feel instant, work offline and sync via the cloud.
+
+## Getting started
+
+- [Quickstart](https://electric-sql.com/docs/usage/quickstart)
+- [Examples](https://github.com/electric-sql/examples)
+- [Documentation](https://electric-sql.com/docs)
+
+## Repo structure
+
+This repo contains the core backend services that proovide ElectricSQL's cloud sync. It's an Elixir application that integrates with Postgres over logical replication and SQLite via a Protobuf web socket protocol.
+
+See also:
+
+- [electric-sql/typescript-client](https://github.com/electric-sql/typescript-client) Typescript client library for local-first application development
+- [electric-sql/vaxine](https://github.com/electric-sql/vaxine) geo-distributed rich-CRDT database based on AntidoteDB
+- [electric-sql/cli](https://github.com/electric-sql/cli) command line interface (CLI) tool to manage config and migrations
 
 ## Pre-reqs
 
