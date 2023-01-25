@@ -21,8 +21,7 @@
 
 Local-first. Electrified.
 
-You develop local-first apps. We provide the cloud sync. Without changing your
-database or your code.
+You develop local-first apps. We provide the cloud sync. Without changing your database or your code.
 
 ## What is ElectricSQL?
 
