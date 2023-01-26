@@ -1,5 +1,5 @@
 env:
-  DOCKER_REPO: europe-docker.pkg.dev/vaxine/electric
+  DOCKER_REPO: europe-docker.pkg.dev/vaxine/electric-sql
   IMAGE_NAME: electric
 
 agent:
