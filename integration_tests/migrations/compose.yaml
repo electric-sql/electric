@@ -66,7 +66,7 @@ services:
       file: ../services_templates.yaml
       service: postgresql
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "54321:5432"
 
@@ -75,7 +75,7 @@ services:
       file: ../services_templates.yaml
       service: postgresql
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "54322:5432"
 
@@ -84,7 +84,7 @@ services:
       file: ../services_templates.yaml
       service: postgresql
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "54323:5432"
 

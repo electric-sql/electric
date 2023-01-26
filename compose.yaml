@@ -32,7 +32,7 @@ services:
     ports:
       - "54321:5432"
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
     entrypoint:
       - docker-entrypoint.sh
@@ -52,7 +52,7 @@ services:
     ports:
       - "54322:5432"
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
     entrypoint:
       - docker-entrypoint.sh
