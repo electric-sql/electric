@@ -22,6 +22,12 @@ services:
 
   electric:
     image: "${ELECTRIC_IMAGE}"
+    environment:
+      LOG_LEVEL: debug
+      GLOBAL_CLUSTER_ID: integration-tests.electric
+      MIGRATIONS_DIR: /migrations
+      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
+      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
     init: true
     privileged: true
 
