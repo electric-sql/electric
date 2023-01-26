@@ -68,6 +68,13 @@ ifeq (${TAG_AS_LATEST}, true)
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
+docker-build-ci-crossplatform:
+	mkdir -p deps
+	docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
+			--build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+			-t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
+			-t ${ELECTRIC_IMAGE_NAME}:latest .
+
 docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
 	docker image rm -f electric:local-build
