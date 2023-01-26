@@ -59,6 +59,7 @@ services:
       - seccomp:unconfined
       - apparmor:unconfined
     volumes:
+      - ./00_shared_init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
     command:
