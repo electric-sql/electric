@@ -1,5 +1,10 @@
 
-.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage
+.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
+
+INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
+
+print_version_from_git:
+	echo "${INFERRED_VERSION}"
 
 build_tools:
 	mix local.hex --force
@@ -48,15 +53,20 @@ DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-pgsql-%:
 	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U electric -d electric
 
+ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 docker-build:
-	docker build -t electric:local-build .
+	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} -t electric:local-build .
 
 docker-build-ci:
 	mkdir -p deps
-	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_IMAGE_TAG} \
-      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG} \
+	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
       -t electric:local-build .
-	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
+	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}
+ifeq (${TAG_AS_LATEST}, true)
+	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
+	docker push "${ELECTRIC_IMAGE_NAME}:latest"
+endif
 
 docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")

@@ -4,7 +4,7 @@ defmodule Electric.MixProject do
   def project do
     [
       app: :electric,
-      version: "0.1.0-#{System.get_env("ELECTRIC_VERSION", "local")}",
+      version: version_from_git_or_env(),
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -76,4 +76,31 @@ defmodule Electric.MixProject do
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp version_from_git_or_env() do
+    with :error <- version_from_env(),
+         :error <- version_from_git() do
+      "0.0.0-local"
+    else
+      {:ok, version} -> version
+    end
+  end
+
+  defp version_from_env() do
+    with {:ok, version} <- System.fetch_env("ELECTRIC_VERSION"),
+         trimmed = String.trim(version),
+         {:ok, _} <- Version.parse(trimmed) do
+      {:ok, trimmed}
+    end
+  end
+
+  defp version_from_git() do
+    case System.cmd("git", ~w[describe --abbrev=7 --tags --always --first-parent]) do
+      {untrimmed_version, 0} ->
+        {:ok, String.trim(untrimmed_version)}
+
+      {_, _error_code} ->
+        :error
+    end
+  end
 end
