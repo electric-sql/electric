@@ -15,6 +15,9 @@ build:
 local-build: node_modules
 	yarn build
 
+bump-electric-sql:
+	yarn remove electric-sql && yarn add git+https://github.com/electric-sql/typescript-client.git#${COMMIT}
+
 run_node:
 	yarn node
 
