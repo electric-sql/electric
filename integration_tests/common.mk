@@ -44,7 +44,11 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 	touch .sysbench_docker_build
 
 start_dev_env:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up -d pg_1 pg_2 pg_3
+	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3 
+
+log_dev_env:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
+
 
 ifdef LUX_EXTRA_LOGS
 export VAXINE_VOLUME=${LUX_EXTRA_LOGS}

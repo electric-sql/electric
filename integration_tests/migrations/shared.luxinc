@@ -7,6 +7,7 @@
     [progress start development environment]
     !make start_dev_env
     [invoke ok]
+    !make log_dev_env
 
 [shell pg_1]
     [invoke start_psql pg_1]
