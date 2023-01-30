@@ -9,7 +9,7 @@
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                    secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
+                    secret_key: "integration-tests-signing-key-example"}
     ?$eprompt
     !{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ auth: %{auth_provider: provider, user_id: "$user_id"}, \
@@ -22,7 +22,7 @@
                 auto_ping: :true \
             ])
     ?+$eprompt
-    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %(.*).SatInStartReplicationReq{(.*)lsn: "", (.*)
     ?(.*) %(.*).SatInStartReplicationResp{(.*)
 
     !Electric.Test.SatelliteWsClient.send_test_relation_owned(conn)

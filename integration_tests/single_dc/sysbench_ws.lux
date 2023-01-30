@@ -40,7 +40,7 @@
     # issuer and secret key here must be the same as the issuer in the
     # config [:electric, Electric.Satellite.Auth, :provider]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                  secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
+                  secret_key: "integration-tests-signing-key-example"}
     ?$eprompt
     !Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ \
