@@ -62,7 +62,7 @@
 
 [macro stop_electric ELECTRIC_INDEX]
     [my old=$LUX_SHELLNAME]
-    [shell stop_electric]
+    [shell stop_electric_$ELECTRIC_INDEX]
         !make stop_electric_$ELECTRIC_INDEX
         [invoke ok]
     [shell electric_$ELECTRIC_INDEX]
