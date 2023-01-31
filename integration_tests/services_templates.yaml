@@ -77,6 +77,8 @@ services:
     image: "node:18"
     user: "${UID}:${GID}"
     environment:
+      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
+      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
       HOME: ${PROJECT_ROOT}/integration_tests/satellite_client
       SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
       NODE_DISABLE_COLORS: 1
