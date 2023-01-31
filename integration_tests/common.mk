@@ -17,7 +17,7 @@ ifdef USE_LOCAL_IMAGE
 else
 	export VAXINE_IMAGE?=${DOCKER_REGISTRY}/vaxine:latest
 	export POSTGRESQL_IMAGE?=${DOCKER_REGISTRY}/postgres:latest
-	export SYSBENCH_IMAGE?=${DOCKER_REGISTRY}/sysbench:latest
+	export SYSBENCH_IMAGE?=europe-docker.pkg.dev/vaxine/ci/sysbench:latest
 endif
 
 ifeq (${ELECTRIC_IMAGE_NAME}${ELECTRIC_IMAGE_TAG},)
