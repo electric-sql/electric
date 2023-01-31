@@ -53,7 +53,7 @@ services:
     image: "${POSTGRESQL_IMAGE}"
     environment:
       POSTGRES_DB: electric
-      POSTGRES_USER: electric
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     security_opt:
       - seccomp:unconfined

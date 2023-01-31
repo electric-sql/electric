@@ -22,8 +22,8 @@ services:
       VAXINE_HOST: vaxine_1
       ELECTRIC_HOST: electric_1
       CONNECTORS: >-
-        postgres_1=postgresql://electric:password@pg_1:5432/electric;
-        postgres_2=postgresql://electric:password@pg_2:5432/electric;
+        postgres_1=postgresql://postgres:password@pg_1:5432/electric;
+        postgres_2=postgresql://postgres:password@pg_2:5432/electric;
       ELECTRIC_INSTANCE_ID: instance-a.region-1.test.electric-db
       ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     ports:
@@ -42,7 +42,7 @@ services:
       VAXINE_HOST: vaxine_1
       ELECTRIC_HOST: electric_2
       CONNECTORS: >-
-        postgres_3=postgresql://electric:password@pg_3:5432/electric;
+        postgres_3=postgresql://postgres:password@pg_3:5432/electric;
       ELECTRIC_INSTANCE_ID: instance-b.region-1.test.electric-db
       ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     ports:

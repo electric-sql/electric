@@ -9,7 +9,6 @@
 [invoke setup_pg_and_vaxine]
 
 [shell sysbench_pg1]
-    [invoke log "Prepare tables and generate data for PG1"]
     !make start_sysbench
     ?$dprompt
     [invoke sysbench_prepare pg_1 10 10]
@@ -17,7 +16,6 @@
     [invoke ok]
 
 [shell sysbench_pg2]
-    [invoke log "Prepare tables for PG2"]
     !make start_sysbench
     ?$dprompt
     [invoke sysbench_prepare pg_2 0 10]
