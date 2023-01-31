@@ -65,6 +65,9 @@ start_vaxine_%:
 start_electric_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
+stop_electric_%:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
+
 stop_dev_env:
 	if [ -n "`docker ps --filter name=elixir_client --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=elixir_client --format '{{.Names}}' | xargs docker kill; \
@@ -72,8 +75,11 @@ stop_dev_env:
 	if [ -n "`docker ps --filter name=satellite_client --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=satellite_client --format '{{.Names}}' | xargs docker kill; \
 	fi
-	docker-compose -f ${DOCKER_COMPOSE_FILE} down
+	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
+		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
+	fi
 	docker-compose -f ${DOCKER_COMPOSE_FILE} stop
+	docker-compose -f ${DOCKER_COMPOSE_FILE} down
 
 start_sysbench:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \

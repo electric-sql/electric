@@ -38,6 +38,16 @@
 
 [endmacro]
 
+[macro stop_electric]
+    [my old=$LUX_SHELLNAME]
+    [shell stop_electric]
+        !make stop_electric_1
+        [invoke ok]
+    [shell electric]
+        [invoke ok]
+    [shell $old]
+[endmacro]
+
 [macro teardown]
     [progress stop development environment]
     !make stop_dev_env
