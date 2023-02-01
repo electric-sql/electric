@@ -28,6 +28,8 @@ test('hydrate', async (t) => {
 
   t.deepEqual(hydrated.console, {
     host: 'console.electric-sql.com',
+    port: 443,
+    ssl: true,
   })
 
   t.false(hydrated.debug)

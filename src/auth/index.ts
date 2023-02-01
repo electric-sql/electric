@@ -25,16 +25,15 @@ export class ConsoleHttpClient implements ConsoleClient {
 
   async token({ app, env, clientId }: TokenRequest): Promise<TokenResponse> {
     Log.info(`fetching token for ${app} ${env} ${clientId}`)
-    const res = await fetch(
-      `https://${this.config.console?.host}/api/v1/jwt/auth/login`,
-      {
-        body: JSON.stringify({ data: { app, env, username: clientId } }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        method: 'POST',
-      }
-    )
+    const protocol = this.config.console?.ssl ? 'https' : 'http'
+    const host = `${protocol}://${this.config.console?.host}:${this.config.console?.port}`
+    const res = await fetch(`${host}/api/v1/jwt/auth/login`, {
+      body: JSON.stringify({ data: { app, env, username: clientId } }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
 
     const response = await res.json()
 
