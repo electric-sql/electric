@@ -1,6 +1,9 @@
 import Log from 'loglevel'
 
-import { DatabaseAdapter as DatabaseAdapterInterface } from '../../electric/adapter'
+import {
+  DatabaseAdapter as DatabaseAdapterInterface,
+  Transaction as Tx,
+} from '../../electric/adapter'
 import {
   parseTableNames,
   QualifiedTablename,
@@ -55,6 +58,19 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     })
   }
 
+  transaction<T>(
+    f: (_tx: Tx, setResult: (res: T) => void) => void
+  ): Promise<T | void> {
+    let result: T | void = undefined
+    return new Promise((resolve, reject) => {
+      const txFn = (tx: Transaction) => {
+        f(new WrappedTx(tx), (res) => (result = res))
+      }
+
+      this.db.transaction(txFn, reject, resolve)
+    }).then(() => result)
+  }
+
   query({ sql, args }: Statement): Promise<Row[]> {
     if (args && !Array.isArray(args)) {
       throw new Error(
@@ -92,4 +108,55 @@ function onlyPositionalArgs(
   statements: Statement[]
 ): statements is PositionalStatement[] {
   return statements.every((x) => !x.args || Array.isArray(x.args))
+}
+
+class WrappedTx implements Tx {
+  constructor(private tx: Transaction) {}
+
+  run(
+    statement: Statement,
+    successCallback?: (tx: Tx) => void,
+    errorCallback?: (error: any) => void
+  ): void {
+    this.executeSQL(
+      statement,
+      (tx, _res) => {
+        if (typeof successCallback !== 'undefined') successCallback(tx)
+      },
+      errorCallback
+    )
+  }
+
+  query(
+    statement: Statement,
+    successCallback: (tx: Tx, res: Row[]) => void,
+    errorCallback?: (error: any) => void
+  ): void {
+    this.executeSQL(statement, successCallback, errorCallback)
+  }
+
+  private executeSQL(
+    { sql, args }: Statement,
+    successCallback?: (tx: Tx, res: Row[]) => void,
+    errorCallback?: (error: any) => void
+  ) {
+    if (args && !Array.isArray(args)) {
+      throw new Error(
+        `react-native-sqlite-storage doesn't support named query parameters, use positional parameters instead`
+      )
+    }
+
+    this.tx.executeSql(
+      sql,
+      args ? (args as any) : [],
+      (tx, res) => {
+        if (typeof successCallback !== 'undefined')
+          successCallback(new WrappedTx(tx), rowsFromResults(res))
+      },
+      (_tx, err) => {
+        if (typeof errorCallback !== 'undefined') errorCallback(err)
+        return true
+      }
+    )
+  }
 }
