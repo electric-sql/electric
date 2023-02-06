@@ -49,7 +49,7 @@ test('database adapter run works', async (t) => {
   const sql = 'drop table badgers'
   const result = await adapter.run({ sql })
 
-  t.is(result, undefined)
+  t.is(result.rowsAffected, 0)
 })
 
 test('database adapter query works', async (t) => {

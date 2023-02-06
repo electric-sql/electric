@@ -2,6 +2,7 @@ import Log from 'loglevel'
 
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  RunResult,
   Transaction as Tx,
 } from '../../electric/adapter'
 import {
@@ -14,15 +15,16 @@ import {
 import { ensurePromise } from '../generic/promise'
 import { rowsFromResults } from '../generic/results'
 import { Database, StatementCallback, Transaction } from './database'
+import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 
 export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(public db: Database, private promisesEnabled: boolean = false) {}
 
-  run(statement: Statement): Promise<void> {
+  run(statement: Statement): Promise<RunResult> {
     return this.runInTransaction(statement)
   }
 
-  async runInTransaction(...statements: Statement[]): Promise<void> {
+  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     if (!onlyPositionalArgs(statements)) {
       throw new Error(
         `react-native-sqlite-storage doesn't support named query parameters, use positional parameters instead`
@@ -32,19 +34,35 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     const promisesEnabled = this.promisesEnabled
     const transaction = this.db.transaction.bind(this.db)
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<RunResult>((resolve, reject) => {
+      let rowsAffected = 0
       const txFn = (tx: Transaction) => {
         for (const { sql, args } of statements) {
           const stmtFailure = (err: any) => {
             Log.info('run statement failure', sql, err)
             reject(err)
           }
-          tx.executeSql(sql, args, undefined, stmtFailure)
+          tx.executeSql(
+            sql,
+            args,
+            (tx2, _res) => {
+              if (isInsertUpdateOrDeleteStatement(sql)) {
+                // Fetch the number of rows affected by the last insert, update, or delete
+                // Fetch it manually because `_res.affectedRows` is wrong
+                tx2.executeSql('SELECT changes()', undefined, (_, res) => {
+                  rowsAffected += res.rows.length
+                })
+              }
+            },
+            stmtFailure
+          )
         }
       }
 
       const success = () => {
-        resolve()
+        resolve({
+          rowsAffected: rowsAffected,
+        })
       }
 
       const failure = (err: any) => {
@@ -115,13 +133,13 @@ class WrappedTx implements Tx {
 
   run(
     statement: Statement,
-    successCallback?: (tx: Tx) => void,
+    successCallback?: (tx: Tx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
     this.executeSQL(
       statement,
-      (tx, _res) => {
-        if (typeof successCallback !== 'undefined') successCallback(tx)
+      (tx, _rows, res) => {
+        if (typeof successCallback !== 'undefined') successCallback(tx, res)
       },
       errorCallback
     )
@@ -137,7 +155,7 @@ class WrappedTx implements Tx {
 
   private executeSQL(
     { sql, args }: Statement,
-    successCallback?: (tx: Tx, res: Row[]) => void,
+    successCallback?: (tx: Tx, rows: Row[], res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
     if (args && !Array.isArray(args)) {
@@ -151,7 +169,9 @@ class WrappedTx implements Tx {
       args ? (args as any) : [],
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new WrappedTx(tx), rowsFromResults(res))
+          successCallback(new WrappedTx(tx), rowsFromResults(res), {
+            rowsAffected: res.rowsAffected,
+          })
       },
       (_tx, err) => {
         if (typeof errorCallback !== 'undefined') errorCallback(err)

@@ -1,5 +1,6 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  RunResult,
   Transaction as Tx,
 } from '../../electric/adapter'
 import {
@@ -15,36 +16,51 @@ import { Database } from './database'
 export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(public db: Database) {}
 
-  run({ sql, args }: Statement): Promise<void> {
+  run({ sql, args }: Statement): Promise<RunResult> {
     if (args && !Array.isArray(args)) {
       throw new Error(
         `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
       )
     }
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<RunResult>((resolve, reject) => {
       return this.db.transaction((tx) =>
-        tx.executeSql(sql, args, () => resolve(), reject)
+        tx.executeSql(
+          sql,
+          args,
+          (_, res) => {
+            resolve({
+              rowsAffected: res.rowsAffected,
+            })
+          },
+          reject
+        )
       )
     })
   }
 
-  runInTransaction(...statements: Statement[]): Promise<void> {
+  runInTransaction(...statements: Statement[]): Promise<RunResult> {
     if (statements.some((x) => x.args && !Array.isArray(x.args))) {
       throw new Error(
         `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
       )
     }
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<RunResult>((resolve, reject) => {
+      let rowsAffected = 0
       this.db.transaction(
         (tx) => {
           for (const { sql, args } of statements) {
-            tx.executeSql(sql, args as SqlValue[] | undefined)
+            tx.executeSql(sql, args as SqlValue[] | undefined, (_, res) => {
+              rowsAffected += res.rowsAffected
+            })
           }
         },
         reject,
-        () => resolve()
+        () =>
+          resolve({
+            rowsAffected: rowsAffected,
+          })
       )
     })
   }
@@ -91,13 +107,13 @@ class WrappedTx implements Tx {
 
   run(
     statement: Statement,
-    successCallback?: (tx: Tx) => void,
+    successCallback?: (tx: Tx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
     this.executeSQL(
       statement,
-      (tx, _res) => {
-        if (typeof successCallback !== 'undefined') successCallback(tx)
+      (tx, _rows, res) => {
+        if (typeof successCallback !== 'undefined') successCallback(tx, res)
       },
       errorCallback
     )
@@ -113,7 +129,7 @@ class WrappedTx implements Tx {
 
   private executeSQL(
     { sql, args }: Statement,
-    successCallback?: (tx: Tx, res: Row[]) => void,
+    successCallback?: (tx: Tx, rows: Row[], res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
     if (args && !Array.isArray(args)) {
@@ -127,7 +143,9 @@ class WrappedTx implements Tx {
       args,
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new WrappedTx(tx), rowsFromResults(res))
+          successCallback(new WrappedTx(tx), rowsFromResults(res), {
+            rowsAffected: res.rowsAffected,
+          })
       },
       (_tx, err) => {
         if (typeof errorCallback !== 'undefined') errorCallback(err)

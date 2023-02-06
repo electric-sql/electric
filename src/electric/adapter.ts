@@ -8,10 +8,10 @@ export interface DatabaseAdapter {
   db: AnyDatabase
 
   // Runs the provided sql statement
-  run(statement: Statement): Promise<void>
+  run(statement: Statement): Promise<RunResult>
 
   // Runs the provided sql as a transaction
-  runInTransaction(...statements: Statement[]): Promise<void>
+  runInTransaction(...statements: Statement[]): Promise<RunResult>
 
   // Query the database.
   query(statement: Statement): Promise<Row[]>
@@ -30,7 +30,7 @@ export interface DatabaseAdapter {
 export interface Transaction {
   run(
     statement: Statement,
-    successCallback?: (tx: Transaction) => void,
+    successCallback?: (tx: Transaction, result: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void
 
@@ -39,4 +39,8 @@ export interface Transaction {
     successCallback: (tx: Transaction, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void
+}
+
+export interface RunResult {
+  rowsAffected: number
 }

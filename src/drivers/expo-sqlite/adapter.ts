@@ -6,6 +6,7 @@ import { Results, rowsFromResults } from '../generic/results'
 import { Database, Transaction } from './database'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  RunResult,
   Transaction as Tx,
 } from '../../electric/adapter'
 
@@ -16,14 +17,21 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     this.db = db
   }
 
-  runInTransaction(...statements: Statement[]): Promise<void> {
+  runInTransaction(...statements: Statement[]): Promise<RunResult> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
+      let rowsAffected = 0
       const txFn = (tx: Transaction) => {
         for (const { sql, args } of statements) {
-          tx.executeSql(sql, args ? (args as any) : [])
+          tx.executeSql(sql, args ? (args as any) : [], (_, res) => {
+            rowsAffected += res.rowsAffected
+          })
         }
       }
-      this.db.transaction(txFn, reject, resolve)
+      this.db.transaction(txFn, reject, () =>
+        resolve({
+          rowsAffected: rowsAffected,
+        })
+      )
     })
   }
 
@@ -39,7 +47,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     }).then(() => result)
   }
 
-  run(statement: Statement): Promise<void> {
+  run(statement: Statement): Promise<RunResult> {
     return this.runInTransaction(statement)
   }
 
@@ -71,13 +79,13 @@ class WrappedTx implements Tx {
 
   run(
     statement: Statement,
-    successCallback?: (tx: Tx) => void,
+    successCallback?: (tx: Tx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
     this.executeSQL(
       statement,
-      (tx, _res) => {
-        if (typeof successCallback !== 'undefined') successCallback(tx)
+      (tx, _rows, res) => {
+        if (typeof successCallback !== 'undefined') successCallback(tx, res)
       },
       errorCallback
     )
@@ -93,7 +101,7 @@ class WrappedTx implements Tx {
 
   private executeSQL(
     { sql, args }: Statement,
-    successCallback?: (tx: Tx, res: Row[]) => void,
+    successCallback?: (tx: Tx, rows: Row[], res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
     this.tx.executeSql(
@@ -101,7 +109,9 @@ class WrappedTx implements Tx {
       args ? (args as any) : [],
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new WrappedTx(tx), rowsFromResults(res))
+          successCallback(new WrappedTx(tx), rowsFromResults(res), {
+            rowsAffected: res.rowsAffected,
+          })
       },
       (_tx, err) => {
         if (typeof errorCallback !== 'undefined') errorCallback(err)

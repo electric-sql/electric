@@ -193,7 +193,7 @@ test('database adapter run works', async (t) => {
   const sql = 'drop table badgers'
   const result = await adapter.run({ sql })
 
-  t.is(result, undefined)
+  t.is(result.rowsAffected, 0) // rowsAffected only counts rows affected by insert, update, and delete statements
 })
 
 test('database adapter query works', async (t) => {
@@ -231,7 +231,7 @@ test('adapter run works on real DB', async (t) => {
   const insertRecordSql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
   const res = await adapter.run({ sql: insertRecordSql })
-  t.is(res, undefined)
+  t.is(res.rowsAffected, 1)
 })
 
 test('adapter query works on real DB', async (t) => {
@@ -253,10 +253,12 @@ test('adapter runInTransaction works on real DB', async (t) => {
   const insertRecord2Sql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i2', 't2', 'c2', 25)"
 
-  await adapter.runInTransaction(
+  const txRes = await adapter.runInTransaction(
     { sql: insertRecord1Sql },
     { sql: insertRecord2Sql }
   )
+
+  t.is(txRes.rowsAffected, 2)
 
   const selectAll = 'SELECT id FROM Post'
   const res = await adapter.query({ sql: selectAll })
@@ -290,30 +292,36 @@ test('adapter runInTransaction rolls back on conflict', async (t) => {
 
 test('adapter supports dependent queries in transaction on real DB', async (t) => {
   const adapter = await makeAdapter()
-  const txRes = await adapter.transaction((tx, setResult) => {
-    tx.run(
-      {
-        sql: "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)",
-      },
-      (tx2) => {
-        const select = { sql: "SELECT nbr FROM Post WHERE id = 'i1'" }
-        tx2.query(select, (tx3, rows) => {
-          const [res] = rows as unknown as Array<{ nbr: number }>
-          const newNbr = res.nbr + 2
-          tx3.run(
-            {
-              sql: `INSERT INTO Post (id, title, contents, nbr) VALUES ('i2', 't2', 'c2', ${newNbr})`,
-            },
-            () => {
-              setResult(newNbr)
-            }
-          )
-        })
-      }
-    )
-  })
+  const [txRes, rowsAffected] = (await adapter.transaction<Array<number>>(
+    (tx, setResult) => {
+      let rowsAffected = 0
+      tx.run(
+        {
+          sql: "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)",
+        },
+        (tx2, res) => {
+          rowsAffected += res.rowsAffected
+          const select = { sql: "SELECT nbr FROM Post WHERE id = 'i1'" }
+          tx2.query(select, (tx3, rows) => {
+            const [res] = rows as unknown as Array<{ nbr: number }>
+            const newNbr = res.nbr + 2
+            tx3.run(
+              {
+                sql: `INSERT INTO Post (id, title, contents, nbr) VALUES ('i2', 't2', 'c2', ${newNbr})`,
+              },
+              (_, res) => {
+                rowsAffected += res.rowsAffected
+                setResult([newNbr, rowsAffected])
+              }
+            )
+          })
+        }
+      )
+    }
+  )) as unknown as Array<number>
 
   t.is(txRes, 20)
+  t.is(rowsAffected, 2)
 
   const selectAll = 'SELECT * FROM Post'
   const res = await adapter.query({ sql: selectAll })

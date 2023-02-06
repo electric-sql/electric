@@ -1,5 +1,6 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  RunResult,
   Transaction as Tx,
 } from '../../electric/adapter'
 
@@ -9,6 +10,7 @@ import { Row, Statement } from '../../util/types'
 
 import { Database } from './database'
 import { resultToRows } from './result'
+import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 
 export class DatabaseAdapter implements DatabaseAdapterInterface {
   db: Database
@@ -16,8 +18,10 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(db: Database) {
     this.db = db
   }
-  async runInTransaction(...statements: Statement[]): Promise<void> {
+
+  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     let open = false
+    let rowsAffected = 0
     try {
       // SQL-js accepts multiple statements in a string and does
       // not run them as transaction.
@@ -25,6 +29,13 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
       open = true
       for (const stmt of statements) {
         await this.db.run(stmt.sql, stmt.args)
+        if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
+          // Fetch the number of rows affected by the last insert, update, or delete
+          rowsAffected += await this.db.getRowsModified()
+        }
+      }
+      return {
+        rowsAffected: rowsAffected,
       }
     } catch (error) {
       await this.db.run('ROLLBACK')
@@ -63,9 +74,13 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     })
   }
 
-  async run(statement: Statement): Promise<void> {
+  async run(statement: Statement): Promise<RunResult> {
     const prepared = await this.db.prepare(statement.sql)
     await prepared.run(statement.args ? statement.args : [])
+    const rowsAffected = await this.db.getRowsModified()
+    return {
+      rowsAffected: rowsAffected,
+    }
   }
 
   async query(statement: Statement): Promise<Row[]> {
@@ -101,14 +116,14 @@ class WrappedTx implements Tx {
 
   run(
     statement: Statement,
-    successCallback?: (tx: WrappedTx) => void,
+    successCallback?: (tx: WrappedTx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
     this.adapter
       .run(statement)
-      .then(() => {
+      .then((res) => {
         if (typeof successCallback !== 'undefined') {
-          successCallback(this)
+          successCallback(this, res)
         }
       })
       .catch((err) => {
