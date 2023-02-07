@@ -5,21 +5,22 @@
 
 [include shared.luxinc]
 
-[invoke setup_pg_and_vaxine]
+[invoke setup]
+# Starting and stopping Electric is required to properly initialize the database - it's what we expect to have done in production
+# Namely, Electric exectutes `CREATE_REPLICATION_SLOT` before any data gets inserted, and thus we can receive inserted backlog on reconnection.
+[invoke stop_electric]
 
 [shell sysbench_pg1]
     !make start_sysbench
     ?$dprompt
-    !sysbench --db-driver=pgsql --table-size=1000 --tables=10 --threads=1 --pgsql-host=pg_1 --pgsql-port=5432 --pgsql-user=electric --pgsql-password=password --pgsql-db=electric oltp_write_only prepare
-    [invoke ok2 $dprompt]
+    [invoke sysbench_prepare pg_1 1000 10]
     !exit
     [invoke ok]
 
 [shell sysbench_pg2]
     !make start_sysbench
     ?$dprompt
-    !sysbench --db-driver=pgsql --table-size=0 --tables=10 --threads=1 --pgsql-host=pg_2 --pgsql-port=5432 --pgsql-user=electric --pgsql-password=password --pgsql-db=electric oltp_write_only prepare
-    [invoke ok2 $dprompt]
+    [invoke sysbench_prepare pg_2 0 10]
     !exit
     [invoke ok]
 
@@ -30,6 +31,7 @@
 [endmacro]
 
 [shell pg_2]
+    [invoke log "Wait for all generated entries to be replicated"]
    # couldn't figure out quickly why loop in the loop was not reliable
     [invoke wait_table sbtest1]
     [invoke wait_table sbtest2]

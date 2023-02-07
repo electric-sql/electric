@@ -6,10 +6,12 @@
 
 [include shared.luxinc]
 
-[invoke setup_pg_and_vaxine]
+[invoke setup]
+# Starting and stopping Electric is required to properly initialize the database - it's what we expect to have done in production
+# Namely, Electric exectutes `CREATE_REPLICATION_SLOT` before any data gets inserted, and thus we can receive inserted backlog on reconnection.
+[invoke stop_electric]
 
 [shell sysbench_pg1]
-    [invoke log "Prepare tables and generate data for PG1"]
     !make start_sysbench
     ?$dprompt
     [invoke sysbench_prepare pg_1 10 10]
@@ -17,7 +19,6 @@
     [invoke ok]
 
 [shell sysbench_pg2]
-    [invoke log "Prepare tables for PG2"]
     !make start_sysbench
     ?$dprompt
     [invoke sysbench_prepare pg_2 0 10]
@@ -40,7 +41,7 @@
     # issuer and secret key here must be the same as the issuer in the
     # config [:electric, Electric.Satellite.Auth, :provider]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                  secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
+                  secret_key: "integration-tests-signing-key-example"}
     ?$eprompt
     !Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ \
@@ -53,7 +54,7 @@
             {:auto_ping, :true} \
             ])
     ?+$eprompt
-    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %(.*).SatInStartReplicationReq\{.*lsn: ""
 
 [shell pg_2]
     [invoke log "Make sure we replicate all data from PG1 -> PG2"]
@@ -69,9 +70,9 @@
 
 [shell ws1]
     [invoke log "Wait for sync up to current state"]
-    ?\d+:\d+:\d+.\d+ \[info\]  rec \[13]: %{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[13\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9\}
     [local middle_lsn=$1]
-    ?\d+:\d+:\d+.\d+ \[info\]  rec \[21]: %{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[21\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9\}
 
 #
 #[shell sysbench_pg1]
@@ -92,7 +93,7 @@
 [shell ws1]
     [timeout 10]
     [invoke log "Wait for Satellite to receive transaction from PG2"]
-    ?\d+:\d+:\d+.\d+ \[info\]  rec \[23]: %{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: \d+}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[23\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: \d+\}
     [local middle_lsn=$1]
 
     [invoke log "Send transaction with insert from Satellite"]
@@ -100,7 +101,7 @@
     ?:ok
     !Electric.Test.SatelliteWsClient.send_new_data("1", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "Hello from Satellite")
     ?:ok
-    ?%(.*).SatPingResp{.* lsn: "1"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "1"
 
 [shell electric]
     ?Hello from Satellite
@@ -113,7 +114,7 @@
     [invoke log "Send transaction with update from Satellite"]
     !Electric.Test.SatelliteWsClient.send_update_data("2", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
     ?:ok
-    ?%(.*).SatPingResp{.* lsn: "2"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "2"
 
 [shell electric]
     ?How are you?
@@ -126,7 +127,7 @@
     [invoke log "Send transaction with delete from Satellite"]
     !Electric.Test.SatelliteWsClient.send_delete_data("3", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
     ?:ok
-    ?%(.*).SatPingResp{.* lsn: "3"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "3"
 
 [shell electric]
     ?How are you?

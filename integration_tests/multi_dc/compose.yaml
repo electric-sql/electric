@@ -42,8 +42,13 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
-    volumes:
-      - ./electric_1.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
+    environment:
+      VAXINE_HOST: vaxine_1
+      ELECTRIC_HOST: electric_1
+      CONNECTORS: >-
+        pg_1=postgresql://postgres:password@pg_1:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-a.region-1.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     depends_on:
       - pg_1
       - vaxine_1
@@ -52,8 +57,13 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
-    volumes:
-      - ./electric_2.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
+    environment:
+      VAXINE_HOST: vaxine_2
+      ELECTRIC_HOST: electric_2
+      CONNECTORS: >-
+        pg_2=postgresql://postgres:password@pg_2:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-a.region-2.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-2.test.electric-db
     depends_on:
       - pg_2
       - vaxine_2
@@ -62,8 +72,13 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
-    volumes:
-      - ./electric_3.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
+    environment:
+      VAXINE_HOST: vaxine_3
+      ELECTRIC_HOST: electric_3
+      CONNECTORS: >-
+        pg_3=postgresql://postgres:password@pg_3:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-a.region-3.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-3.test.electric-db
     depends_on:
       - pg_3
       - vaxine_3

@@ -1,4 +1,7 @@
 import Database from 'better-sqlite3'
+import jwt from 'jsonwebtoken'
+import { ElectricConfig } from 'electric-sql'
+import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify, ElectrifiedDatabase } from 'electric-sql/node'
@@ -8,12 +11,29 @@ import { v4 as uuidv4 } from 'uuid'
 setLogLevel('DEBUG')
 
 // Console client throws an error when unable to fetch token which causes test to fail
-export class MockConsoleClient {
-  token = () =>
-    Promise.resolve({
-      token: 'MOCK_TOKEN',
-      refreshToken: 'MOCK_REFRESH_TOKEN',
-    })
+export class MockConsoleClient implements ConsoleClient {
+  token = async (request: TokenRequest) => {
+    const mockIss =
+      process.env.SATELLITE_AUTH_SIGNING_ISS || 'dev.electric-sql.com'
+    const mockKey =
+      process.env.SATELLITE_AUTH_SIGNING_KEY ||
+      'integration-tests-signing-key-example'
+
+    const iat = Math.floor(Date.now() / 1000) - 1000
+
+    const token = jwt.sign(
+      { user_id: request.clientId, type: 'access', iat },
+      mockKey,
+      {
+        issuer: mockIss,
+        algorithm: 'HS256',
+        expiresIn: '2h',
+      }
+    )
+
+    // Refresh token is not going to be used, so we don't mock it
+    return { token, refreshToken: '' }
+  }
 }
 
 export const read_migrations = (migration_file: string) => {
@@ -27,23 +47,21 @@ export const open_db = (
   host: string,
   port: number,
   migrations: any
-) => {
+): Promise<ElectrifiedDatabase> => {
   //= () => Promise<ElectrifiedDatabase> {
   const original = new Database(name)
-  const config = {
+  const config: ElectricConfig = {
     app: 'satellite_client',
     migrations: migrations,
     replication: {
       host: host,
       port: port,
       ssl: false,
-      insecure: true,
     },
-    token: 'token',
     debug: true,
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return electrify(original as any, config, {
+  return electrify(original, config, {
     console: new MockConsoleClient(),
   })
 }

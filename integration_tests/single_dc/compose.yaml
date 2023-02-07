@@ -18,8 +18,14 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
-    volumes:
-      - ./electric.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
+    environment:
+      VAXINE_HOST: vaxine_1
+      ELECTRIC_HOST: electric_1
+      CONNECTORS: >-
+        postgres_1=postgresql://postgres:password@pg_1:5432/electric;
+        postgres_2=postgresql://postgres:password@pg_2:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-a.region-1.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     ports:
       - "5050:5050"
       - "5133:5133"
@@ -32,8 +38,13 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
-    volumes:
-      - ./electric_b.exs:/app/releases/0.1.0-${ELECTRIC_IMAGE_TAG:-local}/runtime.exs:ro
+    environment:
+      VAXINE_HOST: vaxine_1
+      ELECTRIC_HOST: electric_2
+      CONNECTORS: >-
+        postgres_3=postgresql://postgres:password@pg_3:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-b.region-1.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     ports:
       - "5051:5050"
       - "5134:5133"

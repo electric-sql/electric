@@ -22,6 +22,12 @@ services:
 
   electric:
     image: "${ELECTRIC_IMAGE}"
+    environment:
+      LOG_LEVEL: debug
+      GLOBAL_CLUSTER_ID: integration-tests.electric
+      MIGRATIONS_DIR: /migrations
+      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
+      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
     init: true
     privileged: true
 
@@ -47,13 +53,14 @@ services:
     image: "${POSTGRESQL_IMAGE}"
     environment:
       POSTGRES_DB: electric
-      POSTGRES_USER: electric
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
     volumes:
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./00_shared_init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
     command:
       - -c
@@ -70,6 +77,8 @@ services:
     image: "node:18"
     user: "${UID}:${GID}"
     environment:
+      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
+      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
       HOME: ${PROJECT_ROOT}/integration_tests/satellite_client
       SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
       NODE_DISABLE_COLORS: 1

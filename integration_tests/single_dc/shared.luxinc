@@ -6,6 +6,7 @@
     [progress start development environment]
     !make start_dev_env
     [invoke ok]
+    !make log_dev_env
 
 [shell pg_1]
     [invoke start_psql pg_1]
@@ -35,6 +36,16 @@
 [shell start_env]
     [progress setup finished]
 
+[endmacro]
+
+[macro stop_electric]
+    [my old=$LUX_SHELLNAME]
+    [shell stop_electric]
+        !make stop_electric_1
+        [invoke ok]
+    [shell electric]
+        [invoke ok]
+    [shell $old]
 [endmacro]
 
 [macro teardown]

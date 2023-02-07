@@ -6,6 +6,7 @@
     [progress start development environment]
     !make start_dev_env
     [invoke ok]
+    !make log_dev_env
 
 [shell pg_1]
     [invoke start_psql pg_1]
@@ -46,18 +47,27 @@
 [endmacro]
 
 [macro setup_rest]
-
 [shell electric_1]
-    [timeout 10]
+    [timeout 20]
     !make start_electric_1
     -$fail_pattern
     ?START_REPLICATION SLOT
 
 [shell electric_2]
-    [timeout 10]
+    [timeout 20]
     !make start_electric_2
-     -$fail_pattern
+    -$fail_pattern
     ?START_REPLICATION SLOT
+[endmacro]
+
+[macro stop_electric ELECTRIC_INDEX]
+    [my old=$LUX_SHELLNAME]
+    [shell stop_electric_$ELECTRIC_INDEX]
+        !make stop_electric_$ELECTRIC_INDEX
+        [invoke ok]
+    [shell electric_$ELECTRIC_INDEX]
+        [invoke ok]
+    [shell $old]
 [endmacro]
 
 [macro teardown]

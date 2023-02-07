@@ -44,7 +44,11 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 	touch .sysbench_docker_build
 
 start_dev_env:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up -d pg_1 pg_2 pg_3
+	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3 
+
+log_dev_env:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
+
 
 ifdef LUX_EXTRA_LOGS
 export VAXINE_VOLUME=${LUX_EXTRA_LOGS}
@@ -61,6 +65,9 @@ start_vaxine_%:
 start_electric_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
+stop_electric_%:
+	docker-compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
+
 stop_dev_env:
 	if [ -n "`docker ps --filter name=elixir_client --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=elixir_client --format '{{.Names}}' | xargs docker kill; \
@@ -68,8 +75,11 @@ stop_dev_env:
 	if [ -n "`docker ps --filter name=satellite_client --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=satellite_client --format '{{.Names}}' | xargs docker kill; \
 	fi
-	docker-compose -f ${DOCKER_COMPOSE_FILE} down
+	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
+		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
+	fi
 	docker-compose -f ${DOCKER_COMPOSE_FILE} stop
+	docker-compose -f ${DOCKER_COMPOSE_FILE} down
 
 start_sysbench:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
@@ -108,7 +118,7 @@ endif
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U electric -d electric
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U postgres -d electric
 
 docker-attach-%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} exec $* bash

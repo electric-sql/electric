@@ -5,7 +5,6 @@
 
 [include shared.luxinc]
 [invoke setup]
-[timeout 10000]
 
 [macro validate_insert identity table]
 [shell pg_1]

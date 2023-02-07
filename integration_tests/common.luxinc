@@ -92,13 +92,14 @@
 [endmacro]
 
 [macro sysbench_prepare host table_size tables]
+    [invoke log "Prepare ${tables} tables and generate ${table_size} entires per table for ${host}"]
     !sysbench --db-driver=pgsql \
               --table-size=${table_size} \
               --tables=${tables} \
               --threads=1 \
               --pgsql-host=${host} \
               --pgsql-port=5432 \
-              --pgsql-user=electric \
+              --pgsql-user=postgres \
               --pgsql-password=password \
               --pgsql-db=electric \
               oltp_write_only prepare
@@ -114,7 +115,7 @@
               --report-interval=1 \
               --pgsql-host=${host} \
               --pgsql-port=5432 \
-              --pgsql-user=electric \
+              --pgsql-user=postgres \
               --pgsql-password=password \
               --pgsql-db=electric \
               oltp_write_only run

@@ -26,3 +26,6 @@ electric-*.tar
 /tmp/
 
 *offset_storage*.dat
+
+/archives
+.node_repl_history

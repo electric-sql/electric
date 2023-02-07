@@ -9,7 +9,7 @@
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                    secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")}
+                    secret_key: "integration-tests-signing-key-example"}
     ?$eprompt
     !{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn( \
             [ auth: %{auth_provider: provider, user_id: "$user_id"}, \
@@ -22,7 +22,7 @@
                 auto_ping: :true \
             ])
     ?+$eprompt
-    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "", (.*)
+    ?(.*) %(.*).SatInStartReplicationReq{(.*)lsn: "", (.*)
     ?(.*) %(.*).SatInStartReplicationResp{(.*)
 
     !Electric.Test.SatelliteWsClient.send_test_relation_owned(conn)
@@ -70,7 +70,7 @@
     [invoke log "user 1: session 1: receive data"]
     [local lsn=1]
     ?+%{.*commit_timestamp: 1666371111516
-    ?%(.*).SatPingResp{.* lsn: "$lsn"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "$lsn"
 
 [shell user_2_ws1]
     [invoke log "user 2: session 1: not receive user 1 data"]
@@ -90,7 +90,7 @@
     )
     ?:ok
     ?+%{.*commit_timestamp: 1666371333516
-    ?%(.*).SatPingResp{.* lsn: "3"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "3"
 
     [invoke log "user 2: session 1: send global data"]
     !Electric.Test.SatelliteWsClient.send_new_owned_data( \
@@ -103,7 +103,7 @@
     )
     ?:ok
     ?+%{.*commit_timestamp: 1666371444516
-    ?%(.*).SatPingResp{.* lsn: "4"}
+    ?%(.*)SatPingResp\{[^\}]*lsn: "4"
 
 [shell user_1_ws1]
     [invoke log "user 1: session 1: receive only global data"]
