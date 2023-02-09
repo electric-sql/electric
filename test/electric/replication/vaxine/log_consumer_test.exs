@@ -58,7 +58,7 @@ defmodule Electric.Replication.Vaxine.LogConsumerTest do
   setup_with_mocks([
     {Vaxine, [],
      [
-       transaction_to_vaxine: fn _tx, _pub, _origin -> :ok end
+       transaction_to_vaxine: fn _tx, _pub -> :ok end
      ]}
   ]) do
     {:ok, %{}}

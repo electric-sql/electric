@@ -7,8 +7,10 @@
 [include shared.luxinc]
 
 [invoke setup]
-# Starting and stopping Electric is required to properly initialize the database - it's what we expect to have done in production
-# Namely, Electric exectutes `CREATE_REPLICATION_SLOT` before any data gets inserted, and thus we can receive inserted backlog on reconnection.
+# Starting and stopping Electric is required to properly initialize the database
+# - it's what we expect to have done in production Namely, Electric exectutes
+# `CREATE_REPLICATION_SLOT` before any data gets inserted, and thus we can
+# receive inserted backlog on reconnection.
 [invoke stop_electric]
 
 [shell sysbench_pg1]
@@ -43,7 +45,8 @@
     !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
                   secret_key: "integration-tests-signing-key-example"}
     ?$eprompt
-    !Electric.Test.SatelliteWsClient.connect_and_spawn( \
+    !{ok, pid} = Electric.Test.SatelliteMockedClient.start_replicate_table( \
+            Electric.Test.SatelliteWsClient.gen_schema(), \
             [ \
             {:auth, %{auth_provider: provider, user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
             {:id, "ws1"}, \
@@ -70,38 +73,31 @@
 
 [shell ws1]
     [invoke log "Wait for sync up to current state"]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[13\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9\}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[13\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
     [local middle_lsn=$1]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[21\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 9\}
-
-#
-#[shell sysbench_pg1]
-#    [invoke log "Start generating more data while WS client is subscribed"]
-#    [timeout 15]
-#    !make start_sysbench
-#    ?$dprompt
-#    [invoke sysbench_run pg_1 10 10]
-#    !exit
-#    [invoke ok]
-#    [sleep 5]
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[21\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
 
 [shell pg_2]
     [invoke log "Send new tx from PG2"]
     !INSERT INTO entries (content) VALUES ('Hello from a');
     ?INSERT 0 1
 
+[global id=1f922fbb-016b-40c3-aeb1-e52682f82241]
+
 [shell ws1]
     [timeout 10]
     [invoke log "Wait for Satellite to receive transaction from PG2"]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[23\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: \d+\}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[23\]: %\{commit_timestamp: \d+, lsn: (.*), tags: \["postgres_2@(.*)"\], (.*) update: 1}
     [local middle_lsn=$1]
 
     [invoke log "Send transaction with insert from Satellite"]
-    !Electric.Test.SatelliteWsClient.send_test_relation()
+    !Electric.Test.SatelliteMockedClient.insert( \
+       pid, "$id", %{"id"=> "$id", "content"=> "Hello from Satellite", "content_b"=> ""} )
     ?:ok
-    !Electric.Test.SatelliteWsClient.send_new_data("1", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "Hello from Satellite")
+    !Electric.Test.SatelliteMockedClient.push_changes(pid, 1666371243516)
     ?:ok
-    ?%(.*)SatPingResp\{[^\}]*lsn: "1"
+    ?+(.*) %{commit_timestamp: 1666371243516, lsn: (.*) tags: \["ws1@1666371243516"\], (.*)
+    ?%(.*)SatPingResp\{[^\}]*lsn: <<131, 97, 1>>
 
 [shell electric]
     ?Hello from Satellite
@@ -112,9 +108,13 @@
 
 [shell ws1]
     [invoke log "Send transaction with update from Satellite"]
-    !Electric.Test.SatelliteWsClient.send_update_data("2", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
+    !Electric.Test.SatelliteMockedClient.update( \
+       pid, "$id", %{"id"=> "$id", "content"=> "How are you?", "content_b"=> ""} )
     ?:ok
-    ?%(.*)SatPingResp\{[^\}]*lsn: "2"
+    !Electric.Test.SatelliteMockedClient.push_changes(pid, 1666371243518)
+    ?:ok
+    ?+(.*) %{commit_timestamp: 1666371243518, lsn: (.*) tags: \["ws1@1666371243518"\], (.*)
+    ?%(.*)SatPingResp\{[^\}]*lsn: <<131, 97, 2>>
 
 [shell electric]
     ?How are you?
@@ -125,9 +125,12 @@
 
 [shell ws1]
     [invoke log "Send transaction with delete from Satellite"]
-    !Electric.Test.SatelliteWsClient.send_delete_data("3", 1666371243516, "1f922fbb-016b-40c3-aeb1-e52682f82241", "How are you?")
+    !Electric.Test.SatelliteMockedClient.delete(pid, "$id")
     ?:ok
-    ?%(.*)SatPingResp\{[^\}]*lsn: "3"
+    !Electric.Test.SatelliteMockedClient.push_changes(pid, 1666371243520)
+    ?:ok
+    ?+(.*) %{commit_timestamp: 1666371243520, (.*) tags: \[\], (.*)
+    ?%(.*)SatPingResp\{[^\}]*lsn: <<131, 97, 3>>
 
 [shell electric]
     ?How are you?
@@ -139,24 +142,6 @@
 [shell ws1]
     !Electric.Test.SatelliteWsClient.disconnect()
     ?:ok
-
-#[shell electric]
-#    !make stop_electric_1
-#    [invoke ok]
-
-#    !make start_electric_1
-#    ?START_REPLICATION SLOT
-
-#[shell ws1]
-#    !Electric.Test.SatelliteWsClient.connect_and_spawn( \
-#            [:auth, {:id, "ws1"}, {:sub, "eof"}, \
-#            {:auto_in_sub, true}, \
-#            {:format, :compact}, \
-#            {:host, "electric_1"}, \
-#            {:auto_ping, :true} \
-#            ])
-#    ?+$eprompt
-#    ?(.*) %(.*).SatInStartReplicationReq{__uf__: \[], lsn: "3", (.*)
 
 [cleanup]
     [invoke teardown]

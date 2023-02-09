@@ -113,13 +113,13 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
   end
 
   defp handle_event(%Transaction{} = tx, state) do
-    %Transaction{ack_fn: ack_fn, origin: origin, publication: publication} = tx
+    %Transaction{ack_fn: ack_fn, publication: publication} = tx
 
     Logger.debug("New transaction in publication `#{publication}`: #{inspect(tx, pretty: true)}")
 
     res =
       Electric.Retry.retry_while total_timeout: 10000, max_single_backoff: 1000 do
-        case Vaxine.transaction_to_vaxine(tx, publication, origin) do
+        case Vaxine.transaction_to_vaxine(tx, publication) do
           :ok ->
             # FIXME: Persist LSN from PG to Vaxine
             :ok = ack_fn.()

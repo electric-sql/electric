@@ -2,6 +2,7 @@ defmodule Electric.Replication.VaxineTest do
   use ExUnit.Case
 
   alias Electric.Replication.{Changes, Row}
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Vaxine.ToVaxine
   alias Electric.VaxRepo
   alias Electric.Postgres.SchemaRegistry
@@ -9,34 +10,34 @@ defmodule Electric.Replication.VaxineTest do
   @id Ecto.UUID.generate()
   @row Row.new("fake", "to_vaxine_test", %{"id" => @id}, ["id"])
 
-  def new_record_change(columns \\ %{"content" => "a"}) do
+  def new_record_change(columns \\ %{"content" => "a"}, id \\ @id) do
     %Changes.NewRecord{
-      record: Map.put(columns, "id", @id),
-      relation: {"fake", "to_vaxine_test"}
+      record: Map.put(columns, "id", id),
+      relation: {"fake", "to_vaxine_test"},
+      tags: []
     }
   end
 
-  def updated_record_change(old_columns, new_columns) do
+  def updated_record_change(old_columns, new_columns, tags \\ [], id \\ @id) do
     %Changes.UpdatedRecord{
-      old_record: Map.put(old_columns, "id", @id),
-      record: Map.put(new_columns, "id", @id),
-      relation: {"fake", "to_vaxine_test"}
+      old_record: Map.put(old_columns, "id", id),
+      record: Map.put(new_columns, "id", id),
+      relation: {"fake", "to_vaxine_test"},
+      tags: tags
     }
   end
 
-  def updated_record_change_old_empty(new_columns) do
-    %Changes.UpdatedRecord{
-      old_record: nil,
-      record: Map.put(new_columns, "id", @id),
-      relation: {"fake", "to_vaxine_test"}
-    }
-  end
-
-  def deleted_record_change(old_columns) do
+  def deleted_record_change(old_columns, tags \\ [], id \\ @id) do
     %Changes.DeletedRecord{
-      old_record: Map.put(old_columns, "id", @id),
-      relation: {"fake", "to_vaxine_test"}
+      old_record: Map.put(old_columns, "id", id),
+      relation: {"fake", "to_vaxine_test"},
+      tags: tags
     }
+  end
+
+  def read_row(id \\ @id) do
+    row = Row.new("fake", "to_vaxine_test", %{"id" => id}, ["id"])
+    VaxRepo.reload(row)
   end
 
   setup_all _ do
@@ -53,120 +54,185 @@ defmodule Electric.Replication.VaxineTest do
     :ok
   end
 
-  describe "ToVaxine propagates changes to vaxine" do
-    test "for NewRecord" do
-      assert :ok =
-               %{"content" => "a"}
-               |> new_record_change()
-               |> ToVaxine.handle_change()
+  def gen_ctx(origin \\ "origin") do
+    ct = DateTime.utc_now()
+    # %Transaction{commit_timestamp: ct, origin: origin, origin_type: :satellite}
+    %Transaction{commit_timestamp: ct, origin: origin, origin_type: :postgresql}
+  end
 
-      assert %{row: %{"content" => "a"}, deleted?: false} = VaxRepo.reload(@row)
-    end
+  test "ToVaxine new -> update -> delete" do
+    id = Ecto.UUID.generate()
 
-    test "for UpdatedRecord" do
-      assert :ok =
-               %{"content" => "a"}
-               |> updated_record_change(%{"content" => "b"})
-               |> ToVaxine.handle_change()
+    gen_new(id)
+    gen_update(id)
+    gen_delete(id)
+  end
 
-      assert %{row: %{"content" => "b"}} = VaxRepo.reload(@row)
-    end
+  test "ToVaxine new -> update -> delete 2" do
+    id = Ecto.UUID.generate()
 
-    test "for UpdatedRecord without old row" do
-      assert :ok =
-               updated_record_change_old_empty(%{"content" => "b"})
-               |> ToVaxine.handle_change()
+    gen_new(id)
+    gen_update(id)
+    gen_delete(id)
+  end
 
-      assert %{row: %{"content" => "b"}} = VaxRepo.reload(@row)
-    end
-
-    test "for DeletedRecord" do
-      assert :ok =
-               %{"content" => "a"}
-               |> deleted_record_change()
-               |> ToVaxine.handle_change()
-
-      assert %{deleted?: true} = VaxRepo.reload(@row)
-    after
-      # undoing delete to have clean state
+  def gen_new(id) do
+    change =
       %{"content" => "a"}
-      |> new_record_change()
-      |> ToVaxine.handle_change()
-    end
+      |> new_record_change(id)
+
+    tx = gen_ctx()
+    assert :ok = ToVaxine.handle_change(change, tx)
+
+    tags = Changes.generateTag(tx)
+    assert %{row: %{"content" => "a"}, deleted?: tags} = read_row(id)
+  end
+
+  def gen_update(id) do
+    # %{deleted?: tags} = read_row(id)
+    tags = []
+
+    change =
+      %{"content" => "a"}
+      |> updated_record_change(%{"content" => "b"}, tags, id)
+
+    assert :ok = ToVaxine.handle_change(change, gen_ctx())
+    assert %{row: %{"content" => "b"}} = read_row(id)
+  end
+
+  def gen_delete(id) do
+    %{deleted?: tags} = read_row(id)
+
+    change =
+      %{"content" => "a"}
+      |> deleted_record_change(tags, id)
+
+    tags = MapSet.new([])
+
+    assert :ok = ToVaxine.handle_change(change, gen_ctx())
+    assert %{deleted?: tags} = read_row(id)
   end
 
   describe "Conflict situations" do
     test "rows are merged for new record" do
+      id = Ecto.UUID.generate()
+      ctx1 = gen_ctx()
+
+      ctx2 = %Transaction{
+        ctx1
+        | commit_timestamp: DateTime.add(ctx1.commit_timestamp, 1, :second)
+      }
+
       concurrent_transactions(
         fn ->
           %{"content" => "a"}
-          |> new_record_change()
-          |> ToVaxine.handle_change()
+          |> new_record_change(id)
+          |> ToVaxine.handle_change(ctx1)
         end,
         fn ->
           %{"content_b" => "b"}
-          |> new_record_change()
-          |> ToVaxine.handle_change()
+          |> new_record_change(id)
+          |> ToVaxine.handle_change(ctx2)
         end
       )
 
-      assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: false} =
-               VaxRepo.reload(@row)
+      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)]
+      assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: tags} = read_row(id)
     end
 
     test "rows are merged for updated record" do
+      id = Ecto.UUID.generate()
+      ctx1 = gen_ctx()
+
+      ctx2 = %Transaction{
+        ctx1
+        | commit_timestamp: DateTime.add(ctx1.commit_timestamp, 1, :second)
+      }
+
+      gen_new(id)
+      %{deleted?: tags} = read_row(id)
+
       concurrent_transactions(
         fn ->
           %{"content" => "a"}
-          |> updated_record_change(%{"content" => "b"})
-          |> ToVaxine.handle_change()
+          |> updated_record_change(%{"content" => "b"}, tags, id)
+          |> ToVaxine.handle_change(ctx1)
         end,
         fn ->
           %{"content_b" => "b"}
-          |> updated_record_change(%{"content_b" => "c"})
-          |> ToVaxine.handle_change()
+          |> updated_record_change(%{"content_b" => "c"}, tags, id)
+          |> ToVaxine.handle_change(ctx2)
         end
       )
 
-      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: false} =
-               VaxRepo.reload(@row)
+      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)]
+      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: tags} = read_row(id)
     end
 
     test "update > delete" do
+      id = Ecto.UUID.generate()
+      ctx1 = gen_ctx()
+
+      ctx2 = %Transaction{
+        ctx1
+        | commit_timestamp: DateTime.add(ctx1.commit_timestamp, 1, :second)
+      }
+
+      gen_new(id)
+      %{deleted?: tags} = read_row(id)
+
       concurrent_transactions(
         fn ->
           %{"content" => "a"}
-          |> updated_record_change(%{"content" => "b"})
-          |> ToVaxine.handle_change()
+          |> updated_record_change(%{"content" => "b"}, tags, id)
+          |> ToVaxine.handle_change(ctx1)
         end,
         fn ->
           %{"content" => "a"}
-          |> deleted_record_change()
-          |> ToVaxine.handle_change()
+          |> deleted_record_change(tags, id)
+          |> ToVaxine.handle_change(ctx2)
         end
       )
 
-      assert %{row: %{"content" => "b"}, deleted?: false} = VaxRepo.reload(@row)
+      tags = [Changes.generateTag(ctx1)]
+      assert %{row: %{"content" => "b"}, deleted?: tags} = read_row(id)
     end
 
     test "insert > delete" do
+      id = Ecto.UUID.generate()
+      ctx1 = gen_ctx()
+
+      ctx2 = %Transaction{
+        ctx1
+        | commit_timestamp: DateTime.add(ctx1.commit_timestamp, 1, :second)
+      }
+
+      gen_new(id)
+      gen_delete(id)
+      %{deleted?: tags} = read_row(id)
+
       concurrent_transactions(
         fn ->
           %{"content" => "a"}
-          |> new_record_change()
-          |> ToVaxine.handle_change()
+          |> new_record_change(id)
+          |> ToVaxine.handle_change(ctx1)
         end,
         fn ->
           %{"content" => "a"}
-          |> deleted_record_change()
-          |> ToVaxine.handle_change()
+          |> deleted_record_change(tags, id)
+          |> ToVaxine.handle_change(ctx2)
         end
       )
 
-      assert %{row: %{"content" => "a"}, deleted?: false} = VaxRepo.reload(@row)
+      tags = [Changes.generateTag(ctx1)]
+      assert %{row: %{"content" => "a"}, deleted?: tags} = read_row(id)
     end
   end
 
+  # This type of testing is currently possible with one instance of
+  # Vaxine/Andidote, because certification options is set to false at the
+  # moment, which do not protect from write-write conflicts afaic
+  #
   # transaction 2 starts
   # transaction 1 starts
   # transaction 1 executes its code

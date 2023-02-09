@@ -70,7 +70,7 @@ defmodule Electric.Satellite.WsServerTest do
     # [:passthrough],
     {Vaxine, [],
      [
-       transaction_to_vaxine: fn _tx, _pub, _origin -> :ok end
+       transaction_to_vaxine: fn _tx, _pub -> :ok end
      ]}
   ]) do
     {:ok, %{}}
@@ -347,7 +347,7 @@ defmodule Electric.Satellite.WsServerTest do
       self = self()
 
       with_mock Vaxine,
-        transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
+        transaction_to_vaxine: fn tx, pub -> Process.send(self, {tx, pub, tx.origin}, []) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
           MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
@@ -441,7 +441,7 @@ defmodule Electric.Satellite.WsServerTest do
       self = self()
 
       with_mock Vaxine,
-        transaction_to_vaxine: fn tx, pub, origin -> Process.send(self, {tx, pub, origin}, []) end do
+        transaction_to_vaxine: fn tx, pub -> Process.send(self, {tx, pub, tx.origin}, []) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
           MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
