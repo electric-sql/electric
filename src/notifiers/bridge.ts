@@ -34,39 +34,45 @@ export class MainThreadBridgeNotifier
     this.workerClient = workerClient
   }
 
-  _emitPotentialChange(dbName: DbName): PotentialChangeNotification {
+  override _emitPotentialChange(dbName: DbName): PotentialChangeNotification {
     const notification = super._emitPotentialChange(dbName)
 
-    const method: NotifyMethod = {
+    // below we use `satisfies` to ensure that the method satisfies NotifyMethod,
+    // without assigning the more general `NotifyMethod` type to this constant.
+    // This way we keep the type of `method` as precise as possible (thanks to type inference).
+    // It is important to keep it precise, because if it would be just `NotifyMethod`
+    // then we could call `notify` with a parameter list that matches one of the methods of `EventNotifier`
+    // but not necessarily the one we are targetting (i.e. the parameter list for the method that corresponds to `method.name`)
+    const method = {
       dbName: dbName,
       name: '_emitPotentialChange',
       target: 'notify',
-    }
+    } satisfies NotifyMethod
 
-    this.workerClient.notify(method, notification)
+    this.workerClient.notify(method, notification.dbName)
 
     return notification
   }
 
-  subscribeToDataChanges(callback: ChangeCallback): string {
+  override subscribeToDataChanges(callback: ChangeCallback): string {
     const key = super.subscribeToDataChanges(callback)
     const wrappedCallback = this._changeCallbacks[key] as ChangeCallback
 
     return this.workerClient.subscribeToChanges(key, wrappedCallback)
   }
-  unsubscribeFromDataChanges(key: string): void {
+  override unsubscribeFromDataChanges(key: string): void {
     super.unsubscribeFromDataChanges(key)
 
     return this.workerClient.unsubscribeFromChanges(key)
   }
 
-  _emitConnectivityStatus(dbName: string, status: ConnectivityState) {
+  override _emitConnectivityStatus(dbName: string, status: ConnectivityState) {
     const notification = super._emitConnectivityStatus(dbName, status)
-    const method: NotifyMethod = {
+    const method = {
       dbName: dbName,
       name: '_emitConnectivityStatus',
       target: 'notify',
-    }
+    } satisfies NotifyMethod
 
     this.workerClient.notify(
       method,
@@ -77,7 +83,7 @@ export class MainThreadBridgeNotifier
     return notification
   }
 
-  subscribeToConnectivityStateChange(
+  override subscribeToConnectivityStateChange(
     callback: ConnectivityStateChangeCallback
   ): string {
     const key = super.subscribeToConnectivityStateChange(callback)
@@ -91,7 +97,7 @@ export class MainThreadBridgeNotifier
     )
   }
 
-  unsubscribeFromConnectivityStateChange(key: string): void {
+  override unsubscribeFromConnectivityStateChange(key: string): void {
     super.unsubscribeFromConnectivityStateChange(key)
 
     return this.workerClient.unsubscribeFromConnectivityStateChange(key)

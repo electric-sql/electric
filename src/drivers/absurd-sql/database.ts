@@ -458,7 +458,10 @@ export class MainThreadStatementProxy implements Statement {
     this._workerClient = workerClient
   }
 
-  _request(methodName: string, ...args: any[]): Promise<any> {
+  _request<T extends StatementMethod['name']>(
+    methodName: T,
+    ...args: Parameters<Statement[T]>
+  ): Promise<Awaited<ReturnType<Statement[T]>>> {
     const method: StatementMethod = {
       target: 'statement',
       dbName: this.db._dbName,
@@ -466,7 +469,9 @@ export class MainThreadStatementProxy implements Statement {
       name: methodName,
     }
 
-    return this._workerClient.request(method, ...args)
+    return this._workerClient.request(method, ...args) as Promise<
+      Awaited<ReturnType<Statement[T]>>
+    >
   }
 
   bind(values: BindParams): Promise<boolean> {

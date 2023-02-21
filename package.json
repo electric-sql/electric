@@ -135,7 +135,7 @@
   "devDependencies": {
     "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
-    "@tsmodule/tsmodule": "^40.0.17",
+    "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "^7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
@@ -158,7 +158,7 @@
     "release-it": "^15.5.0",
     "ts-proto": "^1.125.0",
     "typeorm": "^0.3.9",
-    "typescript": "^4.7.4",
+    "typescript": "^4.9",
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {

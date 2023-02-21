@@ -5,6 +5,7 @@ import {
   ChangeNotification,
   ConnectivityStateChangeCallback,
   ConnectivityStateChangeNotification,
+  EventNotifier,
 } from '../notifiers/index'
 import { randomValue } from '../util/random'
 import { AnyFunction, DbName, StatementId } from '../util/types'
@@ -22,26 +23,43 @@ export interface ServerMethod {
   name: 'init' | 'open' | '_get_test_data'
 }
 
+type ExtractFunctions<T> = {
+  [k in keyof T as T[k] extends (...args: any[]) => any ? k : never]: T[k]
+}
+
 export interface DbMethod {
   target: 'db'
   dbName: DbName
-  name: string
+  name: keyof ExtractFunctions<AnyWorkerThreadElectricDatabase>
 }
 
 export interface NotifyMethod {
   target: 'notify'
   dbName: DbName
-  name: string
+  name: keyof ExtractFunctions<EventNotifier>
 }
 
+type AnyWorkerStatement = NonNullable<
+  ReturnType<AnyWorkerThreadElectricDatabase['_getStatement']>
+>
 export interface StatementMethod {
   target: 'statement'
   dbName: DbName
   statementId: StatementId
-  name: string
+  name: keyof ExtractFunctions<AnyWorkerStatement>
 }
 
 type RequestMethod = ServerMethod | DbMethod | NotifyMethod | StatementMethod
+
+type FnForRequestMethod<T extends RequestMethod> = T extends ServerMethod
+  ? (...args: any[]) => any
+  : T extends DbMethod
+  ? AnyWorkerThreadElectricDatabase[T['name']]
+  : T extends NotifyMethod
+  ? EventNotifier[T['name']]
+  : T extends StatementMethod
+  ? AnyWorkerStatement[T['name']]
+  : never
 
 export interface Request {
   args: any[]
@@ -106,7 +124,10 @@ export class WorkerClient {
     this.addListener('message', this.handleMessage.bind(this))
   }
 
-  request(method: RequestMethod, ...args: any[]): Promise<any> {
+  request<T extends RequestMethod>(
+    method: T,
+    ...args: Parameters<FnForRequestMethod<T>>
+  ): Promise<Awaited<ReturnType<FnForRequestMethod<T>>>> {
     const requestId = randomValue()
     const data = {
       args: args,
@@ -138,7 +159,10 @@ export class WorkerClient {
     })
   }
 
-  notify(method: NotifyMethod, ...args: any[]): void {
+  notify<T extends NotifyMethod>(
+    method: T,
+    ...args: Parameters<EventNotifier[T['name']]>
+  ): void {
     const requestId = randomValue()
     const data = {
       args: args,
