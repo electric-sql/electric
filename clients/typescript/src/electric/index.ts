@@ -70,6 +70,32 @@ export const electrify = async (
   registry: Registry,
   config: ElectricConfig
 ): Promise<AnyElectrifiedDatabase> => {
+  await startSatellite(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    console,
+    registry,
+    config
+  )
+
+  return proxyOriginal(db, electric)
+}
+
+export type ExtendedDB<T> = T & { electric: ElectricNamespace }
+
+export const startSatellite = async (
+  dbName: DbName,
+  adapter: DatabaseAdapter,
+  migrator: Migrator,
+  notifier: Notifier,
+  socketFactory: SocketFactory,
+  console: ConsoleClient,
+  registry: Registry,
+  config: ElectricConfig
+): Promise<void> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
 
   await registry.ensureStarted(
@@ -81,6 +107,4 @@ export const electrify = async (
     console,
     config
   )
-
-  return proxyOriginal(db, electric)
 }
