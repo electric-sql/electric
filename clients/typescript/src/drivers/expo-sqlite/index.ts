@@ -7,6 +7,8 @@ import {
   ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify,
+  startSatellite,
+  ExtendedDB,
 } from '../../electric/index'
 
 import { BundleMigrator } from '../../migrators/bundle'
@@ -81,4 +83,38 @@ export const electrify = async <T extends Database>(
     configWithDefaults
   )
   return electrified as ElectrifiedDatabase<T>
+}
+
+export const start = async <T extends Database>(
+  db: T,
+  config: ElectricConfig,
+  opts?: ElectrifyOptions
+): Promise<ExtendedDB<T>> => {
+  const dbName: DbName = db._name!
+  const configWithDefaults = hydrateConfig(config)
+
+  const adapter = opts?.adapter || new DatabaseAdapter(db)
+  const migrator =
+    opts?.migrator || new BundleMigrator(adapter, config.migrations)
+  const notifier = opts?.notifier || new EventNotifier(dbName)
+  const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()
+  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
+  const registry = opts?.registry || globalRegistry
+  const namespace = new ElectricNamespace(adapter, notifier)
+
+  await startSatellite(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    console,
+    registry,
+    configWithDefaults
+  )
+
+  return {
+    ...db,
+    electric: namespace,
+  }
 }

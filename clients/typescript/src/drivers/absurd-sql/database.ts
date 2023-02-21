@@ -1,7 +1,8 @@
 import { DbMethod, StatementMethod, WorkerClient } from '../../bridge/index'
 import { ElectricNamespace } from '../../electric/index'
-import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
-import { isPotentiallyDangerous } from '../../util/parser'
+import { ProxyWrapper } from '../../proxy/index'
+//import { ProxyWrapper, proxyOriginal } from '../../proxy/index'
+//import { isPotentiallyDangerous } from '../../util/parser'
 import { randomValue } from '../../util/random'
 import {
   AnyFunction,
@@ -116,34 +117,38 @@ export class ElectricDatabase {
     params?: BindParams,
     config?: Config
   ): Promise<QueryExecResult[]> {
-    const shouldNotify = isPotentiallyDangerous(sql)
+    //const shouldNotify = isPotentiallyDangerous(sql)
 
     const retval = await this.db.exec(sql, params, config)
 
+    /*
     if (shouldNotify) {
       this.electric.potentiallyChanged()
     }
+     */
 
     return retval
   }
   async run(sql: string, params?: BindParams): Promise<void> {
-    const shouldNotify = isPotentiallyDangerous(sql)
+    //const shouldNotify = isPotentiallyDangerous(sql)
 
     await this.db.run(sql, params)
 
+    /*
     if (shouldNotify) {
       this.electric.potentiallyChanged()
     }
+     */
   }
   async prepare(sql: string, params?: BindParams): Promise<string> {
     const key = randomValue()
     const stmt = await this.db.prepare(sql, params)
 
-    const namespace = this.electric
-    const shouldNotify = isPotentiallyDangerous(sql)
-    const electric = new ElectricStatement(stmt, namespace, shouldNotify)
+    //const namespace = this.electric
+    //const shouldNotify = isPotentiallyDangerous(sql)
+    //const electric = new ElectricStatement(stmt, namespace, shouldNotify)
 
-    this._statements[key] = proxyOriginal(stmt, electric)
+    this._statements[key] = stmt //proxyOriginal(stmt, electric)
 
     return key
   }

@@ -140,7 +140,6 @@ export function useLiveQuery<Res>(
     runQuery()
       .then((res) => setResultData(successResult(res.result)))
       .catch((err) => {
-        console.log('Q FAILED: ' + JSON.stringify(err) + ' - ' + err)
         setResultData(errorResult(err))
       })
   }, [electric, changeSubscriptionKey, cacheKey])
