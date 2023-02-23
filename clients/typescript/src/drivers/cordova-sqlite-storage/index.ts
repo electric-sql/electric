@@ -7,7 +7,6 @@ import {
   ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify,
-  ExtendedDB,
   startSatellite,
 } from '../../electric/index'
 
@@ -62,7 +61,7 @@ export const start = async <T extends Database>(
   db: T,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<ExtendedDB<T>> => {
+): Promise<ElectricNamespace> => {
   const dbName: DbName = db.dbname!
   const configWithDefaults = hydrateConfig(config)
 
@@ -86,8 +85,5 @@ export const start = async <T extends Database>(
     configWithDefaults
   )
 
-  return {
-    ...db,
-    electric: namespace,
-  }
+  return namespace
 }
