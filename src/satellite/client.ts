@@ -756,7 +756,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     let waitingFor: NodeJS.Timeout
     return new Promise<T>((resolve, reject) => {
       waitingFor = setTimeout(() => {
-        console.log(`${request.$type}`)
+        Log.error(`${request.$type}`)
         const error = new SatelliteError(
           SatelliteErrorCode.TIMEOUT,
           `${request.$type}`
