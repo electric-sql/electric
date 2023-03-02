@@ -90,6 +90,7 @@ start_elixir_test_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		--workdir=${PROJECT_ROOT} \
+		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
 		elixir_client_$*
 
 start_satellite_client_%:
