@@ -1,5 +1,6 @@
 env:
-  DOCKER_REPO: europe-docker.pkg.dev/vaxine/electric
+  DOCKER_REPO: europe-docker.pkg.dev/vaxine/electric-sql
+  DOCKERHUB_REPO: electricsql
   IMAGE_NAME: electric
 
 agent:
@@ -15,3 +16,9 @@ steps:
       - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
       - make docker-build-ci
+  - wait
+  - label: ":rocket: Publish the image to DockerHub"
+    if: build.tag =~ /^[0-9]+\.[0-9]+\.[0-9]+/
+    command:
+      - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
+      - make docker-build-ci-crossplatform
