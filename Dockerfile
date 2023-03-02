@@ -48,9 +48,8 @@ RUN chown nobody /app
 FROM runner_setup AS runner
 
 ## Vaxine configuration via environment variables
-COPY --from=builder --chown=nobody:root /app/_build/prod/rel/electric ./
+COPY --from=builder /app/_build/prod/rel/electric ./
 
 VOLUME ./offset_storage_data.dat
 
-USER nobody
 ENTRYPOINT /app/bin/electric start
