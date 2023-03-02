@@ -11,6 +11,10 @@ on:
         default: tests
         required: false
 
+env:
+  OTP_VERSION: "24.3"
+  ELIXIR_VERSION: "1.13"
+
 jobs:
   deps:
     name: Get all the necessary dependencies
@@ -24,8 +28,8 @@ jobs:
         uses: rlespinasse/github-slug-action@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24.3"
-          elixir-version: "1.13"
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
       - uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
@@ -37,14 +41,16 @@ jobs:
           path: deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
-      - run: make deps pretest_compile
-
       - name: Cache compiled code
         id: cache-build
         uses: actions/cache@v3
         with:
-          path: _build
-          key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
+          path: |
+            _build/*/lib
+            !_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
+
+      - run: make deps pretest_compile
 
   tests:
     name: elixir tests
@@ -59,24 +65,27 @@ jobs:
         uses: rlespinasse/github-slug-action@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24.3"
-          elixir-version: "1.13"
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
       - name: Prepare auxillary services
         run: make start_dev_env
 
-      - name: Try to reuse cached deps
+      - name: Restore dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
-      - name: Cache compiled code
+      - name: Restore compiled code
         id: cache-build
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
-          path: _build
-          key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
+          path: |
+            _build/*/lib
+            !_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
 
       - uses: webfactory/ssh-agent@v0.5.4
         with:
@@ -111,22 +120,31 @@ jobs:
         uses: rlespinasse/github-slug-action@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24.3"
-          elixir-version: "1.13"
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
 
-      - name: Try to reuse cached deps
+      - name: Restore dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
-      - name: Cache compiled code
+      - name: Restore compiled code
         id: cache-build
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            _build/*/lib
+            !_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Cache PLT
         uses: actions/cache@v3
         with:
-          path: _build
-          key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
+          path: _build/*/*.plt
+          key: ${{ runner.os }}-plt-${{ github.ref_name }}
+          restore-keys: ${{ runner.os }}-plt-
 
       - uses: webfactory/ssh-agent@v0.5.4
         with:
@@ -158,28 +176,40 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24.3"
-          elixir-version: "1.13"
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
 
-      - name: Try to reuse cached deps
+      - name: Restore dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
-      - name: Cache compiled code
+      - name: Restore compiled code
         id: cache-build
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
-          path: _build
-          key: ${{ runner.os }}-mixbuild-${{ env.GITHUB_SHA_SHORT }}
+          path: |
+            _build/*/lib
+            !_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
 
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
           ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_SHA_SHORT || 'main' }}
       - run: make pretest_compile
+
+      - name: Cache built lux
+        uses: actions/cache@v3
+        with:
+          path: |
+            integration_tests/lux/bin
+            integration_tests/lux/ebin
+            integration_tests/lux/priv
+          key: ${{ runner.os }}-luxbuilt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}
+
       - run: make lux
         working-directory: integration_tests
 
