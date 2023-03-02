@@ -144,7 +144,7 @@ jobs:
         with:
           path: _build/*/*.plt
           key: ${{ runner.os }}-plt-${{ github.ref_name }}
-          restore_keys: ${{ runner.os }}-plt-
+          restore-keys: ${{ runner.os }}-plt-
 
       - uses: webfactory/ssh-agent@v0.5.4
         with:
@@ -200,6 +200,16 @@ jobs:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
           ELECTRIC_IMAGE_TAG: ${{ env.GITHUB_SHA_SHORT || 'main' }}
       - run: make pretest_compile
+
+      - name: Cache built lux
+        uses: actions/cache@v3
+        with:
+          path: |
+            integration_tests/lux/bin
+            integration_tests/lux/ebin
+            integration_tests/lux/priv
+          key: ${{ runner.os }}-luxbuilt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}
+
       - run: make lux
         working-directory: integration_tests
 
