@@ -88,12 +88,15 @@ jobs:
         env:
           MIX_ENV: test
 
+      - name: Setup LCOV
+        uses: hrishikesh-kadam/setup-lcov@v1
       - name: Report code coverage
-        uses: zgosalvez/github-actions-report-lcov@v1
+        uses: zgosalvez/github-actions-report-lcov@v3
         with:
           coverage-files: cover/lcov.info
           artifact-name: code-coverage-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          update-comment: true
 
   dialyzer:
     name: dialyzer and formatting
