@@ -1,5 +1,3 @@
-import { parseTableNames } from '../../util/parser'
-import { QualifiedTablename } from '../../util/tablename'
 import { AnyFunction, Row, Statement } from '../../util/types'
 
 import { Results, rowsFromResults } from '../generic/results'
@@ -7,13 +5,18 @@ import { Database, Transaction } from './database'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
   db: Database
 
   constructor(db: Database) {
+    super()
     this.db = db
   }
 
@@ -70,10 +73,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
         resolve(res)
       })
     })
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
   }
 }
 
