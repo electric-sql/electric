@@ -14,8 +14,9 @@ import {
 } from '../../util'
 import { ensurePromise } from '../generic/promise'
 import { rowsFromResults } from '../generic/results'
-import { Database, StatementCallback, Transaction } from './database'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
+import { Database, Transaction, StatementCallback } from './database'
+//import { SQLiteDatabase as Database, Transaction, StatementCallback } from 'react-native-sqlite-storage'
 
 export class DatabaseAdapter implements DatabaseAdapterInterface {
   constructor(public db: Database, private promisesEnabled: boolean = false) {}

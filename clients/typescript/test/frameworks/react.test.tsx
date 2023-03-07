@@ -1,5 +1,6 @@
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
 import test from 'ava'
+import { z } from 'zod'
 
 import browserEnv from '@ikscodes/browser-env'
 browserEnv()
@@ -12,13 +13,17 @@ import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock
 
 import { DatabaseAdapter as BetterSQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockDatabase as MockBetterSQLiteDatabase } from '../../src/drivers/better-sqlite3/mock'
-import { ElectrifiedDatabase } from '../../src/drivers/generic/index'
 import { ElectricNamespace } from '../../src/electric/index'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
 import { useElectricQuery } from '../../src/frameworks/react/hooks'
-import { ElectricProvider } from '../../src/frameworks/react/provider'
+import { makeElectricContext } from '../../src/frameworks/react/provider'
+import {
+  buildDalNamespace,
+  DalNamespace,
+  DbSchemas,
+} from '../../src/client/model/dalNamespace'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -26,15 +31,27 @@ const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   }
 }
 
-const makeElectrified = (namespace: ElectricNamespace): ElectrifiedDatabase => {
-  return {
-    isGenericDatabase: true,
-    isGenericElectricDatabase: true,
-    electric: namespace,
-  }
+const makeElectrified = <S extends DbSchemas>(
+  dbSchemas: S,
+  namespace: ElectricNamespace
+): DalNamespace<S> => {
+  return buildDalNamespace(dbSchemas, namespace)
 }
 
 type FC = React.FC<React.PropsWithChildren>
+
+const barSchema = z
+  .object({
+    foo: z.string(),
+  })
+  .strict()
+
+const dbSchemas = {
+  bars: barSchema,
+}
+
+const ctxInformation = makeElectricContext<typeof dbSchemas>()
+const ElectricProvider = ctxInformation.ElectricProvider
 
 test('useElectricQuery returns query results', async (t) => {
   const original = new MockDatabase('test.db')
@@ -45,7 +62,7 @@ test('useElectricQuery returns query results', async (t) => {
   const query = 'select foo from bars'
   const wrapper: FC = ({ children }) => {
     return (
-      <ElectricProvider db={makeElectrified(namespace)}>
+      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
         {children}
       </ElectricProvider>
     )
@@ -71,7 +88,7 @@ test('useElectricQuery returns error when query errors', async (t) => {
 
   const wrapper: FC = ({ children }) => {
     return (
-      <ElectricProvider db={makeElectrified(namespace)}>
+      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
         {children}
       </ElectricProvider>
     )
@@ -97,7 +114,7 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
 
   const wrapper: FC = ({ children }) => {
     return (
-      <ElectricProvider db={makeElectrified(namespace)}>
+      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
         {children}
       </ElectricProvider>
     )
@@ -134,7 +151,7 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
 
   const wrapper: FC = ({ children }) => {
     return (
-      <ElectricProvider db={makeElectrified(namespace)}>
+      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
         {children}
       </ElectricProvider>
     )

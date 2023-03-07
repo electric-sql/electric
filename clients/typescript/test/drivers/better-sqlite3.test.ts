@@ -1,59 +1,20 @@
 import test from 'ava'
 
 import Database from 'better-sqlite3'
-import { MockConsoleClient } from '../../src/auth/mock'
 
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { electrify } from '../../src/drivers/better-sqlite3/index'
 import { MockDatabase } from '../../src/drivers/better-sqlite3/mock'
-import { MockNotifier } from '../../src/notifiers/mock'
-import { MockRegistry } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-const config = { app: 'app', env: 'default', migrations: [] }
+// TODO: Move the unit tests for notifications below to the unit tests for the DAL
+/*
 const dbFilename = 'test.db'
+const config = { app: 'app', env: 'default', migrations: [] }
 
 const getNewOpts = () => ({
   notifier: new MockNotifier(dbFilename),
   registry: new MockRegistry(),
   console: new MockConsoleClient(),
-})
-
-test('electrify returns an equivalent database client', async (t) => {
-  const original = new Database('test.db')
-  const registry = new MockRegistry()
-  const console = new MockConsoleClient()
-  const db = await electrify(original, config, { registry, console })
-
-  const originalKeys = Object.getOwnPropertyNames(original)
-  const originalPrototype = Object.getPrototypeOf(original)
-  const allKeys = originalKeys.concat(Object.keys(originalPrototype))
-  allKeys.forEach((key) => {
-    t.assert(key in db)
-  })
-})
-
-test('electrify does not remove non-patched properties and methods', async (t) => {
-  const original = new Database('test.db')
-  const opts = getNewOpts()
-
-  const db = await electrify(original, config, opts)
-
-  t.is(typeof db.pragma, 'function')
-})
-
-test('the electrified database has `.electric.potentiallyChanged()`', async (t) => {
-  const original = new MockDatabase('test.db')
-  const opts = getNewOpts()
-  const db = await electrify(original, config, opts)
-
-  const { notifier } = opts
-
-  t.is(notifier.notifications.length, 0)
-
-  db.electric.potentiallyChanged()
-
-  t.is(notifier.notifications.length, 1)
 })
 
 test("exec'ing a dangerous statement calls potentiallyChanged", async (t) => {
@@ -122,20 +83,6 @@ test('running a transaction sub function calls potentiallyChanged', async (t) =>
   t.is(notifier.notifications.length, 3)
 })
 
-test('electrify preserves chainability', async (t) => {
-  const original = new MockDatabase('test.db')
-  const opts = getNewOpts()
-  const db = await electrify(original, config, opts)
-
-  const { notifier } = opts
-
-  t.is(notifier.notifications.length, 0)
-
-  db.exec('insert into parent').exec('update parent').exec('drop parent')
-
-  t.is(notifier.notifications.length, 3)
-})
-
 test('running a prepared statement outside of a transaction notifies', async (t) => {
   const original = new MockDatabase('test.db')
   const opts = getNewOpts()
@@ -170,21 +117,7 @@ test('running a prepared statement *inside* of a transaction does *not* notify',
   // one notification not two!
   t.is(notifier.notifications.length, 1)
 })
-
-test('iterating a prepared statement works', async (t) => {
-  const original = new MockDatabase(dbFilename)
-  const opts = getNewOpts()
-  const db = await electrify(original, config, opts)
-
-  const { notifier } = opts
-
-  t.is(notifier.notifications.length, 0)
-
-  const stmt = db.prepare('insert into parent')
-  Array.from(stmt.iterate())
-
-  t.is(opts.notifier.notifications.length, 1)
-})
+*/
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

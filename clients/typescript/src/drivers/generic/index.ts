@@ -1,6 +1,8 @@
+export {}
+/*
 // Generic database clients need to mark themselves with the
 // `isGenericDatabase` / `isGenericElectricDatabase` feature.
-import { ElectricNamespace } from '../../electric/index'
+import { ElectricNamespace } from '../../electric/namespace'
 
 // Expose so generic drivers can use these.
 export { BundleMigrator } from '../../migrators/bundle'
@@ -18,3 +20,4 @@ export interface ElectricDatabase {
 }
 
 export interface ElectrifiedDatabase extends Database, ElectricDatabase {}
+*/

@@ -4,10 +4,8 @@
 import { hydrateConfig, ElectricConfig } from '../../config/index'
 
 import {
-  ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify,
-  startSatellite,
 } from '../../electric/index'
 
 import { BundleMigrator } from '../../migrators/bundle'
@@ -18,17 +16,19 @@ import { WebSocketNodeFactory } from '../../sockets/node'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
+import { Database } from './database'
 import { ConsoleHttpClient } from '../../auth'
+import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
 
-export { ElectricDatabase, DatabaseAdapter }
-export type { Database, ElectrifiedDatabase }
+export { DatabaseAdapter }
+export type { Database }
 
-export const electrify = async <T extends Database>(
+export const electrify = async <S extends DbSchemas, T extends Database>(
   db: T,
+  dbSchemas: S,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<ElectrifiedDatabase<T>> => {
+): Promise<DalNamespace<S>> => {
   const dbName: DbName = db.name
   const configWithDefaults = hydrateConfig(config)
 
@@ -40,43 +40,9 @@ export const electrify = async <T extends Database>(
   const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
   const registry = opts?.registry || globalRegistry
 
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const electric = new ElectricDatabase(db, namespace)
-
-  const electrified = await baseElectrify(
+  const namespace = await baseElectrify(
     dbName,
-    db,
-    electric,
-    adapter,
-    migrator,
-    notifier,
-    socketFactory,
-    console,
-    registry,
-    configWithDefaults
-  )
-  return electrified as ElectrifiedDatabase<T>
-}
-
-export const start = async <T extends Database>(
-  db: T,
-  config: ElectricConfig,
-  opts?: ElectrifyOptions
-): Promise<ElectricNamespace> => {
-  const dbName: DbName = db.name
-  const configWithDefaults = hydrateConfig(config)
-
-  const adapter = opts?.adapter || new DatabaseAdapter(db)
-  const migrator =
-    opts?.migrator || new BundleMigrator(adapter, config.migrations)
-  const notifier = opts?.notifier || new EventNotifier(dbName)
-  const socketFactory = opts?.socketFactory || new WebSocketNodeFactory()
-  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
-  const registry = opts?.registry || globalRegistry
-  const namespace = new ElectricNamespace(adapter, notifier)
-
-  await startSatellite(
-    dbName,
+    dbSchemas,
     adapter,
     migrator,
     notifier,
