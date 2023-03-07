@@ -1,21 +1,24 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
 
-import { parseTableNames } from '../../util/parser'
-import { QualifiedTablename } from '../../util/tablename'
 import { Row, Statement } from '../../util/types'
 
 import { Database } from './database'
 import { resultToRows } from './result'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
   db: Database
 
   constructor(db: Database) {
+    super()
     this.db = db
   }
 
@@ -92,10 +95,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   async query(statement: Statement): Promise<Row[]> {
     const result = await this.db.exec(statement.sql, statement.args)
     return resultToRows(result)
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
   }
 }
 
