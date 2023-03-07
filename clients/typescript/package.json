@@ -86,6 +86,9 @@
       ],
       "debug": [
         "./dist/util/debug/index.d.ts"
+      ],
+      "client/model": [
+        "./dist/client/model/index.d.ts"
       ]
     }
   },

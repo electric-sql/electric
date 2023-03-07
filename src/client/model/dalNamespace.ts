@@ -11,7 +11,7 @@ export type Schema<T> = ZObject<T>
 
 // Fetches the object type out of the schema
 // e.g. GetObjectTypeFromSchema<Schema<A>> = A
-type GetObjectTypeFromSchema<T extends Schema<any>> = T extends Schema<infer O> // bind the type of the object for which this is a schema
+type GetObjectTypeFromSchema<T> = T extends Schema<infer O> // bind the type of the object for which this is a schema
   ? O
   : never
 
@@ -23,9 +23,7 @@ export type DalTables<T extends Record<TableName, Schema<any>>> = {
 }
 
 // Extends the ElectricNamespace with a `dal` property containing the tables of the DAL
-export class DalNamespace<
-  T extends Record<TableName, Schema<any>>
-> extends ElectricNamespace {
+export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
   private constructor(
     public dal: DalTables<T>,
     adapter: DatabaseAdapter,
