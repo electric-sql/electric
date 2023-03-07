@@ -26,36 +26,36 @@ export type DalTables<T extends Record<TableName, Schema<any>>> = {
 export class DalNamespace<
   T extends Record<TableName, Schema<any>>
 > extends ElectricNamespace {
-  constructor(
+  private constructor(
     public dal: DalTables<T>,
     adapter: DatabaseAdapter,
     notifier: Notifier
   ) {
     super(adapter, notifier)
   }
-}
 
-// Builds a DAL namespace from a `schemas` object containing the schema of every DB table and the electric namespace
-// TODO: we want to say that T extends Record<TableName, Schema<any>>
-//       but this is not possible because concrete schemas aren't subtypes of Schema<any> ...
-export function buildDalNamespace<T extends DbSchemas>(
-  schemas: T,
-  electric: ElectricNamespace
-): DalNamespace<T> {
-  const tables: Array<[keyof T, Table<any>]> = Object.keys(schemas).map(
-    (tableName) => {
-      const schema = schemas[tableName]
-      return [
-        tableName,
-        new Table(tableName, schema, electric.adapter, electric.notifier),
-      ]
-    }
-  )
+  // Builds a DAL namespace from a `schemas` object containing the schema of every DB table and the electric namespace
+  // TODO: we want to say that S extends Record<TableName, Schema<any>>
+  //       but this is not possible because concrete schemas aren't subtypes of Schema<any> ...
+  static create<S extends DbSchemas>(
+    schemas: S,
+    electric: ElectricNamespace
+  ): DalNamespace<S> {
+    const tables: Array<[keyof S, Table<any>]> = Object.keys(schemas).map(
+      (tableName) => {
+        const schema = schemas[tableName]
+        return [
+          tableName,
+          new Table(tableName, schema, electric.adapter, electric.notifier),
+        ]
+      }
+    )
 
-  const dal = tables.reduce((ns, [tableName, tbl]) => {
-    ns[tableName] = tbl as any
-    return ns
-  }, {} as Partial<DalTables<T>>) as DalTables<T>
+    const dal = tables.reduce((ns, [tableName, tbl]) => {
+      ns[tableName] = tbl as any
+      return ns
+    }, {} as Partial<DalTables<S>>) as DalTables<S>
 
-  return new DalNamespace(dal, electric.adapter, electric.notifier)
+    return new DalNamespace(dal, electric.adapter, electric.notifier)
+  }
 }
