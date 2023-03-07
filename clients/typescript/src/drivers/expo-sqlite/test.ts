@@ -74,12 +74,14 @@ export async function initTestable<
     dbName,
     dbSchemas,
     adapter,
-    migrator,
-    notifier,
     socketFactory,
-    console,
-    registry,
-    config
+    config,
+    {
+      notifier: notifier,
+      migrator: migrator,
+      console: console,
+      registry: registry,
+    }
   )
   return [db, notifier, dal]
 }
