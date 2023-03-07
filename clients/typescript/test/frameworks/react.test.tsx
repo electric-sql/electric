@@ -19,11 +19,7 @@ import { QualifiedTablename } from '../../src/util/tablename'
 
 import { useElectricQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
-import {
-  buildDalNamespace,
-  DalNamespace,
-  DbSchemas,
-} from '../../src/client/model/dalNamespace'
+import { DalNamespace, DbSchemas } from '../../src/client/model/dalNamespace'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -35,7 +31,7 @@ const makeElectrified = <S extends DbSchemas>(
   dbSchemas: S,
   namespace: ElectricNamespace
 ): DalNamespace<S> => {
-  return buildDalNamespace(dbSchemas, namespace)
+  return DalNamespace.create(dbSchemas, namespace)
 }
 
 type FC = React.FC<React.PropsWithChildren>

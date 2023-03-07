@@ -7,11 +7,7 @@ import { SocketFactory } from '../sockets/index'
 import { DbName } from '../util/types'
 import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
-import {
-  buildDalNamespace,
-  DalNamespace,
-  DbSchemas,
-} from '../client/model/dalNamespace'
+import { DalNamespace, DbSchemas } from '../client/model/dalNamespace'
 
 export { ElectricNamespace }
 
@@ -47,7 +43,7 @@ export const electrify = async <S extends DbSchemas>(
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
 
   const electric = new ElectricNamespace(adapter, notifier)
-  const namespace = buildDalNamespace(dbSchemas, electric) // extends the electric namespace with a `dal` field
+  const namespace = DalNamespace.create(dbSchemas, electric) // extends the electric namespace with a `dal` field
 
   await registry.ensureStarted(
     dbName,

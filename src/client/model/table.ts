@@ -19,8 +19,6 @@ import { QualifiedTablename } from '../../util/tablename'
 import { LiveQueries } from './liveQueries'
 import { Notifier } from '../../notifiers'
 
-export { buildDalNamespace } from './dalNamespace'
-
 export class Table<T extends Record<string, any>>
   extends Validation<T>
   implements Model<T>
