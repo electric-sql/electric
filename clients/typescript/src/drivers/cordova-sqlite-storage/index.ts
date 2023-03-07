@@ -8,15 +8,10 @@ import {
   electrify as baseElectrify,
 } from '../../electric/index'
 
-import { BundleMigrator } from '../../migrators/bundle'
-import { EventNotifier } from '../../notifiers/event'
-import { globalRegistry } from '../../satellite/registry'
-
 import { DatabaseAdapter } from './adapter'
-import { ElectricConfig, hydrateConfig } from '../../config'
+import { ElectricConfig } from '../../config'
 import { Database } from './database'
 import { MockSocketFactory } from '../../sockets/mock'
-import { ConsoleHttpClient } from '../../auth'
 import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
 
 export { DatabaseAdapter }
@@ -29,26 +24,17 @@ export const electrify = async <T extends Database, S extends DbSchemas>(
   opts?: ElectrifyOptions
 ): Promise<DalNamespace<S>> => {
   const dbName: DbName = db.dbname!
-  const configWithDefaults = hydrateConfig(config)
-
   const adapter = opts?.adapter || new DatabaseAdapter(db)
-  const migrator =
-    opts?.migrator || new BundleMigrator(adapter, config.migrations)
-  const notifier = opts?.notifier || new EventNotifier(dbName)
   const socketFactory = opts?.socketFactory || new MockSocketFactory()
-  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
-  const registry = opts?.registry || globalRegistry
 
   const namespace = await baseElectrify(
     dbName,
     dbSchemas,
     adapter,
-    migrator,
-    notifier,
     socketFactory,
-    console,
-    registry,
-    configWithDefaults
+    config,
+    opts
   )
+
   return namespace
 }

@@ -1,13 +1,14 @@
-import { ElectricConfig } from '../config/index'
+import { ElectricConfig, hydrateConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
-import { Notifier } from '../notifiers/index'
-import { ConsoleClient, Registry } from '../satellite/index'
+import { BundleMigrator, Migrator } from '../migrators/index'
+import { EventNotifier, Notifier } from '../notifiers/index'
+import { ConsoleClient, globalRegistry, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { DbName } from '../util/types'
 import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { DalNamespace, DbSchemas } from '../client/model/dalNamespace'
+import { ConsoleHttpClient } from '../auth'
 
 export { ElectricNamespace }
 
@@ -33,17 +34,21 @@ export const electrify = async <S extends DbSchemas>(
   dbName: DbName,
   dbSchemas: S,
   adapter: DatabaseAdapter,
-  migrator: Migrator,
-  notifier: Notifier,
   socketFactory: SocketFactory,
-  console: ConsoleClient,
-  registry: Registry,
-  config: ElectricConfig
+  config: ElectricConfig,
+  opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<DalNamespace<S>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
 
+  const configWithDefaults = hydrateConfig(config)
+  const migrator =
+    opts?.migrator || new BundleMigrator(adapter, config.migrations)
+  const notifier = opts?.notifier || new EventNotifier(dbName)
+  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
+  const registry = opts?.registry || globalRegistry
+
   const electric = new ElectricNamespace(adapter, notifier)
-  const namespace = DalNamespace.create(dbSchemas, electric) // extends the electric namespace with a `dal` field
+  const namespace = DalNamespace.create(dbSchemas, electric) // extends the electric namespace with a `dal` property for the data access library
 
   await registry.ensureStarted(
     dbName,
@@ -52,7 +57,7 @@ export const electrify = async <S extends DbSchemas>(
     notifier,
     socketFactory,
     console,
-    config
+    configWithDefaults
   )
 
   return namespace
