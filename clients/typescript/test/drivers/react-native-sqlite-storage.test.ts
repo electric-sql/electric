@@ -4,35 +4,6 @@ import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/a
 import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-/*
-// TODO: Move these two notifier tests to the tests of the DAL
-test('running a transaction runs potentiallyChanged', async (t) => {
-  const [_original, notifier, db] = await initTestable('test.db')
-
-  t.is(notifier.notifications.length, 0)
-
-  db.transaction((tx) => {
-    tx.executeSql('insert foo into bar')
-  })
-
-  t.is(notifier.notifications.length, 1)
-})
-
-test('working with the promise runtime works', async (t) => {
-  const [_original, notifier, db] = await initTestable('test.db', true)
-
-  t.is(notifier.notifications.length, 0)
-
-  //await db.attach('lala.db', 'lala')
-
-  await db.transaction(async (tx) => {
-    await tx.executeSql('INSERT foo INTO bar')
-  })
-
-  t.is(notifier.notifications.length, 2)
-})
-*/
-
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(db, false)

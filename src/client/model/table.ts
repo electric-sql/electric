@@ -71,7 +71,8 @@ export class Table<T extends Record<string, any>>
     i: Input
   ): Promise<Selected<T, Input> | null> {
     return this._executor.execute(
-      this._findUnique.bind(this, i)
+      this._findUnique.bind(this, i),
+      false
     ) as unknown as Promise<Selected<T, Input> | null>
   }
 
@@ -79,16 +80,18 @@ export class Table<T extends Record<string, any>>
     i: Input
   ): Promise<Selected<T, Input> | null> {
     return this._executor.execute(
-      this._findFirst(i)
+      this._findFirst(i),
+      false
     ) as unknown as Promise<Selected<T, Input> | null>
   }
 
   async findMany<Input extends FindInput<T>>(
     i: Input
   ): Promise<Array<Selected<T, Input>>> {
-    return this._executor.execute(this._findMany(i)) as unknown as Promise<
-      Array<Selected<T, Input>>
-    >
+    return this._executor.execute(
+      this._findMany(i),
+      false
+    ) as unknown as Promise<Array<Selected<T, Input>>>
   }
 
   // TODO: see if we can enforce a unique a argument in `where` such that we are sure we identify 0 or max 1 record to update
@@ -213,7 +216,7 @@ export class Table<T extends Record<string, any>>
       db.query(
         sql,
         (_, res) => {
-          if (res.length == 0) return null
+          if (res.length == 0) return continuation(null)
           return continuation(res[0] as unknown as Partial<T>)
         },
         onError
