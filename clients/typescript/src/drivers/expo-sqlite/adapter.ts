@@ -53,19 +53,22 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
   query({ sql, args }: Statement): Promise<Row[]> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const success = (_tx: Transaction, results: Results) => {
-        resolve(rowsFromResults(results))
+      let res: Row[] = []
+      const storeRes = (_tx: Transaction, results: Results) => {
+        res = rowsFromResults(results)
       }
+
       const txFn = (tx: Transaction) => {
         tx.executeSql(
           sql,
           args as unknown as (number | string | null)[],
-          success,
-          reject
+          storeRes
         )
       }
 
-      this.db.readTransaction(txFn)
+      this.db.readTransaction(txFn, reject, () => {
+        resolve(res)
+      })
     })
   }
 

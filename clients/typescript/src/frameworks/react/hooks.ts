@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 
-import { ElectricNamespace } from '../../electric/index'
 import {
   ChangeNotification,
   ConnectivityStateChangeNotification,
@@ -8,8 +7,7 @@ import {
 import { randomValue } from '../../util/random'
 import { QualifiedTablename, hasIntersection } from '../../util/tablename'
 import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
-
-import { useElectric } from './provider'
+import { ElectricContext } from './provider'
 
 interface ResultData<T> {
   error?: any
@@ -56,23 +54,17 @@ export const useRandom = () => {
 export function useLiveQuery<Res>(
   runQuery: () => Promise<LiveResult<Res>>
 ): ResultData<Res> {
-  const db = useElectric()
+  const electric = useContext(ElectricContext)
 
   const [cacheKey, bustCache] = useRandom()
   const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
-  const [electric, setElectric] = useState<ElectricNamespace>()
   const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
-  // TODO: run query first time then fetch the DB tables
-
-  // When the db is set on the provider, we get the electric namespace from it.
+  // The effect below is run only after the initial render
+  // because of the empty array of dependencies
   useEffect(() => {
-    if (db === undefined) {
-      return
-    }
-
     // Do an initial run of the query to fetch the table names
     runQuery()
       .then((res) => {
@@ -82,9 +74,7 @@ export function useLiveQuery<Res>(
         setResultData(successResult(res.result))
       })
       .catch((err) => setResultData(errorResult(err)))
-
-    setElectric(db.electric)
-  }, [db])
+  }, [])
 
   // Once we have electric, we then establish the data change
   // notification subscription, comparing the tablenames used by the
@@ -163,24 +153,14 @@ export function useLiveQuery<Res>(
 // Returns an object that provides the `ResultData` interface of
 // `{ results, error, updatedAt }`.
 export const useElectricQuery = (query: Query, params?: BindParams) => {
-  const db = useElectric()
+  const electric = useContext(ElectricContext)
 
   const [cacheKey, bustCache] = useRandom()
   const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
-  const [electric, setElectric] = useState<ElectricNamespace>()
   const [paramsKey, setParamsKey] = useState<string>()
   const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Row[]>>({})
-
-  // When the db is set on the provider, we get the electric namespace from it.
-  useEffect(() => {
-    if (db === undefined) {
-      return
-    }
-
-    setElectric(db.electric)
-  }, [db])
 
   // Use the `adapter` to parse the tablenames from the SQL query.
   useEffect(() => {
@@ -193,9 +173,7 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
     const tablenamesKey = JSON.stringify(tablenames)
 
     setParamsKey(paramsKey)
-
     setTablenames(tablenames)
-
     setTablenamesKey(tablenamesKey)
   }, [electric])
 
@@ -263,22 +241,14 @@ export const useConnectivityState: () => {
   connectivityState: ConnectivityState
   toggleConnectivityState: () => void
 } = () => {
-  const db = useElectric()
+  const electric = useContext(ElectricContext)
 
   const [connectivityState, setConnectivityState] =
     useState<ConnectivityState>('disconnected')
-  const [electric, setElectric] = useState<ElectricNamespace>()
+  //const [electric, setElectric] = useState<ElectricNamespace>()
 
   useEffect(() => {
-    if (db === undefined) {
-      return
-    }
-
-    setElectric(db.electric)
-  }, [db])
-
-  useEffect(() => {
-    if (db === undefined || electric === undefined) {
+    if (electric === undefined) {
       return
     }
 
@@ -297,18 +267,16 @@ export const useConnectivityState: () => {
     }
 
     electric.notifier.subscribeToConnectivityStateChange(handler)
-
-    setElectric(db.electric)
-  }, [db, electric])
+  }, [electric])
 
   const toggleConnectivityState = () => {
-    if (db === undefined || electric === undefined) {
+    if (electric === undefined) {
       return
     }
 
     const nextState: ConnectivityState =
       connectivityState == 'connected' ? 'disconnected' : 'available'
-    const dbName = db.electric.notifier.dbName
+    const dbName = electric.notifier.dbName
     electric.notifier.connectivityStateChange(dbName, nextState)
     setConnectivityState(nextState)
   }

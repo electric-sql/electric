@@ -1,4 +1,6 @@
 import { initElectricSqlJs } from '../../src/drivers/absurd-sql'
+import { buildDalNamespace } from '../../src/client/model'
+import { z } from 'zod'
 
 const config = {
   app: 'app',
@@ -10,9 +12,38 @@ const config = {
 const url = new URL('./worker.js', import.meta.url)
 const worker = new Worker(url, { type: 'module' })
 
+// Schema describing the DB
+// can be defined manually, or generated
+const dbSchemas = {
+  items: z
+    .object({
+      value: z.string(),
+    })
+    .strict(),
+}
+
 // Electrify the SQL.js / absurd-sql machinery and then open
 // a persistent, named database.
-initElectricSqlJs(worker, { locateFile: (file) => `/${file}` })
-  .then((SQL) => SQL.openDatabase('example.db', config))
-  .then((db) => db.exec('SELECT 1'))
-  .then((results) => console.log('results: ', results))
+const SQL = await initElectricSqlJs(worker, {
+  locateFile: (file) => `/${file}`,
+})
+const electrified = await SQL.openDatabase('example.db', config)
+
+const ns = buildDalNamespace(dbSchemas, electrified.electric)
+await ns.adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
+await ns.adapter.run({
+  sql: 'CREATE TABLE IF NOT EXISTS items (value TEXT PRIMARY KEY NOT NULL) WITHOUT ROWID;',
+})
+await ns.dal.items.createMany({
+  data: [
+    {
+      value: 'foo',
+    },
+    {
+      value: 'bar',
+    },
+  ],
+})
+
+const items = await ns.dal.items.findMany({})
+console.log('results: ', items)

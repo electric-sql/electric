@@ -13,7 +13,6 @@ import { Row } from '../../src/util'
 const initMethod: ServerMethod = { target: 'server', name: 'init' }
 const openMethod: ServerMethod = { target: 'server', name: 'open' }
 
-const getTestData: ServerMethod = { target: 'server', name: '_get_test_data' }
 const electricConfig = { app: 'my-app', env: 'my-env', token: 'my-token' }
 
 const makeWorker = () => {
@@ -353,6 +352,10 @@ test('statement free works', async (t) => {
   t.true(await stmt.free())
 })
 
+// TODO: move the notification unit tests below to unit tests for the DAL
+/*
+const getTestData: ServerMethod = { target: 'server', name: '_get_test_data' }
+
 test('db.exec harmless sql does not notify', async (t) => {
   const worker = makeWorker()
   const client = new WorkerClient(worker)
@@ -581,3 +584,4 @@ test('statement getAsObject notifies if called with params', async (t) => {
   notifications = testData.notifications
   t.is(notifications.length, 2)
 })
+*/

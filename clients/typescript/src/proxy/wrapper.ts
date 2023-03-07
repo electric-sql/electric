@@ -1,4 +1,4 @@
-import { ElectricNamespace } from '../electric/index'
+import { ElectricNamespace } from '../electric/namespace'
 
 // Common interface provided by electric proxy wrappers.
 export interface ProxyWrapper {

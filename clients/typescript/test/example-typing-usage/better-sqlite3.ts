@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 
 import { electrify } from '../../src/drivers/better-sqlite3'
+import { z } from 'zod'
 
 const config = {
   app: 'app',
@@ -10,23 +11,20 @@ const config = {
 
 const original = new Database('example.db')
 
-// Normal code use
-const stmt = original.prepare('select foo from bar')
-const results: any[] = stmt.all()
-const changes: number = stmt.run().changes
-console.log(changes, results)
-original.transaction((x: number) => {
-  original.prepare<{ x: number }>('SELECT 1').get({ x })
-})
+// Schema describing the DB
+// can be defined manually, or generated
+const dbSchemas = {
+  items: z
+    .object({
+      value: z.string(),
+    })
+    .strict(),
+}
 
-//Electrified code use
-electrify(original, config).then((db) => {
-  const stmt = db.prepare('select foo from bar')
-  const results = stmt.all()
-  const changes: number = stmt.run().changes
-  console.log(changes, results)
-
-  db.transaction((x: number) => {
-    db.prepare<{ x: number }>('SELECT 1').get({ x })
-  })
+// Electrify the DB and use the DAL to query the `items` table
+const ns = await electrify(original, dbSchemas, config)
+await ns.dal.items.findMany({
+  select: {
+    value: true,
+  },
 })

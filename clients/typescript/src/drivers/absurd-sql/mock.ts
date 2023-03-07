@@ -8,7 +8,7 @@ import {
 
 import { WorkerServer, RequestError } from '../../bridge/index'
 import { ElectricConfig } from '../../config/index'
-import { ElectricNamespace } from '../../electric/index'
+import { ElectricNamespace } from '../../electric/namespace'
 import { MockMigrator } from '../../migrators/mock'
 import { Notification } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
