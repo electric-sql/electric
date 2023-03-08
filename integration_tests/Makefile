@@ -22,6 +22,9 @@ pull:
 		postgresql \
 		satellite_client
 
+stop:
+	$(foreach dir, $(LUX_DIRS),make -C ${dir} stop_dev_env;)
+
 clean:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} clean;)
 	rm -rf lux
