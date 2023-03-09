@@ -1,0 +1,24 @@
+# Run using `docker-compose -f databases.yaml up`.
+version: "3.7"
+
+# https://hexdocs.pm/mix/1.14/Mix.html#module-environment-variables
+# Check for more mix env vars if in doubt
+services:
+  build:
+    image: ${BUILDER_IMAGE}
+    user: "${UID}:${GID}"
+    environment:
+      UID: ${UID}
+      GID: ${GID}
+      MIX_HOME:       /app/_build_in_docker
+      MIX_BUILD_ROOT: /app/_build_in_docker/_build
+      MIX_DEPS_PATH:  /app/_build_in_docker/deps
+      MIX_ENV: test
+      HEX_HOME: /app/_build_in_docker/.hex
+    volumes:
+      - .:/app:ro
+      - ./_build_in_docker:/app/_build_in_docker
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+    privileged: true

@@ -20,7 +20,7 @@ COPY Makefile /app/
 RUN make build_tools
 
 COPY mix.*  /app/
-COPY deps /app/deps/
+#COPY deps /app/deps/
 RUN make deps
 COPY config /app/config/
 COPY lib    /app/lib/

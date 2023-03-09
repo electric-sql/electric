@@ -1,7 +1,19 @@
 
 .PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
+export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
+#ELIXIR_VERSION=1.13.4
+#OTP_VERSION=24.3
+#DEBIAN_VERSION=bullseye-20210902-slim
+
+#export BUILDER_IMAGE=hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}
+#export RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
+
+export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
+export BUILDER_IMAGE=${DOCKER_REPO}/electric-builder:latest
+
+
 
 print_version_from_git:
 	echo "${INFERRED_VERSION}"
@@ -55,7 +67,26 @@ docker-pgsql-%:
 
 ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 docker-build:
-	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} -t electric:local-build .
+	mkdir -p build_in_docker/.hex
+	mkdir -p build_in_docker/deps
+	mkdir -p build_in_docker/_build
+	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+        -v build_in_docker/_build:/app/_build \
+		-v build_in_docker/deps:/app/deps \
+		-v build_in_docker/.hex:/app/.hex \
+        -v lib:/app/lib:ro \
+		-t electric:local-build .
+
+docker-compile:
+	mkdir -p _build_in_docker
+	make docker-make MK_TARGET=build_tools MK_DOCKER=build
+	make docker-make MK_TARGET=deps MK_DOCKER=build
+	make docker-make MK_TARGET=compile MK_DOCKER=build
+
+docker-make:
+	docker-compose -f tools.yaml run --rm \
+		--workdir=/app build \
+		make ${MK_TARGET}
 
 docker-build-ci:
 	mkdir -p deps
