@@ -18,8 +18,9 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
 
-const strictPostSchema = Post.strict()
-type Post = z.infer<typeof strictPostSchema>
+const strictPostSchema = Post
+type PostSchema = typeof strictPostSchema
+type Post = z.infer<typeof Post>
 
 const dbSchemas = {
   Post: strictPostSchema,
@@ -57,16 +58,21 @@ const post3 = {
 }
 
 // Create a Post table in the DB first
-db.exec(
-  "CREATE TABLE IF NOT EXISTS Post('id' varchar PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
-)
+function clear() {
+  db.exec('DROP TABLE IF EXISTS Post')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Post('id' varchar PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
+  )
+}
+
+clear()
 
 test.serial('table should throw an error on invalid schemas', (t) => {
   t.throws<TypeError>(
     () => {
       new Table<Post>(
         'Post',
-        z.string() as unknown as typeof strictPostSchema,
+        z.string() as unknown as PostSchema,
         null as any,
         null as any
       ) // mislead the type checker to test that it throws an error at runtime
@@ -77,6 +83,68 @@ test.serial('table should throw an error on invalid schemas', (t) => {
     }
   )
 })
+
+test.serial('create query inserts NULL for undefined values', async (t) => {
+  const res = await tbl.create({
+    data: {
+      id: 'i1',
+      title: 't1',
+      contents: 'c1',
+      nbr: undefined,
+    },
+  })
+
+  t.deepEqual(res, {
+    id: 'i1',
+    title: 't1',
+    contents: 'c1',
+    nbr: null,
+  })
+
+  clear()
+})
+
+test.serial('create query handles null values correctly', async (t) => {
+  const res = await tbl.create({
+    data: {
+      id: 'i1',
+      title: 't1',
+      contents: 'c1',
+      nbr: null,
+    },
+  })
+
+  t.deepEqual(res, {
+    id: 'i1',
+    title: 't1',
+    contents: 'c1',
+    nbr: null,
+  })
+
+  clear()
+})
+
+test.serial(
+  'create query inserts NULL values for missing fields',
+  async (t) => {
+    const res = await tbl.create({
+      data: {
+        id: 'i1',
+        title: 't1',
+        contents: 'c1',
+      },
+    })
+
+    t.deepEqual(res, {
+      id: 'i1',
+      title: 't1',
+      contents: 'c1',
+      nbr: null,
+    })
+
+    clear()
+  }
+)
 
 // Test that we can make a create query
 test.serial('create query', async (t) => {

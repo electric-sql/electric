@@ -25,6 +25,6 @@ export const Post = z
      * The actual contents of the post.
      */
     contents: z.string(),
-    nbr: z.number().int(),
+    nbr: z.number().int().nullish(),
   })
   .strict()
