@@ -13,7 +13,7 @@ services:
       MIX_HOME:       /app/_build_in_docker
       MIX_BUILD_ROOT: /app/_build_in_docker/_build
       MIX_DEPS_PATH:  /app/_build_in_docker/deps
-      MIX_ENV: test
+      MIX_ENV: ${MIX_ENV}
       HEX_HOME: /app/_build_in_docker/.hex
     volumes:
       - .:/app:ro

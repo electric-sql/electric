@@ -13,12 +13,13 @@ INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-paren
 export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REPO}/electric-builder:latest
 
-
-
 print_version_from_git:
 	echo "${INFERRED_VERSION}"
 
-build_tools:
+build_tools: _build_in_docker/.hex
+
+_build_in_docker/.hex:
+	ls -lah
 	mix local.hex --force
 	mix local.rebar --force
 
@@ -66,25 +67,19 @@ docker-pgsql-%:
 	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U electric -d electric
 
 ELECTRIC_VERSION ?= ${INFERRED_VERSION}
-docker-build:
-	mkdir -p build_in_docker/.hex
-	mkdir -p build_in_docker/deps
-	mkdir -p build_in_docker/_build
+
+docker-build: in-docker-build_tools in-docker-deps
 	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
-        -v build_in_docker/_build:/app/_build \
-		-v build_in_docker/deps:/app/deps \
-		-v build_in_docker/.hex:/app/.hex \
-        -v lib:/app/lib:ro \
 		-t electric:local-build .
 
-docker-compile:
+_build_in_docker:
 	mkdir -p _build_in_docker
-	make docker-make MK_TARGET=build_tools MK_DOCKER=build
-	make docker-make MK_TARGET=deps MK_DOCKER=build
-	make docker-make MK_TARGET=compile MK_DOCKER=build
+
+in-docker-%: _build_in_docker
+	make docker-make MK_TARGET=$*
 
 docker-make:
-	docker-compose -f tools.yaml run --rm \
+	docker-compose -f ${PROJECT_ROOT}/tools.yaml run --rm \
 		--workdir=/app build \
 		make ${MK_TARGET}
 

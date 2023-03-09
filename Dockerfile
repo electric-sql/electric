@@ -14,14 +14,16 @@ RUN apt-get update -y && \
     rm -f /var/lib/apt/lists/*_*
 
 ENV MIX_ENV=prod
+ENV MIX_HOME=/app
+ENV HEX_HOME=/app/.hex
 
 WORKDIR /app
+COPY mix.*    /app/
 COPY Makefile /app/
-RUN make build_tools
-
-COPY mix.*  /app/
-#COPY deps /app/deps/
-RUN make deps
+COPY _build_in_docker/.hex     /app/.hex
+COPY _build_in_docker/archives /app/archives
+COPY _build_in_docker/deps     /app/deps/
+COPY _build_in_docker/_build   /app/_build
 COPY config /app/config/
 COPY lib    /app/lib/
 

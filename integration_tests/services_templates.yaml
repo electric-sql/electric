@@ -40,10 +40,14 @@ services:
     environment:
       UID: ${UID}
       GID: ${GID}
-      MIX_HOME: ${PROJECT_ROOT}
+      MIX_HOME:       ${PROJECT_ROOT}/_build_in_docker
+      MIX_BUILD_ROOT: ${PROJECT_ROOT}/_build_in_docker/_build
+      MIX_DEPS_PATH:  ${PROJECT_ROOT}/_build_in_docker/deps
+      HEX_HOME:       ${PROJECT_ROOT}/_build_in_docker/.hex
       MIX_ENV: test
     volumes:
-      - ${PROJECT_ROOT}:${PROJECT_ROOT}
+      - ${PROJECT_ROOT}:${PROJECT_ROOT}:ro
+      - ${PROJECT_ROOT}/_build_in_docker:${PROJECT_ROOT}/_build_in_docker
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro
