@@ -23,6 +23,24 @@ const post2 = {
  * Input validation is currently done by the `Table` itself before building the query.
  */
 
+test('null values are inserted as NULL', (t) => {
+  const query = tbl
+    .create({
+      data: {
+        id: 'i1',
+        title: 't1',
+        contents: 'c1',
+        nbr: null,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL)"
+  )
+})
+
 // Test that we can make a create query
 test('create query', (t) => {
   const query = tbl
@@ -92,6 +110,27 @@ test('findUnique query with selection', (t) => {
   t.is(
     query,
     "SELECT id, nbr, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) LIMIT 2"
+  )
+})
+
+test('findUnique query with selection of NULL value', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: null,
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IS NULL) LIMIT 2"
   )
 })
 

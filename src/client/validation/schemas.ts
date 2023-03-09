@@ -1,7 +1,7 @@
 import { z, ZodRawShape } from 'zod'
 import mapValues from 'lodash.mapvalues'
 import { InvalidArgumentError } from './errors/invalidArgumentError'
-import { toZod } from 'tozod'
+import { toZod } from '../util/toZod'
 
 export type ZObject<T> = z.ZodObject<
   { [k in keyof T]-?: toZod<T[k]> },

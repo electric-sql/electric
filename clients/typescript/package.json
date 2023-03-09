@@ -139,7 +139,6 @@
     "react-native-uuid": "^2.0.1",
     "sqlite-parser": "^1.0.1",
     "squel": "^5.13.0",
-    "tozod": "^3.0.0",
     "uuid": "^9.0.0",
     "walkjs": "^3.2.4",
     "ws": "^8.8.1",
