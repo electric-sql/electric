@@ -39,7 +39,9 @@ jobs:
         id: cache-deps
         uses: actions/cache@v3
         with:
-          path: deps
+          path: |
+            deps
+            _build_in_docker/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
       - name: Cache compiled code
@@ -51,7 +53,7 @@ jobs:
             !_build/*/lib/electric
           key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
 
-      - run: make deps pretest_compile
+      - run: make deps copy_deps_ci pretest_compile
 
   tests:
     name: elixir tests
@@ -130,7 +132,9 @@ jobs:
         id: cache-deps
         uses: actions/cache/restore@v3
         with:
-          path: deps
+          path: |
+            deps
+            _build_in_docker/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
       - name: Restore compiled code
