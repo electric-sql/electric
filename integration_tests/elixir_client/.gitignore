@@ -1,0 +1,6 @@
+.hex/
+_build/
+archives/
+deps/
+rebar
+rebar3

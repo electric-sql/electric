@@ -19,6 +19,9 @@ dialyzer:
 compile:
 	mix compile
 
+compile-%:
+	MIX_ENV="$*" mix compile
+
 release:
 	MIX_ENV="prod" mix release
 

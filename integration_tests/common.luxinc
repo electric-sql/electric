@@ -84,10 +84,7 @@
 [macro start_elixir_test id]
     !make start_elixir_test_${id}
     [invoke ok2 $dprompt]
-    !mix local.hex --force --no-color
-    ?archives
-    [invoke ok2 $dprompt]
-    !iex -S mix run --no-start --no-deps-check -e "Application.put_env(:elixir, :ansi_enabled, false)"
+    !make run_elixir
     ?$eprompt
 [endmacro]
 
