@@ -80,13 +80,14 @@ docker-build: in-docker-build_tools in-docker-deps in-docker-compile-prod in-doc
 	docker build --build-arg RUNNER_IMAGE -t electric:local-build .
 
 docker-build-ci: docker-build
-	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
+	docker tag electric:local-build "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}"
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}
 ifeq (${TAG_AS_LATEST}, true)
+	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
-docker-build-ci-crossplatform: in-docker-build_tools in-docker-deps in-docker-release
+docker-build-ci-crossplatform: in-docker-build_tools in-docker-deps in-docker-compile-prod  in-docker-release
 	docker buildx build --build-arg RUNNER_IMAGE \
 			--platform linux/arm64/v8,linux/amd64 --push \
 			-t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
