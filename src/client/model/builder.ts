@@ -160,10 +160,8 @@ export class Builder<T extends { [field: string]: any }> {
   ): Q {
     return fields.reduce<Q>((query: Q, fieldName: string) => {
       const fieldValue = whereObject[fieldName as keyof T]
-      if (fieldValue === null)
-        return query.where(
-          `${fieldName} IS NULL`
-        ) // needed because `WHERE field = NULL` is not valid SQL
+      if (fieldValue === null) return query.where(`${fieldName} IS NULL`)
+      // needed because `WHERE field = NULL` is not valid SQL
       else return query.where(`${fieldName} = ?`, [fieldValue])
     }, q)
   }
