@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@types/uuid": "^9.0.0",
-    "electric-sql": "git+https://github.com/electric-sql/typescript-client.git#f6f2541574cc8e2911da3932133144667b3c5a59",
+    "electric-sql": "git+https://github.com/electric-sql/typescript-client.git#bc0c8e540ebb1fc08c21faf466f3359fa2dd9aaa",
     "jsonwebtoken": "^9.0.0",
     "loglevel": "^1.8.1",
     "tslint": "^6.1.3",

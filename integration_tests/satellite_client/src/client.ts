@@ -47,7 +47,11 @@ export const read_migrations = (migration_file: string) => {
 const dbSchema = {
   items: z.object({
     id: z.string(),
-    content: z.string()
+    content: z.string(),
+    content_text_null: z.string().nullish(),
+    content_text_null_default: z.string().nullish(),
+    intvalue_null: z.number().int().nullish(),
+    intvalue_null_default: z.number().int().nullish()
   }).strict(),
 
   other_items: z.object({
@@ -63,7 +67,6 @@ export const open_db = (
   port: number,
   migrations: any
 ): Promise<DalNamespace<DbSchema>> => {
-  //= () => Promise<ElectrifiedDatabase> {
   const original = new Database(name)
   const config: ElectricConfig = {
     app: 'satellite_client',

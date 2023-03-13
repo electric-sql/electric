@@ -90,9 +90,16 @@
 #===============================================================================
 
 [macro insert_map map]
-    !await db.adapter.run({ sql: "INSERT INTO main.items \
-    (id, content, content_text_null, content_text_null_default, intvalue_null, intvalue_null_default) \
-    VALUES ( @id, @content, @content_text_null, @content_text_null_default, @intvalue_null, \ @intvalue_null_default)", args: $map })
+    !await db.dal.items.create({ \
+      data: { \
+        id: $map.id, \
+        content: $map.content, \
+        content_text_null: $map.content_text_null, \
+        content_text_null_default: $map.content_text_null_default, \
+        intvalue_null: $map.intvalue_null, \
+        intvalue_null_default: $map.intvalue_null_default \
+      } \
+    })
     ?$node
 [endmacro]
 
