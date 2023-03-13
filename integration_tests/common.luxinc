@@ -82,8 +82,6 @@
 [endmacro]
 
 [macro start_elixir_test id]
-    !(cd ${PROJECT_ROOT} && make in-docker-pretest_compile)
-    [invoke ok]
     !make start_elixir_test_${id}
     [invoke ok2 $dprompt]
     !iex -S mix run --no-start --no-deps-check -e "Application.put_env(:elixir, :ansi_enabled, false)"
