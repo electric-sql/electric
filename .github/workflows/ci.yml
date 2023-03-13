@@ -53,7 +53,7 @@ jobs:
             !_build/*/lib/electric
           key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
 
-      - run: make deps copy_deps_ci pretest_compile
+      - run: make deps pretest_compile
 
   tests:
     name: elixir tests

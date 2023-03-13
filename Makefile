@@ -17,10 +17,6 @@ _build_in_docker/.hex:
 	mix local.hex --force
 	mix local.rebar --force
 
-copy_deps_ci:
-	mkdir -p _build_in_docker
-	cp -R deps _build_in_docker/
-
 deps:
 	mix deps.get
 
