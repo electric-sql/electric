@@ -25,7 +25,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           # Tags are required for proper version inference, and this is the only way to pull the tags in
           fetch-depth: 0
-      - run: ls -lah
       - name: Inject slug/short variables
         uses: rlespinasse/github-slug-action@v4
       - uses: erlef/setup-beam@v1

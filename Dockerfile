@@ -24,6 +24,8 @@ COPY _build_in_docker/.hex     /app/.hex
 COPY _build_in_docker/archives /app/archives
 COPY _build_in_docker/deps     /app/deps/
 COPY _build_in_docker/_build   /app/_build
+COPY _build_in_docker/rebar    /app/rebar
+COPY _build_in_docker/rebar3   /app/rebar3
 COPY config /app/config/
 COPY lib    /app/lib/
 

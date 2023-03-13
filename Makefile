@@ -3,15 +3,11 @@
 
 export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
-#ELIXIR_VERSION=1.13.4
-#OTP_VERSION=24.3
-#DEBIAN_VERSION=bullseye-20210902-slim
-
-#export BUILDER_IMAGE=hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}
-#export RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
 
 export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REPO}/electric-builder:latest
+export RUNNER_IMAGE=${DOCKER_REPO}/electric-builder:latest
+
 
 print_version_from_git:
 	echo "${INFERRED_VERSION}"
@@ -19,7 +15,6 @@ print_version_from_git:
 build_tools: _build_in_docker/.hex
 
 _build_in_docker/.hex:
-	ls -lah
 	mix local.hex --force
 	mix local.rebar --force
 
@@ -68,12 +63,12 @@ docker-pgsql-%:
 
 ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 
-docker-build: in-docker-build_tools in-docker-deps
+docker-build: in-docker-build_tools in-docker-deps in-docker-release
 	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
 		-t electric:local-build .
 
 _build_in_docker:
-	mkdir -p _build_in_docker
+	mkdir -p _build_in_docker/_build
 
 in-docker-%: _build_in_docker
 	make docker-make MK_TARGET=$*
