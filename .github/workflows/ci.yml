@@ -202,9 +202,6 @@ jobs:
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
 
-      - name: Build mocked elixir client
-        run: make in-docker-pretest_compile
-
       - name: Cache built lux
         uses: actions/cache@v3
         with:

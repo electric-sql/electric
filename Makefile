@@ -29,7 +29,7 @@ compile:
 release:
 	MIX_ENV="prod" mix release
 
-pretest_compile: deps
+pretest_compile: build_tools deps
 	MIX_ENV="test" mix compile --force --warnings-as-error
 
 tests:

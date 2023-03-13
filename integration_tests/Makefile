@@ -12,6 +12,7 @@ test: deps build pull
 	${LUX} ${LUX_DIRS}
 
 build:
+	(cd ${PROJECT_ROOT} && make in-docker-pretest_compile)
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} build;)
 
 pull:
