@@ -191,7 +191,9 @@ jobs:
         id: cache-deps
         uses: actions/cache/restore@v3
         with:
-          path: deps
+          path: |
+            deps
+            _build_in_docker/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('**/mix.lock') }}
 
       - name: Restore compiled code
@@ -202,6 +204,8 @@ jobs:
             _build/*/lib
             !_build/*/lib/electric
           key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
