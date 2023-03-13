@@ -198,12 +198,12 @@ jobs:
             _build/*/lib
             !_build/*/lib/electric
           key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
-      - run: |
-          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
-      - run: make pretest_compile
+
+      - name: Build mocked elixir client
+        run: make in-docker-pretest_compile
 
       - name: Cache built lux
         uses: actions/cache@v3

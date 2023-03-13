@@ -1,5 +1,5 @@
 
-.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
+.PHONY: build_tools compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
 export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
@@ -62,9 +62,6 @@ docker-pgsql-%:
 
 ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 
-docker-build: in-docker-build_tools in-docker-deps in-docker-release
-	docker build --build-arg RUNNER_IMAGE -t electric:local-build .
-
 _build_in_docker:
 	mkdir -p _build_in_docker/_build
 
@@ -76,9 +73,11 @@ docker-make:
 		--workdir=/app build \
 		make ${MK_TARGET}
 
-docker-build-ci:
-	mkdir -p deps
-	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+docker-build: in-docker-build_tools in-docker-deps in-docker-release
+	docker build --build-arg RUNNER_IMAGE -t electric:local-build .
+
+docker-build-ci: in-docker-build_tools in-docker-deps in-docker-release
+	docker build --build-arg RUNNER_IMAGE \
       -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
       -t electric:local-build .
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}
@@ -87,10 +86,9 @@ ifeq (${TAG_AS_LATEST}, true)
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
-docker-build-ci-crossplatform:
-	mkdir -p deps
-	docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
-			--build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+docker-build-ci-crossplatform: in-docker-build_tools in-docker-deps in-docker-release
+	docker buildx build --build-arg RUNNER_IMAGE \
+			--platform linux/arm64/v8,linux/amd64 --push \
 			-t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
 			-t ${ELECTRIC_IMAGE_NAME}:latest .
 
