@@ -26,6 +26,9 @@ dialyzer:
 compile:
 	mix compile
 
+compile-%:
+	MIX_ENV="$*" mix compile
+
 release:
 	MIX_ENV="prod" mix release
 
@@ -73,16 +76,13 @@ docker-make:
 		--workdir=/app build \
 		make ${MK_TARGET}
 
-docker-build: in-docker-build_tools in-docker-deps in-docker-release
+docker-build: in-docker-build_tools in-docker-deps in-docker-compile-prod in-docker-release
 	docker build --build-arg RUNNER_IMAGE -t electric:local-build .
 
-docker-build-ci: in-docker-build_tools in-docker-deps in-docker-release
-	docker build --build-arg RUNNER_IMAGE \
-      -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
-      -t electric:local-build .
+docker-build-ci: docker-build
+	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
 	docker push ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}
 ifeq (${TAG_AS_LATEST}, true)
-	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
