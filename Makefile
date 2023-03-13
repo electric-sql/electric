@@ -6,8 +6,7 @@ INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-paren
 
 export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REPO}/electric-builder:latest
-export RUNNER_IMAGE=${DOCKER_REPO}/electric-builder:latest
-
+export RUNNER_IMAGE=${DOCKER_REPO}/electric-runner:latest
 
 print_version_from_git:
 	echo "${INFERRED_VERSION}"
@@ -64,8 +63,7 @@ docker-pgsql-%:
 ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 
 docker-build: in-docker-build_tools in-docker-deps in-docker-release
-	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
-		-t electric:local-build .
+	docker build --build-arg RUNNER_IMAGE -t electric:local-build .
 
 _build_in_docker:
 	mkdir -p _build_in_docker/_build
