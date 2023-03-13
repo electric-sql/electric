@@ -1,5 +1,5 @@
 
-.PHONY: build_tools compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
+.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
 export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
