@@ -1,6 +1,9 @@
 export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 LUX=${PROJECT_ROOT}/integration_tests/lux/bin/lux
-DOCKER_REGISTRY=europe-docker.pkg.dev/vaxine/vaxine-io
+DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
+DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
+export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
+
 
 export ELIXIR_VERSION=1.13.4
 export OTP_VERSION=24.3
@@ -89,7 +92,7 @@ start_sysbench:
 start_elixir_test_%:
 	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
-		--workdir=${PROJECT_ROOT} \
+		--workdir=${PROJECT_ROOT}/integration_tests/elixir_client \
 		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
 		elixir_client_$*
 

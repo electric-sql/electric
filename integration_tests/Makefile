@@ -7,6 +7,7 @@ LUX_DIRS= \
 
 deps: lux
 	make -C satellite_client build
+	make -C elixir_client build
 
 test: deps build pull
 	${LUX} ${LUX_DIRS}

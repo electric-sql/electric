@@ -34,21 +34,6 @@ services:
   sysbench:
     image: "${SYSBENCH_IMAGE}"
 
-  elixir_client:
-    image: "hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
-    user: "${UID}:${GID}"
-    environment:
-      UID: ${UID}
-      GID: ${GID}
-      MIX_HOME: ${PROJECT_ROOT}
-      MIX_ENV: test
-    volumes:
-      - ${PROJECT_ROOT}:${PROJECT_ROOT}
-      - /etc/group:/etc/group:ro
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/shadow:/etc/shadow:ro
-    privileged: true
-
   postgresql:
     image: "${POSTGRESQL_IMAGE}"
     environment:
@@ -89,6 +74,25 @@ services:
       # Deliberately mount folder below root, so that yarn/npm would not try
       # to access .git directory, as they do not handle git ls-remote properly
       - ${PROJECT_ROOT}/integration_tests:${PROJECT_ROOT}/integration_tests:rw
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+    privileged: true
+
+  elixir_client:
+    image: ${BUILDER_IMAGE}
+    user: "${UID}:${GID}"
+    environment:
+      MIX_ENV: test
+      MIX_HOME:       ${PROJECT_ROOT}/integration_tests/elixir_client/
+      MIX_BUILD_ROOT: ${PROJECT_ROOT}/integration_tests/elixir_client/_build
+      MIX_DEPS_PATH:  ${PROJECT_ROOT}/integration_tests/elixir_client/deps
+      HEX_HOME:       ${PROJECT_ROOT}/integration_tests/elixir_client/.hex
+      UID: ${UID}
+      GID: ${GID}
+    volumes:
+      - ${PROJECT_ROOT}:${PROJECT_ROOT}:ro
+      - ${PROJECT_ROOT}/integration_tests/elixir_client:${PROJECT_ROOT}/integration_tests/elixir_client
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro
