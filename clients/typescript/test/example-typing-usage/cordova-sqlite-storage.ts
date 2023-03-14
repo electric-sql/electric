@@ -24,8 +24,8 @@ const dbSchemas = {
 
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
-    const ns = await electrify(original, dbSchemas, config)
-    await ns.dal.items.findMany({
+    const { db } = await electrify(original, dbSchemas, config)
+    await db.items.findMany({
       select: {
         value: true,
       },

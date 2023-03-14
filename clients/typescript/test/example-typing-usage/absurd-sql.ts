@@ -1,5 +1,4 @@
 import { initElectricSqlJs } from '../../src/drivers/absurd-sql'
-import { DalNamespace } from '../../src/client/model'
 import { z } from 'zod'
 
 const config = {
@@ -27,14 +26,13 @@ const dbSchemas = {
 const SQL = await initElectricSqlJs(worker, {
   locateFile: (file) => `/${file}`,
 })
-const electrified = await SQL.openDatabase('example.db', config)
+const { db, adapter } = await SQL.openDatabase('example.db', dbSchemas, config)
 
-const ns = DalNamespace.create(dbSchemas, electrified.electric)
-await ns.adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
-await ns.adapter.run({
+await adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
+await adapter.run({
   sql: 'CREATE TABLE IF NOT EXISTS items (value TEXT PRIMARY KEY NOT NULL) WITHOUT ROWID;',
 })
-await ns.dal.items.createMany({
+await db.items.createMany({
   data: [
     {
       value: 'foo',
@@ -45,5 +43,5 @@ await ns.dal.items.createMany({
   ],
 })
 
-const items = await ns.dal.items.findMany({})
+const items = await db.items.findMany({})
 console.log('results: ', items)

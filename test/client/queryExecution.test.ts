@@ -32,7 +32,7 @@ const electric = await electrify(db, dbSchemas, {
   env: 'env',
   migrations: [],
 })
-const tbl = electric.dal.Post
+const tbl = electric.db.Post
 
 const post1 = {
   id: 'i1',

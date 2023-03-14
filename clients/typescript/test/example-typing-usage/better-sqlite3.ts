@@ -22,8 +22,8 @@ const dbSchemas = {
 }
 
 // Electrify the DB and use the DAL to query the `items` table
-const ns = await electrify(original, dbSchemas, config)
-await ns.dal.items.findMany({
+const { db } = await electrify(original, dbSchemas, config)
+await db.items.findMany({
   select: {
     value: true,
   },
