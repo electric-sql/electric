@@ -22,10 +22,10 @@ export type DalTables<T extends Record<TableName, Schema<any>>> = {
   [Tbl in keyof T]: Table<GetObjectTypeFromSchema<T[Tbl]>>
 }
 
-// Extends the ElectricNamespace with a `dal` property containing the tables of the DAL
+// Extends the ElectricNamespace with a `db` property that is the client of the data access library
 export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
   private constructor(
-    public dal: DalTables<T>,
+    public db: DalTables<T>,
     adapter: DatabaseAdapter,
     notifier: Notifier
   ) {

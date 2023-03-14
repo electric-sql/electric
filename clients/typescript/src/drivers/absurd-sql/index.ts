@@ -8,12 +8,9 @@ import { MainThreadBridgeNotifier } from '../../notifiers/bridge'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
-import {
-  ElectricMainThreadDatabaseProxy,
-  ElectrifiedDatabase,
-  MainThreadDatabaseProxy,
-} from './database'
+import { MainThreadDatabaseProxy } from './database'
 import { LocateFileOpts, WasmLocator } from './locator'
+import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
 
 export { WasmLocator }
 export type { LocateFileOpts }
@@ -38,10 +35,11 @@ export { resultToRows } from './result'
 export { ElectricWorker } from './worker'
 
 export interface SQL {
-  openDatabase(
+  openDatabase<S extends DbSchemas>(
     dbName: DbName,
+    dbSchemas: S,
     config: ElectricConfig
-  ): Promise<ElectricMainThreadDatabaseProxy>
+  ): Promise<DalNamespace<S>>
 }
 
 export const initElectricSqlJs = async (
@@ -60,11 +58,12 @@ export const initElectricSqlJs = async (
 
   await workerClient.request(init, locator.serialise())
 
-  const openDatabase = async (
+  const openDatabase = async <S extends DbSchemas>(
     dbName: DbName,
+    dbSchemas: S,
     config: ElectricConfig,
     opts?: ElectrifyOptions
-  ): Promise<ElectrifiedDatabase> => {
+  ): Promise<DalNamespace<S>> => {
     const open: ServerMethod = {
       target: 'server',
       name: 'open',
@@ -75,12 +74,10 @@ export const initElectricSqlJs = async (
     const adapter = opts?.adapter || new DatabaseAdapter(db)
     const notifier =
       opts?.notifier || new MainThreadBridgeNotifier(dbName, workerClient)
-    const namespace = new ElectricNamespace(adapter, notifier)
+    const electric = new ElectricNamespace(adapter, notifier)
+    const namespace = DalNamespace.create(dbSchemas, electric)
 
-    return {
-      ...db,
-      electric: namespace,
-    } as ElectrifiedDatabase
+    return namespace
   }
 
   return { openDatabase }

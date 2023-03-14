@@ -26,9 +26,9 @@ const dbSchemas = {
     .strict(),
 }
 
-const ns = await electrify(original, dbSchemas, promisesEnabled, config)
+const { db } = await electrify(original, dbSchemas, promisesEnabled, config)
 
-await ns.dal.items.findMany({
+await db.items.findMany({
   select: {
     value: true,
   },

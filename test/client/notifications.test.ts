@@ -9,7 +9,7 @@ const config = {
   migrations: [],
 }
 
-const db = new Database(':memory:')
+const conn = new Database(':memory:')
 
 // Schema describing the DB
 // can be defined manually, or generated
@@ -22,7 +22,7 @@ const dbSchemas = {
     .strict(),
 }
 
-const { notifier, adapter, dal } = await electrify(db, dbSchemas, config)
+const { notifier, adapter, db } = await electrify(conn, dbSchemas, config)
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0
@@ -56,7 +56,7 @@ test.serial.after(async (_t) => {
 
 test.serial('create runs potentiallyChanged', async (t) => {
   const insert = async () => {
-    await dal.items.create({
+    await db.items.create({
       data: {
         value: 'foo',
         nbr: 5,
@@ -70,7 +70,7 @@ test.serial('create runs potentiallyChanged', async (t) => {
 
 test.serial('createMany runs potentiallyChanged', async (t) => {
   const insert = async () => {
-    await dal.items.createMany({
+    await db.items.createMany({
       data: [
         {
           value: 'foo',
@@ -89,7 +89,7 @@ test.serial('createMany runs potentiallyChanged', async (t) => {
 })
 
 async function populate() {
-  await dal.items.createMany({
+  await db.items.createMany({
     data: [
       {
         value: 'foo',
@@ -107,7 +107,7 @@ test.serial('findUnique does not run potentiallyChanged', async (t) => {
   await populate()
 
   const find = async () => {
-    await dal.items.findUnique({
+    await db.items.findUnique({
       where: {
         value: 'foo',
       },
@@ -120,7 +120,7 @@ test.serial('findUnique does not run potentiallyChanged', async (t) => {
 
 test.serial('findFirst does not run potentiallyChanged', async (t) => {
   const find = async () => {
-    await dal.items.findFirst({})
+    await db.items.findFirst({})
   }
 
   const notifications = await runAndCheckNotifications(find)
@@ -129,7 +129,7 @@ test.serial('findFirst does not run potentiallyChanged', async (t) => {
 
 test.serial('findMany does not run potentiallyChanged', async (t) => {
   const find = async () => {
-    await dal.items.findMany({})
+    await db.items.findMany({})
   }
 
   const notifications = await runAndCheckNotifications(find)
@@ -140,7 +140,7 @@ test.serial('update runs potentiallyChanged', async (t) => {
   await populate()
 
   const update = async () => {
-    await dal.items.update({
+    await db.items.update({
       data: {
         nbr: 18,
       },
@@ -158,7 +158,7 @@ test.serial('updateMany runs potentiallyChanged', async (t) => {
   await populate()
 
   const update = async () => {
-    await dal.items.updateMany({
+    await db.items.updateMany({
       data: {
         nbr: 18,
       },
@@ -173,7 +173,7 @@ test.serial('upsert runs potentiallyChanged', async (t) => {
   await populate()
 
   const upsert = async () => {
-    await dal.items.upsert({
+    await db.items.upsert({
       create: {
         value: 'foo',
         nbr: 18,
@@ -195,7 +195,7 @@ test.serial('delete runs potentiallyChanged', async (t) => {
   await populate()
 
   const del = async () => {
-    await dal.items.delete({
+    await db.items.delete({
       where: {
         value: 'foo',
       },
@@ -210,7 +210,7 @@ test.serial('deleteMany runs potentiallyChanged', async (t) => {
   await populate()
 
   const del = async () => {
-    await dal.items.deleteMany({
+    await db.items.deleteMany({
       where: {
         nbr: 5,
       },

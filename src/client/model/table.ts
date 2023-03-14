@@ -14,9 +14,8 @@ import { _NOT_UNIQUE_, _RECORD_NOT_FOUND_ } from '../validation/errors/messages'
 import { UpsertInput } from '../input/upsertInput'
 import { Selected } from '../util/types'
 import { DB } from '../execution/db'
-import { Model } from './model'
+import { LiveResult, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
-import { LiveQueries } from './liveQueries'
 import { Notifier } from '../../notifiers'
 
 export class Table<T extends Record<string, any>>
@@ -26,8 +25,6 @@ export class Table<T extends Record<string, any>>
   private _builder: Builder<T>
   private _executor: Executor<T>
   private _qualifiedTableName: QualifiedTablename
-
-  public live: LiveQueries<T>
 
   constructor(
     tableName: string,
@@ -39,7 +36,6 @@ export class Table<T extends Record<string, any>>
     this._builder = new Builder<T>(tableName)
     this._executor = new Executor<T>(adapter, schema, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
-    this.live = new LiveQueries(this, this._qualifiedTableName)
   }
 
   /*
@@ -74,6 +70,12 @@ export class Table<T extends Record<string, any>>
     ) as unknown as Promise<Selected<T, Input> | null>
   }
 
+  liveUnique<Input extends FindUniqueInput<T>>(
+    i: Input
+  ): () => Promise<LiveResult<Selected<T, Input> | null>> {
+    return this.makeLiveResult(this.findUnique(i))
+  }
+
   async findFirst<Input extends FindInput<T>>(
     i: Input
   ): Promise<Selected<T, Input> | null> {
@@ -83,6 +85,12 @@ export class Table<T extends Record<string, any>>
     ) as unknown as Promise<Selected<T, Input> | null>
   }
 
+  liveFirst<Input extends FindInput<T>>(
+    i: Input
+  ): () => Promise<LiveResult<Selected<T, Input> | null>> {
+    return this.makeLiveResult(this.findFirst(i))
+  }
+
   async findMany<Input extends FindInput<T>>(
     i: Input
   ): Promise<Array<Selected<T, Input>>> {
@@ -90,6 +98,12 @@ export class Table<T extends Record<string, any>>
       this._findMany(i),
       false
     ) as unknown as Promise<Array<Selected<T, Input>>>
+  }
+
+  liveMany<Input extends FindInput<T>>(
+    i: Input
+  ): () => Promise<LiveResult<Array<Selected<T, Input>>>> {
+    return this.makeLiveResult(this.findMany(i))
   }
 
   // TODO: see if we can enforce a unique a argument in `where` such that we are sure we identify 0 or max 1 record to update
@@ -391,5 +405,13 @@ export class Table<T extends Record<string, any>>
       },
       onError
     )
+  }
+
+  private makeLiveResult<T>(prom: Promise<T>): () => Promise<LiveResult<T>> {
+    return () => {
+      return prom.then((res) => {
+        return new LiveResult(res, [this._qualifiedTableName])
+      }) as Promise<LiveResult<T>>
+    }
   }
 }
