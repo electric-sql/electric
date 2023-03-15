@@ -83,6 +83,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     }
   }
 
+  // This `query` function does not enforce that the query is read-only
   async query(statement: Statement): Promise<Row[]> {
     const result = await this.db.exec(statement.sql, statement.args)
     return resultToRows(result)

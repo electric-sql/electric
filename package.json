@@ -52,6 +52,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     ".": "./dist/index.js",
@@ -76,6 +77,9 @@
       ],
       "react-native": [
         "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "wa-sqlite": [
+        "./dist/drivers/wa-sqlite/index.d.ts"
       ],
       "config": [
         "./dist/config/index.d.ts"
@@ -116,6 +120,7 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "cross-fetch": "^3.1.5",
     "events": "^3.3.0",
@@ -129,6 +134,7 @@
     "react-native-uuid": "^2.0.1",
     "sqlite-parser": "^1.0.1",
     "uuid": "^9.0.0",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes",
     "walkjs": "^3.2.4",
     "ws": "^8.8.1"
   },

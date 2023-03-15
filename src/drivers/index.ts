@@ -30,6 +30,8 @@ import {
   ElectrifiedDatabase as ReactNativeSQLiteStorageElectrifiedDatabase,
 } from './react-native-sqlite-storage/database'
 
+import { Database as WASQLiteDatabase } from './wa-sqlite/database'
+
 import {
   Database as GenericDatabase,
   ElectricDatabase as GenericElectricDatabase,
@@ -42,6 +44,7 @@ export type AnyDatabase =
   | CordovaSQLiteStorageDatabase
   | ExpoSQLiteDatabase
   | ReactNativeSQLiteStorageDatabase
+  | WASQLiteDatabase
   | GenericDatabase
 
 export type AnyElectricDatabase =
