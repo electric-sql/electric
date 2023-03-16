@@ -40,3 +40,9 @@ To run all tests with locally build images:
 USE_LOCAL_IMAGE=true make test 
 ```
 
+In order to run single test in one of the integration tests directories
+run:
+
+``` sh
+TEST=bidirectional.lux make single_test
+```
