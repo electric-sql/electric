@@ -15,7 +15,7 @@ directory and try to reuse targets provided in that file as much as possible.
 
 To run all tests in integration_tests directory
 ``` sh
-make tests
+make test
 ```
 
 To run tests for specific directory
