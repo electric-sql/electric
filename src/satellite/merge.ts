@@ -1,6 +1,6 @@
 import { OPTYPES, OplogColumnChanges, OpType } from './oplog'
 
-// Merge two sets of changes, using the timestamp to abitrate conflicts
+// Merge two sets of changes, using the timestamp to arbitrate conflicts
 // so that the last write wins.
 export const mergeChangesLastWriteWins = (
   first: OplogColumnChanges,

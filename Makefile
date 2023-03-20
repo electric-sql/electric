@@ -20,3 +20,6 @@ update_proto:
 		--ts_proto_opt=importSuffix=.js \
 		--ts_proto_opt=esModuleInterop=true \
 		--ts_proto_out=./src/_generated/ ${PROTO_LOCAL}
+
+codespell:
+	codespell ./proto/ ./src/

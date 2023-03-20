@@ -135,7 +135,7 @@ export const useElectricQuery = (query: Query, params?: BindParams) => {
   // We re-run this function whenever the query, params or cache key change --
   // the query is proxied in the dependencies by the tablenamesKey, the params are
   // converted to a string so they're compared by value rather than reference and
-  // the cacheKey is updated whenever a data change notification is recieved that
+  // the cacheKey is updated whenever a data change notification is received that
   // may potentially change the query results.
   useEffect(() => {
     if (electric === undefined || changeSubscriptionKey === undefined) {

@@ -7,7 +7,7 @@ export const protobufPackage = "Electric.Satellite.v0_2";
 
 /**
  * This file defines protobuf protocol for Satellite <> Electric replication
- * Messages are send other the wire in the followng format:
+ * Messages are sent other the wire in the following format:
  *
  * Size:32, MsgType:8, Msg/binary
  *
@@ -21,7 +21,7 @@ export const protobufPackage = "Electric.Satellite.v0_2";
  * Producer and Consumer are the corresponding roles Client and Server play in
  * replication process. Consumer requests replication from the Producer, and
  * periodically answer Ping requests form the Prodicer to acknowledge
- * successfull replication. Consumer may also send such Ping requests, if the
+ * successful replication. Consumer may also send such Ping requests, if the
  * bidirectional replication is enabled. If one of the parties is not involved
  * in the replication lsn field may be left empty.
  */
@@ -75,11 +75,11 @@ export interface SatAuthHeaderPair {
 export interface SatAuthReq {
   $type: "Electric.Satellite.v0_2.SatAuthReq";
   /**
-   * Identity of the Satelite application. Is expected to be something like
+   * Identity of the Satellite application. Is expected to be something like
    * UUID. Required field
    */
   id: string;
-  /** Authentification token, auth method specific, required */
+  /** Authentication token, auth method specific, required */
   token: string;
   /** Headers, required */
   headers: SatAuthHeaderPair[];
@@ -275,7 +275,7 @@ export interface SatOpDelete {
 
 /**
  * Message is send when server is migrated while client is still connected It's
- * up to the client to do immediatly performa migration or stop replication
+ * up to the client to do immediately performa migration or stop replication
  * stream if it's ongoing.
  */
 export interface SatMigrationNotification {

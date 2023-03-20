@@ -234,7 +234,7 @@ export class WorkerClient {
 // notification messaging work.
 //
 // It's abstract because we extend with concrete implementations
-// for the open and init methods and an implementatin specific
+// for the open and init methods and an implementation specific
 // start method.
 export abstract class WorkerServer {
   SQL?: any

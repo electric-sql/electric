@@ -42,7 +42,7 @@ export class MainThreadBridgeNotifier
     // This way we keep the type of `method` as precise as possible (thanks to type inference).
     // It is important to keep it precise, because if it would be just `NotifyMethod`
     // then we could call `notify` with a parameter list that matches one of the methods of `EventNotifier`
-    // but not necessarily the one we are targetting (i.e. the parameter list for the method that corresponds to `method.name`)
+    // but not necessarily the one we are targeting (i.e. the parameter list for the method that corresponds to `method.name`)
     const method = {
       dbName: dbName,
       name: '_emitPotentialChange',

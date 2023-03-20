@@ -13,7 +13,7 @@ export interface Database
     'executeSql' | 'transaction' | 'readTransaction' | 'sqlBatch'
   > {
   // Cordova calls the database name `.dbname` using camel case.
-  // this is diffferent to React Native which uses `.dbname`.
+  // this is different to React Native which uses `.dbname`.
   dbname?: DbName
 }
 

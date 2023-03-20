@@ -1,5 +1,5 @@
 // This file defines protobuf protocol for Satellite <> Electric replication
-// Messages are send other the wire in the followng format:
+// Messages are sent over the wire in the following format:
 //
 // Size:32, MsgType:8, Msg/binary
 //
@@ -13,7 +13,7 @@
 // Producer and Consumer are the corresponding roles Client and Server play in
 // replication process. Consumer requests replication from the Producer, and
 // periodically answer Ping requests form the Prodicer to acknowledge
-// successfull replication. Consumer may also send such Ping requests, if the
+// successful replication. Consumer may also send such Ping requests, if the
 // bidirectional replication is enabled. If one of the parties is not involved
 // in the replication lsn field may be left empty.
 syntax = "proto3";
@@ -62,10 +62,10 @@ message SatAuthHeaderPair {
 // executing any other request
 message SatAuthReq {
 
-    // Identity of the Satelite application. Is expected to be something like
+    // Identity of the Satellite application. Is expected to be something like
     // UUID. Required field
     string id = 1;
-    // Authentification token, auth method specific, required
+    // Authentication token, auth method specific, required
     string token = 2;
     // Headers, required
     repeated SatAuthHeaderPair headers = 3;
@@ -217,8 +217,8 @@ message SatOpDelete {
     SatOpRow old_row_data = 3;
 }
 
-// Message is send when server is migrated while client is still connected It's
-// up to the client to do immediatly performa migration or stop replication
+// Message is sent when server is migrated while client is still connected It's
+// up to the client to immediately perform a migration or stop replication
 // stream if it's ongoing.
 message SatMigrationNotification {
     // all fields are required

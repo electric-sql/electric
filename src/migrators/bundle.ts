@@ -45,7 +45,7 @@ export class BundleMigrator implements Migrator {
   }
 
   async queryApplied(): Promise<MigrationRecord[]> {
-    // If this is the first time we're runnign migrations, then the
+    // If this is the first time we're running migrations, then the
     // migrations table won't exist.
     const tableExists = `
       SELECT count(name) as numTables FROM sqlite_master
