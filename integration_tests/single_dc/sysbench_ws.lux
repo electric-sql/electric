@@ -1,7 +1,7 @@
 [doc One-direction replication pg_1 -> pg_2]
 
 [global psql=electric]
-[global dprompt=\w+@\w+:(\S+)[\#\$]]
+[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
 [global eprompt=iex\(\d+\)>\s]
 
 [include shared.luxinc]

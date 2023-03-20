@@ -1,6 +1,6 @@
 [doc partial replication via electric_user_id filtering]
 
-[global dprompt=\w+@\w+:(\S+)[\#\$]]
+[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
 [global eprompt=iex\(\d+\)>\s]
 [global user_id_1=1]
 [global user_id_2=2]
