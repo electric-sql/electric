@@ -89,7 +89,7 @@
 [endmacro]
 
 [macro sysbench_prepare host table_size tables]
-    [invoke log "Prepare ${tables} tables and generate ${table_size} entires per table for ${host}"]
+    [invoke log "Prepare ${tables} tables and generate ${table_size} entries per table for ${host}"]
     !sysbench --db-driver=pgsql \
               --table-size=${table_size} \
               --tables=${tables} \

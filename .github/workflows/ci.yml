@@ -71,7 +71,7 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
 
-      - name: Prepare auxillary services
+      - name: Prepare auxiliary services
         run: make start_dev_env
 
       - name: Restore dependencies

@@ -39,7 +39,7 @@ defmodule Electric.Satellite.Auth do
   end
 
   @doc """
-  Retreive the auth provider configuration
+  Retrieve the auth provider configuration
   """
   @spec provider() :: provider() | no_return
   def provider do

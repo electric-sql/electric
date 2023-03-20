@@ -86,7 +86,7 @@ defmodule Electric.Satellite.Serialization do
 
     {num_columns, bitmask, values} =
       Enum.reduce(rel_cols, {0, bitmask, values}, fn column_name, {num, bitmask0, values0} ->
-        # FIXME: This is ineficient, data should be stored in order, so that we
+        # FIXME: This is inefficient, data should be stored in order, so that we
         # do not have to do lookup here, but filter columns based on the schema instead
         case Map.get(data, column_name, nil) do
           nil ->
