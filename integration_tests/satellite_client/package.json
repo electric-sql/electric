@@ -23,13 +23,13 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@tsmodule/tsmodule": "42",
+    "@tsmodule/tsmodule": "^40.0.17",
     "@types/better-sqlite3": "^7.6.2",
     "@types/jsonwebtoken": "^9.0.1",
     "@types/live-server": "^1.2.1",
     "@types/node": "^16.9.1",
     "better-sqlite3": "^7.6.2",
     "exponential-backoff": "^3.1.0",
-    "typescript": "^4.9"
+    "typescript": "^4.4.3"
   }
 }
