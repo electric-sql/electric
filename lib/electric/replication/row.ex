@@ -40,7 +40,7 @@ defmodule Electric.Replication.Row do
     # deterministic and is guaranteed by the calling code.
     #
     # Code here has been rewritten to provide a simple runtime check that
-    # we do not skip keys that accidently were omitted.
+    # we do not skip keys that accidentally were omitted.
     primary_keys_joined =
       Enum.reduce(Enum.reverse(keys), "", fn key, acc ->
         value = Map.fetch!(record, key)

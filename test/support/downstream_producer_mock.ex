@@ -72,9 +72,9 @@ defmodule DownstreamProducerMock do
   @impl true
   def handle_demand(demand, state) do
     demand = state.demand + demand
-    {dispatch_events, remainig} = Enum.split(state.events, demand)
+    {dispatch_events, remaining} = Enum.split(state.events, demand)
     remaining_demand = demand - length(dispatch_events)
 
-    {:noreply, dispatch_events, %State{state | events: remainig, demand: remaining_demand}}
+    {:noreply, dispatch_events, %State{state | events: remaining, demand: remaining_demand}}
   end
 end

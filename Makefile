@@ -101,3 +101,6 @@ shell_clean:
 
 apply_migration:
 	./apply-local-migration.sh $(name)
+
+codespell:
+	codespell -L authentification --skip .git --skip deps

@@ -65,7 +65,7 @@ defmodule Electric.Satellite.WsServer do
   end
 
   def websocket_init(%State{client: client} = state) do
-    # NOTE: Be carefull with registration, init and websocket_init are called
+    # NOTE: Be careful with registration, init and websocket_init are called
     # in different processes in cowboy 2.9
 
     Logger.metadata(sq_client: client)
@@ -154,7 +154,7 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  # Consumer (Vaxine) has reported that this lsn has been stored succesfully
+  # Consumer (Vaxine) has reported that this lsn has been stored successfully
   # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}

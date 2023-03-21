@@ -3,7 +3,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Wrapper functions around a global storage containing info about current replicated schema.
 
   A lot of replication function rely on the server knowing the exact data schema -- consistent UIDs, types.
-  Since we expect our replicated cluster to have homogenous schema, it's reasonable to fetch it from the server
+  Since we expect our replicated cluster to have homogeneous schema, it's reasonable to fetch it from the server
   upon startup and reuse afterwards.
 
   This is done under the assumption of unchanging DDL schema, however management of that is large enough task
@@ -94,7 +94,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Fetch information about a single table.
 
   For now we're essentially using a global namespace for all tables, under the assumption that
-  this registry is representative of one homogenous cluster, so any table under it's fully qualified
+  this registry is representative of one homogeneous cluster, so any table under it's fully qualified
   name has the same info.
 
   Table can be identified either as a `{"schema_name", "table_name"}` tuple, or the table's OID.

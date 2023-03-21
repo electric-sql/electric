@@ -124,10 +124,10 @@ defmodule Electric.Satellite.Protocol do
       when client_id !== "" and token !== "" ->
         Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
 
-        # NOTE: We treat succesfull registration with Electric.safe_reg as an
+        # NOTE: We treat successful registration with Electric.safe_reg as an
         # indication that at least the previously connected WS client is down.
         # However satellite_client_manager may not necessarily have reacted to that
-        # yet. So as long as safe_reg succeded call to ClientManager should
+        # yet. So as long as safe_reg succeeded call to ClientManager should
         # succeed as well
         reg_name = Electric.Satellite.WsServer.reg_name(client_id)
 
@@ -183,7 +183,7 @@ defmodule Electric.Satellite.Protocol do
     {nil, %{state | out_rep: %OutRep{out_rep | lsn: confirmed_lsn}}}
   end
 
-  # Satelite client request replication
+  # Satellite client request replication
   def process_message(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{in_rep: _in_rep, out_rep: out_rep} = state
@@ -202,7 +202,7 @@ defmodule Electric.Satellite.Protocol do
         end
 
       Logger.debug(
-        "Recieved start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
+        "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
       )
 
       Metrics.satellite_replication_event(%{started: 1})
@@ -216,9 +216,9 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  # Satelite client confirms replication start
+  # Satellite client confirms replication start
   def process_message(%SatInStartReplicationResp{} = _msg, %State{} = state) do
-    Logger.debug("Recieved start replication response")
+    Logger.debug("Received start replication response")
 
     case state.in_rep.status do
       :requested ->
@@ -230,7 +230,7 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  # Satelite requests to stop replication
+  # Satellite requests to stop replication
   def process_message(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
       when out_rep?(state) do
     Logger.debug("Received stop replication request")
