@@ -40,5 +40,4 @@ services:
       GLOBAL_CLUSTER_ID: "local-development"
       MIGRATIONS_DIR: "/var/lib/migrations"
       OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
-    volumes:
-      - migrations_volume:/var/lib/migrations
+      MIGRATIONS_FILE_NAME_SUFFIX: ".sql"
