@@ -306,6 +306,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       | origin: origin,
         publication: state.publication,
         lsn: end_lsn,
+        # Make sure not to pass state.field into ack function, as this
+        # will create a copy of the whole state in memory when sending a message
         ack_fn: fn -> ack(conn, origin, end_lsn) end
     }
   end
