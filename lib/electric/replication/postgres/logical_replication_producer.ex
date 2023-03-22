@@ -298,12 +298,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp build_message(%Transaction{} = transaction, end_lsn, %State{} = state) do
+    conn = state.conn
+    origin = state.origin
+
     %Transaction{
       transaction
-      | origin: state.origin,
+      | origin: origin,
         publication: state.publication,
         lsn: end_lsn,
-        ack_fn: fn -> ack(state.conn, state.origin, end_lsn) end
+        # Make sure not to pass state.field into ack function, as this
+        # will create a copy of the whole state in memory when sending a message
+        ack_fn: fn -> ack(conn, origin, end_lsn) end
     }
   end
 
