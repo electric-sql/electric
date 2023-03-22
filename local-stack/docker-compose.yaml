@@ -24,12 +24,14 @@ services:
       - 5432:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
+
   vaxine_1:
     extends:
       file: './compose/docker-compose-templates.yaml'
       service: vaxine_template
     volumes:
       - vaxine_data:/vaxine-data
+
   electric_1:
     extends:
       file: './compose/docker-compose-templates.yaml'
@@ -45,6 +47,10 @@ services:
       - 5133:5133
     volumes:
       - electric_data:/app/data
+      - migrations_volume:/var/lib/migrations
+    depends_on:
+      - postgres_1
+      - vaxine_1
 
   local_api:
     image: ${LOCAL_API_IMAGE:-electricsql/local-console:latest}
@@ -55,3 +61,5 @@ services:
       ELECTRIC_URI_LIST: http://electric_1:5050
     ports:
       - 4000:4000
+    volumes:
+      - migrations_volume:/var/lib/migrations
