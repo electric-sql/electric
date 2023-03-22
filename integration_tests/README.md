@@ -2,7 +2,7 @@
 
 Tests dependencies:
 - lux tool
-- docker-compose
+- docker compose
 
 ## How to add new lux test directories
 
