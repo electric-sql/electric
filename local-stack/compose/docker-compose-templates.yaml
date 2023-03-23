@@ -1,0 +1,43 @@
+version: '3.8'
+services:
+  postgres_template:
+    image: "${POSTGRESQL_IMAGE:-electricsql/postgres:latest}"
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql.conf
+      - source: postgres_init_sql
+        target: /docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U electric" ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  vaxine_template:
+    image: "${VAXINE_IMAGE:-electricsql/vaxine:latest}"
+    init: true
+    environment:
+      RING_SIZE: "1"
+      ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
+      ANTIDOTE_TXN_PROT: "clocksi"
+      ANTIDOTE_RECOVER_FROM_LOG: "true"
+      ANTIDOTE_META_DATA_ON_START: "true"
+      ANTIDOTE_SYNC_LOG: "true"
+      ANTIDOTE_ENABLE_LOGGING: "true"
+      ANTIDOTE_AUTO_START_READ_SERVERS: "true"
+      COOKIE: "secret"
+
+  electric_template:
+    image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
+    init: true
+    environment:
+      GLOBAL_CLUSTER_ID: "local-development"
+      MIGRATIONS_DIR: "/var/lib/migrations"
+      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
+      MIGRATIONS_FILE_NAME_SUFFIX: ".sql"

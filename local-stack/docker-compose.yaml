@@ -1,0 +1,65 @@
+version: '3.8'
+
+x-preshared-auth-variables: &preshared-auth-variables
+  SATELLITE_AUTH_SIGNING_ISS: local-development
+  SATELLITE_AUTH_SIGNING_KEY: local-development-key-minimum-32-symbols
+configs:
+  postgres_config:
+    file: './compose/postgres/postgres.conf'
+  postgres_init_sql:
+    file: './compose/postgres/init.sql'
+
+volumes:
+  migrations_volume:
+  pg_data:
+  vaxine_data:
+  electric_data:
+
+services:
+  postgres_1:
+    extends:
+      file: './compose/docker-compose-templates.yaml'
+      service: postgres_template
+    ports:
+      - 5432:5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  vaxine_1:
+    extends:
+      file: './compose/docker-compose-templates.yaml'
+      service: vaxine_template
+    volumes:
+      - vaxine_data:/vaxine-data
+
+  electric_1:
+    extends:
+      file: './compose/docker-compose-templates.yaml'
+      service: electric_template
+    environment:
+      <<: *preshared-auth-variables
+      VAXINE_HOST: vaxine_1
+      ELECTRIC_HOST: electric_1
+      ELECTRIC_REGIONAL_ID: region1
+      ELECTRIC_INSTANCE_ID: electric_1
+      CONNECTORS: postgres_1=postgresql://postgres:password@postgres_1:5432/electric
+    ports:
+      - 5133:5133
+    volumes:
+      - electric_data:/app/data
+      - migrations_volume:/var/lib/migrations
+    depends_on:
+      - postgres_1
+      - vaxine_1
+
+  local_api:
+    image: ${LOCAL_API_IMAGE:-electricsql/local-console:latest}
+    environment:
+      <<: *preshared-auth-variables
+      PORT: "4000"
+      MIGRATIONS_DIR: "/var/lib/migrations"
+      ELECTRIC_URI_LIST: http://electric_1:5050
+    ports:
+      - 4000:4000
+    volumes:
+      - migrations_volume:/var/lib/migrations
