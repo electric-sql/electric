@@ -12,9 +12,13 @@ const squelPostgres = squel.useFlavour('postgres')
 export class Builder<T extends { [field: string]: any }> {
   constructor(private _tableName: string, private _fields: string[]) {}
 
-  create(i: CreateInput<T>): QueryBuilder {
+  create(i: CreateInput<any, any>): QueryBuilder {
     // Make a SQL query out of the data
-    return squelPostgres.insert().into(this._tableName).setFields(i.data)
+    return squelPostgres
+      .insert()
+      .into(this._tableName)
+      .setFields(i.data)
+      .returning('*')
   }
 
   createMany(i: CreateManyInput<T[]>): QueryBuilder {

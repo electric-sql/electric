@@ -17,26 +17,67 @@ import { DB } from '../execution/db'
 import { LiveResult, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
+import * as z from 'zod'
+import { forEachCont } from '../util/continuationHelpers'
 
-export class Table<T extends Record<string, any>>
+//////
+type Relation = {
+  relationName: string
+  relationField: string
+  fromField: string
+  toField: string
+  relatedTable: string
+}
+
+type TableName = string
+type FieldName = string
+type RelationName = string
+
+interface DBDescription {
+  getSchema(table: TableName): z.ZodSchema<any>
+  getRelationName(table: TableName, field: FieldName): RelationName | undefined
+  getRelation(table: TableName, relation: RelationName): Relation | undefined
+  getRelations(table: TableName): Relation[] // TODO: DBDescription could take type of DbSchemas as type arg and then fetch the type that is associated to the tableName key out of it
+  getOutgoingRelations(table: TableName): Relation[]
+  getIncomingRelations(table: TableName): Relation[]
+}
+//////
+
+// Data = typeof Prisma.UserCreateArgs.data
+// Select = typeof Prisma.UserCreateArgs.select
+// CreateArgs = Prisma.UserCreateArgs
+export class Table<
+    T extends Record<string, any>,
+    CreateArgs extends CreateInput<any, any>,
+    FindUniqueArgs extends FindUniqueInput<any, any>
+  >
   extends Validation<T>
   implements Model<T>
 {
   private _builder: Builder<T>
   private _executor: Executor<T>
   private _qualifiedTableName: QualifiedTablename
+  private _tables: Map<TableName, Table<any, any, any>>
 
   constructor(
     tableName: string,
     schema: ZObject<T>,
     adapter: DatabaseAdapter,
-    notifier: Notifier
+    notifier: Notifier,
+    private createSchema: z.ZodType<CreateArgs>,
+    private findUniqueSchema: z.ZodType<FindUniqueArgs>,
+    private _dbDescription: DBDescription
   ) {
     super(tableName, schema)
     const fields = Object.keys(this._schema.shape)
     this._builder = new Builder<T>(tableName, fields)
     this._executor = new Executor<T>(adapter, schema, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
+    this._tables = new Map()
+  }
+
+  setTables(tables: Map<TableName, Table<any, any, any>>) {
+    this._tables = tables
   }
 
   /*
@@ -48,9 +89,10 @@ export class Table<T extends Record<string, any>>
    * As such, one can compose these methods arbitrarily and then run them inside a single transaction.
    */
 
-  async create<Input extends CreateInput<T>>(
-    i: Input
+  async create<Input extends CreateArgs>(
+    i: Input //Prisma.SelectSubset<T, Input>
   ): Promise<Selected<T, Input>> {
+    // TODO: also use Prisma's generated return type? <Table>GetPayload<Input>
     // We have to typecast it because internally when querying the DB we get back a Partial<T>
     // But since we carefully craft the queries we know that only the selected fields are in that object
     return this._executor.transaction(
@@ -62,7 +104,7 @@ export class Table<T extends Record<string, any>>
     return this._executor.execute(this._createMany(i))
   }
 
-  async findUnique<Input extends FindUniqueInput<T>>(
+  async findUnique<Input extends FindUniqueInput<any, any>>(
     i: Input
   ): Promise<Selected<T, Input> | null> {
     return this._executor.execute(
@@ -71,7 +113,7 @@ export class Table<T extends Record<string, any>>
     ) as unknown as Promise<Selected<T, Input> | null>
   }
 
-  liveUnique<Input extends FindUniqueInput<T>>(
+  liveUnique<Input extends FindUniqueInput<any, any>>(
     i: Input
   ): () => Promise<LiveResult<Selected<T, Input> | null>> {
     return this.makeLiveResult(this.findUnique(i))
@@ -141,27 +183,131 @@ export class Table<T extends Record<string, any>>
     return this._executor.execute(this._deleteMany.bind(this, i))
   }
 
-  private _create(
-    i: CreateInput<T>,
+  protected _create(
+    i: CreateArgs,
     db: DB<T>,
     continuation: (record: Partial<T>) => void,
     onError: (err: any) => void
   ) {
-    const validatedInput = this.validate(i, InputTypes.Create)
-    // Make a SQL query out of the parsed data
-    const createQuery = this._builder.create(validatedInput)
+    const validatedInput = Validation.validateInternal(i, this.createSchema)
+    const data = validatedInput.data
 
-    db.run(
+    /*
+     * For each outgoing relation with a provided relation field:
+     *  - fetch the object in the relation field and recursively create that object
+     *  - remember to fill in the FK (i.e. assign the createdObject.toField to fromField in the object we will create)
+     *  - remove this relation field from the object we will create
+     */
+
+    const outgoingRelations = this._dbDescription.getOutgoingRelations(
+      this._tableName
+    )
+
+    forEachCont((rel: Relation, cont: () => void) => {
+      const { fromField, toField, relationField, relatedTable } = rel
+      if (Object.hasOwn(data, relationField)) {
+        // this relation field is present
+        // fetch the object in the relation field and recursively create that object
+        const relatedObject = data[relationField].create
+        const relatedTbl = this._tables.get(relatedTable)!
+        relatedTbl._create(
+          { data: relatedObject },
+          db,
+          (createdRelatedObject) => {
+            delete data[relationField] // remove the relation field
+            data[fromField] = createdRelatedObject[toField] // fill in the FK
+            cont()
+          },
+          onError
+        )
+      } else {
+        cont()
+      }
+    }, outgoingRelations)
+
+    /*
+     * For each incoming relation:
+     *  - remove the relation field from this object
+     *  - remember to create the related object and fill in the `toField` of the object we will create as the FK `fromField` of the related object
+     */
+
+    const incomingRelations = this._dbDescription.getIncomingRelations(
+      this._tableName
+    )
+    let makeRelatedObjects: (obj: object) => void = () => undefined
+
+    function createRelatedObject(rel: Relation, relatedObject: object) {
+      const { relationField, relatedTable, relationName } = rel
+      // remove this relation field
+      delete data[relationField]
+      // create the related object and fill in the FK
+      // i.e. fill in the `fromField` on the related object using this object's `toField`
+      const oldMakeRelatedObjects = makeRelatedObjects
+      makeRelatedObjects = (obj: object) => {
+        const relatedTbl = this._tables.get(relatedTable)
+        const { fromField, toField } = this._dbDescription.getRelation(
+          relatedTable,
+          relationName
+        ) // the `fromField` and `toField` are defined on the side of the outgoing relation
+        // Create the related object
+        relatedObject[fromField] = obj[toField] // fill in FK
+        relatedTbl._create(
+          { data: relatedObject },
+          db,
+          () => {
+            oldMakeRelatedObjects(obj)
+          },
+          onError
+        )
+      }
+    }
+
+    forEachCont((rel: Relation, cont: () => void) => {
+      const { relationField } = rel
+      if (Object.hasOwn(data, relationField)) {
+        const relatedObjects = data[relationField].create
+        if (Array.isArray(relatedObjects)) {
+          // this is a one-to-many relation
+          // create all the related objects
+          relatedObjects.forEach(createRelatedObject.bind(this, rel))
+        } else {
+          // this is a one-to-one relation
+          // create the related object
+          createRelatedObject(rel, relatedObjects)
+        }
+      }
+      cont()
+    }, incomingRelations)
+
+    /*
+     * Now create the object and then:
+     *  - create the related objects for the incoming relations
+     */
+
+    // Make a SQL query out of the parsed data
+    const createQuery = this._builder.create({
+      ...validatedInput,
+      data: data,
+    })
+
+    db.query(
       createQuery,
-      (db) => {
+      this._schema,
+      (db, insertedObjects) => {
+        if (insertedObjects.length !== 1)
+          onError('Wrong amount of objects were created.')
+
+        const insertedObject = insertedObjects[0]
+        makeRelatedObjects(insertedObject)
+
         // Now read the record that was inserted
         // need to read it because some fields could be auto-generated
         // it would be enough to select on a unique ID, but we don't know which field(s) is the unique ID
         // hence, for now `findCreated` filters on all the values that are provided in `validatedInput.data`
         this._findUniqueWithoutAutoSelect(
           {
-            where: validatedInput.data,
-            select: validatedInput.select,
+            where: data as any,
+            select: validatedInput.select as any,
           },
           db,
           continuation,
@@ -197,17 +343,18 @@ export class Table<T extends Record<string, any>>
   //       --> We could then compile the table class to be e.g. `PostTable` and replace every `T` by Post and use here `Pick<Post, 'id'> & Partial<Post>`
   //       --> not necessarily, we could also take the interface as an additional type argument `U extends Partial<T>` and U is basically T but with non-unique fields made optional
   private _findUnique(
-    i: FindUniqueInput<T>,
+    i: FindUniqueInput<any, any>,
     db: DB<T>,
     continuation: (res: Partial<T> | null) => void,
     onError: (err: any) => void
   ) {
     // Note: `findUnique` differs from Prisma. In Prisma it requires to provide at least one unique field on which to search.
     //       We can't enforce that because we don't know what the unique fields of T are. This information would have to be generated from the Prisma schema.
-    const data = this.validate(i, InputTypes.FindUnique)
+    const data = Validation.validateInternal(i, this.findUniqueSchema)
     const sql = this._builder.findUnique(data)
     db.query(
       sql,
+      this._schema,
       (_, res) => {
         if (res.length > 1) throw new InvalidArgumentError(_NOT_UNIQUE_)
         if (res.length === 1)
@@ -228,6 +375,7 @@ export class Table<T extends Record<string, any>>
       const sql = this._builder.findFirst(data)
       db.query(
         sql,
+        this._schema,
         (_, res) => {
           if (res.length == 0) return continuation(null)
           return continuation(res[0] as unknown as Partial<T>)
@@ -247,6 +395,7 @@ export class Table<T extends Record<string, any>>
       const sql = this._builder.findMany(data)
       db.query(
         sql,
+        this._schema,
         (_, res) => {
           continuation(res)
         },
@@ -265,6 +414,7 @@ export class Table<T extends Record<string, any>>
     const q = this._builder.findWithoutAutoSelect(i)
     db.query(
       q,
+      this._schema,
       (_, rows) => {
         if (rows.length === 0)
           throw new InvalidArgumentError(_RECORD_NOT_FOUND_(queryType))
@@ -347,7 +497,10 @@ export class Table<T extends Record<string, any>>
         if (rows === null) {
           // Create the record
           return this._create(
-            { data: data.create, select: data.select },
+            {
+              data: data.create as unknown as Data,
+              select: data.select as Select,
+            } as CreateArgs,
             db,
             continuation,
             onError
