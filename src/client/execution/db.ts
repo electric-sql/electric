@@ -1,5 +1,6 @@
 import { RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
+import * as z from 'zod'
 
 export interface DB<T> {
   run(
@@ -12,14 +13,16 @@ export interface DB<T> {
     successCallback?: (tx: DB<T>, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void
-  query(
+  query<Z>(
     statement: string,
-    successCallback: (tx: DB<T>, res: Partial<T>[]) => void,
+    schema: z.ZodType<Z>,
+    successCallback: (tx: DB<T>, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void
-  query(
+  query<Z>(
     statement: QueryBuilder,
-    successCallback: (tx: DB<T>, res: Partial<T>[]) => void,
+    schema: z.ZodType<Z>,
+    successCallback: (tx: DB<T>, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void
 }

@@ -1,10 +1,10 @@
 import { RunResult, Transaction } from '../../electric/adapter'
-import { ZObject } from '../validation/schemas'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
+import * as z from 'zod'
 
 export class TransactionalDB<T> implements DB<T> {
-  constructor(private _tx: Transaction, private _schema: ZObject<T>) {}
+  constructor(private _tx: Transaction) {}
   run(
     statement: QueryBuilder | string,
     successCallback?: (db: DB<T>, res: RunResult) => void,
@@ -14,24 +14,24 @@ export class TransactionalDB<T> implements DB<T> {
       { sql: statement.toString() },
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new TransactionalDB(tx, this._schema), res)
+          successCallback(new TransactionalDB(tx), res)
       },
       errorCallback
     )
   }
 
-  query(
+  query<Z>(
     statement: QueryBuilder | string,
-    successCallback: (db: DB<T>, res: Partial<T>[]) => void,
+    schema: z.ZodType<Z>,
+    successCallback: (db: DB<T>, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void {
     this._tx.query(
       { sql: statement.toString() },
       (tx, rows) => {
         if (typeof successCallback !== 'undefined') {
-          const objects = rows.map((row) => this._schema.partial().parse(row))
-          const typedObjects = objects as unknown as Partial<T>[] // if the row gets parsed it must be of type Partial<T>
-          successCallback(new TransactionalDB(tx, this._schema), typedObjects)
+          const objects = rows.map((row) => schema.parse(row)) //.partial().parse(row))
+          successCallback(new TransactionalDB(tx), objects)
         }
       },
       errorCallback

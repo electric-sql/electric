@@ -1,6 +1,7 @@
 import { DatabaseAdapter, RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
+import * as z from 'zod'
 
 export class NonTransactionalDB<T> implements DB<T> {
   constructor(private _adapter: DatabaseAdapter) {}
@@ -30,9 +31,10 @@ export class NonTransactionalDB<T> implements DB<T> {
       })
   }
 
-  query(
+  query<Z>(
     statement: string | QueryBuilder,
-    successCallback: (db: DB<T>, res: Partial<T>[]) => void,
+    schema: z.ZodType<Z>,
+    successCallback: (db: DB<T>, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
     this._adapter
@@ -40,7 +42,8 @@ export class NonTransactionalDB<T> implements DB<T> {
       .then((rows) => {
         if (typeof successCallback !== 'undefined') {
           try {
-            successCallback(this, rows as unknown as Partial<T>[])
+            const objects = rows.map((row) => schema.parse(row))
+            successCallback(this, objects)
           } catch (err) {
             if (typeof errorCallback !== 'undefined') {
               errorCallback(err)

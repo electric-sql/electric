@@ -20,8 +20,8 @@ export abstract class Validation<T> {
 
   // The schema must be a zod object schema that has the same fields as T but those fields map to Zod types
   constructor(protected _tableName: string, protected _schema: ZObject<T>) {
-    if (!(_schema instanceof z.ZodObject))
-      throw new TypeError('Invalid schema. Must be an object schema.')
+    //if (!(_schema instanceof z.ZodObject))
+    //throw new TypeError('Invalid schema. Must be an object schema.')
 
     // Object that maps the different types of user input to a function that creates a schema for that input
     // This avoids having to create a validation method for every type of input.

@@ -1,7 +1,19 @@
 import { z } from 'zod'
 import test from 'ava'
 
-import { Post } from './generated/post'
+import {
+  PostCreateInputSchema,
+  PostUncheckedCreateInputSchema,
+  PostIncludeSchema,
+  PostSelectSchema,
+  UserCreateInputSchema,
+  Prisma,
+  UserUncheckedCreateInputSchema,
+  UserSelectSchema,
+  UserIncludeSchema,
+  PostFindUniqueArgsSchema,
+  UserFindUniqueArgsSchema,
+} from './generated/post'
 import { Table } from '../../src/client/model/table'
 
 import Database, { SqliteError } from 'better-sqlite3'
@@ -17,13 +29,16 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
+import { DbSchemas } from '../../src/client/model/dalNamespace'
+import { ZObject } from '../../src/client/validation/schemas'
 
-const strictPostSchema = Post
-type PostSchema = typeof strictPostSchema
-type Post = z.infer<typeof Post>
+const strictPostSchema = PostCreateInputSchema //Post
+//type PostSchema = typeof strictPostSchema
+type Post = z.infer<typeof PostCreateInputSchema>
 
 const dbSchemas = {
   Post: strictPostSchema,
+  User: UserCreateInputSchema,
 }
 
 const db = new Database(':memory:')
@@ -32,10 +47,117 @@ const electric = await electrify(db, dbSchemas, {
   env: 'env',
   migrations: [],
 })
-const tbl = electric.db.Post
+
+/////
+class Relation {
+  constructor(
+    public relationField: string,
+    public fromField: string,
+    public toField: string,
+    public relatedTable: string,
+    public relationName: string
+  ) {}
+}
+
+class DBDescription<DB extends DbSchemas> {
+  constructor(private db: DB) {}
+  getSchema(table: string): ZObject<any> {
+    return this.db[table]
+  }
+
+  getRelationName(_table: string, _field: string): undefined {
+    return undefined
+  }
+
+  getRelation(table: string, relation: string): Relation {
+    return this.getRelations(table).find((r) => r.relationName === relation)!
+  }
+
+  // Profile.post <-> Post.profile (from: profileId, to: id)
+  getRelations(table: string): Relation[] {
+    if (table === 'User') {
+      return [new Relation('posts', '', '', 'Post', 'PostsToAuthor')]
+    } else if (table === 'Post') {
+      return [new Relation('author', 'authorId', 'id', 'User', 'PostsToAuthor')]
+    } else return []
+  }
+
+  getOutgoingRelations(table: string): Relation[] {
+    if (table === 'Post') {
+      return [new Relation('author', 'authorId', 'id', 'User', 'PostsToAuthor')]
+    } else {
+      return []
+    }
+  }
+
+  getIncomingRelations(table: string): Relation[] {
+    if (table === 'User') {
+      return [new Relation('posts', '', '', 'Post', 'PostsToAuthor')]
+    } else {
+      return []
+    }
+  }
+}
+
+const dbDescription = new DBDescription(dbSchemas)
+
+const postTable = new Table<
+  Post,
+  Prisma.PostCreateArgs,
+  Prisma.PostFindUniqueArgs
+>(
+  'Post',
+  (PostCreateInputSchema as any)
+    .partial()
+    .or((PostUncheckedCreateInputSchema as any).partial()),
+  electric.adapter,
+  electric.notifier,
+  z.object({
+    data: PostCreateInputSchema.or(PostUncheckedCreateInputSchema),
+    select: PostSelectSchema.nullish(),
+    include: PostIncludeSchema.nullish(),
+  }) as any,
+  PostFindUniqueArgsSchema,
+  dbDescription
+)
+electric.db.Post = postTable
+
+type User = z.infer<typeof UserCreateInputSchema>
+const userTable = new Table<
+  User,
+  Prisma.UserCreateArgs,
+  Prisma.UserFindUniqueArgs
+>(
+  'User',
+  (UserCreateInputSchema as any)
+    .partial()
+    .or((UserUncheckedCreateInputSchema as any).partial()),
+  electric.adapter,
+  electric.notifier,
+  z.object({
+    data: UserCreateInputSchema.or(UserUncheckedCreateInputSchema),
+    select: UserSelectSchema.nullish(),
+    include: UserIncludeSchema.nullish(),
+  }) as any,
+  UserFindUniqueArgsSchema,
+  dbDescription
+)
+electric.db.User = userTable
+
+// Map<TableName, Table<any, any, any, any>>
+const tablesMap = new Map([
+  ['Post', electric.db.Post],
+  ['User', electric.db.User],
+])
+electric.db.Post.setTables(tablesMap)
+electric.db.User.setTables(tablesMap)
+
+/////
+
+const tbl = postTable
 
 const post1 = {
-  id: 'i1',
+  id: 1,
   title: 't1',
   contents: 'c1',
   nbr: 18,
@@ -44,14 +166,14 @@ const post1 = {
 const commonNbr = 21
 
 const post2 = {
-  id: 'i2',
+  id: 2,
   title: 't2',
   contents: 'c2',
   nbr: commonNbr,
 }
 
 const post3 = {
-  id: 'i3',
+  id: 3,
   title: 't2',
   contents: 'c3',
   nbr: commonNbr,
@@ -61,7 +183,7 @@ const post3 = {
 function clear() {
   db.exec('DROP TABLE IF EXISTS Post')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS Post('id' varchar PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
+    "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
   )
 }
 
@@ -70,9 +192,11 @@ clear()
 test.serial('table should throw an error on invalid schemas', (t) => {
   t.throws<TypeError>(
     () => {
-      new Table<Post>(
+      new Table<Post, Prisma.PostCreateArgs>(
         'Post',
-        z.string() as unknown as PostSchema,
+        z.string() as unknown as ZObject<Post>,
+        null as any,
+        null as any,
         null as any,
         null as any
       ) // mislead the type checker to test that it throws an error at runtime
@@ -87,7 +211,7 @@ test.serial('table should throw an error on invalid schemas', (t) => {
 test.serial('create query inserts NULL for undefined values', async (t) => {
   const res = await tbl.create({
     data: {
-      id: 'i1',
+      id: 1,
       title: 't1',
       contents: 'c1',
       nbr: undefined,
@@ -95,7 +219,7 @@ test.serial('create query inserts NULL for undefined values', async (t) => {
   })
 
   t.deepEqual(res, {
-    id: 'i1',
+    id: 1,
     title: 't1',
     contents: 'c1',
     nbr: null,
@@ -107,7 +231,7 @@ test.serial('create query inserts NULL for undefined values', async (t) => {
 test.serial('create query handles null values correctly', async (t) => {
   const res = await tbl.create({
     data: {
-      id: 'i1',
+      id: 1,
       title: 't1',
       contents: 'c1',
       nbr: null,
@@ -115,7 +239,7 @@ test.serial('create query handles null values correctly', async (t) => {
   })
 
   t.deepEqual(res, {
-    id: 'i1',
+    id: 1,
     title: 't1',
     contents: 'c1',
     nbr: null,
@@ -129,14 +253,14 @@ test.serial(
   async (t) => {
     const res = await tbl.create({
       data: {
-        id: 'i1',
+        id: 1,
         title: 't1',
         contents: 'c1',
       },
     })
 
     t.deepEqual(res, {
-      id: 'i1',
+      id: 1,
       title: 't1',
       contents: 'c1',
       nbr: null,
@@ -146,20 +270,148 @@ test.serial(
   }
 )
 
-// Test that we can make a create query
-test.serial('create query', async (t) => {
+test.serial('create query with nested object for outgoing FK', async (t) => {
+  db.exec('DROP TABLE IF EXISTS Post')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int, 'authorId' int);"
+  )
+  db.exec('DROP TABLE IF EXISTS User')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+  )
+
   const res = await tbl.create({
-    data: post1,
+    data: {
+      id: 5,
+      title: 'foo',
+      contents: 'bar',
+      author: {
+        create: {
+          id: 1094,
+          name: 'kevin',
+        },
+      },
+      //authorId: 1
+    },
   })
 
-  t.deepEqual(res, post1)
+  t.deepEqual(res, {
+    id: 5,
+    title: 'foo',
+    contents: 'bar',
+    nbr: null,
+    authorId: 1094,
+  })
+
+  const relatedUser = await userTable.findUnique({
+    where: {
+      id: 1094,
+    },
+  })
+
+  t.deepEqual(relatedUser, {
+    id: 1094,
+    name: 'kevin',
+  })
+
+  clear()
+})
+
+test.serial('create query with nested object for incoming FK', async (t) => {
+  db.exec('DROP TABLE IF EXISTS Post')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int, 'authorId' int);"
+  )
+  db.exec('DROP TABLE IF EXISTS User')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+  )
+
+  const res = await userTable.create({
+    data: {
+      id: 1094,
+      name: 'kevin',
+      posts: {
+        create: [
+          {
+            id: 5,
+            title: 'foo',
+            contents: 'bar',
+          },
+          {
+            id: 6,
+            title: 'test',
+            contents: 'nested post',
+          },
+        ],
+      },
+    },
+  })
+
+  t.deepEqual(res, {
+    id: 1094,
+    name: 'kevin',
+  })
+
+  const relatedUser1 = await postTable.findUnique({
+    where: {
+      id: 5,
+    },
+  })
+
+  const relatedUser2 = await postTable.findUnique({
+    where: {
+      id: 6,
+    },
+  })
+
+  t.deepEqual(relatedUser1, {
+    id: 5,
+    title: 'foo',
+    contents: 'bar',
+    nbr: null,
+    authorId: 1094,
+  })
+
+  t.deepEqual(relatedUser2, {
+    id: 6,
+    title: 'test',
+    contents: 'nested post',
+    nbr: null,
+    authorId: 1094,
+  })
+
+  clear()
+})
+
+// Test that we can make a create query
+test.serial('create query', async (t) => {
+  db.exec('DROP TABLE IF EXISTS Post')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
+  )
+
+  const res = await tbl.create({
+    data: {
+      id: 5,
+      title: 'foo',
+      contents: 'bar',
+    },
+  })
+
+  t.deepEqual(res, {
+    id: 5,
+    title: 'foo',
+    contents: 'bar',
+    nbr: null,
+  })
 })
 
 test.serial(
   'create query throws an error if primary key already exists',
   async (t) => {
     const record = {
-      id: 'i1',
+      id: 1,
       title: 'some title',
       contents: 'some contents',
       nbr: 18,
@@ -242,7 +494,7 @@ test.serial(
     await t.throwsAsync<InvalidArgumentError>(async () => {
       await tbl.findUnique({
         where: {
-          id: 'i2',
+          id: 2,
           nbr: 21,
         },
         select: {
@@ -332,19 +584,19 @@ test.serial('update query', async (t) => {
 
   // Update the primary key
   const res2 = await tbl.update({
-    data: { id: '5' },
+    data: { id: 5 },
     where: { id: post1.id },
   })
 
   t.deepEqual(res2, {
     ...post1,
-    id: '5',
+    id: 5,
   })
 
   // Update primary key and return only a selection
   const res3 = await tbl.update({
     data: { id: post1.id },
-    where: { id: '5' },
+    where: { id: 5 },
     select: { title: true },
   })
 
@@ -470,7 +722,7 @@ test.serial('updateMany query', async (t) => {
 
 test.serial('upsert query', async (t) => {
   const newPost = {
-    id: 'i4',
+    id: 4,
     title: 't4',
     contents: 'c4',
     nbr: 5,
@@ -563,7 +815,7 @@ test.serial('delete query throws error if record does not exist', async (t) => {
     async () => {
       await tbl.delete({
         where: {
-          id: '-1',
+          id: -1,
         },
       })
     },

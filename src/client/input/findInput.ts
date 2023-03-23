@@ -15,7 +15,7 @@ export interface FindInput<T> {
 //       cf. https://www.prisma.io/docs/reference/api-reference/prisma-client-reference#filter-on-non-unique-fields-with-userwhereuniqueinput
 //       But this information is not present in the generated Zod schema so we will need to infer it ourselves
 //       either by modifying the zod generator or by writing our own generator or by introspecting the Prisma schema --> with DMMF? but this is in Prisma client i think
-export interface FindUniqueInput<T> {
-  where: Partial<T>
-  select?: SelectInput<T>
+export interface FindUniqueInput<Select, Where> {
+  where: Where
+  select?: Select
 }
