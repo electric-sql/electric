@@ -14,7 +14,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
       ) do
     vaxine_transaction_data
     |> build_rows()
-    |> do_build_transaction(metadata.commit_timestamp)
+    |> do_build_transaction(metadata)
   end
 
   defp build_rows(vaxine_transaction_data) do
@@ -32,7 +32,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
           [Row.t() | nil],
           commit_timestamp :: DateTime.t()
         ) :: {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  defp do_build_transaction(entries, commit_timestamp) do
+  defp do_build_transaction(entries, metadata) do
     entries
     |> Enum.reduce_while([], fn
       nil, _acc ->
@@ -51,7 +51,8 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
         {:ok,
          %Changes.Transaction{
            changes: Enum.reverse(dml_changes),
-           commit_timestamp: commit_timestamp
+           commit_timestamp: metadata.commit_timestamp,
+           origin: metadata.origin
          }}
 
       error ->

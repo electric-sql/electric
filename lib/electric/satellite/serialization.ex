@@ -27,7 +27,7 @@ defmodule Electric.Satellite.Serialization do
     lsn = :erlang.term_to_binary(vx_offset)
 
     tx_begin = %SatTransOp{
-      op: {:begin, %SatOpBegin{commit_timestamp: tm, lsn: lsn}}
+      op: {:begin, %SatOpBegin{commit_timestamp: tm, lsn: lsn, origin: trans.origin}}
     }
 
     tx_end = %SatTransOp{
