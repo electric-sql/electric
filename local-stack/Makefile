@@ -1,3 +1,12 @@
+start:
+	docker compose up
+
+start_without_electric:
+	docker compose up postgres_1 vaxine_1 local_api
+
+start_electric:
+	docker compose up electric_1
+
 stop:
 	docker compose down --volumes
 
