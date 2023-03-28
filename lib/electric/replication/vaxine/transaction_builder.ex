@@ -30,7 +30,7 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
 
   @spec do_build_transaction(
           [Row.t() | nil],
-          commit_timestamp :: DateTime.t()
+          Metadata.t()
         ) :: {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
   defp do_build_transaction(entries, metadata) do
     entries
