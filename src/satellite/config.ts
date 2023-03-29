@@ -15,6 +15,8 @@ export interface SatelliteOpts {
   oplogTable: QualifiedTablename
   // The database table that controls active opLog triggers.
   triggersTable: QualifiedTablename
+  // The database table that contains dependency tracking information
+  shadowTable: QualifiedTablename
   // Polls the database for changes every `pollingInterval` milliseconds.
   pollingInterval: number
   // Throttle snapshotting to once per `minSnapshotWindow` milliseconds.
@@ -34,6 +36,7 @@ export const satelliteDefaults: SatelliteOpts = {
   migrationsTable: new QualifiedTablename('main', '_electric_migrations'),
   oplogTable: new QualifiedTablename('main', '_electric_oplog'),
   triggersTable: new QualifiedTablename('main', '_electric_trigger_settings'),
+  shadowTable: new QualifiedTablename('main', '_electric_shadow'),
   pollingInterval: 2000,
   minSnapshotWindow: 40,
 }

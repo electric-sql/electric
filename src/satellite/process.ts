@@ -25,18 +25,29 @@ import {
 } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteConfig, SatelliteOpts } from './config'
-import { mergeChangesLastWriteWins, mergeOpTypesAddWins } from './merge'
+import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
+import { difference } from '../util/sets'
 import {
   OPTYPES,
   OplogEntry,
-  OplogTableChanges,
-  operationsToTableChanges,
+  ShadowTableChanges,
+  localOperationsToTableChanges,
+  remoteOperationsToTableChanges,
   fromTransaction,
   toTransactions,
-  OplogEntryChanges,
+  ShadowEntryChanges,
+  encodeTags,
+  decodeTags,
+  ShadowEntry,
+  shadowTagsDefault,
+  newShadowEntry,
+  getShadowPrimaryKey,
+  generateTag,
 } from './oplog'
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
 import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
+import { RunResult } from '../electric/adapter'
+
 import Log from 'loglevel'
 
 type ChangeAccumulator = {
@@ -116,18 +127,7 @@ export class SatelliteProcess implements Satellite {
       throw new Error('Invalid database schema.')
     }
 
-    if (authState !== undefined) {
-      throw new Error('Not implemented')
-      // this._authState = authState
-    } else {
-      const app = this.config.app
-      const env = this.config.env
-      const clientId = await this._getClientId()
-      const token = await this._getMeta('token')
-      const refreshToken = await this._getMeta('refreshToken')
-
-      this._authState = { app, env, clientId, token, refreshToken }
-    }
+    await this._setAuthState(authState)
 
     if (this._authStateSubscription === undefined) {
       const handler = this._updateAuthState.bind(this)
@@ -183,6 +183,21 @@ export class SatelliteProcess implements Satellite {
     }
 
     return this._connectAndStartReplication()
+  }
+
+  async _setAuthState(authState?: AuthState): Promise<void | Error> {
+    if (authState !== undefined) {
+      throw new Error('Not implemented')
+      // this._authState = authState
+    } else {
+      const app = this.config.app
+      const env = this.config.env
+      const clientId = await this._getClientId()
+      const token = await this._getMeta('token')
+      const refreshToken = await this._getMeta('refreshToken')
+
+      this._authState = { app, env, clientId, token, refreshToken }
+    }
   }
 
   setClientListeners(): void {
@@ -275,18 +290,19 @@ export class SatelliteProcess implements Satellite {
   async _verifyTableStructure(): Promise<boolean> {
     const meta = this.opts.metaTable.tablename
     const oplog = this.opts.oplogTable.tablename
+    const shadow = this.opts.shadowTable.tablename
 
     const tablesExist = `
       SELECT count(name) as numTables FROM sqlite_master
         WHERE type='table'
-          AND name IN (?, ?)
+        AND name IN (?, ?, ?)
     `
 
     const [{ numTables }] = await this.adapter.query({
       sql: tablesExist,
-      args: [meta, oplog],
+      args: [meta, oplog, shadow],
     })
-    return numTables === 2
+    return numTables === 3
   }
 
   // Handle auth state changes.
@@ -301,53 +317,108 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Perform a snapshot and notify which data actually changed.
-  async _performSnapshot(): Promise<void> {
-    const oplog = this.opts.oplogTable.toString()
-    const timestamp = new Date().toISOString()
+  async _performSnapshot(): Promise<Date> {
+    const timestamp = new Date()
 
-    const updateTimestamps = `
-      UPDATE ${oplog} set timestamp = ?
-        WHERE rowid in (
-          SELECT rowid FROM ${oplog}
-              WHERE timestamp is NULL
-              AND rowid > ?
-          ORDER BY rowid ASC
+    await this._updateOplogTimestamp(timestamp)
+    const oplogEntries = await this._getUpdatedEntries(timestamp)
+
+    const promises: Promise<void | SatelliteError | RunResult>[] = []
+
+    if (oplogEntries.length !== 0) {
+      promises.push(this._notifyChanges(oplogEntries))
+
+      const shadowEntries = new Map<string, ShadowEntry>()
+
+      for (const oplogEntry of oplogEntries) {
+        const [cached, shadowEntry] = await this._lookupCachedShadowEntry(
+          oplogEntry,
+          shadowEntries
+        )
+
+        // Clear should not contain the tag for this timestamp, so if
+        // the entry was previously in cache - it means, that we already
+        // read it within the same snapshot
+        if (cached) {
+          oplogEntry.clearTags = encodeTags(
+            difference(decodeTags(shadowEntry.tags), [
+              this._generateTag(timestamp),
+            ])
           )
-    `
+        } else {
+          oplogEntry.clearTags = shadowEntry.tags
+        }
 
-    const updateArgs = [timestamp, `${this._lastAckdRowId}`]
-    await this.adapter.run({ sql: updateTimestamps, args: updateArgs })
+        if (oplogEntry.optype == OPTYPES.delete) {
+          shadowEntry.tags = shadowTagsDefault
+        } else {
+          const newTag = this._generateTag(timestamp)
+          shadowEntry.tags = encodeTags([newTag])
+        }
 
-    const selectChanges = `
-      SELECT * FROM ${oplog} 
-      WHERE timestamp = ? ORDER BY rowid ASC
-    `
+        promises.push(this._updateOplogEntryTags(oplogEntry))
+        this._updateCachedShadowEntry(oplogEntry, shadowEntry, shadowEntries)
+      }
 
-    const rows = await this.adapter.query({
-      sql: selectChanges,
-      args: [timestamp],
-    })
-    const results = rows as unknown as OplogEntry[]
-
-    const promises: Promise<void | SatelliteError>[] = []
-
-    if (results.length !== 0) {
-      promises.push(this._notifyChanges(results))
+      shadowEntries.forEach((value: ShadowEntry, _key: string) => {
+        if (value.tags == shadowTagsDefault) {
+          promises.push(this.adapter.run(this._deleteShadowTagsQuery(value)))
+        } else {
+          promises.push(this._updateShadowTags(value))
+        }
+      })
     }
+    await Promise.all(promises)
 
     if (!this.client.isClosed()) {
       const { enqueued } = this.client.getOutboundLogPositions()
       const enqueuedLogPos = bytesToNumber(enqueued)
 
       // TODO: take next N transactions instead of all
-      const promise = this._getEntries(enqueuedLogPos).then((missing) =>
+      await this._getEntries(enqueuedLogPos).then((missing) =>
         this._replicateSnapshotChanges(missing)
       )
-      promises.push(promise)
     }
-
-    await Promise.all(promises)
+    return timestamp
   }
+
+  _updateCachedShadowEntry(
+    oplogEntry: OplogEntry,
+    shadowEntry: ShadowEntry,
+    shadowEntries: Map<string, ShadowEntry>
+  ) {
+    const pk = getShadowPrimaryKey(oplogEntry)
+    const key: string = [oplogEntry.namespace, oplogEntry.tablename, pk].join(
+      '.'
+    )
+
+    shadowEntries.set(key, shadowEntry)
+  }
+
+  async _lookupCachedShadowEntry(
+    oplogEntry: OplogEntry,
+    shadowEntries: Map<string, ShadowEntry>
+  ): Promise<[boolean, ShadowEntry]> {
+    const pk = getShadowPrimaryKey(oplogEntry)
+    const key: string = [oplogEntry.namespace, oplogEntry.tablename, pk].join(
+      '.'
+    )
+
+    let shadowEntry: ShadowEntry
+    if (shadowEntries.has(key)) {
+      return [true, shadowEntries.get(key)!]
+    } else {
+      const shadowEntriesList = await this._getOplogShadowEntry(oplogEntry)
+      if (shadowEntriesList.length == 0) {
+        shadowEntry = newShadowEntry(oplogEntry)
+      } else {
+        shadowEntry = shadowEntriesList[0]
+      }
+      shadowEntries.set(key, shadowEntry)
+      return [false, shadowEntry]
+    }
+  }
+
   async _notifyChanges(results: OplogEntry[]): Promise<void> {
     Log.info('notify changes')
     const acc: ChangeAccumulator = {}
@@ -379,6 +450,7 @@ export class SatelliteProcess implements Satellite {
     const changes = Object.values(results.reduce(reduceFn, acc))
     this.notifier.actuallyChanged(this.dbName, changes)
   }
+
   async _replicateSnapshotChanges(
     results: OplogEntry[]
   ): Promise<void | SatelliteError> {
@@ -394,16 +466,24 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Apply a set of incoming transactions against pending local operations,
-  // applying conflict resolution rules. Takes all changes per each key
-  // before merging, for local and remote operations.
-  async _apply(incoming: OplogEntry[], lsn: LSN): Promise<void> {
-    // assign timestamp to pending operations before apply
-    //
+  // applying conflict resolution rules. Takes all changes per each key before
+  // merging, for local and remote operations.
+  async _apply(
+    incoming: OplogEntry[],
+    incoming_origin: string,
+    lsn: LSN
+  ): Promise<void> {
     Log.info(`apply incoming changes for LSN: ${lsn}`)
+    // assign timestamp to pending operations before apply
     await this._performSnapshot()
 
     const local = await this._getEntries()
-    const merged = this._mergeEntries(local, incoming)
+    const merged = this._mergeEntries(
+      this._authState!.clientId,
+      local,
+      incoming_origin,
+      incoming
+    )
 
     const stmts: Statement[] = []
     // switches off on transaction commit/abort
@@ -418,13 +498,21 @@ export class SatelliteProcess implements Satellite {
 
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
+        const shadowEntry: ShadowEntry = {
+          namespace: entryChanges.namespace,
+          tablename: entryChanges.tablename,
+          primaryKey: getShadowPrimaryKey(entryChanges),
+          tags: encodeTags(entryChanges.tags),
+        }
         switch (entryChanges.optype) {
           case OPTYPES.delete:
             stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
+            stmts.push(this._deleteShadowTagsQuery(shadowEntry))
             break
 
           default:
             stmts.push(_applyNonDeleteOperation(entryChanges, tablenameStr))
+            stmts.push(this._updateShadowTagsQuery(shadowEntry))
         }
       }
     }
@@ -454,13 +542,137 @@ export class SatelliteProcess implements Satellite {
     return rows as unknown as OplogEntry[]
   }
 
+  async _getUpdatedEntries(
+    timestamp: Date,
+    since?: number
+  ): Promise<OplogEntry[]> {
+    if (since === undefined) {
+      since = this._lastAckdRowId
+    }
+    const oplog = this.opts.oplogTable.toString()
+
+    const selectChanges = `
+      SELECT * FROM ${oplog}
+      WHERE timestamp = ? AND
+            rowid > ?
+      ORDER BY rowid ASC
+    `
+
+    const rows = await this.adapter.query({
+      sql: selectChanges,
+      args: [timestamp.toISOString(), since],
+    })
+    return rows as unknown as OplogEntry[]
+  }
+
+  async _getOplogShadowEntry(
+    oplog: OplogEntry | undefined
+  ): Promise<ShadowEntry[]> {
+    const shadow = this.opts.shadowTable.toString()
+    let query
+    let selectTags = `SELECT * FROM ${shadow}`
+    if (oplog != undefined) {
+      selectTags =
+        selectTags +
+        ` WHERE
+         namespace = ? AND
+         tablename = ? AND
+         primaryKey = ?
+      `
+      const args = [
+        oplog.namespace,
+        oplog.tablename,
+        getShadowPrimaryKey(oplog),
+      ]
+      query = { sql: selectTags, args: args }
+    } else {
+      query = { sql: selectTags }
+    }
+
+    const shadowTags = await this.adapter.query(query)
+    return shadowTags as unknown as ShadowEntry[]
+  }
+
+  async _updateShadowTags(shadow: ShadowEntry): Promise<RunResult> {
+    return await this.adapter.run(this._updateShadowTagsQuery(shadow))
+  }
+
+  _deleteShadowTagsQuery(shadow: ShadowEntry): Statement {
+    const shadowTable = this.opts.shadowTable.toString()
+    const deleteRow = `
+      DELETE FROM ${shadowTable}
+      WHERE namespace = ? AND
+            tablename = ? AND
+            primaryKey = ?;
+    `
+    return {
+      sql: deleteRow,
+      args: [shadow.namespace, shadow.tablename, shadow.primaryKey],
+    }
+  }
+
+  _updateShadowTagsQuery(shadow: ShadowEntry): Statement {
+    const shadowTable = this.opts.shadowTable.toString()
+    const updateTags = `
+      INSERT or REPLACE INTO ${shadowTable} (namespace, tablename, primaryKey, tags) VALUES
+      (?, ?, ?, ?);
+    `
+    return {
+      sql: updateTags,
+      args: [
+        shadow.namespace,
+        shadow.tablename,
+        shadow.primaryKey,
+        shadow.tags,
+      ],
+    }
+  }
+
+  async _updateOplogEntryTags(oplog: OplogEntry): Promise<RunResult> {
+    const oplogTable = this.opts.oplogTable.toString()
+    const updateTags = `
+      UPDATE ${oplogTable} set clearTags = ?
+        WHERE rowid = ?
+    `
+    return await this.adapter.run({
+      sql: updateTags,
+      args: [oplog.clearTags, oplog.rowid],
+    })
+  }
+
+  async _updateOplogTimestamp(timestamp: Date): Promise<void> {
+    const oplog = this.opts.oplogTable.toString()
+
+    const updateTimestamps = `
+      UPDATE ${oplog} set timestamp = ?
+        WHERE rowid in (
+          SELECT rowid FROM ${oplog}
+              WHERE timestamp is NULL
+              AND rowid > ?
+          ORDER BY rowid ASC
+          )
+    `
+
+    const updateArgs = [timestamp.toISOString(), `${this._lastAckdRowId}`]
+    await this.adapter.run({ sql: updateTimestamps, args: updateArgs })
+  }
+
   // Merge changes, with last-write-wins and add-wins semantics.
+  // clearTags field is used by the calling code to determine new value of
+  // the shadowTags
   _mergeEntries(
+    local_origin: string,
     local: OplogEntry[],
+    incoming_origin: string,
     incoming: OplogEntry[]
-  ): OplogTableChanges {
-    const localTableChanges = operationsToTableChanges(local)
-    const incomingTableChanges = operationsToTableChanges(incoming)
+  ): ShadowTableChanges {
+    const localTableChanges = localOperationsToTableChanges(
+      local,
+      (timestamp: Date) => {
+        return generateTag(local_origin, timestamp)
+      }
+    )
+    const incomingTableChanges = remoteOperationsToTableChanges(incoming)
 
     for (const [tablename, incomingMapping] of Object.entries(
       incomingTableChanges
@@ -474,22 +686,28 @@ export class SatelliteProcess implements Satellite {
       for (const [primaryKey, incomingChanges] of Object.entries(
         incomingMapping
       )) {
-        const localChanges = localMapping[primaryKey]
-
-        if (localChanges === undefined) {
+        const localInfo = localMapping[primaryKey]
+        if (localInfo === undefined) {
           continue
         }
+        const [_, localChanges] = localInfo
 
         const changes = mergeChangesLastWriteWins(
+          local_origin,
           localChanges.changes,
+          incoming_origin,
           incomingChanges.changes
         )
-        const optype = mergeOpTypesAddWins(
-          localChanges.optype,
-          incomingChanges.optype
-        )
+        let optype
 
-        Object.assign(incomingChanges, { changes, optype })
+        const tags = mergeOpTags(localChanges, incomingChanges)
+        if (tags.length == 0) {
+          optype = OPTYPES.delete
+        } else {
+          optype = OPTYPES.upsert
+        }
+
+        Object.assign(incomingChanges, { changes, optype, tags })
       }
     }
 
@@ -497,18 +715,51 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _applyTransaction(transaction: Transaction) {
-    const opLogEntries = fromTransaction(transaction, this.relations)
+    const origin = transaction.origin!
 
-    await this._apply(opLogEntries, transaction.lsn)
-    this._notifyChanges(opLogEntries)
+    const opLogEntries = fromTransaction(transaction, this.relations)
+    const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
+    await this._applyTransactionInternal(
+      origin,
+      commitTimestamp,
+      opLogEntries,
+      transaction.lsn
+    )
+  }
+
+  async _applyTransactionInternal(
+    origin: string,
+    commitTimestamp: Date,
+    opLogEntries: OplogEntry[],
+    lsn: LSN
+  ) {
+    await this._apply(opLogEntries, origin, lsn)
+    await this._notifyChanges(opLogEntries)
+
+    if (origin == this._authState!.clientId) {
+      /* Any outstanding transaction that originated on Satellite but haven't
+       * been received back from the Electric is considered to be concurrent with
+       * any other transaction coming from Electric.
+       *
+       * Thus we need to keep oplog entries in order to be able to do conflict
+       * resolution with add-wins semantics.
+       *
+       * Once we receive transaction that was originated on the Satellite, oplog
+       * entries that correspond to such transaction can be safely removed as
+       * they are no longer necessary for conflict resolution.
+       */
+      await this._garbageCollectOplog(commitTimestamp)
+    }
   }
 
   _disableTriggers(tablenames: string[]): Statement[] {
     return this._updateTriggerSettings(tablenames, 0)
   }
+
   _enableTriggers(tablenames: string[]): Statement[] {
     return this._updateTriggerSettings(tablenames, 1)
   }
+
   _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Statement[] {
     const triggers = this.opts.triggersTable.toString()
     const stmts = tablenames.map((tablenameStr) => ({
@@ -532,15 +783,8 @@ export class SatelliteProcess implements Satellite {
     ]
 
     if (isAck) {
-      const oplog = this.opts.oplogTable.toString()
-      const del = `DELETE FROM ${oplog} WHERE rowid <= ?`
-      const delArgs = [lsn]
-
       this._lastAckdRowId = lsn
-      await this.adapter.runInTransaction(
-        { sql, args },
-        { sql: del, args: delArgs }
-      )
+      await this.adapter.runInTransaction({ sql, args })
     } else {
       this._lastSentRowId = lsn
       await this.adapter.runInTransaction({ sql, args })
@@ -590,6 +834,7 @@ export class SatelliteProcess implements Satellite {
       this.opts.migrationsTable.tablename.toString(),
       this.opts.oplogTable.tablename.toString(),
       this.opts.triggersTable.tablename.toString(),
+      this.opts.shadowTable.tablename.toString(),
       'sqlite_schema',
       'sqlite_sequence',
       'sqlite_temp_schema',
@@ -633,10 +878,25 @@ export class SatelliteProcess implements Satellite {
 
     return Promise.resolve(relations)
   }
+
+  private _generateTag(timestamp: Date): string {
+    const instanceId = this._authState!.clientId
+    return generateTag(instanceId, timestamp)
+  }
+
+  async _garbageCollectOplog(commitTimestamp: Date) {
+    const isoString = commitTimestamp.toISOString()
+    const oplog = this.opts.oplogTable.tablename.toString()
+    const stmt = `
+      DELETE FROM ${oplog}
+      WHERE timestamp = ?;
+    `
+    await this.adapter.run({ sql: stmt, args: [isoString] })
+  }
 }
 
 function _applyDeleteOperation(
-  entryChanges: OplogEntryChanges,
+  entryChanges: ShadowEntryChanges,
   tablenameStr: string
 ): Statement {
   const pkEntries = Object.entries(entryChanges.primaryKeyCols)
@@ -656,7 +916,7 @@ function _applyDeleteOperation(
 }
 
 function _applyNonDeleteOperation(
-  { changes, primaryKeyCols }: OplogEntryChanges,
+  { changes, primaryKeyCols }: ShadowEntryChanges,
   tablenameStr: string
 ): Statement {
   const columnNames = Object.keys(changes)

@@ -386,6 +386,7 @@ test.serial('send transaction', async (t) => {
       primaryKey: '{"id":0}',
       rowid: 0,
       timestamp: '1970-01-01T00:00:01.000Z',
+      clearTags: '[]',
     },
     {
       namespace: 'main',
@@ -396,6 +397,7 @@ test.serial('send transaction', async (t) => {
       primaryKey: '{"id":1}',
       rowid: 1,
       timestamp: '1970-01-01T00:00:01.000Z',
+      clearTags: '["origin@1231232347"]',
     },
     {
       namespace: 'main',
@@ -406,6 +408,7 @@ test.serial('send transaction', async (t) => {
       primaryKey: '{"id":1}',
       rowid: 2,
       timestamp: '1970-01-01T00:00:02.000Z',
+      clearTags: '["origin@1231232347"]',
     },
   ]
 
@@ -490,6 +493,7 @@ test('ack on send and pong', async (t) => {
         relation: relations.parent,
         type: ChangeType.INSERT,
         record: { id: 0 },
+        tags: [], // actual value is not relevent here
       },
     ],
   }
@@ -579,7 +583,7 @@ test.serial('default and null test', async (t) => {
   })
 
   const serializedRow: Proto.SatOpRow = {
-    $type: 'Electric.Satellite.v0_2.SatOpRow',
+    $type: 'Electric.Satellite.v1_0.SatOpRow',
     nullsBitmask: new Uint8Array([40]),
     values: [
       new Uint8Array([

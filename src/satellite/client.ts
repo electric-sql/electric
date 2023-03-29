@@ -389,44 +389,47 @@ export class SatelliteClient extends EventEmitter implements Client {
       }),
     ]
 
-    transaction.changes.forEach((tx) => {
-      let txOp, oldRecord, record
-      const relation = this.outbound.relations.get(tx.relation.id)!
-
-      if (tx.oldRecord) {
-        oldRecord = serializeRow(tx.oldRecord, relation)
+    transaction.changes.forEach((change) => {
+      let changeOp, oldRecord, record
+      const relation = this.outbound.relations.get(change.relation.id)!
+      const tags = change.tags
+      if (change.oldRecord) {
+        oldRecord = serializeRow(change.oldRecord, relation)
       }
-      if (tx.record) {
-        record = serializeRow(tx.record, relation)
+      if (change.record) {
+        record = serializeRow(change.record, relation)
       }
-      switch (tx.type) {
+      switch (change.type) {
         case ChangeType.DELETE:
-          txOp = SatTransOp.fromPartial({
+          changeOp = SatTransOp.fromPartial({
             delete: {
               oldRowData: oldRecord,
               relationId: relation.id,
+              tags: tags,
             },
           })
           break
         case ChangeType.INSERT:
-          txOp = SatTransOp.fromPartial({
+          changeOp = SatTransOp.fromPartial({
             insert: {
               rowData: record,
               relationId: relation.id,
+              tags: tags,
             },
           })
           break
         case ChangeType.UPDATE:
-          txOp = SatTransOp.fromPartial({
+          changeOp = SatTransOp.fromPartial({
             update: {
               rowData: record,
               oldRowData: oldRecord,
               relationId: relation.id,
+              tags: tags,
             },
           })
           break
       }
-      ops.push(txOp)
+      ops.push(changeOp)
     })
 
     ops.push(SatTransOp.fromPartial({ commit: {} }))
@@ -595,11 +598,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  // It might be unsafe not to clear the log before
-  // applying incoming operations that are ordered
-  // after the last acked position.
-  // TODO: come back here
-
   private handleError(error: SatErrorResp) {
     this.emit(
       'error',
@@ -632,18 +630,20 @@ export class SatelliteClient extends EventEmitter implements Client {
           commit_timestamp: op.begin.commitTimestamp,
           lsn: op.begin.lsn,
           changes: [],
+          origin: op.begin.origin!,
         }
         replication.transactions.push(transaction)
       }
 
       const lastTxnIdx = replication.transactions.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes } =
+        const { commit_timestamp, lsn, changes, origin } =
           replication.transactions[lastTxnIdx]
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
           changes,
+          origin,
         }
         // in the future, emitting this event can be decoupled
         this.emit(
@@ -668,6 +668,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           relation: rel,
           type: ChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel),
+          tags: op.insert.tags,
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
@@ -688,6 +689,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           type: ChangeType.UPDATE,
           record: deserializeRow(op.update.rowData!, rel),
           oldRecord: deserializeRow(op.update.oldRowData, rel),
+          tags: op.update.tags,
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
@@ -707,6 +709,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           relation: rel,
           type: ChangeType.DELETE,
           oldRecord: deserializeRow(op.delete.oldRowData!, rel),
+          tags: op.delete.tags,
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)

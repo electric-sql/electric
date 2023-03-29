@@ -1,9 +1,17 @@
-import { OPTYPES, OplogColumnChanges, OpType } from './oplog'
+import {
+  OplogColumnChanges,
+  Tag,
+  OplogEntryChanges,
+  ShadowEntryChanges,
+} from './oplog'
+import { difference, union } from '../util/sets'
 
 // Merge two sets of changes, using the timestamp to arbitrate conflicts
 // so that the last write wins.
 export const mergeChangesLastWriteWins = (
+  firstOrigin: string,
   first: OplogColumnChanges,
+  secondOrigin: string,
   second: OplogColumnChanges
 ): OplogColumnChanges => {
   const allKeys = Object.keys(first).concat(Object.keys(second))
@@ -24,19 +32,32 @@ export const mergeChangesLastWriteWins = (
     } else if (secondValue === undefined) {
       acc[key] = firstValue
     } else {
-      acc[key] =
-        firstValue.timestamp > secondValue.timestamp ? firstValue : secondValue
+      if (firstValue.timestamp === secondValue.timestamp) {
+        // origin lexicographic ordered on timestamp equality
+        acc[key] = firstOrigin > secondOrigin ? firstValue : secondValue
+      } else {
+        acc[key] =
+          firstValue.timestamp > secondValue.timestamp
+            ? firstValue
+            : secondValue
+      }
     }
 
     return acc
   }, initialValue)
 }
 
-// Merge the type of two operations so that add wins.
-export const mergeOpTypesAddWins = (first: OpType, second: OpType): OpType => {
-  if (first === OPTYPES.delete && second === OPTYPES.delete) {
-    return OPTYPES.delete as OpType
-  }
+export const mergeOpTags = (
+  local: OplogEntryChanges,
+  remote: ShadowEntryChanges
+): Tag[] => {
+  return calculateTags(local.tag, remote.tags, local.clearTags)
+}
 
-  return OPTYPES.upsert as OpType
+const calculateTags = (tag: Tag | null, tags: Tag[], clear: Tag[]) => {
+  if (tag == null) {
+    return difference(tags, clear)
+  } else {
+    return union([tag], difference(tags, clear))
+  }
 }

@@ -12,13 +12,16 @@ import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
+import { AuthState } from '../../src/auth/index'
 
 import {
   OPTYPES,
-  operationsToTableChanges,
+  localOperationsToTableChanges,
   fromTransaction,
   OplogEntry,
   toTransactions,
+  generateTag,
+  encodeTags,
 } from '../../src/satellite/oplog'
 import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
@@ -26,7 +29,9 @@ import { SatelliteProcess } from '../../src/satellite/process'
 import {
   initTableInfo,
   loadSatelliteMetaTable,
-  generateOplogEntry,
+  generateLocalOplogEntry,
+  generateRemoteOplogEntry,
+  genEncodedTags,
   TableInfo,
 } from '../support/satellite-helpers'
 import Long from 'long'
@@ -54,8 +59,11 @@ interface TestNotifier extends EventNotifier {
 interface TestSatellite extends Satellite {
   _lastSentRowId: number
 
-  _performSnapshot(): Promise<void>
+  _setAuthState(authState?: AuthState): Promise<void>
+  _performSnapshot(): Promise<Date>
+  _getEntries(): Promise<OplogEntry[]>
   _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
+  _applyTransaction(transaction: Transaction): any
   _setMeta(key: string, value: SqlValue): Promise<void>
   _getMeta(key: string): Promise<string>
   _ack(lsn: number, isAck: boolean): Promise<void>
@@ -206,12 +214,25 @@ test('cannot UPDATE primary key', async (t) => {
 })
 
 test('snapshot works', async (t) => {
-  const { adapter, notifier, runMigrations, satellite } =
-    t.context as ContextType
+  const { satellite } = t.context as any
+  const { adapter, notifier, runMigrations } = t.context as ContextType
   await runMigrations()
+  await satellite._setAuthState()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
-  await satellite._performSnapshot()
+
+  let snapshotTimestamp = await satellite._performSnapshot()
+
+  const clientId = satellite['_authState']['clientId']
+  let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
+
+  var shadowRows = await adapter.query({
+    sql: `SELECT tags FROM _electric_shadow`,
+  })
+  t.is(shadowRows.length, 2)
+  for (const row of shadowRows) {
+    t.is(row.tags, shadowTags)
+  }
 
   t.is(notifier.notifications.length, 1)
 
@@ -300,12 +321,16 @@ test('snapshot of INSERT after DELETE', async (t) => {
     await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
 
+    await satellite._setAuthState()
     await satellite._performSnapshot()
     const entries = await satellite._getEntries()
+    const clientId = satellite['_authState']['clientId']
 
-    const merged = operationsToTableChanges(entries)
-    const changes = merged['main.parent']['1'].changes
-    const resultingValue = changes.value.value
+    const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
+      return generateTag(clientId, timestamp)
+    })
+    const [_, keyChanges] = merged['main.parent']['1']
+    const resultingValue = keyChanges.changes.value.value
     t.is(resultingValue, null)
   } catch (error) {
     console.log(error)
@@ -317,26 +342,31 @@ test('take snapshot and merge local wins', async (t) => {
   await runMigrations()
 
   const incomingTs = new Date().getTime() - 1
-  const incomingEntry = generateOplogEntry(
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.insert,
     incomingTs,
+    encodeTags([generateTag('remote', new Date(incomingTs))]),
     {
       id: 1,
       value: 'incoming',
     }
   )
-
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
-  await satellite._performSnapshot()
+
+  await satellite._setAuthState()
+  const localTime = await satellite._performSnapshot()
+  const clientId = satellite['_authState']['clientId']
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
-  const merged = satellite._mergeEntries(local, [incomingEntry])
+  const merged = satellite._mergeEntries(clientId, local, 'remote', [
+    incomingEntry,
+  ])
   const item = merged['main.parent']['1']
 
   t.deepEqual(item, {
@@ -349,6 +379,10 @@ test('take snapshot and merge local wins', async (t) => {
       value: { value: 'local', timestamp: localTimestamp },
       other: { value: 1, timestamp: localTimestamp },
     },
+    tags: [
+      generateTag(clientId, localTime),
+      generateTag('remote', new Date(incomingTs)),
+    ],
   })
 })
 
@@ -359,25 +393,31 @@ test('take snapshot and merge incoming wins', async (t) => {
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
+
+  await satellite._setAuthState()
+  const clientId = satellite['_authState']['clientId']
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
 
   const incomingTs = localTimestamp + 1
-  const incomingEntry = generateOplogEntry(
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.insert,
     incomingTs,
+    genEncodedTags('remote', [incomingTs]),
     {
       id: 1,
       value: 'incoming',
     }
   )
 
-  const merged = satellite._mergeEntries(local, [incomingEntry])
+  const merged = satellite._mergeEntries(clientId, local, 'remote', [
+    incomingEntry,
+  ])
   const item = merged['main.parent']['1']
 
   t.deepEqual(item, {
@@ -390,25 +430,33 @@ test('take snapshot and merge incoming wins', async (t) => {
       value: { value: 'incoming', timestamp: incomingTs },
       other: { value: 1, timestamp: localTimestamp },
     },
+    tags: [
+      generateTag(clientId, new Date(localTimestamp)),
+      generateTag('remote', new Date(incomingTs)),
+    ],
   })
 })
 
 test('apply does not add anything to oplog', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
-
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
   })
-  await satellite._performSnapshot()
+
+  await satellite._setAuthState()
+  const clientId = satellite['_authState']['clientId']
+
+  const localTimestamp = await satellite._performSnapshot()
 
   const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.insert,
     incomingTs,
+    genEncodedTags('remote', [incomingTs]),
     {
       id: 1,
       value: 'incoming',
@@ -416,7 +464,7 @@ test('apply does not add anything to oplog', async (t) => {
     }
   )
 
-  await satellite._apply([incomingEntry])
+  await satellite._apply([incomingEntry], 'remote')
   await satellite._performSnapshot()
 
   const sql = 'SELECT * from parent WHERE id=1'
@@ -425,6 +473,17 @@ test('apply does not add anything to oplog', async (t) => {
   t.is(row.other, 1)
 
   const localEntries = await satellite._getEntries()
+  const shadowEntry = await satellite._getOplogShadowEntry(localEntries[0])
+
+  t.deepEqual(
+    encodeTags([
+      generateTag(clientId, new Date(localTimestamp)),
+      generateTag('remote', new Date(incomingTs)),
+    ]),
+    shadowEntry[0].tags
+  )
+
+  //t.deepEqual(shadowEntries, shadowEntries2)
   t.is(localEntries.length, 1)
 })
 
@@ -432,24 +491,28 @@ test('apply incoming with no local', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
 
-  const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(
+  const incomingTs = new Date()
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.delete,
-    incomingTs,
+    incomingTs.getTime(),
+    genEncodedTags('remote', []),
     {
       id: 1,
       value: 'incoming',
-      other: 1,
+      otherValue: 1,
     }
   )
-
-  await satellite._apply([incomingEntry])
+  await satellite._setAuthState()
+  await satellite._apply([incomingEntry], 'remote')
 
   const sql = 'SELECT * from parent WHERE id=1'
   const rows = await adapter.query({ sql })
+  const shadowEntries = await satellite._getOplogShadowEntry()
+
+  t.is(shadowEntries.length, 0)
   t.is(rows.length, 0)
 })
 
@@ -457,6 +520,7 @@ test('apply empty incoming', async (t) => {
   const { runMigrations, satellite } = t.context as any
   await runMigrations()
 
+  await satellite._setAuthState()
   await satellite._apply([])
 
   t.true(true)
@@ -467,12 +531,13 @@ test('apply incoming with null on column with default', async (t) => {
   await runMigrations()
 
   const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.insert,
     incomingTs,
+    genEncodedTags('remote', [incomingTs]),
     {
       id: 1234,
       value: 'incoming',
@@ -480,7 +545,8 @@ test('apply incoming with null on column with default', async (t) => {
     }
   )
 
-  await satellite._apply([incomingEntry])
+  await satellite._setAuthState()
+  await satellite._apply([incomingEntry], 'remote')
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
@@ -494,19 +560,21 @@ test('apply incoming with undefined on column with default', async (t) => {
   await runMigrations()
 
   const incomingTs = new Date().getTime()
-  const incomingEntry = generateOplogEntry(
+  const incomingEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.insert,
     incomingTs,
+    genEncodedTags('remote', [incomingTs]),
     {
       id: 1234,
       value: 'incoming',
     }
   )
 
-  await satellite._apply([incomingEntry])
+  await satellite._setAuthState()
+  await satellite._apply([incomingEntry], 'remote')
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
@@ -516,29 +584,34 @@ test('apply incoming with undefined on column with default', async (t) => {
 })
 
 test('INSERT wins over DELETE and restored deleted values', async (t) => {
-  const { satellite, tableInfo } = t.context as any
+  const { runMigrations, satellite, tableInfo } = t.context as any
+  await runMigrations()
+  await satellite._setAuthState()
+  const clientId = satellite['_authState']['clientId']
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
 
   const incoming = [
-    generateOplogEntry(
+    generateRemoteOplogEntry(
       tableInfo,
       'main',
       'parent',
       OPTYPES.insert,
       incomingTs,
+      genEncodedTags('remote', [incomingTs]),
       {
         id: 1,
         other: 1,
       }
     ),
-    generateOplogEntry(
+    generateRemoteOplogEntry(
       tableInfo,
       'main',
       'parent',
       OPTYPES.delete,
       incomingTs,
+      genEncodedTags('remote', []),
       {
         id: 1,
       }
@@ -546,14 +619,22 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
   ]
 
   const local = [
-    generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.insert, localTs, {
-      id: 1,
-      value: 'local',
-      other: null,
-    }),
+    generateLocalOplogEntry(
+      tableInfo,
+      'main',
+      'parent',
+      OPTYPES.insert,
+      localTs,
+      genEncodedTags(clientId, [localTs]),
+      {
+        id: 1,
+        value: 'local',
+        other: null,
+      }
+    ),
   ]
 
-  const merged = satellite._mergeEntries(local, incoming)
+  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['1']
 
   t.deepEqual(item, {
@@ -566,31 +647,39 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
       value: { value: 'local', timestamp: localTs },
       other: { value: 1, timestamp: incomingTs },
     },
+    tags: [
+      generateTag(clientId, new Date(localTs)),
+      generateTag('remote', new Date(incomingTs)),
+    ],
   })
 })
 
 test('merge incoming with empty local', async (t) => {
-  const { satellite, tableInfo } = t.context as any
+  const { runMigrations, satellite, tableInfo } = t.context as any
+  await runMigrations()
+  await satellite._setAuthState()
+  const clientId = satellite['_authState']['clientId']
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
 
   const incoming = [
-    generateOplogEntry(
+    generateRemoteOplogEntry(
       tableInfo,
       'main',
       'parent',
       OPTYPES.insert,
       incomingTs,
+      genEncodedTags('remote', [incomingTs]),
       {
         id: 1,
-      }
+      },
+      undefined
     ),
   ]
 
   const local: OplogEntry[] = []
-
-  const merged = satellite._mergeEntries(local, incoming)
+  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['1']
 
   t.deepEqual(item, {
@@ -601,6 +690,7 @@ test('merge incoming with empty local', async (t) => {
     changes: {
       id: { value: 1, timestamp: incomingTs },
     },
+    tags: [generateTag('remote', new Date(incomingTs))],
   })
 })
 
@@ -627,11 +717,13 @@ test('advance oplog cursor', async (t) => {
   // Ack.
   await satellite._ack(2, true)
 
-  // The oplog is clean.
+  // NOTE: The oplog is not clean! This is a current design decision to clear
+  // oplog only when receiving transaction that originated from Satellite in the
+  // first place.
   rows = await adapter.query({
     sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}`,
   })
-  t.is(rows[0].num_rows, 0)
+  t.is(rows[0].num_rows, 2)
 
   // Verify the meta.
   rows = await adapter.query({
@@ -646,7 +738,6 @@ test('compensations: referential integrity is enforced', async (t) => {
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
-
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
@@ -666,15 +757,25 @@ test('compensations: incoming operation breaks referential integrity', async (t)
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
+  await satellite._setAuthState()
 
   const incoming = [
-    generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
-      id: 1,
-      parent: 1,
-    }),
+    generateLocalOplogEntry(
+      tableInfo,
+      'main',
+      'child',
+      OPTYPES.insert,
+      timestamp,
+      genEncodedTags('remote', [timestamp]),
+      {
+        id: 1,
+        parent: 1,
+      }
+    ),
   ]
 
-  await t.throwsAsync(satellite._apply(incoming), {
+  await satellite._setAuthState()
+  await t.throwsAsync(satellite._apply(incoming, 'remote'), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
   })
 })
@@ -686,23 +787,43 @@ test('compensations: incoming operations accepted if restore referential integri
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
+  await satellite._setAuthState()
+  const clientId = satellite['_authState']['clientId']
 
   const incoming = [
-    generateOplogEntry(tableInfo, 'main', 'child', OPTYPES.insert, timestamp, {
-      id: 1,
-      parent: 1,
-    }),
-    generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.insert, timestamp, {
-      id: 1,
-    }),
+    generateRemoteOplogEntry(
+      tableInfo,
+      'main',
+      'child',
+      OPTYPES.insert,
+      timestamp,
+      genEncodedTags(clientId, [timestamp]),
+      {
+        id: 1,
+        parent: 1,
+      }
+    ),
+    generateRemoteOplogEntry(
+      tableInfo,
+      'main',
+      'parent',
+      OPTYPES.insert,
+      timestamp,
+      genEncodedTags(clientId, [timestamp]),
+      {
+        id: 1,
+      }
+    ),
   ]
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
+
+  await satellite._setAuthState()
   await satellite._performSnapshot()
-  await satellite._apply(incoming)
+  await satellite._apply(incoming, 'remote')
   const rows = await adapter.query({
     sql: `SELECT * from main.parent WHERE id=1`,
   })
@@ -725,6 +846,7 @@ test('compensations: using triggers with flag 0', async (t) => {
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
+  await satellite._setAuthState()
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
@@ -733,11 +855,19 @@ test('compensations: using triggers with flag 0', async (t) => {
 
   const timestamp = new Date().getTime()
   const incoming = [
-    generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.delete, timestamp, {
-      id: 1,
-    }),
+    generateRemoteOplogEntry(
+      tableInfo,
+      'main',
+      'parent',
+      OPTYPES.delete,
+      timestamp,
+      genEncodedTags('remote', []),
+      {
+        id: 1,
+      }
+    ),
   ]
-  await t.throwsAsync(satellite._apply(incoming), {
+  await t.throwsAsync(satellite._apply(incoming, 'remote'), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
   })
 })
@@ -754,6 +884,7 @@ test('compensations: using triggers with flag 1', async (t) => {
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
+  await satellite._setAuthState()
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
@@ -762,9 +893,17 @@ test('compensations: using triggers with flag 1', async (t) => {
 
   const timestamp = new Date().getTime()
   const incoming = [
-    generateOplogEntry(tableInfo, 'main', 'parent', OPTYPES.delete, timestamp, {
-      id: 1,
-    }),
+    generateRemoteOplogEntry(
+      tableInfo,
+      'main',
+      'parent',
+      OPTYPES.delete,
+      timestamp,
+      genEncodedTags('remote', []),
+      {
+        id: 1,
+      }
+    ),
   ]
   await satellite._apply(incoming)
   t.true(true)
@@ -784,6 +923,7 @@ test('get oplogEntries from transaction', async (t) => {
         relation: relations.parent,
         type: ChangeType.INSERT,
         record: { id: 0 },
+        tags: [], // proper values are not relevent here
       },
     ],
   }
@@ -797,6 +937,7 @@ test('get oplogEntries from transaction', async (t) => {
     primaryKey: '{"id":0}',
     rowid: -1,
     timestamp: '1970-01-01T00:00:00.000Z',
+    clearTags: encodeTags([]),
   }
 
   const opLog = fromTransaction(transaction, relations)
@@ -817,6 +958,7 @@ test('get transactions from opLogEntries', async (t) => {
       primaryKey: '{"id":0}',
       rowid: 1,
       timestamp: '1970-01-01T00:00:00.000Z',
+      clearTags: encodeTags([]),
     },
     {
       namespace: 'public',
@@ -827,6 +969,7 @@ test('get transactions from opLogEntries', async (t) => {
       primaryKey: '{"id":1}',
       rowid: 2,
       timestamp: '1970-01-01T00:00:00.000Z',
+      clearTags: encodeTags([]),
     },
     {
       namespace: 'public',
@@ -837,6 +980,7 @@ test('get transactions from opLogEntries', async (t) => {
       primaryKey: '{"id":0}',
       rowid: 3,
       timestamp: '1970-01-01T00:00:01.000Z',
+      clearTags: encodeTags([]),
     },
   ]
 
@@ -850,12 +994,14 @@ test('get transactions from opLogEntries', async (t) => {
           type: ChangeType.INSERT,
           record: { id: 0 },
           oldRecord: undefined,
+          tags: [],
         },
         {
           relation: relations.parent,
           type: ChangeType.INSERT,
           record: { id: 1 },
           oldRecord: { id: 1 },
+          tags: [],
         },
       ],
     },
@@ -868,6 +1014,7 @@ test('get transactions from opLogEntries', async (t) => {
           type: ChangeType.INSERT,
           record: { id: 2 },
           oldRecord: undefined,
+          tags: [],
         },
       ],
     },
@@ -922,12 +1069,45 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  await satellite._connectivityStateChange('connected')
+  satellite._connectivityStateChange('connected')
 
   setTimeout(async () => {
     const lsn2 = await satellite._getMeta('lastSentRowId')
     t.is(lsn2, '2')
   }, 200)
+})
+
+test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
+  const { satellite } = t.context as any
+  const { runMigrations, adapter } = t.context as ContextType
+  await runMigrations()
+  await satellite.start()
+
+  let clientId = satellite['_authState']['clientId']
+
+  adapter.run({
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
+  })
+  adapter.run({
+    sql: `UPDATE parent SET value = 'local', other = 2 WHERE id = 1;`,
+  })
+
+  let lsn = await satellite._getMeta('lastSentRowId')
+  t.is(lsn, '0')
+
+  await satellite._performSnapshot()
+
+  lsn = await satellite._getMeta('lastSentRowId')
+  t.is(lsn, '2')
+  lsn = await satellite._getMeta('lastAckdRowId')
+
+  const old_oplog = await satellite._getEntries()
+  let transactions = toTransactions(old_oplog, relations)
+  transactions[0].origin = clientId
+
+  await satellite._applyTransaction(transactions[0])
+  const new_oplog = await satellite._getEntries()
+  t.deepEqual(new_oplog, [])
 })
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html

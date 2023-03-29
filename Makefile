@@ -8,6 +8,12 @@ build:
 tests:
 	yarn test
 
+style:
+	prettier --check --loglevel warn . && eslint src --quiet
+
+typecheck_tests:
+	tsc -p tsconfig.tests.json
+
 # TSModule requires that all source files are under ./src
 
 PROTO_LOCAL?=./proto/satellite.proto

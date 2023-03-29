@@ -1,4 +1,5 @@
 import { SatRelation_RelationType } from '../_generated/proto/satellite'
+import { Tag } from '../satellite/oplog'
 
 export type AnyFunction = (...args: any[]) => any
 export type BindParams = SqlValue[] | Row
@@ -48,6 +49,8 @@ export type Transaction = {
   commit_timestamp: Long
   lsn: LSN
   changes: Change[]
+  // This field is only set by transactions coming from Electric
+  origin?: string
 }
 
 export enum ChangeType {
@@ -61,6 +64,7 @@ export type Change = {
   type: ChangeType
   record?: Record
   oldRecord?: Record
+  tags: Tag[]
 }
 
 export type Record = { [key: string]: string | number | undefined | null }

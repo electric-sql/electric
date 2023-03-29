@@ -91,6 +91,7 @@ test('throttled snapshot respects window', async (t) => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any
   await runMigrations()
 
+  await satellite._setAuthState()
   await satellite._throttledSnapshot()
   const numNotifications = notifier.notifications.length
 

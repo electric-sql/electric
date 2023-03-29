@@ -23,7 +23,7 @@ syntax = "proto3";
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v0_2;
+package Electric.Satellite.v1_0;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -159,10 +159,15 @@ message SatRelation {
     repeated SatRelationColumn columns = 5;
 }
 
+// Time granularity.
+// -----------------
+// commit timestamps have microseconds granularity
+
 // (Producer) Type defines replication messages, that flow from Producer once
 // the replication is established. Message contains operations log. Operations
 // should go in the LSN order. Begin and Commit opetations corresponds to
 // transaction boundaries.
+// Transactions are guranteed not to be mixed, and will folllow one by one.
 message SatOpLog {
     repeated SatTransOp ops = 1;
 }
@@ -179,15 +184,22 @@ message SatTransOp {
     }
 }
 
-// (Proucer) Replication message that indicates transaction boundaries
+// (Producer) Replication message that indicates transaction boundaries
 // should be only send as payload in the SatTransOp message
 message SatOpBegin {
     uint64 commit_timestamp = 1;
     string trans_id = 2;
+    // Lsn position that points to first data segment of transaction in the
+    // WAL
     bytes lsn = 3;
+    // Globally unique id of the source that transaction originated from. For
+    // data coming from Satellite this field is ignored. For data coming from
+    // Electric this field can be used to deduce if the incoming transaction
+    // originated on this Satellite instance or not.
+    optional string origin = 4;
 }
 
-// (Proucer) Replication message that indicates transaction boundaries
+// (Producer) Replication message that indicates transaction boundaries
 // should be only send as payload in the SatTransOp message
 message SatOpCommit {
     uint64 commit_timestamp = 1;
@@ -199,7 +211,10 @@ message SatOpCommit {
 // SatTransOp message
 message SatOpInsert {
     uint32 relation_id = 1;
-    SatOpRow row_data = 3;
+    SatOpRow row_data = 2;
+    // dependency information
+    repeated string tags = 3;
+
 }
 
 // (Producer) Data manipulation message, that only should be part of the
@@ -208,13 +223,18 @@ message SatOpUpdate {
     uint32 relation_id = 1;
     SatOpRow row_data = 2;
     SatOpRow old_row_data = 3;
+    // dependency information
+    repeated string tags = 4;
 }
 
 // (Producer) Data manipulation message, that only should be part of the
 // SatTransOp message
 message SatOpDelete {
     uint32 relation_id = 1;
-    SatOpRow old_row_data = 3;
+    SatOpRow old_row_data = 2;
+    // dependency information
+    repeated string tags = 3;
+
 }
 
 // Message is sent when server is migrated while client is still connected It's
@@ -227,6 +247,15 @@ message SatMigrationNotification {
     string new_schema_version = 3;
     string new_schema_hash = 4;
 }
+
+// Dependency information for row data.
+// ------------------------------------
+//
+// Tags in a row is a set of strings, where each tag is textual representation
+// of conacatenation of `origin` and `commit_timestamp`, that can be obtained
+// from SatOpBegin message.
+// Format: origin@commit_timestamp
+// Example: fcb57d30-95ce-4d75-b295-c08c7a1e75d8@1674210220785123
 
 // Message that corresponds to the single row.
 message SatOpRow {
