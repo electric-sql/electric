@@ -1,8 +1,7 @@
-import { SelectInput } from './findInput'
-
-export interface UpsertInput<T> {
-  select?: SelectInput<T>
-  where: Partial<T>
-  create: T
-  update: Partial<T>
+export interface UpsertInput<Create, Update, Select, WhereUnique, Include> {
+  select?: Select
+  where: WhereUnique
+  create: Create
+  update: Update
+  include?: Include
 }

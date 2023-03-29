@@ -3,12 +3,12 @@ import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 
-export class NonTransactionalDB<T> implements DB<T> {
+export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter) {}
 
   run(
     statement: string | QueryBuilder,
-    successCallback?: (db: DB<T>, res: RunResult) => void,
+    successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
     this._adapter
@@ -34,7 +34,7 @@ export class NonTransactionalDB<T> implements DB<T> {
   query<Z>(
     statement: string | QueryBuilder,
     schema: z.ZodType<Z>,
-    successCallback: (db: DB<T>, res: Z[]) => void,
+    successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
     this._adapter

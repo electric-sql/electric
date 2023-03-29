@@ -427,6 +427,11 @@
     "@pnpm/network.ca-file" "^1.0.1"
     config-chain "^1.1.11"
 
+"@prisma/engines@4.11.0":
+  version "4.11.0"
+  resolved "https://registry.yarnpkg.com/@prisma/engines/-/engines-4.11.0.tgz#c99749bfe20f58e8f4d2b5e04fee0785eba440e1"
+  integrity sha512-0AEBi2HXGV02cf6ASsBPhfsVIbVSDC9nbQed4iiY5eHttW9ZtMxHThuKZE1pnESbr8HRdgmFSa/Kn4OSNYuibg==
+
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@protobufjs/aspromise/-/aspromise-1.1.2.tgz#9b8b0cc663d669a7d8f6f5d0893a14d348f30fbf"
@@ -2327,6 +2332,11 @@ formdata-polyfill@^4.0.10:
   dependencies:
     fetch-blob "^3.1.2"
 
+fp-ts@^2.13.1:
+  version "2.13.1"
+  resolved "https://registry.yarnpkg.com/fp-ts/-/fp-ts-2.13.1.tgz#1bf2b24136cca154846af16752dc29e8fa506f2a"
+  integrity sha512-0eu5ULPS2c/jsa1lGFneEFFEdTbembJv8e4QKXeVJ3lm/5hyve06dlKZrpxmMwJt6rYen7sxmHHK2CLaXvWuWQ==
+
 frame-stream@^3.0.1:
   version "3.0.1"
   resolved "https://registry.yarnpkg.com/frame-stream/-/frame-stream-3.0.1.tgz#e58f6ec5dca6fd9f043ca1c077c16bb17ab89183"
@@ -4184,6 +4194,13 @@ pretty-ms@^7.0.1:
   integrity sha512-973driJZvxiGOQ5ONsFhOF/DtzPMOMtgC11kCpUrPGMTgqp2q/1gwzCquocrN33is0VZ5GFHXZYMM9l6h67v2Q==
   dependencies:
     parse-ms "^2.1.0"
+
+prisma@^4.8.1:
+  version "4.11.0"
+  resolved "https://registry.yarnpkg.com/prisma/-/prisma-4.11.0.tgz#9695ba4129a43eab3e76b5f7a033c6c020377725"
+  integrity sha512-4zZmBXssPUEiX+GeL0MUq/Yyie4ltiKmGu7jCJFnYMamNrrulTBc+D+QwAQSJ01tyzeGHlD13kOnqPwRipnlNw==
+  dependencies:
+    "@prisma/engines" "4.11.0"
 
 process-nextick-args@~2.0.0:
   version "2.0.1"

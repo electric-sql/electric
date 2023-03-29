@@ -314,6 +314,7 @@ export const PostWhereUniqueInputSchema: z.ZodType<Prisma.PostWhereUniqueInput> 
   z
     .object({
       id: z.number().int().optional(),
+      title: z.string().optional(),
     })
     .strict()
 
@@ -4792,6 +4793,7 @@ export namespace Prisma {
 
   export type PostWhereUniqueInput = {
     id?: number
+    title?: string
   }
 
   export type PostOrderByWithAggregationInput = {
