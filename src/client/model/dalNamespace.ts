@@ -1,13 +1,14 @@
-import { ZObject } from '../validation/schemas'
 import { ElectricNamespace } from '../../electric/namespace'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { Notifier } from '../../notifiers'
-import { Table } from './table'
+//import { Table } from './table'
+//import * as z from 'zod'
 
 export type TableName = string
 export type DbSchemas = Record<TableName, any>
 
-export type Schema<T> = ZObject<T>
+/*
+export type Schema<T> = z.ZodType<T> //ZObject<T>
 
 // Fetches the object type out of the schema
 // e.g. GetObjectTypeFromSchema<Schema<A>> = A
@@ -15,17 +16,19 @@ type GetObjectTypeFromSchema<T> = T extends Schema<infer O> // bind the type of 
   ? O
   : never
 
+
 // Maps the schemas in T to tables
 // For an object of type { a: Schema<A>, b: Schema<B>, ... }
 // this will map the type to: { a: Table<A>, b: Table<B>, ... }
 export type DalTables<T extends Record<TableName, Schema<any>>> = {
   [Tbl in keyof T]: Table<GetObjectTypeFromSchema<T[Tbl]>>
 }
+*/
 
 // Extends the ElectricNamespace with a `db` property that is the client of the data access library
 export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
   private constructor(
-    public db: DalTables<T>,
+    public db: T, //DalTables<T>,
     adapter: DatabaseAdapter,
     notifier: Notifier
   ) {
@@ -36,9 +39,10 @@ export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
   // TODO: we want to say that S extends Record<TableName, Schema<any>>
   //       but this is not possible because concrete schemas aren't subtypes of Schema<any> ...
   static create<S extends DbSchemas>(
-    schemas: S,
+    _schemas: S,
     electric: ElectricNamespace
   ): DalNamespace<S> {
+    /*
     const tables: Array<[keyof S, Table<any>]> = Object.keys(schemas).map(
       (tableName) => {
         const schema = schemas[tableName]
@@ -55,5 +59,8 @@ export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
     }, {} as Partial<DalTables<S>>) as DalTables<S>
 
     return new DalNamespace(dal, electric.adapter, electric.notifier)
+     */
+
+    return new DalNamespace({} as any, electric.adapter, electric.notifier)
   }
 }

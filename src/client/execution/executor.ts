@@ -1,17 +1,12 @@
 import { DatabaseAdapter, RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
-import { ZObject } from '../validation/schemas'
 import { DB } from './db'
 import { TransactionalDB } from './transactionalDB'
 import { NonTransactionalDB } from './nonTransactionalDB'
 import { Notifier } from '../../notifiers'
 
-export class Executor<T> {
-  constructor(
-    private _adapter: DatabaseAdapter,
-    private _schema: ZObject<T>,
-    private _notifier: Notifier
-  ) {}
+export class Executor {
+  constructor(private _adapter: DatabaseAdapter, private _notifier: Notifier) {}
 
   async runInTransaction(
     qs: QueryBuilder[],
@@ -35,9 +30,9 @@ export class Executor<T> {
 
   // Executes the given function within a transaction
   // and calls `potentiallyChanged` on the notifier if the `notify` argument is true.
-  async transaction<T, A>(
+  async transaction<A>(
     f: (
-      db: DB<T>,
+      db: DB,
       setResult: (res: A) => void,
       onError: (err: any) => void
     ) => void,
@@ -47,7 +42,7 @@ export class Executor<T> {
     // and thus the promise will always be resolved with the value that was passed to `setResult` which is of type `A`
     return (await this._adapter.transaction((tx, setResult) =>
       f(
-        new TransactionalDB<T>(tx, this._schema as unknown as ZObject<T>),
+        new TransactionalDB(tx),
         (res) => {
           if (notify) {
             this._notifier.potentiallyChanged() // inform the notifier that the data may have changed
@@ -63,9 +58,9 @@ export class Executor<T> {
 
   // Executes the given function without starting a new transaction
   // and calls `potentiallyChanged` on the notifier if the `notify` argument is true.
-  async execute<T, A>(
+  async execute<A>(
     f: (
-      db: DB<T>,
+      db: DB,
       setResult: (res: A) => void,
       onError: (err: any) => void
     ) => void,

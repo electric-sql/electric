@@ -37,7 +37,7 @@ test('null values are inserted as NULL', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL)"
+    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING *"
   )
 })
 
@@ -51,7 +51,7 @@ test('create query', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
+    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING *"
   )
 })
 
@@ -158,6 +158,20 @@ test('findMany allows results to be ordered', (t) => {
     query,
     'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC, title DESC'
   )
+})
+
+test('findMany supports IN filters in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        nbr: {
+          in: [1, 5, 18],
+        },
+      },
+    })
+    .toString()
+
+  t.is(query, 'SELECT * FROM Post WHERE (nbr IN (1, 5, 18))')
 })
 
 test('update query', (t) => {

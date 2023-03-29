@@ -5,14 +5,17 @@ import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import flow from 'lodash.flow'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { OrderByInput } from '../input/orderByInput'
+import * as z from 'zod'
 
 const squelPostgres = squel.useFlavour('postgres')
 
-export class Builder<T extends { [field: string]: any }> {
+
+type AnyFindInput = FindInput<any, any, any, any, any>
+
+export class Builder {
   constructor(private _tableName: string, private _fields: string[]) {}
 
-  create(i: CreateInput<any, any>): QueryBuilder {
+  create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
     return squelPostgres
       .insert()
@@ -21,7 +24,7 @@ export class Builder<T extends { [field: string]: any }> {
       .returning('*')
   }
 
-  createMany(i: CreateManyInput<T[]>): QueryBuilder {
+  createMany(i: CreateManyInput<any>): QueryBuilder {
     const insert = squelPostgres
       .insert()
       .into(this._tableName)
@@ -31,52 +34,52 @@ export class Builder<T extends { [field: string]: any }> {
       : insert
   }
 
-  findUnique(i: FindUniqueInput<T>): QueryBuilder {
+  findUnique(i: FindUniqueInput<any, any, any>): QueryBuilder {
     return this.findWhere({ ...i, take: 2 }, true) // take 2 such that we can throw an error if more than one record matches
   }
 
-  findFirst(i: FindInput<T>): QueryBuilder {
+  findFirst(i: AnyFindInput): QueryBuilder {
     return this.findWhere({ ...i, take: 1 })
   }
 
-  findMany(i: FindInput<T>): QueryBuilder {
+  findMany(i: AnyFindInput): QueryBuilder {
     return this.findWhere(i)
   }
 
   // Finds a record but does not select the fields provided in the `where` argument
   // whereas `findUnique`, `findFirst`, and `findMany` also automatically select the fields in `where`
-  findWithoutAutoSelect(i: FindInput<T>): QueryBuilder {
+  findWithoutAutoSelect(i: AnyFindInput): QueryBuilder {
     return this.findWhere(i, false, false)
   }
 
-  update(i: UpdateInput<T>): QueryBuilder {
+  update(i: UpdateInput<any, any, any, any>): QueryBuilder {
     return this.updateInternal(i, true)
   }
 
-  updateMany(i: UpdateManyInput<T>): QueryBuilder {
+  updateMany(i: UpdateManyInput<any, any>): QueryBuilder {
     return this.updateInternal(i)
   }
 
-  delete(i: DeleteInput<T>): QueryBuilder {
+  delete(i: DeleteInput<any, any, any>): QueryBuilder {
     return this.deleteInternal(i, true)
   }
 
-  deleteMany(i: DeleteManyInput<T>): QueryBuilder {
+  deleteMany(i: DeleteManyInput<any>): QueryBuilder {
     return this.deleteInternal(i)
   }
 
   private deleteInternal(
-    i: DeleteManyInput<T>,
+    i: DeleteManyInput<any>,
     idRequired = false
   ): QueryBuilder {
     const deleteQuery = squel.delete().from(this._tableName)
-    const whereObject = i.where as unknown as Partial<T> // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
+    const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
     return Builder.addFilters(fields, whereObject, deleteQuery)
   }
 
   private updateInternal(
-    i: UpdateManyInput<T>,
+    i: UpdateManyInput<any, any>,
     idRequired = false
   ): QueryBuilder {
     const query = squelPostgres
@@ -84,13 +87,12 @@ export class Builder<T extends { [field: string]: any }> {
       .table(this._tableName)
       .setFields(i.data)
 
-    const whereObject = i.where as Partial<T> // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
+    const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
     return Builder.addFilters(fields, whereObject, query)
   }
 
   // TODO: add support for boolean conditions in where statement of FindInput<T>
-  // TODO: look at nesting when refering another object: see https://www.prisma.io/docs/concepts/components/prisma-client/select-fields (look for posts: { select: ... })
 
   /**
    * Creates a `SELECT fields FROM table WHERE conditions` query.
@@ -100,11 +102,11 @@ export class Builder<T extends { [field: string]: any }> {
    * @param idRequired If true, will throw an error if no fields are provided in the `where` argument.
    */
   private findWhere(
-    i: FindInput<T>,
+    i: FindInput<any, any, any, any, any>,
     idRequired = false,
     selectWhereFields = true
   ): QueryBuilder {
-    const whereObject = i.where as Partial<T> // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
+    const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
@@ -140,8 +142,8 @@ export class Builder<T extends { [field: string]: any }> {
     return Object.keys(obj).filter((key) => obj[key as keyof object])
   }
 
-  private addFieldSelection<T>(
-    i: FindInput<T>,
+  private addFieldSelection(
+    i: AnyFindInput,
     identificationFields: string[],
     q: PostgresSelect
   ): PostgresSelect {
@@ -172,61 +174,67 @@ export class Builder<T extends { [field: string]: any }> {
     return fields.reduce<Q>((query: Q, fieldName: string) => {
       const fieldValue = whereObject[fieldName as keyof T]
       if (fieldValue === null) return query.where(`${fieldName} IS NULL`)
+      else if (typeof fieldValue === 'object') {
+        // an object containing filters is provided
+        // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
+        const filterSchema = z
+          .object({
+            in: z.any().array(),
+          })
+          .strict('Unsupported filter in where clause')
+        // TODO: remove this schema check once we support all filters
+        //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
+
+        const values = filterSchema.parse(fieldValue).in
+        return query.where(`${fieldName} IN ?`, values)
+      }
       // needed because `WHERE field = NULL` is not valid SQL
       else return query.where(`${fieldName} = ?`, [fieldValue])
     }, q)
   }
 
-  private static addOffset<T>(
-    i: FindInput<T>,
-    q: PostgresSelect
-  ): PostgresSelect {
+  private static addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
     if (typeof i.skip === 'undefined') return q // no offset
     return q.offset(i.skip)
   }
 
-  private static addLimit<T>(
-    i: FindInput<T>,
-    q: PostgresSelect
-  ): PostgresSelect {
+  private static addLimit(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
     if (typeof i.take === 'undefined') return q // no limit
     return q.limit(i.take)
   }
 
-  private static addDistinct<T>(
-    i: FindInput<T>,
+  private static addDistinct(
+    i: AnyFindInput,
     q: PostgresSelect
   ): PostgresSelect {
     if (typeof i.distinct === 'undefined') return q
     return q.distinct(...i.distinct)
   }
 
-  private addOrderBy(i: FindInput<T>, q: PostgresSelect): PostgresSelect {
+  private addOrderBy(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
     if (typeof i.orderBy === 'undefined') return q
     const orderByArray = Array.isArray(i.orderBy) ? i.orderBy : [i.orderBy]
 
-    return orderByArray.reduce(
-      (query: PostgresSelect, orderBy: OrderByInput<T>) => {
-        // Don't accept more than one field in `fieldOrdering` because we can't infer the order of those fields!
-        // If we need to order on several fields, they should be provided as several OrderByInput objects in an array.
-        const fields = Object.keys(orderBy)
-        if (fields.length > 1)
-          throw new InvalidArgumentError(
-            `Argument 'orderBy' can have at most one field per 'OrderByInput' object. Consider providing several 'OrderByInput' objects in an array.`
-          )
-        if (fields.length === 0) return query
+    return orderByArray.reduce((query: PostgresSelect, orderBy: object) => {
+      // Don't accept more than one field in `fieldOrdering` because we can't infer the order of those fields!
+      // If we need to order on several fields, they should be provided as several OrderByInput objects in an array.
+      const fields = Object.keys(orderBy)
+      if (fields.length > 1)
+        throw new InvalidArgumentError(
+          `Argument 'orderBy' can have at most one field per 'OrderByInput' object. Consider providing several 'OrderByInput' objects in an array.`
+        )
+      if (fields.length === 0) return query
 
-        const field = fields[0]
-        const order = orderBy[field as keyof OrderByInput<T>]
-        const squelOrder = order === 'asc' // squel expects 'true' for ascending order, 'false' for descending order
-        return query.order(field, squelOrder)
-      },
-      q
-    )
+      const field = fields[0]
+      const order = orderBy[field as keyof object]
+      const squelOrder = order === 'asc' // squel expects 'true' for ascending order, 'false' for descending order
+      return query.order(field, squelOrder)
+    }, q)
   }
 
-  private getFields(whereObject: Partial<T>, fieldsRequired = false) {
-    const fields = Object.keys(whereObject)
+  private getFields(whereObject?: object, fieldsRequired = false) {
+    const obj = typeof whereObject !== 'undefined' ? whereObject : {} // provide empty object if no `where` argument is provided
+    const fields = Object.keys(obj)
 
     if (fieldsRequired && fields.length == 0)
       throw new InvalidArgumentError(

@@ -1,47 +1,96 @@
 import { CreateInput, CreateManyInput } from '../input/createInput'
-import { Selected } from '../util/types'
+import { SelectSubset } from '../util/types'
 import { BatchPayload } from '../output/batchPayload'
 import { FindInput, FindUniqueInput } from '../input/findInput'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { QualifiedTablename } from '../../util/tablename'
-import { DbSchemas } from './dalNamespace'
+import { Kind, URIS } from 'fp-ts/HKT'
 
-export interface Model<T extends DbSchemas> {
-  create<Input extends CreateInput<T>>(i: Input): Promise<Selected<T, Input>>
-  createMany(i: CreateManyInput<T[]>): Promise<BatchPayload>
+export interface Model<
+  CreateData extends object,
+  UpdateData,
+  Select,
+  Where,
+  WhereUnique,
+  Include,
+  OrderBy,
+  ScalarFieldEnum,
+  GetPayload extends URIS
+> {
+  create<T extends CreateInput<CreateData, Select, Include>>(
+    i: SelectSubset<T, CreateInput<CreateData, Select, Include>>
+  ): Promise<Kind<GetPayload, T>>
+  createMany<T extends CreateManyInput<CreateData>>(
+    i: SelectSubset<T, CreateManyInput<CreateData>>
+  ): Promise<BatchPayload>
 
-  findUnique<Input extends FindUniqueInput<T>>(
-    i: Input
-  ): Promise<Selected<T, Input> | null>
-  findFirst<Input extends FindInput<T>>(
-    i: Input
-  ): Promise<Selected<T, Input> | null>
-  findMany<Input extends FindInput<T>>(
-    i: Input
-  ): Promise<Array<Selected<T, Input>>>
+  findUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
+    i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
+  ): Promise<Kind<GetPayload, T> | null>
+  findFirst<
+    T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+  >(
+    i: SelectSubset<
+      T,
+      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+    >
+  ): Promise<Kind<GetPayload, T> | null>
+  findMany<
+    T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+  >(
+    i: SelectSubset<
+      T,
+      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+    >
+  ): Promise<Array<Kind<GetPayload, T>>>
 
   // Live queries
   // The queries' return types are slightly different
   // as their result is wrapped inside a `LiveResult`
   // object that contains additional information about the table names.
-  liveUnique<Input extends FindUniqueInput<T>>(
-    i: Input
-  ): () => Promise<LiveResult<Selected<T, Input> | null>>
-  liveFirst<Input extends FindInput<T>>(
-    i: Input
-  ): () => Promise<LiveResult<Selected<T, Input> | null>>
-  liveMany<Input extends FindInput<T>>(
-    i: Input
-  ): () => Promise<LiveResult<Array<Selected<T, Input>>>>
+  liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
+    i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
+  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
+  liveFirst<
+    T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+  >(
+    i: SelectSubset<
+      T,
+      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+    >
+  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
+  liveMany<
+    T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+  >(
+    i: SelectSubset<
+      T,
+      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+    >
+  ): () => Promise<LiveResult<Array<Kind<GetPayload, T>>>>
 
-  update<Input extends UpdateInput<T>>(i: Input): Promise<Selected<T, Input>>
-  updateMany(i: UpdateManyInput<T>): Promise<BatchPayload>
-  upsert<Input extends UpsertInput<T>>(i: Input): Promise<Selected<T, Input>>
+  update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
+    i: SelectSubset<T, UpdateInput<UpdateData, Select, WhereUnique, Include>>
+  ): Promise<Kind<GetPayload, T>>
+  updateMany<T extends UpdateManyInput<UpdateData, Where>>(
+    i: SelectSubset<T, UpdateManyInput<UpdateData, Where>>
+  ): Promise<BatchPayload>
+  upsert<
+    T extends UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
+  >(
+    i: SelectSubset<
+      T,
+      UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
+    >
+  ): Promise<Kind<GetPayload, T>>
 
-  delete<Input extends DeleteInput<T>>(i: Input): Promise<Selected<T, Input>>
-  deleteMany(i: DeleteManyInput<T>): Promise<BatchPayload>
+  delete<T extends DeleteInput<Select, WhereUnique, Include>>(
+    i: SelectSubset<T, DeleteInput<Select, WhereUnique, Include>>
+  ): Promise<Kind<GetPayload, T>>
+  deleteMany<T extends DeleteManyInput<Where>>(
+    i: SelectSubset<T, DeleteManyInput<Where>>
+  ): Promise<BatchPayload>
 }
 
 export class LiveResult<T> {

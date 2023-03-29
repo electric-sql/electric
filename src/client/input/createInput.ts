@@ -48,12 +48,13 @@ type DataWithRelations<T> = {
 
  */
 
-export interface CreateInput<Data extends object, Select> {
+export interface CreateInput<Data extends object, Select, Include> {
   data: Data
   select?: Select
+  include?: Include
 }
 
 export interface CreateManyInput<T> {
-  data: T
+  data: Array<T>
   skipDuplicates?: boolean
 }

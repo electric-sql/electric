@@ -3,11 +3,11 @@ import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 
-export class TransactionalDB<T> implements DB<T> {
+export class TransactionalDB implements DB {
   constructor(private _tx: Transaction) {}
   run(
     statement: QueryBuilder | string,
-    successCallback?: (db: DB<T>, res: RunResult) => void,
+    successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
     this._tx.run(
@@ -23,7 +23,7 @@ export class TransactionalDB<T> implements DB<T> {
   query<Z>(
     statement: QueryBuilder | string,
     schema: z.ZodType<Z>,
-    successCallback: (db: DB<T>, res: Z[]) => void,
+    successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void {
     this._tx.query(
