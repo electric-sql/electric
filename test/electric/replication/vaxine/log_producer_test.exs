@@ -141,7 +141,8 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
           relation: {"public", "#{test_identifier}_test"}
         }
       ],
-      commit_timestamp: DateTime.utc_now()
+      commit_timestamp: DateTime.utc_now(),
+      origin: "some_origin"
     }
   end
 
@@ -150,8 +151,7 @@ defmodule Electric.Replication.Vaxine.LogProducerTest do
 
     Electric.Replication.Vaxine.transaction_to_vaxine(
       transaction,
-      "#{test_identifier}_pub",
-      "some_origin"
+      "#{test_identifier}_pub"
     )
   end
 end

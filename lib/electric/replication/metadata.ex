@@ -3,6 +3,8 @@ defmodule Electric.Replication.Metadata do
 
   @type t() :: %__MODULE__{}
 
+  # The schema itself is a CRDT map with reset functionality, where
+  # setting field to default value is effectively removing the field
   schema "metadata" do
     field(:commit_timestamp, :string)
     field(:publication, :string)

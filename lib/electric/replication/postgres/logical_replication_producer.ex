@@ -304,6 +304,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     %Transaction{
       transaction
       | origin: origin,
+        origin_type: :postgresql,
         publication: state.publication,
         lsn: end_lsn,
         # Make sure not to pass state.field into ack function, as this

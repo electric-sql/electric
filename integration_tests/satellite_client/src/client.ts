@@ -52,6 +52,7 @@ export const open_db = (
   const original = new Database(name)
   const config: ElectricConfig = {
     app: 'satellite_client',
+    env: 'default',
     migrations: migrations,
     replication: {
       host: host,

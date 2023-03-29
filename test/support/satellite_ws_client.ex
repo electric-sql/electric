@@ -3,6 +3,8 @@ defmodule Electric.Test.SatelliteWsClient do
 
   """
   alias Electric.Satellite.Serialization
+  alias Electric.Replication.Changes.{Transaction}
+
   use Electric.Satellite.Protobuf
 
   require Logger
@@ -62,7 +64,7 @@ defmodule Electric.Test.SatelliteWsClient do
 
   @type conn() :: atom() | pid()
 
-  @spec connect_and_spawn([opt()]) :: pid()
+  @spec connect_and_spawn([opt()]) :: {:ok, pid()}
   def connect_and_spawn(opts \\ []) do
     self = self()
     :application.ensure_all_started(:gun)
@@ -80,6 +82,32 @@ defmodule Electric.Test.SatelliteWsClient do
       end
 
     Process.alive?(conn)
+  end
+
+  def gen_schema() do
+    %{
+      schema_name: "public",
+      table_name: "entries",
+      oid: 11111,
+      columns: [
+        %{name: "id", type: :uuid},
+        %{name: "content", type: :varchar},
+        %{name: "content_b", type: :varchar}
+      ]
+    }
+  end
+
+  def gen_owned_schema() do
+    %{
+      schema_name: "public",
+      table_name: "entries",
+      oid: 22222,
+      columns: [
+        %{name: "id", type: :uuid},
+        %{name: "electric_user_id", type: :varchar},
+        %{name: "content", type: :varchar}
+      ]
+    }
   end
 
   def send_test_relation(conn \\ __MODULE__) do
@@ -134,17 +162,21 @@ defmodule Electric.Test.SatelliteWsClient do
     )
   end
 
-  def send_update_data(conn \\ __MODULE__, lsn, commit_time, id, value) do
+  def send_update_data(conn \\ __MODULE__, lsn, commit_time, id, value, old_value) do
     send_tx_data(
       conn,
       lsn,
       commit_time,
       {:update,
-       %SatOpUpdate{relation_id: 11111, old_row_data: nil, row_data: map_to_row([id, value, ""])}}
+       %SatOpUpdate{
+         relation_id: 11111,
+         old_row_data: map_to_row([id, old_value, ""]),
+         row_data: map_to_row([id, value, ""])
+       }}
     )
   end
 
-  def send_update_owned_data(conn \\ __MODULE__, lsn, commit_time, id, user_id, value) do
+  def send_update_owned_data(conn \\ __MODULE__, lsn, commit_time, id, user_id, value, old_value) do
     send_tx_data(
       conn,
       lsn,
@@ -152,7 +184,7 @@ defmodule Electric.Test.SatelliteWsClient do
       {:update,
        %SatOpUpdate{
          relation_id: 22222,
-         old_row_data: nil,
+         old_row_data: map_to_row([id, user_id, old_value]),
          row_data: map_to_row([id, user_id, value])
        }}
     )
@@ -191,6 +223,22 @@ defmodule Electric.Test.SatelliteWsClient do
 
     send_data(conn, tx)
     :ok
+  end
+
+  @doc """
+  Serialize transaction that is represented in internal Electric format
+  """
+  def send_tx_internal(conn, %Transaction{} = tx, lsn, relations) do
+    {sat_oplog, [], _} = Serialization.serialize_trans(tx, lsn, relations)
+    send_data(conn, sat_oplog)
+  end
+
+  @doc """
+  Serialize relation that is represented in internal Electric format
+  """
+  def send_relation_internal(conn, schema, name, oid, columns) do
+    sat_rel = Serialization.serialize_relation(schema, name, oid, columns)
+    send_data(conn, sat_rel)
   end
 
   @spec send_data(conn(), PB.sq_pb_msg(), fun() | :default) :: term()
@@ -492,8 +540,9 @@ defmodule Electric.Test.SatelliteWsClient do
         %SatTransOp{op: {:commit, _}}, acc ->
           acc
 
-        %SatTransOp{op: {key, _}}, acc ->
-          Map.update(acc, key, 0, fn n -> n + 1 end)
+        %SatTransOp{op: {key, op}}, acc ->
+          acc1 = Map.update(acc, key, 1, fn n -> n + 1 end)
+          Map.update(acc1, :tags, op.tags, fn tags -> op.tags ++ tags end)
       end
     )
   end

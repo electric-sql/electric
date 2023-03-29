@@ -5,7 +5,7 @@ DOCKER_COMPOSE_FILE=../services_templates.yaml
 DOCKER_WORKDIR=${PROJECT_ROOT}/integration_tests/satellite_client
 
 node_modules:
-	yarn install --frozen-lockfile --no-default-rc
+	yarn install --frozen-lockfile --no-default-rc --network-concurrency 1
 
 # By default we would like to build in docker, as we intend
 # to run tests with Satellite in it

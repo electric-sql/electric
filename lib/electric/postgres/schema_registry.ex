@@ -23,6 +23,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Qualified name of the table - its schema (namespace) and its name.
   """
   @type table_name :: {String.t(), String.t()}
+  @type column_name :: String.t()
   @type origin :: String.t()
   @type oid :: non_neg_integer()
 
@@ -30,7 +31,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Information about one column in the table.
   """
   @type column :: %{
-          name: String.t(),
+          name: column_name(),
           type: atom(),
           type_modifier: integer(),
           part_of_identity?: boolean() | nil

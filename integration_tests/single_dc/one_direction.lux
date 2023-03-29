@@ -42,11 +42,8 @@
 [endmacro]
 
 [invoke validate_insert "FULL" "entries"]
-[invoke validate_insert "DEFAULT" "entries_default"]
 [invoke validate_update "FULL" "entries"]
-[invoke validate_update "DEFAULT" "entries_default"]
 [invoke validate_delete "FULL" "entries"]
-[invoke validate_delete "DEFAULT" "entries_default"]
 
 [cleanup]
     [invoke teardown]

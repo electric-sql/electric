@@ -14,50 +14,45 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
       ) do
     vaxine_transaction_data
     |> build_rows()
-    |> build_transaction(metadata.commit_timestamp, :origin)
+    |> do_build_transaction(metadata)
   end
 
   defp build_rows(vaxine_transaction_data) do
     vaxine_transaction_data
     |> Enum.filter(fn {{key, _}, _, _, _} -> String.starts_with?(key, "row") end)
-    |> Enum.map(fn {key, type, value, log_ops} ->
-      processed_log_ops =
-        log_ops
-        |> Enum.flat_map(fn {ops, []} -> ops end)
-        |> Enum.map(fn {{key, type}, op_value} -> handle_log_op(key, type, op_value) end)
-
-      {to_row(convert_value([key], type, value)), processed_log_ops}
+    |> Enum.map(fn {key, type, value, _log_ops} ->
+      to_row(convert_value([key], type, value))
     end)
   end
 
   defp to_row(map) when map_size(map) == 0, do: nil
   defp to_row(map), do: struct(Row, map)
 
-  @spec build_transaction(
-          [{Row.t() | nil, ops :: term()}],
-          commit_timestamp :: DateTime.t(),
-          target :: :origin | :peers
+  @spec do_build_transaction(
+          [Row.t() | nil],
+          Metadata.t()
         ) :: {:ok, Changes.Transaction.t()} | {:error, :invalid_materialized_row}
-  defp build_transaction(entries, commit_timestamp, target) do
+  defp do_build_transaction(entries, metadata) do
     entries
     |> Enum.reduce_while([], fn
-      {nil, _ops}, _acc ->
+      nil, _acc ->
         Logger.error("empty row (nil)")
         {:halt, {:error, :invalid_materialized_row}}
 
-      {%{id: nil} = row, _ops}, _acc ->
+      %{id: nil} = row, _acc ->
         Logger.error("empty id for row: #{inspect(row)}")
         {:halt, {:error, :invalid_materialized_row}}
 
-      {row, ops}, acc ->
-        {:cont, [to_dml(row, ops, target) | acc]}
+      row, acc ->
+        {:cont, [to_dml(row) | acc]}
     end)
     |> case do
       dml_changes when is_list(dml_changes) ->
         {:ok,
          %Changes.Transaction{
            changes: Enum.reverse(dml_changes),
-           commit_timestamp: commit_timestamp
+           commit_timestamp: metadata.commit_timestamp,
+           origin: metadata.origin
          }}
 
       error ->
@@ -97,6 +92,8 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
     end
   end
 
+  # FIXME: I do not follow why do we return internal representation of the types here
+  # we should be providing just anitodote_crdt:value() here instead
   defp convert_value(keys, :antidote_crdt_map_rr, value) do
     value
     |> :dict.to_list()
@@ -117,46 +114,30 @@ defmodule Electric.Replication.Vaxine.TransactionBuilder do
     length(disable_tokens -- enable_tokens) == 0
   end
 
-  defp to_dml(
-         %Row{table: table, deleted?: deleted?, schema: schema, row: row},
-         _processed_log_ops,
-         _target
-       ) do
-    # if the final state is `deleted?` it means that the record was deleted;
-    cond do
-      deleted? ->
+  defp convert_value(_key, :antidote_crdt_set_aw, internal_value) do
+    :orddict.fetch_keys(internal_value)
+  end
+
+  defp to_dml(%Row{table: table, deleted?: deleted, schema: schema, row: row}) do
+    # "Deteled" is implemented as an OR-set, however setting field to a bottom value
+    # in crdt map with "observed_remove" strategy will remove this field from the map.
+    # So we only expect nil when the value was deleted, and `[]` is mostly likely
+    # and indication that a row was created.
+
+    case deleted == [] or deleted == nil do
+      true ->
         %Changes.DeletedRecord{old_record: to_string_keys(row), relation: {schema, table}}
 
-      true ->
+      false ->
         %Changes.UpdatedRecord{
           record: to_string_keys(row),
-          relation: {schema, table}
+          relation: {schema, table},
+          tags: deleted
         }
     end
   end
 
   defp to_string_keys(map) do
     Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
-  end
-
-  defp handle_log_op(key, :antidote_crdt_register_lww, {:ok, {_ts, value}}) do
-    if is_list(key) do
-      {key, :erlang.binary_to_term(value)}
-    else
-      {key, value}
-    end
-  end
-
-  defp handle_log_op(key, :antidote_crdt_flag_dw, {:ok, {_, _, _}}) do
-    {key, :touched}
-  end
-
-  defp handle_log_op(key, :antidote_crdt_counter_pn, {:ok, _}) do
-    {key, :touched}
-  end
-
-  defp handle_log_op("row", :antidote_crdt_map_rr, {:ok, {[inner_op], []}}) do
-    {{inner_key, inner_type}, inner_op_value} = inner_op
-    handle_log_op(["row", inner_key], inner_type, inner_op_value)
   end
 end

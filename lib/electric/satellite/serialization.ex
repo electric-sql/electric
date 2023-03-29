@@ -12,7 +12,7 @@ defmodule Electric.Satellite.Serialization do
   use Electric.Satellite.Protobuf
 
   @type relation_mapping() ::
-          %{Changes.relation() => PB.relation_id()}
+          %{Changes.relation() => {PB.relation_id(), [SchemaRegistry.column_name()]}}
 
   @doc """
   Serialize from internal format to Satellite PB format
@@ -27,7 +27,7 @@ defmodule Electric.Satellite.Serialization do
     lsn = :erlang.term_to_binary(vx_offset)
 
     tx_begin = %SatTransOp{
-      op: {:begin, %SatOpBegin{commit_timestamp: tm, lsn: lsn}}
+      op: {:begin, %SatOpBegin{commit_timestamp: tm, lsn: lsn, origin: trans.origin}}
     }
 
     tx_end = %SatTransOp{
@@ -57,23 +57,38 @@ defmodule Electric.Satellite.Serialization do
     {%SatOpLog{ops: Enum.reverse([tx_end | ops])}, new_relations, known_relations}
   end
 
-  defp mk_trans_op(%NewRecord{record: data}, rel_id, rel_cols) do
-    op_insert = %SatOpInsert{relation_id: rel_id, row_data: map_to_row(data, rel_cols)}
+  defp mk_trans_op(%NewRecord{record: data, tags: tags}, rel_id, rel_cols) do
+    op_insert = %SatOpInsert{
+      relation_id: rel_id,
+      row_data: map_to_row(data, rel_cols),
+      tags: tags
+    }
+
     %SatTransOp{op: {:insert, op_insert}}
   end
 
-  defp mk_trans_op(%UpdatedRecord{record: data, old_record: old_data}, rel_id, rel_cols) do
+  defp mk_trans_op(
+         %UpdatedRecord{record: data, old_record: old_data, tags: tags},
+         rel_id,
+         rel_cols
+       ) do
     op_update = %SatOpUpdate{
       relation_id: rel_id,
       row_data: map_to_row(data, rel_cols),
-      old_row_data: map_to_row(old_data, rel_cols)
+      old_row_data: map_to_row(old_data, rel_cols),
+      tags: tags
     }
 
     %SatTransOp{op: {:update, op_update}}
   end
 
-  defp mk_trans_op(%DeletedRecord{old_record: data}, rel_id, rel_cols) do
-    op_delete = %SatOpDelete{relation_id: rel_id, old_row_data: map_to_row(data, rel_cols)}
+  defp mk_trans_op(%DeletedRecord{old_record: data, tags: tags}, rel_id, rel_cols) do
+    op_delete = %SatOpDelete{
+      relation_id: rel_id,
+      old_row_data: map_to_row(data, rel_cols),
+      tags: tags
+    }
+
     %SatTransOp{op: {:delete, op_delete}}
   end
 
@@ -191,6 +206,7 @@ defmodule Electric.Satellite.Serialization do
 
         trans = %Transaction{
           origin: origin,
+          origin_type: :satellite,
           changes: [],
           publication: "",
           commit_timestamp: dt,
@@ -209,23 +225,29 @@ defmodule Electric.Satellite.Serialization do
 
         transop =
           case op do
-            %SatOpInsert{row_data: row_data} ->
+            %SatOpInsert{row_data: row_data, tags: tags} ->
               data = row_to_map(relation.columns, row_data, false)
-              %NewRecord{relation: {relation.schema, relation.table}, record: data}
+              %NewRecord{relation: {relation.schema, relation.table}, record: data, tags: tags}
 
-            %SatOpUpdate{row_data: row_data, old_row_data: old_row_data} ->
+            %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags} ->
               old_data = row_to_map(relation.columns, old_row_data, true)
               data = row_to_map(relation.columns, row_data, false)
 
               %UpdatedRecord{
                 relation: {relation.schema, relation.table},
                 record: data,
-                old_record: old_data
+                old_record: old_data,
+                tags: tags
               }
 
-            %SatOpDelete{old_row_data: old_row_data} ->
+            %SatOpDelete{old_row_data: old_row_data, tags: tags} ->
               old_data = row_to_map(relation.columns, old_row_data, true)
-              %DeletedRecord{relation: {relation.schema, relation.table}, old_record: old_data}
+
+              %DeletedRecord{
+                relation: {relation.schema, relation.table},
+                old_record: old_data,
+                tags: tags
+              }
           end
 
         {%Transaction{trans | changes: [transop | trans.changes]}, complete}
