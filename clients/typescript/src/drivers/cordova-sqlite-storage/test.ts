@@ -14,23 +14,24 @@ import { Database } from './database'
 import { MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
-import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
+import { DalNamespace } from '../../client/model/dalNamespace'
+import { DBDescription } from '../../client/model'
 
-type RetVal<S extends DbSchemas, N extends Notifier> = Promise<
-  [Database, N, DalNamespace<S>]
+type RetVal<DB extends DBDescription<any>, N extends Notifier> = Promise<
+  [Database, N, DalNamespace<DB>]
 >
 
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export const initTestable = async <
-  S extends DbSchemas,
+  DB extends DBDescription<any>,
   N extends Notifier = MockNotifier
 >(
   dbName: DbName,
-  dbSchemas: S,
+  dbDescription: DB,
   config = testConfig,
   opts?: ElectrifyOptions
-): RetVal<S, N> => {
+): RetVal<DB, N> => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
@@ -42,7 +43,7 @@ export const initTestable = async <
 
   const dal = await electrify(
     dbName,
-    dbSchemas,
+    dbDescription,
     adapter,
     socketFactory,
     config,
