@@ -171,7 +171,10 @@ test('findMany supports IN filters in where argument', (t) => {
     })
     .toString()
 
-  t.is(query, 'SELECT * FROM Post WHERE (nbr IN (1, 5, 18))')
+  t.is(
+    query,
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr IN (1, 5, 18))'
+  )
 })
 
 test('update query', (t) => {

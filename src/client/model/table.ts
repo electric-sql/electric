@@ -81,8 +81,10 @@ export class Table<
     private deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>,
     private deleteManySchema: z.ZodType<DeleteManyInput<Where>>
   ) {
-    const fields = Object.keys(this._schema.shape)
-    this._builder = new Builder(tableName, fields)
+    this._builder = new Builder(
+      tableName,
+      this._dbDescription.getFields(tableName)
+    )
     this._executor = new Executor(adapter, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
