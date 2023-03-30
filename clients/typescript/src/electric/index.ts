@@ -7,8 +7,9 @@ import { SocketFactory } from '../sockets/index'
 import { DbName } from '../util/types'
 import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
-import { DalNamespace, DbSchemas } from '../client/model/dalNamespace'
+import { DalNamespace } from '../client/model/dalNamespace'
 import { ConsoleHttpClient } from '../auth'
+import { DBDescription } from '../client/model/dbDescription'
 
 export { ElectricNamespace }
 
@@ -30,14 +31,14 @@ export interface ElectrifyOptions {
  * also be called directly by tests that don't want to go via the adapter
  * entrypoints in order to avoid loading the environment dependencies.
  */
-export const electrify = async <S extends DbSchemas>(
+export const electrify = async <DB extends DBDescription<any>>(
   dbName: DbName,
-  dbSchemas: S,
+  dbDescription: DB,
   adapter: DatabaseAdapter,
   socketFactory: SocketFactory,
   config: ElectricConfig,
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
-): Promise<DalNamespace<S>> => {
+): Promise<DalNamespace<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
 
   const configWithDefaults = hydrateConfig(config)
@@ -48,7 +49,7 @@ export const electrify = async <S extends DbSchemas>(
   const registry = opts?.registry || globalRegistry
 
   const electric = new ElectricNamespace(adapter, notifier)
-  const namespace = DalNamespace.create(dbSchemas, electric) // extends the electric namespace with a `dal` property for the data access library
+  const namespace = DalNamespace.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library
 
   await registry.ensureStarted(
     dbName,

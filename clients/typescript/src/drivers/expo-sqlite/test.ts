@@ -15,46 +15,47 @@ import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
 import { ElectricConfig } from '../../config'
-import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
+import { DalNamespace } from '../../client/model/dalNamespace'
+import { DBDescription } from '../../client/model'
 
 type RetVal<
-  S extends DbSchemas,
+  S extends DBDescription<any>,
   N extends Notifier,
   D extends Database = Database
 > = Promise<[D, N, DalNamespace<S>]>
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export async function initTestable<
-  S extends DbSchemas,
+  S extends DBDescription<any>,
   N extends Notifier = MockNotifier
->(name: DbName, dbSchemas: S): RetVal<S, N, MockDatabase>
+>(name: DbName, dbDescription: S): RetVal<S, N, MockDatabase>
 export async function initTestable<
-  S extends DbSchemas,
+  S extends DBDescription<any>,
   N extends Notifier = MockNotifier
 >(
   name: DbName,
-  dbSchemas: S,
+  dbDescription: S,
   webSql: false,
   config?: ElectricConfig,
   opts?: ElectrifyOptions
 ): RetVal<S, N, MockDatabase>
 export async function initTestable<
-  S extends DbSchemas,
+  S extends DBDescription<any>,
   N extends Notifier = MockNotifier
 >(
   name: DbName,
-  dbSchemas: S,
+  dbDescription: S,
   webSql: true,
   config?: ElectricConfig,
   opts?: ElectrifyOptions
 ): RetVal<S, N, MockWebSQLDatabase>
 
 export async function initTestable<
-  S extends DbSchemas,
+  S extends DBDescription<any>,
   N extends Notifier = MockNotifier
 >(
   dbName: DbName,
-  dbSchemas: S,
+  dbDescription: S,
   useWebSQLDatabase = false,
   config: ElectricConfig = testConfig,
   opts?: ElectrifyOptions
@@ -72,7 +73,7 @@ export async function initTestable<
 
   const dal = await electrify(
     dbName,
-    dbSchemas,
+    dbDescription,
     adapter,
     socketFactory,
     config,

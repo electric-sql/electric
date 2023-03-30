@@ -26,7 +26,6 @@ import {
   PostUpsertArgsSchema,
   PostDeleteManyArgsSchema,
 } from './generated/post'
-import { Table } from '../../src/client/model/table'
 
 import Database, { SqliteError } from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3/index'
@@ -40,118 +39,14 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
-import { DbSchemas } from '../../src/client/model/dalNamespace'
+import {
+  DBDescription,
+  Relation,
+  TableDescription,
+} from '../../src/client/model/dbDescription'
 
 const strictPostSchema = PostCreateInputSchema //Post
-//type PostSchema = typeof strictPostSchema
 type Post = z.infer<typeof PostCreateInputSchema>
-
-const dbSchemas = {
-  Post: strictPostSchema,
-  User: UserCreateInputSchema,
-}
-
-const db = new Database(':memory:')
-const electric = await electrify(db, dbSchemas, {
-  app: 'CRUD-Test',
-  env: 'env',
-  migrations: [],
-})
-
-/////
-type Arity = 'one' | 'many'
-class Relation {
-  constructor(
-    public relationField: string,
-    public fromField: string,
-    public toField: string,
-    public relatedTable: string,
-    public relationName: string,
-    // 'one' if this object can have only one related object,
-    // 'many' if this object potentially has many related objects
-    public relatedObjects: Arity
-  ) {}
-
-  isIncomingRelation(): boolean {
-    return this.fromField === '' && this.toField === ''
-  }
-
-  isOutgoingRelation(): boolean {
-    return !this.isIncomingRelation()
-  }
-
-  getOppositeRelation<DB extends DbSchemas>(
-    dbDescription: DBDescription<DB>
-  ): Relation {
-    return dbDescription.getRelation(this.relatedTable, this.relationName)
-  }
-}
-
-class DBDescription<DB extends DbSchemas> {
-  constructor(private db: DB) {}
-  getSchema(table: string) {
-    return this.db[table]
-  }
-
-  getFields(table: string) {
-    if (table === 'User') return ['id', 'name']
-    else return ['id', 'title', 'contents', 'nbr', 'authorId']
-  }
-
-  getRelationName(table: string, field: string): string {
-    return this.getRelations(table).find((r) => r.relationField === field)!
-      .relationName
-  }
-
-  getRelation(table: string, relation: string): Relation {
-    return this.getRelations(table).find((r) => r.relationName === relation)!
-  }
-
-  // Profile.post <-> Post.profile (from: profileId, to: id)
-  getRelations(table: string): Relation[] {
-    if (table === 'User') {
-      return [new Relation('posts', '', '', 'Post', 'PostsToAuthor', 'many')]
-    } else if (table === 'Post') {
-      return [
-        new Relation(
-          'author',
-          'authorId',
-          'id',
-          'User',
-          'PostsToAuthor',
-          'one'
-        ),
-      ]
-    } else return []
-  }
-
-  getOutgoingRelations(table: string): Relation[] {
-    if (table === 'Post') {
-      return [
-        new Relation(
-          'author',
-          'authorId',
-          'id',
-          'User',
-          'PostsToAuthor',
-          'one'
-        ),
-      ]
-    } else {
-      return []
-    }
-  }
-
-  getIncomingRelations(table: string): Relation[] {
-    if (table === 'User') {
-      return [new Relation('posts', '', '', 'Post', 'PostsToAuthor', 'many')]
-    } else {
-      return []
-    }
-  }
-}
-
-const dbDescription = new DBDescription(dbSchemas)
 
 // Augment the HKT module with a mapping from 'SelectSubset' to the actual type
 // cf. https://ybogomolov.me/higher-kinded-data/
@@ -162,94 +57,93 @@ declare module 'fp-ts/HKT' {
   }
 }
 
-const postTable = new Table<
-  Post,
-  Prisma.PostCreateArgs['data'],
-  Prisma.PostUpdateArgs['data'],
-  Prisma.PostFindFirstArgs['select'],
-  Prisma.PostFindFirstArgs['where'],
-  Prisma.PostFindUniqueArgs['where'],
-  Omit<Prisma.PostInclude, '_count'>, // omit count since we do not support it yet
-  Prisma.PostFindFirstArgs['orderBy'],
-  Prisma.PostScalarFieldEnum,
-  'PostGetPayload'
-  //Prisma.PostCreateArgs,
-  //Omit<Prisma.PostCreateManyArgs, 'data'> & { data: Array<Prisma.PostCreateManyInput> },
-  //Prisma.PostFindUniqueArgs
->(
-  'Post',
-  (PostCreateInputSchema as any)
-    .partial()
-    .or((PostUncheckedCreateInputSchema as any).partial()),
-  electric.adapter,
-  electric.notifier,
-  dbDescription,
-  PostCreateArgsSchema,
-  PostCreateManyArgsSchema,
-  PostFindUniqueArgsSchema,
-  PostFindFirstArgsSchema,
-  PostUpdateArgsSchema,
-  PostUpdateManyArgsSchema,
-  PostUpsertArgsSchema,
-  PostDeleteArgsSchema,
-  PostDeleteManyArgsSchema
-)
-electric.db.Post = postTable
+const tableDescriptions = {
+  User: {
+    fields: ['id', 'name'],
+    relations: [new Relation('posts', '', '', 'Post', 'PostsToAuthor', 'many')],
+    modelSchema: (UserCreateInputSchema as any)
+      .partial()
+      .or((UserUncheckedCreateInputSchema as any).partial()),
+    createSchema: UserCreateArgsSchema,
+    createManySchema: UserCreateManyArgsSchema,
+    findUniqueSchema: UserFindUniqueArgsSchema,
+    findSchema: UserFindFirstArgsSchema,
+    updateSchema: UserUpdateArgsSchema,
+    updateManySchema: UserUpdateManyArgsSchema,
+    upsertSchema: UserUpsertArgsSchema,
+    deleteSchema: UserDeleteArgsSchema,
+    deleteManySchema: UserDeleteManyArgsSchema,
+  } as TableDescription<
+    z.infer<typeof UserCreateInputSchema>,
+    Prisma.UserCreateArgs['data'],
+    Prisma.UserUpdateArgs['data'],
+    Prisma.UserFindFirstArgs['select'],
+    Prisma.UserFindFirstArgs['where'],
+    Prisma.UserFindUniqueArgs['where'],
+    Omit<Prisma.UserInclude, '_count'>, // omit count since we do not support it yet
+    Prisma.UserFindFirstArgs['orderBy'],
+    Prisma.UserScalarFieldEnum,
+    'UserGetPayload'
+  >,
+  Post: {
+    fields: ['id', 'title', 'contents', 'nbr', 'authorId'],
+    relations: [
+      new Relation('author', 'authorId', 'id', 'User', 'PostsToAuthor', 'one'),
+    ],
+    modelSchema: (PostCreateInputSchema as any)
+      .partial()
+      .or((PostUncheckedCreateInputSchema as any).partial()),
+    createSchema: PostCreateArgsSchema,
+    createManySchema: PostCreateManyArgsSchema,
+    findUniqueSchema: PostFindUniqueArgsSchema,
+    findSchema: PostFindFirstArgsSchema,
+    updateSchema: PostUpdateArgsSchema,
+    updateManySchema: PostUpdateManyArgsSchema,
+    upsertSchema: PostUpsertArgsSchema,
+    deleteSchema: PostDeleteArgsSchema,
+    deleteManySchema: PostDeleteManyArgsSchema,
+  } as TableDescription<
+    z.infer<typeof PostCreateInputSchema>,
+    Prisma.PostCreateArgs['data'],
+    Prisma.PostUpdateArgs['data'],
+    Prisma.PostFindFirstArgs['select'],
+    Prisma.PostFindFirstArgs['where'],
+    Prisma.PostFindUniqueArgs['where'],
+    Omit<Prisma.PostInclude, '_count'>, // omit count since we do not support it yet
+    Prisma.PostFindFirstArgs['orderBy'],
+    Prisma.PostScalarFieldEnum,
+    'PostGetPayload'
+  >,
+}
 
-type User = z.infer<typeof UserCreateInputSchema>
-const userTable = new Table<
-  User,
-  Prisma.UserCreateArgs['data'],
-  Prisma.UserUpdateArgs['data'],
-  Prisma.UserFindFirstArgs['select'],
-  Prisma.UserFindFirstArgs['where'],
-  Prisma.UserFindUniqueArgs['where'],
-  Omit<Prisma.UserInclude, '_count'>, // omit count since we do not support it yet
-  Prisma.UserFindFirstArgs['orderBy'],
-  Prisma.UserScalarFieldEnum,
-  'UserGetPayload'
-  // TODO: when generating the tables we will need to do this below:
-  //       because Prisma allows users to pass either the object or an array of objects
-  //       we (and also the generated schema) only support an array of objects
-  //Omit<Prisma.UserCreateManyArgs, 'data'> & { data: Array<Prisma.UserCreateManyInput> },
-  //{ data: Array<Prisma.UserCreateManyInput>, skipDuplicates?: boolean }, //Prisma.UserCreateManyArgs,
-  //Prisma.UserFindUniqueArgs
->(
-  'User',
-  (UserCreateInputSchema as any)
-    .partial()
-    .or((UserUncheckedCreateInputSchema as any).partial()),
-  electric.adapter,
-  electric.notifier,
-  dbDescription,
-  UserCreateArgsSchema,
-  UserCreateManyArgsSchema,
-  UserFindUniqueArgsSchema,
-  UserFindFirstArgsSchema,
-  UserUpdateArgsSchema,
-  UserUpdateManyArgsSchema,
-  UserUpsertArgsSchema,
-  UserDeleteArgsSchema,
-  UserDeleteManyArgsSchema
-)
-electric.db.User = userTable
+const dbDescription = new DBDescription(tableDescriptions)
 
-// Map<TableName, Table<any, any, any, any>>
+const db = new Database(':memory:')
+const electric = await electrify(db, dbDescription, {
+  app: 'CRUD-Test',
+  env: 'env',
+  migrations: [],
+})
+
+/*
 const tablesMap = new Map([
-  ['Post', electric.db.Post],
-  ['User', electric.db.User],
+  ['Post', electric.db.Post as any],
+  ['User', electric.db.User as any]
 ])
+
 electric.db.Post.setTables(tablesMap)
 electric.db.User.setTables(tablesMap)
-
-/////
+*/
 
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)
 //       then check that we can find users and include their authored posts and include the category of those posts
 //       do this when we have automated the generation such that we don't need to manually define all those tables
 //       schemas, etc.
 
-const tbl = postTable
+//const tbl = postTable
+const tbl = electric.db.Post
+const postTable = tbl
+const userTable = electric.db.User
 
 const post1 = {
   id: 1,
@@ -291,10 +185,6 @@ const sortById = (arr: Array<Post>) => arr.sort((a, b) => b.id - a.id)
 
 // Create a Post table in the DB first
 function clear() {
-  //db.exec('DROP TABLE IF EXISTS Post')
-  //db.exec(
-  //  "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int);"
-  //)
   db.exec('DROP TABLE IF EXISTS Post')
   db.exec(
     "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int, 'authorId' int);"

@@ -13,24 +13,28 @@ import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
-import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
+import { DalNamespace } from '../../client/model/dalNamespace'
+import { DBDescription } from '../../client/model/dbDescription'
 
 export { DatabaseAdapter }
 export type { Database }
 
-export const electrify = async <S extends DbSchemas, T extends Database>(
+export const electrify = async <
+  DB extends DBDescription<any>,
+  T extends Database
+>(
   db: T,
-  dbSchemas: S,
+  dbDescription: DB,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<DalNamespace<S>> => {
+): Promise<DalNamespace<DB>> => {
   const dbName: DbName = db.name
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || new WebSocketNodeFactory()
 
   const namespace = await baseElectrify(
     dbName,
-    dbSchemas,
+    dbDescription,
     adapter,
     socketFactory,
     config,

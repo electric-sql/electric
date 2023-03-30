@@ -57,29 +57,30 @@ export class Table<
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
 
+  private _schema: z.ZodType<Partial<T>>
+  private createSchema: z.ZodType<CreateInput<CreateData, Select, Include>>
+  private createManySchema: z.ZodType<CreateManyInput<CreateData>>
+  private findUniqueSchema: z.ZodType<
+    FindUniqueInput<Select, WhereUnique, Include>
+  >
+  private findSchema: z.ZodType<
+    FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+  >
+  private updateSchema: z.ZodType<
+    UpdateInput<UpdateData, Select, WhereUnique, Include>
+  >
+  private updateManySchema: z.ZodType<UpdateManyInput<UpdateData, Where>>
+  private upsertSchema: z.ZodType<
+    UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
+  >
+  private deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>
+  private deleteManySchema: z.ZodType<DeleteManyInput<Where>>
+
   constructor(
     public tableName: string,
-    private _schema: z.ZodType<Partial<T>>,
     adapter: DatabaseAdapter,
     notifier: Notifier,
-    private _dbDescription: DBDescription,
-    private createSchema: z.ZodType<CreateInput<CreateData, Select, Include>>,
-    private createManySchema: z.ZodType<CreateManyInput<CreateData>>,
-    private findUniqueSchema: z.ZodType<
-      FindUniqueInput<Select, WhereUnique, Include>
-    >,
-    private findSchema: z.ZodType<
-      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
-    >,
-    private updateSchema: z.ZodType<
-      UpdateInput<UpdateData, Select, WhereUnique, Include>
-    >,
-    private updateManySchema: z.ZodType<UpdateManyInput<UpdateData, Where>>,
-    private upsertSchema: z.ZodType<
-      UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
-    >,
-    private deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>,
-    private deleteManySchema: z.ZodType<DeleteManyInput<Where>>
+    private _dbDescription: DBDescription<any>
   ) {
     this._builder = new Builder(
       tableName,
@@ -88,6 +89,26 @@ export class Table<
     this._executor = new Executor(adapter, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
+    this._schema =
+      this._dbDescription.getTableDescription(tableName).modelSchema
+    this.createSchema =
+      this._dbDescription.getTableDescription(tableName).createSchema
+    this.createManySchema =
+      this._dbDescription.getTableDescription(tableName).createManySchema
+    this.findUniqueSchema =
+      this._dbDescription.getTableDescription(tableName).findUniqueSchema
+    this.findSchema =
+      this._dbDescription.getTableDescription(tableName).findSchema
+    this.updateSchema =
+      this._dbDescription.getTableDescription(tableName).updateSchema
+    this.updateManySchema =
+      this._dbDescription.getTableDescription(tableName).updateManySchema
+    this.upsertSchema =
+      this._dbDescription.getTableDescription(tableName).upsertSchema
+    this.deleteSchema =
+      this._dbDescription.getTableDescription(tableName).deleteSchema
+    this.deleteManySchema =
+      this._dbDescription.getTableDescription(tableName).deleteManySchema
   }
 
   setTables(tables: Map<TableName, AnyTable>) {

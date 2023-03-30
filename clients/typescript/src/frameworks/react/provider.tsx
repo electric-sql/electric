@@ -1,13 +1,14 @@
 import React, { createContext, useContext } from 'react'
 
-import { DalNamespace, DbSchemas } from '../../client/model/dalNamespace'
+import { DalNamespace } from '../../client/model/dalNamespace'
+import { DBDescription } from '../../client/model'
 
-interface Props<S extends DbSchemas> {
+interface Props<S extends DBDescription<any>> {
   children?: React.ReactNode
   db?: DalNamespace<S>
 }
 
-interface ElectricContext<S extends DbSchemas> {
+interface ElectricContext<S extends DBDescription<any>> {
   ElectricContext: React.Context<DalNamespace<S> | undefined>
   useElectric: () => DalNamespace<S> | undefined
   ElectricProvider: ({ children, db }: Props<S>) => JSX.Element
@@ -17,8 +18,9 @@ interface ElectricContext<S extends DbSchemas> {
 // it looses information about the actual types of the DB schema
 // but we don't need that information in the React hooks.
 // However, users preferably don't lose this type information, therefore, they can use `makeElectricContext`.
-let ElectricContext: React.Context<DalNamespace<DbSchemas> | undefined> =
-  createContext<DalNamespace<DbSchemas> | undefined>(undefined)
+let ElectricContext: React.Context<
+  DalNamespace<DBDescription<any>> | undefined
+> = createContext<DalNamespace<DBDescription<any>> | undefined>(undefined)
 
 export { ElectricContext }
 
@@ -27,7 +29,9 @@ export { ElectricContext }
 // as the types depend on the database schema `dbSchema` that's passed in.
 // e.g. const ctx = createContext<DalTables<DbSchemas | undefined>(undefined)
 //      the above looses information about the concrete db tables
-export function makeElectricContext<S extends DbSchemas>(): ElectricContext<S> {
+export function makeElectricContext<
+  S extends DBDescription<any>
+>(): ElectricContext<S> {
   const ctx = createContext<DalNamespace<S> | undefined>(undefined)
 
   ElectricContext = ctx as any

@@ -1,66 +1,76 @@
 import { ElectricNamespace } from '../../electric/namespace'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { Notifier } from '../../notifiers'
-//import { Table } from './table'
-//import * as z from 'zod'
+import { DBDescription, TableDescription } from './dbDescription'
+import { Table } from './table'
 
-export type TableName = string
-export type DbSchemas = Record<TableName, any>
-
-/*
-export type Schema<T> = z.ZodType<T> //ZObject<T>
-
-// Fetches the object type out of the schema
-// e.g. GetObjectTypeFromSchema<Schema<A>> = A
-type GetObjectTypeFromSchema<T> = T extends Schema<infer O> // bind the type of the object for which this is a schema
-  ? O
-  : never
-
-
-// Maps the schemas in T to tables
-// For an object of type { a: Schema<A>, b: Schema<B>, ... }
-// this will map the type to: { a: Table<A>, b: Table<B>, ... }
-export type DalTables<T extends Record<TableName, Schema<any>>> = {
-  [Tbl in keyof T]: Table<GetObjectTypeFromSchema<T[Tbl]>>
+export type DalTables<DB extends DBDescription<any>> = {
+  [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableDescription<
+    infer T,
+    infer CreateData,
+    infer UpdateData,
+    infer Select,
+    infer Where,
+    infer WhereUnique,
+    infer Include,
+    infer OrderBy,
+    infer ScalarFieldEnum,
+    infer GetPayload
+  >
+    ? Table<
+        T,
+        CreateData,
+        UpdateData,
+        Select,
+        Where,
+        WhereUnique,
+        Include,
+        OrderBy,
+        ScalarFieldEnum,
+        GetPayload
+      >
+    : never
 }
-*/
 
 // Extends the ElectricNamespace with a `db` property that is the client of the data access library
-export class DalNamespace<T extends DbSchemas> extends ElectricNamespace {
+export class DalNamespace<
+  DB extends DBDescription<any>
+> extends ElectricNamespace {
   private constructor(
-    public db: T, //DalTables<T>,
+    public db: DalTables<DB>,
     adapter: DatabaseAdapter,
     notifier: Notifier
   ) {
     super(adapter, notifier)
   }
 
-  // Builds a DAL namespace from a `schemas` object containing the schema of every DB table and the electric namespace
-  // TODO: we want to say that S extends Record<TableName, Schema<any>>
-  //       but this is not possible because concrete schemas aren't subtypes of Schema<any> ...
-  static create<S extends DbSchemas>(
-    _schemas: S,
+  // Builds the DAL namespace from a `dbDescription` object
+  static create<DB extends DBDescription<any>>(
+    dbDescription: DB,
     electric: ElectricNamespace
-  ): DalNamespace<S> {
-    /*
-    const tables: Array<[keyof S, Table<any>]> = Object.keys(schemas).map(
-      (tableName) => {
-        const schema = schemas[tableName]
-        return [
-          tableName,
-          new Table(tableName, schema, electric.adapter, electric.notifier),
-        ]
-      }
-    )
+  ): DalNamespace<DB> {
+    const tables = dbDescription.extendedTables
+    const createTable = (tableName: string) => {
+      return new Table(
+        tableName,
+        electric.adapter,
+        electric.notifier,
+        dbDescription
+      )
+    }
 
-    const dal = tables.reduce((ns, [tableName, tbl]) => {
-      ns[tableName] = tbl as any
-      return ns
-    }, {} as Partial<DalTables<S>>) as DalTables<S>
+    // Create all tables
+    const dal = Object.fromEntries(
+      Object.keys(tables).map((tableName) => {
+        return [tableName, createTable(tableName)]
+      })
+    ) as DalTables<DB>
+
+    // Now inform each table about all tables
+    Object.keys(dal).forEach((tableName) => {
+      dal[tableName].setTables(new Map(Object.entries(dal)))
+    })
 
     return new DalNamespace(dal, electric.adapter, electric.notifier)
-     */
-
-    return new DalNamespace({} as any, electric.adapter, electric.notifier)
   }
 }

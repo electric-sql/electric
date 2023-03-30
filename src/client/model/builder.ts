@@ -9,7 +9,6 @@ import * as z from 'zod'
 
 const squelPostgres = squel.useFlavour('postgres')
 
-
 type AnyFindInput = FindInput<any, any, any, any, any>
 
 export class Builder {
