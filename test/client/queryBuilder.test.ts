@@ -1,7 +1,7 @@
 import test from 'ava'
 import { Builder } from '../../src/client/model/builder'
 
-const tbl = new Builder('Post')
+const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 
 const post1 = {
   id: 'i1',
@@ -90,7 +90,10 @@ test('findUnique query', async (t) => {
     })
     .toString()
 
-  t.is(query, "SELECT * FROM Post WHERE (id = ('i2')) AND (nbr = (21)) LIMIT 2")
+  t.is(
+    query,
+    "SELECT id, nbr, title, contents FROM Post WHERE (id = ('i2')) AND (nbr = (21)) LIMIT 2"
+  )
 })
 
 test('findUnique query with selection', (t) => {
@@ -151,7 +154,10 @@ test('findMany allows results to be ordered', (t) => {
     })
     .toString()
 
-  t.is(query, 'SELECT * FROM Post ORDER BY id ASC, title DESC')
+  t.is(
+    query,
+    'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC, title DESC'
+  )
 })
 
 test('update query', (t) => {

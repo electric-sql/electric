@@ -10,7 +10,7 @@ import { OrderByInput } from '../input/orderByInput'
 const squelPostgres = squel.useFlavour('postgres')
 
 export class Builder<T extends { [field: string]: any }> {
-  constructor(private _tableName: string) {}
+  constructor(private _tableName: string, private _fields: string[]) {}
 
   create(i: CreateInput<T>): QueryBuilder {
     // Make a SQL query out of the data
@@ -141,9 +141,16 @@ export class Builder<T extends { [field: string]: any }> {
     identificationFields: string[],
     q: PostgresSelect
   ): PostgresSelect {
-    if (typeof i.select === 'undefined') return q
+    if (typeof i.select === 'undefined') {
+      // Select all known fields explicitly
+      // which is safer than executing a SELECT * query
+      i.select = {}
+      this._fields.forEach((field) => {
+        ;(i.select as typeof i.select)[field as keyof typeof i.select] = true
+      })
+    }
 
-    const selectedFields = Builder.getSelectedFields(i.select)
+    const selectedFields = Builder.getSelectedFields(i.select!)
     if (selectedFields.length == 0)
       throw new InvalidArgumentError(
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`

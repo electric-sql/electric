@@ -4368,7 +4368,7 @@ readable-stream@1.1.x:
     isarray "0.0.1"
     string_decoder "~0.10.x"
 
-readable-stream@^2.0.0, readable-stream@^2.0.6, readable-stream@^2.1.4:
+readable-stream@^2.0.0, readable-stream@^2.1.4:
   version "2.3.8"
   resolved "https://registry.yarnpkg.com/readable-stream/-/readable-stream-2.3.8.tgz#91125e8042bba1b9887f49345f6277027ce8be9b"
   integrity sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==
@@ -4382,15 +4382,6 @@ readable-stream@^2.0.0, readable-stream@^2.0.6, readable-stream@^2.1.4:
     util-deprecate "~1.0.1"
 
 readable-stream@^3.1.1, readable-stream@^3.4.0, readable-stream@^3.6.0:
-  version "3.6.2"
-  resolved "https://registry.yarnpkg.com/readable-stream/-/readable-stream-3.6.2.tgz#56a9b36ea965c00c5a93ef31eb111a0f11056967"
-  integrity sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==
-  dependencies:
-    inherits "^2.0.3"
-    string_decoder "^1.1.1"
-    util-deprecate "^1.0.1"
-
-readable-stream@^3.6.0:
   version "3.6.2"
   resolved "https://registry.yarnpkg.com/readable-stream/-/readable-stream-3.6.2.tgz#56a9b36ea965c00c5a93ef31eb111a0f11056967"
   integrity sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==
@@ -5107,11 +5098,6 @@ tough-cookie@^3.0.1:
     ip-regex "^2.1.0"
     psl "^1.1.28"
     punycode "^2.1.1"
-
-tozod@^3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/tozod/-/tozod-3.0.0.tgz#ee72eb95de3647076ddc198f5c291b1dc728298e"
-  integrity sha512-R03/moNPEGgWKoTdCsEJuyEoP6NtXyhWg9L9lJhF2XyCR2Ce9XE+yXaswaVmqyBpHsRPC2Pk38mK8Ex7iHaXcg==
 
 tr46@^1.0.1:
   version "1.0.1"

@@ -33,7 +33,8 @@ export class Table<T extends Record<string, any>>
     notifier: Notifier
   ) {
     super(tableName, schema)
-    this._builder = new Builder<T>(tableName)
+    const fields = Object.keys(this._schema.shape)
+    this._builder = new Builder<T>(tableName, fields)
     this._executor = new Executor<T>(adapter, schema, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
   }
