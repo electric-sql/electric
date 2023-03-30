@@ -21,6 +21,7 @@ export type RelationName = string
 
 export interface DBDescription {
   getSchema(table: TableName): z.ZodSchema<any>
+  getFields(table: TableName): string[]
   getRelationName(table: TableName, field: FieldName): RelationName | undefined
   getRelation(table: TableName, relation: RelationName): Relation | undefined
   getRelations(table: TableName): Relation[]

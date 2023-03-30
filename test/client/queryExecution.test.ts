@@ -41,7 +41,6 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
 import { DbSchemas } from '../../src/client/model/dalNamespace'
-import { ZObject } from '../../src/client/validation/schemas'
 
 const strictPostSchema = PostCreateInputSchema //Post
 //type PostSchema = typeof strictPostSchema
@@ -90,8 +89,13 @@ class Relation {
 
 class DBDescription<DB extends DbSchemas> {
   constructor(private db: DB) {}
-  getSchema(table: string): ZObject<any> {
+  getSchema(table: string) {
     return this.db[table]
+  }
+
+  getFields(table: string) {
+    if (table === 'User') return ['id', 'name']
+    else return ['id', 'title', 'contents', 'nbr', 'authorId']
   }
 
   getRelationName(table: string, field: string): string {
