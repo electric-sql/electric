@@ -2,7 +2,7 @@ import * as Pb from '../_generated/proto/satellite'
 import * as _m0 from 'protobufjs/minimal'
 
 type GetName<T extends { $type: string }> =
-  T['$type'] extends `Electric.Satellite.v1_0.${infer K}` ? K : never
+  T['$type'] extends `Electric.Satellite.v1_1.${infer K}` ? K : never
 type MappingTuples = {
   [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]
 }
@@ -23,6 +23,7 @@ const msgtypetuples: MappingTuples = {
   SatOpLog: [9, Pb.SatOpLog],
   SatRelation: [10, Pb.SatRelation],
   SatMigrationNotification: [11, Pb.SatMigrationNotification],
+  SatMigration: [12, Pb.SatMigration],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -46,6 +47,7 @@ export type SatPbMsg =
   | Pb.SatOpLog
   | Pb.SatRelation
   | Pb.SatMigrationNotification
+  | Pb.SatMigration
 
 export type SatPbMsgObj<Type extends string = string> = {
   $type: Type
