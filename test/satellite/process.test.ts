@@ -194,7 +194,8 @@ test('connect saves new token', async (t) => {
   await runMigrations()
 
   const initToken = await satellite._getMeta('token')
-  await satellite.start()
+  const { connectionPromise } = await satellite.start()
+  await connectionPromise // also wait for the connection to be established
   const receivedToken = await satellite._getMeta('token')
 
   t.assert(initToken != receivedToken)

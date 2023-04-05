@@ -9,7 +9,7 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConsoleClient } from './index'
+import { Client, ConnectionWrapper, ConsoleClient } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -119,7 +119,7 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
   }
 
-  async start(authState?: AuthState): Promise<void | Error> {
+  async start(authState?: AuthState): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -182,7 +182,8 @@ export class SatelliteProcess implements Satellite {
       Log.info(`no lsn retrieved from store`)
     }
 
-    return this._connectAndStartReplication()
+    const connectionPromise = this._connectAndStartReplication()
+    return { connectionPromise }
   }
 
   async _setAuthState(authState?: AuthState): Promise<void | Error> {

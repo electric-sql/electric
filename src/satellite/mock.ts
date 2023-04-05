@@ -13,7 +13,7 @@ import {
   Transaction,
 } from '../util/types'
 
-import { Client, ConsoleClient, Satellite } from './index'
+import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
 import {
   SatelliteOpts,
   SatelliteOverrides,
@@ -55,8 +55,11 @@ export class MockSatelliteProcess implements Satellite {
     this.opts = opts
   }
 
-  async start(_authState?: AuthState): Promise<void> {
+  async start(_authState?: AuthState): Promise<ConnectionWrapper> {
     await sleepAsync(50)
+    return {
+      connectionPromise: new Promise((resolve) => resolve()),
+    }
   }
 
   async stop(): Promise<void> {
