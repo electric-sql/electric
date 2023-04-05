@@ -1,3 +1,5 @@
 export { DalNamespace } from './dalNamespace'
-export type { DBDescription } from './dbDescription'
+export type { DalTables } from './dalNamespace'
+export type { TableDescription } from './dbDescription'
+export { DBDescription, Relation } from './dbDescription'
 export { Table } from './table'

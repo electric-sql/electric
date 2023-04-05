@@ -21,6 +21,7 @@ const emptyResult = {
 }
 
 export interface Database {
+  name: string
   exec(statement: Statement): Promise<QueryExecResult>
   getRowsModified(): number
 }
@@ -30,7 +31,11 @@ export class ElectricDatabase implements Database {
 
   // Do not use this constructor directly.
   // Create a Database instance using the static `init` method instead.
-  private constructor(private sqlite3: SQLiteAPI, private db: number) {
+  private constructor(
+    public name: string,
+    private sqlite3: SQLiteAPI,
+    private db: number
+  ) {
     this.mutex = new Mutex()
   }
 
@@ -112,6 +117,6 @@ export class ElectricDatabase implements Database {
       dbName
     )
 
-    return new ElectricDatabase(sqlite3, db)
+    return new ElectricDatabase(dbName, sqlite3, db)
   }
 }

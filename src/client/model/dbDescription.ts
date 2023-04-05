@@ -163,27 +163,10 @@ export class DBDescription<T extends TableDescriptions> {
   }
 
   getOutgoingRelations(table: TableName): Relation[] {
-    if (table === 'Post') {
-      return [
-        new Relation(
-          'author',
-          'authorId',
-          'id',
-          'User',
-          'PostsToAuthor',
-          'one'
-        ),
-      ]
-    } else {
-      return []
-    }
+    return this.extendedTables[table].outgoingRelations
   }
 
   getIncomingRelations(table: TableName): Relation[] {
-    if (table === 'User') {
-      return [new Relation('posts', '', '', 'Post', 'PostsToAuthor', 'many')]
-    } else {
-      return []
-    }
+    return this.extendedTables[table].incomingRelations
   }
 }
