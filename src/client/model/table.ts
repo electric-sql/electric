@@ -18,13 +18,8 @@ import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
 import { Arity, DBDescription, Relation, TableName } from './dbDescription'
 import { Kind, URIS } from 'fp-ts/HKT'
+import { notNullNotUndefined } from '../util/functions'
 import * as z from 'zod'
-
-// TODO: Document the fact that we support one-to-one, one-to-many, and explicit many-to-many relations
-//       Explicit many-to-many relations consist of an intermediate table that contains 2 one-to-many relations
-//       which together form the many-to-many relation. So many-to-many is supported by virtue of us supporting one-to-many.
-//       Implicit many-to-many relations as in Prisma is currently not supported.
-//       https://www.prisma.io/docs/concepts/components/prisma-schema/relations/many-to-many-relations
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, URIS>
 
@@ -375,7 +370,9 @@ export class Table<
                 {
                   where: data,
                   select: validatedInput.select,
-                  include: validatedInput.include,
+                  ...(notNullNotUndefined(validatedInput.include) && {
+                    include: validatedInput.include,
+                  }), // only add `include` property if it is defined
                 } as any,
                 db,
                 continuation,
@@ -748,7 +745,9 @@ export class Table<
               {
                 where: { ...data.where, ...data.data },
                 select: data.select,
-                include: data.include,
+                ...(notNullNotUndefined(data.include) && {
+                  include: data.include,
+                }), // only add `include` property if it is defined
               } as any,
               db,
               continuation,
@@ -803,7 +802,9 @@ export class Table<
             {
               data: data.create,
               select: data.select,
-              include: data.include,
+              ...(notNullNotUndefined(data.include) && {
+                include: data.include,
+              }), // only add `include` property if it is defined
             } as any,
             db,
             continuation,
@@ -816,7 +817,9 @@ export class Table<
               data: data.update,
               where: data.where,
               select: data.select,
-              include: data.include,
+              ...(notNullNotUndefined(data.include) && {
+                include: data.include,
+              }), // only add `include` property if it is defined
             } as any,
             db,
             continuation,
