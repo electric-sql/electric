@@ -1,7 +1,7 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
-import { z } from 'zod'
+import { dbDescription } from './generated'
 
 const config = {
   app: 'app',
@@ -11,18 +11,7 @@ const config = {
 
 const conn = new Database(':memory:')
 
-// Schema describing the DB
-// can be defined manually, or generated
-const dbSchemas = {
-  items: z
-    .object({
-      value: z.string(),
-      nbr: z.number(),
-    })
-    .strict(),
-}
-
-const { notifier, adapter, db } = await electrify(conn, dbSchemas, config)
+const { notifier, adapter, db } = await electrify(conn, dbDescription, config)
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0

@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 
 import { electrify } from '../../src/drivers/expo-sqlite'
-import { z } from 'zod'
+import { dbDescription } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -11,17 +11,7 @@ const config = {
 
 const original = SQLite.openDatabase('example.db')
 
-// Schema describing the DB
-// can be defined manually, or generated
-const dbSchemas = {
-  items: z
-    .object({
-      value: z.string(),
-    })
-    .strict(),
-}
-
-const { db } = await electrify(original, dbSchemas, config)
+const { db } = await electrify(original, dbDescription, config)
 await db.items.findMany({
   select: {
     value: true,

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 
 import { electrify } from '../../src/drivers/better-sqlite3'
-import { z } from 'zod'
+import { dbDescription } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -11,18 +11,8 @@ const config = {
 
 const original = new Database('example.db')
 
-// Schema describing the DB
-// can be defined manually, or generated
-const dbSchemas = {
-  items: z
-    .object({
-      value: z.string(),
-    })
-    .strict(),
-}
-
 // Electrify the DB and use the DAL to query the `items` table
-const { db } = await electrify(original, dbSchemas, config)
+const { db } = await electrify(original, dbDescription, config)
 await db.items.findMany({
   select: {
     value: true,

@@ -1,5 +1,5 @@
 import { electrify } from '../../src/drivers/cordova-sqlite-storage'
-import { z } from 'zod'
+import { dbDescription } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -12,19 +12,9 @@ const opts = {
   location: 'default',
 }
 
-// Schema describing the DB
-// can be defined manually, or generated
-const dbSchemas = {
-  items: z
-    .object({
-      value: z.string(),
-    })
-    .strict(),
-}
-
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
-    const { db } = await electrify(original, dbSchemas, config)
+    const { db } = await electrify(original, dbDescription, config)
     await db.items.findMany({
       select: {
         value: true,

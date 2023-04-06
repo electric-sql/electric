@@ -1,122 +1,15 @@
 import { z } from 'zod'
 import test from 'ava'
 
-import {
-  PostCreateInputSchema,
-  PostUncheckedCreateInputSchema,
-  UserCreateInputSchema,
-  Prisma,
-  UserUncheckedCreateInputSchema,
-  PostFindUniqueArgsSchema,
-  UserFindUniqueArgsSchema,
-  PostCreateManyArgsSchema,
-  UserCreateManyArgsSchema,
-  UserCreateArgsSchema,
-  UserFindFirstArgsSchema,
-  UserUpdateArgsSchema,
-  UserUpdateManyArgsSchema,
-  UserUpsertArgsSchema,
-  UserDeleteArgsSchema,
-  UserDeleteManyArgsSchema,
-  PostCreateArgsSchema,
-  PostFindFirstArgsSchema,
-  PostUpdateArgsSchema,
-  PostUpdateManyArgsSchema,
-  PostDeleteArgsSchema,
-  PostUpsertArgsSchema,
-  PostDeleteManyArgsSchema,
-} from './generated/post'
-
 import Database, { SqliteError } from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3/index'
 import { InvalidArgumentError } from '../../src/client/validation/errors/invalidArgumentError'
-import {
-  UpdateInput,
-  UpdateManyInput,
-} from '../../src/client/input/updateInput'
-import { DeleteInput } from '../../src/client/input/deleteInput'
+import { UpdateManyInput } from '../../src/client/input/updateInput'
 import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
-import {
-  DBDescription,
-  Relation,
-  TableDescription,
-} from '../../src/client/model/dbDescription'
-
-const strictPostSchema = PostCreateInputSchema //Post
-type Post = z.infer<typeof PostCreateInputSchema>
-
-// Augment the HKT module with a mapping from 'SelectSubset' to the actual type
-// cf. https://ybogomolov.me/higher-kinded-data/
-declare module 'fp-ts/HKT' {
-  interface URItoKind<A> {
-    PostGetPayload: Prisma.PostGetPayload<A>
-    UserGetPayload: Prisma.UserGetPayload<A>
-  }
-}
-
-const tableDescriptions = {
-  User: {
-    fields: ['id', 'name'],
-    relations: [new Relation('posts', '', '', 'Post', 'PostsToAuthor', 'many')],
-    modelSchema: (UserCreateInputSchema as any)
-      .partial()
-      .or((UserUncheckedCreateInputSchema as any).partial()),
-    createSchema: UserCreateArgsSchema,
-    createManySchema: UserCreateManyArgsSchema,
-    findUniqueSchema: UserFindUniqueArgsSchema,
-    findSchema: UserFindFirstArgsSchema,
-    updateSchema: UserUpdateArgsSchema,
-    updateManySchema: UserUpdateManyArgsSchema,
-    upsertSchema: UserUpsertArgsSchema,
-    deleteSchema: UserDeleteArgsSchema,
-    deleteManySchema: UserDeleteManyArgsSchema,
-  } as TableDescription<
-    z.infer<typeof UserCreateInputSchema>,
-    Prisma.UserCreateArgs['data'],
-    Prisma.UserUpdateArgs['data'],
-    Prisma.UserFindFirstArgs['select'],
-    Prisma.UserFindFirstArgs['where'],
-    Prisma.UserFindUniqueArgs['where'],
-    Omit<Prisma.UserInclude, '_count'>, // omit count since we do not support it yet
-    Prisma.UserFindFirstArgs['orderBy'],
-    Prisma.UserScalarFieldEnum,
-    'UserGetPayload'
-  >,
-  Post: {
-    fields: ['id', 'title', 'contents', 'nbr', 'authorId'],
-    relations: [
-      new Relation('author', 'authorId', 'id', 'User', 'PostsToAuthor', 'one'),
-    ],
-    modelSchema: (PostCreateInputSchema as any)
-      .partial()
-      .or((PostUncheckedCreateInputSchema as any).partial()),
-    createSchema: PostCreateArgsSchema,
-    createManySchema: PostCreateManyArgsSchema,
-    findUniqueSchema: PostFindUniqueArgsSchema,
-    findSchema: PostFindFirstArgsSchema,
-    updateSchema: PostUpdateArgsSchema,
-    updateManySchema: PostUpdateManyArgsSchema,
-    upsertSchema: PostUpsertArgsSchema,
-    deleteSchema: PostDeleteArgsSchema,
-    deleteManySchema: PostDeleteManyArgsSchema,
-  } as TableDescription<
-    z.infer<typeof PostCreateInputSchema>,
-    Prisma.PostCreateArgs['data'],
-    Prisma.PostUpdateArgs['data'],
-    Prisma.PostFindFirstArgs['select'],
-    Prisma.PostFindFirstArgs['where'],
-    Prisma.PostFindUniqueArgs['where'],
-    Omit<Prisma.PostInclude, '_count'>, // omit count since we do not support it yet
-    Prisma.PostFindFirstArgs['orderBy'],
-    Prisma.PostScalarFieldEnum,
-    'PostGetPayload'
-  >,
-}
-
-const dbDescription = new DBDescription(tableDescriptions)
+import { dbDescription, Post } from './generated'
 
 const db = new Database(':memory:')
 const electric = await electrify(db, dbDescription, {
@@ -125,22 +18,11 @@ const electric = await electrify(db, dbDescription, {
   migrations: [],
 })
 
-/*
-const tablesMap = new Map([
-  ['Post', electric.db.Post as any],
-  ['User', electric.db.User as any]
-])
-
-electric.db.Post.setTables(tablesMap)
-electric.db.User.setTables(tablesMap)
-*/
-
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)
 //       then check that we can find users and include their authored posts and include the category of those posts
 //       do this when we have automated the generation such that we don't need to manually define all those tables
 //       schemas, etc.
 
-//const tbl = postTable
 const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
@@ -181,7 +63,8 @@ const author2 = {
   name: 'bob',
 }
 
-const sortById = (arr: Array<Post>) => arr.sort((a, b) => b.id - a.id)
+const sortById = <T extends { id: number }>(arr: Array<T>) =>
+  arr.sort((a, b) => b.id - a.id)
 
 // Create a Post table in the DB first
 function clear() {
@@ -198,7 +81,7 @@ function clear() {
 clear()
 
 test.serial('create query inserts NULL for undefined values', async (t) => {
-  const res = await tbl.create({
+  const obj = {
     data: {
       id: 1,
       title: 't1',
@@ -206,7 +89,8 @@ test.serial('create query inserts NULL for undefined values', async (t) => {
       nbr: undefined,
       authorId: 1,
     },
-  })
+  }
+  const res = await tbl.create(obj)
 
   t.deepEqual(res, {
     id: 1,
@@ -537,7 +421,7 @@ test.serial(
         select: {
           contents: true,
           foo: false, // field `foo` does not exist, should throw an error
-        } as unknown as SelectInput<Post>, // mislead the type checker to check that it throws a runtime error
+        } as any, // mislead the type checker to check that it throws a runtime error
       })
     })
   }
@@ -716,7 +600,7 @@ test.serial(
     await t.throwsAsync<z.ZodError>(async () => {
       await tbl.update({
         data: { title: 'Foo', contents: 'Bar' },
-      } as unknown as UpdateInput<Post>) // mislead the type checker to see that it is caught at runtime
+      } as any) // mislead the type checker to see that it is caught at runtime
     })
 
     await t.throwsAsync<InvalidArgumentError>(async () => {
@@ -730,7 +614,7 @@ test.serial(
       await tbl.update({
         data: { title: 'Foo', contents: 'Bar' },
         where: { foo: 1 }, // `foo` is not a field of `Post`
-      } as UpdateInput<any, any, any>) // mislead the type checker to see that it is caught at runtime
+      } as any) // mislead the type checker to see that it is caught at runtime
     })
   }
 )
@@ -979,7 +863,7 @@ test.serial('delete query throws error if input is invalid', async (t) => {
   })
 
   await t.throwsAsync<z.ZodError>(async () => {
-    await tbl.delete({} as DeleteInput<any, any>) // mislead the type checker to see that it is caught at runtime
+    await tbl.delete({} as any) // mislead the type checker to see that it is caught at runtime
   })
 })
 

@@ -151,7 +151,7 @@ export class Builder {
       // which is safer than executing a SELECT * query
       i.select = {}
       this._fields.forEach((field) => {
-        ;(i.select as typeof i.select)[field as keyof typeof i.select] = true
+        i.select[field as keyof typeof i.select] = true
       })
     }
 
