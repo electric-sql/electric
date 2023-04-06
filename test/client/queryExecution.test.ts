@@ -922,3 +922,203 @@ test.serial('deleteMany query', async (t) => {
   const emptyPosts = await tbl.findMany({})
   t.is(emptyPosts.length, 0)
 })
+
+async function populate() {
+  clear()
+
+  await postTable.createMany({
+    data: [post1, post2, post3],
+  })
+
+  await userTable.createMany({
+    data: [author1, author2],
+  })
+}
+
+test.serial(
+  'update query can update related object for outgoing FK',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchPost1 = async () => {
+      return await postTable.findUnique({
+        where: {
+          id: post1.id,
+        },
+        include: {
+          author: true,
+        },
+      })
+    }
+
+    const r = await fetchPost1()
+    t.deepEqual(r, {
+      ...post1,
+      author: author1,
+    })
+
+    const res = await postTable.update({
+      data: {
+        title: 'Updated title',
+        author: {
+          update: {
+            name: 'Updated name',
+          },
+        },
+      },
+      where: {
+        id: post1.id,
+      },
+      include: {
+        author: true,
+      },
+    })
+
+    const expectedRes = {
+      ...post1,
+      title: 'Updated title',
+      author: {
+        ...author1,
+        name: 'Updated name',
+      },
+    }
+
+    t.deepEqual(res, expectedRes)
+
+    t.deepEqual(await fetchPost1(), expectedRes)
+  }
+)
+
+test.serial(
+  'update query updates foreign key on update of related object',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchPost1 = async () => {
+      return await postTable.findUnique({
+        where: {
+          id: post1.id,
+        },
+        include: {
+          author: true,
+        },
+      })
+    }
+
+    const r = await fetchPost1()
+    t.deepEqual(r, {
+      ...post1,
+      author: author1,
+    })
+
+    const res = await postTable.update({
+      data: {
+        title: 'Updated title',
+        author: {
+          update: {
+            // we update the id of the user
+            // which is pointed at by the related posts
+            // after the update, those posts must still link to this user
+            id: 5,
+            name: 'Updated name',
+          },
+        },
+      },
+      where: {
+        id: post1.id,
+      },
+      include: {
+        author: true,
+      },
+    })
+
+    const expectedRes = {
+      ...post1,
+      title: 'Updated title',
+      // update must also have modified the `authorId` field
+      // such that it still points to the related object
+      authorId: 5,
+      author: {
+        ...author1,
+        id: 5,
+        name: 'Updated name',
+      },
+    }
+
+    t.deepEqual(res, expectedRes)
+
+    t.deepEqual(await fetchPost1(), expectedRes)
+  }
+)
+
+test.serial(
+  'update query can update related object for incoming FK',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchAuthor1 = async () => {
+      return await userTable.findUnique({
+        where: {
+          id: author1.id,
+        },
+        include: {
+          posts: true,
+        },
+      })
+    }
+
+    const r = await fetchAuthor1()
+    t.deepEqual(r, {
+      ...author1,
+      posts: [post1, post2],
+    })
+
+    const res = await userTable.update({
+      // Update the name of user 1 as well as the title of his post with id 2
+      data: {
+        name: 'Updated name',
+        posts: {
+          update: {
+            data: {
+              title: 'Updated title',
+            },
+            where: {
+              id: post2.id,
+            },
+          },
+        },
+      },
+      where: {
+        id: author1.id,
+      },
+      include: {
+        posts: true,
+      },
+    })
+
+    const expectedRes = {
+      ...author1,
+      name: 'Updated name',
+      posts: [
+        post1,
+        {
+          ...post2,
+          title: 'Updated title',
+        },
+      ],
+    }
+
+    t.deepEqual(res, expectedRes)
+
+    t.deepEqual(await fetchAuthor1(), expectedRes)
+  }
+)
