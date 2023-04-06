@@ -1,6 +1,5 @@
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
 import test from 'ava'
-import { z } from 'zod'
 
 import browserEnv from '@ikscodes/browser-env'
 browserEnv()
@@ -19,7 +18,8 @@ import { QualifiedTablename } from '../../src/util/tablename'
 
 import { useElectricQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
-import { DalNamespace, DbSchemas } from '../../src/client/model/dalNamespace'
+import { DalNamespace } from '../../src/client/model/dalNamespace'
+import { dbDescription } from '../client/generated'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -27,26 +27,9 @@ const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   }
 }
 
-const makeElectrified = <S extends DbSchemas>(
-  dbSchemas: S,
-  namespace: ElectricNamespace
-): DalNamespace<S> => {
-  return DalNamespace.create(dbSchemas, namespace)
-}
-
 type FC = React.FC<React.PropsWithChildren>
 
-const barSchema = z
-  .object({
-    foo: z.string(),
-  })
-  .strict()
-
-const dbSchemas = {
-  bars: barSchema,
-}
-
-const ctxInformation = makeElectricContext<typeof dbSchemas>()
+const ctxInformation = makeElectricContext<typeof dbDescription>()
 const ElectricProvider = ctxInformation.ElectricProvider
 
 test('useElectricQuery returns query results', async (t) => {
@@ -54,14 +37,11 @@ test('useElectricQuery returns query results', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = DalNamespace.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
   const wrapper: FC = ({ children }) => {
-    return (
-      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
-        {children}
-      </ElectricProvider>
-    )
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
@@ -78,16 +58,13 @@ test('useElectricQuery returns error when query errors', async (t) => {
 
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = DalNamespace.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
   const params = { shouldError: 1 }
 
   const wrapper: FC = ({ children }) => {
-    return (
-      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
-        {children}
-      </ElectricProvider>
-    )
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
   const { result } = renderHook(() => useElectricQuery(query, params), {
@@ -105,15 +82,12 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = DalNamespace.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
 
   const wrapper: FC = ({ children }) => {
-    return (
-      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
-        {children}
-      </ElectricProvider>
-    )
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })
@@ -141,16 +115,13 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = DalNamespace.create(dbDescription, namespace)
 
   await notifier.attach('baz.db', 'baz')
   const query = 'select foo from baz.bars'
 
   const wrapper: FC = ({ children }) => {
-    return (
-      <ElectricProvider db={makeElectrified(dbSchemas, namespace)}>
-        {children}
-      </ElectricProvider>
-    )
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
   const { result } = renderHook(() => useElectricQuery(query), { wrapper })

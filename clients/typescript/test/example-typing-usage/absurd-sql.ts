@@ -1,5 +1,5 @@
 import { initElectricSqlJs } from '../../src/drivers/absurd-sql'
-import { z } from 'zod'
+import { dbDescription } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -11,22 +11,16 @@ const config = {
 const url = new URL('./worker.js', import.meta.url)
 const worker = new Worker(url, { type: 'module' })
 
-// Schema describing the DB
-// can be defined manually, or generated
-const dbSchemas = {
-  items: z
-    .object({
-      value: z.string(),
-    })
-    .strict(),
-}
-
 // Electrify the SQL.js / absurd-sql machinery and then open
 // a persistent, named database.
 const SQL = await initElectricSqlJs(worker, {
   locateFile: (file) => `/${file}`,
 })
-const { db, adapter } = await SQL.openDatabase('example.db', dbSchemas, config)
+const { db, adapter } = await SQL.openDatabase(
+  'example.db',
+  dbDescription,
+  config
+)
 
 await adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
 await adapter.run({
