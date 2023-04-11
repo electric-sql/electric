@@ -901,10 +901,9 @@ export class Table<
               /*
                * For each outgoing relation:
                *  - update the related object
-               *  - fill in the outgoing FK on this object again
-               *    because it may have been updated on the related object
-               *  - also add the fromField (i.e. outgoing FK) to `nonRelationalData`
+               *  - add the fromField (i.e. outgoing FK) to `nonRelationalData`
                *    because we will fetch the updated object based on its new values
+               *    and that field may have changed
                */
               this.forEachRelation(
                 data.data as object,
@@ -914,9 +913,9 @@ export class Table<
 
                   // fetch the related object and recursively update that object
                   const relationActions = dataRecord[relationField] as {
-                    create?: object
                     update?: object
-                    //updateMany?: object,
+                    updateMany?: object
+                    //create?: object,
                     //upsert?: object,
                     //delete?: boolean
                   }
@@ -941,30 +940,21 @@ export class Table<
                   const updateObject = relationActions.update
 
                   if (rel.isOutgoingRelation()) {
-                    // outgoing relation
-                    const { fromField, toField } = rel
-                    const fromFieldValue = ogObject[fromField]
-                    // update the related object
-                    const wrappedUpdateObject =
-                      typeof updateObject === 'undefined'
-                        ? undefined
-                        : { data: updateObject }
-                    this.updateRelatedObject(
-                      wrappedUpdateObject,
+                    this.updateRelatedObjectFromOutgoingRelation(
+                      rel,
+                      ogObject,
+                      updateObject,
                       relatedTable,
-                      fromFieldValue,
-                      toField,
-                      false,
                       db,
                       (updatedObj) => {
-                        // The update above might have changed the value of `toField` that this `fromField` is pointing to
+                        // The update might have changed the value of `toField` that this `fromField` is pointing to
                         // That update will then have modified our `fromField` to point to the modified `toField`
                         const updatedObject = updatedObj!
-                        const toFieldValue = updatedObject[toField]
+                        const toFieldValue = updatedObject[rel.toField]
 
                         // Add the new value of the `fromField` to `nonRelationalData`
                         // such that we keep it into account when fetching the updated record
-                        nonRelationalData[fromField] = toFieldValue
+                        nonRelationalData[rel.fromField] = toFieldValue
                         cont()
                       },
                       onError
@@ -976,51 +966,16 @@ export class Table<
                     //       perhaps we can modify `updateRelatedObject` such that it call update or updateMany depending
                     //       on some argument
 
-                    // the `fromField` and `toField` are defined on the side of the outgoing relation
-                    // update the related object(s) like for an outgoing relation but switch the `to` and `from` fields
-                    const { fromField, toField } =
-                      this._dbDescription.getRelation(
-                        relatedTable,
-                        relationName
-                      )!
-                    const toFieldValue = ogObject[toField]
-
-                    if (Array.isArray(updateObject)) {
-                      // this is a one-to-many relation
-                      // update all the requested related objects
-                      forEach(
-                        (updateObj, cont) => {
-                          this.updateRelatedObject(
-                            updateObj,
-                            relatedTable,
-                            toFieldValue,
-                            fromField,
-                            true,
-                            db,
-                            cont,
-                            onError
-                          )
-                        },
-                        updateObject,
-                        cont
-                      )
-                    } else {
-                      // this is a one-to-one relation
-                      // update the related object
-                      const typedUpdateObj = updateObject as
-                        | { where?: object; data: object }
-                        | undefined
-                      this.updateRelatedObject(
-                        typedUpdateObj,
-                        relatedTable,
-                        toFieldValue,
-                        fromField,
-                        true,
-                        db,
-                        cont,
-                        onError
-                      )
-                    }
+                    this.updateRelatedObjectFromIncomingRelation(
+                      relatedTable,
+                      relationName,
+                      rel.relatedObjects,
+                      ogObject,
+                      updateObject,
+                      db,
+                      onError,
+                      cont
+                    )
                   }
                 },
                 () => {
@@ -1045,6 +1000,99 @@ export class Table<
           onError
         )
       },
+      onError
+    )
+  }
+
+  private updateRelatedObjectFromIncomingRelation(
+    relatedTable: string,
+    relationName: string,
+    relationArity: Arity,
+    ogObject: Record<string, any>,
+    updateObject: object | undefined | any[],
+    db: DB,
+    onError: (err: any) => void,
+    cont: () => void
+  ) {
+    // incoming relation, can be one-to-one or one-to-many
+
+    // the `fromField` and `toField` are defined on the side of the outgoing relation
+    // update the related object like for an outgoing relation but switch the `to` and `from` fields
+    const { fromField, toField } = this._dbDescription.getRelation(
+      relatedTable,
+      relationName
+    )!
+    const toFieldValue = ogObject[toField]
+
+    if (Array.isArray(updateObject)) {
+      // this is a one-to-many relation
+      // update all the requested related objects
+      forEach(
+        (updateObj, cont) => {
+          this.updateRelatedObject(
+            updateObj,
+            relatedTable,
+            toFieldValue,
+            fromField,
+            true,
+            db,
+            cont,
+            onError
+          )
+        },
+        updateObject,
+        cont
+      )
+    } else {
+      // this is a one-to-one relation or a one-to-many relation but only 1 update object was provided
+      // update the related object
+      const typedUpdateObj =
+        relationArity === 'many'
+          ? (updateObject as { where?: object; data: object } | undefined)
+          : // if it is a one-to-one relation we have to wrap the object in a `data` field and provide a `where` argument
+          // that identifies the related object
+          typeof updateObject === 'undefined'
+          ? undefined
+          : { data: updateObject, where: { [toField]: toFieldValue } }
+
+      this.updateRelatedObject(
+        typedUpdateObj,
+        relatedTable,
+        toFieldValue,
+        fromField,
+        true,
+        db,
+        cont,
+        onError
+      )
+    }
+  }
+
+  private updateRelatedObjectFromOutgoingRelation(
+    relation: Relation,
+    ogObject: Record<string, any>,
+    updateObject: object | undefined,
+    relatedTable: string,
+    db: DB,
+    cont: (updatedObj: Record<string, any> | undefined) => void,
+    onError: (err: any) => void
+  ) {
+    // outgoing relation
+    const { fromField, toField } = relation
+    const fromFieldValue = ogObject[fromField]
+
+    // update the related object
+    const wrappedUpdateObject =
+      typeof updateObject === 'undefined' ? undefined : { data: updateObject }
+
+    this.updateRelatedObject(
+      wrappedUpdateObject,
+      relatedTable,
+      fromFieldValue,
+      toField,
+      false,
+      db,
+      cont,
       onError
     )
   }
