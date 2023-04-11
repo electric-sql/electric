@@ -24,6 +24,8 @@ export const PostScalarFieldEnumSchema = z.enum([
   'authorId',
 ])
 
+export const ProfileScalarFieldEnumSchema = z.enum(['id', 'bio', 'userId'])
+
 export const QueryModeSchema = z.enum(['default', 'insensitive'])
 
 export const SortOrderSchema = z.enum(['asc', 'desc'])
@@ -77,6 +79,18 @@ export const PostSchema = z.object({
 export type Post = z.infer<typeof PostSchema>
 
 /////////////////////////////////////////
+// PROFILE SCHEMA
+/////////////////////////////////////////
+
+export const ProfileSchema = z.object({
+  id: z.number().int(),
+  bio: z.string(),
+  userId: z.number().int(),
+})
+
+export type Profile = z.infer<typeof ProfileSchema>
+
+/////////////////////////////////////////
 // SELECT & INCLUDE
 /////////////////////////////////////////
 
@@ -98,6 +112,7 @@ export const UserIncludeSchema: z.ZodType<Prisma.UserInclude> = z
     posts: z
       .union([z.boolean(), z.lazy(() => PostFindManyArgsSchema)])
       .optional(),
+    profile: z.union([z.boolean(), z.lazy(() => ProfileArgsSchema)]).optional(),
     _count: z
       .union([z.boolean(), z.lazy(() => UserCountOutputTypeArgsSchema)])
       .optional(),
@@ -132,6 +147,7 @@ export const UserSelectSchema: z.ZodType<Prisma.UserSelect> = z
     posts: z
       .union([z.boolean(), z.lazy(() => PostFindManyArgsSchema)])
       .optional(),
+    profile: z.union([z.boolean(), z.lazy(() => ProfileArgsSchema)]).optional(),
     _count: z
       .union([z.boolean(), z.lazy(() => UserCountOutputTypeArgsSchema)])
       .optional(),
@@ -162,6 +178,31 @@ export const PostSelectSchema: z.ZodType<Prisma.PostSelect> = z
     nbr: z.boolean().optional(),
     authorId: z.boolean().optional(),
     author: z.union([z.boolean(), z.lazy(() => UserArgsSchema)]).optional(),
+  })
+  .strict()
+
+// PROFILE
+//------------------------------------------------------
+
+export const ProfileIncludeSchema: z.ZodType<Prisma.ProfileInclude> = z
+  .object({
+    user: z.union([z.boolean(), z.lazy(() => UserArgsSchema)]).optional(),
+  })
+  .strict()
+
+export const ProfileArgsSchema: z.ZodType<Prisma.ProfileArgs> = z
+  .object({
+    select: z.lazy(() => ProfileSelectSchema).optional(),
+    include: z.lazy(() => ProfileIncludeSchema).optional(),
+  })
+  .strict()
+
+export const ProfileSelectSchema: z.ZodType<Prisma.ProfileSelect> = z
+  .object({
+    id: z.boolean().optional(),
+    bio: z.boolean().optional(),
+    userId: z.boolean().optional(),
+    user: z.union([z.boolean(), z.lazy(() => UserArgsSchema)]).optional(),
   })
   .strict()
 
@@ -279,6 +320,13 @@ export const UserWhereInputSchema: z.ZodType<Prisma.UserWhereInput> = z
       .optional()
       .nullable(),
     posts: z.lazy(() => PostListRelationFilterSchema).optional(),
+    profile: z
+      .union([
+        z.lazy(() => ProfileRelationFilterSchema),
+        z.lazy(() => ProfileWhereInputSchema),
+      ])
+      .optional()
+      .nullable(),
   })
   .strict()
 
@@ -288,6 +336,7 @@ export const UserOrderByWithRelationInputSchema: z.ZodType<Prisma.UserOrderByWit
       id: z.lazy(() => SortOrderSchema).optional(),
       name: z.lazy(() => SortOrderSchema).optional(),
       posts: z.lazy(() => PostOrderByRelationAggregateInputSchema).optional(),
+      profile: z.lazy(() => ProfileOrderByWithRelationInputSchema).optional(),
     })
     .strict()
 
@@ -458,6 +507,100 @@ export const PostScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.PostScal
     })
     .strict()
 
+export const ProfileWhereInputSchema: z.ZodType<Prisma.ProfileWhereInput> = z
+  .object({
+    AND: z
+      .union([
+        z.lazy(() => ProfileWhereInputSchema),
+        z.lazy(() => ProfileWhereInputSchema).array(),
+      ])
+      .optional(),
+    OR: z
+      .lazy(() => ProfileWhereInputSchema)
+      .array()
+      .optional(),
+    NOT: z
+      .union([
+        z.lazy(() => ProfileWhereInputSchema),
+        z.lazy(() => ProfileWhereInputSchema).array(),
+      ])
+      .optional(),
+    id: z.union([z.lazy(() => IntFilterSchema), z.number()]).optional(),
+    bio: z.union([z.lazy(() => StringFilterSchema), z.string()]).optional(),
+    userId: z.union([z.lazy(() => IntFilterSchema), z.number()]).optional(),
+    user: z
+      .union([
+        z.lazy(() => UserRelationFilterSchema),
+        z.lazy(() => UserWhereInputSchema),
+      ])
+      .optional()
+      .nullable(),
+  })
+  .strict()
+
+export const ProfileOrderByWithRelationInputSchema: z.ZodType<Prisma.ProfileOrderByWithRelationInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      bio: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+      user: z.lazy(() => UserOrderByWithRelationInputSchema).optional(),
+    })
+    .strict()
+
+export const ProfileWhereUniqueInputSchema: z.ZodType<Prisma.ProfileWhereUniqueInput> =
+  z
+    .object({
+      id: z.number().int().optional(),
+      userId: z.number().int().optional(),
+    })
+    .strict()
+
+export const ProfileOrderByWithAggregationInputSchema: z.ZodType<Prisma.ProfileOrderByWithAggregationInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      bio: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+      _count: z.lazy(() => ProfileCountOrderByAggregateInputSchema).optional(),
+      _avg: z.lazy(() => ProfileAvgOrderByAggregateInputSchema).optional(),
+      _max: z.lazy(() => ProfileMaxOrderByAggregateInputSchema).optional(),
+      _min: z.lazy(() => ProfileMinOrderByAggregateInputSchema).optional(),
+      _sum: z.lazy(() => ProfileSumOrderByAggregateInputSchema).optional(),
+    })
+    .strict()
+
+export const ProfileScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.ProfileScalarWhereWithAggregatesInput> =
+  z
+    .object({
+      AND: z
+        .union([
+          z.lazy(() => ProfileScalarWhereWithAggregatesInputSchema),
+          z.lazy(() => ProfileScalarWhereWithAggregatesInputSchema).array(),
+        ])
+        .optional(),
+      OR: z
+        .lazy(() => ProfileScalarWhereWithAggregatesInputSchema)
+        .array()
+        .optional(),
+      NOT: z
+        .union([
+          z.lazy(() => ProfileScalarWhereWithAggregatesInputSchema),
+          z.lazy(() => ProfileScalarWhereWithAggregatesInputSchema).array(),
+        ])
+        .optional(),
+      id: z
+        .union([z.lazy(() => IntWithAggregatesFilterSchema), z.number()])
+        .optional(),
+      bio: z
+        .union([z.lazy(() => StringWithAggregatesFilterSchema), z.string()])
+        .optional(),
+      userId: z
+        .union([z.lazy(() => IntWithAggregatesFilterSchema), z.number()])
+        .optional(),
+    })
+    .strict()
+
 export const itemsCreateInputSchema: z.ZodType<Prisma.itemsCreateInput> = z
   .object({
     value: z.string(),
@@ -560,6 +703,9 @@ export const UserCreateInputSchema: z.ZodType<Prisma.UserCreateInput> = z
     posts: z
       .lazy(() => PostCreateNestedManyWithoutAuthorInputSchema)
       .optional(),
+    profile: z
+      .lazy(() => ProfileCreateNestedOneWithoutUserInputSchema)
+      .optional(),
   })
   .strict()
 
@@ -570,6 +716,9 @@ export const UserUncheckedCreateInputSchema: z.ZodType<Prisma.UserUncheckedCreat
       name: z.string().optional().nullable(),
       posts: z
         .lazy(() => PostUncheckedCreateNestedManyWithoutAuthorInputSchema)
+        .optional(),
+      profile: z
+        .lazy(() => ProfileUncheckedCreateNestedOneWithoutUserInputSchema)
         .optional(),
     })
     .strict()
@@ -592,6 +741,9 @@ export const UserUpdateInputSchema: z.ZodType<Prisma.UserUpdateInput> = z
     posts: z
       .lazy(() => PostUpdateManyWithoutAuthorNestedInputSchema)
       .optional(),
+    profile: z
+      .lazy(() => ProfileUpdateOneWithoutUserNestedInputSchema)
+      .optional(),
   })
   .strict()
 
@@ -613,6 +765,9 @@ export const UserUncheckedUpdateInputSchema: z.ZodType<Prisma.UserUncheckedUpdat
         .nullable(),
       posts: z
         .lazy(() => PostUncheckedUpdateManyWithoutAuthorNestedInputSchema)
+        .optional(),
+      profile: z
+        .lazy(() => ProfileUncheckedUpdateOneWithoutUserNestedInputSchema)
         .optional(),
     })
     .strict()
@@ -825,6 +980,113 @@ export const PostUncheckedUpdateManyInputSchema: z.ZodType<Prisma.PostUncheckedU
     })
     .strict()
 
+export const ProfileCreateInputSchema: z.ZodType<Prisma.ProfileCreateInput> = z
+  .object({
+    id: z.number().int(),
+    bio: z.string(),
+    user: z.lazy(() => UserCreateNestedOneWithoutProfileInputSchema).optional(),
+  })
+  .strict()
+
+export const ProfileUncheckedCreateInputSchema: z.ZodType<Prisma.ProfileUncheckedCreateInput> =
+  z
+    .object({
+      id: z.number().int(),
+      bio: z.string(),
+      userId: z.number().int(),
+    })
+    .strict()
+
+export const ProfileUpdateInputSchema: z.ZodType<Prisma.ProfileUpdateInput> = z
+  .object({
+    id: z
+      .union([
+        z.number().int(),
+        z.lazy(() => IntFieldUpdateOperationsInputSchema),
+      ])
+      .optional(),
+    bio: z
+      .union([z.string(), z.lazy(() => StringFieldUpdateOperationsInputSchema)])
+      .optional(),
+    user: z.lazy(() => UserUpdateOneWithoutProfileNestedInputSchema).optional(),
+  })
+  .strict()
+
+export const ProfileUncheckedUpdateInputSchema: z.ZodType<Prisma.ProfileUncheckedUpdateInput> =
+  z
+    .object({
+      id: z
+        .union([
+          z.number().int(),
+          z.lazy(() => IntFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+      bio: z
+        .union([
+          z.string(),
+          z.lazy(() => StringFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+      userId: z
+        .union([
+          z.number().int(),
+          z.lazy(() => IntFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
+export const ProfileCreateManyInputSchema: z.ZodType<Prisma.ProfileCreateManyInput> =
+  z
+    .object({
+      id: z.number().int(),
+      bio: z.string(),
+      userId: z.number().int(),
+    })
+    .strict()
+
+export const ProfileUpdateManyMutationInputSchema: z.ZodType<Prisma.ProfileUpdateManyMutationInput> =
+  z
+    .object({
+      id: z
+        .union([
+          z.number().int(),
+          z.lazy(() => IntFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+      bio: z
+        .union([
+          z.string(),
+          z.lazy(() => StringFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
+export const ProfileUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ProfileUncheckedUpdateManyInput> =
+  z
+    .object({
+      id: z
+        .union([
+          z.number().int(),
+          z.lazy(() => IntFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+      bio: z
+        .union([
+          z.string(),
+          z.lazy(() => StringFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+      userId: z
+        .union([
+          z.number().int(),
+          z.lazy(() => IntFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
 export const StringFilterSchema: z.ZodType<Prisma.StringFilter> = z
   .object({
     equals: z.string().optional(),
@@ -992,6 +1254,20 @@ export const PostListRelationFilterSchema: z.ZodType<Prisma.PostListRelationFilt
     })
     .strict()
 
+export const ProfileRelationFilterSchema: z.ZodType<Prisma.ProfileRelationFilter> =
+  z
+    .object({
+      is: z
+        .lazy(() => ProfileWhereInputSchema)
+        .optional()
+        .nullable(),
+      isNot: z
+        .lazy(() => ProfileWhereInputSchema)
+        .optional()
+        .nullable(),
+    })
+    .strict()
+
 export const PostOrderByRelationAggregateInputSchema: z.ZodType<Prisma.PostOrderByRelationAggregateInput> =
   z
     .object({
@@ -1149,6 +1425,49 @@ export const PostSumOrderByAggregateInputSchema: z.ZodType<Prisma.PostSumOrderBy
     })
     .strict()
 
+export const ProfileCountOrderByAggregateInputSchema: z.ZodType<Prisma.ProfileCountOrderByAggregateInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      bio: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
+export const ProfileAvgOrderByAggregateInputSchema: z.ZodType<Prisma.ProfileAvgOrderByAggregateInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
+export const ProfileMaxOrderByAggregateInputSchema: z.ZodType<Prisma.ProfileMaxOrderByAggregateInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      bio: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
+export const ProfileMinOrderByAggregateInputSchema: z.ZodType<Prisma.ProfileMinOrderByAggregateInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      bio: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
+export const ProfileSumOrderByAggregateInputSchema: z.ZodType<Prisma.ProfileSumOrderByAggregateInput> =
+  z
+    .object({
+      id: z.lazy(() => SortOrderSchema).optional(),
+      userId: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
 export const StringFieldUpdateOperationsInputSchema: z.ZodType<Prisma.StringFieldUpdateOperationsInput> =
   z
     .object({
@@ -1196,6 +1515,22 @@ export const PostCreateNestedManyWithoutAuthorInputSchema: z.ZodType<Prisma.Post
     })
     .strict()
 
+export const ProfileCreateNestedOneWithoutUserInputSchema: z.ZodType<Prisma.ProfileCreateNestedOneWithoutUserInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => ProfileCreateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => ProfileCreateOrConnectWithoutUserInputSchema)
+        .optional(),
+      connect: z.lazy(() => ProfileWhereUniqueInputSchema).optional(),
+    })
+    .strict()
+
 export const PostUncheckedCreateNestedManyWithoutAuthorInputSchema: z.ZodType<Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput> =
   z
     .object({
@@ -1222,6 +1557,22 @@ export const PostUncheckedCreateNestedManyWithoutAuthorInputSchema: z.ZodType<Pr
           z.lazy(() => PostWhereUniqueInputSchema).array(),
         ])
         .optional(),
+    })
+    .strict()
+
+export const ProfileUncheckedCreateNestedOneWithoutUserInputSchema: z.ZodType<Prisma.ProfileUncheckedCreateNestedOneWithoutUserInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => ProfileCreateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => ProfileCreateOrConnectWithoutUserInputSchema)
+        .optional(),
+      connect: z.lazy(() => ProfileWhereUniqueInputSchema).optional(),
     })
     .strict()
 
@@ -1318,6 +1669,31 @@ export const PostUpdateManyWithoutAuthorNestedInputSchema: z.ZodType<Prisma.Post
     })
     .strict()
 
+export const ProfileUpdateOneWithoutUserNestedInputSchema: z.ZodType<Prisma.ProfileUpdateOneWithoutUserNestedInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => ProfileCreateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => ProfileCreateOrConnectWithoutUserInputSchema)
+        .optional(),
+      upsert: z.lazy(() => ProfileUpsertWithoutUserInputSchema).optional(),
+      disconnect: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      connect: z.lazy(() => ProfileWhereUniqueInputSchema).optional(),
+      update: z
+        .union([
+          z.lazy(() => ProfileUpdateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedUpdateWithoutUserInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
 export const PostUncheckedUpdateManyWithoutAuthorNestedInputSchema: z.ZodType<Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput> =
   z
     .object({
@@ -1393,6 +1769,31 @@ export const PostUncheckedUpdateManyWithoutAuthorNestedInputSchema: z.ZodType<Pr
     })
     .strict()
 
+export const ProfileUncheckedUpdateOneWithoutUserNestedInputSchema: z.ZodType<Prisma.ProfileUncheckedUpdateOneWithoutUserNestedInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => ProfileCreateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => ProfileCreateOrConnectWithoutUserInputSchema)
+        .optional(),
+      upsert: z.lazy(() => ProfileUpsertWithoutUserInputSchema).optional(),
+      disconnect: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      connect: z.lazy(() => ProfileWhereUniqueInputSchema).optional(),
+      update: z
+        .union([
+          z.lazy(() => ProfileUpdateWithoutUserInputSchema),
+          z.lazy(() => ProfileUncheckedUpdateWithoutUserInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
 export const UserCreateNestedOneWithoutPostsInputSchema: z.ZodType<Prisma.UserCreateNestedOneWithoutPostsInput> =
   z
     .object({
@@ -1429,6 +1830,47 @@ export const UserUpdateOneWithoutPostsNestedInputSchema: z.ZodType<Prisma.UserUp
         .union([
           z.lazy(() => UserUpdateWithoutPostsInputSchema),
           z.lazy(() => UserUncheckedUpdateWithoutPostsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
+export const UserCreateNestedOneWithoutProfileInputSchema: z.ZodType<Prisma.UserCreateNestedOneWithoutProfileInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => UserCreateWithoutProfileInputSchema),
+          z.lazy(() => UserUncheckedCreateWithoutProfileInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => UserCreateOrConnectWithoutProfileInputSchema)
+        .optional(),
+      connect: z.lazy(() => UserWhereUniqueInputSchema).optional(),
+    })
+    .strict()
+
+export const UserUpdateOneWithoutProfileNestedInputSchema: z.ZodType<Prisma.UserUpdateOneWithoutProfileNestedInput> =
+  z
+    .object({
+      create: z
+        .union([
+          z.lazy(() => UserCreateWithoutProfileInputSchema),
+          z.lazy(() => UserUncheckedCreateWithoutProfileInputSchema),
+        ])
+        .optional(),
+      connectOrCreate: z
+        .lazy(() => UserCreateOrConnectWithoutProfileInputSchema)
+        .optional(),
+      upsert: z.lazy(() => UserUpsertWithoutProfileInputSchema).optional(),
+      disconnect: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      connect: z.lazy(() => UserWhereUniqueInputSchema).optional(),
+      update: z
+        .union([
+          z.lazy(() => UserUpdateWithoutProfileInputSchema),
+          z.lazy(() => UserUncheckedUpdateWithoutProfileInputSchema),
         ])
         .optional(),
     })
@@ -1673,6 +2115,33 @@ export const PostCreateManyAuthorInputEnvelopeSchema: z.ZodType<Prisma.PostCreat
     })
     .strict()
 
+export const ProfileCreateWithoutUserInputSchema: z.ZodType<Prisma.ProfileCreateWithoutUserInput> =
+  z
+    .object({
+      id: z.number(),
+      bio: z.string(),
+    })
+    .strict()
+
+export const ProfileUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.ProfileUncheckedCreateWithoutUserInput> =
+  z
+    .object({
+      id: z.number(),
+      bio: z.string(),
+    })
+    .strict()
+
+export const ProfileCreateOrConnectWithoutUserInputSchema: z.ZodType<Prisma.ProfileCreateOrConnectWithoutUserInput> =
+  z
+    .object({
+      where: z.lazy(() => ProfileWhereUniqueInputSchema),
+      create: z.union([
+        z.lazy(() => ProfileCreateWithoutUserInputSchema),
+        z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+      ]),
+    })
+    .strict()
+
 export const PostUpsertWithWhereUniqueWithoutAuthorInputSchema: z.ZodType<Prisma.PostUpsertWithWhereUniqueWithoutAuthorInput> =
   z
     .object({
@@ -1742,11 +2211,58 @@ export const PostScalarWhereInputSchema: z.ZodType<Prisma.PostScalarWhereInput> 
     })
     .strict()
 
+export const ProfileUpsertWithoutUserInputSchema: z.ZodType<Prisma.ProfileUpsertWithoutUserInput> =
+  z
+    .object({
+      update: z.union([
+        z.lazy(() => ProfileUpdateWithoutUserInputSchema),
+        z.lazy(() => ProfileUncheckedUpdateWithoutUserInputSchema),
+      ]),
+      create: z.union([
+        z.lazy(() => ProfileCreateWithoutUserInputSchema),
+        z.lazy(() => ProfileUncheckedCreateWithoutUserInputSchema),
+      ]),
+    })
+    .strict()
+
+export const ProfileUpdateWithoutUserInputSchema: z.ZodType<Prisma.ProfileUpdateWithoutUserInput> =
+  z
+    .object({
+      id: z
+        .union([z.number(), z.lazy(() => IntFieldUpdateOperationsInputSchema)])
+        .optional(),
+      bio: z
+        .union([
+          z.string(),
+          z.lazy(() => StringFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
+export const ProfileUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.ProfileUncheckedUpdateWithoutUserInput> =
+  z
+    .object({
+      id: z
+        .union([z.number(), z.lazy(() => IntFieldUpdateOperationsInputSchema)])
+        .optional(),
+      bio: z
+        .union([
+          z.string(),
+          z.lazy(() => StringFieldUpdateOperationsInputSchema),
+        ])
+        .optional(),
+    })
+    .strict()
+
 export const UserCreateWithoutPostsInputSchema: z.ZodType<Prisma.UserCreateWithoutPostsInput> =
   z
     .object({
       id: z.number(),
       name: z.string().optional().nullable(),
+      profile: z
+        .lazy(() => ProfileCreateNestedOneWithoutUserInputSchema)
+        .optional(),
     })
     .strict()
 
@@ -1755,6 +2271,9 @@ export const UserUncheckedCreateWithoutPostsInputSchema: z.ZodType<Prisma.UserUn
     .object({
       id: z.number(),
       name: z.string().optional().nullable(),
+      profile: z
+        .lazy(() => ProfileUncheckedCreateNestedOneWithoutUserInputSchema)
+        .optional(),
     })
     .strict()
 
@@ -1796,6 +2315,9 @@ export const UserUpdateWithoutPostsInputSchema: z.ZodType<Prisma.UserUpdateWitho
         ])
         .optional()
         .nullable(),
+      profile: z
+        .lazy(() => ProfileUpdateOneWithoutUserNestedInputSchema)
+        .optional(),
     })
     .strict()
 
@@ -1812,6 +2334,94 @@ export const UserUncheckedUpdateWithoutPostsInputSchema: z.ZodType<Prisma.UserUn
         ])
         .optional()
         .nullable(),
+      profile: z
+        .lazy(() => ProfileUncheckedUpdateOneWithoutUserNestedInputSchema)
+        .optional(),
+    })
+    .strict()
+
+export const UserCreateWithoutProfileInputSchema: z.ZodType<Prisma.UserCreateWithoutProfileInput> =
+  z
+    .object({
+      id: z.number(),
+      name: z.string().optional().nullable(),
+      posts: z
+        .lazy(() => PostCreateNestedManyWithoutAuthorInputSchema)
+        .optional(),
+    })
+    .strict()
+
+export const UserUncheckedCreateWithoutProfileInputSchema: z.ZodType<Prisma.UserUncheckedCreateWithoutProfileInput> =
+  z
+    .object({
+      id: z.number(),
+      name: z.string().optional().nullable(),
+      posts: z
+        .lazy(() => PostUncheckedCreateNestedManyWithoutAuthorInputSchema)
+        .optional(),
+    })
+    .strict()
+
+export const UserCreateOrConnectWithoutProfileInputSchema: z.ZodType<Prisma.UserCreateOrConnectWithoutProfileInput> =
+  z
+    .object({
+      where: z.lazy(() => UserWhereUniqueInputSchema),
+      create: z.union([
+        z.lazy(() => UserCreateWithoutProfileInputSchema),
+        z.lazy(() => UserUncheckedCreateWithoutProfileInputSchema),
+      ]),
+    })
+    .strict()
+
+export const UserUpsertWithoutProfileInputSchema: z.ZodType<Prisma.UserUpsertWithoutProfileInput> =
+  z
+    .object({
+      update: z.union([
+        z.lazy(() => UserUpdateWithoutProfileInputSchema),
+        z.lazy(() => UserUncheckedUpdateWithoutProfileInputSchema),
+      ]),
+      create: z.union([
+        z.lazy(() => UserCreateWithoutProfileInputSchema),
+        z.lazy(() => UserUncheckedCreateWithoutProfileInputSchema),
+      ]),
+    })
+    .strict()
+
+export const UserUpdateWithoutProfileInputSchema: z.ZodType<Prisma.UserUpdateWithoutProfileInput> =
+  z
+    .object({
+      id: z
+        .union([z.number(), z.lazy(() => IntFieldUpdateOperationsInputSchema)])
+        .optional(),
+      name: z
+        .union([
+          z.string(),
+          z.lazy(() => NullableStringFieldUpdateOperationsInputSchema),
+        ])
+        .optional()
+        .nullable(),
+      posts: z
+        .lazy(() => PostUpdateManyWithoutAuthorNestedInputSchema)
+        .optional(),
+    })
+    .strict()
+
+export const UserUncheckedUpdateWithoutProfileInputSchema: z.ZodType<Prisma.UserUncheckedUpdateWithoutProfileInput> =
+  z
+    .object({
+      id: z
+        .union([z.number(), z.lazy(() => IntFieldUpdateOperationsInputSchema)])
+        .optional(),
+      name: z
+        .union([
+          z.string(),
+          z.lazy(() => NullableStringFieldUpdateOperationsInputSchema),
+        ])
+        .optional()
+        .nullable(),
+      posts: z
+        .lazy(() => PostUncheckedUpdateManyWithoutAuthorNestedInputSchema)
+        .optional(),
     })
     .strict()
 
@@ -2221,6 +2831,113 @@ export const PostFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.PostFindUniqueOrT
     })
     .strict()
 
+export const ProfileFindFirstArgsSchema: z.ZodType<Prisma.ProfileFindFirstArgs> =
+  z
+    .object({
+      select: ProfileSelectSchema.optional(),
+      include: ProfileIncludeSchema.optional(),
+      where: ProfileWhereInputSchema.optional(),
+      orderBy: z
+        .union([
+          ProfileOrderByWithRelationInputSchema.array(),
+          ProfileOrderByWithRelationInputSchema,
+        ])
+        .optional(),
+      cursor: ProfileWhereUniqueInputSchema.optional(),
+      take: z.number().optional(),
+      skip: z.number().optional(),
+      distinct: ProfileScalarFieldEnumSchema.array().optional(),
+    })
+    .strict()
+
+export const ProfileFindFirstOrThrowArgsSchema: z.ZodType<Prisma.ProfileFindFirstOrThrowArgs> =
+  z
+    .object({
+      select: ProfileSelectSchema.optional(),
+      include: ProfileIncludeSchema.optional(),
+      where: ProfileWhereInputSchema.optional(),
+      orderBy: z
+        .union([
+          ProfileOrderByWithRelationInputSchema.array(),
+          ProfileOrderByWithRelationInputSchema,
+        ])
+        .optional(),
+      cursor: ProfileWhereUniqueInputSchema.optional(),
+      take: z.number().optional(),
+      skip: z.number().optional(),
+      distinct: ProfileScalarFieldEnumSchema.array().optional(),
+    })
+    .strict()
+
+export const ProfileFindManyArgsSchema: z.ZodType<Prisma.ProfileFindManyArgs> =
+  z
+    .object({
+      select: ProfileSelectSchema.optional(),
+      include: ProfileIncludeSchema.optional(),
+      where: ProfileWhereInputSchema.optional(),
+      orderBy: z
+        .union([
+          ProfileOrderByWithRelationInputSchema.array(),
+          ProfileOrderByWithRelationInputSchema,
+        ])
+        .optional(),
+      cursor: ProfileWhereUniqueInputSchema.optional(),
+      take: z.number().optional(),
+      skip: z.number().optional(),
+      distinct: ProfileScalarFieldEnumSchema.array().optional(),
+    })
+    .strict()
+
+export const ProfileAggregateArgsSchema: z.ZodType<Prisma.ProfileAggregateArgs> =
+  z
+    .object({
+      where: ProfileWhereInputSchema.optional(),
+      orderBy: z
+        .union([
+          ProfileOrderByWithRelationInputSchema.array(),
+          ProfileOrderByWithRelationInputSchema,
+        ])
+        .optional(),
+      cursor: ProfileWhereUniqueInputSchema.optional(),
+      take: z.number().optional(),
+      skip: z.number().optional(),
+    })
+    .strict()
+
+export const ProfileGroupByArgsSchema: z.ZodType<Prisma.ProfileGroupByArgs> = z
+  .object({
+    where: ProfileWhereInputSchema.optional(),
+    orderBy: z
+      .union([
+        ProfileOrderByWithAggregationInputSchema.array(),
+        ProfileOrderByWithAggregationInputSchema,
+      ])
+      .optional(),
+    by: ProfileScalarFieldEnumSchema.array(),
+    having: ProfileScalarWhereWithAggregatesInputSchema.optional(),
+    take: z.number().optional(),
+    skip: z.number().optional(),
+  })
+  .strict()
+
+export const ProfileFindUniqueArgsSchema: z.ZodType<Prisma.ProfileFindUniqueArgs> =
+  z
+    .object({
+      select: ProfileSelectSchema.optional(),
+      include: ProfileIncludeSchema.optional(),
+      where: ProfileWhereUniqueInputSchema,
+    })
+    .strict()
+
+export const ProfileFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.ProfileFindUniqueOrThrowArgs> =
+  z
+    .object({
+      select: ProfileSelectSchema.optional(),
+      include: ProfileIncludeSchema.optional(),
+      where: ProfileWhereUniqueInputSchema,
+    })
+    .strict()
+
 export const itemsCreateArgsSchema: z.ZodType<Prisma.itemsCreateArgs> = z
   .object({
     select: itemsSelectSchema.optional(),
@@ -2403,42 +3120,120 @@ export const PostDeleteManyArgsSchema: z.ZodType<Prisma.PostDeleteManyArgs> = z
   })
   .strict()
 
+export const ProfileCreateArgsSchema: z.ZodType<Prisma.ProfileCreateArgs> = z
+  .object({
+    select: ProfileSelectSchema.optional(),
+    include: ProfileIncludeSchema.optional(),
+    data: z.union([
+      ProfileCreateInputSchema,
+      ProfileUncheckedCreateInputSchema,
+    ]),
+  })
+  .strict()
+
+export const ProfileUpsertArgsSchema: z.ZodType<Prisma.ProfileUpsertArgs> = z
+  .object({
+    select: ProfileSelectSchema.optional(),
+    include: ProfileIncludeSchema.optional(),
+    where: ProfileWhereUniqueInputSchema,
+    create: z.union([
+      ProfileCreateInputSchema,
+      ProfileUncheckedCreateInputSchema,
+    ]),
+    update: z.union([
+      ProfileUpdateInputSchema,
+      ProfileUncheckedUpdateInputSchema,
+    ]),
+  })
+  .strict()
+
+export const ProfileCreateManyArgsSchema: z.ZodType<Prisma.ProfileCreateManyArgs> =
+  z
+    .object({
+      data: z.union([
+        ProfileCreateManyInputSchema,
+        ProfileCreateManyInputSchema.array(),
+      ]),
+      skipDuplicates: z.boolean().optional(),
+    })
+    .strict()
+
+export const ProfileDeleteArgsSchema: z.ZodType<Prisma.ProfileDeleteArgs> = z
+  .object({
+    select: ProfileSelectSchema.optional(),
+    include: ProfileIncludeSchema.optional(),
+    where: ProfileWhereUniqueInputSchema,
+  })
+  .strict()
+
+export const ProfileUpdateArgsSchema: z.ZodType<Prisma.ProfileUpdateArgs> = z
+  .object({
+    select: ProfileSelectSchema.optional(),
+    include: ProfileIncludeSchema.optional(),
+    data: z.union([
+      ProfileUpdateInputSchema,
+      ProfileUncheckedUpdateInputSchema,
+    ]),
+    where: ProfileWhereUniqueInputSchema,
+  })
+  .strict()
+
+export const ProfileUpdateManyArgsSchema: z.ZodType<Prisma.ProfileUpdateManyArgs> =
+  z
+    .object({
+      data: z.union([
+        ProfileUpdateManyMutationInputSchema,
+        ProfileUncheckedUpdateManyInputSchema,
+      ]),
+      where: ProfileWhereInputSchema.optional(),
+    })
+    .strict()
+
+export const ProfileDeleteManyArgsSchema: z.ZodType<Prisma.ProfileDeleteManyArgs> =
+  z
+    .object({
+      where: ProfileWhereInputSchema.optional(),
+    })
+    .strict()
+
 declare module 'fp-ts/HKT' {
   interface URItoKind<
     A extends
-      | Prisma.PostArgs
-      | Prisma.UserArgs
-      | Prisma.itemsArgs
       | boolean
       | null
       | undefined
+      | Prisma.itemsArgs
+      | Prisma.UserArgs
+      | Prisma.PostArgs
+      | Prisma.ProfileArgs
   > {
-    // (Record<string, any> & Prisma.itemsArgs) -> the record is needed because Prisma.itemsArgs only contains optional fields
-    //                                             so an object only extends it if it provides one of those fields.
-    //                                             but sometimes we do not provide those fields at all in which case it doesn't extend it
-    //                                             therefore if we make it a record it will indeed extend that record
-    //  { data: number } extends { foo?: number } ? true : false  -> is false
-    //  { data: number } extends (Record<string, any> &{ foo?: number }) ? true : false  -> is true
     itemsGetPayload: A extends
       | boolean
       | null
       | undefined
-      | (Record<string, any> & Prisma.itemsArgs)
+      | (Prisma.itemsArgs & Record<string, any>)
       ? Prisma.itemsGetPayload<A>
       : never
     UserGetPayload: A extends
       | boolean
       | null
       | undefined
-      | (Record<string, any> & Prisma.UserArgs)
+      | (Prisma.UserArgs & Record<string, any>)
       ? Prisma.UserGetPayload<A>
       : never
     PostGetPayload: A extends
       | boolean
       | null
       | undefined
-      | (Record<string, any> & Prisma.PostArgs)
+      | (Prisma.PostArgs & Record<string, any>)
       ? Prisma.PostGetPayload<A>
+      : never
+    ProfileGetPayload: A extends
+      | boolean
+      | null
+      | undefined
+      | (Prisma.ProfileArgs & Record<string, any>)
+      ? Prisma.ProfileGetPayload<A>
       : never
   }
 }
@@ -2473,7 +3268,10 @@ export const tableDescriptions = {
   >,
   User: {
     fields: ['id', 'name'],
-    relations: [new Relation('posts', '', '', 'Post', 'PostToUser', 'many')],
+    relations: [
+      new Relation('posts', '', '', 'Post', 'PostToUser', 'many'),
+      new Relation('profile', '', '', 'Profile', 'ProfileToUser', 'one'),
+    ],
     modelSchema: (UserCreateInputSchema as any)
       .partial()
       .or((UserUncheckedCreateInputSchema as any).partial()),
@@ -2526,6 +3324,35 @@ export const tableDescriptions = {
     Prisma.PostFindFirstArgs['orderBy'],
     Prisma.PostScalarFieldEnum,
     'PostGetPayload'
+  >,
+  Profile: {
+    fields: ['id', 'bio', 'userId'],
+    relations: [
+      new Relation('user', 'userId', 'id', 'User', 'ProfileToUser', 'one'),
+    ],
+    modelSchema: (ProfileCreateInputSchema as any)
+      .partial()
+      .or((ProfileUncheckedCreateInputSchema as any).partial()),
+    createSchema: ProfileCreateArgsSchema,
+    createManySchema: ProfileCreateManyArgsSchema,
+    findUniqueSchema: ProfileFindUniqueArgsSchema,
+    findSchema: ProfileFindFirstArgsSchema,
+    updateSchema: ProfileUpdateArgsSchema,
+    updateManySchema: ProfileUpdateManyArgsSchema,
+    upsertSchema: ProfileUpsertArgsSchema,
+    deleteSchema: ProfileDeleteArgsSchema,
+    deleteManySchema: ProfileDeleteManyArgsSchema,
+  } as TableDescription<
+    z.infer<typeof ProfileCreateInputSchema>,
+    Prisma.ProfileCreateArgs['data'],
+    Prisma.ProfileUpdateArgs['data'],
+    Prisma.ProfileFindFirstArgs['select'],
+    Prisma.ProfileFindFirstArgs['where'],
+    Prisma.ProfileFindUniqueArgs['where'],
+    Omit<Prisma.ProfileInclude, '_count'>,
+    Prisma.ProfileFindFirstArgs['orderBy'],
+    Prisma.ProfileScalarFieldEnum,
+    'ProfileGetPayload'
   >,
 }
 

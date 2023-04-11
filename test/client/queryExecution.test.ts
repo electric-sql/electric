@@ -26,6 +26,7 @@ const electric = await electrify(db, dbDescription, {
 const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
+const profileTable = electric.db.Profile
 
 const post1 = {
   id: 1,
@@ -58,9 +59,21 @@ const author1 = {
   name: 'alice',
 }
 
+const profile1 = {
+  id: 1,
+  bio: 'bio 1',
+  userId: 1,
+}
+
 const author2 = {
   id: 2,
   name: 'bob',
+}
+
+const profile2 = {
+  id: 2,
+  bio: 'bio 2',
+  userId: 2,
 }
 
 const sortById = <T extends { id: number }>(arr: Array<T>) =>
@@ -75,6 +88,10 @@ function clear() {
   db.exec('DROP TABLE IF EXISTS User')
   db.exec(
     "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+  )
+  db.exec('DROP TABLE IF EXISTS Profile')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int);"
   )
 }
 
@@ -933,6 +950,10 @@ async function populate() {
   await userTable.createMany({
     data: [author1, author2],
   })
+
+  await profileTable.createMany({
+    data: [profile1, profile2],
+  })
 }
 
 test.serial(
@@ -1058,7 +1079,7 @@ test.serial(
 )
 
 test.serial(
-  'update query can update related object for incoming FK',
+  'update query can update related object for incoming one-to-many FK',
   async (t) => {
     await populate()
 
@@ -1120,6 +1141,64 @@ test.serial(
     t.deepEqual(res, expectedRes)
 
     t.deepEqual(await fetchAuthor1(), expectedRes)
+  }
+)
+
+test.serial(
+  'update query can update related object for incoming one-to-one FK',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchUser1 = async () => {
+      return await userTable.findUnique({
+        where: {
+          id: author1.id,
+        },
+        include: {
+          profile: true,
+        },
+      })
+    }
+
+    const r = await fetchUser1()
+    t.deepEqual(r, {
+      ...author1,
+      profile: profile1,
+    })
+
+    const res = await userTable.update({
+      // Update the name of user 1 as well as the bio in his profile
+      data: {
+        name: 'Updated name',
+        profile: {
+          update: {
+            bio: 'Updated bio',
+          },
+        },
+      },
+      where: {
+        id: author1.id,
+      },
+      include: {
+        profile: true,
+      },
+    })
+
+    const expectedRes = {
+      ...author1,
+      name: 'Updated name',
+      profile: {
+        ...profile1,
+        bio: 'Updated bio',
+      },
+    }
+
+    t.deepEqual(res, expectedRes)
+
+    t.deepEqual(await fetchUser1(), expectedRes)
   }
 )
 

@@ -20,16 +20,24 @@ model items {
 }
 
 model User {
-  id    Int    @id
-  name  String?
-  posts Post[]
+  id      Int      @id
+  name    String?
+  posts   Post[]
+  profile Profile?
 }
 
 model Post {
-  id        Int  @id
+  id        Int    @id
   title     String @unique
   contents  String
   nbr       Int?
   authorId  Int
-  author    User? @relation(fields: [authorId], references: [id])
+  author    User?  @relation(fields: [authorId], references: [id])
+}
+
+model Profile {
+  id     Int    @id
+  bio    String
+  userId Int    @unique
+  user   User?  @relation(fields: [userId], references: [id])
 }
