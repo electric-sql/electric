@@ -20,6 +20,7 @@ import { Arity, DBDescription, Relation, TableName } from './dbDescription'
 import { Kind, URIS } from 'fp-ts/HKT'
 import { notNullNotUndefined } from '../util/functions'
 import pick from 'lodash.pick'
+import omitBy from 'lodash.omitby'
 import * as z from 'zod'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, URIS>
@@ -785,6 +786,80 @@ export class Table<
     }
   }
 
+  /**
+   * Takes the original object and the updated object
+   * and updates foreign keys of related objects
+   * that were pointing at a field that got updated.
+   * @param cont Function to call after the foreign keys are updated.
+   */
+  private updateFKs(
+    originalObject: Kind<
+      GetPayload,
+      FindUniqueInput<Select, WhereUnique, Include>
+    >,
+    updatedObj: Kind<GetPayload, FindUniqueInput<Select, WhereUnique, Include>>,
+    db: DB,
+    onError: (err: any) => void,
+    cont: () => void
+  ) {
+    /*
+     * Compute a diff containing all fields that were updated.
+     * For each updated field check if there are relations pointing to that field.
+     * For each relation pointing to that field, update that pointer such that it points to the new value.
+     */
+    const diff = omitBy(updatedObj, (value, field) => {
+      return originalObject[field] === value
+    })
+
+    const updatedFields = Object.keys(diff)
+    // Keep only the updated fields that are pointed at by at least one relation
+    const updatedIncomingFields = updatedFields.filter((field) => {
+      return (
+        this._dbDescription.getRelationsPointingAtField(this.tableName, field)
+          .length > 0
+      )
+    })
+
+    forEach(
+      (toField, cont) => {
+        // Update each relation pointing to this field
+        const incomingRelations =
+          this._dbDescription.getRelationsPointingAtField(
+            this.tableName,
+            toField
+          )
+        forEach(
+          (relation, cont) => {
+            // Fetch the `fromField` and `toField` of the relation
+            // This is defined on the outgoing side of the relation
+            const relatedTableName = relation.relatedTable
+            const { fromField } = relation.getOppositeRelation(
+              this._dbDescription
+            )
+            const relatedTable = this._tables.get(relatedTableName)!
+            relatedTable._updateMany(
+              {
+                data: {
+                  [fromField]: updatedObj[toField],
+                },
+                where: {
+                  [fromField]: originalObject[toField],
+                },
+              },
+              db,
+              cont,
+              onError
+            )
+          },
+          incomingRelations,
+          cont
+        )
+      },
+      updatedIncomingFields,
+      cont
+    )
+  }
+
   private _update<
     T extends UpdateInput<UpdateData, Select, WhereUnique, Include>
   >(
@@ -793,10 +868,6 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    // TODO: if the FK of an incoming relation is changed
-    //       then update that FK also in the related objects!
-    //       e.g. user wrote 5 posts, if we update the user.id
-    //       we also need to update the authorId correspondingly in the posts
     const data = validate(i, this.updateSchema)
 
     // Find the record and make sure it is unique
@@ -804,6 +875,7 @@ export class Table<
       { where: data.where } as any,
       db,
       (originalObject) => {
+        const ogObject = originalObject as Record<string, any>
         if (originalObject === null)
           throw new InvalidArgumentError(_RECORD_NOT_FOUND_('Update'))
 
@@ -820,181 +892,155 @@ export class Table<
 
         // Update the record
         const updateDataQuery = this._builder.update(nonRelationalObject)
-        db.run(
+        db.query(
           updateDataQuery,
-          (db) => {
-            /*
-             * For each outgoing relation:
-             *  - update the related object
-             *  - fill in the outgoing FK on this object again
-             *    because it may have been updated on the related object
-             *  - also add the fromField (i.e. outgoing FK) to `nonRelationalData`
-             *    because we will fetch the updated object based on its new values
-             */
-            this.forEachRelation(
-              data.data as object,
-              (rel: Relation, cont: () => void) => {
-                const { relationField, relatedTable, relationName } = rel
-                const dataRecord = data.data as Record<string, any>
+          this._schema,
+          (db, res) => {
+            const updatedObj = res[0] as typeof originalObject
+            this.updateFKs(originalObject, updatedObj, db, onError, () => {
+              /*
+               * For each outgoing relation:
+               *  - update the related object
+               *  - fill in the outgoing FK on this object again
+               *    because it may have been updated on the related object
+               *  - also add the fromField (i.e. outgoing FK) to `nonRelationalData`
+               *    because we will fetch the updated object based on its new values
+               */
+              this.forEachRelation(
+                data.data as object,
+                (rel: Relation, cont: () => void) => {
+                  const { relationField, relatedTable, relationName } = rel
+                  const dataRecord = data.data as Record<string, any>
 
-                // fetch the related object and recursively update that object
-                const relationActions = dataRecord[relationField] as {
-                  create?: object
-                  update?: object
-                  //updateMany?: object,
-                  //upsert?: object,
-                  //delete?: boolean
-                }
+                  // fetch the related object and recursively update that object
+                  const relationActions = dataRecord[relationField] as {
+                    create?: object
+                    update?: object
+                    //updateMany?: object,
+                    //upsert?: object,
+                    //delete?: boolean
+                  }
 
-                // TODO: below we handle the `update` action on related objects
-                //       the code structure for the other actions (`create`, `updateMany`, etc.)
-                //       will be very similar, so need to extract that pattern to a function
-                //       in essence, only the call to `this.updateRelatedObject` will be different
-                //       and also the things we do in the continuation of updateRelatedObject of outgoing relation
-                //       is probably not needed for the other actions (except for updateMany which probably also needs it)
-                //       (updateMany is only supported on incoming 1-to-many relations)
+                  // TODO: below we handle the `update` action on related objects
+                  //       the code structure for the other actions (`create`, `updateMany`, etc.)
+                  //       will be very similar, so need to extract that pattern to a function
+                  //       in essence, only the call to `this.updateRelatedObject` will be different
+                  //       and also the things we do in the continuation of updateRelatedObject of outgoing relation
+                  //       is probably not needed for the other actions (except for updateMany which probably also needs it)
+                  //       (updateMany is only supported on incoming 1-to-many relations)
 
-                // TODO: for the refactoring: move the implementation below into a separate method
-                //       and here just call handleNestedCreate(..., () => {
-                //         handleNestedUpdate(..., () => {
-                //           handleNestedUpdateMany(..., () => {
-                //             ...
-                //           })
-                //         })
-                //       })
+                  // TODO: for the refactoring: move the implementation below into a separate method
+                  //       and here just call handleNestedCreate(..., () => {
+                  //         handleNestedUpdate(..., () => {
+                  //           handleNestedUpdateMany(..., () => {
+                  //             ...
+                  //           })
+                  //         })
+                  //       })
 
-                const updateObject = relationActions.update
+                  const updateObject = relationActions.update
 
-                if (rel.isOutgoingRelation()) {
-                  // outgoing relation
-                  const { fromField, toField } = rel
-                  const fromFieldValue = originalObject[fromField]
-                  // update the related object
-                  const wrappedUpdateObject =
-                    typeof updateObject === 'undefined'
-                      ? undefined
-                      : { data: updateObject }
-                  this.updateRelatedObject(
-                    wrappedUpdateObject,
-                    relatedTable,
-                    fromFieldValue,
-                    toField,
-                    false,
-                    db,
-                    (updatedObj) => {
-                      // update this object's `fromField` with the value of the updated object's `toField`
-                      // because the update above might have changed the value of `toField` that this `fromField` is pointing to
-                      const updatedObject = updatedObj!
-                      const toFieldValue = updatedObject[toField]
-                      this._update(
-                        {
-                          data: { [fromField]: toFieldValue } as UpdateData,
-                          where: { ...data.where, ...nonRelationalData },
-                        },
-                        db,
-                        () => {
-                          // Add the new value of the `fromField` to `nonRelationalData`
-                          // such that we keep it into account when fetching the updated record
-                          nonRelationalData[fromField] = toFieldValue
-                          cont()
-                        },
-                        onError
-                      )
-                    },
-                    onError
-                  )
-                } else {
-                  // incoming relation, can be one-to-one or one-to-many
-                  // TODO: also support updateMany here, almost everything is the same except updateObject should by the updateManyObject
-                  //       and the calls below should not be `this.updateRelatedObject` but calls to `updateManyRelatedObject`
-                  //       perhaps we can modify `updateRelatedObject` such that it call update or updateMany depending
-                  //       on some argument
-
-                  // the `fromField` and `toField` are defined on the side of the outgoing relation
-                  // update the related object(s) like for an outgoing relation but switch the `to` and `from` fields
-                  const { fromField, toField } =
-                    this._dbDescription.getRelation(relatedTable, relationName)!
-                  const toFieldValue = originalObject[toField]
-
-                  if (Array.isArray(updateObject)) {
-                    // this is a one-to-many relation
-                    // update all the requested related objects
-                    forEach(
-                      (updateObj, cont) => {
-                        this.updateRelatedObject(
-                          updateObj,
-                          relatedTable,
-                          toFieldValue,
-                          fromField,
-                          true,
-                          db,
-                          cont,
-                          onError
-                        )
-                      },
-                      updateObject,
-                      cont
-                    )
-                  } else {
-                    // this is a one-to-one relation
+                  if (rel.isOutgoingRelation()) {
+                    // outgoing relation
+                    const { fromField, toField } = rel
+                    const fromFieldValue = ogObject[fromField]
                     // update the related object
-                    const typedUpdateObj = updateObject as
-                      | { where?: object; data: object }
-                      | undefined
+                    const wrappedUpdateObject =
+                      typeof updateObject === 'undefined'
+                        ? undefined
+                        : { data: updateObject }
                     this.updateRelatedObject(
-                      typedUpdateObj,
+                      wrappedUpdateObject,
                       relatedTable,
-                      toFieldValue,
-                      fromField,
-                      true,
+                      fromFieldValue,
+                      toField,
+                      false,
                       db,
-                      cont,
+                      (updatedObj) => {
+                        // The update above might have changed the value of `toField` that this `fromField` is pointing to
+                        // That update will then have modified our `fromField` to point to the modified `toField`
+                        const updatedObject = updatedObj!
+                        const toFieldValue = updatedObject[toField]
+
+                        // Add the new value of the `fromField` to `nonRelationalData`
+                        // such that we keep it into account when fetching the updated record
+                        nonRelationalData[fromField] = toFieldValue
+                        cont()
+                      },
                       onError
                     )
-                  }
-                }
-              },
-              () => {
-                // Fetch the updated record
-                this._findUniqueWithoutAutoSelect(
-                  {
-                    where: { ...data.where, ...nonRelationalData },
-                    select: data.select,
-                    ...(notNullNotUndefined(data.include) && {
-                      include: data.include,
-                    }), // only add `include` property if it is defined
-                  } as any,
-                  db,
-                  continuation,
-                  onError,
-                  'Update'
-                )
-              }
-            )
+                  } else {
+                    // incoming relation, can be one-to-one or one-to-many
+                    // TODO: also support updateMany here, almost everything is the same except updateObject should be the updateManyObject
+                    //       and the calls below should not be `this.updateRelatedObject` but calls to `updateManyRelatedObject`
+                    //       perhaps we can modify `updateRelatedObject` such that it call update or updateMany depending
+                    //       on some argument
 
-            // const outgoingRelations = this._dbDescription.getOutgoingRelations(this.tableName)
-            // forEach(
-            //   (rel: Relation, cont: () => void) => {
-            //
-            //   },
-            //   outgoingRelations,
-            //   () => {
-            //     // Fetch the updated record
-            //     this._findUniqueWithoutAutoSelect(
-            //       {
-            //         where: { ...data.where, ...nonRelationalData },
-            //         select: data.select,
-            //         ...(notNullNotUndefined(data.include) && {
-            //           include: data.include,
-            //         }), // only add `include` property if it is defined
-            //       } as any,
-            //       db,
-            //       continuation,
-            //       onError,
-            //       'Update'
-            //     )
-            //   }
-            // )
+                    // the `fromField` and `toField` are defined on the side of the outgoing relation
+                    // update the related object(s) like for an outgoing relation but switch the `to` and `from` fields
+                    const { fromField, toField } =
+                      this._dbDescription.getRelation(
+                        relatedTable,
+                        relationName
+                      )!
+                    const toFieldValue = ogObject[toField]
+
+                    if (Array.isArray(updateObject)) {
+                      // this is a one-to-many relation
+                      // update all the requested related objects
+                      forEach(
+                        (updateObj, cont) => {
+                          this.updateRelatedObject(
+                            updateObj,
+                            relatedTable,
+                            toFieldValue,
+                            fromField,
+                            true,
+                            db,
+                            cont,
+                            onError
+                          )
+                        },
+                        updateObject,
+                        cont
+                      )
+                    } else {
+                      // this is a one-to-one relation
+                      // update the related object
+                      const typedUpdateObj = updateObject as
+                        | { where?: object; data: object }
+                        | undefined
+                      this.updateRelatedObject(
+                        typedUpdateObj,
+                        relatedTable,
+                        toFieldValue,
+                        fromField,
+                        true,
+                        db,
+                        cont,
+                        onError
+                      )
+                    }
+                  }
+                },
+                () => {
+                  // Fetch the updated record
+                  this._findUniqueWithoutAutoSelect(
+                    {
+                      where: { ...data.where, ...nonRelationalData },
+                      select: data.select,
+                      ...(notNullNotUndefined(data.include) && {
+                        include: data.include,
+                      }), // only add `include` property if it is defined
+                    } as any,
+                    db,
+                    continuation,
+                    onError,
+                    'Update'
+                  )
+                }
+              )
+            })
           },
           onError
         )

@@ -7,6 +7,7 @@ import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { URIS } from 'fp-ts/HKT'
+import groupBy from 'lodash.groupby'
 
 export type Arity = 'one' | 'many'
 
@@ -107,9 +108,17 @@ export class Relation {
 }
 
 export class DBDescription<T extends TableDescriptions> {
-  public extendedTables: ExtendedTableDescriptions
+  public readonly extendedTables: ExtendedTableDescriptions
+
+  // index mapping fields to an array of relations that map to that field
+  private readonly incomingRelationsIndex: Record<
+    TableName,
+    Record<FieldName, Array<Relation>>
+  >
+
   constructor(public tables: T) {
     this.extendedTables = this.extend(tables)
+    this.incomingRelationsIndex = this.indexIncomingRelations()
   }
 
   private extend(tbls: T): ExtendedTableDescriptions {
@@ -125,6 +134,32 @@ export class DBDescription<T extends TableDescriptions> {
         outgoingRelations: outgoing,
       }
     })
+  }
+
+  private indexIncomingRelations(): Record<
+    TableName,
+    Record<FieldName, Array<Relation>>
+  > {
+    const tableNames = Object.keys(this.extendedTables)
+    const buildRelationIndex = (tableName: TableName) => {
+      // For each incoming relation we store the field that is pointed at by the relation
+      // Several relations may point to the same field.
+      // Therefore, we first group the incoming relations based on the field that they point to
+      // Then we store those relations per field
+      const inRelations = this.getIncomingRelations(tableName)
+      return groupBy(inRelations, (relation) => {
+        // group the relations by their `toField` property
+        // but need to fetch that property on the outgoing side of the relation
+        return relation.getOppositeRelation(this).toField
+      })
+    }
+
+    const obj: Record<TableName, Record<FieldName, Array<Relation>>> = {}
+    tableNames.forEach((tableName) => {
+      obj[tableName] = buildRelationIndex(tableName)
+    })
+
+    return obj
   }
 
   getTableDescription(
@@ -168,5 +203,12 @@ export class DBDescription<T extends TableDescriptions> {
 
   getIncomingRelations(table: TableName): Relation[] {
     return this.extendedTables[table].incomingRelations
+  }
+
+  getRelationsPointingAtField(table: TableName, field: FieldName): Relation[] {
+    const index = this.incomingRelationsIndex[table]
+    const relations = index[field]
+    if (typeof relations === 'undefined') return []
+    else return relations
   }
 }

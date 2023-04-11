@@ -1122,3 +1122,45 @@ test.serial(
     t.deepEqual(await fetchAuthor1(), expectedRes)
   }
 )
+
+test.serial(
+  'update query updates foreign keys of related objects',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const updatedUser = {
+      // We update the id of the user which is pointed at by the posts they wrote.
+      // After the update, those posts must still link to this user.
+      id: 5,
+      name: 'Updated name',
+    }
+
+    // User 1 authored 2 posts: post 1 & 2
+    // We will update the id of user 1 and check that posts 1 & 2 now point to the user's new id
+    const user = await userTable.update({
+      data: updatedUser,
+      where: {
+        id: 1,
+      },
+    })
+
+    t.deepEqual(user, {
+      ...author1,
+      ...updatedUser,
+    })
+
+    const posts = await postTable.findMany({
+      where: {
+        id: {
+          in: [1, 2],
+        },
+      },
+    })
+
+    t.is(posts.length, 2)
+    posts.forEach((p) => t.is(p.authorId, updatedUser.id))
+  }
+)
