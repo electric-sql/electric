@@ -85,6 +85,7 @@ export class Builder {
       .update()
       .table(this._tableName)
       .setFields(i.data)
+      .returning('*')
 
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)

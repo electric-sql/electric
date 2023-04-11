@@ -187,7 +187,7 @@ test('update query', (t) => {
 
   t.is(
     query,
-    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = ('1'))"
+    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = ('1')) RETURNING *"
   )
 })
 
@@ -201,7 +201,7 @@ test('updateMany query', (t) => {
     })
     .toString()
 
-  const sql = "UPDATE Post SET title = 'Foo', contents = 'Bar'"
+  const sql = "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING *"
 
   t.is(query1, sql)
 })
