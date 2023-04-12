@@ -21,7 +21,7 @@
     "noUnusedParameters": true,
     "outDir": "dist",
     "resolveJsonModule": true,
-    "rootDir": "",
+    "rootDir": "src",
     "skipLibCheck": true,
     "strict": true,
     "strictBindCallApply": true,
