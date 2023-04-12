@@ -155,7 +155,7 @@
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
-    "@types/better-sqlite3": "^7.6.3",
+    "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.mapvalues": "^4.6.7",
