@@ -393,19 +393,19 @@ defmodule Electric.Replication.Postgres.SlotServer do
          %Changes.UpdatedRecord{relation: table, old_record: nil, record: new},
          relations
        ) do
-    %ReplicationMessages.Update{
+    %ReplicationMessages.Insert{
       relation_id: relations[table].oid,
       tuple_data: record_to_tuple(new, relations[table].columns)
     }
   end
 
   defp changes_to_wal(
-         %Changes.UpdatedRecord{relation: table, old_record: old, record: new},
+         %Changes.UpdatedRecord{relation: table, old_record: _old, record: new},
          relations
        ) do
-    %ReplicationMessages.Update{
+    %ReplicationMessages.Insert{
       relation_id: relations[table].oid,
-      old_tuple_data: record_to_tuple(old, relations[table].columns),
+      # old_tuple_data: record_to_tuple(old, relations[table].columns),
       tuple_data: record_to_tuple(new, relations[table].columns)
     }
   end

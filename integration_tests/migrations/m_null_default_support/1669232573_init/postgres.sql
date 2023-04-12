@@ -14,3 +14,11 @@ CREATE TABLE public.items (
 
 ALTER TABLE public.items REPLICA IDENTITY FULL;
 
+CREATE OR REPLACE TRIGGER insert_on_conflict_for_logical_trigger
+BEFORE INSERT ON public.items
+FOR EACH ROW
+WHEN (pg_trigger_depth() < 1)
+EXECUTE PROCEDURE upsert_from_replication_stream_insert();
+
+ALTER TABLE public.items enable replica trigger insert_on_conflict_for_logical_trigger;
+

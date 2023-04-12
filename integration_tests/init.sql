@@ -11,3 +11,11 @@ CREATE TABLE owned_entries (
   content VARCHAR(64) NOT NULL
 );
 ALTER TABLE owned_entries REPLICA IDENTITY FULL;
+
+CREATE OR REPLACE TRIGGER insert_on_conflict_for_logical_trigger
+BEFORE INSERT ON "entries"
+FOR EACH ROW
+WHEN (pg_trigger_depth() < 1)
+EXECUTE PROCEDURE upsert_from_replication_stream_insert();
+
+ALTER TABLE "entries" enable replica trigger insert_on_conflict_for_logical_trigger;

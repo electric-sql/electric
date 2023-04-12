@@ -27,6 +27,34 @@
     !exit
     [invoke ok]
 
+[shell pg_1]
+    [loop iter 1..10]
+        """!
+        CREATE OR REPLACE TRIGGER insert_on_conflict_for_logical_trigger
+        BEFORE INSERT ON "sbtest$iter"
+        FOR EACH ROW
+        WHEN (pg_trigger_depth() < 1)
+        EXECUTE PROCEDURE upsert_from_replication_stream_insert();
+
+        ALTER TABLE "sbtest$iter" enable replica trigger insert_on_conflict_for_logical_trigger;
+        """
+        ?$psql
+    [endloop]
+
+[shell pg_2]
+    [loop iter 1..10]
+        """!
+        CREATE OR REPLACE TRIGGER insert_on_conflict_for_logical_trigger
+        BEFORE INSERT ON "sbtest$iter"
+        FOR EACH ROW
+        WHEN (pg_trigger_depth() < 1)
+        EXECUTE PROCEDURE upsert_from_replication_stream_insert();
+
+        ALTER TABLE "sbtest$iter" enable replica trigger insert_on_conflict_for_logical_trigger;
+        """
+        ?$psql
+    [endloop]
+
 [invoke setup_rest]
 
 [macro wait_table table]
