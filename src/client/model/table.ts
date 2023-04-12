@@ -748,6 +748,12 @@ export class Table<
     )
   }
 
+  /**
+   * Updates the related object of a one-to-one relation (when `updateType === 'update'`)
+   * or many related objects from a one-to-many relation (when `updateType === 'updateMany'`).
+   * The related object(s) is one or more rows from the `relatedTable` that matches the `obj.where` argument
+   * and where the value of `toField` equals `fromFieldValue`.
+   */
   private updateRelatedObject(
     obj: { where?: object; data: object } | undefined,
     relatedTable: string,
@@ -756,33 +762,49 @@ export class Table<
     isIncomingRelation: boolean,
     db: DB,
     cont: (updatedObj?: Record<string, any>) => void,
-    onError: (err: any) => void
+    onError: (err: any) => void,
+    updateType: 'update' | 'updateMany' = 'update'
   ) {
     if (typeof obj === 'undefined') {
       cont()
     } else {
       const relatedTbl = this._tables.get(relatedTable)!
-      const whereArg = isIncomingRelation
-        ? obj.where
-        : {
-            ...obj.where,
-            [toField]: fromFieldValue,
-          }
-      // TODO: later this will need to also support _updateMany when processing updateMany arg
-      relatedTbl._update(
-        {
-          data: obj.data,
-          //where: obj.where
-          where: whereArg,
-          /*{
-             ...obj.where,
-             [toField]: fromFieldValue // TODO: only needed in case of updateMany because obj.where might not be enough to identify only the ones that are related
-           }*/
-        },
-        db,
-        cont,
-        onError
-      )
+
+      if (updateType === 'update') {
+        // for incoming relations there is no need to match on `toField`
+        // because the `where` argument of the nested update already uniquely identifies the object
+        const whereArg = isIncomingRelation
+          ? obj.where
+          : {
+              ...obj.where,
+              [toField]: fromFieldValue,
+            }
+
+        relatedTbl._update(
+          {
+            data: obj.data,
+            where: whereArg,
+          },
+          db,
+          cont,
+          onError
+        )
+      } else {
+        relatedTbl._updateMany(
+          {
+            data: obj.data,
+            where: {
+              ...obj.where,
+              // `obj.where` might not be enough to identify only the objects that are related
+              //  so restrict the object to only those that are related by this foreign key
+              [toField]: fromFieldValue,
+            },
+          },
+          db,
+          cont,
+          onError
+        )
+      }
     }
   }
 
@@ -860,6 +882,232 @@ export class Table<
     )
   }
 
+  /**
+   * Updates related objects for incoming relations based on
+   * nested `updateMany` argument that is provided with `update`.
+   * For example:
+   *  User.update({
+   *    data: {
+   *      posts: {
+   *        updateMany: {
+   *          data: {
+   *            title: 'A new title for all my posts'
+   *          },
+   *          where: {}
+   *        }
+   *      }
+   *    },
+   *    where: {
+   *      id: user1.id
+   *    }
+   *  })
+   * The above example updates the title of all posts written by `user1`.
+   * In the `User` table there is an incoming relation from each post to the user that wrote it.
+   * This method updates all related objects for such an incoming relation.
+   *
+   * @param relatedTable The name of the table containing the related objects.
+   * @param relationName The name of the relation between the two tables.
+   * @param ogObject The object on which `update` is called, before the update is executed.
+   * @param updateManyObject The object that was passed as `updateMany` argument to `update`.
+   * @param onError Error handler callback.
+   * @param cont Function that will be called once the related objects are updated.
+   */
+  private updateManyRelatedObjectsFromIncomingRelation(
+    relatedTable: string,
+    relationName: string,
+    ogObject: Record<string, any>,
+    updateManyObject: object | undefined | any[],
+    db: DB,
+    onError: (err: any) => void,
+    cont: () => void
+  ) {
+    // incoming relation, can be one-to-one or one-to-many
+
+    // the `fromField` and `toField` are defined on the side of the outgoing relation
+    // update the related object like for an outgoing relation but switch the `to` and `from` fields
+    const { fromField, toField } = this._dbDescription.getRelation(
+      relatedTable,
+      relationName
+    )!
+    const toFieldValue = ogObject[toField]
+
+    // User may optionally provide an `updateMany` field containing an object or an array of objects
+    // if it is an object we wrap it in an array and then process the array of objects
+    const updateManyArray = Array.isArray(updateManyObject)
+      ? updateManyObject
+      : typeof updateManyObject === 'undefined'
+      ? []
+      : [updateManyObject]
+
+    // update all the requested related objects
+    forEach(
+      (updateObj, cont) => {
+        this.updateRelatedObject(
+          updateObj,
+          relatedTable,
+          toFieldValue,
+          fromField,
+          true,
+          db,
+          cont,
+          onError,
+          'updateMany'
+        )
+      },
+      updateManyArray,
+      cont
+    )
+  }
+
+  /**
+   * Updates related objects for incoming relations based on
+   * nested `update` argument that is provided with `update`.
+   * For example:
+   *  User.update({
+   *    data: {
+   *      posts: {
+   *        update: {
+   *          data: {
+   *            title: 'A new title for all my posts'
+   *          },
+   *          where: {
+   *            id: post2.id
+   *          }
+   *        }
+   *      }
+   *    },
+   *    where: {
+   *      id: user1.id
+   *    }
+   *  })
+   * The above example updates the title of post2 that was written by `user1`.
+   * This method updates that related object for such incoming relations.
+   *
+   * @param relatedTable The name of the table containing the related objects.
+   * @param relationName The name of the relation between the two tables.
+   * @param ogObject The object on which `update` is called, before the update is executed.
+   * @param updateObject The object that was passed as nested `update` argument to `update`.
+   * @param onError Error handler callback.
+   * @param cont Function that will be called once the related objects are updated.
+   */
+  private updateRelatedObjectFromIncomingRelation(
+    relatedTable: string,
+    relationName: string,
+    ogObject: Record<string, any>,
+    updateObject: object | undefined | any[],
+    db: DB,
+    onError: (err: any) => void,
+    cont: () => void
+  ) {
+    // incoming relation, can be one-to-one or one-to-many
+    const { relatedObjects } = this._dbDescription.getRelation(
+      this.tableName,
+      relationName
+    )!
+
+    // the `fromField` and `toField` are defined on the side of the outgoing relation
+    // update the related object like for an outgoing relation but switch the `to` and `from` fields
+    const { fromField, toField } = this._dbDescription.getRelation(
+      relatedTable,
+      relationName
+    )!
+    const toFieldValue = ogObject[toField]
+
+    if (relatedObjects === 'many') {
+      // this is a one-to-many relation
+      // update all the requested related objects
+
+      // `updateObj` may be an array of objects or a single object
+      // if it is a single object we wrap it in an array and then process the array
+      const updateObjects = Array.isArray(updateObject)
+        ? updateObject
+        : typeof updateObject === 'undefined'
+        ? []
+        : [updateObject]
+
+      forEach(
+        (updateObj, cont) => {
+          this.updateRelatedObject(
+            updateObj,
+            relatedTable,
+            toFieldValue,
+            fromField,
+            true,
+            db,
+            (res) => {
+              // the `where` argument of the nested update uniquely identifies the object
+              // and is used to update the related object.
+              // However, we need to make sure that the object
+              // that is identified by `where` is indeed a related object!
+              const updatedObj = res as Record<string, any>
+              if (updatedObj[fromField] !== toFieldValue) {
+                // the object is not related to the object of the original `update` query
+                throw new InvalidArgumentError(
+                  `Nested update cannot update an unrelated object.\n` +
+                    `Related object has field ${fromField} === ${toFieldValue}\n` +
+                    `but the object identified by ${JSON.stringify(
+                      updateObj
+                    )} has ${fromField} === ${updatedObj[fromField]}`
+                )
+              }
+              cont()
+            },
+            onError
+          )
+        },
+        updateObjects,
+        cont
+      )
+    } else {
+      // this is a one-to-one relation
+      // update the related object
+      const typedUpdateObj =
+        typeof updateObject === 'undefined'
+          ? undefined
+          : { data: updateObject, where: { [toField]: toFieldValue } }
+
+      this.updateRelatedObject(
+        typedUpdateObj,
+        relatedTable,
+        toFieldValue,
+        fromField,
+        true,
+        db,
+        cont,
+        onError
+      )
+    }
+  }
+
+  private updateRelatedObjectFromOutgoingRelation(
+    relation: Relation,
+    ogObject: Record<string, any>,
+    updateObject: object | undefined,
+    relatedTable: string,
+    db: DB,
+    cont: (updatedObj: Record<string, any> | undefined) => void,
+    onError: (err: any) => void
+  ) {
+    // outgoing relation
+    const { fromField, toField } = relation
+    const fromFieldValue = ogObject[fromField]
+
+    // update the related object
+    const wrappedUpdateObject =
+      typeof updateObject === 'undefined' ? undefined : { data: updateObject }
+
+    this.updateRelatedObject(
+      wrappedUpdateObject,
+      relatedTable,
+      fromFieldValue,
+      toField,
+      false,
+      db,
+      cont,
+      onError
+    )
+  }
+
   private _update<
     T extends UpdateInput<UpdateData, Select, WhereUnique, Include>
   >(
@@ -920,23 +1168,6 @@ export class Table<
                     //delete?: boolean
                   }
 
-                  // TODO: below we handle the `update` action on related objects
-                  //       the code structure for the other actions (`create`, `updateMany`, etc.)
-                  //       will be very similar, so need to extract that pattern to a function
-                  //       in essence, only the call to `this.updateRelatedObject` will be different
-                  //       and also the things we do in the continuation of updateRelatedObject of outgoing relation
-                  //       is probably not needed for the other actions (except for updateMany which probably also needs it)
-                  //       (updateMany is only supported on incoming 1-to-many relations)
-
-                  // TODO: for the refactoring: move the implementation below into a separate method
-                  //       and here just call handleNestedCreate(..., () => {
-                  //         handleNestedUpdate(..., () => {
-                  //           handleNestedUpdateMany(..., () => {
-                  //             ...
-                  //           })
-                  //         })
-                  //       })
-
                   const updateObject = relationActions.update
 
                   if (rel.isOutgoingRelation()) {
@@ -961,20 +1192,27 @@ export class Table<
                     )
                   } else {
                     // incoming relation, can be one-to-one or one-to-many
-                    // TODO: also support updateMany here, almost everything is the same except updateObject should be the updateManyObject
-                    //       and the calls below should not be `this.updateRelatedObject` but calls to `updateManyRelatedObject`
-                    //       perhaps we can modify `updateRelatedObject` such that it call update or updateMany depending
-                    //       on some argument
-
                     this.updateRelatedObjectFromIncomingRelation(
                       relatedTable,
                       relationName,
-                      rel.relatedObjects,
                       ogObject,
                       updateObject,
                       db,
                       onError,
-                      cont
+                      () => {
+                        // Now also handle nested `updateMany` argument
+                        // `updateMany` argument can only be provided on an incoming one-to-many relation
+                        const updateManyObject = relationActions.updateMany
+                        this.updateManyRelatedObjectsFromIncomingRelation(
+                          relatedTable,
+                          relationName,
+                          ogObject,
+                          updateManyObject,
+                          db,
+                          onError,
+                          cont
+                        )
+                      }
                     )
                   }
                 },
@@ -1000,99 +1238,6 @@ export class Table<
           onError
         )
       },
-      onError
-    )
-  }
-
-  private updateRelatedObjectFromIncomingRelation(
-    relatedTable: string,
-    relationName: string,
-    relationArity: Arity,
-    ogObject: Record<string, any>,
-    updateObject: object | undefined | any[],
-    db: DB,
-    onError: (err: any) => void,
-    cont: () => void
-  ) {
-    // incoming relation, can be one-to-one or one-to-many
-
-    // the `fromField` and `toField` are defined on the side of the outgoing relation
-    // update the related object like for an outgoing relation but switch the `to` and `from` fields
-    const { fromField, toField } = this._dbDescription.getRelation(
-      relatedTable,
-      relationName
-    )!
-    const toFieldValue = ogObject[toField]
-
-    if (Array.isArray(updateObject)) {
-      // this is a one-to-many relation
-      // update all the requested related objects
-      forEach(
-        (updateObj, cont) => {
-          this.updateRelatedObject(
-            updateObj,
-            relatedTable,
-            toFieldValue,
-            fromField,
-            true,
-            db,
-            cont,
-            onError
-          )
-        },
-        updateObject,
-        cont
-      )
-    } else {
-      // this is a one-to-one relation or a one-to-many relation but only 1 update object was provided
-      // update the related object
-      const typedUpdateObj =
-        relationArity === 'many'
-          ? (updateObject as { where?: object; data: object } | undefined)
-          : // if it is a one-to-one relation we have to wrap the object in a `data` field and provide a `where` argument
-          // that identifies the related object
-          typeof updateObject === 'undefined'
-          ? undefined
-          : { data: updateObject, where: { [toField]: toFieldValue } }
-
-      this.updateRelatedObject(
-        typedUpdateObj,
-        relatedTable,
-        toFieldValue,
-        fromField,
-        true,
-        db,
-        cont,
-        onError
-      )
-    }
-  }
-
-  private updateRelatedObjectFromOutgoingRelation(
-    relation: Relation,
-    ogObject: Record<string, any>,
-    updateObject: object | undefined,
-    relatedTable: string,
-    db: DB,
-    cont: (updatedObj: Record<string, any> | undefined) => void,
-    onError: (err: any) => void
-  ) {
-    // outgoing relation
-    const { fromField, toField } = relation
-    const fromFieldValue = ogObject[fromField]
-
-    // update the related object
-    const wrappedUpdateObject =
-      typeof updateObject === 'undefined' ? undefined : { data: updateObject }
-
-    this.updateRelatedObject(
-      wrappedUpdateObject,
-      relatedTable,
-      fromFieldValue,
-      toField,
-      false,
-      db,
-      cont,
       onError
     )
   }

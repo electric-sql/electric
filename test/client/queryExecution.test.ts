@@ -1199,6 +1199,15 @@ test.serial(
     t.deepEqual(res, expectedRes)
 
     t.deepEqual(await fetchUser1(), expectedRes)
+
+    // Check that the other users' profiles are not changed
+    const profile2Res = await profileTable.findUnique({
+      where: {
+        id: profile2.id,
+      },
+    })
+
+    t.deepEqual(profile2Res, profile2)
   }
 )
 
@@ -1241,5 +1250,210 @@ test.serial(
 
     t.is(posts.length, 2)
     posts.forEach((p) => t.is(p.authorId, updatedUser.id))
+  }
+)
+
+test.serial(
+  'update query throws error if nested object for incoming one-to-many relation is not related',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    // User 1 authored 2 posts: post 1 & 2
+    // We will update the id of user 1 and check that posts 1 & 2 now point to the user's new id
+    await t.throwsAsync(async () => {
+      return await userTable.update({
+        data: {
+          name: 'Updated name',
+          posts: {
+            update: {
+              data: {
+                title: 'Updated title',
+              },
+              where: {
+                id: post3.id, // Post 3 is not written by user 1, and hence, is not a related object
+              },
+            },
+          },
+        },
+        where: {
+          id: 1,
+        },
+      })
+    })
+
+    const fetchedPost3 = await postTable.findUnique({
+      where: {
+        id: post3.id,
+      },
+    })
+
+    t.deepEqual(fetchedPost3, post3)
+  }
+)
+
+test.serial(
+  'update query can updateMany related objects for incoming one-to-many FK',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchAuthor1 = async () => {
+      return await userTable.findUnique({
+        where: {
+          id: author1.id,
+        },
+        include: {
+          posts: true,
+        },
+      })
+    }
+
+    const r = await fetchAuthor1()
+    t.deepEqual(r, {
+      ...author1,
+      posts: [post1, post2],
+    })
+
+    const res = await userTable.update({
+      // Update the name of user 1 as well as the title of his posts using a nested updateMany query
+      data: {
+        name: 'Updated name',
+        posts: {
+          updateMany: {
+            data: {
+              title: 'Updated title',
+            },
+            where: {},
+          },
+        },
+      },
+      where: {
+        id: author1.id,
+      },
+      include: {
+        posts: true,
+      },
+    })
+
+    const expectedRes = {
+      ...author1,
+      name: 'Updated name',
+      posts: [
+        {
+          ...post1,
+          title: 'Updated title',
+        },
+        {
+          ...post2,
+          title: 'Updated title',
+        },
+      ],
+    }
+
+    t.deepEqual(res, expectedRes)
+    t.deepEqual(await fetchAuthor1(), expectedRes)
+
+    // Check that it did not affect the third post
+    // Because only post 1 and post 2 are related to author 1
+    const post3Res = await postTable.findUnique({
+      where: {
+        id: 3,
+      },
+    })
+
+    t.deepEqual(post3Res, post3)
+  }
+)
+
+test.serial(
+  'update query supports array of nested updateMany queries for incoming one-to-many FK',
+  async (t) => {
+    await populate()
+
+    // post 1 & 2 -> author 1
+    // post 3 -> author 2
+
+    const fetchAuthor1 = async () => {
+      return await userTable.findUnique({
+        where: {
+          id: author1.id,
+        },
+        include: {
+          posts: true,
+        },
+      })
+    }
+
+    const r = await fetchAuthor1()
+    t.deepEqual(r, {
+      ...author1,
+      posts: [post1, post2],
+    })
+
+    const res = await userTable.update({
+      // Update the name of user 1 as well as the title of his posts using separate updateMany queries
+      data: {
+        name: 'Updated name',
+        posts: {
+          updateMany: [
+            {
+              data: {
+                title: 'Updated title for post 1',
+              },
+              where: {
+                id: post1.id,
+              },
+            },
+            {
+              data: {
+                title: 'Updated title for post 2',
+              },
+              where: {
+                id: post2.id,
+              },
+            },
+          ],
+        },
+      },
+      where: {
+        id: author1.id,
+      },
+      include: {
+        posts: true,
+      },
+    })
+
+    const expectedRes = {
+      ...author1,
+      name: 'Updated name',
+      posts: [
+        {
+          ...post1,
+          title: 'Updated title for post 1',
+        },
+        {
+          ...post2,
+          title: 'Updated title for post 2',
+        },
+      ],
+    }
+
+    t.deepEqual(res, expectedRes)
+    t.deepEqual(await fetchAuthor1(), expectedRes)
+
+    // Check that it did not affect the third post
+    // Because only post 1 and post 2 are related to author 1
+    const post3Res = await postTable.findUnique({
+      where: {
+        id: 3,
+      },
+    })
+
+    t.deepEqual(post3Res, post3)
   }
 )
