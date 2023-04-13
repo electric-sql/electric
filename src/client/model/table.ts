@@ -23,6 +23,16 @@ import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import * as z from 'zod'
 
+// This file uses `Object.hasOwn` but
+// some older browsers don't support `Object.hasOwn()`.
+// Patch it if that's the case.
+if (typeof Object.hasOwn === 'undefined') {
+  Object.hasOwn = (obj, prop) => {
+    // eslint-disable-next-line no-prototype-builtins
+    return obj.hasOwnProperty(prop)
+  }
+}
+
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, URIS>
 
 export class Table<
