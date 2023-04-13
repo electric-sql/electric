@@ -21,17 +21,8 @@ import { Kind, URIS } from 'fp-ts/HKT'
 import { notNullNotUndefined } from '../util/functions'
 import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
+import hasOwn from 'object.hasown'
 import * as z from 'zod'
-
-// This file uses `Object.hasOwn` but
-// some older browsers don't support `Object.hasOwn()`.
-// Patch it if that's the case.
-if (typeof Object.hasOwn === 'undefined') {
-  Object.hasOwn = (obj, prop) => {
-    // eslint-disable-next-line no-prototype-builtins
-    return obj.hasOwnProperty(prop)
-  }
-}
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, URIS>
 
@@ -246,7 +237,7 @@ export class Table<
 
     forEach(
       (rel: Relation, cont: () => void) => {
-        if (Object.hasOwn(data, rel.relationField)) {
+        if (hasOwn(data, rel.relationField)) {
           f(rel, cont)
         } else {
           cont()
@@ -367,7 +358,7 @@ export class Table<
 
         incomingRelations.forEach((rel: Relation) => {
           const { relationField } = rel
-          if (Object.hasOwn(data, relationField)) {
+          if (hasOwn(data, relationField)) {
             const relatedObjects = data[relationField].create
             if (Array.isArray(relatedObjects)) {
               // this is a one-to-many relation
