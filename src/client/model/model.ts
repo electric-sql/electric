@@ -6,7 +6,7 @@ import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { QualifiedTablename } from '../../util/tablename'
-import { Kind, URIS } from 'fp-ts/HKT'
+import { HKT, Kind } from '../util/hkt'
 
 export interface Model<
   CreateData extends object,
@@ -17,7 +17,7 @@ export interface Model<
   Include,
   OrderBy,
   ScalarFieldEnum,
-  GetPayload extends URIS
+  GetPayload extends HKT
 > {
   create<T extends CreateInput<CreateData, Select, Include>>(
     i: SelectSubset<T, CreateInput<CreateData, Select, Include>>

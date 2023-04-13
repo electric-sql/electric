@@ -2409,11 +2409,6 @@ formdata-polyfill@^4.0.10:
   dependencies:
     fetch-blob "^3.1.2"
 
-fp-ts@^2.13.1:
-  version "2.13.1"
-  resolved "https://registry.yarnpkg.com/fp-ts/-/fp-ts-2.13.1.tgz#1bf2b24136cca154846af16752dc29e8fa506f2a"
-  integrity sha512-0eu5ULPS2c/jsa1lGFneEFFEdTbembJv8e4QKXeVJ3lm/5hyve06dlKZrpxmMwJt6rYen7sxmHHK2CLaXvWuWQ==
-
 frame-stream@^3.0.1:
   version "3.0.1"
   resolved "https://registry.yarnpkg.com/frame-stream/-/frame-stream-3.0.1.tgz#e58f6ec5dca6fd9f043ca1c077c16bb17ab89183"

@@ -6,7 +6,7 @@ import { FindInput, FindUniqueInput } from '../input/findInput'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
-import { URIS } from 'fp-ts/HKT'
+import { HKT } from '../util/hkt'
 import groupBy from 'lodash.groupby'
 
 export type Arity = 'one' | 'many'
@@ -25,7 +25,7 @@ export type TableSchema<
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
-  _GetPayload extends URIS
+  _GetPayload extends HKT
 > = {
   fields: FieldName[]
   relations: Relation[]
@@ -55,7 +55,7 @@ export type ExtendedTableSchema<
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
-  GetPayload extends URIS
+  GetPayload extends HKT
 > = TableSchema<
   T,
   CreateData,
@@ -74,12 +74,12 @@ export type ExtendedTableSchema<
 
 export type TableSchemas = Record<
   TableName,
-  TableSchema<any, any, any, any, any, any, any, any, any, URIS>
+  TableSchema<any, any, any, any, any, any, any, any, any, HKT>
 >
 
 export type ExtendedTableSchemas = Record<
   TableName,
-  ExtendedTableSchema<any, any, any, any, any, any, any, any, any, URIS>
+  ExtendedTableSchema<any, any, any, any, any, any, any, any, any, HKT>
 >
 
 export class Relation {
@@ -164,7 +164,7 @@ export class DbSchema<T extends TableSchemas> {
 
   getTableDescription(
     table: TableName
-  ): ExtendedTableSchema<any, any, any, any, any, any, any, any, any, URIS> {
+  ): ExtendedTableSchema<any, any, any, any, any, any, any, any, any, HKT> {
     return this.extendedTables[table]
   }
 

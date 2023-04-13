@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Prisma } from '../generated/client'
 import { TableSchema, DbSchema, Relation } from '../../../src/client/model'
+import { HKT } from '../../../src/client/util/hkt'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -3055,6 +3056,8 @@ export const UserDeleteManyArgsSchema: z.ZodType<Prisma.UserDeleteManyArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostCreateArgsSchema: z.ZodType<Prisma.PostCreateArgs> = z
   .object({
     select: PostSelectSchema.optional(),
@@ -3063,6 +3066,8 @@ export const PostCreateArgsSchema: z.ZodType<Prisma.PostCreateArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostUpsertArgsSchema: z.ZodType<Prisma.PostUpsertArgs> = z
   .object({
     select: PostSelectSchema.optional(),
@@ -3091,6 +3096,8 @@ export const PostDeleteArgsSchema: z.ZodType<Prisma.PostDeleteArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostUpdateArgsSchema: z.ZodType<Prisma.PostUpdateArgs> = z
   .object({
     select: PostSelectSchema.optional(),
@@ -3116,6 +3123,8 @@ export const PostDeleteManyArgsSchema: z.ZodType<Prisma.PostDeleteManyArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileCreateArgsSchema: z.ZodType<Prisma.ProfileCreateArgs> = z
   .object({
     select: ProfileSelectSchema.optional(),
@@ -3127,6 +3136,8 @@ export const ProfileCreateArgsSchema: z.ZodType<Prisma.ProfileCreateArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileUpsertArgsSchema: z.ZodType<Prisma.ProfileUpsertArgs> = z
   .object({
     select: ProfileSelectSchema.optional(),
@@ -3162,6 +3173,8 @@ export const ProfileDeleteArgsSchema: z.ZodType<Prisma.ProfileDeleteArgs> = z
   })
   .strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileUpdateArgsSchema: z.ZodType<Prisma.ProfileUpdateArgs> = z
   .object({
     select: ProfileSelectSchema.optional(),
@@ -3192,46 +3205,24 @@ export const ProfileDeleteManyArgsSchema: z.ZodType<Prisma.ProfileDeleteManyArgs
     })
     .strict()
 
-declare module 'fp-ts/HKT' {
-  interface URItoKind<
-    A extends
-      | boolean
-      | null
-      | undefined
-      | Prisma.ItemsArgs
-      | Prisma.UserArgs
-      | Prisma.PostArgs
-      | Prisma.ProfileArgs
-  > {
-    ItemsGetPayload: A extends
-      | boolean
-      | null
-      | undefined
-      | (Prisma.ItemsArgs & Record<string, any>)
-      ? Prisma.ItemsGetPayload<A>
-      : never
-    UserGetPayload: A extends
-      | boolean
-      | null
-      | undefined
-      | (Prisma.UserArgs & Record<string, any>)
-      ? Prisma.UserGetPayload<A>
-      : never
-    PostGetPayload: A extends
-      | boolean
-      | null
-      | undefined
-      | (Prisma.PostArgs & Record<string, any>)
-      ? Prisma.PostGetPayload<A>
-      : never
-    ProfileGetPayload: A extends
-      | boolean
-      | null
-      | undefined
-      | (Prisma.ProfileArgs & Record<string, any>)
-      ? Prisma.ProfileGetPayload<A>
-      : never
-  }
+interface ItemsGetPayload extends HKT {
+  readonly _A?: boolean | null | undefined | Prisma.ItemsArgs
+  readonly type: Prisma.ItemsGetPayload<this['_A']>
+}
+
+interface UserGetPayload extends HKT {
+  readonly _A?: boolean | null | undefined | Prisma.UserArgs
+  readonly type: Prisma.UserGetPayload<this['_A']>
+}
+
+interface PostGetPayload extends HKT {
+  readonly _A?: boolean | null | undefined | Prisma.PostArgs
+  readonly type: Prisma.PostGetPayload<this['_A']>
+}
+
+interface ProfileGetPayload extends HKT {
+  readonly _A?: boolean | null | undefined | Prisma.ProfileArgs
+  readonly type: Prisma.ProfileGetPayload<this['_A']>
 }
 
 export const tableDescriptions = {
@@ -3260,7 +3251,7 @@ export const tableDescriptions = {
     never,
     Prisma.ItemsFindFirstArgs['orderBy'],
     Prisma.ItemsScalarFieldEnum,
-    'ItemsGetPayload'
+    ItemsGetPayload
   >,
   User: {
     fields: ['id', 'name'],
@@ -3290,7 +3281,7 @@ export const tableDescriptions = {
     Omit<Prisma.UserInclude, '_count'>,
     Prisma.UserFindFirstArgs['orderBy'],
     Prisma.UserScalarFieldEnum,
-    'UserGetPayload'
+    UserGetPayload
   >,
   Post: {
     fields: ['id', 'title', 'contents', 'nbr', 'authorId'],
@@ -3319,7 +3310,7 @@ export const tableDescriptions = {
     Omit<Prisma.PostInclude, '_count'>,
     Prisma.PostFindFirstArgs['orderBy'],
     Prisma.PostScalarFieldEnum,
-    'PostGetPayload'
+    PostGetPayload
   >,
   Profile: {
     fields: ['id', 'bio', 'userId'],
@@ -3348,7 +3339,7 @@ export const tableDescriptions = {
     Omit<Prisma.ProfileInclude, '_count'>,
     Prisma.ProfileFindFirstArgs['orderBy'],
     Prisma.ProfileScalarFieldEnum,
-    'ProfileGetPayload'
+    ProfileGetPayload
   >,
 }
 
