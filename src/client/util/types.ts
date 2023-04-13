@@ -5,7 +5,7 @@ export type SelectSubset<T, U> = {
   [key in keyof T]: key extends keyof U ? T[key] : never
 } & (T extends SelectAndInclude
   ? 'Please either choose `select` or `include`.'
-  : {})
+  : object)
 
 type SelectAndInclude = {
   select: any
