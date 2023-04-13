@@ -15,7 +15,7 @@ export type TableName = string
 export type FieldName = string
 export type RelationName = string
 
-export type TableDescription<
+export type TableSchema<
   T extends Record<string, any>,
   CreateData extends object,
   UpdateData,
@@ -45,7 +45,7 @@ export type TableDescription<
   deleteManySchema: z.ZodType<DeleteManyInput<Where>>
 }
 
-export type ExtendedTableDescription<
+export type ExtendedTableSchema<
   T extends Record<string, any>,
   CreateData extends object,
   UpdateData,
@@ -56,7 +56,7 @@ export type ExtendedTableDescription<
   OrderBy,
   ScalarFieldEnum,
   GetPayload extends URIS
-> = TableDescription<
+> = TableSchema<
   T,
   CreateData,
   UpdateData,
@@ -72,14 +72,14 @@ export type ExtendedTableDescription<
   incomingRelations: Relation[]
 }
 
-export type TableDescriptions = Record<
+export type TableSchemas = Record<
   TableName,
-  TableDescription<any, any, any, any, any, any, any, any, any, URIS>
+  TableSchema<any, any, any, any, any, any, any, any, any, URIS>
 >
 
-export type ExtendedTableDescriptions = Record<
+export type ExtendedTableSchemas = Record<
   TableName,
-  ExtendedTableDescription<any, any, any, any, any, any, any, any, any, URIS>
+  ExtendedTableSchema<any, any, any, any, any, any, any, any, any, URIS>
 >
 
 export class Relation {
@@ -102,13 +102,13 @@ export class Relation {
     return !this.isIncomingRelation()
   }
 
-  getOppositeRelation(dbDescription: DBDescription<any>): Relation {
+  getOppositeRelation(dbDescription: DbSchema<any>): Relation {
     return dbDescription.getRelation(this.relatedTable, this.relationName)
   }
 }
 
-export class DBDescription<T extends TableDescriptions> {
-  public readonly extendedTables: ExtendedTableDescriptions
+export class DbSchema<T extends TableSchemas> {
+  public readonly extendedTables: ExtendedTableSchemas
 
   // index mapping fields to an array of relations that map to that field
   private readonly incomingRelationsIndex: Record<
@@ -121,7 +121,7 @@ export class DBDescription<T extends TableDescriptions> {
     this.incomingRelationsIndex = this.indexIncomingRelations()
   }
 
-  private extend(tbls: T): ExtendedTableDescriptions {
+  private extend(tbls: T): ExtendedTableSchemas {
     // map over object fields, then take the relations and then split them into 2 parts based on
     // isIncomingRelation and isOutgoingRelation
     return mapValues(tbls, (descr) => {
@@ -164,18 +164,7 @@ export class DBDescription<T extends TableDescriptions> {
 
   getTableDescription(
     table: TableName
-  ): ExtendedTableDescription<
-    any,
-    any,
-    any,
-    any,
-    any,
-    any,
-    any,
-    any,
-    any,
-    URIS
-  > {
+  ): ExtendedTableSchema<any, any, any, any, any, any, any, any, any, URIS> {
     return this.extendedTables[table]
   }
 

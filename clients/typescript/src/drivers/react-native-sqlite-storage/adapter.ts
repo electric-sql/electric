@@ -7,8 +7,8 @@ import {
   Transaction as Tx,
 } from '../../electric/adapter'
 import { Row, SqlValue, Statement } from '../../util'
-import { ensurePromise } from '../generic/promise'
-import { rowsFromResults } from '../generic/results'
+import { ensurePromise } from '../util/promise'
+import { rowsFromResults } from '../util/results'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 import { Database, Transaction, StatementCallback } from './database'
 

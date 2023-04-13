@@ -5,7 +5,7 @@ import {
   Transaction as Tx,
 } from '../../electric/adapter'
 import { Row, SqlValue, Statement } from '../../util'
-import { rowsFromResults } from '../generic/results'
+import { rowsFromResults } from '../util/results'
 import { Database } from './database'
 
 export class DatabaseAdapter

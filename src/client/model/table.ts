@@ -16,7 +16,7 @@ import { LiveResult, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
-import { Arity, DBDescription, Relation, TableName } from './dbDescription'
+import { Arity, DbSchema, Relation, TableName } from './schema'
 import { Kind, URIS } from 'fp-ts/HKT'
 import { notNullNotUndefined } from '../util/functions'
 import pick from 'lodash.pick'
@@ -77,7 +77,7 @@ export class Table<
     public tableName: string,
     adapter: DatabaseAdapter,
     notifier: Notifier,
-    private _dbDescription: DBDescription<any>
+    private _dbDescription: DbSchema<any>
   ) {
     this._builder = new Builder(
       tableName,
@@ -151,18 +151,18 @@ export class Table<
   async findFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
+    i?: SelectSubset<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): Promise<Kind<GetPayload, T> | null> {
-    return this._executor.execute(this._findFirst.bind(this, i), false)
+    return this._executor.execute(this._findFirst.bind(this, i ?? {}), false)
   }
 
   liveFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
+    i?: SelectSubset<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
@@ -173,12 +173,12 @@ export class Table<
   async findMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
+    i?: SelectSubset<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): Promise<Array<Kind<GetPayload, T>>> {
-    return this._executor.execute(this._findMany.bind(this, i), false)
+    return this._executor.execute(this._findMany.bind(this, i ?? {}), false)
   }
 
   liveMany<
@@ -222,9 +222,9 @@ export class Table<
   }
 
   async deleteMany<T extends DeleteManyInput<Where>>(
-    i: SelectSubset<T, DeleteManyInput<Where>>
+    i?: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload> {
-    return this._executor.execute(this._deleteMany.bind(this, i))
+    return this._executor.execute(this._deleteMany.bind(this, i ?? {}))
   }
 
   private forEachRelation<T extends object>(

@@ -1,6 +1,6 @@
 import { Database } from './database'
 import { DbName, Statement } from '../../util'
-import { QueryExecResult } from '../absurd-sql/database'
+import { QueryExecResult } from '../util/results'
 
 export class MockDatabase implements Database {
   name: DbName

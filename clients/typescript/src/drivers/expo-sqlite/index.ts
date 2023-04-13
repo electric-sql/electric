@@ -28,21 +28,18 @@ import uuid from 'react-native-uuid'
     : global
 )
 
-import { DalNamespace } from '../../client/model/dalNamespace'
-import { DBDescription } from '../../client/model/dbDescription'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model/schema'
 
 export { DatabaseAdapter }
 export type { Database }
 
-export const electrify = async <
-  T extends Database,
-  DB extends DBDescription<any>
->(
+export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<DalNamespace<DB>> => {
+): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db._name!
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()

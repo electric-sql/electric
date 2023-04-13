@@ -18,7 +18,7 @@ import { QualifiedTablename } from '../../src/util/tablename'
 
 import { useElectricQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
-import { DalNamespace } from '../../src/client/model/dalNamespace'
+import { ElectricClient } from '../../src/client/model/client'
 import { dbDescription } from '../client/generated'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
@@ -37,7 +37,7 @@ test('useElectricQuery returns query results', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = DalNamespace.create(dbDescription, namespace)
+  const dal = ElectricClient.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
   const wrapper: FC = ({ children }) => {
@@ -58,7 +58,7 @@ test('useElectricQuery returns error when query errors', async (t) => {
 
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = DalNamespace.create(dbDescription, namespace)
+  const dal = ElectricClient.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
   const params = { shouldError: 1 }
@@ -82,7 +82,7 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = DalNamespace.create(dbDescription, namespace)
+  const dal = ElectricClient.create(dbDescription, namespace)
 
   const query = 'select foo from bars'
 
@@ -115,7 +115,7 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = DalNamespace.create(dbDescription, namespace)
+  const dal = ElectricClient.create(dbDescription, namespace)
 
   await notifier.attach('baz.db', 'baz')
   const query = 'select foo from baz.bars'
