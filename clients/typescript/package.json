@@ -138,6 +138,7 @@
     "lodash.pick": "^4.4.0",
     "lodash.groupby": "^4.6.0",
     "lodash.omitby": "^4.6.0",
+    "object.hasown": "^1.1.2",
     "loglevel": "^1.8.1",
     "long": "^5.2.0",
     "protobufjs": "^7.1.1",
