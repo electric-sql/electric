@@ -11,9 +11,9 @@ const config = {
 
 const original = new Database('example.db')
 
-// Electrify the DB and use the DAL to query the `items` table
+// Electrify the DB and use the DAL to query the `Items` table
 const { db } = await electrify(original, dbDescription, config)
-await db.items.findMany({
+await db.Items.findMany({
   select: {
     value: true,
   },

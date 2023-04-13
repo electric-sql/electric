@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '../generated/client'
 import { TableSchema, DbSchema, Relation } from '../../../src/client/model'
 
 /////////////////////////////////////////
@@ -42,12 +42,12 @@ export const UserScalarFieldEnumSchema = z.enum(['id', 'name'])
 // ITEMS SCHEMA
 /////////////////////////////////////////
 
-export const itemsSchema = z.object({
+export const ItemsSchema = z.object({
   value: z.string(),
   nbr: z.number().int().nullish(),
 })
 
-export type items = z.infer<typeof itemsSchema>
+export type Items = z.infer<typeof ItemsSchema>
 
 /////////////////////////////////////////
 // USER SCHEMA
@@ -93,7 +93,7 @@ export type Profile = z.infer<typeof ProfileSchema>
 // ITEMS
 //------------------------------------------------------
 
-export const itemsSelectSchema: z.ZodType<Prisma.itemsSelect> = z
+export const ItemsSelectSchema: z.ZodType<Prisma.ItemsSelect> = z
   .object({
     value: z.boolean().optional(),
     nbr: z.boolean().optional(),
@@ -206,22 +206,22 @@ export const ProfileSelectSchema: z.ZodType<Prisma.ProfileSelect> = z
 // INPUT TYPES
 /////////////////////////////////////////
 
-export const itemsWhereInputSchema: z.ZodType<Prisma.itemsWhereInput> = z
+export const ItemsWhereInputSchema: z.ZodType<Prisma.ItemsWhereInput> = z
   .object({
     AND: z
       .union([
-        z.lazy(() => itemsWhereInputSchema),
-        z.lazy(() => itemsWhereInputSchema).array(),
+        z.lazy(() => ItemsWhereInputSchema),
+        z.lazy(() => ItemsWhereInputSchema).array(),
       ])
       .optional(),
     OR: z
-      .lazy(() => itemsWhereInputSchema)
+      .lazy(() => ItemsWhereInputSchema)
       .array()
       .optional(),
     NOT: z
       .union([
-        z.lazy(() => itemsWhereInputSchema),
-        z.lazy(() => itemsWhereInputSchema).array(),
+        z.lazy(() => ItemsWhereInputSchema),
+        z.lazy(() => ItemsWhereInputSchema).array(),
       ])
       .optional(),
     value: z.union([z.lazy(() => StringFilterSchema), z.string()]).optional(),
@@ -232,7 +232,7 @@ export const itemsWhereInputSchema: z.ZodType<Prisma.itemsWhereInput> = z
   })
   .strict()
 
-export const itemsOrderByWithRelationInputSchema: z.ZodType<Prisma.itemsOrderByWithRelationInput> =
+export const ItemsOrderByWithRelationInputSchema: z.ZodType<Prisma.ItemsOrderByWithRelationInput> =
   z
     .object({
       value: z.lazy(() => SortOrderSchema).optional(),
@@ -240,43 +240,43 @@ export const itemsOrderByWithRelationInputSchema: z.ZodType<Prisma.itemsOrderByW
     })
     .strict()
 
-export const itemsWhereUniqueInputSchema: z.ZodType<Prisma.itemsWhereUniqueInput> =
+export const ItemsWhereUniqueInputSchema: z.ZodType<Prisma.ItemsWhereUniqueInput> =
   z
     .object({
       value: z.string().optional(),
     })
     .strict()
 
-export const itemsOrderByWithAggregationInputSchema: z.ZodType<Prisma.itemsOrderByWithAggregationInput> =
+export const ItemsOrderByWithAggregationInputSchema: z.ZodType<Prisma.ItemsOrderByWithAggregationInput> =
   z
     .object({
       value: z.lazy(() => SortOrderSchema).optional(),
       nbr: z.lazy(() => SortOrderSchema).optional(),
-      _count: z.lazy(() => itemsCountOrderByAggregateInputSchema).optional(),
-      _avg: z.lazy(() => itemsAvgOrderByAggregateInputSchema).optional(),
-      _max: z.lazy(() => itemsMaxOrderByAggregateInputSchema).optional(),
-      _min: z.lazy(() => itemsMinOrderByAggregateInputSchema).optional(),
-      _sum: z.lazy(() => itemsSumOrderByAggregateInputSchema).optional(),
+      _count: z.lazy(() => ItemsCountOrderByAggregateInputSchema).optional(),
+      _avg: z.lazy(() => ItemsAvgOrderByAggregateInputSchema).optional(),
+      _max: z.lazy(() => ItemsMaxOrderByAggregateInputSchema).optional(),
+      _min: z.lazy(() => ItemsMinOrderByAggregateInputSchema).optional(),
+      _sum: z.lazy(() => ItemsSumOrderByAggregateInputSchema).optional(),
     })
     .strict()
 
-export const itemsScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.itemsScalarWhereWithAggregatesInput> =
+export const ItemsScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.ItemsScalarWhereWithAggregatesInput> =
   z
     .object({
       AND: z
         .union([
-          z.lazy(() => itemsScalarWhereWithAggregatesInputSchema),
-          z.lazy(() => itemsScalarWhereWithAggregatesInputSchema).array(),
+          z.lazy(() => ItemsScalarWhereWithAggregatesInputSchema),
+          z.lazy(() => ItemsScalarWhereWithAggregatesInputSchema).array(),
         ])
         .optional(),
       OR: z
-        .lazy(() => itemsScalarWhereWithAggregatesInputSchema)
+        .lazy(() => ItemsScalarWhereWithAggregatesInputSchema)
         .array()
         .optional(),
       NOT: z
         .union([
-          z.lazy(() => itemsScalarWhereWithAggregatesInputSchema),
-          z.lazy(() => itemsScalarWhereWithAggregatesInputSchema).array(),
+          z.lazy(() => ItemsScalarWhereWithAggregatesInputSchema),
+          z.lazy(() => ItemsScalarWhereWithAggregatesInputSchema).array(),
         ])
         .optional(),
       value: z
@@ -597,14 +597,14 @@ export const ProfileScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Profi
     })
     .strict()
 
-export const itemsCreateInputSchema: z.ZodType<Prisma.itemsCreateInput> = z
+export const ItemsCreateInputSchema: z.ZodType<Prisma.ItemsCreateInput> = z
   .object({
     value: z.string(),
     nbr: z.number().int().optional().nullable(),
   })
   .strict()
 
-export const itemsUncheckedCreateInputSchema: z.ZodType<Prisma.itemsUncheckedCreateInput> =
+export const ItemsUncheckedCreateInputSchema: z.ZodType<Prisma.ItemsUncheckedCreateInput> =
   z
     .object({
       value: z.string(),
@@ -612,7 +612,7 @@ export const itemsUncheckedCreateInputSchema: z.ZodType<Prisma.itemsUncheckedCre
     })
     .strict()
 
-export const itemsUpdateInputSchema: z.ZodType<Prisma.itemsUpdateInput> = z
+export const ItemsUpdateInputSchema: z.ZodType<Prisma.ItemsUpdateInput> = z
   .object({
     value: z
       .union([z.string(), z.lazy(() => StringFieldUpdateOperationsInputSchema)])
@@ -627,7 +627,7 @@ export const itemsUpdateInputSchema: z.ZodType<Prisma.itemsUpdateInput> = z
   })
   .strict()
 
-export const itemsUncheckedUpdateInputSchema: z.ZodType<Prisma.itemsUncheckedUpdateInput> =
+export const ItemsUncheckedUpdateInputSchema: z.ZodType<Prisma.ItemsUncheckedUpdateInput> =
   z
     .object({
       value: z
@@ -646,7 +646,7 @@ export const itemsUncheckedUpdateInputSchema: z.ZodType<Prisma.itemsUncheckedUpd
     })
     .strict()
 
-export const itemsCreateManyInputSchema: z.ZodType<Prisma.itemsCreateManyInput> =
+export const ItemsCreateManyInputSchema: z.ZodType<Prisma.ItemsCreateManyInput> =
   z
     .object({
       value: z.string(),
@@ -654,7 +654,7 @@ export const itemsCreateManyInputSchema: z.ZodType<Prisma.itemsCreateManyInput> 
     })
     .strict()
 
-export const itemsUpdateManyMutationInputSchema: z.ZodType<Prisma.itemsUpdateManyMutationInput> =
+export const ItemsUpdateManyMutationInputSchema: z.ZodType<Prisma.ItemsUpdateManyMutationInput> =
   z
     .object({
       value: z
@@ -673,7 +673,7 @@ export const itemsUpdateManyMutationInputSchema: z.ZodType<Prisma.itemsUpdateMan
     })
     .strict()
 
-export const itemsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.itemsUncheckedUpdateManyInput> =
+export const ItemsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ItemsUncheckedUpdateManyInput> =
   z
     .object({
       value: z
@@ -1118,7 +1118,7 @@ export const IntNullableFilterSchema: z.ZodType<Prisma.IntNullableFilter> = z
   })
   .strict()
 
-export const itemsCountOrderByAggregateInputSchema: z.ZodType<Prisma.itemsCountOrderByAggregateInput> =
+export const ItemsCountOrderByAggregateInputSchema: z.ZodType<Prisma.ItemsCountOrderByAggregateInput> =
   z
     .object({
       value: z.lazy(() => SortOrderSchema).optional(),
@@ -1126,22 +1126,14 @@ export const itemsCountOrderByAggregateInputSchema: z.ZodType<Prisma.itemsCountO
     })
     .strict()
 
-export const itemsAvgOrderByAggregateInputSchema: z.ZodType<Prisma.itemsAvgOrderByAggregateInput> =
+export const ItemsAvgOrderByAggregateInputSchema: z.ZodType<Prisma.ItemsAvgOrderByAggregateInput> =
   z
     .object({
       nbr: z.lazy(() => SortOrderSchema).optional(),
     })
     .strict()
 
-export const itemsMaxOrderByAggregateInputSchema: z.ZodType<Prisma.itemsMaxOrderByAggregateInput> =
-  z
-    .object({
-      value: z.lazy(() => SortOrderSchema).optional(),
-      nbr: z.lazy(() => SortOrderSchema).optional(),
-    })
-    .strict()
-
-export const itemsMinOrderByAggregateInputSchema: z.ZodType<Prisma.itemsMinOrderByAggregateInput> =
+export const ItemsMaxOrderByAggregateInputSchema: z.ZodType<Prisma.ItemsMaxOrderByAggregateInput> =
   z
     .object({
       value: z.lazy(() => SortOrderSchema).optional(),
@@ -1149,7 +1141,15 @@ export const itemsMinOrderByAggregateInputSchema: z.ZodType<Prisma.itemsMinOrder
     })
     .strict()
 
-export const itemsSumOrderByAggregateInputSchema: z.ZodType<Prisma.itemsSumOrderByAggregateInput> =
+export const ItemsMinOrderByAggregateInputSchema: z.ZodType<Prisma.ItemsMinOrderByAggregateInput> =
+  z
+    .object({
+      value: z.lazy(() => SortOrderSchema).optional(),
+      nbr: z.lazy(() => SortOrderSchema).optional(),
+    })
+    .strict()
+
+export const ItemsSumOrderByAggregateInputSchema: z.ZodType<Prisma.ItemsSumOrderByAggregateInput> =
   z
     .object({
       nbr: z.lazy(() => SortOrderSchema).optional(),
@@ -2522,102 +2522,102 @@ export const PostUncheckedUpdateManyWithoutPostsInputSchema: z.ZodType<Prisma.Po
 // ARGS
 /////////////////////////////////////////
 
-export const itemsFindFirstArgsSchema: z.ZodType<Prisma.itemsFindFirstArgs> = z
+export const ItemsFindFirstArgsSchema: z.ZodType<Prisma.ItemsFindFirstArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    where: itemsWhereInputSchema.optional(),
+    select: ItemsSelectSchema.optional(),
+    where: ItemsWhereInputSchema.optional(),
     orderBy: z
       .union([
-        itemsOrderByWithRelationInputSchema.array(),
-        itemsOrderByWithRelationInputSchema,
+        ItemsOrderByWithRelationInputSchema.array(),
+        ItemsOrderByWithRelationInputSchema,
       ])
       .optional(),
-    cursor: itemsWhereUniqueInputSchema.optional(),
+    cursor: ItemsWhereUniqueInputSchema.optional(),
     take: z.number().optional(),
     skip: z.number().optional(),
     distinct: ItemsScalarFieldEnumSchema.array().optional(),
   })
   .strict()
 
-export const itemsFindFirstOrThrowArgsSchema: z.ZodType<Prisma.itemsFindFirstOrThrowArgs> =
+export const ItemsFindFirstOrThrowArgsSchema: z.ZodType<Prisma.ItemsFindFirstOrThrowArgs> =
   z
     .object({
-      select: itemsSelectSchema.optional(),
-      where: itemsWhereInputSchema.optional(),
+      select: ItemsSelectSchema.optional(),
+      where: ItemsWhereInputSchema.optional(),
       orderBy: z
         .union([
-          itemsOrderByWithRelationInputSchema.array(),
-          itemsOrderByWithRelationInputSchema,
+          ItemsOrderByWithRelationInputSchema.array(),
+          ItemsOrderByWithRelationInputSchema,
         ])
         .optional(),
-      cursor: itemsWhereUniqueInputSchema.optional(),
+      cursor: ItemsWhereUniqueInputSchema.optional(),
       take: z.number().optional(),
       skip: z.number().optional(),
       distinct: ItemsScalarFieldEnumSchema.array().optional(),
     })
     .strict()
 
-export const itemsFindManyArgsSchema: z.ZodType<Prisma.itemsFindManyArgs> = z
+export const ItemsFindManyArgsSchema: z.ZodType<Prisma.ItemsFindManyArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    where: itemsWhereInputSchema.optional(),
+    select: ItemsSelectSchema.optional(),
+    where: ItemsWhereInputSchema.optional(),
     orderBy: z
       .union([
-        itemsOrderByWithRelationInputSchema.array(),
-        itemsOrderByWithRelationInputSchema,
+        ItemsOrderByWithRelationInputSchema.array(),
+        ItemsOrderByWithRelationInputSchema,
       ])
       .optional(),
-    cursor: itemsWhereUniqueInputSchema.optional(),
+    cursor: ItemsWhereUniqueInputSchema.optional(),
     take: z.number().optional(),
     skip: z.number().optional(),
     distinct: ItemsScalarFieldEnumSchema.array().optional(),
   })
   .strict()
 
-export const itemsAggregateArgsSchema: z.ZodType<Prisma.ItemsAggregateArgs> = z
+export const ItemsAggregateArgsSchema: z.ZodType<Prisma.ItemsAggregateArgs> = z
   .object({
-    where: itemsWhereInputSchema.optional(),
+    where: ItemsWhereInputSchema.optional(),
     orderBy: z
       .union([
-        itemsOrderByWithRelationInputSchema.array(),
-        itemsOrderByWithRelationInputSchema,
+        ItemsOrderByWithRelationInputSchema.array(),
+        ItemsOrderByWithRelationInputSchema,
       ])
       .optional(),
-    cursor: itemsWhereUniqueInputSchema.optional(),
+    cursor: ItemsWhereUniqueInputSchema.optional(),
     take: z.number().optional(),
     skip: z.number().optional(),
   })
   .strict()
 
-export const itemsGroupByArgsSchema: z.ZodType<Prisma.ItemsGroupByArgs> = z
+export const ItemsGroupByArgsSchema: z.ZodType<Prisma.ItemsGroupByArgs> = z
   .object({
-    where: itemsWhereInputSchema.optional(),
+    where: ItemsWhereInputSchema.optional(),
     orderBy: z
       .union([
-        itemsOrderByWithAggregationInputSchema.array(),
-        itemsOrderByWithAggregationInputSchema,
+        ItemsOrderByWithAggregationInputSchema.array(),
+        ItemsOrderByWithAggregationInputSchema,
       ])
       .optional(),
     by: ItemsScalarFieldEnumSchema.array(),
-    having: itemsScalarWhereWithAggregatesInputSchema.optional(),
+    having: ItemsScalarWhereWithAggregatesInputSchema.optional(),
     take: z.number().optional(),
     skip: z.number().optional(),
   })
   .strict()
 
-export const itemsFindUniqueArgsSchema: z.ZodType<Prisma.itemsFindUniqueArgs> =
+export const ItemsFindUniqueArgsSchema: z.ZodType<Prisma.ItemsFindUniqueArgs> =
   z
     .object({
-      select: itemsSelectSchema.optional(),
-      where: itemsWhereUniqueInputSchema,
+      select: ItemsSelectSchema.optional(),
+      where: ItemsWhereUniqueInputSchema,
     })
     .strict()
 
-export const itemsFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.itemsFindUniqueOrThrowArgs> =
+export const ItemsFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.ItemsFindUniqueOrThrowArgs> =
   z
     .object({
-      select: itemsSelectSchema.optional(),
-      where: itemsWhereUniqueInputSchema,
+      select: ItemsSelectSchema.optional(),
+      where: ItemsWhereUniqueInputSchema,
     })
     .strict()
 
@@ -2934,63 +2934,63 @@ export const ProfileFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.ProfileFindUni
     })
     .strict()
 
-export const itemsCreateArgsSchema: z.ZodType<Prisma.itemsCreateArgs> = z
+export const ItemsCreateArgsSchema: z.ZodType<Prisma.ItemsCreateArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    data: z.union([itemsCreateInputSchema, itemsUncheckedCreateInputSchema]),
+    select: ItemsSelectSchema.optional(),
+    data: z.union([ItemsCreateInputSchema, ItemsUncheckedCreateInputSchema]),
   })
   .strict()
 
-export const itemsUpsertArgsSchema: z.ZodType<Prisma.itemsUpsertArgs> = z
+export const ItemsUpsertArgsSchema: z.ZodType<Prisma.ItemsUpsertArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    where: itemsWhereUniqueInputSchema,
-    create: z.union([itemsCreateInputSchema, itemsUncheckedCreateInputSchema]),
-    update: z.union([itemsUpdateInputSchema, itemsUncheckedUpdateInputSchema]),
+    select: ItemsSelectSchema.optional(),
+    where: ItemsWhereUniqueInputSchema,
+    create: z.union([ItemsCreateInputSchema, ItemsUncheckedCreateInputSchema]),
+    update: z.union([ItemsUpdateInputSchema, ItemsUncheckedUpdateInputSchema]),
   })
   .strict()
 
-export const itemsCreateManyArgsSchema: z.ZodType<Prisma.itemsCreateManyArgs> =
+export const ItemsCreateManyArgsSchema: z.ZodType<Prisma.ItemsCreateManyArgs> =
   z
     .object({
       data: z.union([
-        itemsCreateManyInputSchema,
-        itemsCreateManyInputSchema.array(),
+        ItemsCreateManyInputSchema,
+        ItemsCreateManyInputSchema.array(),
       ]),
       skipDuplicates: z.boolean().optional(),
     })
     .strict()
 
-export const itemsDeleteArgsSchema: z.ZodType<Prisma.itemsDeleteArgs> = z
+export const ItemsDeleteArgsSchema: z.ZodType<Prisma.ItemsDeleteArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    where: itemsWhereUniqueInputSchema,
+    select: ItemsSelectSchema.optional(),
+    where: ItemsWhereUniqueInputSchema,
   })
   .strict()
 
-export const itemsUpdateArgsSchema: z.ZodType<Prisma.itemsUpdateArgs> = z
+export const ItemsUpdateArgsSchema: z.ZodType<Prisma.ItemsUpdateArgs> = z
   .object({
-    select: itemsSelectSchema.optional(),
-    data: z.union([itemsUpdateInputSchema, itemsUncheckedUpdateInputSchema]),
-    where: itemsWhereUniqueInputSchema,
+    select: ItemsSelectSchema.optional(),
+    data: z.union([ItemsUpdateInputSchema, ItemsUncheckedUpdateInputSchema]),
+    where: ItemsWhereUniqueInputSchema,
   })
   .strict()
 
-export const itemsUpdateManyArgsSchema: z.ZodType<Prisma.itemsUpdateManyArgs> =
+export const ItemsUpdateManyArgsSchema: z.ZodType<Prisma.ItemsUpdateManyArgs> =
   z
     .object({
       data: z.union([
-        itemsUpdateManyMutationInputSchema,
-        itemsUncheckedUpdateManyInputSchema,
+        ItemsUpdateManyMutationInputSchema,
+        ItemsUncheckedUpdateManyInputSchema,
       ]),
-      where: itemsWhereInputSchema.optional(),
+      where: ItemsWhereInputSchema.optional(),
     })
     .strict()
 
-export const itemsDeleteManyArgsSchema: z.ZodType<Prisma.itemsDeleteManyArgs> =
+export const ItemsDeleteManyArgsSchema: z.ZodType<Prisma.ItemsDeleteManyArgs> =
   z
     .object({
-      where: itemsWhereInputSchema.optional(),
+      where: ItemsWhereInputSchema.optional(),
     })
     .strict()
 
@@ -3198,17 +3198,17 @@ declare module 'fp-ts/HKT' {
       | boolean
       | null
       | undefined
-      | Prisma.itemsArgs
+      | Prisma.ItemsArgs
       | Prisma.UserArgs
       | Prisma.PostArgs
       | Prisma.ProfileArgs
   > {
-    itemsGetPayload: A extends
+    ItemsGetPayload: A extends
       | boolean
       | null
       | undefined
-      | (Prisma.itemsArgs & Record<string, any>)
-      ? Prisma.itemsGetPayload<A>
+      | (Prisma.ItemsArgs & Record<string, any>)
+      ? Prisma.ItemsGetPayload<A>
       : never
     UserGetPayload: A extends
       | boolean
@@ -3235,32 +3235,32 @@ declare module 'fp-ts/HKT' {
 }
 
 export const tableDescriptions = {
-  items: {
+  Items: {
     fields: ['value', 'nbr'],
     relations: [],
-    modelSchema: (itemsCreateInputSchema as any)
+    modelSchema: (ItemsCreateInputSchema as any)
       .partial()
-      .or((itemsUncheckedCreateInputSchema as any).partial()),
-    createSchema: itemsCreateArgsSchema,
-    createManySchema: itemsCreateManyArgsSchema,
-    findUniqueSchema: itemsFindUniqueArgsSchema,
-    findSchema: itemsFindFirstArgsSchema,
-    updateSchema: itemsUpdateArgsSchema,
-    updateManySchema: itemsUpdateManyArgsSchema,
-    upsertSchema: itemsUpsertArgsSchema,
-    deleteSchema: itemsDeleteArgsSchema,
-    deleteManySchema: itemsDeleteManyArgsSchema,
+      .or((ItemsUncheckedCreateInputSchema as any).partial()),
+    createSchema: ItemsCreateArgsSchema,
+    createManySchema: ItemsCreateManyArgsSchema,
+    findUniqueSchema: ItemsFindUniqueArgsSchema,
+    findSchema: ItemsFindFirstArgsSchema,
+    updateSchema: ItemsUpdateArgsSchema,
+    updateManySchema: ItemsUpdateManyArgsSchema,
+    upsertSchema: ItemsUpsertArgsSchema,
+    deleteSchema: ItemsDeleteArgsSchema,
+    deleteManySchema: ItemsDeleteManyArgsSchema,
   } as TableSchema<
-    z.infer<typeof itemsCreateInputSchema>,
-    Prisma.itemsCreateArgs['data'],
-    Prisma.itemsUpdateArgs['data'],
-    Prisma.itemsFindFirstArgs['select'],
-    Prisma.itemsFindFirstArgs['where'],
-    Prisma.itemsFindUniqueArgs['where'],
+    z.infer<typeof ItemsCreateInputSchema>,
+    Prisma.ItemsCreateArgs['data'],
+    Prisma.ItemsUpdateArgs['data'],
+    Prisma.ItemsFindFirstArgs['select'],
+    Prisma.ItemsFindFirstArgs['where'],
+    Prisma.ItemsFindUniqueArgs['where'],
     never,
-    Prisma.itemsFindFirstArgs['orderBy'],
+    Prisma.ItemsFindFirstArgs['orderBy'],
     Prisma.ItemsScalarFieldEnum,
-    'itemsGetPayload'
+    'ItemsGetPayload'
   >,
   User: {
     fields: ['id', 'name'],

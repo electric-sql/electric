@@ -27,9 +27,9 @@ async function runAndCheckNotifications(f: () => Promise<void>) {
 
 // Clean the DB environment
 async function cleanDB() {
-  await adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
+  await adapter.run({ sql: 'DROP TABLE IF EXISTS Items' })
   await adapter.run({
-    sql: 'CREATE TABLE IF NOT EXISTS items (value TEXT PRIMARY KEY NOT NULL, nbr INTEGER) WITHOUT ROWID;',
+    sql: 'CREATE TABLE IF NOT EXISTS Items (value TEXT PRIMARY KEY NOT NULL, nbr INTEGER) WITHOUT ROWID;',
   })
 }
 
@@ -40,12 +40,12 @@ test.serial.beforeEach(async (_t) => {
 
 // Clean the DB after all tests
 test.serial.after(async (_t) => {
-  await adapter.run({ sql: 'DROP TABLE IF EXISTS items' })
+  await adapter.run({ sql: 'DROP TABLE IF EXISTS Items' })
 })
 
 test.serial('create runs potentiallyChanged', async (t) => {
   const insert = async () => {
-    await db.items.create({
+    await db.Items.create({
       data: {
         value: 'foo',
         nbr: 5,
@@ -59,7 +59,7 @@ test.serial('create runs potentiallyChanged', async (t) => {
 
 test.serial('createMany runs potentiallyChanged', async (t) => {
   const insert = async () => {
-    await db.items.createMany({
+    await db.Items.createMany({
       data: [
         {
           value: 'foo',
@@ -78,7 +78,7 @@ test.serial('createMany runs potentiallyChanged', async (t) => {
 })
 
 async function populate() {
-  await db.items.createMany({
+  await db.Items.createMany({
     data: [
       {
         value: 'foo',
@@ -96,7 +96,7 @@ test.serial('findUnique does not run potentiallyChanged', async (t) => {
   await populate()
 
   const find = async () => {
-    await db.items.findUnique({
+    await db.Items.findUnique({
       where: {
         value: 'foo',
       },
@@ -109,7 +109,7 @@ test.serial('findUnique does not run potentiallyChanged', async (t) => {
 
 test.serial('findFirst does not run potentiallyChanged', async (t) => {
   const find = async () => {
-    await db.items.findFirst({})
+    await db.Items.findFirst({})
   }
 
   const notifications = await runAndCheckNotifications(find)
@@ -118,7 +118,7 @@ test.serial('findFirst does not run potentiallyChanged', async (t) => {
 
 test.serial('findMany does not run potentiallyChanged', async (t) => {
   const find = async () => {
-    await db.items.findMany({})
+    await db.Items.findMany({})
   }
 
   const notifications = await runAndCheckNotifications(find)
@@ -129,7 +129,7 @@ test.serial('update runs potentiallyChanged', async (t) => {
   await populate()
 
   const update = async () => {
-    await db.items.update({
+    await db.Items.update({
       data: {
         nbr: 18,
       },
@@ -147,7 +147,7 @@ test.serial('updateMany runs potentiallyChanged', async (t) => {
   await populate()
 
   const update = async () => {
-    await db.items.updateMany({
+    await db.Items.updateMany({
       data: {
         nbr: 18,
       },
@@ -162,7 +162,7 @@ test.serial('upsert runs potentiallyChanged', async (t) => {
   await populate()
 
   const upsert = async () => {
-    await db.items.upsert({
+    await db.Items.upsert({
       create: {
         value: 'foo',
         nbr: 18,
@@ -184,7 +184,7 @@ test.serial('delete runs potentiallyChanged', async (t) => {
   await populate()
 
   const del = async () => {
-    await db.items.delete({
+    await db.Items.delete({
       where: {
         value: 'foo',
       },
@@ -199,7 +199,7 @@ test.serial('deleteMany runs potentiallyChanged', async (t) => {
   await populate()
 
   const del = async () => {
-    await db.items.deleteMany({
+    await db.Items.deleteMany({
       where: {
         nbr: 5,
       },
