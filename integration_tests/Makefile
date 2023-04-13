@@ -16,7 +16,7 @@ build:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} build;)
 
 pull:
-	docker-compose -f services_templates.yaml pull \
+	docker compose -f services_templates.yaml pull \
 		vaxine \
 		sysbench \
 		elixir_client \

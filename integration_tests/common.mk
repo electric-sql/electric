@@ -47,10 +47,10 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 	touch .sysbench_docker_build
 
 start_dev_env:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3 
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3 
 
 log_dev_env:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
+	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
 
 
 ifdef LUX_EXTRA_LOGS
@@ -63,13 +63,13 @@ endif
 
 start_vaxine_%:
 	mkdir -p ${VAXINE_VOLUME}/vaxine_$*
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
 
 start_electric_%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
 
 stop_electric_%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
 
 stop_dev_env:
 	if [ -n "`docker ps --filter name=elixir_client --format '{{.Names}}'`" ]; then \
@@ -81,23 +81,23 @@ stop_dev_env:
 	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
 	fi
-	docker-compose -f ${DOCKER_COMPOSE_FILE} stop
-	docker-compose -f ${DOCKER_COMPOSE_FILE} down
+	docker compose -f ${DOCKER_COMPOSE_FILE} stop
+	docker compose -f ${DOCKER_COMPOSE_FILE} down
 
 start_sysbench:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
+	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		sysbench
 
 start_elixir_test_%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
+	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		--workdir=${PROJECT_ROOT}/integration_tests/elixir_client \
 		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
 		elixir_client_$*
 
 start_satellite_client_%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run \
+	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
 		--workdir=${PROJECT_ROOT}/integration_tests/satellite_client \
 		satellite_client_$*
@@ -125,17 +125,17 @@ docker-psql-%:
 	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U postgres -d electric
 
 docker-attach-%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
+	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
 
 DOCKER_WORKDIR?=${PROJECT_ROOT}
 
 docker-start-clean-%:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh \
+	docker compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh \
 		--workdir=${DOCKER_WORKDIR} \
 		$*
 
 docker-make:
-	docker-compose -f ${DOCKER_COMPOSE_FILE} run --rm \
+	docker compose -f ${DOCKER_COMPOSE_FILE} run --rm \
 		--workdir=${DOCKER_WORKDIR} ${MK_DOCKER} \
 		make ${MK_TARGET}
 

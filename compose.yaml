@@ -1,4 +1,4 @@
-# Run using `docker-compose -f databases.yaml up`.
+# Run using `docker compose -f databases.yaml up`.
 version: "3.1"
 
 services:
