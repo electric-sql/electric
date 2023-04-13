@@ -414,6 +414,11 @@ test.serial('findFirst query returns first result', async (t) => {
   t.deepEqual(res, post2)
 })
 
+test.serial('findFirst query argument is optional', async (t) => {
+  const res = await tbl.findFirst()
+  t.deepEqual(res, post1)
+})
+
 test.serial('findFirst query supports include', async (t) => {
   const res = await tbl.findFirst({
     where: {

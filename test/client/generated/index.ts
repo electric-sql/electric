@@ -1,10 +1,6 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import {
-  TableDescription,
-  DBDescription,
-  Relation,
-} from '../../../src/client/model'
+import { TableSchema, DbSchema, Relation } from '../../../src/client/model'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -3254,7 +3250,7 @@ export const tableDescriptions = {
     upsertSchema: itemsUpsertArgsSchema,
     deleteSchema: itemsDeleteArgsSchema,
     deleteManySchema: itemsDeleteManyArgsSchema,
-  } as TableDescription<
+  } as TableSchema<
     z.infer<typeof itemsCreateInputSchema>,
     Prisma.itemsCreateArgs['data'],
     Prisma.itemsUpdateArgs['data'],
@@ -3284,7 +3280,7 @@ export const tableDescriptions = {
     upsertSchema: UserUpsertArgsSchema,
     deleteSchema: UserDeleteArgsSchema,
     deleteManySchema: UserDeleteManyArgsSchema,
-  } as TableDescription<
+  } as TableSchema<
     z.infer<typeof UserCreateInputSchema>,
     Prisma.UserCreateArgs['data'],
     Prisma.UserUpdateArgs['data'],
@@ -3313,7 +3309,7 @@ export const tableDescriptions = {
     upsertSchema: PostUpsertArgsSchema,
     deleteSchema: PostDeleteArgsSchema,
     deleteManySchema: PostDeleteManyArgsSchema,
-  } as TableDescription<
+  } as TableSchema<
     z.infer<typeof PostCreateInputSchema>,
     Prisma.PostCreateArgs['data'],
     Prisma.PostUpdateArgs['data'],
@@ -3342,7 +3338,7 @@ export const tableDescriptions = {
     upsertSchema: ProfileUpsertArgsSchema,
     deleteSchema: ProfileDeleteArgsSchema,
     deleteManySchema: ProfileDeleteManyArgsSchema,
-  } as TableDescription<
+  } as TableSchema<
     z.infer<typeof ProfileCreateInputSchema>,
     Prisma.ProfileCreateArgs['data'],
     Prisma.ProfileUpdateArgs['data'],
@@ -3356,4 +3352,4 @@ export const tableDescriptions = {
   >,
 }
 
-export const dbDescription = new DBDescription(tableDescriptions)
+export const dbDescription = new DbSchema(tableDescriptions)

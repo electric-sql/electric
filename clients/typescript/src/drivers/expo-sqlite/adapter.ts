@@ -1,6 +1,6 @@
 import { AnyFunction, Row, Statement } from '../../util/types'
 
-import { Results, rowsFromResults } from '../generic/results'
+import { Results, rowsFromResults } from '../util/results'
 import { Database, Transaction } from './database'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,

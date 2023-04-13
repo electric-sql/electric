@@ -1,16 +1,16 @@
 import React, { createContext, useContext } from 'react'
 
-import { DalNamespace } from '../../client/model/dalNamespace'
-import { DBDescription } from '../../client/model'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model'
 
-interface Props<S extends DBDescription<any>> {
+interface Props<S extends DbSchema<any>> {
   children?: React.ReactNode
-  db?: DalNamespace<S>
+  db?: ElectricClient<S>
 }
 
-interface ElectricContext<S extends DBDescription<any>> {
-  ElectricContext: React.Context<DalNamespace<S> | undefined>
-  useElectric: () => DalNamespace<S> | undefined
+interface ElectricContext<S extends DbSchema<any>> {
+  ElectricContext: React.Context<ElectricClient<S> | undefined>
+  useElectric: () => ElectricClient<S> | undefined
   ElectricProvider: ({ children, db }: Props<S>) => JSX.Element
 }
 
@@ -18,9 +18,8 @@ interface ElectricContext<S extends DBDescription<any>> {
 // it looses information about the actual types of the DB schema
 // but we don't need that information in the React hooks.
 // However, users preferably don't lose this type information, therefore, they can use `makeElectricContext`.
-let ElectricContext: React.Context<
-  DalNamespace<DBDescription<any>> | undefined
-> = createContext<DalNamespace<DBDescription<any>> | undefined>(undefined)
+let ElectricContext: React.Context<ElectricClient<DbSchema<any>> | undefined> =
+  createContext<ElectricClient<DbSchema<any>> | undefined>(undefined)
 
 export { ElectricContext }
 
@@ -30,9 +29,9 @@ export { ElectricContext }
 // e.g. const ctx = createContext<DalTables<DbSchemas | undefined>(undefined)
 //      the above looses information about the concrete db tables
 export function makeElectricContext<
-  S extends DBDescription<any>
+  S extends DbSchema<any>
 >(): ElectricContext<S> {
-  const ctx = createContext<DalNamespace<S> | undefined>(undefined)
+  const ctx = createContext<ElectricClient<S> | undefined>(undefined)
 
   ElectricContext = ctx as any
   const useElectric = () => useContext(ctx)

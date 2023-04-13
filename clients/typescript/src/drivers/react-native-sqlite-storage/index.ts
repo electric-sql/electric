@@ -12,7 +12,7 @@ import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 import { Database } from './database'
-import { DalNamespace } from '../../client/model/dalNamespace'
+import { ElectricClient } from '../../client/model/client'
 
 export type { Database }
 
@@ -20,7 +20,7 @@ export type { Database }
 import 'fastestsmallesttextencoderdecoder'
 // Provide implementation for global uuid()
 import uuid from 'react-native-uuid'
-import { DBDescription } from '../../client/model/dbDescription'
+import { DbSchema } from '../../client/model/schema'
 ;(function (global: any) {
   global['uuid'] = uuid.v4
 })(
@@ -33,16 +33,13 @@ import { DBDescription } from '../../client/model/dbDescription'
 
 export { DatabaseAdapter }
 
-export const electrify = async <
-  T extends Database,
-  DB extends DBDescription<any>
->(
+export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
   promisesEnabled: boolean,
   config: ElectricConfig,
   opts?: ElectrifyOptions
-): Promise<DalNamespace<DB>> => {
+): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db.dbName
   const adapter = opts?.adapter || new DatabaseAdapter(db, promisesEnabled)
   const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()

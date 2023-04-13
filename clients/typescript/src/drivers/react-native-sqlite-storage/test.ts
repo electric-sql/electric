@@ -17,17 +17,17 @@ import { Database } from './index'
 import { enablePromiseRuntime, MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
-import { DalNamespace } from '../../client/model/dalNamespace'
-import { DBDescription } from '../../client/model'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model'
 
-type RetVal<S extends DBDescription<any>, N extends Notifier> = Promise<
-  [Database, N, DalNamespace<S>]
+type RetVal<S extends DbSchema<any>, N extends Notifier> = Promise<
+  [Database, N, ElectricClient<S>]
 >
 
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export const initTestable = async <
-  S extends DBDescription<any>,
+  S extends DbSchema<any>,
   N extends Notifier = MockNotifier
 >(
   dbName: DbName,

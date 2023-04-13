@@ -11,7 +11,7 @@ import * as SQLite from 'wa-sqlite'
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
 import { SqlValue, Statement } from '../../util'
-import { QueryExecResult } from '../absurd-sql/database'
+import { QueryExecResult } from '../util/results'
 
 import { Mutex } from 'async-mutex'
 

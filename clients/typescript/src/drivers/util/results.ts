@@ -1,4 +1,4 @@
-import { Row } from '../../util/types'
+import { Row, SqlValue } from '../../util/types'
 
 export interface Results {
   rows: {
@@ -10,6 +10,11 @@ export interface Results {
   insertId?: number
 }
 
+export interface QueryExecResult {
+  columns: string[]
+  values: SqlValue[][]
+}
+
 export const rowsFromResults = (results: Results): Row[] => {
   if (results.rows.raw) {
     return results.rows.raw()
@@ -18,6 +23,30 @@ export const rowsFromResults = (results: Results): Row[] => {
   const rows = []
   for (let i = 0; i < results.rows.length; i++) {
     rows.push(results.rows.item(i))
+  }
+
+  return rows
+}
+
+export const resultToRows = (result: QueryExecResult[]): Row[] => {
+  const rows: Row[] = []
+  if (result.length == 0) {
+    return rows
+  }
+
+  for (const res of result) {
+    const cols = res.columns
+    res.values.map((values: SqlValue[]) => {
+      const row: Row = {}
+
+      values.map((val: SqlValue, i: number) => {
+        const col = cols[i]
+
+        row[col] = val
+      })
+
+      rows.push(row)
+    })
   }
 
   return rows
