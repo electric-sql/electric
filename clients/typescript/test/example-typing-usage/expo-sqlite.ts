@@ -12,7 +12,7 @@ const config = {
 const original = SQLite.openDatabase('example.db')
 
 const { db } = await electrify(original, dbDescription, config)
-await db.items.findMany({
+await db.Items.findMany({
   select: {
     value: true,
   },

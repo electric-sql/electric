@@ -3,10 +3,6 @@ datasource db {
   url      = env("PRISMA_DB_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 generator electric {
   provider                 = "./node_modules/prisma-generator-electric/packages/generator/dist/bin.js"
   output                   = "../generated"
@@ -14,7 +10,12 @@ generator electric {
   writeNullishInModelTypes = true
 }
 
-model items {
+generator client {
+  provider = "prisma-client-js"
+  output = "../generated/client"
+}
+
+model Items {
   value String @id
   nbr   Int?
 }

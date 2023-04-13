@@ -1,0 +1,44 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("PRISMA_DB_URL")
+}
+
+generator electric {
+  provider                 = "./node_modules/prisma-generator-electric/packages/generator/dist/bin.js"
+  output                   = "../generated"
+  relationModel            = true
+  writeNullishInModelTypes = true
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output = "../generated/client"
+}
+
+model Items {
+  value String @id
+  nbr   Int?
+}
+
+model User {
+  id      Int      @id
+  name    String?
+  posts   Post[]
+  profile Profile?
+}
+
+model Post {
+  id        Int    @id
+  title     String @unique
+  contents  String
+  nbr       Int?
+  authorId  Int
+  author    User?  @relation(fields: [authorId], references: [id])
+}
+
+model Profile {
+  id     Int    @id
+  bio    String
+  userId Int    @unique
+  user   User?  @relation(fields: [userId], references: [id])
+}

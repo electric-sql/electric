@@ -28,7 +28,7 @@ export const initTableInfo = (): TableInfo => {
       primaryKey: ['id'],
       columns: ['id', 'parent'],
     },
-    'main.items': {
+    'main.Items': {
       primaryKey: ['value'],
       columns: ['value', 'other'],
     },

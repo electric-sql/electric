@@ -15,7 +15,7 @@ const opts = {
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
     const { db } = await electrify(original, dbDescription, config)
-    await db.items.findMany({
+    await db.Items.findMany({
       select: {
         value: true,
       },
