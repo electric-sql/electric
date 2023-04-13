@@ -17,14 +17,14 @@ import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
 import { Arity, DbSchema, Relation, TableName } from './schema'
-import { Kind, URIS } from 'fp-ts/HKT'
+import { HKT, Kind } from '../util/hkt'
 import { notNullNotUndefined } from '../util/functions'
 import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
 
-type AnyTable = Table<any, any, any, any, any, any, any, any, any, URIS>
+type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
 export class Table<
   T extends Record<string, any>,
@@ -36,7 +36,7 @@ export class Table<
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
-  GetPayload extends URIS
+  GetPayload extends HKT
 > implements
     Model<
       CreateData,
@@ -128,7 +128,9 @@ export class Table<
     // a higher kinded type GetPayload<T>
     // We have to typecast it because internally when querying the DB we get back a Partial<T>
     // But since we carefully craft the queries we know that only the selected fields are in that object
-    return this._executor.transaction(this._create.bind(this, i))
+    return this._executor.transaction((db, cont, onError) =>
+      this._create<T>(i, db, cont, onError)
+    )
   }
 
   async createMany<T extends CreateManyInput<CreateData>>(
@@ -140,7 +142,10 @@ export class Table<
   async findUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T> | null> {
-    return this._executor.execute(this._findUnique.bind(this, i), false)
+    return this._executor.execute(
+      (db, cont, onError) => this._findUnique(i, db, cont, onError),
+      false
+    )
   }
 
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
@@ -157,7 +162,10 @@ export class Table<
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): Promise<Kind<GetPayload, T> | null> {
-    return this._executor.execute(this._findFirst.bind(this, i ?? {}), false)
+    return this._executor.execute(
+      (db, cont, onError) => this._findFirst(i, db, cont, onError),
+      false
+    )
   }
 
   liveFirst<
@@ -179,7 +187,10 @@ export class Table<
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): Promise<Array<Kind<GetPayload, T>>> {
-    return this._executor.execute(this._findMany.bind(this, i ?? {}), false)
+    return this._executor.execute(
+      (db, cont, onError) => this._findMany(i, db, cont, onError),
+      false
+    )
   }
 
   liveMany<
@@ -196,7 +207,9 @@ export class Table<
   async update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
     i: SelectSubset<T, UpdateInput<UpdateData, Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T>> {
-    return this._executor.transaction(this._update.bind(this, i))
+    return this._executor.transaction((db, cont, onError) =>
+      this._update(i, db, cont, onError)
+    )
   }
 
   async updateMany<T extends UpdateManyInput<UpdateData, Where>>(
@@ -213,19 +226,23 @@ export class Table<
       UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
     >
   ): Promise<Kind<GetPayload, T>> {
-    return this._executor.transaction(this._upsert.bind(this, i))
+    return this._executor.transaction((db, cont, onError) =>
+      this._upsert(i, db, cont, onError)
+    )
   }
 
   async delete<T extends DeleteInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, DeleteInput<Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T>> {
-    return this._executor.transaction(this._delete.bind(this, i))
+    return this._executor.transaction((db, cont, onError) =>
+      this._delete(i, db, cont, onError)
+    )
   }
 
   async deleteMany<T extends DeleteManyInput<Where>>(
     i?: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload> {
-    return this._executor.execute(this._deleteMany.bind(this, i ?? {}))
+    return this._executor.execute(this._deleteMany.bind(this, i))
   }
 
   private forEachRelation<T extends object>(
@@ -269,7 +286,7 @@ export class Table<
   protected _create<T extends CreateInput<CreateData, Select, Include>>(
     i: SelectSubset<T, CreateInput<CreateData, Select, Include>>,
     db: DB,
-    continuation: (record: Kind<GetPayload, T>) => void,
+    continuation: (record: Kind<GetPayload, T> & Record<string, any>) => void,
     onError: (err: any) => void
   ) {
     const validatedInput = validate(i, this.createSchema)
@@ -406,7 +423,7 @@ export class Table<
                   }), // only add `include` property if it is defined
                 } as any,
                 db,
-                continuation,
+                continuation as any,
                 onError,
                 'Create'
               )
@@ -450,11 +467,11 @@ export class Table<
         if (res.length > 1) throw new InvalidArgumentError(_NOT_UNIQUE_)
         if (res.length === 1)
           return this.fetchIncludes(
-            res as Kind<GetPayload, T>[],
+            res as any,
             data.include,
             db,
             (rows) => {
-              continuation(rows[0])
+              continuation(rows[0] as any)
             },
             onError
           )
@@ -467,15 +484,17 @@ export class Table<
   private _findFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
-      T,
-      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
-    >,
+    i:
+      | SelectSubset<
+          T,
+          FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+        >
+      | undefined,
     db: DB,
     continuation: (res: Kind<GetPayload, T> | null) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.findSchema)
+    const data = validate(i ?? {}, this.findSchema)
     const sql = this._builder.findFirst(data)
     db.query(
       sql,
@@ -483,11 +502,11 @@ export class Table<
       (_, res) => {
         if (res.length == 0) return continuation(null)
         return this.fetchIncludes(
-          [res[0]] as Kind<GetPayload, T>[],
-          data.include,
+          [res[0]] as any,
+          (data as any).include,
           db,
           (rows) => {
-            continuation(rows[0])
+            continuation(rows[0] as any)
           },
           onError
         )
@@ -689,25 +708,27 @@ export class Table<
   private _findMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
-      T,
-      FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
-    >,
+    i:
+      | SelectSubset<
+          T,
+          FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
+        >
+      | undefined,
     db: DB,
     continuation: (res: Kind<GetPayload, T>[]) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.findSchema)
+    const data = validate(i ?? {}, this.findSchema)
     const sql = this._builder.findMany(data)
     db.query(
       sql,
       this._schema,
       (_, rows) => {
         this.fetchIncludes(
-          rows as Kind<GetPayload, T>[],
-          data.include,
+          rows as any,
+          (data as any).include,
           db,
-          continuation,
+          continuation as any,
           onError
         )
       },
@@ -720,7 +741,7 @@ export class Table<
   >(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>,
     db: DB,
-    continuation: (res: Kind<GetPayload, T>) => void,
+    continuation: (res: Kind<GetPayload, T> & Record<string, any>) => void,
     onError: (err: any) => void,
     queryType: string
   ) {
@@ -735,12 +756,12 @@ export class Table<
 
         // Fetch the related objects requested by the `include` argument
         this.fetchIncludes(
-          rows as Array<Kind<GetPayload, T>>,
+          rows as any,
           i.include,
           db,
           (joinedRows) => {
             const [joinedObj] = joinedRows
-            continuation(joinedObj)
+            continuation(joinedObj as any)
           },
           onError
         )
@@ -1288,7 +1309,7 @@ export class Table<
               }), // only add `include` property if it is defined
             } as any,
             db,
-            continuation,
+            continuation as any,
             onError
           )
         } else {
@@ -1303,7 +1324,7 @@ export class Table<
               }), // only add `include` property if it is defined
             } as any,
             db,
-            continuation,
+            continuation as any,
             onError
           )
         }
@@ -1326,7 +1347,11 @@ export class Table<
       (record) => {
         // Delete it and return the deleted record
         const deleteQuery = this._builder.delete(data)
-        db.run(deleteQuery, () => continuation(record), onError)
+        db.run(
+          deleteQuery,
+          () => continuation(record as Kind<GetPayload, T>),
+          onError
+        )
       },
       onError,
       'Delete'
@@ -1334,12 +1359,12 @@ export class Table<
   }
 
   private _deleteMany<T extends DeleteManyInput<Where>>(
-    i: SelectSubset<T, DeleteManyInput<Where>>,
+    i: SelectSubset<T, DeleteManyInput<Where>> | undefined,
     db: DB,
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.deleteManySchema)
+    const data = validate(i ?? {}, this.deleteManySchema)
     const sql = this._builder.deleteMany(data)
     db.run(
       sql,

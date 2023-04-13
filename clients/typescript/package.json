@@ -129,7 +129,6 @@
     "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
-    "fp-ts": "^2.13.1",
     "frame-stream": "^3.0.1",
     "lodash.flow": "^3.5.0",
     "lodash.mapvalues": "^4.6.0",
