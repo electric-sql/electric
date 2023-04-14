@@ -106,7 +106,11 @@ export class ElectricDatabase implements Database {
 
     // Open the DB connection
     // see: https://rhashimoto.github.io/wa-sqlite/docs/interfaces/SQLiteAPI.html#open_v2
-    const db = await sqlite3.open_v2(dbName)
+    const db = await sqlite3.open_v2(
+      dbName,
+      SQLite.SQLITE_OPEN_CREATE | SQLite.SQLITE_OPEN_READWRITE,
+      dbName
+    )
 
     return new ElectricDatabase(sqlite3, db)
   }
