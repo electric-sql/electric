@@ -1,4 +1,4 @@
-name: Release new version
+name: Clients / Typescript / Publish
 run-name: Next ${{ inputs.version_increment }} version publish by @${{ github.actor }}
 on:
   workflow_dispatch:
@@ -16,6 +16,10 @@ on:
           - "preminor"
           - "premajor"
 
+defaults:
+  run:
+    working-directory: clients/typescript
+
 jobs:
   test:
     uses: ./.github/workflows/tests.yml
@@ -24,11 +28,13 @@ jobs:
     needs: test
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Use Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: 16
+          cache: yarn
+          cache-dependency-path: clients/typescript/yarn.lock
       - name: git config
         run: |
           git config user.name "${{ github.actor }}"

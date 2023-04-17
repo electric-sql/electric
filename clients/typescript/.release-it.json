@@ -1,6 +1,7 @@
 {
   "git": {
-    "commitMessage": "chore: release v${version}"
+    "commitMessage": "chore(clients/typescript): Release v${version}",
+    "tagName": "clients/typescript@${version}"
   },
   "github": {
     "release": true,
