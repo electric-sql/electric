@@ -1,0 +1,32 @@
+[
+  {
+    "httpRequest": {
+      "path": "/auth",
+      "body": {
+        "type": "JSON",
+        "json": {
+          "token": "token",
+          "cluster_id": "cluster_auth_id"
+        }
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200
+    }
+  },
+  {
+    "httpRequest": {
+      "path": "/auth",
+      "body": {
+        "type": "JSON",
+        "json": {
+          "token": "invalid_token",
+          "cluster_id": "cluster_auth_id"
+        }
+      }
+    },
+    "httpResponse": {
+        "statusCode": 401
+    }
+  }
+]

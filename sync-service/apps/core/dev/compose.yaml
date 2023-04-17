@@ -70,4 +70,4 @@ services:
     environment:
       MOCKSERVER_INITIALIZATION_JSON_PATH: /auth_mock.json
     volumes:
-      - ./integration_tests/auth_mock.json:/auth_mock.json:ro
+      - ./auth_mock.json:/auth_mock.json:ro
