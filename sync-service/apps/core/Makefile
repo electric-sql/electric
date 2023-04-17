@@ -37,7 +37,7 @@ format:
 check-format:
 	mix format --check-formatted
 
-DC_CONFIG=compose.yaml
+DC_CONFIG=dev/compose.yaml
 
 start_dev_env:
 	docker compose -f ${DC_CONFIG} up -d
@@ -46,7 +46,7 @@ export UID=$(shell id -u)
 export GID=$(shell id -g)
 start_dev_env_mounted:
 	mkdir -p _tmp_vaxine_data
-	docker compose -f compose-mounts.yaml up -d
+	docker compose -f dev/compose-mounts.yaml up -d
 
 stop_dev_env:
 	docker compose -f ${DC_CONFIG} down
@@ -100,7 +100,7 @@ shell_clean:
 	iex -S mix run --no-start
 
 apply_migration:
-	./apply-local-migration.sh $(name)
+	./dev/apply-local-migration.sh $(name)
 
 codespell:
 	codespell -L authentification --skip .git --skip deps

@@ -1,9 +1,12 @@
 export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
-LUX=${PROJECT_ROOT}/integration_tests/lux/bin/lux
+
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+export E2E_ROOT := $(dir $(mkfile_path))
+
+LUX=${E2E_ROOT}/lux/bin/lux
 DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
 DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
-
 
 export ELIXIR_VERSION=1.13.4
 export OTP_VERSION=24.3
@@ -92,14 +95,14 @@ start_sysbench:
 start_elixir_test_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
-		--workdir=${PROJECT_ROOT}/integration_tests/elixir_client \
+		--workdir=${E2E_ROOT}/elixir_client \
 		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
 		elixir_client_$*
 
 start_satellite_client_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm --entrypoint=/bin/bash \
-		--workdir=${PROJECT_ROOT}/integration_tests/satellite_client \
+		--workdir=${E2E_ROOT}/satellite_client \
 		satellite_client_$*
 
 VAXINE_BRANCH?=main
@@ -127,7 +130,7 @@ docker-psql-%:
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
 
-DOCKER_WORKDIR?=${PROJECT_ROOT}
+DOCKER_WORKDIR?=${E2E_ROOT}
 
 docker-start-clean-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run --rm --entrypoint=/bin/sh \
