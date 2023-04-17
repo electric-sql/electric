@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite'
 
 import { electrify } from '../../src/drivers/expo-sqlite'
-import { dbDescription } from '../client/generated'
+import { dbSchema } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -11,7 +11,7 @@ const config = {
 
 const original = SQLite.openDatabase('example.db')
 
-const { db } = await electrify(original, dbDescription, config)
+const { db } = await electrify(original, dbSchema, config)
 await db.Items.findMany({
   select: {
     value: true,

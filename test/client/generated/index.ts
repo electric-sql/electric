@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import type { Prisma } from '../generated/client'
-import { TableSchema, DbSchema, Relation } from '../../../src/client/model'
-import { HKT } from '../../../src/client/util/hkt'
+import { TableSchema, DbSchema, Relation, HKT } from '../../../src/client/model'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -3225,7 +3224,7 @@ interface ProfileGetPayload extends HKT {
   readonly type: Prisma.ProfileGetPayload<this['_A']>
 }
 
-export const tableDescriptions = {
+export const tableSchemas = {
   Items: {
     fields: ['value', 'nbr'],
     relations: [],
@@ -3343,4 +3342,4 @@ export const tableDescriptions = {
   >,
 }
 
-export const dbDescription = new DbSchema(tableDescriptions)
+export const dbSchema = new DbSchema(tableSchemas)

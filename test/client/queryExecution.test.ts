@@ -9,10 +9,10 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../src/client/validation/errors/messages'
-import { dbDescription, Post } from './generated'
+import { dbSchema, Post } from './generated'
 
 const db = new Database(':memory:')
-const electric = await electrify(db, dbDescription, {
+const electric = await electrify(db, dbSchema, {
   app: 'CRUD-Test',
   env: 'env',
   migrations: [],
