@@ -181,6 +181,7 @@ message SatTransOp {
         SatOpUpdate update = 3;
         SatOpInsert insert = 4;
         SatOpDelete delete = 5;
+        SatOpMigrate migrate = 6;
     }
 }
 
@@ -272,7 +273,7 @@ message SatOpRow {
 // Each migration message includes the sql strings to execute on the satellite
 // client as well as metadata information about the resulting structure of the
 // changed tables.
-message SatMigration {
+message SatOpMigrate {
     enum Type {
         CREATE_TABLE = 0;
         CREATE_INDEX = 1;
@@ -314,7 +315,11 @@ message SatMigration {
     // the postgresql migration as an electric function call
     string version = 1;
     // a list of sql ddl statements to apply, converted from the pg originals
+    // The migration machinery converts an `ALTER TABLE action1, action2, action3;` 
+    // query into a set of 3: `ALTER TABLE action1; ALTER TABLE action2,` etc
+    // so we need to support 1+ statements for every migration event.
     repeated Stmt stmts = 2;
-    // a list of the table definitions resulting from applying these migrations
-    repeated Table tables = 3;
+    // The resulting table definition after applying these migrations
+    // (a DDL statement can only affect one table at a time).
+    Table table = 3;
 }

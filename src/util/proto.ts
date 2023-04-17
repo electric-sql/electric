@@ -23,7 +23,6 @@ const msgtypetuples: MappingTuples = {
   SatOpLog: [9, Pb.SatOpLog],
   SatRelation: [10, Pb.SatRelation],
   SatMigrationNotification: [11, Pb.SatMigrationNotification],
-  SatMigration: [12, Pb.SatMigration],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -47,7 +46,6 @@ export type SatPbMsg =
   | Pb.SatOpLog
   | Pb.SatRelation
   | Pb.SatMigrationNotification
-  | Pb.SatMigration
 
 export type SatPbMsgObj<Type extends string = string> = {
   $type: Type
