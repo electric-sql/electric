@@ -1,0 +1,214 @@
+{
+  "version": "0.4.3",
+  "name": "electric-sql",
+  "description": "ElectricSQL TypeScript client for developing local-first SQL apps. Supports JavaScript based mobile, web and edge applications.",
+  "repository": "https://github.com/electric-sql/typescript-client",
+  "author": "Electric DB Limited",
+  "homepage": "https://electric-sql.com",
+  "license": "Apache-2.0",
+  "keywords": [
+    "absurd-sql",
+    "active",
+    "android",
+    "better-sqlite3",
+    "cordova",
+    "crdt",
+    "crdts",
+    "database",
+    "db",
+    "electric",
+    "electric-sql",
+    "expo",
+    "ios",
+    "local-first",
+    "local-first-sql",
+    "node",
+    "offline",
+    "offline-first",
+    "react-native",
+    "sql",
+    "sql.js",
+    "sqlite",
+    "sqlite3",
+    "sync",
+    "web"
+  ],
+  "bugs": {
+    "url": "https://github.com/electric-sql/typescript-client/issues"
+  },
+  "main": "dist/index.js",
+  "type": "module",
+  "platform": "node",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./browser": "./dist/drivers/absurd-sql/index.js",
+    "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
+    "./expo": "./dist/drivers/expo-sqlite/index.js",
+    "./generic": "./dist/drivers/generic/index.js",
+    "./node": "./dist/drivers/better-sqlite3/index.js",
+    "./react": "./dist/frameworks/react/index.js",
+    "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
+    "./config": "./dist/config/index.js",
+    "./debug": "./dist/util/debug/index.js",
+    ".": "./dist/index.js",
+    "./*": "./dist/*/index.js"
+  },
+  "typesVersions": {
+    "*": {
+      "browser": [
+        "./dist/drivers/absurd-sql/index.d.ts"
+      ],
+      "cordova": [
+        "./dist/drivers/cordova-sqlite-storage/index.d.ts"
+      ],
+      "expo": [
+        "./dist/drivers/expo-sqlite/index.d.ts"
+      ],
+      "node": [
+        "./dist/drivers/better-sqlite3/index.d.ts"
+      ],
+      "react": [
+        "./dist/frameworks/react/index.d.ts"
+      ],
+      "react-native": [
+        "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "wa-sqlite": [
+        "./dist/drivers/wa-sqlite/index.d.ts"
+      ],
+      "config": [
+        "./dist/config/index.d.ts"
+      ],
+      "debug": [
+        "./dist/util/debug/index.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "dev": "tsmodule dev",
+    "build": "rm -rf ./dist && tsc && tsmodule build",
+    "test": "ava",
+    "typecheck": "tsc -p tsconfig.tests.json",
+    "posttest": "npm run typecheck",
+    "prepublishOnly": "npm run test",
+    "lint": "eslint src --fix",
+    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
+    "prepare": "husky install; npm run build"
+  },
+  "ava": {
+    "timeout": "10m",
+    "files": [
+      "test/**/*.test.ts",
+      "test/**/*.test.tsx"
+    ],
+    "extensions": {
+      "ts": "module",
+      "tsx": "module"
+    },
+    "nodeArguments": [
+      "--no-warnings",
+      "--loader=@tsmodule/tsmodule/loader"
+    ],
+    "workerThreads": false
+  },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  },
+  "dependencies": {
+    "async-mutex": "^0.4.0",
+    "base-64": "^1.0.0",
+    "cross-fetch": "^3.1.5",
+    "events": "^3.3.0",
+    "exponential-backoff": "^3.1.0",
+    "fastestsmallesttextencoderdecoder": "^1.0.22",
+    "frame-stream": "^3.0.1",
+    "lodash.throttle": "^4.1.1",
+    "loglevel": "^1.8.1",
+    "long": "^5.2.0",
+    "protobufjs": "^7.1.1",
+    "react-native-uuid": "^2.0.1",
+    "sqlite-parser": "^1.0.1",
+    "uuid": "^9.0.0",
+    "walkjs": "^3.2.4",
+    "ws": "^8.8.1"
+  },
+  "devDependencies": {
+    "@ikscodes/browser-env": "^1.0.0",
+    "@testing-library/react": "^13.4.0",
+    "@tsmodule/tsmodule": "42",
+    "@types/base-64": "^1.0.0",
+    "@types/better-sqlite3": "^7.6.3",
+    "@types/cordova-sqlite-storage": "^1.5.5",
+    "@types/node": "^18.8.4",
+    "@types/react": "^18.0.18",
+    "@types/react-native-sqlite-storage": "^5.0.2",
+    "@types/react-native-uuid": "^2.0.0",
+    "@types/ws": "^8.5.3",
+    "@typescript-eslint/eslint-plugin": "^5.34.0",
+    "@typescript-eslint/parser": "^5.34.0",
+    "ava": "^4.3.1",
+    "better-sqlite3": "^7.6.2",
+    "eslint": "^8.22.0",
+    "expo-sqlite": "^11.0.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.1.0",
+    "prettier": "2.8.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "release-it": "^15.5.0",
+    "ts-proto": "^1.125.0",
+    "typeorm": "^0.3.9",
+    "typescript": "^4.9",
+    "web-worker": "^1.2.0",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes"
+  },
+  "peerDependencies": {
+    "@aphro/absurd-sql": "^0.0.53",
+    "@aphro/sql.js": "^1.7.0",
+    "better-sqlite3": ">= 7.4.0",
+    "cordova-sqlite-storage": ">= 5.0.0",
+    "expo-sqlite": ">= 10.0.0",
+    "react": ">= 16.8.0",
+    "react-native": ">= 0.68.0",
+    "react-native-sqlite-storage": ">= 6.0.0",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes",
+    "typeorm": ">=0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@aphro/absurd-sql": {
+      "optional": true
+    },
+    "@aphro/sql.js": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "cordova-sqlite-storage": {
+      "optional": true
+    },
+    "expo-sqlite": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-sqlite-storage": {
+      "optional": true
+    },
+    "wa-sqlite": {
+      "optional": true
+    },
+    "typeorm": {
+      "optional": true
+    }
+  }
+}

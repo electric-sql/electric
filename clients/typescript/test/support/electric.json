@@ -1,0 +1,14 @@
+{
+  "app": "tarragon-envy-5432",
+  "debug": false,
+  "defaultEnv": "default",
+  "directories": {
+    "migrations": "migrations",
+    "output": ".electric"
+  },
+  "environments": {
+    "default": {
+      "slug": "default"
+    }
+  }
+}

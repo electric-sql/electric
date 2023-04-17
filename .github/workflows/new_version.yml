@@ -1,0 +1,43 @@
+name: Release new version
+run-name: Next ${{ inputs.version_increment }} version publish by @${{ github.actor }}
+on:
+  workflow_dispatch:
+    inputs:
+      version_increment:
+        description: "Select increment (next version)"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - "patch"
+          - "minor"
+          - "major"
+          - "prepatch"
+          - "preminor"
+          - "premajor"
+
+jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+  release:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+      - name: git config
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+      - run: make deps
+      - name: Release
+        run: |
+          npm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
+          npx release-it --increment=${{ inputs.version_increment }} --ci
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

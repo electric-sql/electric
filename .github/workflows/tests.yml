@@ -1,0 +1,44 @@
+name: Tests
+
+on: [push, workflow_call]
+
+jobs:
+  verify_formatting:
+    name: Check formatting & linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: make deps
+      - run: yarn check-styleguide
+  check_types:
+    name: Check types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: make deps
+      - run: yarn typecheck
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [14, 16, 18]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install
+        run: make deps
+      - name: Build
+        run: make build
+      - name: Run tests
+        run: make tests
