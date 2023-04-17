@@ -74,6 +74,7 @@ services:
       # Deliberately mount folder below root, so that yarn/npm would not try
       # to access .git directory, as they do not handle git ls-remote properly
       - ${E2E_ROOT}:${E2E_ROOT}:rw
+      - ${PROJECT_ROOT}/clients/typescript:${PROJECT_ROOT}/clients/typescript:ro
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro

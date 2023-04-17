@@ -128,7 +128,7 @@ export const delete_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
   }
 }
 
-export const run = (db: ElectrifiedDatabase) => {
+export const run = (db: ElectrifiedDatabase): Database.Transaction => {
   const stmt = db.prepare('select 1')
   return db.transaction(() => {
     stmt.run()

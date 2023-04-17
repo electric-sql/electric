@@ -94,10 +94,10 @@
     esbuild "0.15.12"
     typescript "^4.8.4"
 
-"@types/better-sqlite3@^7.6.2":
-  version "7.6.2"
-  resolved "https://registry.yarnpkg.com/@types/better-sqlite3/-/better-sqlite3-7.6.2.tgz#6ffa6379df60f30beb79d997102ff43412cde55c"
-  integrity sha512-RgmaapusqTq6IMAr4McMyAsC6RshYTCjXCnzwVV59WctUxC8bNPyUfT9t5F81lKcU41lLurhjqjoMHfauzfqGg==
+"@types/better-sqlite3@7.6.3":
+  version "7.6.3"
+  resolved "https://registry.yarnpkg.com/@types/better-sqlite3/-/better-sqlite3-7.6.3.tgz#117c3c182e300799b84d1b7e1781c27d8d536505"
+  integrity sha512-YS64N9SNDT/NAvou3QNdzAu3E2om/W/0dhORimtPGLef+zSK5l1vDzfsWb4xgXOgfhtOI5ZDTRxnvRPb22AIVQ==
   dependencies:
     "@types/node" "*"
 
@@ -113,12 +113,7 @@
   resolved "https://registry.yarnpkg.com/@types/live-server/-/live-server-1.2.1.tgz#4d6588e1b888b415ed5fe8480224dcd225bc9eba"
   integrity sha512-Yind497JdcZT8L9FF7u73nq44KmamiDitsZJEwrAi/pgBhFHThNvtR+2Z/YGNSMjyUoDBFdvhVSQmod06yd1Ng==
 
-"@types/node@*":
-  version "18.11.9"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.11.9.tgz#02d013de7058cea16d36168ef2fc653464cfbad4"
-  integrity sha512-CRpX21/kGdzjOpFsZSkcrXMGIBWMGNIHXXBVFSH+ggkftxg+XYP20TESbh+zFvFj3EQOl5byk0HTRn1IL6hbqg==
-
-"@types/node@>=13.7.0":
+"@types/node@*", "@types/node@>=13.7.0":
   version "18.15.11"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-18.15.11.tgz#b3b790f09cb1696cffcec605de025b088fa4225f"
   integrity sha512-E5Kwq2n4SbMzQOn6wnmBjuK9ouqlURrcZDVfbo9ftDDTFt3nk7ZKK4GMOzoYgnpQJKcxwQw+lGaBvvlMo0qN/Q==
@@ -291,9 +286,8 @@ ecdsa-sig-formatter@1.0.11:
   dependencies:
     safe-buffer "^5.0.1"
 
-"electric-sql@git+https://github.com/electric-sql/typescript-client.git#dda82f576dc303d0d40e989881f6b5855776b7de":
+"electric-sql@file:../../clients/typescript":
   version "0.4.3"
-  resolved "git+https://github.com/electric-sql/typescript-client.git#dda82f576dc303d0d40e989881f6b5855776b7de"
   dependencies:
     async-mutex "^0.4.0"
     base-64 "^1.0.0"
