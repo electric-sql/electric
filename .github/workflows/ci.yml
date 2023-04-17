@@ -114,6 +114,7 @@ jobs:
           artifact-name: code-coverage-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
           update-comment: true
+          working-directory: sync-service/apps/core
 
   dialyzer:
     name: dialyzer and formatting
