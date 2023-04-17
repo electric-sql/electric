@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import type { Prisma } from '../generated/client'
-import { TableSchema, DbSchema, Relation, HKT } from '../../../src/client/model'
+import {
+  TableSchema,
+  DbSchema,
+  Relation,
+  ElectricClient,
+  HKT,
+} from '../../../src/client/model'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -3343,3 +3349,4 @@ export const tableSchemas = {
 }
 
 export const dbSchema = new DbSchema(tableSchemas)
+export type Electric = ElectricClient<typeof dbSchema>

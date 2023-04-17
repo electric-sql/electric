@@ -19,7 +19,7 @@ import { QualifiedTablename } from '../../src/util/tablename'
 import { useElectricQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
-import { dbSchema } from '../client/generated'
+import { dbSchema, Electric } from '../client/generated'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -29,7 +29,7 @@ const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
 
 type FC = React.FC<React.PropsWithChildren>
 
-const ctxInformation = makeElectricContext<typeof dbSchema>()
+const ctxInformation = makeElectricContext<Electric>()
 const ElectricProvider = ctxInformation.ElectricProvider
 
 test('useElectricQuery returns query results', async (t) => {

@@ -3,14 +3,14 @@ import React, { createContext, useContext } from 'react'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
 
-interface Props<S extends DbSchema<any>> {
+interface Props<S extends ElectricClient<DbSchema<any>>> {
   children?: React.ReactNode
-  db?: ElectricClient<S>
+  db?: S
 }
 
-interface ElectricContext<S extends DbSchema<any>> {
-  ElectricContext: React.Context<ElectricClient<S> | undefined>
-  useElectric: () => ElectricClient<S> | undefined
+interface ElectricContext<S extends ElectricClient<DbSchema<any>>> {
+  ElectricContext: React.Context<S | undefined>
+  useElectric: () => S | undefined
   ElectricProvider: ({ children, db }: Props<S>) => JSX.Element
 }
 
@@ -29,9 +29,9 @@ export { ElectricContext }
 // e.g. const ctx = createContext<DalTables<DbSchemas | undefined>(undefined)
 //      the above looses information about the concrete db tables
 export function makeElectricContext<
-  S extends DbSchema<any>
+  S extends ElectricClient<DbSchema<any>>
 >(): ElectricContext<S> {
-  const ctx = createContext<ElectricClient<S> | undefined>(undefined)
+  const ctx = createContext<S | undefined>(undefined)
 
   ElectricContext = ctx as any
   const useElectric = () => useContext(ctx)
