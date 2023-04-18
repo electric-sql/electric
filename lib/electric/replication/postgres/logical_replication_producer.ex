@@ -314,7 +314,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     }
   end
 
-  @spec ack(pid(), PostgresConnector.origin(), Electric.Postgres.Lsn.t()) :: :ok
+  @spec ack(pid(), Connectors.origin(), Electric.Postgres.Lsn.t()) :: :ok
   def ack(conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(conn, lsn)
