@@ -3,22 +3,22 @@ defmodule Electric.Replication.PostgresConnectorMng do
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
+  alias Electric.Replication.Connectors
 
   @behaviour GenServer
   require Logger
-
-  @type origin :: PostgresConnector.origin()
 
   @update_migration "INSERT INTO electric.migrations (version, hash) VALUES ($1, $2);"
   @select_migration "SELECT (version, hash) FROM electric.migrations WHERE version = $1;"
 
   defmodule State do
-    defstruct [:state, :conn_config, :repl_config, :backoff, :origin]
+    defstruct [:state, :conn_config, :repl_config, :backoff, :origin, :config]
 
     @type t() :: %__MODULE__{
+            config: Connectors.config(),
             backoff: term,
             conn_config: %{},
-            origin: PostgresConnector.origin(),
+            origin: Connectors.origin(),
             repl_config: %{
               publication: String.t(),
               slot: String.t(),
@@ -30,12 +30,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
           }
   end
 
-  @spec start_link(origin()) :: {:ok, pid} | :ignore | {:error, term}
-  def start_link(origin) do
-    GenServer.start_link(__MODULE__, origin, [])
+  @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
+  def start_link(conn_config) do
+    GenServer.start_link(__MODULE__, conn_config, [])
   end
 
-  @spec name(origin()) :: Electric.reg_name()
+  @spec name(Connectors.config()) :: Electric.reg_name()
+  def name(config) when is_list(config) do
+    config
+    |> Connectors.origin()
+    |> name()
+  end
+
+  @spec name(Connectors.origin()) :: Electric.reg_name()
   def name(origin) do
     Electric.name(__MODULE__, origin)
   end
@@ -46,28 +53,30 @@ defmodule Electric.Replication.PostgresConnectorMng do
   Take into consideration that vsn validation is outside of the scope
   of this function
   """
-  @spec migrate(origin(), String.t()) :: :ok | {:error, term}
+  @spec migrate(Connectors.origin(), String.t()) :: :ok | {:error, term}
   def migrate(origin, vsn) do
     GenServer.call(name(origin), {:migrate, vsn}, :infinity)
   end
 
-  @spec status(origin()) :: :init | :subscription | :ready | :migration
+  @spec status(Connectors.origin()) :: :init | :subscription | :ready | :migration
   def status(origin) do
     GenServer.call(name(origin), {:status})
   end
 
   @impl GenServer
-  def init(origin) do
+  def init(conn_config) do
+    origin = Connectors.origin(conn_config)
     Electric.reg(name(origin))
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
     {:ok,
      %State{
+       config: conn_config,
        backoff: {:backoff.init(1000, 10_000), nil},
-       conn_config: PostgresConnector.get_connection_opts(origin),
+       conn_config: Connectors.get_connection_opts(conn_config),
        origin: origin,
-       repl_config: PostgresConnector.get_replication_opts(origin),
+       repl_config: Connectors.get_replication_opts(conn_config),
        state: :init
      }, {:continue, :init}}
   end
@@ -77,7 +86,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       when init == :init or init == :reinit do
     case initialize_postgres(state) do
       {:ok, state1} ->
-        :ok = PostgresConnector.start_children(state.origin)
+        :ok = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
         SchemaRegistry.mark_origin_ready(origin)
 

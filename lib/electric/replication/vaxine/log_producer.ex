@@ -8,6 +8,7 @@ defmodule Electric.Replication.Vaxine.LogProducer do
   require Logger
 
   alias Electric.Utils
+  alias Electric.Replication.Connectors
   alias Electric.Replication.DownstreamProducer
   alias Electric.Replication.Vaxine.TransactionBuilder
 

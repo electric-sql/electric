@@ -18,6 +18,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
   alias Electric.Postgres.SchemaRegistry
+  alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
 
@@ -25,6 +26,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
+              config: nil,
               origin: nil,
               send_fn: nil,
               slot_name: nil,
@@ -49,16 +51,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   # Public interface
 
-  @spec start_link(
-          String.t(),
-          %{
-            replication: %{subscription: binary()},
-            downstream: %{producer: module()}
-          },
-          Electric.reg_name()
-        ) :: GenServer.on_start()
-  def start_link(reg_name, init_args, producer) do
-    GenStage.start_link(__MODULE__, [reg_name, init_args, producer])
+  @spec start_link(Connectors.config(), Electric.reg_name()) :: GenServer.on_start()
+  def start_link(conn_config, producer) do
+    GenStage.start_link(__MODULE__, [conn_config, producer])
   end
 
   @spec get_name(String.t()) :: Electric.reg_name()
@@ -120,8 +115,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Server callbacks
 
   @impl true
-  def init([origin, args, {:via, :gproc, producer}]) do
-    slot = args.replication.subscription
+  def init([conn_config, {:via, :gproc, producer}]) do
+    origin = Connectors.origin(conn_config)
+    replication_opts = Connectors.get_replication_opts(conn_config)
+    downstream_opts = Connectors.get_downstream_opts(conn_config)
+    slot = replication_opts.subscription
 
     :gproc.nb_wait(producer)
     :gproc.reg(name(origin))
@@ -132,11 +130,12 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     {:consumer,
      %State{
+       config: conn_config,
        slot_name: slot,
        origin: origin,
        producer_name: producer,
-       producer: args.downstream.producer,
-       opts: Map.get(args.replication, :opts, [])
+       producer: downstream_opts.producer,
+       opts: Map.get(replication_opts, :opts, [])
      }}
   end
 
