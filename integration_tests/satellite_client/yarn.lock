@@ -291,9 +291,9 @@ ecdsa-sig-formatter@1.0.11:
   dependencies:
     safe-buffer "^5.0.1"
 
-"electric-sql@git+https://github.com/electric-sql/typescript-client.git#314df48f7908ede4ae9fe27d376746164d8905f5":
+"electric-sql@git+https://github.com/electric-sql/typescript-client.git#dda82f576dc303d0d40e989881f6b5855776b7de":
   version "0.4.3"
-  resolved "git+https://github.com/electric-sql/typescript-client.git#314df48f7908ede4ae9fe27d376746164d8905f5"
+  resolved "git+https://github.com/electric-sql/typescript-client.git#dda82f576dc303d0d40e989881f6b5855776b7de"
   dependencies:
     async-mutex "^0.4.0"
     base-64 "^1.0.0"
@@ -617,9 +617,9 @@ loglevel@^1.8.1:
   integrity sha512-tCRIJM51SHjAayKwC+QAg8hT8vg6z7GSgLJKGvzuPb1Wc+hLzqtuVLxp6/HzSPOozuK+8ErAhy7U/sVzw8Dgfg==
 
 long@^5.0.0, long@^5.2.0:
-  version "5.2.1"
-  resolved "https://registry.yarnpkg.com/long/-/long-5.2.1.tgz#e27595d0083d103d2fa2c20c7699f8e0c92b897f"
-  integrity sha512-GKSNGeNAtw8IryjjkhZxuKB3JzlcLTwjtiQCHKvqQet81I93kXslhDQruGI/QsddO83mcDToBVy7GqGS/zYf/A==
+  version "5.2.3"
+  resolved "https://registry.yarnpkg.com/long/-/long-5.2.3.tgz#a3ba97f3877cf1d778eccbcb048525ebb77499e1"
+  integrity sha512-lcHwpNoggQTObv5apGNCTdJrO69eHOZMi4BNC+rTLER8iHAqGrUVeLh/irVIM7zTw2bOXA8T6uNPeujwOLg/2Q==
 
 lru-cache@^6.0.0:
   version "6.0.0"
