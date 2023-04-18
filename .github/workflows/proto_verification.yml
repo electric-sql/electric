@@ -1,0 +1,37 @@
+name: Proto
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sync-service/proto/**'
+  pull_request:
+    paths:
+      - 'sync-service/proto/**'
+  workflow_dispatch:
+
+env:
+  OTP_VERSION: "24.3"
+  ELIXIR_VERSION: "1.13"
+
+jobs:
+  verify_proto:
+    name: Check if generated files are up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Tags are required for proper version inference, and this is the only way to pull the tags in
+          fetch-depth: 0
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+          cache-dependency-path: clients/typescript/yarn.lock
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+      - run: make update_protobuf
+      - run: ./.github/workflows/bin/check_if_any_files_changed.sh

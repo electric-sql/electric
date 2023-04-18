@@ -21,7 +21,7 @@ typecheck_tests:
 
 PROTO_FILE ?= ../../sync-service/proto/satellite.proto
 PROTO_DIR = $(dir $(abspath $(dir $(PROTO_FILE))))
-update_protobuf:
+update_protobuf: node_modules
 	mkdir -p ./src/_generated
 	protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_opt=outputJsonMethods=false \
