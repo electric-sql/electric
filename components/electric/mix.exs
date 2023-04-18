@@ -62,13 +62,6 @@ defmodule Electric.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_metrics_prometheus, "~> 1.1.0"},
-      {:satellite_proto,
-       git: "https://github.com/electric-sql/typescript-client.git",
-       runtime: false,
-       app: false,
-       ref: "dda82f576dc303d0d40e989881f6b5855776b7de",
-       compile: false,
-       sparse: "proto"},
       {:yajwt, "~> 1.4"}
     ]
   end

@@ -4,3 +4,7 @@ build_all:
 test_all:
 	make -C components/electric deps tests
 	make -C e2e test
+
+update_protobuf:
+	make -C components/electric update_protobuf
+	make -C clients/typescript update_protobuf
