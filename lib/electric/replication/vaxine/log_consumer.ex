@@ -2,7 +2,6 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
   use GenStage
 
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.Connectors
   alias Electric.Replication.Vaxine
   alias Electric.Telemetry.Metrics
 

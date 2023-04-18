@@ -1,5 +1,4 @@
 defmodule Electric.Replication.Connectors do
-  alias Hex.API.Key
   use DynamicSupervisor
 
   @type origin() :: binary()
