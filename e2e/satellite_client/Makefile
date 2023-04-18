@@ -11,10 +11,10 @@ node_modules:
 # to run tests with Satellite in it
 build:
 	make -C ${PROJECT_ROOT}/clients/typescript build
-	yarn upgrade electric-sql
 	make docker-make MK_TARGET=local-build MK_DOCKER=${NODEJS_DOCKER}
 
 local-build: node_modules
+	yarn upgrade electric-sql
 	yarn build
 
 run_node:

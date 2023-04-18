@@ -2,7 +2,10 @@ deps:
 	yarn install --frozen-lockfile
 #	npm install tslint tslint-config-prettier
 
-build:
+node_modules:
+	yarn install --frozen-lockfile
+
+build: node_modules
 	yarn build
 
 tests:
