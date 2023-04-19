@@ -26,6 +26,8 @@ jobs:
           fetch-depth: 0
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
         with:
           node-version: 18
@@ -35,5 +37,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+      - name: Restore dependencies
+        id: cache-deps
+        uses: actions/cache/restore@v3
+        with:
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+
+      - name: Restore compiled code
+        id: cache-build
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
       - run: make update_protobuf
       - run: ./.github/workflows/bin/check_if_any_files_changed.sh
