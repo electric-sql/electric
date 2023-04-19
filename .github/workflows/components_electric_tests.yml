@@ -1,4 +1,4 @@
-name: Sync service / Core / Tests
+name: Components / Electric/ Tests
 on:
   push:
     branches:

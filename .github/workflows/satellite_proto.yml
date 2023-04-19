@@ -1,4 +1,4 @@
-name: Proto
+name: Satellite / Proto
 on:
   push:
     branches:
