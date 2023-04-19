@@ -14,6 +14,7 @@ steps:
     command:
       - git fetch --tags
       - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
+      - cd ./components/electric
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
       - make docker-build-ci
   - wait
