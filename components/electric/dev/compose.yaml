@@ -21,6 +21,7 @@ services:
       - "8087:8087"
       - "8088:8088"
     privileged: true
+    init: true
 
   db_a:
     image: europe-docker.pkg.dev/vaxine/vaxine-io/postgres:latest
@@ -69,4 +70,4 @@ services:
     environment:
       MOCKSERVER_INITIALIZATION_JSON_PATH: /auth_mock.json
     volumes:
-      - ./integration_tests/auth_mock.json:/auth_mock.json:ro
+      - ./auth_mock.json:/auth_mock.json:ro

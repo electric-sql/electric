@@ -6,7 +6,8 @@ config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_da
 
 config :electric, Electric.Migrations,
   migration_file_name_suffix: "/postgres.sql",
-  dir: System.get_env("MIGRATIONS_DIR", "./integration_tests/migrations/migration_schemas/")
+  # Currently unused in dev & likely to be soon removed, but must be set for now
+  dir: System.get_env("MIGRATIONS_DIR", "./migrations")
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [

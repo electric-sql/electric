@@ -2,7 +2,7 @@ include ../common.mk
 
 NODEJS_DOCKER=satellite_client
 DOCKER_COMPOSE_FILE=../services_templates.yaml
-DOCKER_WORKDIR=${PROJECT_ROOT}/integration_tests/satellite_client
+DOCKER_WORKDIR=${E2E_ROOT}/satellite_client
 
 node_modules:
 	yarn install --frozen-lockfile --no-default-rc --network-concurrency 1

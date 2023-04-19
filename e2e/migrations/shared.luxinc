@@ -32,7 +32,7 @@
 [macro setup_rest migration_dir]
 [shell electric_1]
     [timeout 10]
-    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
+    !export MIGRATION_DIRS=${E2E_ROOT}/migrations/${migration_dir}
     !make start_electric_1
     -$fail_pattern
     ?START_REPLICATION SLOT
@@ -40,7 +40,7 @@
 
 [shell electric_2]
     [timeout 10]
-    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
+    !export MIGRATION_DIRS=${E2E_ROOT}/migrations/${migration_dir}
     !make start_electric_2
      -$fail_pattern
     ?START_REPLICATION SLOT
@@ -50,7 +50,7 @@
 
 [macro start_satellite name migration_dir]
 [shell satellite_${name}]
-    !export MIGRATION_DIRS=${PROJECT_ROOT}/integration_tests/migrations/${migration_dir}
+    !export MIGRATION_DIRS=${E2E_ROOT}/migrations/${migration_dir}
     !make start_satellite_client_${name}
 [endmacro]
 

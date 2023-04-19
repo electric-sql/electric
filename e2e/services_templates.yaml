@@ -64,7 +64,7 @@ services:
     environment:
       SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
       SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
-      HOME: ${PROJECT_ROOT}/integration_tests/satellite_client
+      HOME: ${E2E_ROOT}/satellite_client
       SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
       NODE_DISABLE_COLORS: 1
       TERM: dumb
@@ -73,7 +73,7 @@ services:
     volumes:
       # Deliberately mount folder below root, so that yarn/npm would not try
       # to access .git directory, as they do not handle git ls-remote properly
-      - ${PROJECT_ROOT}/integration_tests:${PROJECT_ROOT}/integration_tests:rw
+      - ${E2E_ROOT}:${E2E_ROOT}:rw
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro
@@ -84,15 +84,15 @@ services:
     user: "${UID}:${GID}"
     environment:
       MIX_ENV: test
-      MIX_HOME:       ${PROJECT_ROOT}/integration_tests/elixir_client/
-      MIX_BUILD_ROOT: ${PROJECT_ROOT}/integration_tests/elixir_client/_build
-      MIX_DEPS_PATH:  ${PROJECT_ROOT}/integration_tests/elixir_client/deps
-      HEX_HOME:       ${PROJECT_ROOT}/integration_tests/elixir_client/.hex
+      MIX_HOME:       ${E2E_ROOT}/elixir_client/
+      MIX_BUILD_ROOT: ${E2E_ROOT}/elixir_client/_build
+      MIX_DEPS_PATH:  ${E2E_ROOT}/elixir_client/deps
+      HEX_HOME:       ${E2E_ROOT}/elixir_client/.hex
       UID: ${UID}
       GID: ${GID}
     volumes:
       - ${PROJECT_ROOT}:${PROJECT_ROOT}:ro
-      - ${PROJECT_ROOT}/integration_tests/elixir_client:${PROJECT_ROOT}/integration_tests/elixir_client
+      - ${E2E_ROOT}/elixir_client:${E2E_ROOT}/elixir_client
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro
