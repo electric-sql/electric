@@ -230,7 +230,10 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   def send_tx_internal(conn, %Transaction{} = tx, lsn, relations) do
     {sat_oplog, [], _} = Serialization.serialize_trans(tx, lsn, relations)
-    send_data(conn, sat_oplog)
+
+    for op <- sat_oplog do
+      send_data(conn, op)
+    end
   end
 
   @doc """
@@ -540,9 +543,12 @@ defmodule Electric.Test.SatelliteWsClient do
         %SatTransOp{op: {:commit, _}}, acc ->
           acc
 
-        %SatTransOp{op: {key, op}}, acc ->
+        %SatTransOp{op: {key, %{tags: _} = op}}, acc ->
           acc1 = Map.update(acc, key, 1, fn n -> n + 1 end)
           Map.update(acc1, :tags, op.tags, fn tags -> op.tags ++ tags end)
+
+        %SatTransOp{op: {key, _op}}, acc ->
+          Map.update(acc, key, 1, fn n -> n + 1 end)
       end
     )
   end

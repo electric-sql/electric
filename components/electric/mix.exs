@@ -62,7 +62,11 @@ defmodule Electric.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_metrics_prometheus, "~> 1.1.0"},
-      {:yajwt, "~> 1.4"}
+      {:yajwt, "~> 1.4"},
+      {:stream_data, "~> 0.5", only: [:dev, :test]},
+      {:exqlite, "~> 0.13.5", only: [:dev, :test]},
+      {:tzdata, "~> 1.1", only: [:dev, :test]},
+      {:pg_query_ex, github: "electric-sql/pg_query_ex"}
     ]
   end
 

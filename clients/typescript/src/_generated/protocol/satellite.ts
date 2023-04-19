@@ -354,7 +354,7 @@ export interface SatOpMigrate {
    * The resulting table definition after applying these migrations
    * (a DDL statement can only affect one table at a time).
    */
-  table: SatOpMigrate_Table | undefined;
+  table?: SatOpMigrate_Table | undefined;
 }
 
 export enum SatOpMigrate_Type {

@@ -323,5 +323,5 @@ message SatOpMigrate {
     repeated Stmt stmts = 2;
     // The resulting table definition after applying these migrations
     // (a DDL statement can only affect one table at a time).
-    Table table = 3;
+    optional Table table = 3;
 }

@@ -1,0 +1,51 @@
+# Run using `docker compose -f databases.yaml up`.
+version: '3.7'
+
+services:
+  vaxine_1:
+    extends:
+      file: ../services_templates.yaml
+      service: vaxine
+    environment:
+      NODE_NAME: "vaxine@vaxine_1"
+    volumes:
+      - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
+    ports:
+      - "8087:8087"
+      - "8088:8088"
+
+  electric_1:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    environment:
+      VAXINE_HOST: vaxine_1
+      ELECTRIC_HOST: electric_1
+      CONNECTORS: >-
+        postgres_1=postgresql://postgres:password@pg_1:5432/electric;
+        postgres_2=postgresql://postgres:password@pg_2:5432/electric;
+      ELECTRIC_INSTANCE_ID: instance-a.region-1.test.electric-db
+      ELECTRIC_REGIONAL_ID: region-1.test.electric-db
+    depends_on:
+      - pg_1
+      - pg_2
+      - vaxine_1
+
+  pg_1:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54321:5432"
+
+  pg_2:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54322:5432"
+
+  elixir_client_1:
+    extends:
+      file: ../services_templates.yaml
+      service: elixir_client
