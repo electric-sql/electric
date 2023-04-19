@@ -4,10 +4,10 @@ on:
     branches:
       - main
     paths:
-      - 'sync-service/proto/**'
+      - 'satellite/proto/**'
   pull_request:
     paths:
-      - 'sync-service/proto/**'
+      - 'satellite/proto/**'
   workflow_dispatch:
 
 env:

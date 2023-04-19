@@ -2,7 +2,7 @@
 .PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
-PROTO_FILE ?= ../../proto/satellite.proto
+PROTO_FILE ?= ../../satellite/proto/satellite.proto
 
 print_version_from_git:
 	echo "${INFERRED_VERSION}"

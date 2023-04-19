@@ -19,7 +19,7 @@ typecheck_tests:
 
 # TSModule requires that all source files are under ./src
 
-PROTO_FILE ?= ../../sync-service/proto/satellite.proto
+PROTO_FILE ?= ../../satellite/proto/satellite.proto
 PROTO_DIR = $(dir $(abspath $(dir $(PROTO_FILE))))
 update_protobuf: node_modules
 	mkdir -p ./src/_generated
