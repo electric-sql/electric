@@ -4,9 +4,11 @@ import { ElectricConfig } from 'electric-sql'
 import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
-import { electrify, ElectrifiedDatabase } from 'electric-sql/node'
+import { electrify } from 'electric-sql/node'
 import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
+import {DalNamespace} from "electric-sql/dist/client/model/dalNamespace"
+import {z} from 'zod'
 
 setLogLevel('DEBUG')
 
@@ -42,13 +44,29 @@ export const read_migrations = (migration_file: string) => {
   return json_data.migrations
 }
 
+const dbSchema = {
+  items: z.object({
+    id: z.string(),
+    content: z.string(),
+    content_text_null: z.string().nullish(),
+    content_text_null_default: z.string().nullish(),
+    intvalue_null: z.number().int().nullish(),
+    intvalue_null_default: z.number().int().nullish()
+  }).strict(),
+
+  other_items: z.object({
+    id: z.string(),
+    content: z.string()
+  }).strict()
+}
+type DbSchema = typeof dbSchema
+
 export const open_db = (
   name: string,
   host: string,
   port: number,
   migrations: any
-): Promise<ElectrifiedDatabase> => {
-  //= () => Promise<ElectrifiedDatabase> {
+): Promise<DalNamespace<DbSchema>> => {
   const original = new Database(name)
   const config: ElectricConfig = {
     app: 'satellite_client',
@@ -62,75 +80,76 @@ export const open_db = (
     debug: true,
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return electrify(original, config, {
+  return electrify(original, dbSchema, config, {
     console: new MockConsoleClient(),
   })
 }
 
-export const set_subscribers = (db: ElectrifiedDatabase) => {
-  db.electric.notifier.subscribeToAuthStateChanges((x) => {
+export const set_subscribers = (db: DalNamespace<DbSchema>) => {
+  db.notifier.subscribeToAuthStateChanges((x) => {
     console.log('auth state changes: ')
     console.log(x)
   })
-  db.electric.notifier.subscribeToPotentialDataChanges((x) => {
+  db.notifier.subscribeToPotentialDataChanges((x) => {
     console.log('potential data change: ')
     console.log(x)
   })
-  db.electric.notifier.subscribeToDataChanges((x) => {
+  db.notifier.subscribeToDataChanges((x) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
 }
 
-export const get_items = (db: ElectrifiedDatabase) => {
-  const stmt = db.prepare('SELECT * FROM main.items;')
-  return stmt.all()
+export const get_items = async (db: DalNamespace<DbSchema>) => {
+  return await db.dal.items.findMany({})
 }
 
-export const insert_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<{ uuid: string; key: string }>(
-    'INSERT INTO main.items (id, content) VALUES ( @uuid, @key )'
-  )
-  for (var key of keys) {
-    let myuuid = uuidv4()
-    st.run({ key: key, uuid: myuuid })
-  }
-}
-
-export const delete_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<[string]>('DELETE FROM main.items WHERE content = ?')
-  for (var key of keys) {
-    st.run(key)
-  }
-}
-
-export const get_other_items = (db: ElectrifiedDatabase) => {
-  const stmt = db.prepare('SELECT * FROM main.other_items;')
-  return stmt.all()
-}
-
-export const insert_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<{ uuid: string; key: string }>(
-    'INSERT INTO main.other_items (id, content) VALUES ( @uuid, @key )'
-  )
-  for (var key of keys) {
-    let myuuid = uuidv4()
-    st.run({ key: key, uuid: myuuid })
-  }
-}
-
-export const delete_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<[string]>(
-    'DELETE FROM main.other_items WHERE content = ?'
-  )
-  for (var key of keys) {
-    st.run(key)
-  }
-}
-
-export const run = (db: ElectrifiedDatabase): Database.Transaction => {
-  const stmt = db.prepare('select 1')
-  return db.transaction(() => {
-    stmt.run()
+export const insert_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+  const items = keys.map(k => {
+    return {
+      id: uuidv4(),
+      content: k
+    }
   })
+
+  await db.dal.items.createMany({
+    data: items
+  })
+}
+
+export const delete_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+  for (const key of keys) {
+    await db.dal.items.deleteMany({
+      where: {
+        content: key
+      }
+    })
+  }
+}
+
+export const get_other_items = async (db: DalNamespace<DbSchema>) => {
+  return await db.dal.other_items.findMany({})
+}
+
+export const insert_other_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+  const items = keys.map(k => {
+    return {
+      id: uuidv4(),
+      content: k
+    }
+  })
+
+  await db.dal.other_items.createMany({
+    data: items
+  })
+}
+
+export const delete_other_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+  for (const key of keys) {
+    await db.dal.other_items.deleteMany({
+      where: {
+        content: key
+      }
+    })
+  }
 }
