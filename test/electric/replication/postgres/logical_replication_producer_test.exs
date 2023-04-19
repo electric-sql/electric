@@ -8,13 +8,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Postgres.Client
-  alias Electric.Replication.PostgresConnector
+  alias Electric.Replication.Connectors
   # alias Electric.Replication.MockPostgresClient
 
   setup_with_mocks([
     {Client, [:passthrough],
      [connect: fn _ -> {:ok, :conn} end, start_replication: fn :conn, _, _, _ -> :ok end]},
-    {PostgresConnector, [:passthrough],
+    {Connectors, [:passthrough],
      [
        get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
        get_connection_opts: fn _ -> %{} end
@@ -82,7 +82,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} = LogicalReplicationProducer.init([:mock_postgres])
+    {:producer, state} = LogicalReplicationProducer.init(origin: "mock_postgres")
     {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state
   end

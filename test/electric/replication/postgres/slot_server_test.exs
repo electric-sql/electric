@@ -243,8 +243,11 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
 
   defp start_args(slot) do
     [
-      slot,
-      %{replication: %{subscription: slot}, downstream: %{producer: DownstreamProducerMock}},
+      [
+        origin: slot,
+        replication: [subscription: slot],
+        downstream: [producer: DownstreamProducerMock]
+      ],
       LogProducer.get_name(producer_name())
     ]
   end

@@ -35,12 +35,12 @@ defmodule Electric.Replication.Vaxine.LogConsumer do
   end
 
   @impl true
-  def init([origin, {:via, :gproc, producer}]) do
-    :gproc.reg(name(origin))
+  def init([name, {:via, :gproc, producer}]) do
+    :gproc.reg(name(name))
     :gproc.nb_wait(producer)
 
-    Logger.metadata(vx_consumer: origin)
-    Logger.debug("Vaxine consumer started for #{origin} consume from #{inspect(producer)}")
+    Logger.metadata(vx_consumer: name)
+    Logger.debug("Vaxine consumer started for #{name} consume from #{inspect(producer)}")
     {:consumer, %State{producer: producer}}
   end
 

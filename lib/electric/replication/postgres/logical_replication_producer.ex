@@ -7,7 +7,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Postgres.Client
-  alias Electric.Replication.PostgresConnector
+  alias Electric.Replication.Connectors
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -49,19 +49,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             relations: %{Messages.relation_id() => %Relation{}},
             transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
             publication: String.t(),
-            origin: PostgresConnector.origin(),
+            origin: Connectors.origin(),
             drop_current_transaction?: boolean(),
             types: %{},
             ignore_relations: [term()]
           }
   end
 
-  @spec start_link(PostgresConnector.origin()) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(origin) do
-    GenStage.start_link(__MODULE__, [origin])
+  @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
+  def start_link(conn_config) do
+    GenStage.start_link(__MODULE__, conn_config)
   end
 
-  @spec get_name(PostgresConnector.origin()) :: Electric.reg_name()
+  @spec get_name(Connectors.origin()) :: Electric.reg_name()
   def get_name(name) do
     {:via, :gproc, name(name)}
   end
@@ -71,20 +71,21 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   @impl true
-  def init([origin]) do
+  def init(conn_config) do
+    origin = Connectors.origin(conn_config)
+    conn_opts = Connectors.get_connection_opts(conn_config)
+    repl_opts = Connectors.get_replication_opts(conn_config)
+
     :gproc.reg(name(origin))
 
-    conn_config = PostgresConnector.get_connection_opts(origin)
-    repl_config = PostgresConnector.get_replication_opts(origin)
+    publication = repl_opts.publication
+    slot = repl_opts.slot
 
-    publication = repl_config.publication
-    slot = repl_config.slot
-
-    with {:ok, conn} <- Client.connect(conn_config),
+    with {:ok, conn} <- Client.connect(conn_opts),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
       Logger.info("Starting replication from #{origin}")
-      Logger.info("Connection settings: #{inspect(conn_config)}")
+      Logger.info("Connection settings: #{inspect(conn_opts)}")
 
       {:producer,
        %State{
@@ -313,7 +314,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     }
   end
 
-  @spec ack(pid(), PostgresConnector.origin(), Electric.Postgres.Lsn.t()) :: :ok
+  @spec ack(pid(), Connectors.origin(), Electric.Postgres.Lsn.t()) :: :ok
   def ack(conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(conn, lsn)
