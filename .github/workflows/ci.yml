@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
     steps:
       - uses: actions/checkout@v3
         with:
@@ -42,17 +42,17 @@ jobs:
         id: cache-deps
         uses: actions/cache@v3
         with:
-          path: sync-service/apps/core/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Cache compiled code
         id: cache-build
         uses: actions/cache@v3
         with:
           path: |
-            sync-service/apps/core/_build/*/lib
-            !sync-service/apps/core/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - run: make deps pretest_compile
 
@@ -62,7 +62,7 @@ jobs:
     needs: deps
     defaults:
       run:
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
     steps:
       - uses: actions/checkout@v3
         with:
@@ -83,17 +83,17 @@ jobs:
         id: cache-deps
         uses: actions/cache/restore@v3
         with:
-          path: sync-service/apps/core/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Restore compiled code
         id: cache-build
         uses: actions/cache/restore@v3
         with:
           path: |
-            sync-service/apps/core/_build/*/lib
-            !sync-service/apps/core/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - uses: webfactory/ssh-agent@v0.5.4
         with:
@@ -110,11 +110,11 @@ jobs:
       - name: Report code coverage
         uses: zgosalvez/github-actions-report-lcov@v3
         with:
-          coverage-files: sync-service/apps/core/cover/lcov.info
+          coverage-files: components/electric/cover/lcov.info
           artifact-name: code-coverage-report
           github-token: ${{ secrets.GITHUB_TOKEN }}
           update-comment: true
-          working-directory: sync-service/apps/core
+          working-directory: components/electric
 
   dialyzer:
     name: dialyzer and formatting
@@ -122,7 +122,7 @@ jobs:
     needs: deps
     defaults:
       run:
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
     steps:
       - uses: actions/checkout@v3
         with:
@@ -140,22 +140,22 @@ jobs:
         id: cache-deps
         uses: actions/cache/restore@v3
         with:
-          path: sync-service/apps/core/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Restore compiled code
         id: cache-build
         uses: actions/cache/restore@v3
         with:
           path: |
-            sync-service/apps/core/_build/*/lib
-            !sync-service/apps/core/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Cache PLT
         uses: actions/cache@v3
         with:
-          path: sync-service/apps/core/_build/*/*.plt
+          path: components/electric/_build/*/*.plt
           key: ${{ runner.os }}-plt-${{ github.ref_name }}
           restore-keys: ${{ runner.os }}-plt-
 
@@ -200,27 +200,27 @@ jobs:
         id: cache-deps
         uses: actions/cache/restore@v3
         with:
-          path: sync-service/apps/core/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Restore compiled code
         id: cache-build
         uses: actions/cache/restore@v3
         with:
           path: |
-            sync-service/apps/core/_build/*/lib
-            !sync-service/apps/core/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('sync-service/apps/core/**/mix.lock') }}
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - run: |
           echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
       - run: make pretest_compile
-        working-directory: sync-service/apps/core
+        working-directory: components/electric
 
       - name: Cache built lux
         uses: actions/cache@v3

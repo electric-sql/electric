@@ -1,6 +1,6 @@
 build_all:
-	make -C sync-service/apps/core docker-build
+	make -C components/electric docker-build
 
 test_all:
-	make -C sync-service/apps/core deps tests
+	make -C components/electric deps tests
 	make -C e2e test
