@@ -2,7 +2,10 @@ deps:
 	yarn install --frozen-lockfile
 #	npm install tslint tslint-config-prettier
 
-build:
+node_modules:
+	yarn install --frozen-lockfile
+
+build: node_modules
 	yarn build
 
 tests:
@@ -16,8 +19,9 @@ typecheck_tests:
 
 # TSModule requires that all source files are under ./src
 
-PROTO_LOCAL?=./proto/satellite.proto
-update_proto:
+PROTO_FILE ?= ../../protocol/satellite.proto
+PROTO_DIR = $(dir $(abspath $(dir $(PROTO_FILE))))
+update_protobuf: node_modules
 	mkdir -p ./src/_generated
 	protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_opt=outputJsonMethods=false \
@@ -25,7 +29,8 @@ update_proto:
 		--ts_proto_opt=forceLong=long \
 		--ts_proto_opt=importSuffix=.js \
 		--ts_proto_opt=esModuleInterop=true \
-		--ts_proto_out=./src/_generated/ ${PROTO_LOCAL}
+		--ts_proto_out=./src/_generated \
+		-I ${PROTO_DIR} ${abspath ${PROTO_FILE}}
 
 codespell:
 	codespell ./proto/ ./src/

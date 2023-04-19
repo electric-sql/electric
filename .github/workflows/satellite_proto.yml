@@ -1,0 +1,56 @@
+name: Satellite / Proto
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'protocol/**'
+  pull_request:
+    paths:
+      - 'protocol/**'
+  workflow_dispatch:
+
+env:
+  OTP_VERSION: "24.3"
+  ELIXIR_VERSION: "1.13"
+
+jobs:
+  verify_proto:
+    name: Check if generated files are up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Tags are required for proper version inference, and this is the only way to pull the tags in
+          fetch-depth: 0
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+          cache-dependency-path: clients/typescript/yarn.lock
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+      - name: Restore dependencies
+        id: cache-deps
+        uses: actions/cache/restore@v3
+        with:
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+
+      - name: Restore compiled code
+        id: cache-build
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+      - run: make update_protobuf
+      - run: ./.github/workflows/bin/check_if_any_files_changed.sh

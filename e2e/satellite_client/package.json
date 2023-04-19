@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@types/uuid": "^9.0.0",
-    "electric-sql": "git+https://github.com/electric-sql/typescript-client.git#dda82f576dc303d0d40e989881f6b5855776b7de",
+    "electric-sql": "file:../../clients/typescript",
     "jsonwebtoken": "^9.0.0",
     "loglevel": "^1.8.1",
     "tslint": "^6.1.3",
@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@tsmodule/tsmodule": "^40.0.17",
-    "@types/better-sqlite3": "^7.6.2",
+    "@types/better-sqlite3": "7.6.3",
     "@types/jsonwebtoken": "^9.0.1",
     "@types/live-server": "^1.2.1",
     "@types/node": "^16.9.1",

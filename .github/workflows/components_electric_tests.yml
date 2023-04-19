@@ -1,15 +1,9 @@
-name: CI
+name: Components / Electric/ Tests
 on:
   push:
     branches:
       - main
   pull_request: null
-  workflow_dispatch:
-    inputs:
-      environment:
-        type: test_name
-        default: tests
-        required: false
 
 env:
   OTP_VERSION: "24.3"

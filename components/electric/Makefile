@@ -2,6 +2,7 @@
 .PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
+PROTO_FILE ?= ../../protocol/satellite.proto
 
 print_version_from_git:
 	echo "${INFERRED_VERSION}"
@@ -89,10 +90,11 @@ rm_offset_storage:
 update_protobuf: deps
 	mix electric.gen.proto.package \
 		--output-path=./lib/electric/satellite/protobuf_package.ex \
-		./deps/satellite_proto/proto/satellite.proto
+		${PROTO_FILE}
 	mix protox.generate \
 		--output-path=./lib/electric/satellite/protobuf_messages.ex \
-		./deps/satellite_proto/proto/satellite.proto
+		${PROTO_FILE}
+	sed -E -i "s/Electric.Satellite.V[0-9]+/$$(cat lib/electric/satellite/protobuf_package.ex | tail -n +2 | head -n 1 | sed -E 's/defmodule (.*) do/\1/')/" ./lib/electric/satellite/protobuf.ex
 shell:
 	iex -S mix
 

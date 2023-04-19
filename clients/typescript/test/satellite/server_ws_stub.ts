@@ -10,7 +10,7 @@ import {
   SatPingReq,
   SatPingResp,
   SatRelation,
-} from '../../src/_generated/proto/satellite'
+} from '../../src/_generated/protocol/satellite'
 
 const PORT = 30002
 const IP = '127.0.0.1'

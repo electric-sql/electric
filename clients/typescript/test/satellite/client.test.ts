@@ -23,7 +23,7 @@ import {
   SatelliteErrorCode,
   Transaction,
 } from '../../src/util/types'
-import * as Proto from '../../src/_generated/proto/satellite'
+import * as Proto from '../../src/_generated/protocol/satellite'
 import { relations } from './common'
 import { SatelliteWSServerStub } from './server_ws_stub'
 

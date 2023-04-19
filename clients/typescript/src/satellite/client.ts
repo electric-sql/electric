@@ -18,7 +18,7 @@ import {
   SatRelationColumn,
   SatAuthHeader,
   SatAuthHeaderPair,
-} from '../_generated/proto/satellite'
+} from '../_generated/protocol/satellite'
 import {
   getObjFromString,
   getSizeBuf,

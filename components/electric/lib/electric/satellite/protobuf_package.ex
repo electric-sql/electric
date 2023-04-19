@@ -1,4 +1,4 @@
-# File generated from protobuf file: ./deps/satellite_proto/proto/satellite.proto
+# File generated from protobuf file: ../../protocol/satellite.proto
 defmodule Electric.Satellite.V11 do
   @moduledoc false
   @spec package() :: String.t()

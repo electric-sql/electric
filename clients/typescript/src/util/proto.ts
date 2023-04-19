@@ -1,4 +1,4 @@
-import * as Pb from '../_generated/proto/satellite'
+import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 
 type GetName<T extends { $type: string }> =
