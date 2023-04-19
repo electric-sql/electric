@@ -1,4 +1,4 @@
-import { SatRelation_RelationType } from '../../src/_generated/proto/satellite'
+import { SatRelation_RelationType } from '../../src/_generated/protocol/satellite'
 import { serializeRow, deserializeRow } from '../../src/satellite/client'
 import test from 'ava'
 import { Relation, Record } from '../../src/util/types'

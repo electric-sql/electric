@@ -4,10 +4,10 @@ on:
     branches:
       - main
     paths:
-      - 'satellite/proto/**'
+      - 'protocol/**'
   pull_request:
     paths:
-      - 'satellite/proto/**'
+      - 'protocol/**'
   workflow_dispatch:
 
 env:

@@ -44,7 +44,7 @@ import {
   getShadowPrimaryKey,
   generateTag,
 } from './oplog'
-import { SatRelation_RelationType } from '../_generated/proto/satellite'
+import { SatRelation_RelationType } from '../_generated/protocol/satellite'
 import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 import { RunResult } from '../electric/adapter'
 
