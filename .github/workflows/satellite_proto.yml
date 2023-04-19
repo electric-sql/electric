@@ -24,6 +24,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           # Tags are required for proper version inference, and this is the only way to pull the tags in
           fetch-depth: 0
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
       - uses: actions/setup-node@v3
         with:
           node-version: 18
