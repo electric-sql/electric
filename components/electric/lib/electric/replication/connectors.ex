@@ -101,10 +101,13 @@ defmodule Electric.Replication.Connectors do
   end
 
   @spec get_connection_opts(config()) :: connection_opts()
-  def get_connection_opts(config) do
+  def get_connection_opts(config, opts \\ []) do
+    replication? = Keyword.get(opts, :replication, true)
+
     config
     |> Keyword.fetch!(:connection)
     |> new_map_with_charlists()
+    |> set_replication(replication?)
   end
 
   @spec get_downstream_opts(config()) :: downstream_opts()
@@ -119,5 +122,13 @@ defmodule Electric.Replication.Connectors do
       {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
       {k, v} -> {k, v}
     end)
+  end
+
+  defp set_replication(opts, false) do
+    Map.delete(opts, :replication)
+  end
+
+  defp set_replication(opts, true) do
+    opts
   end
 end

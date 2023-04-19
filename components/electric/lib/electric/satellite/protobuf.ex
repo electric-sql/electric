@@ -75,6 +75,7 @@ defmodule Electric.Satellite.Protobuf do
         SatOpDelete,
         SatOpInsert,
         SatOpUpdate,
+        SatOpMigrate,
         SatTransOp,
         SatRelation,
         SatRelationColumn,

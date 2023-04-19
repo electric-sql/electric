@@ -73,9 +73,9 @@
 
 [shell ws1]
     [invoke log "Wait for sync up to current state"]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[13\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[\d+\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
     [local middle_lsn=$1]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[21\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[\d+\]: %\{commit_timestamp: \d+, lsn: (.*), trans_id: "", update: 10\}
 
 [shell pg_2]
     [invoke log "Send new tx from PG2"]
@@ -87,7 +87,7 @@
 [shell ws1]
     [timeout 10]
     [invoke log "Wait for Satellite to receive transaction from PG2"]
-    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[23\]: %\{commit_timestamp: \d+, lsn: (.*), tags: \["postgres_2@(.*)"\], (.*) update: 1}
+    ?\d+:\d+:\d+.\d+ \[info\]\s+rec \[\d+\]: %\{commit_timestamp: \d+, lsn: (.*), tags: \["postgres_2@(.*)"\], (.*) update: 1}
     [local middle_lsn=$1]
 
     [invoke log "Send transaction with insert from Satellite"]

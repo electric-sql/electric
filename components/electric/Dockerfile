@@ -22,8 +22,9 @@ RUN make build_tools
 COPY mix.*  /app/
 RUN make deps
 COPY config /app/config/
-COPY lib    /app/lib/
+RUN mix deps.compile
 
+COPY lib    /app/lib/
 ARG ELECTRIC_VERSION=local
 RUN make compile release
 

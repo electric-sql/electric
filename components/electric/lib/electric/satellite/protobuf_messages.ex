@@ -5647,9 +5647,9 @@
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
           []
+          |> encode_table(msg)
           |> encode_version(msg)
           |> encode_stmts(msg)
-          |> encode_table(msg)
           |> encode_unknown_fields(msg)
         end
       )
@@ -5690,10 +5690,9 @@
         end,
         defp encode_table(acc, msg) do
           try do
-            if msg.table == nil do
-              acc
-            else
-              [acc, "\x1A", Protox.Encode.encode_message(msg.table)]
+            case msg.table do
+              nil -> [acc]
+              child_field_value -> [acc, "\x1A", Protox.Encode.encode_message(child_field_value)]
             end
           rescue
             ArgumentError ->
@@ -5773,11 +5772,17 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
 
                 {[
-                   table:
-                     Protox.MergeMessage.merge(
-                       msg.table,
-                       Electric.Satellite.V12.SatOpMigrate.Table.decode!(delimited)
-                     )
+                   case msg.table do
+                     {:table, previous_value} ->
+                       {:table,
+                        Protox.MergeMessage.merge(
+                          previous_value,
+                          Electric.Satellite.V12.SatOpMigrate.Table.decode!(delimited)
+                        )}
+
+                     _ ->
+                       {:table, Electric.Satellite.V12.SatOpMigrate.Table.decode!(delimited)}
+                   end
                  ], rest}
 
               {tag, wire_type, rest} ->
@@ -5843,7 +5848,7 @@
         %{
           1 => {:version, {:scalar, ""}, :string},
           2 => {:stmts, :unpacked, {:message, Electric.Satellite.V12.SatOpMigrate.Stmt}},
-          3 => {:table, {:scalar, nil}, {:message, Electric.Satellite.V12.SatOpMigrate.Table}}
+          3 => {:table, {:oneof, :_table}, {:message, Electric.Satellite.V12.SatOpMigrate.Table}}
         }
       end
 
@@ -5854,7 +5859,7 @@
       def defs_by_name() do
         %{
           stmts: {2, :unpacked, {:message, Electric.Satellite.V12.SatOpMigrate.Stmt}},
-          table: {3, {:scalar, nil}, {:message, Electric.Satellite.V12.SatOpMigrate.Table}},
+          table: {3, {:oneof, :_table}, {:message, Electric.Satellite.V12.SatOpMigrate.Table}},
           version: {1, {:scalar, ""}, :string}
         }
       end
@@ -5885,8 +5890,8 @@
           %{
             __struct__: Protox.Field,
             json_name: "table",
-            kind: {:scalar, nil},
-            label: :optional,
+            kind: {:oneof, :_table},
+            label: :proto3_optional,
             name: :table,
             tag: 3,
             type: {:message, Electric.Satellite.V12.SatOpMigrate.Table}
@@ -5960,8 +5965,8 @@
              %{
                __struct__: Protox.Field,
                json_name: "table",
-               kind: {:scalar, nil},
-               label: :optional,
+               kind: {:oneof, :_table},
+               label: :proto3_optional,
                name: :table,
                tag: 3,
                type: {:message, Electric.Satellite.V12.SatOpMigrate.Table}
@@ -5973,8 +5978,8 @@
              %{
                __struct__: Protox.Field,
                json_name: "table",
-               kind: {:scalar, nil},
-               label: :optional,
+               kind: {:oneof, :_table},
+               label: :proto3_optional,
                name: :table,
                tag: 3,
                type: {:message, Electric.Satellite.V12.SatOpMigrate.Table}
@@ -6029,7 +6034,7 @@
         {:error, :no_default_value}
       end,
       def default(:table) do
-        {:ok, nil}
+        {:error, :no_default_value}
       end,
       def default(_) do
         {:error, :no_such_field}
