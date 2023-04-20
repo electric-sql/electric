@@ -199,7 +199,7 @@ export enum SatRelation_RelationType {
 /**
  * (Producer) Type defines replication messages, that flow from Producer once
  * the replication is established. Message contains operations log. Operations
- * should go in the LSN order. Begin and Commit opetations corresponds to
+ * should go in the LSN order. Begin and Commit operations corresponds to
  * transaction boundaries.
  * Transactions are guranteed not to be mixed, and will follow one by one.
  */
