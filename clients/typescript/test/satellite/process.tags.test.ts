@@ -10,11 +10,12 @@ import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
+import Long from 'long'
 
 import {
   OPTYPES,
   generateTag,
-  encodeTags,
+  encodeTags, toTransactions, opLogEntryToChange,
   //decodeTags,
 } from '../../src/satellite/oplog'
 import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
@@ -28,6 +29,7 @@ import {
 import { Statement } from '../../src/util/types'
 
 import config from '../support/.electric/@config/index'
+import {relations} from "./common";
 const { migrations } = config
 
 // Speed up the intervals for testing.
@@ -133,7 +135,7 @@ test('basic rules for setting tags', async (t) => {
   shadow = await satellite._getOplogShadowEntry()
   t.is(shadow.length, 0)
 
-  let entries = await satellite._getEntries()
+  const entries = await satellite._getEntries()
   //console.log(entries)
   t.is(entries[0].clearTags, encodeTags([]))
   t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate1]))
@@ -227,17 +229,30 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
     undefined
   )
 
-  await satellite._applyTransactionInternal(
-    clientId,
-    txDate1,
-    [ackEntry],
-    new Uint8Array()
-  )
+  /*
+  export type Transaction = {
+    commit_timestamp: Long
+    lsn: LSN
+    changes: Change[]
+    // This field is only set by transactions coming from Electric
+    origin?: string
+  }
+   */
 
-  // validat that garbage collection have triggered
+  const ackDataChange = opLogEntryToChange(ackEntry, relations)
+  satellite.relations = relations // satellite must be aware of the relations in order to turn the `ackDataChange` DataChange into an OpLogEntry
+  const tx = {
+    origin: clientId,
+    commit_timestamp: Long.fromNumber((txDate1 as Date).getTime()), // FIXME: should be a long
+    changes: [ackDataChange],
+    lsn: new Uint8Array()
+  }
+  await satellite._applyTransaction(tx)
+
+  // validate that garbage collection has been triggered
   t.is(2, (await satellite._getEntries()).length)
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const shadow = await satellite._getOplogShadowEntry()
   t.like(
     shadow[0],
     {
@@ -252,7 +267,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
   await runMigrations()
   await satellite._setAuthState()
 
-  let stmts: Statement[] = []
+  const stmts: Statement[] = []
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
@@ -305,7 +320,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
   await satellite._apply([prevEntry], 'remote')
   await satellite._apply([nextEntry], 'remote')
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
     {
       namespace: 'main',
@@ -324,7 +339,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
 
   //let entries= await satellite._getEntries()
   //console.log(entries)
-  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
   //console.log(table)
 
   // In both cases insert wins over delete, but
@@ -398,7 +413,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
   await satellite._apply([prevEntry], 'remote')
   await satellite._apply([nextEntry], 'remote')
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
     {
       namespace: 'main',

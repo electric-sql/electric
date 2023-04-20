@@ -36,12 +36,12 @@ import {
 } from '../support/satellite-helpers'
 import Long from 'long'
 import {
-  ChangeType,
+  DataChangeType,
   ConnectivityState,
   LSN,
   Relation,
   SqlValue,
-  Transaction,
+  DataTransaction,
 } from '../../src/util/types'
 import { relations } from './common'
 import { Satellite } from '../../src/satellite'
@@ -63,7 +63,7 @@ interface TestSatellite extends Satellite {
   _performSnapshot(): Promise<Date>
   _getEntries(): Promise<OplogEntry[]>
   _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
-  _applyTransaction(transaction: Transaction): any
+  _applyTransaction(transaction: DataTransaction): any
   _setMeta(key: string, value: SqlValue): Promise<void>
   _getMeta(key: string): Promise<string>
   _ack(lsn: number, isAck: boolean): Promise<void>
@@ -916,13 +916,13 @@ test('get oplogEntries from transaction', async (t) => {
 
   const relations = await satellite['_getLocalRelations']()
 
-  const transaction: Transaction = {
+  const transaction: DataTransaction = {
     lsn: DEFAULT_LOG_POS,
     commit_timestamp: Long.UZERO,
     changes: [
       {
         relation: relations.parent,
-        type: ChangeType.INSERT,
+        type: DataChangeType.INSERT,
         record: { id: 0 },
         tags: [], // proper values are not relevent here
       },
@@ -992,14 +992,14 @@ test('get transactions from opLogEntries', async (t) => {
       changes: [
         {
           relation: relations.parent,
-          type: ChangeType.INSERT,
+          type: DataChangeType.INSERT,
           record: { id: 0 },
           oldRecord: undefined,
           tags: [],
         },
         {
           relation: relations.parent,
-          type: ChangeType.INSERT,
+          type: DataChangeType.INSERT,
           record: { id: 1 },
           oldRecord: { id: 1 },
           tags: [],
@@ -1012,7 +1012,7 @@ test('get transactions from opLogEntries', async (t) => {
       changes: [
         {
           relation: relations.parent,
-          type: ChangeType.INSERT,
+          type: DataChangeType.INSERT,
           record: { id: 2 },
           oldRecord: undefined,
           tags: [],

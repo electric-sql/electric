@@ -15,6 +15,8 @@ import {
   AckType,
   ConnectivityState,
   DbName,
+  isDataChange,
+  Change as Chg,
   LSN,
   Relation,
   RelationsCache,
@@ -22,6 +24,8 @@ import {
   SqlValue,
   Statement,
   Transaction,
+  DataChange,
+  SchemaChange,
 } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteConfig, SatelliteOpts } from './config'
@@ -202,9 +206,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   setClientListeners(): void {
-    this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction)
-    })
+    this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     // When a local transaction is sent, or an acknowledgement for
     // a remote transaction commit is received, we update lsn records.
     this.client.subscribeToAck(async (lsn, type) => {
@@ -472,12 +474,7 @@ export class SatelliteProcess implements Satellite {
   async _apply(
     incoming: OplogEntry[],
     incoming_origin: string,
-    lsn: LSN
-  ): Promise<void> {
-    Log.info(`apply incoming changes for LSN: ${lsn}`)
-    // assign timestamp to pending operations before apply
-    await this._performSnapshot()
-
+  ) {
     const local = await this._getEntries()
     const merged = this._mergeEntries(
       this._authState!.clientId,
@@ -487,16 +484,6 @@ export class SatelliteProcess implements Satellite {
     )
 
     const stmts: Statement[] = []
-    // switches off on transaction commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
-    // update lsn.
-    this._lsn = lsn
-    const lsn_base64 = base64.fromBytes(lsn)
-    stmts.push({
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
-      args: [lsn_base64, 'lsn'],
-    })
-
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
         const shadowEntry: ShadowEntry = {
@@ -519,12 +506,10 @@ export class SatelliteProcess implements Satellite {
     }
 
     const tablenames = Object.keys(merged)
-
-    await this.adapter.runInTransaction(
-      ...this._disableTriggers(tablenames),
-      ...stmts,
-      ...this._enableTriggers(tablenames)
-    )
+    return {
+      tablenames,
+      statements: stmts
+    }
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
@@ -717,25 +702,125 @@ export class SatelliteProcess implements Satellite {
 
   async _applyTransaction(transaction: Transaction) {
     const origin = transaction.origin!
-
-    const opLogEntries = fromTransaction(transaction, this.relations)
     const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
-    await this._applyTransactionInternal(
-      origin,
-      commitTimestamp,
-      opLogEntries,
-      transaction.lsn
+
+    // Transactions coming from the replication stream
+    // may contain DML operations manipulating data
+    // but may also contain DDL operations migrating schemas.
+    // DML operations are ran through conflict resolution logic.
+    // DDL operations are applied as is against the local DB.
+
+    // TODO: discuss with Valter if this is safe because
+    //       what happens is that the first chunk of DML will be merged with pending local operations
+    //       then later another batch of DML may be merged against local pending operations but are they still there?
+    //       since we already merged the first batch with the pending operations.. so not sure what will happen
+
+    const stmts: Statement[] = []
+    const tablenamesSet: Set<string> = new Set()
+    const opLogEntries: OplogEntry[] = []
+    const lsn = transaction.lsn
+    let firstDMLChunk = true
+
+    // switches off on transaction commit/abort
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    // update lsn.
+    this._lsn = lsn
+    const lsn_base64 = base64.fromBytes(lsn)
+    stmts.push({
+      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
+      args: [lsn_base64, 'lsn'],
+    })
+
+    const processDML = async (changes: DataChange[]) => {
+      const tx = {
+        ...transaction,
+        changes: changes
+      }
+      const entries = fromTransaction(tx, this.relations)
+
+      // Before applying DML statements we need to assign a timestamp to pending operations.
+      // This only needs to be done once, even if there are several DML chunks
+      // because all those chunks are part of the same transaction.
+      if (firstDMLChunk) {
+        Log.info(`apply incoming changes for LSN: ${lsn}`)
+        // assign timestamp to pending operations before apply
+        await this._performSnapshot()
+        firstDMLChunk = false
+      }
+
+      const { statements, tablenames } = await this._apply(entries, origin)
+      entries.forEach(e => opLogEntries.push(e))
+      statements.forEach(s => stmts.push(s))
+      tablenames.forEach(n => tablenamesSet.add(n))
+    }
+    const processDDL = (changes: SchemaChange[]) => {
+      changes.forEach(change => stmts.push({ sql: change.sql }))
+    }
+
+    // Now process all changes per chunk.
+    // We basically take a prefix of changes of the same type
+    // which we call a `dmlChunk` or `ddlChunk` if the changes
+    // are DML statements, respectively, DDL statements.
+    // We process chunk per chunk in-order.
+    let dmlChunk: DataChange[] = []
+    let ddlChunk: SchemaChange[] = []
+
+    const changes = transaction.changes
+    for (let idx = 0; idx < changes.length; idx++) {
+      const change = changes[idx]
+      const changeType = (change: Chg): 'DML' | 'DDL' => {
+        return isDataChange(change) ? 'DML' : 'DDL'
+      }
+      const sameChangeTypeAsPrevious = (): boolean => {
+        return idx == 0 ||
+          changeType(changes[idx]) === changeType(changes[idx-1])
+      }
+      const addToChunk = (change: Chg) => {
+        if (isDataChange(change))
+          dmlChunk.push(change)
+        else
+          ddlChunk.push(change)
+      }
+      const processChunk = async (type: 'DML' | 'DDL') => {
+        if (type === 'DML') {
+          await processDML(dmlChunk)
+          dmlChunk = []
+        }
+        else {
+          processDDL(ddlChunk)
+          ddlChunk = []
+        }
+      }
+
+      addToChunk(change) // add the change in the right chunk
+      if (!sameChangeTypeAsPrevious()) {
+        // We're starting a new chunk
+        // process the previous chunk and clear it
+        const previousChange = changes[idx-1]
+        await processChunk(changeType(previousChange))
+      }
+
+      if (idx === (changes.length - 1)) {
+        // we're at the last change
+        // process this chunk
+        const thisChange = changes[idx]
+        await processChunk(changeType(thisChange))
+      }
+    }
+
+    // Now run the DML and DDL statements in-order in a transaction
+    const tablenames = Array.from(tablenamesSet)
+    await this.adapter.runInTransaction(
+      ...this._disableTriggers(tablenames),
+      ...stmts,
+      ...this._enableTriggers(tablenames)
     )
+
+    await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
 
-  async _applyTransactionInternal(
-    origin: string,
-    commitTimestamp: Date,
-    opLogEntries: OplogEntry[],
-    lsn: LSN
-  ) {
-    await this._apply(opLogEntries, origin, lsn)
-    await this._notifyChanges(opLogEntries)
+  private async notifyChangesAndGCopLog(oplogEntries: OplogEntry[], origin: string, commitTimestamp: Date) {
+    await this._notifyChanges(oplogEntries)
 
     if (origin == this._authState!.clientId) {
       /* Any outstanding transaction that originated on Satellite but haven't

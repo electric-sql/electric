@@ -1,4 +1,4 @@
-import { SatRelation_RelationType } from '../_generated/protocol/satellite'
+import { SatOpMigrate_Type, SatRelation_RelationType } from '../_generated/protocol/satellite'
 import { Tag } from '../satellite/oplog'
 
 export type AnyFunction = (...args: any[]) => any
@@ -53,18 +53,36 @@ export type Transaction = {
   origin?: string
 }
 
-export enum ChangeType {
+// A transaction whose changes are only DML statements
+// i.e. the transaction does not contain migrations
+export type DataTransaction = Omit<Transaction, 'changes'> & {
+  changes: DataChange[]
+}
+
+export enum DataChangeType {
   INSERT = 'INSERT',
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
 }
 
-export type Change = {
+export type Change = DataChange | SchemaChange
+
+export type DataChange = {
   relation: Relation
-  type: ChangeType
+  type: DataChangeType
   record?: Record
   oldRecord?: Record
   tags: Tag[]
+}
+
+export type SchemaChange = {
+  migrationType: SatOpMigrate_Type
+  sql: string
+}
+
+// Some functions for narrowing `Change` and `Transaction` types
+export function isDataChange(change: Change): change is DataChange {
+  return 'relation' in change
 }
 
 export type Record = { [key: string]: string | number | undefined | null }
@@ -76,6 +94,10 @@ export type Replication = {
   ack_lsn?: LSN
   enqueued_lsn?: LSN
   transactions: Transaction[]
+}
+
+export type OutgoingReplication = Omit<Replication, 'transactions'> & {
+  transactions: DataTransaction[] // outgoing transactions cannot contain migrations
 }
 
 export type Relation = {

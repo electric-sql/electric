@@ -34,16 +34,16 @@ import {
   AckCallback,
   AckType,
   AuthResponse,
-  ChangeType,
+  DataChangeType,
   LSN,
   RelationColumn,
   Replication,
   ReplicationStatus,
   SatelliteError,
   SatelliteErrorCode,
-  Transaction,
+  DataTransaction,
   Record,
-  Relation,
+  Relation, SchemaChange, OutgoingReplication, Transaction,
 } from '../util/types'
 import {
   base64,
@@ -70,7 +70,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private notifier: Notifier
 
   private inbound: Replication
-  private outbound: Replication
+  private outbound: OutgoingReplication
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -150,7 +150,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     enqueued?: LSN,
     ack?: LSN,
     isReplicating?: ReplicationStatus
-  ): Replication {
+  ) {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
@@ -302,7 +302,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  enqueueTransaction(transaction: Transaction): void {
+  enqueueTransaction(transaction: DataTransaction): void {
     if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
@@ -356,7 +356,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMissingRelations(
-    transaction: Transaction,
+    transaction: DataTransaction,
     replication: Replication
   ): void {
     transaction.changes.forEach((change) => {
@@ -379,7 +379,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  private transactionToSatOpLog(transaction: Transaction): SatOpLog {
+  private transactionToSatOpLog(transaction: DataTransaction): SatOpLog {
     const ops: SatTransOp[] = [
       SatTransOp.fromPartial({
         begin: {
@@ -400,7 +400,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         record = serializeRow(change.record, relation)
       }
       switch (change.type) {
-        case ChangeType.DELETE:
+        case DataChangeType.DELETE:
           changeOp = SatTransOp.fromPartial({
             delete: {
               oldRowData: oldRecord,
@@ -409,7 +409,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             },
           })
           break
-        case ChangeType.INSERT:
+        case DataChangeType.INSERT:
           changeOp = SatTransOp.fromPartial({
             insert: {
               rowData: record,
@@ -418,7 +418,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             },
           })
           break
-        case ChangeType.UPDATE:
+        case DataChangeType.UPDATE:
           changeOp = SatTransOp.fromPartial({
             update: {
               rowData: record,
@@ -666,7 +666,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.INSERT,
+          type: DataChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel),
           tags: op.insert.tags,
         }
@@ -686,7 +686,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.UPDATE,
+          type: DataChangeType.UPDATE,
           record: deserializeRow(op.update.rowData!, rel),
           oldRecord: deserializeRow(op.update.oldRowData, rel),
           tags: op.update.tags,
@@ -707,12 +707,23 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.DELETE,
+          type: DataChangeType.DELETE,
           oldRecord: deserializeRow(op.delete.oldRowData!, rel),
           tags: op.delete.tags,
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
+      }
+
+      if (op.migrate) {
+        const stmts = op.migrate.stmts
+        stmts.forEach((stmt) => {
+          const change: SchemaChange = {
+            migrationType: stmt.type,
+            sql: stmt.sql
+          }
+          replication.transactions[lastTxnIdx].changes.push(change)
+        })
       }
     })
   }

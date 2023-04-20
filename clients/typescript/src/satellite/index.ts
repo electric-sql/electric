@@ -10,7 +10,7 @@ import {
   DbName,
   LSN,
   SatelliteError,
-  Transaction,
+  DataTransaction, Transaction,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'
@@ -62,7 +62,7 @@ export interface Client {
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
   ): void
-  enqueueTransaction(transaction: Transaction): void | SatelliteError
+  enqueueTransaction(transaction: DataTransaction): void | SatelliteError
   subscribeToAck(callback: AckCallback): void
   unsubscribeToAck(callback: AckCallback): void
   resetOutboundLogPositions(sent?: LSN, ack?: LSN): void

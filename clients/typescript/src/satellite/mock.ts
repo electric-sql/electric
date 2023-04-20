@@ -10,7 +10,7 @@ import {
   DbName,
   LSN,
   SatelliteError,
-  Transaction,
+  DataTransaction, Transaction,
 } from '../util/types'
 
 import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
@@ -153,7 +153,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     _callback: (transaction: Transaction) => Promise<void>
   ): void {}
 
-  enqueueTransaction(transaction: Transaction): void | SatelliteError {
+  enqueueTransaction(transaction: DataTransaction): void | SatelliteError {
     this.outboundSent = transaction.lsn
 
     this.emit('ack_lsn', transaction.lsn, AckType.LOCAL_SEND)

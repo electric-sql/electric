@@ -1,12 +1,11 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  Change,
-  ChangeType,
+  DataChangeType,
   RelationsCache,
   Row,
   SqlValue,
-  Transaction,
+  DataTransaction, DataChange,
 } from '../util/types'
 import { union } from '../util/sets'
 import { numberToBytes } from '../util/common'
@@ -255,7 +254,7 @@ export const remoteOperationsToTableChanges = (
 }
 
 export const fromTransaction = (
-  transaction: Transaction,
+  transaction: DataTransaction,
   relations: RelationsCache
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
@@ -287,7 +286,7 @@ export const fromTransaction = (
 export const toTransactions = (
   opLogEntries: OplogEntry[],
   relations: RelationsCache
-): Transaction[] => {
+): DataTransaction[] => {
   if (opLogEntries.length == 0) {
     return []
   }
@@ -295,29 +294,7 @@ export const toTransactions = (
   const to_commit_timestamp = (timestamp: string): Long =>
     Long.UZERO.add(new Date(timestamp).getTime())
 
-  const opLogEntryToChange = (entry: OplogEntry): Change => {
-    let record, oldRecord
-    if (entry.newRow != null) {
-      record = JSON.parse(entry.newRow)
-    }
-
-    if (entry.oldRow != null) {
-      oldRecord = JSON.parse(entry.oldRow)
-    }
-
-    // FIXME: We should not loose UPDATE information here, as otherwise
-    // it will be identical to setting all values in a transaction, instead
-    // of updating values (different CR outcome)
-    return {
-      type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
-      relation: relations[`${entry.tablename}`],
-      record,
-      oldRecord,
-      tags: decodeTags(entry.clearTags),
-    }
-  }
-
-  const init: Transaction = {
+  const init: DataTransaction = {
     commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
     lsn: numberToBytes(opLogEntries[0].rowid),
     changes: [],
@@ -338,7 +315,7 @@ export const toTransactions = (
         currTxn = nextTxn
       }
 
-      const change = opLogEntryToChange(txn)
+      const change = opLogEntryToChange(txn, relations)
       currTxn.changes.push(change)
       currTxn.lsn = numberToBytes(txn.rowid)
       return acc
@@ -372,6 +349,28 @@ export const encodeTags = (tags: Tag[]): string => {
 
 export const decodeTags = (tags: string): Tag[] => {
   return JSON.parse(tags)
+}
+
+export const opLogEntryToChange = (entry: OplogEntry, relations: RelationsCache): DataChange => {
+  let record, oldRecord
+  if (entry.newRow != null) {
+    record = JSON.parse(entry.newRow)
+  }
+
+  if (entry.oldRow != null) {
+    oldRecord = JSON.parse(entry.oldRow)
+  }
+
+  // FIXME: We should not loose UPDATE information here, as otherwise
+  // it will be identical to setting all values in a transaction, instead
+  // of updating values (different CR outcome)
+  return {
+    type: entry.optype == 'DELETE' ? DataChangeType.DELETE : DataChangeType.INSERT,
+    relation: relations[`${entry.tablename}`],
+    record,
+    oldRecord,
+    tags: decodeTags(entry.clearTags),
+  }
 }
 
 const primaryKeyToStr = (primaryKeyJson: {

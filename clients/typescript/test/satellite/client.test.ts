@@ -18,10 +18,10 @@ import {
 } from '../../src/util/proto'
 import {
   AckType,
-  ChangeType,
+  DataChangeType,
   Relation,
   SatelliteErrorCode,
-  Transaction,
+  DataTransaction,
 } from '../../src/util/types'
 import * as Proto from '../../src/_generated/protocol/satellite'
 import { relations } from './common'
@@ -322,7 +322,7 @@ test.serial('receive transaction over multiple messages', async (t) => {
   server.nextResponses([stop])
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: Transaction) => {
+    client.on('transaction', (transaction: DataTransaction) => {
       t.is(transaction.changes.length, 3)
       res()
     })
@@ -357,7 +357,7 @@ test.serial('acknowledge lsn', async (t) => {
   server.nextResponses([stop])
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (_t: Transaction, ack: any) => {
+    client.on('transaction', (_t: DataTransaction, ack: any) => {
       const lsn0 = client['inbound'].ack_lsn
       t.is(lsn0, undefined)
       ack()
@@ -485,13 +485,13 @@ test('ack on send and pong', async (t) => {
 
   await client.startReplication()
 
-  const transaction: Transaction = {
+  const transaction: DataTransaction = {
     lsn: lsn_1,
     commit_timestamp: Long.UZERO,
     changes: [
       {
         relation: relations.parent,
-        type: ChangeType.INSERT,
+        type: DataChangeType.INSERT,
         record: { id: 0 },
         tags: [], // actual value is not relevent here
       },
