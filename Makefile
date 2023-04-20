@@ -4,6 +4,7 @@ build_all:
 test_all:
 	make -C components/electric deps tests
 	make -C clients/typescript deps tests
+	make -C generator deps tests
 	make -C e2e test
 
 update_protobuf:

@@ -28,7 +28,8 @@
     "lint": "eslint --ext ts,tsx,js,jsx --fix .",
     "test": "vitest",
     "build": "tsc",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "check-styleguide": "eslint --ext ts,tsx,js,jsx --quiet ."
   },
   "devDependencies": {
     "@prisma/internals": "^4.11.0",
