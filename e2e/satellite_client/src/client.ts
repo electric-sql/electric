@@ -7,8 +7,7 @@ import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
-import {DalNamespace} from "electric-sql/dist/client/model/dalNamespace"
-import {z} from 'zod'
+import { dbSchema, Electric } from './generated/models'
 
 setLogLevel('DEBUG')
 
@@ -44,29 +43,12 @@ export const read_migrations = (migration_file: string) => {
   return json_data.migrations
 }
 
-const dbSchema = {
-  items: z.object({
-    id: z.string(),
-    content: z.string(),
-    content_text_null: z.string().nullish(),
-    content_text_null_default: z.string().nullish(),
-    intvalue_null: z.number().int().nullish(),
-    intvalue_null_default: z.number().int().nullish()
-  }).strict(),
-
-  other_items: z.object({
-    id: z.string(),
-    content: z.string()
-  }).strict()
-}
-type DbSchema = typeof dbSchema
-
-export const open_db = (
+export const open_db = async (
   name: string,
   host: string,
   port: number,
   migrations: any
-): Promise<DalNamespace<DbSchema>> => {
+): Promise<Electric> => {
   const original = new Database(name)
   const config: ElectricConfig = {
     app: 'satellite_client',
@@ -80,12 +62,12 @@ export const open_db = (
     debug: true,
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return electrify(original, dbSchema, config, {
+  return await electrify(original, dbSchema, config, {
     console: new MockConsoleClient(),
   })
 }
 
-export const set_subscribers = (db: DalNamespace<DbSchema>) => {
+export const set_subscribers = (db: Electric) => {
   db.notifier.subscribeToAuthStateChanges((x) => {
     console.log('auth state changes: ')
     console.log(x)
@@ -100,11 +82,19 @@ export const set_subscribers = (db: DalNamespace<DbSchema>) => {
   })
 }
 
-export const get_items = async (db: DalNamespace<DbSchema>) => {
-  return await db.dal.items.findMany({})
+export const get_items = async (electric: Electric) => {
+  return await electric.db.items.findMany({})
 }
 
-export const insert_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+export const get_item_ids = async (electric: Electric) => {
+  return await electric.db.items.findMany({
+    select: {
+      id: true
+    }
+  })
+}
+
+export const insert_item = async (electric: Electric, keys: [string]) => {
   const items = keys.map(k => {
     return {
       id: uuidv4(),
@@ -112,14 +102,14 @@ export const insert_item = async (db: DalNamespace<DbSchema>, keys: [string]) =>
     }
   })
 
-  await db.dal.items.createMany({
+  await electric.db.items.createMany({
     data: items
   })
 }
 
-export const delete_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+export const delete_item = async (electric: Electric, keys: [string]) => {
   for (const key of keys) {
-    await db.dal.items.deleteMany({
+    await electric.db.items.deleteMany({
       where: {
         content: key
       }
@@ -127,11 +117,11 @@ export const delete_item = async (db: DalNamespace<DbSchema>, keys: [string]) =>
   }
 }
 
-export const get_other_items = async (db: DalNamespace<DbSchema>) => {
-  return await db.dal.other_items.findMany({})
+export const get_other_items = async (electric: Electric) => {
+  return await electric.db.other_items.findMany({})
 }
 
-export const insert_other_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+export const insert_other_item = async (electric: Electric, keys: [string]) => {
   const items = keys.map(k => {
     return {
       id: uuidv4(),
@@ -139,14 +129,14 @@ export const insert_other_item = async (db: DalNamespace<DbSchema>, keys: [strin
     }
   })
 
-  await db.dal.other_items.createMany({
+  await electric.db.other_items.createMany({
     data: items
   })
 }
 
-export const delete_other_item = async (db: DalNamespace<DbSchema>, keys: [string]) => {
+export const delete_other_item = async (electric: Electric, keys: [string]) => {
   for (const key of keys) {
-    await db.dal.other_items.deleteMany({
+    await electric.db.other_items.deleteMany({
       where: {
         content: key
       }

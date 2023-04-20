@@ -90,7 +90,7 @@
 #===============================================================================
 
 [macro insert_map map]
-    !await db.dal.items.create({ \
+    !await db.db.items.create({ \
       data: { \
         id: $map.id, \
         content: $map.content, \
