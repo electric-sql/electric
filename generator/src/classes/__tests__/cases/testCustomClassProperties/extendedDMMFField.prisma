@@ -1,0 +1,26 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model MyPrismaScalarsType {
+    /// @zod.string({ invalid_type_error: "invalid type error" }).cuid()
+    id      String    @id @default(cuid())
+    /// Some comment about string @zod.string.min(3, { message: "min error" }).max(10, { message: "max error" })
+    string  String?
+    /// @zod.custom.use(z.string().refine((val) => validator.isBIC(val), { message: 'BIC is not valid' }))
+    bic     String?
+    /// @zod.number.lt(10, { message: "lt error" }).gt(5, { message: "gt error" })
+    float   Float
+    decimal Decimal
+    date    DateTime? /// @zod.date.min(new Date('2020-01-01')).max(new Date('2020-12-31'))
+    bigInt  BigInt
+    json    Json
+    bytes   Bytes
+    /// @zod.custom.use(z.string().refine((val) => myFunction.validate(val), { message: 'Is not valid' }))
+    custom  String?
+}

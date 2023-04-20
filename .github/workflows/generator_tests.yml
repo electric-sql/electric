@@ -1,0 +1,58 @@
+name: Generator / Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'generator/**'
+
+defaults:
+  run:
+    working-directory: generator
+
+jobs:
+  verify_formatting:
+    name: Check formatting & linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+          cache-dependency-path: generator/yarn.lock
+      - run: make deps
+      - run: yarn check-styleguide
+  check_types:
+    name: Check types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+          cache-dependency-path: generator/yarn.lock
+      - run: make deps
+      - run: yarn build
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [14, 16, 18]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: yarn
+          cache-dependency-path: generator/yarn.lock
+      - name: Install
+        run: make deps
+      - name: Run tests
+        run: make tests

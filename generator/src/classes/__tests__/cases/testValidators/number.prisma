@@ -1,0 +1,40 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model NumberValidators {
+    id          Int  @id @default(autoincrement())
+    gt          Int? /// @zod.number.gt(5)
+    gte         Int? /// @zod.number.gte(5)
+    lt          Int? /// @zod.number.lt(5)
+    lte         Int? /// @zod.number.lte(5)
+    int         Int? /// @zod.number.int()
+    positive    Int? /// @zod.number.positive()
+    nonnegative Int? /// @zod.number.nonnegative()
+    negative    Int? /// @zod.number.negative()
+    nonpositive Int? /// @zod.number.nonpositive()
+    multipleOf  Int? /// @zod.number.multipleOf(5)
+    finite      Int? /// @zod.number.finite()
+    chained     Int? /// @zod.number.gt(5).lt(10)
+}
+
+model NumberValidatorsWithMessage {
+    id          Int  @id @default(autoincrement())
+    gt          Int? /// @zod.number.gt(5, { message: "Must be greater than 5" })
+    gte         Int? /// @zod.number.gte(5, { message: "Must be greater than or equal to 5" })
+    lt          Int? /// @zod.number.lt(5, { message: "Must be less than 5" })
+    lte         Int? /// @zod.number.lte(5, { message: "Must be less than or equal to 5" })
+    int         Int? /// @zod.number.int({ message: "Must be an integer" })
+    positive    Int? /// @zod.number.positive({ message: "Must be positive" })
+    nonnegative Int? /// @zod.number.nonnegative({ message: "Must be nonnegative" })
+    negative    Int? /// @zod.number.negative({ message: "Must be negative" })
+    nonpositive Int? /// @zod.number.nonpositive({ message: "Must be nonpositive" })
+    multipleOf  Int? /// @zod.number.multipleOf(5, { message: "Must be a multiple of 5" })
+    finite      Int? /// @zod.number.finite({ message: "Must be finite" })
+    chained     Int? /// @zod.number.gt(5, { message: "Must be greater than 5" }).lt(10, { message: "Must be less than 10" })
+}
