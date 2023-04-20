@@ -2,7 +2,7 @@ import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 
 type GetName<T extends { $type: string }> =
-  T['$type'] extends `Electric.Satellite.v1_1.${infer K}` ? K : never
+  T['$type'] extends `Electric.Satellite.v1_2.${infer K}` ? K : never
 type MappingTuples = {
   [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]
 }

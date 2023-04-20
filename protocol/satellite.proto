@@ -23,7 +23,7 @@ syntax = "proto3";
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v1_1;
+package Electric.Satellite.v1_2;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -165,9 +165,9 @@ message SatRelation {
 
 // (Producer) Type defines replication messages, that flow from Producer once
 // the replication is established. Message contains operations log. Operations
-// should go in the LSN order. Begin and Commit opetations corresponds to
+// should go in the LSN order. Begin and Commit operations corresponds to
 // transaction boundaries.
-// Transactions are guranteed not to be mixed, and will folllow one by one.
+// Transactions are guranteed not to be mixed, and will follow one by one.
 message SatOpLog {
     repeated SatTransOp ops = 1;
 }
@@ -198,6 +198,8 @@ message SatOpBegin {
     // Electric this field can be used to deduce if the incoming transaction
     // originated on this Satellite instance or not.
     optional string origin = 4;
+    // does this transaction contain ddl statements?
+    bool is_migration = 5;
 }
 
 // (Producer) Replication message that indicates transaction boundaries

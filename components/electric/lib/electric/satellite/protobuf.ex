@@ -2,9 +2,9 @@ defmodule Electric.Satellite.Protobuf do
   # This is a version provided in the corresponding protocol buffer file
   # Make sure to bump it here and in the using macro below.
 
-  import Electric.Satellite.V11
+  import Electric.Satellite.V12
 
-  alias Electric.Satellite.V11.{
+  alias Electric.Satellite.V12.{
     SatErrorResp,
     SatAuthReq,
     SatAuthResp,
@@ -57,7 +57,7 @@ defmodule Electric.Satellite.Protobuf do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
 
-      alias Electric.Satellite.V11.{
+      alias Electric.Satellite.V12.{
         SatErrorResp,
         SatAuthReq,
         SatAuthHeaderPair,
