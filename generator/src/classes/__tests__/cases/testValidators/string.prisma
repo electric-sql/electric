@@ -1,0 +1,44 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model StringValidators {
+    id              String  @id @default(cuid())
+    customTypeError String? /// @zod.string({ invalid_type_error: "my message", description: "my description" })
+    min             String? /// @zod.string.min(3)
+    max             String? /// @zod.string.max(10)
+    length          String? /// @zod.string.length(5)
+    email           String? /// @zod.string.email()
+    url             String? /// @zod.string.url()
+    uuid            String? /// @zod.string.uuid()
+    cuid            String? /// @zod.string.cuid()
+    regex           String? /// @zod.string.regex(/^[a-z]+$/)
+    startsWith      String? /// @zod.string.startsWith("abc")
+    endsWith        String? /// @zod.string.endsWith("xyz")
+    trim            String? /// @zod.string.trim()
+    datetime        String? /// @zod.string.datetime()
+    chained         String? /// @zod.string.min(3).max(10).length(5)
+}
+
+model StringValidatorsWithMessage {
+    id              String  @id @default(cuid())
+    customTypeError String? /// @zod.string({ invalid_type_error: "my message", description: "my description" })
+    min             String? /// @zod.string.min(3, { message: "Must be 3 or more characters long" })
+    max             String? /// @zod.string.max(10, { message: "Must be 10 or fewer characters long" })q
+    length          String? /// @zod.string.length(5, { message: "Must be exactly 5 characters long" })
+    email           String? /// @zod.string.email({ message: "Invalid email address" })
+    url             String? /// @zod.string.url({ message: "Invalid url" })
+    uuid            String? /// @zod.string.uuid({ message: "Invalid UUID" })
+    cuid            String? /// @zod.string.cuid({ message: "Invalid cuid" })
+    regex           String? /// @zod.string.regex(/^[a-z]+$/, { message: "Must be lowercase letters only" })
+    startsWith      String? /// @zod.string.startsWith("abc", { message: "Must start with abc" })
+    endsWith        String? /// @zod.string.endsWith("xyz", { message: "Must end with xyz" })
+    trim            String? /// @zod.string.trim({ message: "Must be trimmed" })
+    datetime        String? /// @zod.string.datetime({ message: "Invalid datetime! string Must be UTC." })
+    chained         String? /// @zod.string.min(3, { message: "Must be 3 or more characters long" }).max(10, { message: "Must be 10 or fewer characters long" }).length(5, { message: "Must be exactly 5 characters long" })
+}

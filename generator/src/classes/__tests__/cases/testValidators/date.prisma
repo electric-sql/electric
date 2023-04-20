@@ -1,0 +1,22 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model DateTimeValidators {
+    id      DateTime  @id @default(now())
+    min     DateTime? /// @zod.date.min(new Date("1900-01-01"))
+    max     DateTime? /// @zod.date.max(new Date())
+    chained DateTime? /// @zod.date.min(new Date("1900-01-01")).max(new Date())
+}
+
+model DateTimeValidatorsWithMessage {
+    id      DateTime  @id @default(now())
+    min     DateTime? /// @zod.date.min(new Date("1900-01-01"), { message: "Too old" })
+    max     DateTime? /// @zod.date.max(new Date(), { message: "Too young!" })
+    chained DateTime? /// @zod.date.min(new Date("1900-01-01"), { message: "Too old" }).max(new Date(), { message: "Too young!" })
+}
