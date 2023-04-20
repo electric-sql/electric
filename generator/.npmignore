@@ -1,0 +1,10 @@
+# src
+node_modules
+tsconfig.json
+.eslintrc.json
+# README.md
+vite.config.ts
+yarn.lock
+yarn-error.log
+.pnpm-debug.log
+# dist

@@ -1,0 +1,14 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model MyModel {
+    id     Int     @id @default(autoincrement())
+    string String /// @zod.string.min(3)
+    custom String? /// @zod.asdf.min(3)
+}
