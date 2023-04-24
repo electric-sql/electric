@@ -21,7 +21,8 @@ import {
   OplogEntry,
   toTransactions,
   generateTag,
-  encodeTags, opLogEntryToChange,
+  encodeTags,
+  opLogEntryToChange,
 } from '../../src/satellite/oplog'
 import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
@@ -472,7 +473,7 @@ test('apply does not add anything to oplog', async (t) => {
     origin: 'remote',
     commit_timestamp: Long.fromNumber(incomingTs),
     changes: [incomingChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(incomingTx)
 
@@ -565,7 +566,7 @@ test('apply incoming with null on column with default', async (t) => {
     origin: 'remote',
     commit_timestamp: Long.fromNumber(incomingTs),
     changes: [incomingChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(incomingTx)
 
@@ -603,7 +604,7 @@ test('apply incoming with undefined on column with default', async (t) => {
     origin: 'remote',
     commit_timestamp: Long.fromNumber(incomingTs),
     changes: [incomingChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(incomingTx)
 
@@ -812,7 +813,7 @@ test('compensations: incoming operation breaks referential integrity', async (t)
     origin: 'remote',
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [incomingChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {
@@ -871,7 +872,7 @@ test('compensations: incoming operations accepted if restore referential integri
     origin: 'remote',
     commit_timestamp: Long.fromNumber(new Date().getTime()), // timestamp is not important for this test, it is only used to GC the oplog
     changes: [childInsertChange, parentInsertChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(insertChildAndParentTx)
 
@@ -924,7 +925,7 @@ test('compensations: using triggers with flag 0', async (t) => {
     origin: 'remote',
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [incomingChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {

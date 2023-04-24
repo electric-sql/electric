@@ -10,7 +10,8 @@ import {
   DbName,
   LSN,
   SatelliteError,
-  DataTransaction, Transaction,
+  DataTransaction,
+  Transaction,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'

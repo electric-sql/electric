@@ -10,7 +10,8 @@ import {
   DbName,
   LSN,
   SatelliteError,
-  DataTransaction, Transaction,
+  DataTransaction,
+  Transaction,
 } from '../util/types'
 
 import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'

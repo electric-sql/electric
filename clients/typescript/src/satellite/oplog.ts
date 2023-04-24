@@ -5,7 +5,8 @@ import {
   RelationsCache,
   Row,
   SqlValue,
-  DataTransaction, DataChange,
+  DataTransaction,
+  DataChange,
 } from '../util/types'
 import { union } from '../util/sets'
 import { numberToBytes } from '../util/common'
@@ -351,7 +352,10 @@ export const decodeTags = (tags: string): Tag[] => {
   return JSON.parse(tags)
 }
 
-export const opLogEntryToChange = (entry: OplogEntry, relations: RelationsCache): DataChange => {
+export const opLogEntryToChange = (
+  entry: OplogEntry,
+  relations: RelationsCache
+): DataChange => {
   let record, oldRecord
   if (entry.newRow != null) {
     record = JSON.parse(entry.newRow)
@@ -365,7 +369,8 @@ export const opLogEntryToChange = (entry: OplogEntry, relations: RelationsCache)
   // it will be identical to setting all values in a transaction, instead
   // of updating values (different CR outcome)
   return {
-    type: entry.optype == 'DELETE' ? DataChangeType.DELETE : DataChangeType.INSERT,
+    type:
+      entry.optype == 'DELETE' ? DataChangeType.DELETE : DataChangeType.INSERT,
     relation: relations[`${entry.tablename}`],
     record,
     oldRecord,

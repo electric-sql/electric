@@ -1,4 +1,7 @@
-import { SatOpMigrate_Type, SatRelation_RelationType } from '../_generated/protocol/satellite'
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { Tag } from '../satellite/oplog'
 
 export type AnyFunction = (...args: any[]) => any

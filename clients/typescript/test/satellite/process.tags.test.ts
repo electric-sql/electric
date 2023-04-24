@@ -29,7 +29,7 @@ import {
 import { Statement } from '../../src/util/types'
 
 import config from '../support/.electric/@config/index'
-import {relations} from "./common";
+import { relations } from './common'
 const { migrations } = config
 
 // Speed up the intervals for testing.
@@ -235,7 +235,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
     origin: clientId,
     commit_timestamp: Long.fromNumber((txDate1 as Date).getTime()),
     changes: [ackDataChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(tx)
 
@@ -314,7 +314,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
     origin: 'remote',
     commit_timestamp: Long.fromNumber(prevTs),
     changes: [prevChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(prevTx)
 
@@ -323,7 +323,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
     origin: 'remote',
     commit_timestamp: Long.fromNumber(nextTs),
     changes: [nextChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(nextTx)
 
@@ -424,7 +424,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
     origin: 'remote',
     commit_timestamp: Long.fromNumber(prevTs),
     changes: [prevChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(prevTx)
 
@@ -433,7 +433,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
     origin: 'remote',
     commit_timestamp: Long.fromNumber(nextTs),
     changes: [nextChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(nextTx)
 
@@ -538,7 +538,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
     origin: 'remote',
     commit_timestamp: Long.fromNumber(prevTs),
     changes: [prevChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(prevTx)
 
@@ -547,7 +547,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
     origin: 'remote',
     commit_timestamp: Long.fromNumber(nextTs),
     changes: [nextChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(nextTx)
 
@@ -658,13 +658,19 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 
   satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction`
 
-  const electricEntrySameChange = opLogEntryToChange(electricEntrySame, relations)
-  const electricEntryConflictChange = opLogEntryToChange(electricEntryConflict, relations)
+  const electricEntrySameChange = opLogEntryToChange(
+    electricEntrySame,
+    relations
+  )
+  const electricEntryConflictChange = opLogEntryToChange(
+    electricEntryConflict,
+    relations
+  )
   const tx = {
     origin: clientId,
     commit_timestamp: Long.fromNumber(new Date().getTime()), // commit_timestamp doesn't matter for this test, it is only used to GC the oplog
     changes: [electricEntrySameChange, electricEntryConflictChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(tx)
 
@@ -727,7 +733,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
     origin: clientId,
     commit_timestamp: Long.fromNumber(txDate1),
     changes: [insertChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(insertTx)
 
@@ -747,7 +753,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
     origin: clientId,
     commit_timestamp: Long.fromNumber(deleteDate),
     changes: [deleteChange],
-    lsn: new Uint8Array()
+    lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(deleteTx)
 

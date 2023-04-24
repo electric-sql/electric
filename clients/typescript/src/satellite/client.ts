@@ -43,7 +43,10 @@ import {
   SatelliteErrorCode,
   DataTransaction,
   Record,
-  Relation, SchemaChange, OutgoingReplication, Transaction,
+  Relation,
+  SchemaChange,
+  OutgoingReplication,
+  Transaction,
 } from '../util/types'
 import {
   base64,
@@ -720,7 +723,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         stmts.forEach((stmt) => {
           const change: SchemaChange = {
             migrationType: stmt.type,
-            sql: stmt.sql
+            sql: stmt.sql,
           }
           replication.transactions[lastTxnIdx].changes.push(change)
         })

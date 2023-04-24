@@ -471,10 +471,7 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key before
   // merging, for local and remote operations.
-  async _apply(
-    incoming: OplogEntry[],
-    incoming_origin: string,
-  ) {
+  async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
     const merged = this._mergeEntries(
       this._authState!.clientId,
@@ -508,7 +505,7 @@ export class SatelliteProcess implements Satellite {
     const tablenames = Object.keys(merged)
     return {
       tablenames,
-      statements: stmts
+      statements: stmts,
     }
   }
 
@@ -734,7 +731,7 @@ export class SatelliteProcess implements Satellite {
     const processDML = async (changes: DataChange[]) => {
       const tx = {
         ...transaction,
-        changes: changes
+        changes: changes,
       }
       const entries = fromTransaction(tx, this.relations)
 
@@ -749,12 +746,12 @@ export class SatelliteProcess implements Satellite {
       }
 
       const { statements, tablenames } = await this._apply(entries, origin)
-      entries.forEach(e => opLogEntries.push(e))
-      statements.forEach(s => stmts.push(s))
-      tablenames.forEach(n => tablenamesSet.add(n))
+      entries.forEach((e) => opLogEntries.push(e))
+      statements.forEach((s) => stmts.push(s))
+      tablenames.forEach((n) => tablenamesSet.add(n))
     }
     const processDDL = (changes: SchemaChange[]) => {
-      changes.forEach(change => stmts.push({ sql: change.sql }))
+      changes.forEach((change) => stmts.push({ sql: change.sql }))
     }
 
     // Now process all changes per chunk.
@@ -772,21 +769,19 @@ export class SatelliteProcess implements Satellite {
         return isDataChange(change) ? 'DML' : 'DDL'
       }
       const sameChangeTypeAsPrevious = (): boolean => {
-        return idx == 0 ||
-          changeType(changes[idx]) === changeType(changes[idx-1])
+        return (
+          idx == 0 || changeType(changes[idx]) === changeType(changes[idx - 1])
+        )
       }
       const addToChunk = (change: Chg) => {
-        if (isDataChange(change))
-          dmlChunk.push(change)
-        else
-          ddlChunk.push(change)
+        if (isDataChange(change)) dmlChunk.push(change)
+        else ddlChunk.push(change)
       }
       const processChunk = async (type: 'DML' | 'DDL') => {
         if (type === 'DML') {
           await processDML(dmlChunk)
           dmlChunk = []
-        }
-        else {
+        } else {
           processDDL(ddlChunk)
           ddlChunk = []
         }
@@ -796,11 +791,11 @@ export class SatelliteProcess implements Satellite {
       if (!sameChangeTypeAsPrevious()) {
         // We're starting a new chunk
         // process the previous chunk and clear it
-        const previousChange = changes[idx-1]
+        const previousChange = changes[idx - 1]
         await processChunk(changeType(previousChange))
       }
 
-      if (idx === (changes.length - 1)) {
+      if (idx === changes.length - 1) {
         // we're at the last change
         // process this chunk
         const thisChange = changes[idx]
@@ -819,7 +814,11 @@ export class SatelliteProcess implements Satellite {
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
 
-  private async notifyChangesAndGCopLog(oplogEntries: OplogEntry[], origin: string, commitTimestamp: Date) {
+  private async notifyChangesAndGCopLog(
+    oplogEntries: OplogEntry[],
+    origin: string,
+    commitTimestamp: Date
+  ) {
     await this._notifyChanges(oplogEntries)
 
     if (origin == this._authState!.clientId) {
