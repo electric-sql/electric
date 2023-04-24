@@ -21,7 +21,7 @@ import {
   OplogEntry,
   toTransactions,
   generateTag,
-  encodeTags,
+  encodeTags, opLogEntryToChange,
 } from '../../src/satellite/oplog'
 import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
@@ -465,7 +465,17 @@ test('apply does not add anything to oplog', async (t) => {
     }
   )
 
-  await satellite._apply([incomingEntry], 'remote')
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const incomingChange = opLogEntryToChange(incomingEntry, relations)
+  const incomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(incomingTs),
+    changes: [incomingChange],
+    lsn: new Uint8Array()
+  }
+  await satellite._applyTransaction(incomingTx)
+
   await satellite._performSnapshot()
 
   const sql = 'SELECT * from parent WHERE id=1'
@@ -547,7 +557,17 @@ test('apply incoming with null on column with default', async (t) => {
   )
 
   await satellite._setAuthState()
-  await satellite._apply([incomingEntry], 'remote')
+
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const incomingChange = opLogEntryToChange(incomingEntry, relations)
+  const incomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(incomingTs),
+    changes: [incomingChange],
+    lsn: new Uint8Array()
+  }
+  await satellite._applyTransaction(incomingTx)
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
@@ -575,7 +595,17 @@ test('apply incoming with undefined on column with default', async (t) => {
   )
 
   await satellite._setAuthState()
-  await satellite._apply([incomingEntry], 'remote')
+
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const incomingChange = opLogEntryToChange(incomingEntry, relations)
+  const incomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(incomingTs),
+    changes: [incomingChange],
+    lsn: new Uint8Array()
+  }
+  await satellite._applyTransaction(incomingTx)
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
   const rows = await adapter.query({ sql })
@@ -760,23 +790,32 @@ test('compensations: incoming operation breaks referential integrity', async (t)
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState()
 
-  const incoming = [
-    generateLocalOplogEntry(
-      tableInfo,
-      'main',
-      'child',
-      OPTYPES.insert,
-      timestamp,
-      genEncodedTags('remote', [timestamp]),
-      {
-        id: 1,
-        parent: 1,
-      }
-    ),
-  ]
+  const incoming = generateLocalOplogEntry(
+    tableInfo,
+    'main',
+    'child',
+    OPTYPES.insert,
+    timestamp,
+    genEncodedTags('remote', [timestamp]),
+    {
+      id: 1,
+      parent: 1,
+    }
+  )
 
   await satellite._setAuthState()
-  await t.throwsAsync(satellite._apply(incoming, 'remote'), {
+
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const incomingChange = opLogEntryToChange(incoming, relations)
+  const incomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [incomingChange],
+    lsn: new Uint8Array()
+  }
+
+  await t.throwsAsync(satellite._applyTransaction(incomingTx), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
   })
 })
@@ -791,31 +830,30 @@ test('compensations: incoming operations accepted if restore referential integri
   await satellite._setAuthState()
   const clientId = satellite['_authState']['clientId']
 
-  const incoming = [
-    generateRemoteOplogEntry(
-      tableInfo,
-      'main',
-      'child',
-      OPTYPES.insert,
-      timestamp,
-      genEncodedTags(clientId, [timestamp]),
-      {
-        id: 1,
-        parent: 1,
-      }
-    ),
-    generateRemoteOplogEntry(
-      tableInfo,
-      'main',
-      'parent',
-      OPTYPES.insert,
-      timestamp,
-      genEncodedTags(clientId, [timestamp]),
-      {
-        id: 1,
-      }
-    ),
-  ]
+  const childInsertEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'child',
+    OPTYPES.insert,
+    timestamp,
+    genEncodedTags(clientId, [timestamp]),
+    {
+      id: 1,
+      parent: 1,
+    }
+  )
+
+  const parentInsertEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.insert,
+    timestamp,
+    genEncodedTags(clientId, [timestamp]),
+    {
+      id: 1,
+    }
+  )
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
@@ -824,7 +862,19 @@ test('compensations: incoming operations accepted if restore referential integri
 
   await satellite._setAuthState()
   await satellite._performSnapshot()
-  await satellite._apply(incoming, 'remote')
+
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const childInsertChange = opLogEntryToChange(childInsertEntry, relations)
+  const parentInsertChange = opLogEntryToChange(parentInsertEntry, relations)
+  const insertChildAndParentTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(new Date().getTime()), // timestamp is not important for this test, it is only used to GC the oplog
+    changes: [childInsertChange, parentInsertChange],
+    lsn: new Uint8Array()
+  }
+  await satellite._applyTransaction(insertChildAndParentTx)
+
   const rows = await adapter.query({
     sql: `SELECT * from main.parent WHERE id=1`,
   })
@@ -855,20 +905,29 @@ test('compensations: using triggers with flag 0', async (t) => {
   await satellite._performSnapshot()
 
   const timestamp = new Date().getTime()
-  const incoming = [
-    generateRemoteOplogEntry(
-      tableInfo,
-      'main',
-      'parent',
-      OPTYPES.delete,
-      timestamp,
-      genEncodedTags('remote', []),
-      {
-        id: 1,
-      }
-    ),
-  ]
-  await t.throwsAsync(satellite._apply(incoming, 'remote'), {
+  const incoming = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.delete,
+    timestamp,
+    genEncodedTags('remote', []),
+    {
+      id: 1,
+    }
+  )
+
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
+
+  const incomingChange = opLogEntryToChange(incoming, relations)
+  const incomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [incomingChange],
+    lsn: new Uint8Array()
+  }
+
+  await t.throwsAsync(satellite._applyTransaction(incomingTx), {
     code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
   })
 })
