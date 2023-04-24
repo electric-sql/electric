@@ -1,15 +1,4 @@
-import { mkdir, rm as removeFile } from 'node:fs/promises'
-
-import test from 'ava'
-
-import Database from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-
-import { MockSatelliteClient } from '../../src/satellite/mock'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
-import { randomValue } from '../../src/util/random'
+import test, {ExecutionContext} from 'ava'
 import Long from 'long'
 
 import {
@@ -18,80 +7,17 @@ import {
   encodeTags,
   opLogEntryToChange,
 } from '../../src/satellite/oplog'
-import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
-import { SatelliteProcess } from '../../src/satellite/process'
 
 import {
-  initTableInfo,
   generateRemoteOplogEntry,
   genEncodedTags,
 } from '../support/satellite-helpers'
 import { Statement } from '../../src/util/types'
 
-import config from '../support/.electric/@config/index'
-import { relations } from './common'
-const { migrations } = config
+import {makeContext, stopSatelliteAndClean, relations} from './common'
 
-// Speed up the intervals for testing.
-const opts = Object.assign({}, satelliteDefaults, {
-  minSnapshotWindow: 40,
-  pollingInterval: 200,
-})
-
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
-
-test.beforeEach(async (t) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
-  const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
-  const satellite = new SatelliteProcess(
-    dbName,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    console,
-    satelliteConfig,
-    opts
-  )
-
-  const tableInfo = initTableInfo()
-  const timestamp = new Date().getTime()
-
-  const runMigrations = async () => {
-    await migrator.up()
-  }
-
-  t.context = {
-    dbName,
-    db,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    runMigrations,
-    satellite,
-    tableInfo,
-    timestamp,
-  }
-})
-
-test.afterEach.always(async (t) => {
-  const { dbName, satellite } = t.context as any
-
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
-
-  await satellite.stop()
-})
+test.beforeEach(makeContext)
+test.afterEach.always(stopSatelliteAndClean)
 
 test('basic rules for setting tags', async (t) => {
   const { adapter, runMigrations, satellite } = t.context as any

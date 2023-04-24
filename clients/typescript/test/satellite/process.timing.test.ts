@@ -19,6 +19,7 @@ import { initTableInfo } from '../support/satellite-helpers'
 import { Satellite } from '../../src/satellite'
 
 import config from '../support/.electric/@config/index'
+import {makeContext, stopSatellite} from "./common";
 const { migrations } = config
 
 type ContextType = {
@@ -28,64 +29,14 @@ type ContextType = {
   client: MockSatelliteClient
 }
 
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
-
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 80,
   pollingInterval: 500,
 })
 
-test.beforeEach(async (t) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
-  const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
-  const satellite = new SatelliteProcess(
-    dbName,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    console,
-    satelliteConfig,
-    opts
-  )
-
-  const tableInfo = initTableInfo()
-  const timestamp = new Date().getTime()
-
-  const runMigrations = async () => {
-    await migrator.up()
-  }
-
-  t.context = {
-    dbName,
-    db,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    runMigrations,
-    satellite,
-    tableInfo,
-    timestamp,
-  }
-})
-
-test.afterEach.always(async (t) => {
-  const { dbName } = t.context as ContextType
-
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
-})
+test.beforeEach(async (t) => makeContext(t, opts))
+test.afterEach.always(stopSatellite)
 
 test('throttled snapshot respects window', async (t) => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any

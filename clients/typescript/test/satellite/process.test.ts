@@ -1,15 +1,7 @@
-import { mkdir, rm as removeFile } from 'node:fs/promises'
-
 import test from 'ava'
 
-import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-
 import { MockSatelliteClient } from '../../src/satellite/mock'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
-import { randomValue } from '../../src/util/random'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 import { AuthState } from '../../src/auth/index'
@@ -24,11 +16,9 @@ import {
   encodeTags,
   opLogEntryToChange,
 } from '../../src/satellite/oplog'
-import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import {
-  initTableInfo,
   loadSatelliteMetaTable,
   generateLocalOplogEntry,
   generateRemoteOplogEntry,
@@ -44,14 +34,11 @@ import {
   SqlValue,
   DataTransaction,
 } from '../../src/util/types'
-import { relations } from './common'
+import {makeContext, opts, relations, stopSatelliteAndClean} from './common'
 import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
-
-import config from '../support/.electric/@config/index'
-const { migrations } = config
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]
@@ -81,66 +68,8 @@ type ContextType = {
   tableInfo: TableInfo
 }
 
-// Speed up the intervals for testing.
-const opts = Object.assign({}, satelliteDefaults, {
-  minSnapshotWindow: 40,
-  pollingInterval: 200,
-})
-
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
-
-test.beforeEach(async (t) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
-  const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
-  const satellite = new SatelliteProcess(
-    dbName,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    console,
-    satelliteConfig,
-    opts
-  )
-
-  const tableInfo = initTableInfo()
-  const timestamp = new Date().getTime()
-
-  const runMigrations = async () => {
-    await migrator.up()
-  }
-
-  t.context = {
-    dbName,
-    db,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    runMigrations,
-    satellite,
-    tableInfo,
-    timestamp,
-  }
-})
-
-test.afterEach.always(async (t) => {
-  const { dbName, satellite } = t.context as any
-
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
-
-  await satellite.stop()
-})
+test.beforeEach(makeContext)
+test.afterEach.always(stopSatelliteAndClean)
 
 test('setup starts a satellite process', async (t) => {
   const { satellite } = t.context as any
