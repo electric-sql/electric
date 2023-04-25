@@ -34,7 +34,7 @@ import {
   SqlValue,
   DataTransaction,
 } from '../../src/util/types'
-import {makeContext, opts, relations, stopSatelliteAndClean} from './common'
+import {makeContext, opts, relations, cleanAndStopSatellite} from './common'
 import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
 
@@ -69,7 +69,7 @@ type ContextType = {
 }
 
 test.beforeEach(makeContext)
-test.afterEach.always(stopSatelliteAndClean)
+test.afterEach.always(cleanAndStopSatellite)
 
 test('setup starts a satellite process', async (t) => {
   const { satellite } = t.context as any

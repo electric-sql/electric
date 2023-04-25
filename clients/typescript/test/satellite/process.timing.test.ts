@@ -2,7 +2,7 @@ import test from 'ava'
 import { sleepAsync } from '../../src/util/timer'
 
 import { satelliteDefaults } from '../../src/satellite/config'
-import {makeContext, stopSatellite} from "./common";
+import {makeContext, clean} from "./common";
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -11,7 +11,7 @@ const opts = Object.assign({}, satelliteDefaults, {
 })
 
 test.beforeEach(async (t) => makeContext(t, opts))
-test.afterEach.always(stopSatellite)
+test.afterEach.always(clean)
 
 test('throttled snapshot respects window', async (t) => {
   const { adapter, notifier, runMigrations, satellite } = t.context as any

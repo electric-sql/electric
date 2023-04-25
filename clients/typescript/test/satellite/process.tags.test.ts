@@ -1,4 +1,4 @@
-import test, {ExecutionContext} from 'ava'
+import test from 'ava'
 import Long from 'long'
 
 import {
@@ -14,10 +14,10 @@ import {
 } from '../support/satellite-helpers'
 import { Statement } from '../../src/util/types'
 
-import {makeContext, stopSatelliteAndClean, relations} from './common'
+import {makeContext, cleanAndStopSatellite, relations} from './common'
 
 test.beforeEach(makeContext)
-test.afterEach.always(stopSatelliteAndClean)
+test.afterEach.always(cleanAndStopSatellite)
 
 test('basic rules for setting tags', async (t) => {
   const { adapter, runMigrations, satellite } = t.context as any

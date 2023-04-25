@@ -1,4 +1,3 @@
-import {ExecutionContext} from "ava/entrypoints";
 import {mkdir, rm as removeFile} from "node:fs/promises";
 import {randomValue} from "../../src/util";
 import Database from "better-sqlite3";
@@ -56,6 +55,7 @@ export const relations = {
 }
 
 import config from '../support/.electric/@config/index'
+import {ExecutionContext} from "ava";
 const { migrations } = config
 
 // Speed up the intervals for testing.
@@ -74,7 +74,7 @@ type Opts = SatelliteOpts & {
   pollingInterval: number
 }
 
-export const makeContext = async (t: ExecutionContext<unknown>, options: Opts = opts) => {
+export const makeContext = async (t: ExecutionContext, options: Opts = opts) => {
   await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new Database(dbName)
@@ -115,14 +115,15 @@ export const makeContext = async (t: ExecutionContext<unknown>, options: Opts = 
   }
 }
 
-export const stopSatellite = async (t: ExecutionContext<unknown>) => {
+export const clean = async (t: ExecutionContext) => {
   const { dbName } = t.context as any
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
 }
 
-export const stopSatelliteAndClean = async (t: ExecutionContext<unknown>) => {
-  await stopSatellite(t)
-  await t.context.satellite.stop()
+export const cleanAndStopSatellite = async (t: ExecutionContext) => {
+  await clean(t)
+  const { satellite } = t.context as any
+  await satellite.stop()
 }
