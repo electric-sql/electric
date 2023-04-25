@@ -2,7 +2,7 @@ import test from 'ava'
 import { sleepAsync } from '../../src/util/timer'
 
 import { satelliteDefaults } from '../../src/satellite/config'
-import {makeContext, clean} from "./common";
+import { makeContext, clean } from './common'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {

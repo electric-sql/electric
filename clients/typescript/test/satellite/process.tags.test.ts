@@ -14,7 +14,7 @@ import {
 } from '../support/satellite-helpers'
 import { Statement } from '../../src/util/types'
 
-import {makeContext, cleanAndStopSatellite, relations} from './common'
+import { makeContext, cleanAndStopSatellite, relations } from './common'
 
 test.beforeEach(makeContext)
 test.afterEach.always(cleanAndStopSatellite)

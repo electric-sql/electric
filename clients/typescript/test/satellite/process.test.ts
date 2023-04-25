@@ -34,7 +34,7 @@ import {
   SqlValue,
   DataTransaction,
 } from '../../src/util/types'
-import {makeContext, opts, relations, cleanAndStopSatellite} from './common'
+import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
 import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
 

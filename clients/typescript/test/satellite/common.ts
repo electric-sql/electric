@@ -1,14 +1,18 @@
-import {mkdir, rm as removeFile} from "node:fs/promises";
-import {randomValue} from "../../src/util";
-import Database from "better-sqlite3";
-import {DatabaseAdapter} from "../../src/drivers/better-sqlite3";
-import {BundleMigrator} from "../../src/migrators";
-import {MockNotifier} from "../../src/notifiers";
-import {MockSatelliteClient} from "../../src/satellite/mock";
-import {MockConsoleClient} from "../../src/auth/mock";
-import {SatelliteProcess} from "../../src/satellite";
-import {initTableInfo} from "../support/satellite-helpers";
-import {SatelliteConfig, satelliteDefaults, SatelliteOpts} from "../../src/satellite/config";
+import { mkdir, rm as removeFile } from 'node:fs/promises'
+import { randomValue } from '../../src/util'
+import Database from 'better-sqlite3'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { BundleMigrator } from '../../src/migrators'
+import { MockNotifier } from '../../src/notifiers'
+import { MockSatelliteClient } from '../../src/satellite/mock'
+import { MockConsoleClient } from '../../src/auth/mock'
+import { SatelliteProcess } from '../../src/satellite'
+import { initTableInfo } from '../support/satellite-helpers'
+import {
+  SatelliteConfig,
+  satelliteDefaults,
+  SatelliteOpts,
+} from '../../src/satellite/config'
 
 export const relations = {
   child: {
@@ -55,7 +59,7 @@ export const relations = {
 }
 
 import config from '../support/.electric/@config/index'
-import {ExecutionContext} from "ava";
+import { ExecutionContext } from 'ava'
 const { migrations } = config
 
 // Speed up the intervals for testing.
@@ -74,7 +78,10 @@ type Opts = SatelliteOpts & {
   pollingInterval: number
 }
 
-export const makeContext = async (t: ExecutionContext, options: Opts = opts) => {
+export const makeContext = async (
+  t: ExecutionContext,
+  options: Opts = opts
+) => {
   await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new Database(dbName)
