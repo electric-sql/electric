@@ -178,29 +178,30 @@ defmodule Electric.Postgres.SQLGenerator.Column do
       name,
       type,
       constraint(name, class, type, flags, table_opts, opts),
-      default(class, type)
+      default(class, type, opts)
     ])
   end
 
-  def value(:serial, _type) do
+  def value(:serial, _type, _opts) do
     # the range of an int2
     int(0..32_767)
   end
 
-  def value(:int, _type) do
+  def value(:int, _type, _opts) do
     # the range of an int2
     int(0..32_767)
   end
 
-  def value(:str, _type) do
+  def value(:str, type, _opts) do
     fixed_list([
       constant("'"),
       map(string(:alphanumeric, max_length: 10), &esc/1),
-      constant("'")
+      constant("'::"),
+      constant(type)
     ])
   end
 
-  def value(:byte, type) do
+  def value(:byte, type, _opts) do
     fixed_list([
       constant("'\\x"),
       map(binary(min_length: 1, max_length: 10), &Base.encode16(&1, case: :upper)),
@@ -209,7 +210,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     ])
   end
 
-  def value(:bit, _) do
+  def value(:bit, _, _opts) do
     fixed_list([
       constant("'"),
       map(integer(0..255), &Integer.to_string(&1, 2)),
@@ -217,7 +218,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     ])
   end
 
-  def value(:float, type) do
+  def value(:float, type, _opts) do
     stmt(
       [
         "'",
@@ -232,7 +233,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
   @year 3600 * 24 * 365
   @hundred_years 100 * @year
 
-  def value(:date, _) do
+  def value(:date, _, _opts) do
     bind(datetime(), fn t ->
       value = DateTime.to_date(t)
 
@@ -240,7 +241,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     end)
   end
 
-  def value(:time, _) do
+  def value(:time, _, _opts) do
     bind(datetime(), fn t ->
       value = DateTime.to_time(t)
 
@@ -248,33 +249,41 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     end)
   end
 
-  def value(:timetz, _) do
+  def value(:timetz, _, opts) do
     bind(datetime(), fn t ->
       bind(member_of(Tzdata.canonical_zone_list()), fn tz ->
-        value =
-          t
-          |> DateTime.shift_zone!(tz, Tzdata.TimeZoneDatabase)
-          |> DateTime.to_time()
+        if Keyword.get(opts, :timezones, true) do
+          value =
+            t
+            |> DateTime.shift_zone!(tz, Tzdata.TimeZoneDatabase)
+            |> DateTime.to_time()
 
-        constant("'#{value}'::time with time zone")
+          constant("'#{value}'::time with time zone")
+        else
+          constant("'#{timestamp_format(t, false)}'::time with time zone")
+        end
       end)
     end)
   end
 
-  def value(:timestamptz, _) do
+  def value(:timestamptz, _, opts) do
     bind(datetime(), fn t ->
       bind(member_of(Tzdata.canonical_zone_list()), fn tz ->
-        value =
-          t
-          |> DateTime.shift_zone!(tz, Tzdata.TimeZoneDatabase)
-          |> timestamp_format()
+        if Keyword.get(opts, :timezones, true) do
+          value =
+            t
+            |> DateTime.shift_zone!(tz, Tzdata.TimeZoneDatabase)
+            |> timestamp_format()
 
-        constant("'#{value}'::timestamp with time zone")
+          constant("'#{value}'::timestamp with time zone")
+        else
+          constant("'#{timestamp_format(t, false)}'::timestamp with time zone" |> dbg)
+        end
       end)
     end)
   end
 
-  def value(:timestamp, _) do
+  def value(:timestamp, _, _opts) do
     bind(datetime(), fn t ->
       value = timestamp_format(t)
 
@@ -286,7 +295,13 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     integer(0..@hundred_years) |> map(&DateTime.from_unix!/1)
   end
 
-  defp timestamp_format(datetime) do
+  defp timestamp_format(datetime, timezone \\ true)
+
+  defp timestamp_format(datetime, false) do
+    Calendar.strftime(datetime, "%c+00")
+  end
+
+  defp timestamp_format(datetime, true) do
     case Calendar.strftime(datetime, "%z") do
       utc when utc in ["+00", "+0000"] ->
         Calendar.strftime(datetime, "%c")
@@ -296,30 +311,30 @@ defmodule Electric.Postgres.SQLGenerator.Column do
     end
   end
 
-  def default(:serial, _type) do
+  def default(:serial, _type, _opts) do
     nil
   end
 
-  def default(class, type) do
+  def default(class, type, opts) do
     one_of([
       nil,
       fixed_list([
         constant("DEFAULT "),
-        default_value(class, type)
+        default_value(class, type, opts)
       ])
     ])
   end
 
-  def default_value(class, type)
+  def default_value(class, type, opts)
       when class in [:date, :time, :timetz, :timestamp, :timestamptz] do
     one_of([
       time_function(class),
-      value(class, type)
+      value(class, type, opts)
     ])
   end
 
-  def default_value(class, type) do
-    value(class, type)
+  def default_value(class, type, opts) do
+    value(class, type, opts)
   end
 
   defp time_function(:date) do
@@ -419,7 +434,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
             "CHECK (",
             name,
             member_of([" > ", " < ", " <> ", " != ", " = "]),
-            value(class, type),
+            value(class, type, opts),
             ")"
           ],
           ""

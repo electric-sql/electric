@@ -35,6 +35,7 @@ defmodule Electric.Postgres.Extension do
   # that will go away once we stop replicating all tables by default)
   @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema") VALUES ($1, $2) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
+  @event_triggers %{ddl_command_end: "#{@schema}_event_trigger_ddl_end"}
 
   def schema, do: @schema
   def ddl_table, do: @ddl_table
@@ -44,6 +45,7 @@ defmodule Electric.Postgres.Extension do
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
+  def event_triggers, do: @event_triggers
 
   defguard is_migration_relation(relation)
            when elem(relation, 0) == @schema and
@@ -101,12 +103,33 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do
+    name = to_string(table_name)
+
+    ddlx_create(conn, name, "ddlx_create")
+  end
+
+  def create_index_ddl(conn, %Proto.RangeVar{} = table_name, index_name) do
+    name = to_string(%{table_name | name: index_name})
+
+    ddlx_create(conn, name, "ddlx_create")
+  end
+
+  defp ddlx_create(conn, name, function) do
+    query = "SELECT #{@schema}.#{function}($1::regclass)"
+
+    with {:ok, _cols, [{ddl}]} <- :epgsql.equery(conn, query, [name]) do
+      {:ok, ddl}
+    end
+  end
+
   @spec migrations() :: [module(), ...]
   def migrations do
     alias Electric.Postgres.Extension.Migrations
 
     [
-      Migrations.Migration_20230328113927
+      Migrations.Migration_20230328113927,
+      Migrations.Migration_20230424154425_DDLX
     ]
   end
 
@@ -134,9 +157,25 @@ defmodule Electric.Postgres.Extension do
           |> Enum.reduce([], fn {version, module}, v ->
             Logger.info("Running extension migration: #{version}")
 
-            for sql <- module.up(@schema) do
-              {:ok, _cols, _rows} = :epgsql.squery(txconn, sql)
-            end
+            disabling_event_triggers(txconn, module, fn ->
+              for sql <- module.up(@schema) do
+                case :epgsql.squery(txconn, sql) do
+                  results when is_list(results) ->
+                    errors = Enum.filter(results, &(elem(&1, 0) == :error))
+
+                    unless(Enum.empty?(errors)) do
+                      raise RuntimeError,
+                        message:
+                          "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
+                    end
+
+                    :ok
+
+                  {:ok, _cols, _rows} ->
+                    :ok
+                end
+              end
+            end)
 
             {:ok, _count} =
               :epgsql.squery(
@@ -167,7 +206,7 @@ defmodule Electric.Postgres.Extension do
   end
 
   def create_schema(conn) do
-    ddl(conn, "CREATE SCHEMA IF NOT EXISTS #{@schema}")
+    ddl(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
   end
 
   @create_migration_table_sql """
@@ -184,6 +223,35 @@ defmodule Electric.Postgres.Extension do
   defp with_migration_lock(conn, fun) do
     ddl(conn, "LOCK TABLE #{@migration_table} IN SHARE UPDATE EXCLUSIVE MODE")
     fun.()
+  end
+
+  defp disabling_event_triggers(conn, _module, fun) do
+    disable =
+      Enum.flat_map(@event_triggers, fn {_type, name} ->
+        case :epgsql.equery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = $1", [name]) do
+          {:ok, _, [_]} ->
+            [name]
+
+          _ ->
+            []
+        end
+      end)
+
+    Enum.each(disable, &alter_event_trigger(conn, &1, "DISABLE"))
+
+    result = fun.()
+
+    # if there's a problem the tx will be aborted and the event triggers
+    # left in an enabled state, so no need for a try..after..end block
+    Enum.each(disable, &alter_event_trigger(conn, &1, "ENABLE"))
+
+    result
+  end
+
+  defp alter_event_trigger(conn, name, state) do
+    query = ~s|ALTER EVENT TRIGGER "#{name}" #{state}|
+    Logger.debug(query)
+    {:ok, [], []} = :epgsql.squery(conn, query)
   end
 
   defp existing_migrations(conn) do

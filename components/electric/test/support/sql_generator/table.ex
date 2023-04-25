@@ -469,11 +469,11 @@ defmodule Electric.Postgres.SQLGenerator.Table do
     end)
   end
 
-  defp alter_set_default({_name, type, _flags}, _opts) do
+  defp alter_set_default({_name, type, _flags}, opts) do
     bind(constant(type), fn {class, type} ->
       stmt([
         "SET DEFAULT",
-        default_value(class, type)
+        default_value(class, type, opts)
       ])
     end)
   end
