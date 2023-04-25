@@ -12,7 +12,7 @@
   </picture>
 </a>
 
-![GitHub](https://img.shields.io/github/license/electric-sql/typescript-client) [![npm](https://img.shields.io/npm/v/electric-sql)](https://www.npmjs.com/package/electric-sql) [![Tests](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml)
+![License](https://img.shields.io/github/license/electric-sql/electric) [![npm](https://img.shields.io/npm/v/electric-sql)](https://www.npmjs.com/package/electric-sql) [![Tests](https://github.com/electric-sql/electric/actions/workflows/clients_typescript_tests.yml/badge.svg?event=push)](https://github.com/electric-sql/electric/actions/workflows/clients_typescript_tests.yml)
 
 # ElectricSQL Typescript Client
 
@@ -97,7 +97,7 @@ const db = await SQL.openDatabase('example.db', config)
 ```
 
 This gives you persistent, local-first SQL with active-active replication
-in your web browser 🤯. Use the db client as normal, with the proviso that
+in your web browser 🤯. Use the db client as normal, with the provision that
 the methods are now async (they return promises rather than direct values).
 
 See the [Quickstart](https://electric-sql.com/docs/usage/quickstart) guide for more information.
@@ -138,7 +138,7 @@ See the [Reactivity](https://electric-sql.com/docs/usage/reactivity) guide for m
 
 ## Issues
 
-Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/typescript-client/issues).
+Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/electric/issues).
 
 ## Contributing
 
