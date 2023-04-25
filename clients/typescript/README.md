@@ -97,7 +97,7 @@ const db = await SQL.openDatabase('example.db', config)
 ```
 
 This gives you persistent, local-first SQL with active-active replication
-in your web browser 🤯. Use the db client as normal, with the provision that
+in your web browser 🤯. Use the db client as normal, with the proviso that
 the methods are now async (they return promises rather than direct values).
 
 See the [Quickstart](https://electric-sql.com/docs/usage/quickstart) guide for more information.
