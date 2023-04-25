@@ -22,7 +22,7 @@ defaults:
 
 jobs:
   test:
-    uses: ./.github/workflows/tests.yml
+    uses: ./.github/workflows/clients_typescript_tests.yml
   release:
     runs-on: ubuntu-latest
     needs: test

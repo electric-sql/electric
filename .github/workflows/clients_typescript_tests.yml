@@ -1,6 +1,14 @@
 name: Clients / Typescript / Tests
 
-on: [push, workflow_call]
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'clients/typescript/**'
+      - '!clients/typescript/**.md'
 
 defaults:
   run:
