@@ -12,7 +12,7 @@
   </picture>
 </a>
 
-![GitHub](https://img.shields.io/github/license/electric-sql/typescript-client) [![npm](https://img.shields.io/npm/v/electric-sql)](https://www.npmjs.com/package/electric-sql) [![Tests](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/electric-sql/typescript-client/actions/workflows/tests.yml)
+![License](https://img.shields.io/github/license/electric-sql/electric) [![npm](https://img.shields.io/npm/v/electric-sql)](https://www.npmjs.com/package/electric-sql) [![Tests](https://github.com/electric-sql/electric/actions/workflows/clients_typescript_tests.yml/badge.svg?event=push)](https://github.com/electric-sql/electric/actions/workflows/clients_typescript_tests.yml)
 
 # ElectricSQL Typescript Client
 
@@ -138,7 +138,7 @@ See the [Reactivity](https://electric-sql.com/docs/usage/reactivity) guide for m
 
 ## Issues
 
-Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/typescript-client/issues).
+Please raise any bugs, issues and feature requests on [GitHub Issues](https://github.com/electric-sql/electric/issues).
 
 ## Contributing
 
