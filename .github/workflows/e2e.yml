@@ -1,0 +1,99 @@
+name: E2E
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths-ignore:
+      # Root files
+      - '*'
+      # CI files not related to GH actions
+      - '.buildkite/**'
+      - '**/README.md'
+      - 'docs/**'
+
+env:
+  OTP_VERSION: "24.3"
+  ELIXIR_VERSION: "1.13"
+
+jobs:
+  e2e_tests:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Restore dependencies
+        id: cache-deps
+        uses: actions/cache/restore@v3
+        with:
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+
+      - name: Restore compiled code
+        id: cache-build
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make docker-build-ci
+        env:
+          ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
+        working-directory: components/electric
+      - run: make pretest_compile
+        working-directory: components/electric
+
+      - name: Cache built lux
+        uses: actions/cache@v3
+        with:
+          path: |
+            e2e/lux/bin
+            e2e/lux/ebin
+            e2e/lux/priv
+          key: ${{ runner.os }}-luxbuilt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}
+
+      - run: make lux
+
+      - run: make vaxine
+
+      - run: make postgres
+
+      - run: make test
+        id: tests
+        env:
+          ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
+          ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ always() }}
+        with:
+          name: lux_logs
+          path: e2e/lux_logs/run_*
