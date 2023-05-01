@@ -14,6 +14,10 @@ defaults:
   run:
     working-directory: clients/typescript
 
+concurrency:
+  group: clients-typescript-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify_formatting:
     name: Check formatting & linting
