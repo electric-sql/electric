@@ -419,4 +419,89 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
   )
 })
 
-// TODO: test migration transaction that is concurrent with a regular transaction
+test('apply migration and concurrent transaction', async (t: any) => {
+  const { satellite, adapter, txDate } = t.context
+
+  const timestamp = txDate.getTime()
+  const remoteA = 'remoteA'
+  const remoteB = 'remoteB'
+  const txTagsRemoteA = [ generateTag(remoteA, txDate) ]
+  const txTagsRemoteB = [ generateTag(remoteB, txDate) ]
+
+  const mkInsertChange = (record: any, tags: string[]) => {
+    return {
+      type: DataChangeType.INSERT,
+      relation: relations['parent'],
+      record: record,
+      oldRecord: {},
+      tags: tags
+    }
+  }
+
+  const insertRowA = {
+    id: 3,
+    value: 'remote A',
+    other: 8
+  }
+
+  const insertRowB = {
+    id: 3,
+    value: 'remote B',
+    other: 9
+  }
+
+  // Make 2 concurrent insert changes.
+  // They are concurrent because both remoteA and remoteB
+  // generated the changes at `timestamp`
+  const insertChangeA = mkInsertChange(insertRowA, txTagsRemoteA)
+  const insertChangeB = mkInsertChange(insertRowB, txTagsRemoteB)
+
+  const txA = {
+    origin: remoteA,
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [ insertChangeA ],
+    lsn: new Uint8Array(),
+  }
+
+  const ddl = [ addColumn, createTable ]
+
+  const txB = {
+    origin: remoteB,
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [ ...ddl, insertChangeB ],
+    lsn: new Uint8Array(),
+  }
+
+  const rowsBeforeMigration = await fetchParentRows(adapter)
+
+  // Apply the concurrent transactions
+  await satellite._applyTransaction(txB)
+  await satellite._applyTransaction(txA)
+
+  // Check that the migration was successfully applied
+  await checkMigrationIsApplied(t)
+
+  // Check that one of the two insertions won
+  const rowsAfterMigration = await fetchParentRows(adapter)
+  const extendRow = (r: Row) => {
+    return {
+      ...r,
+      baz: null
+    }
+  }
+  const extendedRows = rowsBeforeMigration.map(extendRow)
+
+  // Check that all rows now have an additional column
+  t.deepEqual(
+    rowsAfterMigration.filter(r => r.id !== insertRowA.id),
+    extendedRows
+  )
+
+  const conflictingRow = rowsAfterMigration.find(r => r.id === insertRowA.id)
+
+  // Now also check the row that was concurrently inserted
+  t.assert(
+    isequal(conflictingRow, extendRow(insertRowA)) ||
+    isequal(conflictingRow, extendRow(insertRowB))
+  )
+})
