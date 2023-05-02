@@ -1,18 +1,31 @@
 import test from 'ava'
 import Long from 'long'
-import { makeContext, cleanAndStopSatellite } from './common'
+import {makeContext, cleanAndStopSatellite, relations} from './common'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { Row, Statement } from '../../src/util'
+import {DataChangeType, Row, Statement} from '../../src/util'
 import { SatOpMigrate_Type } from '../../src/_generated/protocol/satellite'
+import {generateTag} from '../../src/satellite/oplog'
+import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
   await makeContext(t)
   const { satellite } = t.context as any
   await satellite.start()
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction` calls
   t.context['clientId'] = satellite['_authState']['clientId'] // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
   t.context['txDate'] = txDate
+  // Mimick Electric sending our own operations back
+  // which serves as an acknowledgement (even though there is a separate ack also)
+  // and leads to GC of the oplog
+  const ackTx = {
+    origin: satellite._authState.clientId,
+    commit_timestamp: Long.fromNumber(txDate.getTime()),
+    changes: [ ], // doesn't matter, only the origin and timestamp matter for GC of the oplog
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(ackTx)
 })
 test.afterEach.always(cleanAndStopSatellite)
 
@@ -79,44 +92,22 @@ test('setup populates DB', async (t: any) => {
   ])
 })
 
-test('apply migration containing only DDL', async (t: any) => {
-  const { satellite, adapter, txDate } = t.context
-  const timestamp = txDate.getTime()
-
-  const fetchParentRows = async (): Promise<Row[]> => {
-    return adapter.query({
-      sql: 'SELECT * FROM parent',
-    })
-  }
-
-  const rowsBeforeMigration = await fetchParentRows()
-
-  const createTable = {
-    migrationType: SatOpMigrate_Type.CREATE_TABLE,
-    sql: 'CREATE TABLE NewTable(\
+const createTable = {
+  migrationType: SatOpMigrate_Type.CREATE_TABLE,
+  sql: 'CREATE TABLE NewTable(\
          id TEXT NOT NULL,\
          foo INTEGER,\
          bar TEXT,\
          PRIMARY KEY(id)\
        );',
-  }
+}
 
-  const addColumn = {
-    migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
-    sql: 'ALTER TABLE parent ADD baz TEXT',
-  }
+const addColumn = {
+  migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
+  sql: 'ALTER TABLE parent ADD baz TEXT',
+}
 
-  const migrationTx = {
-    origin: 'remote',
-    commit_timestamp: Long.fromNumber(timestamp),
-    changes: [createTable, addColumn],
-    lsn: new Uint8Array(),
-  }
-
-  // Apply the migration transaction
-  await satellite._applyTransaction(migrationTx)
-
-  // Check that the migration was successfully applied
+async function checkMigrationIsApplied(t: any) {
   await assertDbHasTables(t, 'parent', 'child', 'NewTable')
 
   const newTableInfo = await getTableInfo('NewTable', t)
@@ -147,9 +138,39 @@ test('apply migration containing only DDL', async (t: any) => {
   })
 
   t.true(parentTableHasColumn)
+}
+
+const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
+  return adapter.query({
+    sql: 'SELECT * FROM parent',
+  })
+}
+
+const eqSet = (xs, ys) =>
+  xs.length === ys.length &&
+  xs.every((x) => ys.some(y => isequal(x, y)))
+
+test('apply migration containing only DDL', async (t: any) => {
+  const { satellite, adapter, txDate } = t.context
+  const timestamp = txDate.getTime()
+
+  const rowsBeforeMigration = await fetchParentRows(adapter)
+
+  const migrationTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [createTable, addColumn],
+    lsn: new Uint8Array(),
+  }
+
+  // Apply the migration transaction
+  await satellite._applyTransaction(migrationTx)
+
+  // Check that the migration was successfully applied
+  await checkMigrationIsApplied(t)
 
   // Check that the existing rows are still there and are unchanged
-  const rowsAfterMigration = await fetchParentRows()
+  const rowsAfterMigration = await fetchParentRows(adapter)
   const expectedRowsAfterMigration = rowsBeforeMigration.map((row: Row) => {
     return {
       ...row,
@@ -159,3 +180,243 @@ test('apply migration containing only DDL', async (t: any) => {
 
   t.deepEqual(rowsAfterMigration, expectedRowsAfterMigration)
 })
+
+test('apply migration containing DDL and non-conflicting DML', async (t: any) => {
+  /*
+     Test migrations containing non-conflicting DML statements and some DDL statements
+     - Process the following migration tx: <DML 1> <DDL 1> <DML 2>
+        - DML 1 is:
+           insert non-conflicting row in existing table
+           non-conflict update to existing row
+           delete row
+        - DDL 1 is:
+            Add column to table that is affected by the statements in DML 1
+            Create new table
+        - DML 2 is:
+            insert row in extended table with value for new column
+            insert row in extended table without a value for the new column
+            Insert some rows in newly created table
+     - Check that the migration was successfully applied on the local DB
+     - Check the modifications (insert, update, delete) to the rows
+ */
+
+  const { satellite, adapter, txDate } = t.context
+  const timestamp = txDate.getTime()
+
+  const txTags = [ generateTag('remote', txDate) ]
+  const mkInsertChange = (record: any) => {
+    return {
+      type: DataChangeType.INSERT,
+      relation: relations['parent'],
+      record: record,
+      oldRecord: {},
+      tags: txTags
+    }
+  }
+
+  const insertRow = {
+    id: 3,
+    value: 'remote',
+    other: 1
+  }
+
+  const insertChange = mkInsertChange(insertRow)
+
+  const oldUpdateRow = {
+    id: 1,
+    value: 'local',
+    other: null
+  }
+
+  const updateRow = {
+    id: 1,
+    value: 'remote',
+    other: 5
+  }
+
+  const updateChange = {
+    //type: DataChangeType.INSERT, // insert since `opLogEntryToChange` also transforms update optype into insert
+    type: DataChangeType.UPDATE,
+    relation: relations['parent'],
+    record: updateRow,
+    oldRecord: oldUpdateRow,
+    tags: txTags
+  }
+
+  // Delete overwrites the insert for row with id 2
+  // Thus, it overwrites the shadow tag for that row
+  const localEntries = await satellite._getEntries()
+  const shadowEntryForRow2 = await satellite._getOplogShadowEntry(localEntries[1]) // shadow entry for insert of row with id 2
+  const shadowTagsRow2 = JSON.parse(shadowEntryForRow2[0].tags)
+
+  const deleteRow = {
+    id: 2,
+    value: 'local'
+  }
+
+  const deleteChange = {
+    type: DataChangeType.DELETE,
+    relation: relations['parent'],
+    record: deleteRow,
+    oldRecord: {},
+    tags: shadowTagsRow2
+  }
+
+  const insertExtendedRow = {
+    id: 4,
+    value: 'remote',
+    other: 6,
+    baz: 'foo'
+  }
+  const insertExtendedChange = mkInsertChange(insertExtendedRow)
+
+  const insertExtendedWithoutValueRow = {
+    id: 5,
+    value: 'remote',
+    other: 7
+  }
+  const insertExtendedWithoutValueChange = mkInsertChange(insertExtendedWithoutValueRow)
+
+  const insertInNewTableRow = {
+    id: '1',
+    foo: 1,
+    bar: '2'
+  }
+  const insertInNewTableChange = {
+    type: DataChangeType.INSERT,
+    relation: relations['NewTable'],
+    record: insertInNewTableRow,
+    oldRecord: {},
+    tags: txTags
+  }
+
+  const dml1 = [ insertChange, updateChange, deleteChange ]
+  const ddl1 = [ addColumn, createTable ]
+  const dml2 = [ insertExtendedChange, insertExtendedWithoutValueChange, insertInNewTableChange ]
+
+  const migrationTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [...dml1, ...ddl1, ...dml2],
+    lsn: new Uint8Array(),
+  }
+
+  const rowsBeforeMigration = await fetchParentRows(adapter)
+
+  // Apply the migration transaction
+  await satellite._applyTransaction(migrationTx)
+
+  // Check that the migration was successfully applied
+  await checkMigrationIsApplied(t)
+
+  // Check that the existing rows are still there and are unchanged
+  const rowsAfterMigration = await fetchParentRows(adapter)
+  const expectedRowsAfterMigration = rowsBeforeMigration
+    .filter((r: Row) => r.id !== deleteRow.id && r.id !== oldUpdateRow.id)
+    .concat([insertRow, updateRow, insertExtendedWithoutValueRow])
+    .map((row: Row) => {
+      return {
+        ...row,
+        baz: null,
+      }
+    })
+    .concat([insertExtendedRow])
+
+  t.assert(eqSet(rowsAfterMigration, expectedRowsAfterMigration))
+
+  // Check the row that was inserted in the new table
+  const newTableRows = await adapter.query({
+    sql: 'SELECT * FROM NewTable',
+  })
+
+  t.is(newTableRows.length, 1)
+  t.deepEqual(newTableRows[0], insertInNewTableRow)
+})
+
+test('apply migration containing DDL and conflicting DML', async (t: any) => {
+  // Same as previous test but DML 1 and DML 2 contain some conflicting operations
+  const { satellite, adapter, txDate } = t.context
+
+  // Fetch the shadow tag for row 1 such that delete will overwrite it
+  const localEntries = await satellite._getEntries()
+  const shadowEntryForRow1 = await satellite._getOplogShadowEntry(localEntries[0]) // shadow entry for insert of row with id 1
+  const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)
+
+  // Locally update row with id 1
+  await adapter.runInTransaction(
+    {
+      sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
+      args: ['still local', 5, 1],
+    }
+  )
+
+  await satellite._performSnapshot()
+
+  // Now receive a concurrent delete of that row
+  // such that it deletes the row with id 1 that was initially inserted
+  const timestamp = txDate.getTime()
+  //const txTags = [ generateTag('remote', txDate) ]
+
+  const deleteRow = {
+    id: 1,
+    value: 'local'
+  }
+
+  const deleteChange = {
+    type: DataChangeType.DELETE,
+    relation: relations['parent'],
+    record: deleteRow,
+    oldRecord: {},
+    tags: shadowTagsRow1
+  }
+
+  // Process the incoming delete
+  const ddl = [ addColumn, createTable ]
+  const dml = [ deleteChange ]
+
+  const migrationTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [...ddl, ...dml],
+    lsn: new Uint8Array(),
+  }
+
+  const rowsBeforeMigration = await fetchParentRows(adapter)
+  const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(r => r.id !== deleteRow.id)
+
+  // Apply the migration transaction
+  await satellite._applyTransaction(migrationTx)
+
+  // Check that the migration was successfully applied
+  await checkMigrationIsApplied(t)
+
+  // The local update and remote delete happened concurrently
+  // Check that the update wins
+  const rowsAfterMigration = await fetchParentRows(adapter)
+  const newRowsExceptConflictingRow = rowsAfterMigration.filter(r => r.id !== deleteRow.id)
+  const conflictingRow = rowsAfterMigration.find(r => r.id === deleteRow.id)
+
+  t.assert(
+    eqSet(
+      rowsBeforeMigrationExceptConflictingRow.map(r => {
+        return {
+          baz: null,
+          ...r
+        }
+      }),
+      newRowsExceptConflictingRow
+    )
+  )
+
+  t.deepEqual(
+    conflictingRow,
+    {
+      id: 1,
+      value: 'still local',
+      other: 5,
+      baz: null
+    }
+  )
+})
+
+// TODO: test migration transaction that is concurrent with a regular transaction

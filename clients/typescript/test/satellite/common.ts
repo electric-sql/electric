@@ -56,6 +56,29 @@ export const relations = {
       },
     ],
   },
+  NewTable: {
+    id: 2,
+    schema: 'public',
+    table: 'NewTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'TEXT',
+        primaryKey: true,
+      },
+      {
+        name: 'foo',
+        type: 'INTEGER',
+        primaryKey: false,
+      },
+      {
+        name: 'bar',
+        type: 'TEXT',
+        primaryKey: false,
+      },
+    ],
+  },
 }
 
 import config from '../support/.electric/@config/index'
