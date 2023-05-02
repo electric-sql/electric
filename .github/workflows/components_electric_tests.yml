@@ -99,20 +99,9 @@ jobs:
 
       - run: make pretest_compile
 
-      - run: mix coveralls.lcov
+      - run: mix test
         env:
           MIX_ENV: test
-
-      - name: Setup LCOV
-        uses: hrishikesh-kadam/setup-lcov@v1
-      - name: Report code coverage
-        uses: zgosalvez/github-actions-report-lcov@v3
-        with:
-          coverage-files: components/electric/cover/lcov.info
-          artifact-name: code-coverage-report
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          update-comment: true
-          working-directory: components/electric
 
   dialyzer:
     name: dialyzer and formatting
