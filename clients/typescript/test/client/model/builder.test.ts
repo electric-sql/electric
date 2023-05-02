@@ -1,5 +1,5 @@
 import test from 'ava'
-import { Builder } from '../../src/client/model/builder'
+import { Builder } from '../../../src/client/model/builder'
 
 const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 
@@ -157,6 +157,23 @@ test('findMany allows results to be ordered', (t) => {
   t.is(
     query,
     'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC, title DESC'
+  )
+})
+
+test('findMany supports pagination', (t) => {
+  const query = tbl
+    .findMany({
+      // `where` argument must not be provided when using the actual API because it is added as default by the validator
+      // but since we directly use the query builder we need to provide it
+      where: {},
+      take: 1,
+      skip: 1
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT id, title, contents, nbr FROM Post LIMIT 1 OFFSET 1'
   )
 })
 

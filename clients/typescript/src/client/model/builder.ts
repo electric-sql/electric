@@ -74,7 +74,7 @@ export class Builder {
     const deleteQuery = squel.delete().from(this._tableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
-    return Builder.addFilters(fields, whereObject, deleteQuery)
+    return addFilters(fields, whereObject, deleteQuery)
   }
 
   private updateInternal(
@@ -89,7 +89,7 @@ export class Builder {
 
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
-    return Builder.addFilters(fields, whereObject, query)
+    return addFilters(fields, whereObject, query)
   }
 
   // TODO: add support for boolean conditions in where statement of FindInput<T>
@@ -111,35 +111,26 @@ export class Builder {
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
-    const addFieldSelection = this.addFieldSelection.bind(
+    const addFieldSelectionP = this.addFieldSelection.bind(
       this,
       i,
       selectWhereFields ? identificationFields : []
     )
     // add a where clause to filter on the conditions provided in `i.where`
-    const addFilters = Builder.addFilters.bind(
-      null,
-      identificationFields,
-      whereObject
-    )
-    const addLimit = Builder.addLimit.bind(null, i)
-    const addOffset = Builder.addOffset.bind(null, i)
-    const addDistinct = Builder.addDistinct.bind(null, i)
-    const addOrderBy = this.addOrderBy.bind(this, i)
+    const addFiltersP = addFilters.bind(null, identificationFields, whereObject)
+    const addLimitP = addLimit.bind(null, i)
+    const addOffsetP = addOffset.bind(null, i)
+    const addDistinctP = addDistinct.bind(null, i)
+    const addOrderByP = this.addOrderBy.bind(this, i)
     const buildQuery = flow(
-      addFieldSelection,
-      addFilters,
-      addLimit,
-      addOffset,
-      addDistinct,
-      addOrderBy
+      addFieldSelectionP,
+      addFiltersP,
+      addLimitP,
+      addOffsetP,
+      addDistinctP,
+      addOrderByP
     )
     return buildQuery(query)
-  }
-
-  // Returns an array containing the names of the fields that are set to `true`
-  private static getSelectedFields(obj: object): string[] {
-    return Object.keys(obj).filter((key) => obj[key as keyof object])
   }
 
   private addFieldSelection(
@@ -156,7 +147,7 @@ export class Builder {
       })
     }
 
-    const selectedFields = Builder.getSelectedFields(i.select!)
+    const selectedFields = getSelectedFields(i.select!)
     if (selectedFields.length == 0)
       throw new InvalidArgumentError(
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
@@ -164,51 +155,6 @@ export class Builder {
 
     const fields = identificationFields.concat(selectedFields)
     return q.fields(fields)
-  }
-
-  private static addFilters<T, Q extends QueryBuilder & WhereMixin>(
-    fields: string[],
-    whereObject: T,
-    q: Q
-  ): Q {
-    return fields.reduce<Q>((query: Q, fieldName: string) => {
-      const fieldValue = whereObject[fieldName as keyof T]
-      if (fieldValue === null) return query.where(`${fieldName} IS NULL`)
-      else if (typeof fieldValue === 'object') {
-        // an object containing filters is provided
-        // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
-        const filterSchema = z
-          .object({
-            in: z.any().array(),
-          })
-          .strict('Unsupported filter in where clause')
-        // TODO: remove this schema check once we support all filters
-        //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
-
-        const values = filterSchema.parse(fieldValue).in
-        return query.where(`${fieldName} IN ?`, values)
-      }
-      // needed because `WHERE field = NULL` is not valid SQL
-      else return query.where(`${fieldName} = ?`, [fieldValue])
-    }, q)
-  }
-
-  private static addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
-    if (typeof i.skip === 'undefined') return q // no offset
-    return q.offset(i.skip)
-  }
-
-  private static addLimit(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
-    if (typeof i.take === 'undefined') return q // no limit
-    return q.limit(i.take)
-  }
-
-  private static addDistinct(
-    i: AnyFindInput,
-    q: PostgresSelect
-  ): PostgresSelect {
-    if (typeof i.distinct === 'undefined') return q
-    return q.distinct(...i.distinct)
   }
 
   private addOrderBy(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
@@ -243,4 +189,66 @@ export class Builder {
 
     return fields
   }
+}
+
+/**
+ * Adds filters to the provided query based on the provided `where` object.
+ *
+ * @param fields - Fields of the `whereObject` argument.
+ * @param whereObject - The `where` argument provided by the user.
+ * @param q - The SQL query.
+ */
+function addFilters<T, Q extends QueryBuilder & WhereMixin>(
+  fields: string[],
+  whereObject: T,
+  q: Q
+): Q {
+  return fields.reduce<Q>((query: Q, fieldName: string) => {
+    const fieldValue = whereObject[fieldName as keyof T]
+    if (fieldValue === null) return query.where(`${fieldName} IS NULL`)
+    else if (typeof fieldValue === 'object') {
+      // an object containing filters is provided
+      // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
+      const filterSchema = z
+        .object({
+          in: z.any().array(),
+        })
+        .strict('Unsupported filter in where clause')
+      // TODO: remove this schema check once we support all filters
+      //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
+
+      const values = filterSchema.parse(fieldValue).in
+      return query.where(`${fieldName} IN ?`, values)
+    }
+    // needed because `WHERE field = NULL` is not valid SQL
+    else return query.where(`${fieldName} = ?`, [fieldValue])
+  }, q)
+}
+
+function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
+  if (typeof i.skip === 'undefined') return q // no offset
+  return q.offset(i.skip)
+}
+
+function addLimit(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
+  if (typeof i.take === 'undefined') return q // no limit
+  return q.limit(i.take)
+}
+
+function addDistinct(
+  i: AnyFindInput,
+  q: PostgresSelect
+): PostgresSelect {
+  if (typeof i.distinct === 'undefined') return q
+  return q.distinct(...i.distinct)
+}
+
+/**
+ * Returns an array containing the names of the fields that are set to `true`
+ *
+ * @param obj - A selection object.
+ * @returns Array containing the names of the selected fields.
+ */
+function getSelectedFields(obj: object): string[] {
+  return Object.keys(obj).filter((key) => obj[key as keyof object])
 }
