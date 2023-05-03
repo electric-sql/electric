@@ -24,7 +24,7 @@ export interface Model<
 > {
   /**
    * Creates a unique record in the DB.
-   * @param i - Record to create.
+   * @param i - The record to create.
    * @returns The record that was inserted in the DB.
    */
   create<T extends CreateInput<CreateData, Select, Include>>(
@@ -33,7 +33,7 @@ export interface Model<
 
   /**
    * Creates several records in the DB.
-   * @param i - The records to be created.
+   * @param i - The records to create.
    * @returns An object indicating how many records were inserted in the DB.
    */
   createMany<T extends CreateManyInput<CreateData>>(
