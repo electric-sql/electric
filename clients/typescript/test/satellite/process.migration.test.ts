@@ -146,7 +146,7 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   })
 }
 
-const eqSet = (xs, ys) =>
+const eqSet = (xs: any[], ys: any[]) =>
   xs.length === ys.length &&
   xs.every((x) => ys.some(y => isequal(x, y)))
 
@@ -318,7 +318,7 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
       return {
         ...row,
         baz: null,
-      }
+      } as Row
     })
     .concat([insertExtendedRow])
 
