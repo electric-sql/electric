@@ -15,17 +15,9 @@ import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo } from '../support/satellite-helpers'
-import { Satellite } from '../../src/satellite'
 
 import config from '../support/.electric/@config/index'
 const { migrations } = config
-
-type ContextType = {
-  dbName: string
-  adapter: DatabaseAdapter
-  satellite: Satellite
-  client: MockSatelliteClient
-}
 
 const satelliteConfig: SatelliteConfig = {
   app: 'test',
@@ -63,6 +55,8 @@ test.beforeEach(async (t) => {
     await migrator.up()
   }
 
+  const token = 'test_token'
+
   t.context = {
     dbName,
     db,
@@ -74,21 +68,23 @@ test.beforeEach(async (t) => {
     satellite,
     tableInfo,
     timestamp,
+    token,
   }
 })
 
 test.afterEach.always(async (t) => {
-  const { dbName } = t.context as ContextType
+  const { dbName } = t.context as any
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
 })
 
 test('throttled snapshot respects window', async (t) => {
-  const { adapter, notifier, runMigrations, satellite } = t.context as any
+  const { adapter, notifier, runMigrations, satellite, token } =
+    t.context as any
   await runMigrations()
 
-  await satellite._setAuthState()
+  await satellite._setAuthState({ clientId: '', token })
   await satellite._throttledSnapshot()
   const numNotifications = notifier.notifications.length
 

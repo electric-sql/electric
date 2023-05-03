@@ -184,18 +184,13 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _setAuthState(authState?: AuthState): Promise<void | Error> {
-    if (authState !== undefined) {
+    if (!authState) {
       throw new Error('Not implemented')
-      // this._authState = authState
-    } else {
-      const app = this.config.app
-      const env = this.config.env
-      const clientId = await this._getClientId()
-      const token = await this._getMeta('token')
-      const refreshToken = await this._getMeta('refreshToken')
-
-      this._authState = { app, env, clientId, token, refreshToken }
     }
+
+    const clientId =
+      authState.clientId !== '' ? authState.clientId : await this._getClientId()
+    this._authState = { ...authState, clientId }
   }
 
   setClientListeners(): void {
