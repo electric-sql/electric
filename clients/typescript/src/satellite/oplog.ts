@@ -51,6 +51,7 @@ export interface ShadowEntryChanges {
   }
   optype: ChangesOpType
   changes: OplogColumnChanges
+  fullRow: Row
   tags: Tag[]
 }
 
@@ -143,17 +144,18 @@ export const localEntryToChanges = (
 // Convert an `OplogEntry` to a `ShadowEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
 export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
+  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
+  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
+
   const result: ShadowEntryChanges = {
     namespace: entry.namespace,
     tablename: entry.tablename,
     primaryKeyCols: JSON.parse(entry.primaryKey),
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
+    fullRow: newRow,
     tags: decodeTags(entry.clearTags),
   }
-
-  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
-  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
 
   const timestamp = new Date(entry.timestamp).getTime()
 
@@ -166,11 +168,17 @@ export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
   return result
 }
 
-// Convert a list of `OplogEntry`s into a nested `OplogTableChanges` map of
-// `{tableName: {primaryKey: entryChanges}}` where the entryChanges has the
-// most recent `optype` and column `value`` from all of the operations.
-// Multiple OplogEntries that point to the same row will be merged to a
-// single OpLogEntryChanges object.
+/**
+ * Convert a list of `OplogEntry`s into a nested `OplogTableChanges` map of
+ * `{tableName: {primaryKey: entryChanges}}` where the entryChanges has the
+ * most recent `optype` and column `value` from all of the operations.
+ * Multiple OplogEntries that point to the same row will be merged to a
+ * single OpLogEntryChanges object.
+ *
+ * @param operations Array of local oplog entries.
+ * @param genTag Function that generates a tag from a timestamp.
+ * @returns An object of oplog table changes.
+ */
 export const localOperationsToTableChanges = (
   operations: OplogEntry[],
   genTag: (timestamp: Date) => Tag
@@ -247,6 +255,7 @@ export const remoteOperationsToTableChanges = (
       existing.optype = entryChanges.optype
       for (const [key, value] of Object.entries(entryChanges.changes)) {
         existing.changes[key] = value
+        existing.fullRow[key] = value.value
       }
     }
 

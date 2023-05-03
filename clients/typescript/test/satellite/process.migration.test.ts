@@ -1,10 +1,10 @@
 import test from 'ava'
 import Long from 'long'
-import {makeContext, cleanAndStopSatellite, relations} from './common'
+import { makeContext, cleanAndStopSatellite, relations } from './common'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import {DataChangeType, Row, Statement} from '../../src/util'
+import { DataChangeType, Row, Statement } from '../../src/util'
 import { SatOpMigrate_Type } from '../../src/_generated/protocol/satellite'
-import {generateTag} from '../../src/satellite/oplog'
+import { generateTag } from '../../src/satellite/oplog'
 import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
@@ -22,7 +22,7 @@ test.beforeEach(async (t: any) => {
   const ackTx = {
     origin: satellite._authState.clientId,
     commit_timestamp: Long.fromNumber(txDate.getTime()),
-    changes: [ ], // doesn't matter, only the origin and timestamp matter for GC of the oplog
+    changes: [], // doesn't matter, only the origin and timestamp matter for GC of the oplog
     lsn: new Uint8Array(),
   }
   await satellite._applyTransaction(ackTx)
@@ -146,9 +146,8 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   })
 }
 
-const eqSet = (xs, ys) =>
-  xs.length === ys.length &&
-  xs.every((x) => ys.some(y => isequal(x, y)))
+const eqSet = (xs: any[], ys: any[]) =>
+  xs.length === ys.length && xs.every((x) => ys.some((y) => isequal(x, y)))
 
 test('apply migration containing only DDL', async (t: any) => {
   const { satellite, adapter, txDate } = t.context
@@ -203,21 +202,21 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
   const { satellite, adapter, txDate } = t.context
   const timestamp = txDate.getTime()
 
-  const txTags = [ generateTag('remote', txDate) ]
+  const txTags = [generateTag('remote', txDate)]
   const mkInsertChange = (record: any) => {
     return {
       type: DataChangeType.INSERT,
       relation: relations['parent'],
       record: record,
       oldRecord: {},
-      tags: txTags
+      tags: txTags,
     }
   }
 
   const insertRow = {
     id: 3,
     value: 'remote',
-    other: 1
+    other: 1,
   }
 
   const insertChange = mkInsertChange(insertRow)
@@ -225,13 +224,13 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
   const oldUpdateRow = {
     id: 1,
     value: 'local',
-    other: null
+    other: null,
   }
 
   const updateRow = {
     id: 1,
     value: 'remote',
-    other: 5
+    other: 5,
   }
 
   const updateChange = {
@@ -240,18 +239,20 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
     relation: relations['parent'],
     record: updateRow,
     oldRecord: oldUpdateRow,
-    tags: txTags
+    tags: txTags,
   }
 
   // Delete overwrites the insert for row with id 2
   // Thus, it overwrites the shadow tag for that row
   const localEntries = await satellite._getEntries()
-  const shadowEntryForRow2 = await satellite._getOplogShadowEntry(localEntries[1]) // shadow entry for insert of row with id 2
+  const shadowEntryForRow2 = await satellite._getOplogShadowEntry(
+    localEntries[1]
+  ) // shadow entry for insert of row with id 2
   const shadowTagsRow2 = JSON.parse(shadowEntryForRow2[0].tags)
 
   const deleteRow = {
     id: 2,
-    value: 'local'
+    value: 'local',
   }
 
   const deleteChange = {
@@ -259,40 +260,46 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
     relation: relations['parent'],
     record: deleteRow,
     oldRecord: {},
-    tags: shadowTagsRow2
+    tags: shadowTagsRow2,
   }
 
   const insertExtendedRow = {
     id: 4,
     value: 'remote',
     other: 6,
-    baz: 'foo'
+    baz: 'foo',
   }
   const insertExtendedChange = mkInsertChange(insertExtendedRow)
 
   const insertExtendedWithoutValueRow = {
     id: 5,
     value: 'remote',
-    other: 7
+    other: 7,
   }
-  const insertExtendedWithoutValueChange = mkInsertChange(insertExtendedWithoutValueRow)
+  const insertExtendedWithoutValueChange = mkInsertChange(
+    insertExtendedWithoutValueRow
+  )
 
   const insertInNewTableRow = {
     id: '1',
     foo: 1,
-    bar: '2'
+    bar: '2',
   }
   const insertInNewTableChange = {
     type: DataChangeType.INSERT,
     relation: relations['NewTable'],
     record: insertInNewTableRow,
     oldRecord: {},
-    tags: txTags
+    tags: txTags,
   }
 
-  const dml1 = [ insertChange, updateChange, deleteChange ]
-  const ddl1 = [ addColumn, createTable ]
-  const dml2 = [ insertExtendedChange, insertExtendedWithoutValueChange, insertInNewTableChange ]
+  const dml1 = [insertChange, updateChange, deleteChange]
+  const ddl1 = [addColumn, createTable]
+  const dml2 = [
+    insertExtendedChange,
+    insertExtendedWithoutValueChange,
+    insertInNewTableChange,
+  ]
 
   const migrationTx = {
     origin: 'remote',
@@ -318,7 +325,7 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
       return {
         ...row,
         baz: null,
-      }
+      } as Row
     })
     .concat([insertExtendedRow])
 
@@ -339,16 +346,16 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
 
   // Fetch the shadow tag for row 1 such that delete will overwrite it
   const localEntries = await satellite._getEntries()
-  const shadowEntryForRow1 = await satellite._getOplogShadowEntry(localEntries[0]) // shadow entry for insert of row with id 1
+  const shadowEntryForRow1 = await satellite._getOplogShadowEntry(
+    localEntries[0]
+  ) // shadow entry for insert of row with id 1
   const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)
 
   // Locally update row with id 1
-  await adapter.runInTransaction(
-    {
-      sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
-      args: ['still local', 5, 1],
-    }
-  )
+  await adapter.runInTransaction({
+    sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
+    args: ['still local', 5, 1],
+  })
 
   await satellite._performSnapshot()
 
@@ -359,7 +366,7 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
 
   const deleteRow = {
     id: 1,
-    value: 'local'
+    value: 'local',
   }
 
   const deleteChange = {
@@ -367,12 +374,12 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
     relation: relations['parent'],
     record: deleteRow,
     oldRecord: {},
-    tags: shadowTagsRow1
+    tags: shadowTagsRow1,
   }
 
   // Process the incoming delete
-  const ddl = [ addColumn, createTable ]
-  const dml = [ deleteChange ]
+  const ddl = [addColumn, createTable]
+  const dml = [deleteChange]
 
   const migrationTx = {
     origin: 'remote',
@@ -382,7 +389,9 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
   }
 
   const rowsBeforeMigration = await fetchParentRows(adapter)
-  const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(r => r.id !== deleteRow.id)
+  const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(
+    (r) => r.id !== deleteRow.id
+  )
 
   // Apply the migration transaction
   await satellite._applyTransaction(migrationTx)
@@ -393,30 +402,29 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
   // The local update and remote delete happened concurrently
   // Check that the update wins
   const rowsAfterMigration = await fetchParentRows(adapter)
-  const newRowsExceptConflictingRow = rowsAfterMigration.filter(r => r.id !== deleteRow.id)
-  const conflictingRow = rowsAfterMigration.find(r => r.id === deleteRow.id)
+  const newRowsExceptConflictingRow = rowsAfterMigration.filter(
+    (r) => r.id !== deleteRow.id
+  )
+  const conflictingRow = rowsAfterMigration.find((r) => r.id === deleteRow.id)
 
   t.assert(
     eqSet(
-      rowsBeforeMigrationExceptConflictingRow.map(r => {
+      rowsBeforeMigrationExceptConflictingRow.map((r) => {
         return {
           baz: null,
-          ...r
+          ...r,
         }
       }),
       newRowsExceptConflictingRow
     )
   )
 
-  t.deepEqual(
-    conflictingRow,
-    {
-      id: 1,
-      value: 'still local',
-      other: 5,
-      baz: null
-    }
-  )
+  t.deepEqual(conflictingRow, {
+    id: 1,
+    value: 'still local',
+    other: 5,
+    baz: null,
+  })
 })
 
 test('apply migration and concurrent transaction', async (t: any) => {
@@ -425,8 +433,8 @@ test('apply migration and concurrent transaction', async (t: any) => {
   const timestamp = txDate.getTime()
   const remoteA = 'remoteA'
   const remoteB = 'remoteB'
-  const txTagsRemoteA = [ generateTag(remoteA, txDate) ]
-  const txTagsRemoteB = [ generateTag(remoteB, txDate) ]
+  const txTagsRemoteA = [generateTag(remoteA, txDate)]
+  const txTagsRemoteB = [generateTag(remoteB, txDate)]
 
   const mkInsertChange = (record: any, tags: string[]) => {
     return {
@@ -434,20 +442,20 @@ test('apply migration and concurrent transaction', async (t: any) => {
       relation: relations['parent'],
       record: record,
       oldRecord: {},
-      tags: tags
+      tags: tags,
     }
   }
 
   const insertRowA = {
     id: 3,
     value: 'remote A',
-    other: 8
+    other: 8,
   }
 
   const insertRowB = {
     id: 3,
     value: 'remote B',
-    other: 9
+    other: 9,
   }
 
   // Make 2 concurrent insert changes.
@@ -459,16 +467,16 @@ test('apply migration and concurrent transaction', async (t: any) => {
   const txA = {
     origin: remoteA,
     commit_timestamp: Long.fromNumber(timestamp),
-    changes: [ insertChangeA ],
+    changes: [insertChangeA],
     lsn: new Uint8Array(),
   }
 
-  const ddl = [ addColumn, createTable ]
+  const ddl = [addColumn, createTable]
 
   const txB = {
     origin: remoteB,
     commit_timestamp: Long.fromNumber(timestamp),
-    changes: [ ...ddl, insertChangeB ],
+    changes: [...ddl, insertChangeB],
     lsn: new Uint8Array(),
   }
 
@@ -486,22 +494,22 @@ test('apply migration and concurrent transaction', async (t: any) => {
   const extendRow = (r: Row) => {
     return {
       ...r,
-      baz: null
+      baz: null,
     }
   }
   const extendedRows = rowsBeforeMigration.map(extendRow)
 
   // Check that all rows now have an additional column
   t.deepEqual(
-    rowsAfterMigration.filter(r => r.id !== insertRowA.id),
+    rowsAfterMigration.filter((r) => r.id !== insertRowA.id),
     extendedRows
   )
 
-  const conflictingRow = rowsAfterMigration.find(r => r.id === insertRowA.id)
+  const conflictingRow = rowsAfterMigration.find((r) => r.id === insertRowA.id)
 
   // Now also check the row that was concurrently inserted
   t.assert(
     isequal(conflictingRow, extendRow(insertRowA)) ||
-    isequal(conflictingRow, extendRow(insertRowB))
+      isequal(conflictingRow, extendRow(insertRowB))
   )
 })

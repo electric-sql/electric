@@ -679,7 +679,8 @@ export class SatelliteProcess implements Satellite {
           local_origin,
           localChanges.changes,
           incoming_origin,
-          incomingChanges.changes
+          incomingChanges.changes,
+          incomingChanges.fullRow
         )
         let optype
 
@@ -996,11 +997,11 @@ function _applyDeleteOperation(
 }
 
 function _applyNonDeleteOperation(
-  { changes, primaryKeyCols }: ShadowEntryChanges,
+  { fullRow, primaryKeyCols }: ShadowEntryChanges,
   tablenameStr: string
 ): Statement {
-  const columnNames = Object.keys(changes)
-  const columnValues = Object.values(changes).map((c) => c.value)
+  const columnNames = Object.keys(fullRow)
+  const columnValues = Object.values(fullRow)
   let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
     ', '
   )}) VALUES (${columnValues.map((_) => '?').join(',')})`
@@ -1010,7 +1011,7 @@ function _applyNonDeleteOperation(
     .reduce(
       (acc, c) => {
         acc.where.push(`${c} = ?`)
-        acc.values.push(changes[c].value)
+        acc.values.push(fullRow[c])
         return acc
       },
       { where: [] as string[], values: [] as SqlValue[] }
