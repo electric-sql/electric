@@ -2,14 +2,14 @@ import { z } from 'zod'
 import test from 'ava'
 
 import Database, { SqliteError } from 'better-sqlite3'
-import { electrify } from '../../src/drivers/better-sqlite3/index'
-import { InvalidArgumentError } from '../../src/client/validation/errors/invalidArgumentError'
-import { UpdateManyInput } from '../../src/client/input/updateInput'
+import { electrify } from '../../../src/drivers/better-sqlite3'
+import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
+import { UpdateManyInput } from '../../../src/client/input/updateInput'
 import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
-} from '../../src/client/validation/errors/messages'
-import { dbSchema, Post } from './generated'
+} from '../../../src/client/validation/errors/messages'
+import { dbSchema, Post } from '../generated'
 
 const db = new Database(':memory:')
 const electric = await electrify(db, dbSchema, {
