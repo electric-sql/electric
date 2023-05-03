@@ -73,7 +73,7 @@ type ColumnInfo = {
   pk: number
 }
 
-test('setup populates DB', async (t: any) => {
+test.serial('setup populates DB', async (t: any) => {
   const adapter = t.context.adapter as DatabaseAdapter
 
   const sql = 'SELECT * FROM parent'
@@ -149,7 +149,7 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
 const eqSet = (xs: any[], ys: any[]) =>
   xs.length === ys.length && xs.every((x) => ys.some((y) => isequal(x, y)))
 
-test('apply migration containing only DDL', async (t: any) => {
+test.serial('apply migration containing only DDL', async (t: any) => {
   const { satellite, adapter, txDate } = t.context
   const timestamp = txDate.getTime()
 
@@ -180,7 +180,7 @@ test('apply migration containing only DDL', async (t: any) => {
   t.deepEqual(rowsAfterMigration, expectedRowsAfterMigration)
 })
 
-test('apply migration containing DDL and non-conflicting DML', async (t: any) => {
+test.serial('apply migration containing DDL and non-conflicting DML', async (t: any) => {
   /*
      Test migrations containing non-conflicting DML statements and some DDL statements
      - Process the following migration tx: <DML 1> <DDL 1> <DML 2>
@@ -340,7 +340,7 @@ test('apply migration containing DDL and non-conflicting DML', async (t: any) =>
   t.deepEqual(newTableRows[0], insertInNewTableRow)
 })
 
-test('apply migration containing DDL and conflicting DML', async (t: any) => {
+test.serial('apply migration containing DDL and conflicting DML', async (t: any) => {
   // Same as previous test but DML 1 and DML 2 contain some conflicting operations
   const { satellite, adapter, txDate } = t.context
 
@@ -427,7 +427,7 @@ test('apply migration containing DDL and conflicting DML', async (t: any) => {
   })
 })
 
-test('apply migration and concurrent transaction', async (t: any) => {
+test.serial('apply migration and concurrent transaction', async (t: any) => {
   const { satellite, adapter, txDate } = t.context
 
   const timestamp = txDate.getTime()
