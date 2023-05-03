@@ -177,6 +177,22 @@ test('findMany supports pagination', (t) => {
   )
 })
 
+test('findMany supports distinct results', (t) => {
+  const query = tbl
+    .findMany({
+      // `where` argument must not be provided when using the actual API because it is added as default by the validator
+      // but since we directly use the query builder we need to provide it
+      where: {},
+      distinct: [ 'nbr' ]
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT DISTINCT ON (nbr) id, title, contents, nbr FROM Post'
+  )
+})
+
 test('findMany supports IN filters in where argument', (t) => {
   const query = tbl
     .findMany({
