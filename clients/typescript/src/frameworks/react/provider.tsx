@@ -14,20 +14,27 @@ interface ElectricContext<S extends ElectricClient<DbSchema<any>>> {
   ElectricProvider: ({ children, db }: Props<S>) => JSX.Element
 }
 
-// This "static" context is used internally by our React hooks to access the DalNamespace
-// it looses information about the actual types of the DB schema
-// but we don't need that information in the React hooks.
-// However, users preferably don't lose this type information, therefore, they can use `makeElectricContext`.
+/**
+ * This "static" context is used internally by our React hooks to access the {@link ElectricClient}.
+ * It loses information about the actual types of the DB tables,
+ * but we don't need that information in the React hooks.
+ * However, users preferably don't lose this type information,
+ * therefore, they can use {@link makeElectricContext}.
+ */
 let ElectricContext: React.Context<ElectricClient<DbSchema<any>> | undefined> =
   createContext<ElectricClient<DbSchema<any>> | undefined>(undefined)
 
 export { ElectricContext }
 
-// Call this function to create an Electric context, provider, and subscriber for your React application.
-// We can't provide a predefined context, provider, and subscriber because that would lose type information
-// as the types depend on the database schema `dbSchema` that's passed in.
-// e.g. const ctx = createContext<DalTables<DbSchemas | undefined>(undefined)
-//      the above looses information about the concrete db tables
+/**
+ * Call this function to create an Electric context, provider, and subscriber for your React application.
+ * We can't provide a predefined context, provider, and subscriber because that would lose type information
+ * as the types depend on the type of the database `S` that's provides as a type argument.
+ *
+ * @example
+ * This example loses information about the concrete DB tables:
+ * const ctx = createContext<ElectricClient>()
+ */
 export function makeElectricContext<
   S extends ElectricClient<DbSchema<any>>
 >(): ElectricContext<S> {

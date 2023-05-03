@@ -46,11 +46,16 @@ export const useRandom = () => {
   return [value, setRandomValue] as const
 }
 
-// Main reactive query hook for React applications. It needs to be
-// used in tandem with the `ElectricProvider` in `./provider` which
-// sets an `ElectricNamespace` as the `electric` value. This provides
-// a notifier which this hook uses to subscribe to data change
-// notifications to matching tables.
+/**
+ * Main reactive query hook for React applications. It needs to be
+ * used in tandem with the {@link ElectricProvider} which sets an
+ * {@link ElectricClient) as the `electric` value. This provides
+ * a notifier which this hook uses to subscribe to data change
+ * notifications to matching tables. The {@link ElectricProvider}
+ * can be obtained through {@link makeElectricContext}.
+ *
+ * @param runQuery - A live query.
+ */
 export function useLiveQuery<Res>(
   runQuery: () => Promise<LiveResult<Res>>
 ): ResultData<Res> {
