@@ -707,11 +707,6 @@ export class SatelliteProcess implements Satellite {
     // DML operations are ran through conflict resolution logic.
     // DDL operations are applied as is against the local DB.
 
-    // TODO: discuss with Valter if this is safe because
-    //       what happens is that the first chunk of DML will be merged with pending local operations
-    //       then later another batch of DML may be merged against local pending operations but are they still there?
-    //       since we already merged the first batch with the pending operations.. so not sure what will happen
-
     const stmts: Statement[] = []
     const tablenamesSet: Set<string> = new Set()
     const opLogEntries: OplogEntry[] = []
