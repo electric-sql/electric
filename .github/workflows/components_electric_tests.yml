@@ -13,6 +13,10 @@ env:
   OTP_VERSION: "24.3"
   ELIXIR_VERSION: "1.13"
 
+concurrency:
+  group: components-electric-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deps:
     name: Get all the necessary dependencies

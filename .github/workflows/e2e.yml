@@ -16,6 +16,10 @@ env:
   OTP_VERSION: "24.3"
   ELIXIR_VERSION: "1.13"
 
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e_tests:
     name: E2E tests
