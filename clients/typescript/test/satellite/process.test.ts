@@ -655,9 +655,9 @@ test('concurrent updates take all changed values', async (t) => {
       {
         id: 1,
         value: 'local',
-        other: 0
+        other: 0,
       }
-    )
+    ),
   ]
 
   const local = [
@@ -676,7 +676,7 @@ test('concurrent updates take all changed values', async (t) => {
       {
         id: 1,
         value: 'local',
-        other: 0
+        other: 0,
       }
     ),
   ]
@@ -745,7 +745,7 @@ test('merge incoming with empty local', async (t) => {
       id: { value: 1, timestamp: incomingTs },
     },
     fullRow: {
-      id: 1
+      id: 1,
     },
     tags: [generateTag('remote', new Date(incomingTs))],
   })
