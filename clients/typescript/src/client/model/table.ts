@@ -87,26 +87,17 @@ export class Table<
     this._executor = new Executor(adapter, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
-    this._schema =
-      this._dbDescription.getTableDescription(tableName).modelSchema
-    this.createSchema =
-      this._dbDescription.getTableDescription(tableName).createSchema
-    this.createManySchema =
-      this._dbDescription.getTableDescription(tableName).createManySchema
-    this.findUniqueSchema =
-      this._dbDescription.getTableDescription(tableName).findUniqueSchema
-    this.findSchema =
-      this._dbDescription.getTableDescription(tableName).findSchema
-    this.updateSchema =
-      this._dbDescription.getTableDescription(tableName).updateSchema
-    this.updateManySchema =
-      this._dbDescription.getTableDescription(tableName).updateManySchema
-    this.upsertSchema =
-      this._dbDescription.getTableDescription(tableName).upsertSchema
-    this.deleteSchema =
-      this._dbDescription.getTableDescription(tableName).deleteSchema
-    this.deleteManySchema =
-      this._dbDescription.getTableDescription(tableName).deleteManySchema
+    const tableDescription = this._dbDescription.getTableDescription(tableName)
+    this._schema          = tableDescription.modelSchema
+    this.createSchema     = tableDescription.createSchema
+    this.createManySchema = tableDescription.createManySchema
+    this.findUniqueSchema = tableDescription.findUniqueSchema
+    this.findSchema       = tableDescription.findSchema
+    this.updateSchema     = tableDescription.updateSchema
+    this.updateManySchema = tableDescription.updateManySchema
+    this.upsertSchema     = tableDescription.upsertSchema
+    this.deleteSchema     = tableDescription.deleteSchema
+    this.deleteManySchema = tableDescription.deleteManySchema
   }
 
   setTables(tables: Map<TableName, AnyTable>) {
