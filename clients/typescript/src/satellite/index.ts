@@ -24,7 +24,6 @@ export interface Registry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: ElectricConfig,
     authState?: AuthState
   ): Promise<Satellite>
@@ -69,19 +68,4 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
-}
-
-export type TokenRequest = {
-  app: string
-  env: string
-  clientId: string
-}
-
-export type TokenResponse = {
-  token: string
-  refreshToken: string
-}
-
-export interface ConsoleClient {
-  token(request: TokenRequest): Promise<TokenResponse>
 }

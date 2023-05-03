@@ -8,7 +8,6 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
 import { sleepAsync } from '../../src/util/timer'
 
@@ -47,14 +46,12 @@ test.beforeEach(async (t) => {
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
   const satellite = new SatelliteProcess(
     dbName,
     adapter,
     migrator,
     notifier,
     client,
-    console,
     satelliteConfig,
     opts
   )

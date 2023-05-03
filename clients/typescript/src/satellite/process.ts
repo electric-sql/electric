@@ -9,7 +9,7 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, ConsoleClient } from './index'
+import { Client, ConnectionWrapper } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -60,7 +60,6 @@ export class SatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   client: Client
-  console: ConsoleClient
 
   config: SatelliteConfig
   opts: SatelliteOpts
@@ -86,7 +85,6 @@ export class SatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     client: Client,
-    console: ConsoleClient,
     config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
@@ -95,7 +93,6 @@ export class SatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
-    this.console = console
 
     this.config = config
     this.opts = opts
@@ -266,26 +263,11 @@ export class SatelliteProcess implements Satellite {
 
     return this.client
       .connect()
-      .then(() => this.refreshAuthState(authState))
-      .then((freshAuthState) => this.client.authenticate(freshAuthState))
+      .then(() => this.client.authenticate(authState))
       .then(() => this.client.startReplication(this._lsn))
       .catch((error) => {
         Log.warn(`couldn't start replication: ${error}`)
       })
-  }
-
-  // TODO: fetch token every time, must add logic to check if token is still valid
-  async refreshAuthState(authState: AuthState): Promise<AuthState> {
-    try {
-      const { token, refreshToken } = await this.console.token(authState)
-      await this._setMeta('token', token)
-      await this._setMeta('refreshToken', token)
-      return { ...authState, token, refreshToken }
-    } catch (error) {
-      Log.warn(`unable to refresh token: ${error}`)
-    }
-
-    return { ...authState }
   }
 
   async _verifyTableStructure(): Promise<boolean> {

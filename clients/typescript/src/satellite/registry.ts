@@ -5,7 +5,7 @@ import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'
 
-import { Satellite, Registry, ConsoleClient } from './index'
+import { Satellite, Registry } from './index'
 import {
   SatelliteClientOpts,
   SatelliteOverrides,
@@ -42,7 +42,6 @@ export abstract class BaseRegistry implements Registry {
     _migrator: Migrator,
     _notifier: Notifier,
     _socketFactory: SocketFactory,
-    _console: ConsoleClient,
     _config: ElectricConfig,
     _authState?: AuthState,
     _opts?: SatelliteOverrides
@@ -56,7 +55,6 @@ export abstract class BaseRegistry implements Registry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: ElectricConfig,
     authState?: AuthState,
     opts?: SatelliteOverrides
@@ -74,7 +72,6 @@ export abstract class BaseRegistry implements Registry {
           migrator,
           notifier,
           socketFactory,
-          console,
           config,
           authState,
           opts
@@ -110,7 +107,6 @@ export abstract class BaseRegistry implements Registry {
       migrator,
       notifier,
       socketFactory,
-      console,
       config,
       authState
     ).then((satellite) => {
@@ -197,7 +193,6 @@ export class GlobalRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: Required<ElectricConfig>,
     authState?: AuthState
   ): Promise<Satellite> {
@@ -230,7 +225,6 @@ export class GlobalRegistry extends BaseRegistry {
       migrator,
       notifier,
       client,
-      console,
       satelliteConfig,
       satelliteDefaults
     )

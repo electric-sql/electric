@@ -2,13 +2,12 @@ import { ElectricConfig, hydrateConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { BundleMigrator, Migrator } from '../migrators/index'
 import { EventNotifier, Notifier } from '../notifiers/index'
-import { ConsoleClient, globalRegistry, Registry } from '../satellite/index'
+import { globalRegistry, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
 import { DbName } from '../util/types'
 import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
-import { ConsoleHttpClient } from '../auth'
 import { DbSchema } from '../client/model/schema'
 
 export { ElectricNamespace }
@@ -21,7 +20,6 @@ export interface ElectrifyOptions {
   migrator?: Migrator
   notifier?: Notifier
   socketFactory?: SocketFactory
-  console?: ConsoleClient
   registry?: Registry
 }
 
@@ -45,7 +43,6 @@ export const electrify = async <DB extends DbSchema<any>>(
   const migrator =
     opts?.migrator || new BundleMigrator(adapter, config.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
-  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
   const registry = opts?.registry || globalRegistry
 
   const electric = new ElectricNamespace(adapter, notifier)
@@ -57,7 +54,6 @@ export const electrify = async <DB extends DbSchema<any>>(
     migrator,
     notifier,
     socketFactory,
-    console,
     configWithDefaults
   )
 
