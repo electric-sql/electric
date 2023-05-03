@@ -36,9 +36,11 @@ function errorResult<T>(error: any): ResultData<T> {
   }
 }
 
-// Utility hook for a random value that sets the value to a random
-// string on create and provides an update function that generates
-// and assigns the value to a new random string.
+/**
+ * Utility hook for a random value that sets the value to a random
+ * string on create and provides an update function that generates
+ * and assigns the value to a new random string.
+ */
 export const useRandom = () => {
   const [value, _setValue] = useState<string>(randomValue())
   const setRandomValue = () => _setValue(randomValue())
@@ -142,22 +144,28 @@ export function useLiveQuery<Res>(
   return resultData
 }
 
-// Main reactive query hook for React applications. It needs to be
-// used in tandem with the `ElectricProvider` in `./provider` which
-// sets an `ElectricNamespace` as the `electric` value. This provides
-// an adapter and notifier which this hook uses to:
-//
-// 1. parse the tablenames out of the query
-// 2. subscribe to data change notifications to matching tables
-// 3. (re)-run the query whenever the underlying data potentially changes
-//
-// Running the query successfully will assign a new array of rows to
-// the `results` state variable. Or if the query errors, the error will
-// be assigned to the `error` variable.
-//
-// Returns an object that provides the `ResultData` interface of
-// `{ results, error, updatedAt }`.
+/**
+ * Alternative reactive query hook for React applications.
+ * Takes a raw SQL string and can thus serve as an escape patch.
+ * It is preferable to use the {@link useLiveQuery} hook when possible.
+ *
+ * This hook must be used in tandem with the {@link ElectricProvider}
+ * which sets an {@link ElectricClient) as the `electric` value.
+ * This provides a notifier which this hook uses to subscribe to data change
+ * notifications to matching tables. The {@link ElectricProvider}
+ * can be obtained through {@link makeElectricContext}.
+ *
+ * @returns An object that provides the {@link ResultData} interface of
+ * `{ results, error, updatedAt }`.
+ */
 export const useElectricQuery = (query: Query, params?: BindParams) => {
+  // This hook uses Electric's adapter and notifier to:
+  // 1. parse the tablenames out of the query
+  // 2. subscribe to data change notifications to matching tables
+  // 3. (re)-run the query whenever the underlying data potentially changes
+  // Running the query successfully will assign a new array of rows to
+  // the `results` state variable. Or if the query errors, the error will
+  // be assigned to the `error` variable.
   const electric = useContext(ElectricContext)
 
   const [cacheKey, bustCache] = useRandom()
