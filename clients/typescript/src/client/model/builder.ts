@@ -147,7 +147,7 @@ export class Builder {
       })
     }
 
-    const selectedFields = getSelectedFields(i.select!)
+    const selectedFields = getSelectedFields(i.select)
     if (selectedFields.length == 0)
       throw new InvalidArgumentError(
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`

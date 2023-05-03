@@ -146,7 +146,7 @@ export function useLiveQuery<Res>(
 
 /**
  * Alternative reactive query hook for React applications.
- * Takes a raw SQL string and can thus serve as an escape patch.
+ * Takes a raw SQL string and thus serves as an escape patch.
  * It is preferable to use the {@link useLiveQuery} hook when possible.
  *
  * This hook must be used in tandem with the {@link ElectricProvider}
