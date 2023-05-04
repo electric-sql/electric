@@ -95,11 +95,9 @@ export class ElectricClient<
     const db: ClientTables<DB> & RawQueries = {
       ...dal,
       raw: raw.bind(null, electric.adapter),
-      liveRaw: liveRaw.bind(null, electric.adapter)
+      liveRaw: liveRaw.bind(null, electric.adapter),
     }
 
     return new ElectricClient(db, electric.adapter, electric.notifier)
   }
 }
-
-

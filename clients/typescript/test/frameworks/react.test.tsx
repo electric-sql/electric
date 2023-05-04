@@ -39,17 +39,17 @@ test('useLiveQuery returns query results', async (t) => {
 
   const query = 'select i from bars'
   const liveQuery = dal.db.liveRaw({
-    sql: query
+    sql: query,
   })
 
-  const wrapper: FC = ({children}) => {
+  const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const {result} = renderHook(() => useLiveQuery(liveQuery), {wrapper})
+  const { result } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
 
   await waitFor(() => assert(result.current.updatedAt !== undefined))
-  t.deepEqual(result.current.results, await adapter.query({sql: query}))
+  t.deepEqual(result.current.results, await adapter.query({ sql: query }))
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
@@ -83,23 +83,23 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
-    sql: query
+    sql: query,
   })
 
-  const wrapper: FC = ({children}) => {
+  const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const {result} = renderHook(() => useLiveQuery(liveQuery), {wrapper})
+  const { result } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
 
-  const {results, updatedAt} = result.current
+  const { results, updatedAt } = result.current
 
   act(() => {
     const qtn = new QualifiedTablename('main', 'bars')
-    const changes = [{qualifiedTablename: qtn}]
+    const changes = [{ qualifiedTablename: qtn }]
 
     notifier.actuallyChanged('test.db', changes)
   })
@@ -119,25 +119,25 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
 
   await notifier.attach('baz.db', 'baz')
 
-  const wrapper: FC = ({children}) => {
+  const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
   const query = 'select foo from baz.bars'
   const liveQuery = dal.db.liveRaw({
-    sql: query
+    sql: query,
   })
 
-  const {result} = renderHook(() => useLiveQuery(liveQuery), {wrapper})
+  const { result } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
 
-  const {results, updatedAt} = result.current
+  const { results, updatedAt } = result.current
 
   act(() => {
     const qtn = new QualifiedTablename('main', 'bars')
-    const changes = [{qualifiedTablename: qtn}]
+    const changes = [{ qualifiedTablename: qtn }]
 
     notifier.actuallyChanged('baz.db', changes)
   })

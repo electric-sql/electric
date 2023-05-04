@@ -2,7 +2,7 @@ import { RunResult, Transaction } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
-import {Row, Statement} from "../../util";
+import { Row, Statement } from '../../util'
 
 export class TransactionalDB implements DB {
   constructor(private _tx: Transaction) {}

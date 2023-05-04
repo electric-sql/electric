@@ -167,14 +167,11 @@ test('findMany supports pagination', (t) => {
       // but since we directly use the query builder we need to provide it
       where: {},
       take: 1,
-      skip: 1
+      skip: 1,
     })
     .toString()
 
-  t.is(
-    query,
-    'SELECT id, title, contents, nbr FROM Post LIMIT 1 OFFSET 1'
-  )
+  t.is(query, 'SELECT id, title, contents, nbr FROM Post LIMIT 1 OFFSET 1')
 })
 
 test('findMany supports distinct results', (t) => {
@@ -183,14 +180,11 @@ test('findMany supports distinct results', (t) => {
       // `where` argument must not be provided when using the actual API because it is added as default by the validator
       // but since we directly use the query builder we need to provide it
       where: {},
-      distinct: [ 'nbr' ]
+      distinct: ['nbr'],
     })
     .toString()
 
-  t.is(
-    query,
-    'SELECT DISTINCT ON (nbr) id, title, contents, nbr FROM Post'
-  )
+  t.is(query, 'SELECT DISTINCT ON (nbr) id, title, contents, nbr FROM Post')
 })
 
 test('findMany supports IN filters in where argument', (t) => {
@@ -234,7 +228,8 @@ test('updateMany query', (t) => {
     })
     .toString()
 
-  const sql = "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING id, title, contents, nbr"
+  const sql =
+    "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING id, title, contents, nbr"
 
   t.is(query1, sql)
 })

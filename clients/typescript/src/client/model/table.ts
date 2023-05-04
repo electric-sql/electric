@@ -23,7 +23,7 @@ import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
-import {parseTableNames, Row, Statement} from "../../util";
+import { parseTableNames, Row, Statement } from '../../util'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -89,15 +89,15 @@ export class Table<
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     const tableDescription = this._dbDescription.getTableDescription(tableName)
-    this._schema          = tableDescription.modelSchema
-    this.createSchema     = tableDescription.createSchema
+    this._schema = tableDescription.modelSchema
+    this.createSchema = tableDescription.createSchema
     this.createManySchema = tableDescription.createManySchema
     this.findUniqueSchema = tableDescription.findUniqueSchema
-    this.findSchema       = tableDescription.findSchema
-    this.updateSchema     = tableDescription.updateSchema
+    this.findSchema = tableDescription.findSchema
+    this.updateSchema = tableDescription.updateSchema
     this.updateManySchema = tableDescription.updateManySchema
-    this.upsertSchema     = tableDescription.upsertSchema
-    this.deleteSchema     = tableDescription.deleteSchema
+    this.upsertSchema = tableDescription.upsertSchema
+    this.deleteSchema = tableDescription.deleteSchema
     this.deleteManySchema = tableDescription.deleteManySchema
   }
 
@@ -1174,7 +1174,14 @@ export class Table<
             // so we need to update those FKs correspondingly
             this.updateFKs(originalObject, updatedObj, db, onError, () => {
               // Also update any related objects that are provided in the query
-              this.updateRelatedObjects(data, ogObject, db, nonRelationalData, onError, continuation)
+              this.updateRelatedObjects(
+                data,
+                ogObject,
+                db,
+                nonRelationalData,
+                onError,
+                continuation
+              )
             })
           },
           onError
@@ -1188,7 +1195,9 @@ export class Table<
    * Updates may also include nested updates to related objects.
    * This function updates those related objects as requested by the user.
    */
-  private updateRelatedObjects<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
+  private updateRelatedObjects<
+    T extends UpdateInput<UpdateData, Select, WhereUnique, Include>
+  >(
     data: UpdateInput<UpdateData, Select, WhereUnique, Include>,
     ogObject: Record<string, any>,
     db: DB,
@@ -1206,7 +1215,7 @@ export class Table<
     this.forEachRelation(
       data.data as object,
       (rel: Relation, cont: () => void) => {
-        const {relationField, relatedTable, relationName} = rel
+        const { relationField, relatedTable, relationName } = rel
         const dataRecord = data.data as Record<string, any>
 
         // fetch the related object and recursively update that object
@@ -1270,7 +1279,7 @@ export class Table<
         // Fetch the updated record
         this._findUniqueWithoutAutoSelect(
           {
-            where: {...data.where, ...nonRelationalData},
+            where: { ...data.where, ...nonRelationalData },
             select: data.select,
             ...(notNullNotUndefined(data.include) && {
               include: data.include,
@@ -1409,7 +1418,10 @@ export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
   return adapter.query(sql)
 }
 
-export function liveRaw(adapter: DatabaseAdapter, sql: Statement): () => Promise<LiveResult<Row[]>> {
+export function liveRaw(
+  adapter: DatabaseAdapter,
+  sql: Statement
+): () => Promise<LiveResult<Row[]>> {
   return () => {
     const prom = raw(adapter, sql)
     // parse the table names from the query

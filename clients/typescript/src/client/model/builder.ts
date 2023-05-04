@@ -1,5 +1,10 @@
 import { CreateInput, CreateManyInput } from '../input/createInput'
-import squel, {PostgresSelect, QueryBuilder, ReturningMixin, WhereMixin} from 'squel'
+import squel, {
+  PostgresSelect,
+  QueryBuilder,
+  ReturningMixin,
+  WhereMixin,
+} from 'squel'
 import { FindInput, FindUniqueInput } from '../input/findInput'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
@@ -16,10 +21,7 @@ export class Builder {
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
-    const query = squelPostgres
-      .insert()
-      .into(this._tableName)
-      .setFields(i.data)
+    const query = squelPostgres.insert().into(this._tableName).setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
     const queryWithReturn = this.returnAllFields(query)
@@ -195,7 +197,9 @@ export class Builder {
     return fields
   }
 
-  private returnAllFields<T extends QueryBuilder & ReturningMixin>(query: T): T {
+  private returnAllFields<T extends QueryBuilder & ReturningMixin>(
+    query: T
+  ): T {
     return this._fields.reduce((query, field) => {
       return query.returning(field)
     }, query)
@@ -246,10 +250,7 @@ function addLimit(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
   return q.limit(i.take)
 }
 
-function addDistinct(
-  i: AnyFindInput,
-  q: PostgresSelect
-): PostgresSelect {
+function addDistinct(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
   if (typeof i.distinct === 'undefined') return q
   return q.distinct(...i.distinct)
 }

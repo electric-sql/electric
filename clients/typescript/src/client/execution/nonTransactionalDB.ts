@@ -2,7 +2,7 @@ import { DatabaseAdapter, RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
-import {Row, Statement} from "../../util";
+import { Row, Statement } from '../../util'
 
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter) {}
