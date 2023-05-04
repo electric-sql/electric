@@ -2,8 +2,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
+  alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Postgres.Client
@@ -126,14 +128,23 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
   defp process_message(%Relation{} = msg, state) do
-    case ignore_relations(msg, state) do
-      {true, state} ->
-        Logger.debug("ignore relation from electric schema #{inspect(msg)}")
-        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
+    state =
+      case ignore_relations(msg, state) do
+        {true, state} ->
+          Logger.debug("ignore relation from electric schema #{inspect(msg)}")
+          %{state | relations: Map.put(state.relations, msg.id, msg)}
 
-      false ->
-        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
-    end
+        false ->
+          %{state | relations: Map.put(state.relations, msg.id, msg)}
+      end
+
+    # TODO: look at the schema registry as-is and see if it can't be replaced
+    # with the new materialised schema information held by electric
+    {table, columns} = Relation.to_schema_table(msg)
+    SchemaRegistry.put_replicated_tables(state.publication, [table])
+    SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+
+    {:noreply, [], state}
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
