@@ -25,7 +25,6 @@ defmodule Electric.Telemetry do
       Metrics.counter("electric.vaxine_consumer.replication.saved"),
       Metrics.counter("electric.vaxine_consumer.replication.failed_to_write"),
       Metrics.counter("electric.satellite.connection.authorized_connection"),
-      Metrics.counter("electric.satellite.connection.authorized_connection"),
       Metrics.counter("electric.satellite.replication.started"),
       Metrics.counter("electric.satellite.replication.stopped"),
       Metrics.last_value("vm.memory.total", unit: :byte),
