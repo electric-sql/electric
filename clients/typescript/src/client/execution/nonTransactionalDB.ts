@@ -2,6 +2,7 @@ import { DatabaseAdapter, RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
+import {Row, Statement} from "../../util";
 
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter) {}
@@ -40,15 +41,32 @@ export class NonTransactionalDB implements DB {
     this._adapter
       .query({ sql: statement.toString() })
       .then((rows) => {
-        if (typeof successCallback !== 'undefined') {
-          try {
-            const objects = rows.map((row) => schema.parse(row))
-            successCallback(this, objects)
-          } catch (err) {
-            if (typeof errorCallback !== 'undefined') {
-              errorCallback(err)
-            }
+        try {
+          const objects = rows.map((row) => schema.parse(row))
+          successCallback(this, objects)
+        } catch (err) {
+          if (typeof errorCallback !== 'undefined') {
+            errorCallback(err)
           }
+        }
+      })
+      .catch((err) => {
+        if (typeof errorCallback !== 'undefined') {
+          errorCallback(err)
+        }
+      })
+  }
+
+  raw(
+    sql: Statement,
+    successCallback?: (tx: DB, res: Row[]) => void,
+    errorCallback?: (error: any) => void
+  ) {
+    this._adapter
+      .query(sql)
+      .then((rows) => {
+        if (typeof successCallback !== 'undefined') {
+          successCallback(this, rows)
         }
       })
       .catch((err) => {

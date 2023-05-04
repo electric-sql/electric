@@ -6,7 +6,7 @@ import {
 } from '../../notifiers/index'
 import { randomValue } from '../../util/random'
 import { QualifiedTablename, hasIntersection } from '../../util/tablename'
-import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
+import { ConnectivityState } from '../../util/types'
 import { ElectricContext } from './provider'
 
 export interface ResultData<T> {
@@ -140,112 +140,6 @@ export function useLiveQuery<Res>(
         setResultData(errorResult(err))
       })
   }, [electric, changeSubscriptionKey, cacheKey])
-
-  return resultData
-}
-
-/**
- * Alternative reactive query hook for React applications.
- * Takes a raw SQL string and thus serves as an escape patch.
- * It is preferable to use the {@link useLiveQuery} hook when possible.
- *
- * This hook must be used in tandem with the {@link ElectricProvider}
- * which sets an {@link ElectricClient) as the `electric` value.
- * This provides a notifier which this hook uses to subscribe to data change
- * notifications to matching tables. The {@link ElectricProvider}
- * can be obtained through {@link makeElectricContext}.
- *
- * @returns An object that provides the {@link ResultData} interface of
- * `{ results, error, updatedAt }`.
- */
-export const useElectricQuery = (query: Query, params?: BindParams) => {
-  // This hook uses Electric's adapter and notifier to:
-  // 1. parse the tablenames out of the query
-  // 2. subscribe to data change notifications to matching tables
-  // 3. (re)-run the query whenever the underlying data potentially changes
-  // Running the query successfully will assign a new array of rows to
-  // the `results` state variable. Or if the query errors, the error will
-  // be assigned to the `error` variable.
-  const electric = useContext(ElectricContext)
-
-  const [cacheKey, bustCache] = useRandom()
-  const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
-  const [paramsKey, setParamsKey] = useState<string>()
-  const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
-  const [tablenamesKey, setTablenamesKey] = useState<string>()
-  const [resultData, setResultData] = useState<ResultData<Row[]>>({})
-
-  // Use the `adapter` to parse the tablenames from the SQL query.
-  useEffect(() => {
-    if (electric === undefined) {
-      return
-    }
-
-    const paramsKey = JSON.stringify(params)
-    const tablenames = electric.adapter.tableNames({ sql: query })
-    const tablenamesKey = JSON.stringify(tablenames)
-
-    setParamsKey(paramsKey)
-    setTablenames(tablenames)
-    setTablenamesKey(tablenamesKey)
-  }, [electric])
-
-  // Once we have the tablenames, we then establish the data change
-  // notification subscription, comparing the tablenames used by the
-  // query with the changed tablenames in the data change notification
-  // to determine whether to re-query or not.
-  //
-  // If we do need to re-query, then we call `bustCache` to set a new
-  // `cacheKey`, which is a dependency of the next useEffect below
-  useEffect(() => {
-    if (electric === undefined || tablenames === undefined) {
-      return
-    }
-
-    const notifier = electric.notifier
-    const handleChange = (notification: ChangeNotification): void => {
-      // Reduces the `ChangeNotification` to an array of namespaced tablenames,
-      // in a way that supports both the main namespace for the primary database
-      // and aliases for any attached databases.
-      const changedTablenames = notifier.alias(notification)
-
-      if (hasIntersection(tablenames, changedTablenames)) {
-        bustCache()
-      }
-    }
-
-    const key = notifier.subscribeToDataChanges(handleChange)
-    if (changeSubscriptionKey !== undefined) {
-      notifier.unsubscribeFromDataChanges(changeSubscriptionKey)
-    }
-
-    setChangeSubscriptionKey(key)
-
-    return () => notifier.unsubscribeFromDataChanges(key)
-  }, [electric, tablenamesKey])
-
-  // Once we have the subscription established, we're ready to query the database
-  // and then setResults or setError depending on whether the query succeeds.
-  //
-  // We re-run this function whenever the query, params or cache key change --
-  // the query is proxied in the dependencies by the tablenamesKey, the params are
-  // converted to a string so they're compared by value rather than reference and
-  // the cacheKey is updated whenever a data change notification is received that
-  // may potentially change the query results.
-  useEffect(() => {
-    if (electric === undefined || changeSubscriptionKey === undefined) {
-      return
-    }
-
-    electric.adapter
-      .query({ sql: query, args: params })
-      .then((res: Row[]) => {
-        setResultData(successResult(res))
-      })
-      .catch((err: any) => {
-        setResultData(errorResult(err))
-      })
-  }, [electric, changeSubscriptionKey, cacheKey, paramsKey])
 
   return resultData
 }

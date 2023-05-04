@@ -343,6 +343,15 @@ test.serial('findUnique query', async (t) => {
   t.deepEqual(res, post2)
 })
 
+test.serial('raw query', async (t) => {
+  const res = await tbl.raw({
+    sql: 'SELECT * FROM Post WHERE id = ?',
+    args: [ post2.id ]
+  })
+  t.assert(res.length === 1)
+  t.deepEqual(res[0], post2)
+})
+
 test.serial('findUnique query with selection', async (t) => {
   const res = await tbl.findUnique({
     where: {

@@ -1,6 +1,7 @@
 import { RunResult } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import * as z from 'zod'
+import {Row, Statement} from "../../util";
 
 /**
  * Interface that must be implemented by DB implementations.
@@ -31,6 +32,11 @@ export interface DB {
     statement: QueryBuilder,
     schema: z.ZodType<Z>,
     successCallback: (tx: DB, res: Z[]) => void,
+    errorCallback?: (error: any) => void
+  ): void
+  raw(
+    sql: Statement,
+    successCallback: (tx: DB, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void
 }

@@ -7,6 +7,7 @@ import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { QualifiedTablename } from '../../util/tablename'
 import { HKT, Kind } from '../util/hkt'
+import {Row, Statement} from "../../util";
 
 /**
  * Interface that is implemented by Electric clients.
@@ -80,20 +81,26 @@ export interface Model<
     >
   ): Promise<Array<Kind<GetPayload, T>>>
 
+  /**
+   * Executes a raw SQL query.
+   * @returns The rows that result from the query.
+   */
+  raw(sql: Statement): Promise<Row[]>
+
   // Live queries
   // The queries' return types are slightly different
   // as their result is wrapped inside a `LiveResult`
   // object that contains additional information about the table names.
 
   /**
-   * Same as {@link Model#findUnique} but wraps the result in a `LiveResult` object.
+   * Same as {@link Model#findUnique} but wraps the result in a {@link LiveResult} object.
    */
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
   ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
 
   /**
-   * Same as {@link Model#findFirst} but wraps the result in a `LiveResult` object.
+   * Same as {@link Model#findFirst} but wraps the result in a {@link LiveResult} object.
    */
   liveFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
@@ -105,7 +112,7 @@ export interface Model<
   ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
 
   /**
-   * Same as {@link Model#findMany} but wraps the result in a `LiveResult` object.
+   * Same as {@link Model#findMany} but wraps the result in a {@link LiveResult} object.
    */
   liveMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
@@ -115,6 +122,12 @@ export interface Model<
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): () => Promise<LiveResult<Array<Kind<GetPayload, T>>>>
+
+  /**
+   * Same as {@link Model#raw} but wraps the result in a {@link LiveResult} object.
+   * @param sql
+   */
+  liveRaw(sql: Statement): () => Promise<LiveResult<any>>
 
   /**
    * Updates a single record that is uniquely identified by the provided argument.
@@ -190,3 +203,5 @@ export interface Model<
 export class LiveResult<T> {
   constructor(public result: T, public tablenames: QualifiedTablename[]) {}
 }
+
+// liveRawQuery

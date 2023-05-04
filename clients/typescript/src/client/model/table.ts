@@ -23,6 +23,7 @@ import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
+import {parseTableNames, Row, Statement} from "../../util";
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -234,6 +235,36 @@ export class Table<
     i?: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload> {
     return this._executor.execute(this._deleteMany.bind(this, i))
+  }
+
+  async raw(sql: Statement): Promise<Row[]> {
+    return this._executor.transaction(this._raw.bind(this, sql))
+  }
+
+  liveRaw(sql: Statement): () => Promise<LiveResult<Row[]>> {
+    return () => {
+      const prom = this.raw(sql)
+      // parse the table names from the query
+      // because this is a raw query so
+      // we cannot trust that it queries this table
+      const tablenames = parseTableNames(sql.sql)
+      return prom.then((res) => {
+        return new LiveResult(res, tablenames)
+      })
+    }
+  }
+
+  async _raw(
+    sql: Statement,
+    db: DB,
+    continuation: (res: Row[]) => void,
+    onError?: (error: any) => void
+  ) {
+    db.raw(
+      sql,
+      (_tx, res) => continuation(res),
+      onError
+    )
   }
 
   private forEachRelation<T extends object>(
