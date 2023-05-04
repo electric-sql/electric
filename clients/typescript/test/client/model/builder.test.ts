@@ -37,7 +37,7 @@ test('null values are inserted as NULL', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING *"
+    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING id, title, contents, nbr"
   )
 })
 
@@ -51,7 +51,7 @@ test('create query', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING *"
+    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING id, title, contents, nbr"
   )
 })
 
@@ -220,7 +220,7 @@ test('update query', (t) => {
 
   t.is(
     query,
-    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = ('1')) RETURNING *"
+    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = ('1')) RETURNING id, title, contents, nbr"
   )
 })
 
@@ -234,7 +234,7 @@ test('updateMany query', (t) => {
     })
     .toString()
 
-  const sql = "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING *"
+  const sql = "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING id, title, contents, nbr"
 
   t.is(query1, sql)
 })
