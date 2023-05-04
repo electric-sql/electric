@@ -1169,100 +1169,119 @@ export class Table<
           this._schema,
           (db, res) => {
             const updatedObj = res[0] as typeof originalObject
+            // Some objects may be pointing to `originalObject`
+            // but the value they were pointing at may have changed
+            // so we need to update those FKs correspondingly
             this.updateFKs(originalObject, updatedObj, db, onError, () => {
-              /*
-               * For each outgoing relation:
-               *  - update the related object
-               *  - add the fromField (i.e. outgoing FK) to `nonRelationalData`
-               *    because we will fetch the updated object based on its new values
-               *    and that field may have changed
-               */
-              this.forEachRelation(
-                data.data as object,
-                (rel: Relation, cont: () => void) => {
-                  const { relationField, relatedTable, relationName } = rel
-                  const dataRecord = data.data as Record<string, any>
-
-                  // fetch the related object and recursively update that object
-                  const relationActions = dataRecord[relationField] as {
-                    update?: object
-                    updateMany?: object
-                    //create?: object,
-                    //upsert?: object,
-                    //delete?: boolean
-                  }
-
-                  const updateObject = relationActions.update
-
-                  if (rel.isOutgoingRelation()) {
-                    this.updateRelatedObjectFromOutgoingRelation(
-                      rel,
-                      ogObject,
-                      updateObject,
-                      relatedTable,
-                      db,
-                      (updatedObj) => {
-                        // The update might have changed the value of `toField` that this `fromField` is pointing to
-                        // That update will then have modified our `fromField` to point to the modified `toField`
-                        const updatedObject = updatedObj!
-                        const toFieldValue = updatedObject[rel.toField]
-
-                        // Add the new value of the `fromField` to `nonRelationalData`
-                        // such that we keep it into account when fetching the updated record
-                        nonRelationalData[rel.fromField] = toFieldValue
-                        cont()
-                      },
-                      onError
-                    )
-                  } else {
-                    // incoming relation, can be one-to-one or one-to-many
-                    this.updateRelatedObjectFromIncomingRelation(
-                      relatedTable,
-                      relationName,
-                      ogObject,
-                      updateObject,
-                      db,
-                      onError,
-                      () => {
-                        // Now also handle nested `updateMany` argument
-                        // `updateMany` argument can only be provided on an incoming one-to-many relation
-                        const updateManyObject = relationActions.updateMany
-                        this.updateManyRelatedObjectsFromIncomingRelation(
-                          relatedTable,
-                          relationName,
-                          ogObject,
-                          updateManyObject,
-                          db,
-                          onError,
-                          cont
-                        )
-                      }
-                    )
-                  }
-                },
-                () => {
-                  // Fetch the updated record
-                  this._findUniqueWithoutAutoSelect(
-                    {
-                      where: { ...data.where, ...nonRelationalData },
-                      select: data.select,
-                      ...(notNullNotUndefined(data.include) && {
-                        include: data.include,
-                      }), // only add `include` property if it is defined
-                    } as any,
-                    db,
-                    continuation,
-                    onError,
-                    'Update'
-                  )
-                }
-              )
+              // Also update any related objects that are provided in the query
+              this.updateRelatedObjects(data, ogObject, db, nonRelationalData, onError, continuation)
             })
           },
           onError
         )
       },
       onError
+    )
+  }
+
+  /**
+   * Updates may also include nested updates to related objects.
+   * This function updates those related objects as requested by the user.
+   */
+  private updateRelatedObjects<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
+    data: UpdateInput<UpdateData, Select, WhereUnique, Include>,
+    ogObject: Record<string, any>,
+    db: DB,
+    nonRelationalData: Record<string, any>,
+    onError: (err: any) => void,
+    continuation: (res: Kind<GetPayload, T>) => void
+  ) {
+    /*
+     * For each outgoing FK relation:
+     *  - update the related object
+     *  - add the fromField (i.e. outgoing FK) to `nonRelationalData`
+     *    because we will fetch the updated object based on its new values
+     *    and that field may have changed
+     */
+    this.forEachRelation(
+      data.data as object,
+      (rel: Relation, cont: () => void) => {
+        const {relationField, relatedTable, relationName} = rel
+        const dataRecord = data.data as Record<string, any>
+
+        // fetch the related object and recursively update that object
+        const relationActions = dataRecord[relationField] as {
+          update?: object
+          updateMany?: object
+          //create?: object,
+          //upsert?: object,
+          //delete?: boolean
+        }
+
+        const updateObject = relationActions.update
+
+        if (rel.isOutgoingRelation()) {
+          this.updateRelatedObjectFromOutgoingRelation(
+            rel,
+            ogObject,
+            updateObject,
+            relatedTable,
+            db,
+            (updatedObj) => {
+              // The update might have changed the value of `toField` that this `fromField` is pointing to
+              // That update will then have modified our `fromField` to point to the modified `toField`
+              const updatedObject = updatedObj!
+              const toFieldValue = updatedObject[rel.toField]
+
+              // Add the new value of the `fromField` to `nonRelationalData`
+              // such that we keep it into account when fetching the updated record
+              nonRelationalData[rel.fromField] = toFieldValue
+              cont()
+            },
+            onError
+          )
+        } else {
+          // incoming relation, can be one-to-one or one-to-many
+          this.updateRelatedObjectFromIncomingRelation(
+            relatedTable,
+            relationName,
+            ogObject,
+            updateObject,
+            db,
+            onError,
+            () => {
+              // Now also handle nested `updateMany` argument
+              // `updateMany` argument can only be provided on an incoming one-to-many relation
+              const updateManyObject = relationActions.updateMany
+              this.updateManyRelatedObjectsFromIncomingRelation(
+                relatedTable,
+                relationName,
+                ogObject,
+                updateManyObject,
+                db,
+                onError,
+                cont
+              )
+            }
+          )
+        }
+      },
+      () => {
+        // Fetch the updated record
+        this._findUniqueWithoutAutoSelect(
+          {
+            where: {...data.where, ...nonRelationalData},
+            select: data.select,
+            ...(notNullNotUndefined(data.include) && {
+              include: data.include,
+            }), // only add `include` property if it is defined
+          } as any,
+          db,
+          continuation,
+          onError,
+          'Update'
+        )
+      }
     )
   }
 
