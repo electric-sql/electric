@@ -604,10 +604,17 @@ export class Table<
     if (includeArg === false) {
       return onResult([])
     } else if (relation.isIncomingRelation()) {
-      // incoming relation
+      // incoming relation from the `fromField` in the other table
+      // to the `toField` in this table
       const { fromField, toField } = relation.getOppositeRelation(
         this._dbDescription
       )
+      // The `fromField` and `toField` are defined
+      // from the perspective of the outgoing relation
+      // (`fromField` being in the table and `toField` being in the related table).
+      // Fetch the related object like for an outgoing relation
+      // but switch the `toField` and `fromField` fields because
+      // `toField` is defined in this table and `fromField` is defined in the related table.
       this.fetchRelated(
         rows,
         relation.relatedTable,
@@ -936,7 +943,7 @@ export class Table<
   ) {
     // incoming relation, can be one-to-one or one-to-many
 
-    // the `fromField` and `toField` are defined on the side of the outgoing relation
+    // the `fromField` and `toField` are defined from the perspective of the outgoing relation
     // update the related object like for an outgoing relation but switch the `to` and `from` fields
     const { fromField, toField } = this._dbDescription.getRelation(
       relatedTable,
