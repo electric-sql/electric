@@ -49,3 +49,14 @@ services:
     extends:
       file: ../services_templates.yaml
       service: elixir_client
+
+  satellite_client_1:
+    extends:
+      file: ../services_templates.yaml
+      service: satellite_client
+
+  satellite_client_2:
+    extends:
+      file: ../services_templates.yaml
+      service: satellite_client
+

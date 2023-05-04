@@ -5,7 +5,7 @@ import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify, ElectrifiedDatabase } from 'electric-sql/node'
-import * as fs from 'fs'
+// import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 
 setLogLevel('DEBUG')
@@ -36,11 +36,11 @@ export class MockConsoleClient implements ConsoleClient {
   }
 }
 
-export const read_migrations = (migration_file: string) => {
-  const data = fs.readFileSync(migration_file)
-  const json_data = JSON.parse(data.toString())
-  return json_data.migrations
-}
+// export const read_migrations = (migration_file: string) => {
+//   const data = fs.readFileSync(migration_file)
+//   const json_data = JSON.parse(data.toString())
+//   return json_data.migrations
+// }
 
 export const open_db = (
   name: string,
@@ -84,6 +84,11 @@ export const set_subscribers = (db: ElectrifiedDatabase) => {
 
 export const get_items = (db: ElectrifiedDatabase) => {
   const stmt = db.prepare('SELECT * FROM main.items;')
+  return stmt.all()
+}
+
+export const get_tables = (db: ElectrifiedDatabase) => {
+  const stmt = db.prepare(`SELECT name FROM sqlite_master WHERE type='table';`)
   return stmt.all()
 }
 

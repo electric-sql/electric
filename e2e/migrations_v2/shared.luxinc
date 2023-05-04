@@ -48,6 +48,11 @@
     [shell $old]
 [endmacro]
 
+[macro start_satellite name]
+[shell satellite_${name}]
+    !make start_satellite_client_${name}
+[endmacro]
+
 [macro teardown]
     [progress stop development environment]
     !make stop_dev_env
