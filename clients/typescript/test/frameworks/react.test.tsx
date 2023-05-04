@@ -16,10 +16,11 @@ import { ElectricNamespace } from '../../src/electric/index'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 
-import { useElectricQuery } from '../../src/frameworks/react/hooks'
+import {ResultData, useElectricQuery, useLiveQuery} from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { dbSchema, Electric } from '../client/generated'
+import {Row} from "../../src/util";
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -28,26 +29,48 @@ const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
 }
 
 type FC = React.FC<React.PropsWithChildren>
+type RunQueryBuilder = (adapter: DatabaseAdapter) => () => ResultData<Row[]>
 
 const ctxInformation = makeElectricContext<Electric>()
 const ElectricProvider = ctxInformation.ElectricProvider
 
-test('useElectricQuery returns query results', async (t) => {
+async function testQueryResults(t: any, mkRunQuery: (adapter: DatabaseAdapter) => [() => ResultData<Row[]>, string]) {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
   const dal = ElectricClient.create(dbSchema, namespace)
 
-  const query = 'select foo from bars'
-  const wrapper: FC = ({ children }) => {
+  const [runQuery, query] = mkRunQuery(adapter)
+  const wrapper: FC = ({children}) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result } = renderHook(() => useElectricQuery(query), { wrapper })
+  const {result} = renderHook(runQuery, {wrapper})
 
   await waitFor(() => assert(result.current.updatedAt !== undefined))
-  t.deepEqual(result.current.results, await adapter.query({ sql: query }))
+  t.deepEqual(result.current.results, await adapter.query({sql: query}))
+}
+
+test('useElectricQuery returns query results', async (t) => {
+  await testQueryResults(t, (_adapter) => {
+    const query = 'select foo from bars'
+    return [
+      () => useElectricQuery(query),
+      query
+    ]
+  })
+})
+
+test('useLiveQuery returns query results', async (t) => {
+  await testQueryResults(t, (adapter) => {
+    const query = 'select i from bars'
+    const liveQuery = mockLiveQuery(adapter, query)
+    return [
+      () => useLiveQuery(liveQuery),
+      query
+    ]
+  })
 })
 
 test('useElectricQuery returns error when query errors', async (t) => {
@@ -77,29 +100,51 @@ test('useElectricQuery returns error when query errors', async (t) => {
   t.deepEqual(result.current.error, new Error('Mock query error'))
 })
 
-test('useElectricQuery re-runs query when data changes', async (t) => {
+test('useLiveQuery returns error when query errors', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+
+  const notifier = new MockNotifier('test.db')
+  const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = ElectricClient.create(dbSchema, namespace)
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result } = renderHook(() => useLiveQuery(mockLiveQueryError), {
+    wrapper,
+  })
+
+  await waitFor(() => assert(result.current.updatedAt !== undefined), {
+    timeout: 1000,
+  })
+  t.deepEqual(result.current.error, new Error('Mock query error'))
+})
+
+async function testReRunOnDataChange(t: any, mkRunQuery: RunQueryBuilder) {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
   const dal = ElectricClient.create(dbSchema, namespace)
 
-  const query = 'select foo from bars'
+  const runQuery = mkRunQuery(adapter)
 
-  const wrapper: FC = ({ children }) => {
+  const wrapper: FC = ({children}) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result } = renderHook(() => useElectricQuery(query), { wrapper })
+  const {result} = renderHook(runQuery, {wrapper})
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
 
-  const { results, updatedAt } = result.current
+  const {results, updatedAt} = result.current
 
   act(() => {
     const qtn = new QualifiedTablename('main', 'bars')
-    const changes = [{ qualifiedTablename: qtn }]
+    const changes = [{qualifiedTablename: qtn}]
 
     notifier.actuallyChanged('test.db', changes)
   })
@@ -108,9 +153,24 @@ test('useElectricQuery re-runs query when data changes', async (t) => {
     timeout: 1000,
   })
   t.not(results, result.current.results)
+}
+
+test('useElectricQuery re-runs query when data changes', async (t) => {
+  await testReRunOnDataChange(t, (_adapter: DatabaseAdapter) => {
+    const query = 'select foo from bars'
+    return () => useElectricQuery(query)
+  })
 })
 
-test('useElectricQuery re-runs query when *aliased* data changes', async (t) => {
+test('useLiveQuery re-runs query when data changes', async (t) => {
+  await testReRunOnDataChange(t, (adapter: DatabaseAdapter) => {
+    const query = 'select foo from bars'
+    const liveQuery = mockLiveQuery(adapter, query)
+    return () => useLiveQuery(liveQuery)
+  })
+})
+
+async function testReRunWhenAliasedDataChanges(t: any, mkRunQuery: RunQueryBuilder) {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
@@ -118,22 +178,22 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
   const dal = ElectricClient.create(dbSchema, namespace)
 
   await notifier.attach('baz.db', 'baz')
-  const query = 'select foo from baz.bars'
 
-  const wrapper: FC = ({ children }) => {
+  const wrapper: FC = ({children}) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result } = renderHook(() => useElectricQuery(query), { wrapper })
+  const runQuery = mkRunQuery(adapter)
+  const {result} = renderHook(runQuery, {wrapper})
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
 
-  const { results, updatedAt } = result.current
+  const {results, updatedAt} = result.current
 
   act(() => {
     const qtn = new QualifiedTablename('main', 'bars')
-    const changes = [{ qualifiedTablename: qtn }]
+    const changes = [{qualifiedTablename: qtn}]
 
     notifier.actuallyChanged('baz.db', changes)
   })
@@ -142,4 +202,35 @@ test('useElectricQuery re-runs query when *aliased* data changes', async (t) => 
     timeout: 1000,
   })
   t.not(results, result.current.results)
+}
+
+test('useElectricQuery re-runs query when *aliased* data changes', async (t) => {
+  await testReRunWhenAliasedDataChanges(t, (_adapter: DatabaseAdapter) => {
+    const query = 'select foo from baz.bars'
+    return () => useElectricQuery(query)
+  })
 })
+
+test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
+  await testReRunWhenAliasedDataChanges(t, (adapter: DatabaseAdapter) => {
+    const query = 'select foo from baz.bars'
+    const liveQuery = mockLiveQuery(adapter, query)
+    return () => useLiveQuery(liveQuery)
+  })
+})
+
+function mockLiveQuery(adapter: DatabaseAdapter, query: string) {
+  return async () => {
+    const sql = { sql: query }
+    const res = await adapter.query(sql)
+    const tablenames = adapter.tableNames(sql)
+    return {
+      result: res,
+      tablenames: tablenames
+    }
+  }
+}
+
+const mockLiveQueryError = async () => {
+  throw new Error('Mock query error')
+}

@@ -9,7 +9,7 @@ import { QualifiedTablename, hasIntersection } from '../../util/tablename'
 import { BindParams, ConnectivityState, Query, Row } from '../../util/types'
 import { ElectricContext } from './provider'
 
-interface ResultData<T> {
+export interface ResultData<T> {
   error?: any
   results?: T
   updatedAt?: Date
