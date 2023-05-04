@@ -166,7 +166,6 @@ export class SatelliteProcess implements Satellite {
     setTimeout(this._throttledSnapshot, 0)
 
     // Need to reload primary keys after schema migration
-    // For now, we do it only at initialization
     this.relations = await this._getLocalRelations()
 
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
@@ -713,6 +712,7 @@ export class SatelliteProcess implements Satellite {
     const opLogEntries: OplogEntry[] = []
     const lsn = transaction.lsn
     let firstDMLChunk = true
+    let containsDDL = false
 
     // switches off on transaction commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
@@ -748,6 +748,7 @@ export class SatelliteProcess implements Satellite {
     }
     const processDDL = (changes: SchemaChange[]) => {
       changes.forEach((change) => stmts.push({ sql: change.sql }))
+      containsDDL = true
     }
 
     // Now process all changes per chunk.
@@ -806,6 +807,21 @@ export class SatelliteProcess implements Satellite {
       ...stmts,
       ...this._enableTriggers(tablenames)
     )
+
+    // TODO: after each chunk of DDL we need to update the relations
+    //       this.relations = await this._getLocalRelations()
+    //       we can do this using interactive transactions instead of runInTransaction
+    //       need to be careful that the queries executed by this._getLocalRelations()
+    //       are executed in our transaction!
+
+    // TODO: also update the migration tests such that they only set the original relations not the ones that come in!
+    //       and then test the problematic case (TX1=create table; TX2=insert in that table) to see that it is solved
+    //       afterwards also test one TX that creates table and then inserts in that table (but require proper solution above)
+
+    if (containsDDL) {
+      // Need to reload primary keys after schema migration
+      this.relations = await this._getLocalRelations()
+    }
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
