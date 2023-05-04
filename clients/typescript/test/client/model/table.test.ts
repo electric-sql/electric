@@ -23,6 +23,7 @@ const electric = await electrify(db, dbSchema, {
 //       do this when we have automated the generation such that we don't need to manually define all those tables
 //       schemas, etc.
 
+const electricDb = electric.db
 const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
@@ -344,7 +345,7 @@ test.serial('findUnique query', async (t) => {
 })
 
 test.serial('raw query', async (t) => {
-  const res = await tbl.raw({
+  const res = await electricDb.raw({
     sql: 'SELECT * FROM Post WHERE id = ?',
     args: [ post2.id ]
   })

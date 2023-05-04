@@ -237,36 +237,6 @@ export class Table<
     return this._executor.execute(this._deleteMany.bind(this, i))
   }
 
-  async raw(sql: Statement): Promise<Row[]> {
-    return this._executor.transaction(this._raw.bind(this, sql))
-  }
-
-  liveRaw(sql: Statement): () => Promise<LiveResult<Row[]>> {
-    return () => {
-      const prom = this.raw(sql)
-      // parse the table names from the query
-      // because this is a raw query so
-      // we cannot trust that it queries this table
-      const tablenames = parseTableNames(sql.sql)
-      return prom.then((res) => {
-        return new LiveResult(res, tablenames)
-      })
-    }
-  }
-
-  async _raw(
-    sql: Statement,
-    db: DB,
-    continuation: (res: Row[]) => void,
-    onError?: (error: any) => void
-  ) {
-    db.raw(
-      sql,
-      (_tx, res) => continuation(res),
-      onError
-    )
-  }
-
   private forEachRelation<T extends object>(
     data: T,
     f: (rel: Relation, cont: () => void) => void,
@@ -1413,5 +1383,22 @@ export class Table<
         return new LiveResult(res, [this._qualifiedTableName])
       }) as Promise<LiveResult<T>>
     }
+  }
+}
+
+export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+  return adapter.query(sql)
+}
+
+export function liveRaw(adapter: DatabaseAdapter, sql: Statement): () => Promise<LiveResult<Row[]>> {
+  return () => {
+    const prom = raw(adapter, sql)
+    // parse the table names from the query
+    // because this is a raw query so
+    // we cannot trust that it queries this table
+    const tablenames = parseTableNames(sql.sql)
+    return prom.then((res) => {
+      return new LiveResult(res, tablenames)
+    })
   }
 }

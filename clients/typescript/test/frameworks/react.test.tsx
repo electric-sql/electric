@@ -38,7 +38,9 @@ test('useLiveQuery returns query results', async (t) => {
   const dal = ElectricClient.create(dbSchema, namespace)
 
   const query = 'select i from bars'
-  const liveQuery = mockLiveQuery(adapter, query)
+  const liveQuery = dal.db.liveRaw({
+    sql: query
+  })
 
   const wrapper: FC = ({children}) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -80,7 +82,9 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const dal = ElectricClient.create(dbSchema, namespace)
 
   const query = 'select foo from bars'
-  const liveQuery = mockLiveQuery(adapter, query)
+  const liveQuery = dal.db.liveRaw({
+    sql: query
+  })
 
   const wrapper: FC = ({children}) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -120,7 +124,9 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   }
 
   const query = 'select foo from baz.bars'
-  const liveQuery = mockLiveQuery(adapter, query)
+  const liveQuery = dal.db.liveRaw({
+    sql: query
+  })
 
   const {result} = renderHook(() => useLiveQuery(liveQuery), {wrapper})
   await waitFor(() => assert(result.current.results !== undefined), {
@@ -141,18 +147,6 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   })
   t.not(results, result.current.results)
 })
-
-function mockLiveQuery(adapter: DatabaseAdapter, query: string) {
-  return async () => {
-    const sql = { sql: query }
-    const res = await adapter.query(sql)
-    const tablenames = adapter.tableNames(sql)
-    return {
-      result: res,
-      tablenames: tablenames
-    }
-  }
-}
 
 const mockLiveQueryError = async () => {
   throw new Error('Mock query error')

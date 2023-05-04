@@ -2,7 +2,9 @@ import { ElectricNamespace } from '../../electric/namespace'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { Notifier } from '../../notifiers'
 import { DbSchema, TableSchema } from './schema'
-import { Table } from './table'
+import { liveRaw, raw, Table } from './table'
+import { Row, Statement } from '../../util'
+import { LiveResult } from './model'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -32,14 +34,31 @@ export type ClientTables<DB extends DbSchema<any>> = {
     : never
 }
 
-// Electric client
-// Extends the ElectricNamespace with a `db` property
-// providing the data access library for each DB table
+interface RawQueries {
+  /**
+   * Executes a raw SQL query.
+   * @param sql - A raw SQL query and its bind parameters.
+   * @returns The rows that result from the query.
+   */
+  raw(sql: Statement): Promise<Row[]>
+  /**
+   * A raw SQL query that can be used with {@link useLiveQuery}.
+   * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
+   * @param sql - A raw SQL query and its bind parameters.
+   */
+  liveRaw(sql: Statement): () => Promise<LiveResult<any>>
+}
+
+/**
+ * Electric client.
+ * Extends the {@link ElectricNamespace} with a `db` property
+ * providing raw query capabilities as well as a data access library for each DB table.
+ */
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
   private constructor(
-    public db: ClientTables<DB>,
+    public db: ClientTables<DB> & RawQueries,
     adapter: DatabaseAdapter,
     notifier: Notifier
   ) {
@@ -73,6 +92,14 @@ export class ElectricClient<
       dal[tableName].setTables(new Map(Object.entries(dal)))
     })
 
-    return new ElectricClient(dal, electric.adapter, electric.notifier)
+    const db: ClientTables<DB> & RawQueries = {
+      ...dal,
+      raw: raw.bind(null, electric.adapter),
+      liveRaw: liveRaw.bind(null, electric.adapter)
+    }
+
+    return new ElectricClient(db, electric.adapter, electric.notifier)
   }
 }
+
+
