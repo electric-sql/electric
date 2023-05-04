@@ -905,25 +905,28 @@ export class Table<
   /**
    * Updates related objects for incoming relations based on
    * nested `updateMany` argument that is provided with `update`.
-   * For example:
-   *  User.update({
-   *    data: {
-   *      posts: {
-   *        updateMany: {
-   *          data: {
-   *            title: 'A new title for all my posts'
-   *          },
-   *          where: {}
-   *        }
-   *      }
-   *    },
-   *    where: {
-   *      id: user1.id
-   *    }
-   *  })
-   * The above example updates the title of all posts written by `user1`.
+   *
+   * @example
+   * The example below updates the title of all posts written by `user1`.
    * In the `User` table there is an incoming relation from each post to the user that wrote it.
-   * This method updates all related objects for such an incoming relation.
+   * This method updates all related objects for such an incoming relation:
+   * ```
+   * User.update({
+   *   data: {
+   *     posts: {
+   *       updateMany: {
+   *         data: {
+   *           title: 'A new title for all my posts'
+   *         },
+   *         where: {}
+   *       }
+   *     }
+   *   },
+   *   where: {
+   *     id: user1.id
+   *   }
+   * })
+   * ```
    *
    * @param relatedTable The name of the table containing the related objects.
    * @param relationName The name of the relation between the two tables.

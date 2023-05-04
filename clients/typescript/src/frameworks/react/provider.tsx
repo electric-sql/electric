@@ -33,7 +33,9 @@ export { ElectricContext }
  *
  * @example
  * This example loses information about the concrete DB tables:
+ * ```
  * const ctx = createContext<ElectricClient>()
+ * ```
  */
 export function makeElectricContext<
   S extends ElectricClient<DbSchema<any>>
