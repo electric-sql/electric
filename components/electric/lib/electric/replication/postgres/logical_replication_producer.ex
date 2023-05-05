@@ -2,6 +2,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Electric.Postgres.Extension.SchemaCache
   alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
@@ -141,7 +142,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     # TODO: look at the schema registry as-is and see if it can't be replaced
     # with the new materialised schema information held by electric
     {table, columns} = Relation.to_schema_table(msg)
+    {:ok, pks} = SchemaCache.table_primary_keys(state.origin, table.oid)
+
+    table = %{table | primary_keys: pks}
+
     SchemaRegistry.put_replicated_tables(state.publication, [table])
+
     SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
 
     {:noreply, [], state}
