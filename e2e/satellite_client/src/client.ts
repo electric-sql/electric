@@ -92,6 +92,11 @@ export const get_tables = (db: ElectrifiedDatabase) => {
   return stmt.all()
 }
 
+export const get_columns = (db: ElectrifiedDatabase, table: string) => {
+  const stmt = db.prepare<{name: string}>(`SELECT * FROM pragma_table_info(@name);`)
+  return stmt.all({name: table})
+}
+
 export const insert_item = (db: ElectrifiedDatabase, keys: [string]) => {
   const st = db.prepare<{ uuid: string; key: string }>(
     'INSERT INTO main.items (id, content) VALUES ( @uuid, @key )'

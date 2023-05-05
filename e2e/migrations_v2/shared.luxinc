@@ -11,8 +11,8 @@
 [shell pg_1]
     [invoke start_psql pg_1]
 
-[shell pg_2]
-    [invoke start_psql pg_2]
+# [shell pg_2]
+#     [invoke start_psql pg_2]
 
 [shell vaxine]
     !make start_vaxine_1
@@ -31,7 +31,7 @@
     !make start_electric_1
     -$fail_pattern
     ?START_REPLICATION SLOT
-    ?START_REPLICATION SLOT
+    # ?START_REPLICATION SLOT
 
 [shell start_env]
     [progress setup finished]
