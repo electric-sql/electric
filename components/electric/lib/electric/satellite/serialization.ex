@@ -132,7 +132,7 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp maybe_load_schema(origin, nil, version) do
-    with {:ok, schema} <- Extension.SchemaCache.load(origin, version) do
+    with {:ok, _version, schema} <- Extension.SchemaCache.load(origin, version) do
       {:ok, schema}
     else
       error ->

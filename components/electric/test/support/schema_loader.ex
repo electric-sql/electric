@@ -13,12 +13,12 @@ defmodule Electric.Postgres.MockSchemaLoader do
   @impl true
   def load({[], opts}) do
     notify(opts, :load)
-    {:ok, Schema.new()}
+    {:ok, nil, Schema.new()}
   end
 
   def load({[{version, schema} | _versions], opts}) do
     notify(opts, {:load, version, schema})
-    {:ok, schema}
+    {:ok, version, schema}
   end
 
   @impl true
@@ -27,7 +27,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
       {^version, schema} ->
         notify(opts, {:load, version, schema})
 
-        {:ok, schema}
+        {:ok, version, schema}
 
       nil ->
         {:error, "schema version #{version} not found"}
