@@ -1,9 +1,43 @@
 defmodule Electric.Satellite.Auth.JWT do
-  alias Electric.Satellite.Auth
+  @behaviour Electric.Satellite.Auth
 
   require Logger
 
-  @behaviour Auth
+  alias Electric.Satellite.Auth
+  alias Electric.Satellite.Auth.ConfigError
+
+  @doc """
+  Validate configuration options for JWT auth.
+
+  This function should be called early in the configuration process to provide quick feedback for the developer instead
+  of failing later on, when a client connection tries to authenticate with the server.
+
+  Raises if any of the required options are missing or the secret key is too weak.
+
+  Returns a config map that can be passed to subsequent `validate_token/2` calls.
+  """
+  @spec validate_config!(Access.t()) :: map
+  def validate_config!(opts) do
+    iss =
+      if issuer = opts[:issuer] do
+        issuer
+      else
+        raise ConfigError, "Missing 'issuer' configuration option for JWT auth mode"
+      end
+
+    key =
+      if key = opts[:secret_key] do
+        key
+      else
+        raise ConfigError, "Missing 'secret_key' configuration option for JWT auth mode"
+      end
+
+    if byte_size(key) < 32 do
+      raise ConfigError, "The secret key value needs to be 32 bytes or greater for JWT auth mode"
+    end
+
+    %{issuer: iss, secret_key: key}
+  end
 
   defmodule Token do
     @spec verify(binary, binary, binary, Keyword.t()) ::
@@ -49,11 +83,9 @@ defmodule Electric.Satellite.Auth.JWT do
 
   @impl true
   def validate_token(token, config) do
-    {:ok, key} = Keyword.fetch(config, :secret_key)
-    {:ok, iss} = Keyword.fetch(config, :issuer)
-    Logger.debug(["Validating token for issuer: ", iss])
+    Logger.debug(["Validating token for issuer: ", config.issuer])
 
-    with {:ok, claims} <- Token.verify(token, key, iss, []),
+    with {:ok, claims} <- Token.verify(token, config.secret_key, config.issuer, []),
          {:claims, %{"user_id" => user_id, "type" => "access"}} <- {:claims, claims} do
       {:ok, %Auth{user_id: user_id}}
     else
@@ -73,10 +105,7 @@ defmodule Electric.Satellite.Auth.JWT do
 
   @impl true
   def generate_token(user_id, config, opts) do
-    {:ok, iss} = Keyword.fetch(config, :issuer)
-    {:ok, key} = Keyword.fetch(config, :secret_key)
-
-    Token.create(user_id, key, iss, opts)
+    Token.create(user_id, config.secret_key, config.issuer, opts)
   end
 
   def generate_token(user_id, opts \\ []) do

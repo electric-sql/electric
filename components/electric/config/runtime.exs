@@ -6,6 +6,30 @@
 # rather than compile time.
 
 import Config
+alias Electric.Satellite.Auth
+
+auth_provider =
+  cond do
+    System.get_env("SATELLITE_AUTH_MODE") == "insecure" ->
+      {Auth.Insecure, %{}}
+
+    config_env() == :test ->
+      auth_config =
+        Auth.JWT.validate_config!(
+          issuer: "dev.electric-db",
+          secret_key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ=")
+        )
+
+      {Auth.JWT, auth_config}
+
+    true ->
+      auth_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY")
+      auth_iss = System.fetch_env!("SATELLITE_AUTH_SIGNING_ISS")
+      auth_config = Auth.JWT.validate_config!(issuer: auth_iss, secret_key: auth_key)
+      {Auth.JWT, auth_config}
+  end
+
+config :electric, Electric.Satellite.Auth, provider: auth_provider
 
 if config_env() == :prod do
   config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
@@ -92,10 +116,4 @@ if config_env() == :prod do
     global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
     instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
     regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
-
-  auth_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY")
-  auth_iss = System.fetch_env!("SATELLITE_AUTH_SIGNING_ISS")
-
-  config :electric, Electric.Satellite.Auth,
-    provider: {Electric.Satellite.Auth.JWT, issuer: auth_iss, secret_key: auth_key}
 end

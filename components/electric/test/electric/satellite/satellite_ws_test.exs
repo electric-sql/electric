@@ -39,10 +39,13 @@ defmodule Electric.Satellite.WsServerTest do
 
     port = 55133
 
-    auth_provider =
-      {Electric.Satellite.Auth.JWT,
-       issuer: "electric-sql.com",
-       secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
+    config =
+      Electric.Satellite.Auth.JWT.validate_config!(
+        issuer: "electric-sql.com",
+        secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")
+      )
+
+    auth_provider = {Electric.Satellite.Auth.JWT, config}
 
     _sup_pid =
       Electric.Satellite.WsServer.start_link(
@@ -245,7 +248,7 @@ defmodule Electric.Satellite.WsServerTest do
 
     test "cluster/app id mismatch is detected", cxt do
       {_module, config} = cxt.auth_provider
-      key = Keyword.fetch!(config, :secret_key)
+      key = config.secret_key
 
       assert {:ok, invalid_token} =
                Electric.Satellite.Auth.JWT.Token.create(cxt.user_id, key, "some-other-cluster-id")
