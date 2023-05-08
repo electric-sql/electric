@@ -86,6 +86,9 @@
       ],
       "debug": [
         "./dist/util/debug/index.d.ts"
+      ],
+      "client/model": [
+        "./dist/client/model/index.d.ts"
       ]
     }
   },
@@ -127,26 +130,43 @@
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
+    "lodash.flow": "^3.5.0",
+    "lodash.mapvalues": "^4.6.0",
     "lodash.throttle": "^4.1.1",
+    "lodash.partition": "^4.6.0",
+    "lodash.pick": "^4.4.0",
+    "lodash.groupby": "^4.6.0",
+    "lodash.omitby": "^4.6.0",
+    "object.hasown": "^1.1.2",
     "loglevel": "^1.8.1",
     "long": "^5.2.0",
     "protobufjs": "^7.1.1",
     "react-native-uuid": "^2.0.1",
     "sqlite-parser": "^1.0.1",
+    "squel": "^5.13.0",
     "uuid": "^9.0.0",
     "walkjs": "^3.2.4",
-    "ws": "^8.8.1"
+    "ws": "^8.8.1",
+    "zod": "^3.20.2"
   },
   "devDependencies": {
+    "@prisma/client": "^4.12.0",
     "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
-    "@types/better-sqlite3": "^7.6.3",
+    "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
+    "@types/lodash.flow": "^3.5.7",
+    "@types/lodash.mapvalues": "^4.6.7",
+    "@types/lodash.throttle": "^4.1.7",
+    "@types/lodash.partition": "^4.6.7",
+    "@types/lodash.pick": "^4.4.7",
+    "@types/lodash.groupby": "^4.6.7",
+    "@types/lodash.omitby": "^4.6.7",
     "@types/node": "^18.8.4",
     "@types/react": "^18.0.18",
-    "@types/react-native-sqlite-storage": "^5.0.2",
+    "@types/react-native-sqlite-storage": "^6.0.0",
     "@types/react-native-uuid": "^2.0.0",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
@@ -158,14 +178,16 @@
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",
     "prettier": "2.8.2",
+    "prisma": "^4.8.1",
+    "prisma-generator-electric": "electric-sql/prisma-generator-electric#kevindp/build-on-install",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "release-it": "^15.5.0",
     "ts-proto": "^1.125.0",
     "typeorm": "^0.3.9",
     "typescript": "^4.9",
-    "web-worker": "^1.2.0",
-    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes"
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes",
+    "web-worker": "^1.2.0"
   },
   "peerDependencies": {
     "@aphro/absurd-sql": "^0.0.53",
@@ -176,8 +198,8 @@
     "react": ">= 16.8.0",
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
-    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes",
-    "typeorm": ">=0.3.0"
+    "typeorm": ">=0.3.0",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes"
   },
   "peerDependenciesMeta": {
     "@aphro/absurd-sql": {

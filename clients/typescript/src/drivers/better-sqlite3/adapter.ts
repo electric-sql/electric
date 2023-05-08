@@ -1,11 +1,10 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
 
-import { parseTableNames } from '../../util/parser'
-import { QualifiedTablename } from '../../util/tablename'
 import {
   Statement as DbStatement,
   Row,
@@ -15,13 +14,14 @@ import {
 
 import { Database, StatementBindParams } from './database'
 
-// TODO: Introduce a reentrant read/write lock such that we can have several read-only transactions but only a single write transaction.
-//       But before doing that we need to enforce that `query` is read-only, e.g. check the `readonly` property on the prepared statement.
-//       Or use 2 DB connections one in read-write mode and one in read-only mode and then only need to lock on writes.
-export class DatabaseAdapter implements DatabaseAdapterInterface {
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
   db: Database
 
   constructor(db: Database) {
+    super()
     this.db = db
   }
 
@@ -62,10 +62,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   async query({ sql, args }: DbStatement): Promise<Row[]> {
     const stmt = this.db.prepare(sql)
     return stmt.all(...wrapBindParams(args))
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
   }
 }
 

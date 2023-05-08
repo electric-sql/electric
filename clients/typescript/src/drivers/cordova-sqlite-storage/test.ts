@@ -2,11 +2,7 @@
 // specific dependencies.
 import { DbName } from '../../util/types'
 
-import {
-  ElectricNamespace,
-  electrify,
-  ElectrifyOptions,
-} from '../../electric/index'
+import { electrify, ElectrifyOptions } from '../../electric/index'
 
 import { MockMigrator } from '../../migrators/mock'
 import { Notifier } from '../../notifiers/index'
@@ -14,20 +10,28 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
+import { Database } from './database'
 import { MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model'
 
-type RetVal<N extends Notifier> = Promise<[Database, N, ElectrifiedDatabase]>
+type RetVal<DB extends DbSchema<any>, N extends Notifier> = Promise<
+  [Database, N, ElectricClient<DB>]
+>
 
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
-export const initTestable = async <N extends Notifier = MockNotifier>(
+export const initTestable = async <
+  DB extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(
   dbName: DbName,
+  dbDescription: DB,
   config = testConfig,
   opts?: ElectrifyOptions
-): RetVal<N> => {
+): RetVal<DB, N> => {
   const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
@@ -37,20 +41,19 @@ export const initTestable = async <N extends Notifier = MockNotifier>(
   const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const electric = new ElectricDatabase(db, namespace)
-
-  const electrified = await electrify(
+  const dal = await electrify(
     dbName,
-    db,
-    electric,
+    dbDescription,
     adapter,
-    migrator,
-    notifier,
     socketFactory,
-    console,
-    registry,
-    config
+    config,
+    {
+      notifier: notifier,
+      migrator: migrator,
+      console: console,
+      registry: registry,
+    }
   )
-  return [db, notifier, electrified as unknown as ElectrifiedDatabase]
+
+  return [db, notifier, dal]
 }

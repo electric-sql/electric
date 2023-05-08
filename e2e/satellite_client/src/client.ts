@@ -4,9 +4,10 @@ import { ElectricConfig } from 'electric-sql'
 import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
-import { electrify, ElectrifiedDatabase } from 'electric-sql/node'
+import { electrify } from 'electric-sql/node'
 import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
+import { dbSchema, Electric } from './generated/models'
 
 setLogLevel('DEBUG')
 
@@ -42,13 +43,12 @@ export const read_migrations = (migration_file: string) => {
   return json_data.migrations
 }
 
-export const open_db = (
+export const open_db = async (
   name: string,
   host: string,
   port: number,
   migrations: any
-): Promise<ElectrifiedDatabase> => {
-  //= () => Promise<ElectrifiedDatabase> {
+): Promise<Electric> => {
   const original = new Database(name)
   const config: ElectricConfig = {
     app: 'satellite_client',
@@ -62,75 +62,84 @@ export const open_db = (
     debug: true,
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return electrify(original, config, {
+  return await electrify(original, dbSchema, config, {
     console: new MockConsoleClient(),
   })
 }
 
-export const set_subscribers = (db: ElectrifiedDatabase) => {
-  db.electric.notifier.subscribeToAuthStateChanges((x) => {
+export const set_subscribers = (db: Electric) => {
+  db.notifier.subscribeToAuthStateChanges((x) => {
     console.log('auth state changes: ')
     console.log(x)
   })
-  db.electric.notifier.subscribeToPotentialDataChanges((x) => {
+  db.notifier.subscribeToPotentialDataChanges((x) => {
     console.log('potential data change: ')
     console.log(x)
   })
-  db.electric.notifier.subscribeToDataChanges((x) => {
+  db.notifier.subscribeToDataChanges((x) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
 }
 
-export const get_items = (db: ElectrifiedDatabase) => {
-  const stmt = db.prepare('SELECT * FROM main.items;')
-  return stmt.all()
+export const get_items = async (electric: Electric) => {
+  return await electric.db.items.findMany({})
 }
 
-export const insert_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<{ uuid: string; key: string }>(
-    'INSERT INTO main.items (id, content) VALUES ( @uuid, @key )'
-  )
-  for (var key of keys) {
-    let myuuid = uuidv4()
-    st.run({ key: key, uuid: myuuid })
-  }
-}
-
-export const delete_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<[string]>('DELETE FROM main.items WHERE content = ?')
-  for (var key of keys) {
-    st.run(key)
-  }
-}
-
-export const get_other_items = (db: ElectrifiedDatabase) => {
-  const stmt = db.prepare('SELECT * FROM main.other_items;')
-  return stmt.all()
-}
-
-export const insert_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<{ uuid: string; key: string }>(
-    'INSERT INTO main.other_items (id, content) VALUES ( @uuid, @key )'
-  )
-  for (var key of keys) {
-    let myuuid = uuidv4()
-    st.run({ key: key, uuid: myuuid })
-  }
-}
-
-export const delete_other_item = (db: ElectrifiedDatabase, keys: [string]) => {
-  const st = db.prepare<[string]>(
-    'DELETE FROM main.other_items WHERE content = ?'
-  )
-  for (var key of keys) {
-    st.run(key)
-  }
-}
-
-export const run = (db: ElectrifiedDatabase): Database.Transaction => {
-  const stmt = db.prepare('select 1')
-  return db.transaction(() => {
-    stmt.run()
+export const get_item_ids = async (electric: Electric) => {
+  return await electric.db.items.findMany({
+    select: {
+      id: true
+    }
   })
+}
+
+export const insert_item = async (electric: Electric, keys: [string]) => {
+  const items = keys.map(k => {
+    return {
+      id: uuidv4(),
+      content: k
+    }
+  })
+
+  await electric.db.items.createMany({
+    data: items
+  })
+}
+
+export const delete_item = async (electric: Electric, keys: [string]) => {
+  for (const key of keys) {
+    await electric.db.items.deleteMany({
+      where: {
+        content: key
+      }
+    })
+  }
+}
+
+export const get_other_items = async (electric: Electric) => {
+  return await electric.db.other_items.findMany({})
+}
+
+export const insert_other_item = async (electric: Electric, keys: [string]) => {
+  const items = keys.map(k => {
+    return {
+      id: uuidv4(),
+      content: k
+    }
+  })
+
+  await electric.db.other_items.createMany({
+    data: items
+  })
+}
+
+export const delete_other_item = async (electric: Electric, keys: [string]) => {
+  for (const key of keys) {
+    await electric.db.other_items.deleteMany({
+      where: {
+        content: key
+      }
+    })
+  }
 }

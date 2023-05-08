@@ -3,22 +3,22 @@ import Log from 'loglevel'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import {
-  parseTableNames,
-  QualifiedTablename,
-  Row,
-  SqlValue,
-  Statement,
-} from '../../util'
-import { ensurePromise } from '../generic/promise'
-import { rowsFromResults } from '../generic/results'
-import { Database, StatementCallback, Transaction } from './database'
+import { Row, SqlValue, Statement } from '../../util'
+import { ensurePromise } from '../util/promise'
+import { rowsFromResults } from '../util/results'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
+import { Database, Transaction, StatementCallback } from './database'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
-  constructor(public db: Database, private promisesEnabled: boolean = false) {}
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
+  constructor(public db: Database, private promisesEnabled: boolean = false) {
+    super()
+  }
 
   run(statement: Statement): Promise<RunResult> {
     return this.runInTransaction(statement)
@@ -114,10 +114,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
       readTransaction(txFn)
     })
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
   }
 }
 

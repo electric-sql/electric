@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsmodule dev",
-    "build": "rm -rf ./dist && tsmodule build",
+    "fix_client": "sed -i'' -e 's/Relation\\, //' ./src/generated/models/index.ts && sed -i'' -e 's/Prisma\\.other_itemsAggregateArgs/Prisma.Other_itemsAggregateArgs/' ./src/generated/models/index.ts && sed -i'' -e 's/Prisma\\.other_itemsGroupByArgs/Prisma.Other_itemsGroupByArgs/' ./src/generated/models/index.ts && sed -i'' -e 's/Prisma\\.itemsAggregateArgs/Prisma.ItemsAggregateArgs/' ./src/generated/models/index.ts && sed -i'' -e 's/Prisma\\.itemsGroupByArgs/Prisma.ItemsGroupByArgs/' ./src/generated/models/index.ts",
+    "build": "npx prisma generate && npm run fix_client && rm -rf ./dist && tsmodule build",
     "run_node": "node dist/client.js",
     "test": "ava",
     "pretest": "yarn build",
@@ -14,6 +15,7 @@
     "lint": "eslint src --fix"
   },
   "dependencies": {
+    "@prisma/client": "^4.11.0",
     "@types/uuid": "^9.0.0",
     "electric-sql": "file:../../clients/typescript",
     "jsonwebtoken": "^9.0.0",
@@ -30,6 +32,8 @@
     "@types/node": "^16.9.1",
     "better-sqlite3": "^7.6.2",
     "exponential-backoff": "^3.1.0",
+    "prisma": "^4.11.0",
+    "prisma-generator-electric": "file:../../generator",
     "typescript": "^4.4.3"
   }
 }

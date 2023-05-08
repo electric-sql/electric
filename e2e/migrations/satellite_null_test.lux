@@ -64,7 +64,7 @@
 
 [shell satellite_1]
     [invoke node_await_get ${pg_id1}]
-    !client.get_items(db)
+    !await client.get_items(db)
 
     ?id: 'f989b58b-980d-4d3c-b178-adb6ae8222f1',
     ?content: 'hello from pg_1',
@@ -76,7 +76,7 @@
 
 [shell satellite_2]
     [invoke node_await_get ${pg_id1}]
-    !client.get_items(db)
+    !await client.get_items(db)
 
     ?id: 'f989b58b-980d-4d3c-b178-adb6ae8222f1',
     ?content: 'hello from pg_1',
@@ -90,9 +90,16 @@
 #===============================================================================
 
 [macro insert_map map]
-    !db.prepare("INSERT INTO main.items \
-    (id, content, content_text_null, content_text_null_default, intvalue_null, intvalue_null_default) \
-    VALUES ( @id, @content, @content_text_null, @content_text_null_default, @intvalue_null, \ @intvalue_null_default)").run($map)
+    !await db.db.items.create({ \
+      data: { \
+        id: $map.id, \
+        content: $map.content, \
+        content_text_null: $map.content_text_null, \
+        content_text_null_default: $map.content_text_null_default, \
+        intvalue_null: $map.intvalue_null, \
+        intvalue_null_default: $map.intvalue_null_default \
+      } \
+    })
     ?$node
 [endmacro]
 

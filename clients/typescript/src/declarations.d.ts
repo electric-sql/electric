@@ -1,7 +1,2 @@
-declare module '@aphro/sql.js'
-declare module '@aphro/absurd-sql'
-declare module '@aphro/absurd-sql/dist/indexeddb-backend'
-declare module '@aphro/absurd-sql/dist/indexeddb-main-thread'
-declare module 'lodash.throttle'
 declare module 'sqlite-parser'
 declare module 'uuid'

@@ -1,5 +1,4 @@
-import { AnyElectrifiedDatabase } from '../../drivers'
-import { ElectricNamespace } from '../../electric'
+import { ElectricNamespace } from '../../electric/namespace'
 import { Row } from '../types'
 import Log, { LogLevelDesc } from 'loglevel'
 
@@ -12,6 +11,7 @@ export const setLogLevel = (level: LogLevelDesc = 'TRACE') => {
   Log.setLevel(level)
 }
 
+/*
 export const init = (
   electrified: AnyElectrifiedDatabase,
   context: DebugContext
@@ -21,3 +21,4 @@ export const init = (
 
   setLogLevel('TRACE')
 }
+ */

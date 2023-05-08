@@ -531,7 +531,7 @@ test.serial('default and null test', async (t) => {
   const rel: Relation = {
     id: 1,
     schema: 'schema',
-    table: 'items',
+    table: 'Items',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
       { name: 'id', type: 'uuid' },

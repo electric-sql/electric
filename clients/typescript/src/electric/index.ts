@@ -1,17 +1,17 @@
-import { ElectricConfig } from '../config/index'
-import {
-  AnyDatabase,
-  AnyElectricDatabase,
-  AnyElectrifiedDatabase,
-} from '../drivers/index'
+import { ElectricConfig, hydrateConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
-import { Notifier } from '../notifiers/index'
-import { ConsoleClient, Registry } from '../satellite/index'
+import { BundleMigrator, Migrator } from '../migrators/index'
+import { EventNotifier, Notifier } from '../notifiers/index'
+import { ConsoleClient, globalRegistry, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
-import { proxyOriginal } from '../proxy/original'
 import { DbName } from '../util/types'
 import { setLogLevel } from '../util/debug'
+import { ElectricNamespace } from './namespace'
+import { ElectricClient } from '../client/model/client'
+import { ConsoleHttpClient } from '../auth'
+import { DbSchema } from '../client/model/schema'
+
+export { ElectricNamespace }
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock
@@ -25,52 +25,31 @@ export interface ElectrifyOptions {
   registry?: Registry
 }
 
-// This is the namespace that's patched onto the user's database client
-// (technically via the proxy machinery) as the `.electric` property.
-export class ElectricNamespace {
-  adapter: DatabaseAdapter
-  notifier: Notifier
-  isConnected: boolean
-
-  constructor(adapter: DatabaseAdapter, notifier: Notifier) {
-    this.adapter = adapter
-    this.notifier = notifier
-    this.isConnected = false
-
-    // we need to set isConnected before the first event is emitted,
-    // otherwise application might be out of sync with satellite state.
-    this.notifier.subscribeToConnectivityStateChange((notification) => {
-      this.isConnected = notification.connectivityState == 'connected'
-    })
-  }
-
-  // We lift this function a level so the user can call
-  // `db.electric.potentiallyChanged()` rather than the longer / more redundant
-  // `db.electric.notifier.potentiallyChanged()`.
-  potentiallyChanged(): void {
-    this.notifier.potentiallyChanged()
-  }
-}
-
 /**
  * This is the primary `electrify()` endpoint that the individual drivers
  * call once they've constructed their implementations. This function can
  * also be called directly by tests that don't want to go via the adapter
  * entrypoints in order to avoid loading the environment dependencies.
  */
-export const electrify = async (
+export const electrify = async <DB extends DbSchema<any>>(
   dbName: DbName,
-  db: AnyDatabase,
-  electric: AnyElectricDatabase,
+  dbDescription: DB,
   adapter: DatabaseAdapter,
-  migrator: Migrator,
-  notifier: Notifier,
   socketFactory: SocketFactory,
-  console: ConsoleClient,
-  registry: Registry,
-  config: ElectricConfig
-): Promise<AnyElectrifiedDatabase> => {
+  config: ElectricConfig,
+  opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
+): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
+
+  const configWithDefaults = hydrateConfig(config)
+  const migrator =
+    opts?.migrator || new BundleMigrator(adapter, config.migrations)
+  const notifier = opts?.notifier || new EventNotifier(dbName)
+  const console = opts?.console || new ConsoleHttpClient(configWithDefaults)
+  const registry = opts?.registry || globalRegistry
+
+  const electric = new ElectricNamespace(adapter, notifier)
+  const namespace = ElectricClient.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library
 
   await registry.ensureStarted(
     dbName,
@@ -79,8 +58,8 @@ export const electrify = async (
     notifier,
     socketFactory,
     console,
-    config
+    configWithDefaults
   )
 
-  return proxyOriginal(db, electric)
+  return namespace
 }
