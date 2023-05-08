@@ -18,7 +18,7 @@
 
 [ElectricSQL](https://electric-sql.com) is a local-first SQL system. It provides active-active cloud sync for embedded SQLite databases and a reactive programming model to bind components to live database queries.
 
-The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with _any_ SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Expo](https://electric-sql.com/docs/usage/drivers#expo), [React Native](https://electric-sql.com/docs/usage/drivers#react-native), [SQL.js](https://electric-sql.com/docs/drivers/web) and [Node.js](https://electric-sql.com/docs/usage/drivers#edge).
+The ElectricSQL Typescript Client is the main ElectricSQL client library for developing node, web and JavaScript-based mobile applications. It's designed to work with _any_ SQLite driver or bindings, with convienience functions to integrate with the most popular ones, including the primary drivers for [Expo](https://electric-sql.com/docs/usage/drivers#expo), [React Native](https://electric-sql.com/docs/usage/drivers#react-native), [SQL.js](https://electric-sql.com/docs/usage/drivers#web) and [Node.js](https://electric-sql.com/docs/usage/drivers#edge).
 
 See the:
 
@@ -65,7 +65,7 @@ db.transaction((tx) => tx.executeSql('SELECT 1'))
 
 ### Using in the web browser
 
-Electric uses [SQL.js](https://electric-sql.com/docs/usage/web) in the browser with [absurd-sql](https://electric-sql.com/docs/usage/web) for persistence. This runs in a web worker (which we also use to keep background replication off the main thread). As a result, the electrified db client provides an asynchronous version of a subset of the SQL.js driver interface.
+Electric uses [SQL.js](https://electric-sql.com/docs/usage/drivers#web) in the browser with [absurd-sql](https://electric-sql.com/docs/usage/drivers#web) for persistence. This runs in a web worker (which we also use to keep background replication off the main thread). As a result, the electrified db client provides an asynchronous version of a subset of the SQL.js driver interface.
 
 First create a `worker.js` file that imports and starts an `ElectricWorker` process:
 
