@@ -54,8 +54,8 @@ defmodule Electric.Postgres.SchemaRegistry do
 
   use GenServer
 
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(args) do
+    GenServer.start_link(__MODULE__, args, name: Keyword.get(args, :name, __MODULE__))
   end
 
   # for tests only
@@ -70,9 +70,20 @@ defmodule Electric.Postgres.SchemaRegistry do
   `fetch_replicated_tables/2` yields a list of all tables within the publication,
   and `fetch_table_info/2` yields one of the tables saved here, either by name or oid.
   """
-  @spec put_replicated_tables(registry(), String.t(), [replicated_table()]) :: true
+  @spec put_replicated_tables(registry(), String.t(), [replicated_table()]) :: :ok
   def put_replicated_tables(agent \\ __MODULE__, publication, tables) do
     GenServer.call(agent, {:put_replicated_tables, publication, tables})
+  end
+
+  @doc """
+  Add the tables to the given publication.
+
+  Unlike `put_replicated_tables/3` this function appends tables to the existing
+  set for the publication rather than overwriting it.
+  """
+  @spec add_replicated_tables(registry(), String.t(), [replicated_table()]) :: :ok
+  def add_replicated_tables(agent \\ __MODULE__, publication, tables) do
+    GenServer.call(agent, {:add_replicated_tables, publication, tables})
   end
 
   @doc """
@@ -120,7 +131,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   @doc """
   Save information about columns of a particular table.
   """
-  @spec put_table_columns(registry(), table_name(), [column()]) :: true
+  @spec put_table_columns(registry(), table_name(), [column()]) :: :ok
   def put_table_columns(agent \\ __MODULE__, table, columns) do
     %{oid: oid} = fetch_table_info!(agent, table)
     GenServer.call(agent, {:put_table_columns, table, oid, columns})
@@ -182,7 +193,7 @@ defmodule Electric.Postgres.SchemaRegistry do
     ets_table =
       :ets.new(
         :postgres_schema_registry,
-        [:named_table, :protected]
+        [:protected]
       )
 
     {:ok, %{ets_table: ets_table, pending: []}}
@@ -210,6 +221,24 @@ defmodule Electric.Postgres.SchemaRegistry do
         state,
         &send_pending_calls(&2, {:fetch_table_info, &1.oid}, &1)
       )
+
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:add_replicated_tables, publication, tables}, _from, state) do
+    oids = MapSet.new(tables, & &1.oid)
+
+    existing =
+      case :ets.lookup(state.ets_table, {:publication, publication, :tables}) do
+        [] -> []
+        [{_, tables}] -> tables
+      end
+      |> Enum.reject(&MapSet.member?(oids, &1.oid))
+
+    tables
+    |> Enum.map(&{{:table, {&1.schema, &1.name}, :info}, &1.oid, &1})
+    |> then(&[{{:publication, publication, :tables}, existing ++ tables} | &1])
+    |> then(&:ets.insert(state.ets_table, &1))
 
     {:reply, :ok, state}
   end

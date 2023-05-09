@@ -254,15 +254,26 @@ defmodule Electric.Replication.Postgres.SlotServer do
       Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
         transaction = filter_extension_relations(transaction)
 
-        Logger.debug(
-          "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
-        )
+        case transaction do
+          %{changes: []} ->
+            state
 
-        {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
+          transaction ->
+            Logger.debug(
+              "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
+            )
 
-        send_all(wal_messages, state.send_fn, origin)
+            {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
 
-        %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
+            send_all(wal_messages, state.send_fn, origin)
+
+            %{
+              state
+              | current_lsn: new_lsn,
+                sent_relations: relations,
+                current_vx_offset: vx_offset
+            }
+        end
       end)
 
     OffsetStorage.put_pg_relation(

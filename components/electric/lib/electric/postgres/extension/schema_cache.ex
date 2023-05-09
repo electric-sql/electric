@@ -20,6 +20,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   alias Electric.Replication.Connectors
   alias Electric.Postgres.Extension.SchemaLoader
+  # alias Electric.Postgres.Schema
 
   require Logger
 
@@ -138,5 +139,34 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     :ok = :epgsql.close(conn)
     {:noreply, state}
   end
+
+  # def handle_call({:primary_keys, ns, table}, _from, %{current: {_version, schema}} = state) do
+  #   result =
+  #     with {:ok, table} <- Schema.fetch_table(schema, {ns, table}) do
+  #       Schema.primary_keys(table)
+  #     end
+  #
+  #   {:reply, result, state}
+  # end
+  #
+  # def handle_call({:primary_keys, ns, table}, _from, state) do
+  #   {result, state} =
+  #     with {{:ok, _version, schema}, state} <- load_current_schema(state),
+  #          {{:ok, table}, state} <-
+  #            {Schema.fetch_table(schema, {ns, table}), state} do
+  #       {Schema.primary_keys(table), state}
+  #     end
+  #
+  #   {:reply, result, state}
+  # end
+
+  defp load_current_schema(state) do
+    case SchemaLoader.load(state.backend) do
+      {:ok, version, schema} ->
+        {{:ok, version, schema}, %{state | current: {version, schema}}}
+
+      error ->
+        {error, state}
+    end
   end
 end

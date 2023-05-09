@@ -82,6 +82,23 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  def primary_keys(%Proto.Table{} = table) do
+    pk =
+      Enum.find_value(table.constraints, nil, fn
+        %Proto.Constraint{constraint: {:primary, pk}} ->
+          pk
+
+        _ ->
+          false
+      end)
+
+    if pk do
+      {:ok, pk.keys}
+    else
+      {:error, "table #{table.name} has no primary key constraint"}
+    end
+  end
+
   def struct_order(list) do
     Enum.sort(list)
   end

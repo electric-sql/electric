@@ -146,9 +146,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     table = %{table | primary_keys: pks}
 
-    SchemaRegistry.put_replicated_tables(state.publication, [table])
+    # FIXME: Since we use fake oids for our schema, we need to keep them consistent
+    # so retrieve the generated oid from the registry and use it if it exists
+    table =
+      case SchemaRegistry.fetch_table_info({table.schema, table.name}) do
+        {:ok, existing_table} ->
+          %{table | oid: existing_table.oid}
 
-    SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+        :error ->
+          table
+      end
+
+    :ok = SchemaRegistry.add_replicated_tables(state.publication, [table])
+    :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
 
     {:noreply, [], state}
   end
