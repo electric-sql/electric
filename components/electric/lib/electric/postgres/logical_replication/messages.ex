@@ -55,10 +55,7 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
          schema: relation.namespace,
          oid: relation.id,
          replica_identity: relation.replica_identity,
-         primary_keys:
-           relation.columns
-           |> Stream.filter(&(:key in &1.flags))
-           |> Enum.map(& &1.name)
+         primary_keys: []
        },
        Enum.map(
          relation.columns,

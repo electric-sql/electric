@@ -191,6 +191,24 @@ defmodule Electric.Replication.Postgres.Client do
     end)
   end
 
+  @spec query_table_pks(connection(), integer()) :: {:ok, [String.t()]} | no_return
+  def query_table_pks(conn, oid) do
+    primary_keys_query = """
+    SELECT i.indrelid, a.attname
+    FROM   pg_index i
+    JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+    WHERE  i.indrelid = '$1'
+    AND    i.indisprimary;
+    """
+
+    {:ok, _, pks_data} =
+      primary_keys_query
+      |> String.replace("$1", to_string(oid))
+      |> then(&:epgsql.squery(conn, &1))
+
+    {:ok, Enum.map(pks_data, &elem(&1, 1))}
+  end
+
   @spec query_migration_table(connection) :: [Electric.Postgres.SchemaRegistry.migration_table()]
   def query_migration_table(conn) do
     {:ok, _, table_data} = :epgsql.squery(conn, @migrations_query)

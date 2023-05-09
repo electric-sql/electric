@@ -6,8 +6,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type version() :: binary()
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
-  @callback load(state()) :: {:ok, Schema.t()}
-  @callback load(state(), version()) :: {:ok, Schema.t()} | {:error, binary()}
+  @callback load(state()) :: {:ok, version(), Schema.t()}
+  @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
   @callback save(state(), version(), Schema.t()) :: {:ok, state()}
 
   @default_backend {__MODULE__.Epgsql, []}
@@ -58,16 +58,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @impl true
   def load(conn) do
-    with {:ok, _version, schema} <- Extension.current_schema(conn) do
-      {:ok, schema}
-    end
+    Extension.current_schema(conn)
   end
 
   @impl true
   def load(conn, version) do
-    with {:ok, ^version, schema} <- Extension.schema_version(conn, version) do
-      {:ok, schema}
-    end
+    Extension.schema_version(conn, version)
   end
 
   @impl true

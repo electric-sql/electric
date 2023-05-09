@@ -63,6 +63,18 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:save, version, schema})
   end
 
+  @spec table_primary_keys(Connectors.origin(), binary | nil, binary) ::
+          {:ok, [binary()]} | {:error, term()}
+  def table_primary_keys(origin, schema, table) do
+    GenServer.call(name(origin), {:primary_keys, schema, table})
+  end
+
+  @spec table_primary_keys(Connectors.origin(), pos_integer()) ::
+          {:ok, [binary()]} | {:error, term()}
+  def table_primary_keys(origin, oid) when is_integer(oid) do
+    GenServer.call(name(origin), {:primary_keys, oid})
+  end
+
   @impl GenServer
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
@@ -75,25 +87,56 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       |> SchemaLoader.get(:backend)
       |> SchemaLoader.connect(conn_config)
 
-    state = %{origin: origin, backend: backend, opts: opts}
+    state = %{
+      origin: origin,
+      backend: backend,
+      conn_config: conn_config,
+      opts: opts,
+      current: nil
+    }
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_call({:load, :current}, _from, state) do
-    %{backend: backend} = state
-    {:reply, SchemaLoader.load(backend), state}
+  def handle_call({:load, :current}, _from, %{current: nil} = state) do
+    {result, state} = load_current_schema(state)
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:load, :current}, _from, %{current: {version, schema}} = state) do
+    {:reply, {:ok, version, schema}, state}
+  end
+
+  def handle_call({:load, {:version, version}}, _from, %{current: {version, schema}} = state) do
+    {:reply, {:ok, version, schema}, state}
   end
 
   def handle_call({:load, {:version, version}}, _from, state) do
-    %{backend: backend} = state
-    {:reply, SchemaLoader.load(backend, version), state}
+    {:reply, SchemaLoader.load(state.backend, version), state}
   end
 
   def handle_call({:save, version, schema}, _from, state) do
-    %{origin: origin, backend: backend} = state
-    {:ok, backend} = SchemaLoader.save(backend, version, schema)
-    {:reply, {:ok, origin}, %{state | backend: backend}}
+    {:ok, backend} = SchemaLoader.save(state.backend, version, schema)
+    {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
+  end
+
+  def handle_call({:primary_keys, oid}, _from, state) do
+    {:ok, conn} =
+      state.conn_config
+      |> Connectors.get_connection_opts(replication: false)
+      |> :epgsql.connect()
+
+    result = Electric.Replication.Postgres.Client.query_table_pks(conn, oid)
+
+    {:reply, result, state, {:continue, {:close, conn}}}
+  end
+
+  @impl GenServer
+  def handle_continue({:close, conn}, state) do
+    :ok = :epgsql.close(conn)
+    {:noreply, state}
+  end
   end
 end

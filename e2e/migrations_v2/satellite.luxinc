@@ -26,6 +26,10 @@
     [invoke wait-for "client.get_tables(db)" "${match}" 10 $node]
 [endmacro]
 
+[macro node_await_column table column]
+    [invoke wait-for "client.get_columns(db, "${table}")" "${column}" 10 $node]
+[endmacro]
+
 [macro node_await_insert keys]
     !client.insert_item(db, ${keys})
     ?$node

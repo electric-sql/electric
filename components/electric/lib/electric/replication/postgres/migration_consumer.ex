@@ -144,9 +144,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, schema} = load_schema(state)
+    {:ok, old_version, schema} = load_schema(state)
 
-    Logger.info("Applying migration #{version}")
+    Logger.info("Applying migration #{old_version} -> #{version}")
 
     schema =
       Enum.reduce(stmts, schema, fn stmt, schema ->

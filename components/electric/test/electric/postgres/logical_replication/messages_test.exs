@@ -47,7 +47,9 @@ defmodule Electric.Postgres.LogicalReplication.MessagesTest do
       table = %{
         name: "ddl_commands",
         oid: 20005,
-        primary_keys: ["id"],
+        # FIXME: primary keys are filled in somewhere else, somewhere that has access to the pg 
+        # catalog tables...
+        primary_keys: [],
         replica_identity: :default,
         schema: "electric"
       }

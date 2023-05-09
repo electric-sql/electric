@@ -24,6 +24,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   alias Electric.Replication.DownstreamProducer
 
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
               config: nil,
@@ -250,11 +252,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
       when replication_started?(state) do
     state =
       Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
+        transaction = filter_extension_relations(transaction)
+
         Logger.debug(
           "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
         )
 
         {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
+
         send_all(wal_messages, state.send_fn, origin)
 
         %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
@@ -282,6 +287,17 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   # Private function
+
+  defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
+    %{
+      tx
+      | changes:
+          Enum.reject(changes, fn
+            %{relation: relation} when is_extension_relation(relation) -> true
+            _ -> false
+          end)
+    }
+  end
 
   defp clear_replication(%State{} = state) do
     Process.demonitor(state.socket_process_ref)
