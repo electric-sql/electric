@@ -4,6 +4,7 @@
 [global eprompt=iex\(\d+\)>\s]
 [global psql=electric]
 [global user_id_1=1]
+[global migration_version=20230504114018]
 
 [include shared.luxinc]
 [invoke setup]
@@ -34,7 +35,8 @@
     [invoke log "run migration on postgres"]
     !BEGIN;
     ?electric=\*#
-    # need to invoke the migration id function
+    !SELECT electric.migration_version('$migration_version');
+    ?electric=\*#
     !CREATE TABLE mtable1 (id uuid PRIMARY KEY);
     ?electric=\*#
     !COMMIT;
@@ -45,9 +47,7 @@
     [invoke client_session $user_id_1 1]
 
 [shell electric]
-    ?.* origin=postgres_2 .* \[debug\] Sending \d messages to the subscriber
-    ?"query" => "CREATE TABLE mtable1 \(id uuid PRIMARY KEY\);",
-    ?relation: {"electric", "ddl_commands"}
+    ?.* client_id=client_1_1 .* \[info\] Serializing migration "$migration_version"
 
 [shell user_1_ws1]
     ?.*SatOpMigrate\{.*sql: "CREATE TABLE \\"mtable1\\".*

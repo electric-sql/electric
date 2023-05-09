@@ -10,7 +10,7 @@
 [include shared.luxinc]
 [include satellite.luxinc]
 
-[macro migrate_pg version ddl] 
+[macro migrate_pg version ddl]
   [shell pg_1]
       [invoke log "run migration ${version} on postgres"]
       !BEGIN;
