@@ -3,7 +3,10 @@ import Long from 'long'
 import { makeContext, cleanAndStopSatellite, relations } from './common'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { DataChangeType, Row, Statement } from '../../src/util'
-import { SatOpMigrate_Type } from '../../src/_generated/protocol/satellite'
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../../src/_generated/protocol/satellite'
 import { generateTag } from '../../src/satellite/oplog'
 import isequal from 'lodash.isequal'
 
@@ -11,7 +14,6 @@ test.beforeEach(async (t: any) => {
   await makeContext(t)
   const { satellite } = t.context as any
   await satellite.start()
-  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction` calls
   t.context['clientId'] = satellite['_authState']['clientId'] // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
@@ -105,6 +107,58 @@ const createTable = {
 const addColumn = {
   migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
   sql: 'ALTER TABLE parent ADD baz TEXT',
+}
+
+const addColumnRelation = {
+  id: 2000, // doesn't matter
+  schema: 'public',
+  table: 'parent',
+  tableType: SatRelation_RelationType.TABLE,
+  columns: [
+    {
+      name: 'id',
+      type: 'INTEGER',
+      primaryKey: true,
+    },
+    {
+      name: 'value',
+      type: 'TEXT',
+      primaryKey: false,
+    },
+    {
+      name: 'other',
+      type: 'INTEGER',
+      primaryKey: false,
+    },
+    {
+      name: 'baz',
+      type: 'TEXT',
+      primaryKey: false,
+    },
+  ],
+}
+const newTableRelation = {
+  id: 2001, // doesn't matter
+  schema: 'public',
+  table: 'NewTable',
+  tableType: SatRelation_RelationType.TABLE,
+  columns: [
+    {
+      name: 'id',
+      type: 'TEXT',
+      primaryKey: true,
+    },
+    {
+      name: 'foo',
+      type: 'INTEGER',
+      primaryKey: false,
+    },
+    {
+      name: 'bar',
+      type: 'TEXT',
+      primaryKey: false,
+    },
+  ],
 }
 
 async function checkMigrationIsApplied(t: any) {
@@ -271,16 +325,26 @@ test.serial(
       other: 6,
       baz: 'foo',
     }
-    const insertExtendedChange = mkInsertChange(insertExtendedRow)
+    const insertExtendedChange = {
+      type: DataChangeType.INSERT,
+      relation: addColumnRelation,
+      record: insertExtendedRow,
+      oldRecord: {},
+      tags: txTags,
+    }
 
     const insertExtendedWithoutValueRow = {
       id: 5,
       value: 'remote',
       other: 7,
     }
-    const insertExtendedWithoutValueChange = mkInsertChange(
-      insertExtendedWithoutValueRow
-    )
+    const insertExtendedWithoutValueChange = {
+      type: DataChangeType.INSERT,
+      relation: addColumnRelation,
+      record: insertExtendedWithoutValueRow,
+      oldRecord: {},
+      tags: txTags,
+    }
 
     const insertInNewTableRow = {
       id: '1',
@@ -289,7 +353,7 @@ test.serial(
     }
     const insertInNewTableChange = {
       type: DataChangeType.INSERT,
-      relation: relations['NewTable'],
+      relation: newTableRelation,
       record: insertInNewTableRow,
       oldRecord: {},
       tags: txTags,
@@ -311,6 +375,12 @@ test.serial(
     }
 
     const rowsBeforeMigration = await fetchParentRows(adapter)
+
+    // For each schema change, Electric sends a `SatRelation` message
+    // that is handled by `_updateRelations` in order
+    // to update Satellite's relations
+    await satellite._updateRelations(addColumnRelation)
+    await satellite._updateRelations(newTableRelation)
 
     // Apply the migration transaction
     await satellite._applyTransaction(migrationTx)
@@ -397,6 +467,12 @@ test.serial(
     const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(
       (r) => r.id !== deleteRow.id
     )
+
+    // For each schema change, Electric sends a `SatRelation` message
+    // that is handled by `_updateRelations` in order
+    // to update Satellite's relations
+    await satellite._updateRelations(addColumnRelation)
+    await satellite._updateRelations(newTableRelation)
 
     // Apply the migration transaction
     await satellite._applyTransaction(migrationTx)
@@ -487,6 +563,12 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
   }
 
   const rowsBeforeMigration = await fetchParentRows(adapter)
+
+  // For each schema change, Electric sends a `SatRelation` message
+  // that is handled by `_updateRelations` in order
+  // to update Satellite's relations
+  await satellite._updateRelations(addColumnRelation)
+  await satellite._updateRelations(newTableRelation)
 
   // Apply the concurrent transactions
   await satellite._applyTransaction(txB)

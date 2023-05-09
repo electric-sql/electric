@@ -12,6 +12,7 @@ import {
   SatelliteError,
   DataTransaction,
   Transaction,
+  Relation,
 } from '../util/types'
 
 import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
@@ -149,6 +150,10 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.replicating = false
     return Promise.resolve()
   }
+
+  subscribeToRelations(
+    _callback: (relation: Relation) => Promise<void>
+  ): void {}
 
   subscribeToTransactions(
     _callback: (transaction: Transaction) => Promise<void>

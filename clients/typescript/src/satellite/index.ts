@@ -12,6 +12,7 @@ import {
   SatelliteError,
   DataTransaction,
   Transaction,
+  Relation,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'
@@ -60,6 +61,7 @@ export interface Client {
   isClosed(): boolean
   startReplication(lsn?: LSN): Promise<void | SatelliteError>
   stopReplication(): Promise<void | SatelliteError>
+  subscribeToRelations(callback: (relation: Relation) => Promise<void>): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
   ): void

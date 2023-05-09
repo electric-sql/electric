@@ -26,6 +26,7 @@ import {
   Transaction,
   DataChange,
   SchemaChange,
+  Row,
 } from '../util/types'
 import { Satellite } from './index'
 import { SatelliteConfig, SatelliteOpts } from './config'
@@ -205,6 +206,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   setClientListeners(): void {
+    this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     // When a local transaction is sent, or an acknowledgement for
     // a remote transaction commit is received, we update lsn records.
@@ -697,6 +699,34 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
+  async _updateRelations(rel: Relation) {
+    if (rel.tableType === SatRelation_RelationType.TABLE) {
+      // this relation may be for a newly created table
+      // or for a column that was added to an existing table
+      const tableName = rel.table
+
+      if (this.relations[tableName] === undefined) {
+        // the relation is for a new table
+        const localTableNames = await this._getLocalTableNames()
+        const id = localTableNames.length
+        const relation = {
+          ...rel,
+          id: id,
+        }
+        this.relations[tableName] = relation
+      } else {
+        // the relation is for an existing table
+        // update the information but keep the same ID
+        const id = this.relations[tableName].id
+        const relation = {
+          ...rel,
+          id: id,
+        }
+        this.relations[tableName] = relation
+      }
+    }
+  }
+
   async _applyTransaction(transaction: Transaction) {
     const origin = transaction.origin!
     const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
@@ -712,7 +742,6 @@ export class SatelliteProcess implements Satellite {
     const opLogEntries: OplogEntry[] = []
     const lsn = transaction.lsn
     let firstDMLChunk = true
-    let containsDDL = false
 
     // switches off on transaction commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
@@ -748,7 +777,6 @@ export class SatelliteProcess implements Satellite {
     }
     const processDDL = (changes: SchemaChange[]) => {
       changes.forEach((change) => stmts.push({ sql: change.sql }))
-      containsDDL = true
     }
 
     // Now process all changes per chunk.
@@ -807,21 +835,6 @@ export class SatelliteProcess implements Satellite {
       ...stmts,
       ...this._enableTriggers(tablenames)
     )
-
-    // TODO: after each chunk of DDL we need to update the relations
-    //       this.relations = await this._getLocalRelations()
-    //       we can do this using interactive transactions instead of runInTransaction
-    //       need to be careful that the queries executed by this._getLocalRelations()
-    //       are executed in our transaction!
-
-    // TODO: also update the migration tests such that they only set the original relations not the ones that come in!
-    //       and then test the problematic case (TX1=create table; TX2=insert in that table) to see that it is solved
-    //       afterwards also test one TX that creates table and then inserts in that table (but require proper solution above)
-
-    if (containsDDL) {
-      // Need to reload primary keys after schema migration
-      this.relations = await this._getLocalRelations()
-    }
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
@@ -923,9 +936,7 @@ export class SatelliteProcess implements Satellite {
     return clientId
   }
 
-  // Fetch primary keys from local store and use them to identify incoming ops.
-  // TODO: Improve this code once with Migrator and consider simplifying oplog.
-  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
+  private async _getLocalTableNames(): Promise<Row[]> {
     const notIn = [
       this.opts.metaTable.tablename.toString(),
       this.opts.migrationsTable.tablename.toString(),
@@ -942,8 +953,13 @@ export class SatelliteProcess implements Satellite {
         WHERE type = 'table'
           AND name NOT IN (${notIn.map(() => '?').join(',')})
     `
-    const tableNames = await this.adapter.query({ sql: tables, args: notIn })
+    return await this.adapter.query({ sql: tables, args: notIn })
+  }
 
+  // Fetch primary keys from local store and use them to identify incoming ops.
+  // TODO: Improve this code once with Migrator and consider simplifying oplog.
+  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
+    const tableNames = await this._getLocalTableNames()
     const relations: RelationsCache = {}
 
     let id = 0

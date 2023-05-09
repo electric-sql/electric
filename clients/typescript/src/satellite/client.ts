@@ -305,6 +305,12 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
+  subscribeToRelations(callback: (relation: Relation) => Promise<void>) {
+    this.on('relation', async (relation) => {
+      await callback(relation)
+    })
+  }
+
   enqueueTransaction(transaction: DataTransaction): void {
     if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
@@ -577,10 +583,15 @@ export class SatelliteClient extends EventEmitter implements Client {
       schema: message.schemaName,
       table: message.tableName,
       tableType: message.tableType,
-      columns: message.columns.map((c) => ({ name: c.name, type: c.type })),
+      columns: message.columns.map((c) => ({
+        name: c.name,
+        type: c.type,
+        primaryKey: c.primaryKey,
+      })),
     }
 
     this.inbound.relations.set(relation.id, relation)
+    this.emit('relation', relation)
   }
 
   private handleTransaction(message: SatOpLog) {
