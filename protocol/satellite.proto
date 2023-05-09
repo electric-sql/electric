@@ -23,7 +23,7 @@ syntax = "proto3";
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v1_2;
+package Electric.Satellite.v1_3;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -139,6 +139,7 @@ message SatInStopReplicationResp {
 message SatRelationColumn {
     string name = 1;
     string type = 2;
+    bool primaryKey = 3;
 }
 
 message SatRelation {
@@ -317,7 +318,7 @@ message SatOpMigrate {
     // the postgresql migration as an electric function call
     string version = 1;
     // a list of sql ddl statements to apply, converted from the pg originals
-    // The migration machinery converts an `ALTER TABLE action1, action2, action3;` 
+    // The migration machinery converts an `ALTER TABLE action1, action2, action3;`
     // query into a set of 3: `ALTER TABLE action1; ALTER TABLE action2,` etc
     // so we need to support 1+ statements for every migration event.
     repeated Stmt stmts = 2;
