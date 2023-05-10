@@ -116,11 +116,11 @@ defmodule Electric.Postgres.Dialect.SQLite do
     alter_table_cmd(cmd, table, opts)
   end
 
-  defp alter_table_cmd(%Pg.AlterTableCmd{subtype: :AT_AddColumn} = cmd, table, opts) do
+  defp alter_table_cmd(%Pg.AlterTableCmd{subtype: :AT_AddColumn} = cmd, table, _opts) do
     %{def: %Pg.Node{node: {:column_def, %Pg.ColumnDef{} = coldef}}} = cmd
 
     constraints =
-      Enum.map(coldef.constraints, &Schema.AST.constraint(&1, table, [coldef.colname], opts))
+      Enum.map(coldef.constraints, &Schema.AST.constraint(&1, table, [coldef.colname]))
 
     stmt(
       [

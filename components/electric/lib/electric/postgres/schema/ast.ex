@@ -2,13 +2,11 @@ defmodule Electric.Postgres.Schema.AST do
   alias PgQuery, as: Pg
   alias Electric.Postgres.{Schema, Schema.AST, Schema.Proto}
 
-  @default_schema "public"
-
   def create(%Pg.CreateStmt{} = action, %Schema.Update.Opts{} = opts) do
     map(action, opts)
   end
 
-  def constraint(condef, table, keys, opts \\ %Schema.Update.Opts{})
+  def constraint(condef, table, keys, opts \\ Schema.Update.Opts.loose())
 
   def constraint(%Pg.Node{node: {:constraint, constraint}}, table, keys, opts) do
     constraint(constraint, table, keys, opts)
@@ -197,7 +195,7 @@ defmodule Electric.Postgres.Schema.AST do
     end
   end
 
-  def map(ast, opts \\ %Schema.Update.Opts{})
+  def map(ast, opts \\ Schema.Update.Opts.loose())
 
   def map([], _opts), do: []
 
@@ -238,10 +236,10 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def map(%Pg.RangeVar{} = rangevar, _opts) do
+  def map(%Pg.RangeVar{} = rangevar, opts) do
     %Proto.RangeVar{
       name: rangevar.relname,
-      schema: optional_string(rangevar.schemaname) || @default_schema,
+      schema: optional_string(rangevar.schemaname) || opts.default_schema,
       alias: optional(rangevar.alias)
     }
   end

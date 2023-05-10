@@ -39,12 +39,26 @@ defmodule Electric.Postgres.Schema.Update do
   defmodule Opts do
     @moduledoc false
 
-    defstruct [:oid_loader, if_not_exists: false]
+    defstruct [:oid_loader, if_not_exists: false, default_schema: "public"]
 
     @type t() :: %__MODULE__{
             oid_loader: Extension.SchemaLoader.oid_loader(),
-            if_not_exists: boolean()
+            if_not_exists: boolean(),
+            default_schema: binary()
           }
+
+    @doc """
+    Schema mapping configuration that doesn't require a valid implementation of an oid_loader function
+    """
+    def loose() do
+      %__MODULE__{oid_loader: fn _, _, _ -> {:ok, 0} end}
+    end
+
+    def strict() do
+      %__MODULE__{
+        oid_loader: fn _, _, _ -> raise RuntimeError, message: "Invalid oid_loader function" end
+      }
+    end
   end
 
   def apply_stmt(schema, stmt, opts) when is_binary(stmt) do
