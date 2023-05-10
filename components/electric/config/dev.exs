@@ -79,28 +79,3 @@ config :electric,
   regional_id: System.get_env("ELECTRIC_REGIONAL_ID", "region-1.dev.electric-db")
 
 config :logger, level: :debug
-
-auth_provider =
-  with {:ok, auth_key} <- System.fetch_env("SATELLITE_AUTH_SIGNING_KEY"),
-       {:ok, auth_iss} <- System.fetch_env("SATELLITE_AUTH_SIGNING_ISS") do
-    IO.puts("using JWT auth for issuer #{auth_iss}")
-
-    if byte_size(auth_key) >= 32 do
-      {Electric.Satellite.Auth.JWT, issuer: auth_iss, secret_key: auth_key}
-    else
-      IO.puts(
-        IO.ANSI.format([
-          :bright,
-          :red,
-          "SATELLITE_AUTH_SIGNING_KEY value needs to be 32 bytes or greater. Falling back to insecure auth"
-        ])
-      )
-
-      {Electric.Satellite.Auth.Insecure, []}
-    end
-  else
-    :error ->
-      {Electric.Satellite.Auth.Insecure, []}
-  end
-
-config :electric, Electric.Satellite.Auth, provider: auth_provider
