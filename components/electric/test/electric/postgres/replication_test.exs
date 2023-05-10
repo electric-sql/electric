@@ -108,10 +108,18 @@ defmodule Electric.Postgres.ReplicationTest do
     end
   end
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
+  def schema_update(schema \\ Schema.new(), cmds) do
+    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  end
+
   describe "migrate/2" do
     test "updates the schema and returns a valid protcol message" do
       stmt = "CREATE TABLE public.fish (id int8 PRIMARY KEY);"
-      schema = Schema.update(Schema.new(), stmt)
+      schema = schema_update(stmt)
 
       version = "20230405134615"
 
@@ -153,7 +161,7 @@ defmodule Electric.Postgres.ReplicationTest do
       );
       """
 
-      schema = Schema.update(schema, stmt)
+      schema = schema_update(schema, stmt)
 
       assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
@@ -195,7 +203,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
     test "multiple alter table cmds" do
       stmt = "CREATE TABLE public.fish (id int8 PRIMARY KEY);"
-      schema = Schema.update(Schema.new(), stmt)
+      schema = schema_update(stmt)
 
       version = "20230405134615"
 
@@ -207,7 +215,7 @@ defmodule Electric.Postgres.ReplicationTest do
       stmt =
         "ALTER TABLE fish ADD COLUMN value jsonb DEFAULT '{}', ADD COLUMN ts timestamp DEFAULT current_timestamp;"
 
-      schema = Schema.update(schema, stmt)
+      schema = schema_update(schema, stmt)
 
       assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
 
@@ -252,14 +260,14 @@ defmodule Electric.Postgres.ReplicationTest do
 
     test "create index doesn't list tables" do
       stmt = "CREATE TABLE public.fish (id int8 PRIMARY KEY, available boolean);"
-      schema = Schema.update(Schema.new(), stmt)
+      schema = schema_update(stmt)
 
       version = "20230405134615"
 
       assert {:ok, [_msg]} = Replication.migrate(schema, version, stmt)
 
       stmt = "CREATE INDEX fish_available_index ON public.fish (avilable);"
-      schema = Schema.update(schema, stmt)
+      schema = schema_update(schema, stmt)
 
       version = "20230405134616"
       assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)

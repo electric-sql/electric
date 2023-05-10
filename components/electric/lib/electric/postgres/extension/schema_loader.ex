@@ -4,11 +4,18 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   @type state() :: term()
   @type version() :: binary()
+  @type name() :: binary()
+  @type schema() :: name()
+  @type oid() :: integer()
+  @type rel_type() :: :table | :index | :view | :trigger
+  @type oid_result() :: {:ok, integer()} | {:error, term()}
+  @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
   @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
   @callback save(state(), version(), Schema.t()) :: {:ok, state()}
+  @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -41,6 +48,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
       {:ok, {module, state}}
     end
   end
+
+  def relation_oid({module, state}, rel_type, schema, table) do
+    module.relation_oid(state, rel_type, schema, table)
+  end
 end
 
 defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
@@ -70,6 +81,29 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   def save(conn, version, schema) do
     with :ok <- Extension.save_schema(conn, version, schema) do
       {:ok, conn}
+    end
+  end
+
+  @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
+  @pg_class_query """
+  SELECT c.oid FROM pg_class c 
+    INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE
+      n.nspname = $1
+      AND c.relname = $2
+      AND c.relkind = ANY($3::char[])
+  LIMIT 1;
+  """
+
+  @impl true
+  def relation_oid(_conn, :trigger, _schema, _table) do
+    raise RuntimeError, message: "oid lookup for triggers no implemented"
+  end
+
+  def relation_oid(conn, rel_type, schema, table) do
+    with {:ok, relkind} <- Map.fetch(@relkind, rel_type),
+         {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
+      {:ok, String.to_integer(oid)}
     end
   end
 end

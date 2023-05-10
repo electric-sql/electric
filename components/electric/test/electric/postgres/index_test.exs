@@ -9,13 +9,21 @@ defmodule Electric.Postgres.IndexTest do
   CREATE TABLE t2 (c4 int, c2 int, c3 int);
   """
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
+  def schema_update(schema \\ Schema.new(), cmds) do
+    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  end
+
   def assert_migration(tests, opts \\ []) do
     setup_sql = Keyword.get(opts, :setup, "")
     table_name = Keyword.get(opts, :table, "t1")
 
     for {sql, expected_index} <- tests do
       cmds = parse(@table_setup <> setup_sql <> sql)
-      schema = Schema.update(Schema.new(), cmds)
+      schema = schema_update(cmds)
 
       assert_valid_schema(schema)
 
@@ -35,6 +43,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :LAST, ordering: :ASC}
            ],
            name: "t1_c1_c2_idx",
+           oid: 13541,
            table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
@@ -46,6 +55,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :FIRST, ordering: :DESC}
            ],
            name: "t1_c2_idx",
+           oid: 46053,
            table: %Proto.RangeVar{name: "t1", schema: "public"},
            unique: false,
            using: "btree",
@@ -62,6 +72,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "t1_c2_idx",
+           oid: 46053,
            table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
@@ -89,6 +100,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "t1_idx",
+           oid: 9612,
            table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
@@ -108,6 +120,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :LAST, ordering: :ASC}
            ],
            name: "t1_c1_c2_idx",
+           oid: 13541,
            table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
@@ -181,6 +194,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "myindex",
+           oid: 48957,
            table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: true,
            using: "gist",
@@ -200,6 +214,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c1", nulls_ordering: :LAST, ordering: :ASC}
             ],
             name: "myindex",
+            oid: 48957,
             table: %Proto.RangeVar{schema: "public", name: "t1"},
             unique: false,
             using: "btree",
@@ -213,7 +228,7 @@ defmodule Electric.Postgres.IndexTest do
     property "generated" do
       check all(sql <- SQLGenerator.Index.create_index(table_name: "t1")) do
         assert cmds = parse(@table_setup <> sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = schema_update(cmds)
         assert_valid_schema(schema)
       end
     end
@@ -233,6 +248,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c2"}
             ],
             name: "new_name",
+            oid: 35142,
             table: %Proto.RangeVar{schema: "public", name: "t1"},
             unique: false,
             using: "btree",
@@ -253,6 +269,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c2"}
             ],
             name: "new_name",
+            oid: 43559,
             table: %Proto.RangeVar{schema: "myschema", name: "t1"},
             unique: false,
             using: "btree",

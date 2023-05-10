@@ -39,8 +39,12 @@ defmodule Electric.Postgres.SQLGenerator do
 
     def update(pid, sql) when is_binary(sql) do
       Agent.update(pid, fn schema ->
-        Schema.update(schema, Postgres.parse!(sql))
+        Schema.update(schema, Postgres.parse!(sql), oid_loader: &oid_loader/3)
       end)
+    end
+
+    defp oid_loader(type, schema, name) do
+      {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
     end
   end
 

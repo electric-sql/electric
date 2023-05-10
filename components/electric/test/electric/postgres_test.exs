@@ -256,6 +256,10 @@ defmodule Electric.PostgresTest do
     Stream.repeatedly(fn -> :rand.uniform(50) end)
   end
 
+  def oid_loader(conn) do
+    &Electric.Postgres.Extension.SchemaLoader.Epgsql.relation_oid(conn, &1, &2, &3)
+  end
+
   def exec(nil, schema, _conn, _cxt) do
     schema
   end
@@ -270,7 +274,7 @@ defmodule Electric.PostgresTest do
     end)
 
     cmds = parse(sql)
-    Schema.update(schema, cmds)
+    Schema.update(schema, cmds, oid_loader: oid_loader(conn))
   end
 
   def take(generator) do
@@ -398,7 +402,7 @@ defmodule Electric.PostgresTest do
     end)
   end
 
-  defp pg_schema(_conn, pg_config, namespace) do
+  defp pg_schema(conn, pg_config, namespace) do
     connection_args =
       Enum.flat_map([:host, :port, :database, :username], fn arg ->
         if value = pg_config[arg] do
@@ -424,7 +428,7 @@ defmodule Electric.PostgresTest do
     trace(sql)
     cmds = parse(sql)
 
-    expected_schema = Schema.update(Schema.new(), cmds)
+    expected_schema = Schema.update(Schema.new(), cmds, oid_loader: oid_loader(conn))
 
     {expected_schema, cmds}
   end

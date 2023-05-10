@@ -51,7 +51,7 @@ defmodule Electric.Postgres.Schema.Update.AlterTable do
 
   def update(%{node: {:alter_table_cmd, %{subtype: :AT_AddColumn} = cmd}}, table) do
     Logger.info("ALTER TABLE #{table.name} ADD COLUMN...")
-    table = AST.add_column(cmd.def, table, if_not_exists: cmd.missing_ok)
+    table = AST.add_column(cmd.def, table, %{if_not_exists: cmd.missing_ok})
     {[], table}
   end
 
@@ -60,7 +60,7 @@ defmodule Electric.Postgres.Schema.Update.AlterTable do
 
     %{node: {:constraint, con}} = cmd.def
 
-    constraint = AST.constraint(con, table)
+    constraint = AST.constraint(con, table, [])
 
     {
       [],

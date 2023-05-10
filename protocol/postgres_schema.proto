@@ -13,6 +13,7 @@ message Table {
   repeated Column columns = 2;
   repeated Constraint constraints = 3;
   repeated Index indexes = 4;
+  int32 oid = 5;
 }
 
 message Column {
@@ -128,6 +129,7 @@ message Index {
   repeated string including = 5;
   Expression where = 6;
   string using = 7;
+  int32 oid = 8;
 }
 
 message Expression {

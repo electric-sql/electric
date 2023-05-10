@@ -9138,7 +9138,8 @@
               columns: [],
               including: [],
               where: nil,
-              using: ""
+              using: "",
+              oid: 0
 
     (
       (
@@ -9161,6 +9162,7 @@
           |> encode_including(msg)
           |> encode_where(msg)
           |> encode_using(msg)
+          |> encode_oid(msg)
         end
       )
 
@@ -9264,6 +9266,18 @@
             ArgumentError ->
               reraise Protox.EncodingError.new(:using, "invalid field value"), __STACKTRACE__
           end
+        end,
+        defp encode_oid(acc, msg) do
+          try do
+            if msg.oid == 0 do
+              acc
+            else
+              [acc, "@", Protox.Encode.encode_int32(msg.oid)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:oid, "invalid field value"), __STACKTRACE__
+          end
         end
       ]
 
@@ -9355,6 +9369,10 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[using: delimited], rest}
 
+              {8, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_int32(bytes)
+                {[oid: value], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -9418,7 +9436,8 @@
           4 => {:columns, :unpacked, {:message, Electric.Postgres.Schema.Proto.Index.Column}},
           5 => {:including, :unpacked, :string},
           6 => {:where, {:scalar, nil}, {:message, Electric.Postgres.Schema.Proto.Expression}},
-          7 => {:using, {:scalar, ""}, :string}
+          7 => {:using, {:scalar, ""}, :string},
+          8 => {:oid, {:scalar, 0}, :int32}
         }
       end
 
@@ -9431,6 +9450,7 @@
           columns: {4, :unpacked, {:message, Electric.Postgres.Schema.Proto.Index.Column}},
           including: {5, :unpacked, :string},
           name: {1, {:scalar, ""}, :string},
+          oid: {8, {:scalar, 0}, :int32},
           table: {2, {:scalar, nil}, {:message, Electric.Postgres.Schema.Proto.RangeVar}},
           unique: {3, {:scalar, false}, :bool},
           using: {7, {:scalar, ""}, :string},
@@ -9505,6 +9525,15 @@
             name: :using,
             tag: 7,
             type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "oid",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :oid,
+            tag: 8,
+            type: :int32
           }
         ]
       end
@@ -9714,6 +9743,35 @@
 
           []
         ),
+        (
+          def field_def(:oid) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 8,
+               type: :int32
+             }}
+          end
+
+          def field_def("oid") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 8,
+               type: :int32
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -9758,6 +9816,9 @@
       end,
       def default(:using) do
         {:ok, ""}
+      end,
+      def default(:oid) do
+        {:ok, 0}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -10893,7 +10954,7 @@
   end,
   defmodule Electric.Postgres.Schema.Proto.Table do
     @moduledoc false
-    defstruct name: nil, columns: [], constraints: [], indexes: []
+    defstruct name: nil, columns: [], constraints: [], indexes: [], oid: 0
 
     (
       (
@@ -10913,6 +10974,7 @@
           |> encode_columns(msg)
           |> encode_constraints(msg)
           |> encode_indexes(msg)
+          |> encode_oid(msg)
         end
       )
 
@@ -10987,6 +11049,18 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:indexes, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_oid(acc, msg) do
+          try do
+            if msg.oid == 0 do
+              acc
+            else
+              [acc, "(", Protox.Encode.encode_int32(msg.oid)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:oid, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -11066,6 +11140,10 @@
                      msg.indexes ++ [Electric.Postgres.Schema.Proto.Index.decode!(delimited)]
                  ], rest}
 
+              {5, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_int32(bytes)
+                {[oid: value], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -11126,7 +11204,8 @@
           1 => {:name, {:scalar, nil}, {:message, Electric.Postgres.Schema.Proto.RangeVar}},
           2 => {:columns, :unpacked, {:message, Electric.Postgres.Schema.Proto.Column}},
           3 => {:constraints, :unpacked, {:message, Electric.Postgres.Schema.Proto.Constraint}},
-          4 => {:indexes, :unpacked, {:message, Electric.Postgres.Schema.Proto.Index}}
+          4 => {:indexes, :unpacked, {:message, Electric.Postgres.Schema.Proto.Index}},
+          5 => {:oid, {:scalar, 0}, :int32}
         }
       end
 
@@ -11139,7 +11218,8 @@
           columns: {2, :unpacked, {:message, Electric.Postgres.Schema.Proto.Column}},
           constraints: {3, :unpacked, {:message, Electric.Postgres.Schema.Proto.Constraint}},
           indexes: {4, :unpacked, {:message, Electric.Postgres.Schema.Proto.Index}},
-          name: {1, {:scalar, nil}, {:message, Electric.Postgres.Schema.Proto.RangeVar}}
+          name: {1, {:scalar, nil}, {:message, Electric.Postgres.Schema.Proto.RangeVar}},
+          oid: {5, {:scalar, 0}, :int32}
         }
       end
     )
@@ -11183,6 +11263,15 @@
             name: :indexes,
             tag: 4,
             type: {:message, Electric.Postgres.Schema.Proto.Index}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "oid",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :oid,
+            tag: 5,
+            type: :int32
           }
         ]
       end
@@ -11305,6 +11394,35 @@
 
           []
         ),
+        (
+          def field_def(:oid) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 5,
+               type: :int32
+             }}
+          end
+
+          def field_def("oid") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 5,
+               type: :int32
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -11340,6 +11458,9 @@
       end,
       def default(:indexes) do
         {:error, :no_default_value}
+      end,
+      def default(:oid) do
+        {:ok, 0}
       end,
       def default(_) do
         {:error, :no_such_field}

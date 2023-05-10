@@ -2,12 +2,20 @@ defmodule Electric.Postgres.TableTest do
   use Electric.Postgres.Case, async: true
   use ExUnitProperties
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
+  def schema_update(schema \\ Schema.new(), cmds) do
+    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  end
+
   def assert_migrations(sqls, opts \\ []) do
     setup_sql = Keyword.get(opts, :setup, "")
 
     Enum.each(sqls, fn {sql, table_ast} ->
       cmds = parse(setup_sql <> sql)
-      schema = Schema.update(Schema.new(), cmds)
+      schema = schema_update(cmds)
       assert_valid_schema(schema)
 
       for {table_name, expected_ast} <- table_ast do
@@ -34,6 +42,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           ["public", "something"] => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "something"},
+            oid: 25336,
             columns: [%Proto.Column{name: "value", type: %Proto.Column.Type{name: "text"}}]
           }
         }
@@ -50,10 +59,12 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [%Proto.Column{name: "c1", type: %Proto.Column.Type{name: "text"}}]
           },
           "t2" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t2"},
+            oid: 8756,
             columns: [%Proto.Column{name: "c2", type: %Proto.Column.Type{name: "int4"}}]
           }
         }
@@ -72,6 +83,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "text"}},
               %Proto.Column{name: "c2", type: %Proto.Column.Type{name: "timestamptz"}},
@@ -95,6 +107,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "numeric", size: [3, 1]}}
             ]
@@ -116,6 +129,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}}
             ]
@@ -131,6 +145,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -152,6 +167,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -183,6 +199,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "c2", type: %Proto.Column.Type{name: "int4"}},
@@ -230,6 +247,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -263,6 +281,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -294,6 +313,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -325,6 +345,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -370,6 +391,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -430,6 +452,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -479,6 +502,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -565,6 +589,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -611,6 +636,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -652,6 +678,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -683,6 +710,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -714,6 +742,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -746,6 +775,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{
                 name: "c1",
@@ -777,6 +807,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -802,6 +833,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -833,6 +865,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -862,6 +895,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -891,6 +925,7 @@ defmodule Electric.Postgres.TableTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "c2", type: %Proto.Column.Type{name: "int4"}}
@@ -958,7 +993,7 @@ defmodule Electric.Postgres.TableTest do
   property "generated create table statements" do
     check all(sql <- SQLGenerator.Table.create_table(columns: [references: true])) do
       cmds = parse(sql)
-      _schema = Schema.update(Schema.new(), cmds)
+      _schema = schema_update(cmds)
     end
   end
 end

@@ -40,6 +40,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, {[{version, schema} | versions], opts}}
   end
 
+  @impl true
+  def relation_oid({_versions, opts}, type, schema, name) do
+    with %{} = oids <- get_in(opts, [:oids, type]),
+         {:ok, oid} <- Map.fetch(oids, {schema, name}) do
+      {:ok, oid}
+    else
+      _ -> {:error, "no oid defined for #{type}:#{schema}.#{name} in #{inspect(opts)}"}
+    end
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end
