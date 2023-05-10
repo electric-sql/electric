@@ -7,6 +7,26 @@
 
 import Config
 
+alias Electric.Satellite.Auth
+
+auth_provider =
+  if config_env() == :test do
+    auth_config = Auth.Insecure.build_config([])
+    {Auth.Insecure, auth_config}
+  else
+    case System.get_env("SATELLITE_AUTH_MODE") do
+      "insecure" ->
+        namespace = System.get_env("SATELLITE_AUTH_JWT_NAMESPACE")
+        auth_config = Auth.Insecure.build_config(namespace: namespace)
+        {Auth.Insecure, auth_config}
+
+      other ->
+        raise "Unsupported auth mode: #{inspect(other)}"
+    end
+  end
+
+config :electric, Electric.Satellite.Auth, provider: auth_provider
+
 if config_env() == :prod do
   config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
 
