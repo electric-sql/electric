@@ -79,6 +79,7 @@ export type DataChange = {
 }
 
 export type SchemaChange = {
+  tableName: string // table affected by the schema change
   migrationType: SatOpMigrate_Type
   sql: string
 }

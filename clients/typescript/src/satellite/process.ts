@@ -1,7 +1,7 @@
 import throttle from 'lodash.throttle'
 
 import { AuthState } from '../auth/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter, RunResult } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,
@@ -9,51 +9,53 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, ConsoleClient } from './index'
+import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
+  Change as Chg,
   ConnectivityState,
+  DataChange,
   DbName,
   isDataChange,
-  Change as Chg,
   LSN,
   Relation,
   RelationsCache,
   SatelliteError,
+  SchemaChange,
   SqlValue,
   Statement,
   Transaction,
-  DataChange,
-  SchemaChange,
   Row,
 } from '../util/types'
-import { Satellite } from './index'
 import { SatelliteConfig, SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
 import { difference } from '../util/sets'
 import {
-  OPTYPES,
-  OplogEntry,
-  ShadowTableChanges,
-  localOperationsToTableChanges,
-  remoteOperationsToTableChanges,
-  fromTransaction,
-  toTransactions,
-  ShadowEntryChanges,
-  encodeTags,
   decodeTags,
-  ShadowEntry,
-  shadowTagsDefault,
-  newShadowEntry,
-  getShadowPrimaryKey,
+  encodeTags,
+  fromTransaction,
   generateTag,
+  getShadowPrimaryKey,
+  localOperationsToTableChanges,
+  newShadowEntry,
+  OplogEntry,
+  OPTYPES,
+  remoteOperationsToTableChanges,
+  ShadowEntry,
+  ShadowEntryChanges,
+  ShadowTableChanges,
+  shadowTagsDefault,
+  toTransactions,
 } from './oplog'
-import { SatRelation_RelationType } from '../_generated/protocol/satellite'
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
-import { RunResult } from '../electric/adapter'
 
 import Log from 'loglevel'
+import { generateOplogTriggers } from '../migrators/triggers'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -739,6 +741,7 @@ export class SatelliteProcess implements Satellite {
 
     const stmts: Statement[] = []
     const tablenamesSet: Set<string> = new Set()
+    let newTables: Set<string> = new Set()
     const opLogEntries: OplogEntry[] = []
     const lsn = transaction.lsn
     let firstDMLChunk = true
@@ -775,8 +778,39 @@ export class SatelliteProcess implements Satellite {
       statements.forEach((s) => stmts.push(s))
       tablenames.forEach((n) => tablenamesSet.add(n))
     }
-    const processDDL = (changes: SchemaChange[]) => {
-      changes.forEach((change) => stmts.push({ sql: change.sql }))
+    const processDDL = async (changes: SchemaChange[]) => {
+      const createdTables: Set<string> = new Set()
+      const affectedTables: Set<string> = new Set()
+      changes.forEach((change) => {
+        stmts.push({ sql: change.sql })
+
+        if (
+          change.migrationType === SatOpMigrate_Type.CREATE_TABLE ||
+          change.migrationType === SatOpMigrate_Type.ALTER_ADD_COLUMN
+        ) {
+          // We will create/update triggers for this new/updated table
+          // so store it in `tablenamesSet` such that those
+          // triggers can be disabled while executing the transaction
+          const affectedTable = change.tableName
+          affectedTables.add(affectedTable)
+          tablenamesSet.add(affectedTable)
+
+          if (change.migrationType === SatOpMigrate_Type.CREATE_TABLE) {
+            createdTables.add(affectedTable)
+          }
+        }
+      })
+
+      // Also add statements to create the necessary triggers for the created/updated table
+      for (const affectedTableName of affectedTables) {
+        const triggers = this._generateTriggersForTable(affectedTableName)
+        stmts.push(...triggers)
+      }
+
+      // Disable the newly created triggers
+      // during the processing of this transaction
+      stmts.push(...this._disableTriggers([...createdTables]))
+      newTables = new Set([...newTables, ...createdTables])
     }
 
     // Now process all changes per chunk.
@@ -807,7 +841,7 @@ export class SatelliteProcess implements Satellite {
           await processDML(dmlChunk)
           dmlChunk = []
         } else {
-          processDDL(ddlChunk)
+          await processDDL(ddlChunk)
           ddlChunk = []
         }
       }
@@ -830,13 +864,31 @@ export class SatelliteProcess implements Satellite {
 
     // Now run the DML and DDL statements in-order in a transaction
     const tablenames = Array.from(tablenamesSet)
+    const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
+
     await this.adapter.runInTransaction(
-      ...this._disableTriggers(tablenames),
+      ...this._disableTriggers(notNewTableNames),
       ...stmts,
       ...this._enableTriggers(tablenames)
     )
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
+  }
+
+  private _generateTriggersForTable(affectedTableName: string): Statement[] {
+    const relation = this.relations[affectedTableName]
+    const affectedTable = {
+      tableName: affectedTableName,
+      namespace: 'main',
+      columns: relation.columns.map((col) => col.name),
+      primary: relation.columns
+        .filter((col) => col.primaryKey)
+        .map((col) => col.name),
+      foreignKeys: [], // TODO: will need to provide here the FKs once we also generate triggers for compensations for FKs
+    }
+    const fullTableName =
+      affectedTable.namespace + '.' + affectedTable.tableName
+    return generateOplogTriggers(fullTableName, affectedTable)
   }
 
   private async notifyChangesAndGCopLog(

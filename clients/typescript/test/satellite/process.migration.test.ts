@@ -95,6 +95,7 @@ test.serial('setup populates DB', async (t: any) => {
 })
 
 const createTable = {
+  tableName: 'NewTable',
   migrationType: SatOpMigrate_Type.CREATE_TABLE,
   sql: 'CREATE TABLE NewTable(\
          id TEXT NOT NULL,\
@@ -105,6 +106,7 @@ const createTable = {
 }
 
 const addColumn = {
+  tableName: 'parent',
   migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
   sql: 'ALTER TABLE parent ADD baz TEXT',
 }
@@ -215,6 +217,12 @@ test.serial('apply migration containing only DDL', async (t: any) => {
     changes: [createTable, addColumn],
     lsn: new Uint8Array(),
   }
+
+  // For each schema change, Electric sends a `SatRelation` message
+  // that is handled by `_updateRelations` in order
+  // to update Satellite's relations
+  await satellite._updateRelations(addColumnRelation)
+  await satellite._updateRelations(newTableRelation)
 
   // Apply the migration transaction
   await satellite._applyTransaction(migrationTx)

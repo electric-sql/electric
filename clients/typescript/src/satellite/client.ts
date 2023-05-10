@@ -733,6 +733,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         const stmts = op.migrate.stmts
         stmts.forEach((stmt) => {
           const change: SchemaChange = {
+            tableName: op.migrate!.table!.name!,
             migrationType: stmt.type,
             sql: stmt.sql,
           }
