@@ -174,7 +174,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @impl GenStage
   def handle_cancel({:down, _}, _from, %{producer: producer} = state) do
     Logger.warn("producer is down: #{inspect(producer)}")
-    :gproc.nb_wait(producer)
+    await_producer(producer)
     {:noreply, [], state}
   end
 
