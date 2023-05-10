@@ -29,7 +29,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ADD c2 integer DEFAULT 23;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}},
@@ -60,7 +60,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 * ADD IF NOT EXISTS o1 varchar(24);
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -72,7 +72,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE IF EXISTS t1 * ADD c5 float8, ADD c6 timestamptz;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}},
@@ -86,7 +86,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE IF EXISTS t4 ADD c5 float8;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -104,7 +104,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 DROP o2;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}}
             ]
@@ -115,7 +115,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 DROP COLUMN IF EXISTS c1;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -127,7 +127,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 DROP o1, DROP o2 CASCADE;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: []
           }
         }
@@ -144,7 +144,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER COLUMN o1 SET DATA TYPE float4[][];
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{
                 name: "o1",
@@ -159,7 +159,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER COLUMN o1 SET DEFAULT 3;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{
                 name: "o1",
@@ -192,7 +192,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER COLUMN o1 SET DEFAULT current_time;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{
                 name: "o1",
@@ -223,7 +223,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER o1 DROP DEFAULT;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
               %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -235,7 +235,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER o1 SET NOT NULL;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{
                 name: "o1",
@@ -254,7 +254,7 @@ defmodule Electric.Postgres.AlterTableTest do
           ALTER TABLE t1 ALTER o1 DROP NOT NULL;
           """,
           %Proto.Table{
-            name: %Proto.RangeVar{name: "t1"},
+            name: %Proto.RangeVar{schema: "public", name: "t1"},
             columns: [
               %Proto.Column{
                 name: "o1",
@@ -287,7 +287,7 @@ defmodule Electric.Postgres.AlterTableTest do
       |> Enum.map(fn {_, sql} ->
         {"ALTER TABLE t1 ALTER o1 " <> sql <> ";",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -305,7 +305,7 @@ defmodule Electric.Postgres.AlterTableTest do
       [
         {"ALTER TABLE t1 ADD CONSTRAINT con1 CHECK (c1 > 0)",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -345,7 +345,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD CONSTRAINT con2 CHECK (c1 > 0)",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -385,7 +385,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD CONSTRAINT con3 FOREIGN KEY (c1, c2) REFERENCES t1 (c1, c2) ON DELETE CASCADE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -402,7 +402,7 @@ defmodule Electric.Postgres.AlterTableTest do
                    on_delete: :CASCADE,
                    match_type: :SIMPLE,
                    fk_cols: ["c1", "c2"],
-                   pk_table: %Proto.RangeVar{name: "t1"},
+                   pk_table: %Proto.RangeVar{schema: "public", name: "t1"},
                    pk_cols: ["c1", "c2"]
                  }
                }
@@ -421,7 +421,7 @@ defmodule Electric.Postgres.AlterTableTest do
       [
         {"ALTER TABLE t1 ADD CONSTRAINT i1_unique UNIQUE USING INDEX i1",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -442,7 +442,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD PRIMARY KEY USING INDEX i2 DEFERRABLE INITIALLY IMMEDIATE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -463,7 +463,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD CONSTRAINT c2 UNIQUE USING INDEX i3 NOT DEFERRABLE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -490,7 +490,7 @@ defmodule Electric.Postgres.AlterTableTest do
       [
         {"ALTER TABLE t1 ADD CONSTRAINT con1 UNIQUE (o1); ALTER TABLE t1 ALTER CONSTRAINT con1 DEFERRABLE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -511,7 +511,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD CONSTRAINT con2 UNIQUE (o1) DEFERRABLE INITIALLY DEFERRED; ALTER TABLE t1 ALTER CONSTRAINT con2 NOT DEFERRABLE INITIALLY IMMEDIATE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -532,7 +532,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 ADD CONSTRAINT con3 UNIQUE (o1); ALTER TABLE t1 ALTER CONSTRAINT con3 DEFERRABLE INITIALLY DEFERRED",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -559,7 +559,7 @@ defmodule Electric.Postgres.AlterTableTest do
       [
         {"ALTER TABLE t1 DROP CONSTRAINT con1",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -568,7 +568,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 DROP CONSTRAINT IF EXISTS con1",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -577,7 +577,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 DROP CONSTRAINT con1 RESTRICT",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -586,7 +586,7 @@ defmodule Electric.Postgres.AlterTableTest do
          }},
         {"ALTER TABLE t1 DROP CONSTRAINT IF EXISTS con1 CASCADE",
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}, constraints: []},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}
@@ -634,7 +634,7 @@ defmodule Electric.Postgres.AlterTableTest do
       |> Enum.map(
         &{&1,
          %Proto.Table{
-           name: %Proto.RangeVar{name: "t1"},
+           name: %Proto.RangeVar{schema: "public", name: "t1"},
            columns: [
              %Proto.Column{name: "o1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "o2", type: %Proto.Column.Type{name: "int4"}}

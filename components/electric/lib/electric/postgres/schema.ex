@@ -216,6 +216,10 @@ defmodule Electric.Postgres.Schema do
     s1 in search_paths
   end
 
+  def same_schema?(s1, s2, _search_paths) when is_binary(s1) and is_binary(s2) do
+    s1 == s2
+  end
+
   defp qualified_names(n, search_paths) when is_binary(n) do
     Enum.map(search_paths, &{&1, n})
   end

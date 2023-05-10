@@ -35,7 +35,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :LAST, ordering: :ASC}
            ],
            name: "t1_c1_c2_idx",
-           table: %Proto.RangeVar{name: "t1"},
+           table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
            including: []
@@ -46,7 +46,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :FIRST, ordering: :DESC}
            ],
            name: "t1_c2_idx",
-           table: %Proto.RangeVar{alias: nil, name: "t1", schema: nil},
+           table: %Proto.RangeVar{name: "t1", schema: "public"},
            unique: false,
            using: "btree",
            including: []
@@ -62,7 +62,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "t1_c2_idx",
-           table: %Proto.RangeVar{name: "t1"},
+           table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
            including: []
@@ -89,7 +89,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "t1_idx",
-           table: %Proto.RangeVar{alias: nil, name: "t1", schema: nil},
+           table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
            where: nil,
@@ -108,7 +108,7 @@ defmodule Electric.Postgres.IndexTest do
              %Proto.Index.Column{name: "c2", nulls_ordering: :LAST, ordering: :ASC}
            ],
            name: "t1_c1_c2_idx",
-           table: %Proto.RangeVar{name: "t1"},
+           table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: false,
            using: "btree",
            where: %Proto.Expression{
@@ -181,7 +181,7 @@ defmodule Electric.Postgres.IndexTest do
              }
            ],
            name: "myindex",
-           table: %Proto.RangeVar{alias: nil, name: "t1", schema: nil},
+           table: %Proto.RangeVar{schema: "public", name: "t1"},
            unique: true,
            using: "gist",
            where: nil,
@@ -200,7 +200,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c1", nulls_ordering: :LAST, ordering: :ASC}
             ],
             name: "myindex",
-            table: %Proto.RangeVar{name: "t1"},
+            table: %Proto.RangeVar{schema: "public", name: "t1"},
             unique: false,
             using: "btree",
             including: ["c2", "c3"]
@@ -233,7 +233,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c2"}
             ],
             name: "new_name",
-            table: %Proto.RangeVar{name: "t1"},
+            table: %Proto.RangeVar{schema: "public", name: "t1"},
             unique: false,
             using: "btree",
             including: []
@@ -253,7 +253,7 @@ defmodule Electric.Postgres.IndexTest do
               %Proto.Index.Column{name: "c2"}
             ],
             name: "new_name",
-            table: %Proto.RangeVar{name: "t1", schema: "myschema"},
+            table: %Proto.RangeVar{schema: "myschema", name: "t1"},
             unique: false,
             using: "btree",
             including: []

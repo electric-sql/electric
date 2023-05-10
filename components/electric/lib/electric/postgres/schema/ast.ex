@@ -2,6 +2,8 @@ defmodule Electric.Postgres.Schema.AST do
   alias PgQuery, as: Pg
   alias Electric.Postgres.{Schema, Schema.AST, Schema.Proto}
 
+  @default_schema "public"
+
   def create(%Pg.CreateStmt{} = action) do
     map(action)
   end
@@ -242,7 +244,7 @@ defmodule Electric.Postgres.Schema.AST do
   def map(%Pg.RangeVar{} = rangevar) do
     %Proto.RangeVar{
       name: rangevar.relname,
-      schema: optional_string(rangevar.schemaname),
+      schema: optional_string(rangevar.schemaname) || @default_schema,
       alias: optional(rangevar.alias)
     }
   end

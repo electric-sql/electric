@@ -41,7 +41,7 @@ defmodule Electric.Postgres.ReplicationTest do
       """
       |> parse()
       |> Replication.affected_tables()
-      |> assert_table_list([{"public", "fish"}, {nil, "frog"}, {"teeth", "front"}])
+      |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
     test "returns a list of altered tables" do
@@ -52,7 +52,7 @@ defmodule Electric.Postgres.ReplicationTest do
       """
       |> parse()
       |> Replication.affected_tables()
-      |> assert_table_list([{"public", "fish"}, {nil, "frog"}, {"teeth", "front"}])
+      |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
     test "captures all affected tables" do
@@ -63,7 +63,7 @@ defmodule Electric.Postgres.ReplicationTest do
       """
       |> parse()
       |> Replication.affected_tables()
-      |> assert_table_list([{"public", "fish"}, {nil, "frog"}, {"teeth", "front"}])
+      |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
     test "deduplicates in a search path aware manner" do
@@ -183,7 +183,7 @@ defmodule Electric.Postgres.ReplicationTest do
                  }
                ],
                fks: [
-                 %Electric.Satellite.V12.SatOpMigrate.ForeignKey{
+                 %SatOpMigrate.ForeignKey{
                    fk_cols: ["frog_id"],
                    pk_table: "fish",
                    pk_cols: ["id"]
