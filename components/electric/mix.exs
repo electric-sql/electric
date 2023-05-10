@@ -62,7 +62,7 @@ defmodule Electric.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_metrics_prometheus, "~> 1.1.0"},
-      {:yajwt, "~> 1.4"}
+      {:joken, "~> 2.6"}
     ]
   end
 
