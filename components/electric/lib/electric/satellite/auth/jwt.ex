@@ -154,6 +154,7 @@ defmodule Electric.Satellite.Auth.JWT do
     token_config =
       Enum.reduce(opts, config.joken_config, fn
         {:expiry, unix_time}, acc -> add_exp_claim(acc, at: unix_time)
+        {:issuer, issuer}, acc -> Joken.Config.add_claim(acc, "iss", fn -> issuer end)
       end)
 
     extra_claims = JWTUtil.put_user_id(%{}, config.namespace, user_id)
