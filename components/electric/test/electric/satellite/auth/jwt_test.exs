@@ -140,6 +140,65 @@ defmodule Electric.Satellite.Auth.JWTTest do
       end
     end
 
+    test "validates the presence of required standard claims: iat and exp" do
+      claims = %{
+        "exp" => DateTime.to_unix(~U[2123-05-01 00:00:00Z]),
+        "user_id" => "000"
+      }
+
+      token = signed_token(claims)
+
+      assert {:error, %Auth.TokenError{message: ~S'Missing required "iat" claim'}} ==
+               validate_token(token, config([]))
+
+      ###
+
+      claims = %{
+        "iat" => DateTime.to_unix(~U[2023-05-01 00:00:00Z]),
+        "user_id" => "000"
+      }
+
+      token = signed_token(claims)
+
+      assert {:error, %Auth.TokenError{message: ~S'Missing required "exp" claim'}} ==
+               validate_token(token, config([]))
+    end
+
+    test "validates the iat claim" do
+      token = signed_token(claims(%{"iat" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+
+      assert {:error, %Auth.TokenError{message: ~S'Invalid "iat" claim value: ' <> _}} =
+               validate_token(token, config([]))
+    end
+
+    test "validates the nbf claim" do
+      token = signed_token(claims(%{"nbf" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+
+      assert {:error, %Auth.TokenError{message: "Token is not yet valid"}} ==
+               validate_token(token, config([]))
+    end
+
+    test "validates the exp claim" do
+      token = signed_token(claims(%{"exp" => DateTime.to_unix(~U[2023-05-01 00:00:00Z])}))
+
+      assert {:error, %Auth.TokenError{message: "Expired token"}} ==
+               validate_token(token, config([]))
+    end
+
+    test "validates the iss claim if configured" do
+      token = signed_token(claims(%{"user_id" => "111"}))
+
+      assert {:error, %Auth.TokenError{message: ~S'Missing required "iss" claim'}} ==
+               validate_token(token, config(iss: "test-issuer"))
+    end
+
+    test "validates the aud claim if configured" do
+      token = signed_token(claims(%{"user_id" => "111"}))
+
+      assert {:error, %Auth.TokenError{message: ~S'Missing required "aud" claim'}} ==
+               validate_token(token, config(aud: "test-audience"))
+    end
+
     defp signed_token(claims) do
       signer = Joken.Signer.create("HS256", @signing_key)
       {:ok, token, _} = Joken.encode_and_sign(claims, signer)

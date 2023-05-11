@@ -45,6 +45,9 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   def translate_error_reason(:user_id), do: %TokenError{message: "Missing or invalid 'user_id'"}
   def translate_error_reason(:signing_alg), do: %TokenError{message: "Signing algorithm mismatch"}
 
+  def translate_error_reason(message: "Invalid token", missing_claims: [claim | _]),
+    do: %TokenError{message: "Missing required #{inspect(claim)} claim"}
+
   def translate_error_reason(message: "Invalid token", claim: "exp", claim_val: _),
     do: %TokenError{message: "Expired token"}
 
