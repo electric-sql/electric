@@ -4,6 +4,7 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   """
 
   alias Electric.Satellite.Auth
+  alias Electric.Satellite.Auth.TokenError
 
   # The name of the claim which holds the User ID in a JWT.
   @user_id_key "user_id"
@@ -35,4 +36,11 @@ defmodule Electric.Satellite.Auth.JWTUtil do
       {:error, :user_id}
     end
   end
+
+  @doc """
+  Convert a given token validation error reason into a %TokenError{} with a human-readable error description.
+  """
+  @spec translate_error_reason(term) :: TokenError.t()
+
+  def translate_error_reason(:user_id), do: %TokenError{message: "Missing or invalid 'user_id'"}
 end

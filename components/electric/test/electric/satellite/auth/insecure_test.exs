@@ -27,6 +27,32 @@ defmodule Electric.Satellite.Auth.InsecureTest do
       assert {:ok, %Auth{user_id: "0"}} == validate_token(token, config([]))
     end
 
+    test "successfully extracts the namespaced user_id claim" do
+      claims = %{"custom_namespace" => %{"user_id" => "000"}}
+      token = unsigned_token(claims)
+
+      assert {:ok, %Auth{user_id: "000"}} ==
+               validate_token(token, config(namespace: "custom_namespace"))
+
+      claims = %{"user_id" => "111"}
+      token = unsigned_token(claims)
+      assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+    end
+
+    test "verifies that user_id is present and is not empty" do
+      for claims <- [
+            %{@namespace => %{}},
+            %{@namespace => %{"user_id" => ""}},
+            %{@namespace => %{"user_id" => 555}},
+            %{"custom_namespace" => %{"user_id" => "123"}}
+          ] do
+        token = unsigned_token(claims)
+
+        assert {:error, %Auth.TokenError{message: "Missing or invalid 'user_id'"}} ==
+                 validate_token(token, config(namespace: @namespace))
+      end
+    end
+
     defp unsigned_token(claims) do
       # With yajwt it was possible to simply call
       #
