@@ -22,7 +22,7 @@ defmodule Electric.Satellite.Auth.JWT do
   require Logger
 
   defguardp supported_signing_alg?(alg)
-            when alg in ~w[HS256 HS384 HS512]
+            when alg in ~w[HS256 HS384 HS512 RS256 RS384 RS512 ES256 ES384 ES512]
 
   @doc ~S"""
   Validate configuration options and build a clean config for "jwt" auth.
@@ -104,6 +104,9 @@ defmodule Electric.Satellite.Auth.JWT do
   defp validate_key(key, _alg), do: key
 
   defp prepare_key(raw_key, "HS" <> _), do: raw_key
+  defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
+  defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
+
   defp maybe_add_claim(token_config, _claim, nil), do: token_config
 
   defp maybe_add_claim(token_config, claim, val),

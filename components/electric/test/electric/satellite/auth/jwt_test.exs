@@ -104,6 +104,39 @@ defmodule Electric.Satellite.Auth.JWTTest do
       end
     end
 
+    test "successfully validates a token signed using any of the supported RS* algorithms", %{
+      claims: claims
+    } do
+      public_key = File.read!("test/fixtures/keys/rsa_pub.pem")
+      private_key = File.read!("test/fixtures/keys/rsa.pem")
+
+      for alg <- ~w[RS256 RS384 RS512] do
+        signer = Joken.Signer.create(alg, %{"pem" => private_key})
+        {:ok, token, _} = Joken.encode_and_sign(claims, signer)
+
+        config = build_config!(alg: alg, key: public_key, namespace: @namespace)
+        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+      end
+    end
+
+    test "successfully validates a token signed using any of the supported ES* algorithms", %{
+      claims: claims
+    } do
+      for {alg, private_key_filename, public_key_filename} <- [
+            {"ES256", "ecc256.pem", "ecc256_pub.pem"},
+            {"ES384", "ecc384.pem", "ecc384_pub.pem"},
+            {"ES512", "ecc512.pem", "ecc512_pub.pem"}
+          ] do
+        public_key = Path.join("test/fixtures/keys", public_key_filename) |> File.read!()
+        private_key = Path.join("test/fixtures/keys", private_key_filename) |> File.read!()
+
+        signer = Joken.Signer.create(alg, %{"pem" => private_key})
+        {:ok, token, _} = Joken.encode_and_sign(claims, signer)
+
+        config = build_config!(alg: alg, key: public_key, namespace: @namespace)
+        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+      end
+    end
 
     test "rejects a token that has no signature" do
       token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e30."
