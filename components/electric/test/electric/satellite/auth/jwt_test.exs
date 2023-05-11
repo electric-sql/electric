@@ -144,6 +144,25 @@ defmodule Electric.Satellite.Auth.JWTTest do
       assert {:error, %Auth.TokenError{message: "Signing algorithm mismatch"}} ==
                validate_token(token, config([]))
     end
+
+    test "rejects malformed token" do
+      # NOTE(alco): this list of strings should be replaced with a fuzzer that can generate random strings.
+      malformed_tokens = [
+        "",
+        ".",
+        "..",
+        "0.1.2",
+        "1.2",
+        "foobarbaz",
+        "........",
+        "!yJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e30."
+      ]
+
+      for token <- malformed_tokens do
+        assert {:error, %Auth.TokenError{message: "Invalid token"}} ==
+                 validate_token(token, config([]))
+      end
+    end
   end
 
   describe "validate_token(<signed token>)" do

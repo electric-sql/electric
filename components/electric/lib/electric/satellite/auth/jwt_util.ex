@@ -57,6 +57,7 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   """
   @spec translate_error_reason(term) :: TokenError.t()
 
+  def translate_error_reason(:token_malformed), do: %TokenError{message: "Invalid token"}
   def translate_error_reason(:user_id), do: %TokenError{message: "Missing or invalid 'user_id'"}
   def translate_error_reason(:signing_alg), do: %TokenError{message: "Signing algorithm mismatch"}
 
@@ -71,4 +72,25 @@ defmodule Electric.Satellite.Auth.JWTUtil do
 
   def translate_error_reason(message: "Invalid token", claim: claim, claim_val: val),
     do: %TokenError{message: "Invalid #{inspect(claim)} claim value: #{inspect(val)}"}
+
+  # Joken delegates JWT parsing to erlang-jose which eventually calls Jason.decode!(). If the header or payload
+  # happen to be empty or otherwise invalid JSON, both Joken.peek_header() and Joken.peek_claims() will blow up.
+
+  @doc false
+  def peek_header(token) do
+    try do
+      Joken.peek_header(token)
+    rescue
+      Jason.DecodeError -> {:error, :token_malformed}
+    end
+  end
+
+  @doc false
+  def peek_claims(token) do
+    try do
+      Joken.peek_claims(token)
+    rescue
+      Jason.DecodeError -> {:error, :token_malformed}
+    end
+  end
 end

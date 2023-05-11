@@ -7,6 +7,27 @@ defmodule Electric.Satellite.Auth.InsecureTest do
   @namespace "https://electric-sql.com/jwt/claims"
   @signing_key 'abcdefghijklmnopqrstuvwxyz012345' |> Enum.shuffle() |> List.to_string()
 
+  describe "validate_token()" do
+    test "rejects malformed tokens" do
+      # NOTE(alco): this list of strings should be replaced with a fuzzer that can generate random strings.
+      malformed_tokens = [
+        "",
+        ".",
+        "..",
+        "0.1.2",
+        "1.2",
+        "foobarbaz",
+        "........",
+        "eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e20."
+      ]
+
+      for token <- malformed_tokens do
+        assert {:error, %Auth.TokenError{message: "Invalid token"}} ==
+                 validate_token(token, config([]))
+      end
+    end
+  end
+
   describe "unsigned validate_token()" do
     test "successfully validates a token that has no signature" do
       claims = %{

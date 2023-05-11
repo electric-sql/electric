@@ -164,7 +164,7 @@ defmodule Electric.Satellite.Auth.JWT do
   ###
 
   defp verify_and_decode(token, config) do
-    with {:ok, header} <- Joken.peek_header(token),
+    with {:ok, header} <- JWTUtil.peek_header(token),
          :ok <- validate_signing_alg(header["alg"], config.alg) do
       Joken.verify(token, config.joken_signer)
     end
