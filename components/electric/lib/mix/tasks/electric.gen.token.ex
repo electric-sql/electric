@@ -6,8 +6,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
   Generate an authentication token for the given user ids.
 
   This requires the application to be configured for JWT authentication with the required
-  environment variables set, i.e. `SATELLITE_AUTH_SIGNING_KEY` and `SATELLITE_AUTH_SIGNING_ISS`.
-  See the README under "Environment Variables".
+  environment variables set, i.e. `SATELLITE_AUTH_JWT_ALG` and `SATELLITE_AUTH_JWT_KEY`.
 
   ## Usage
 
@@ -54,14 +53,10 @@ defmodule Mix.Tasks.Electric.Gen.Token do
 
     tokens =
       for user_id <- user_ids do
-        case Electric.Satellite.Auth.JWT.generate_token(user_id, expiry: DateTime.to_unix(expiry)) do
-          {:ok, token} ->
-            %{token: token, user_id: user_id, expiry: expiry}
+        token =
+          Electric.Satellite.Auth.JWT.create_token(user_id, expiry: DateTime.to_unix(expiry))
 
-          {:error, reason} ->
-            Mix.Shell.IO.error(reason)
-            System.halt(1)
-        end
+        %{token: token, user_id: user_id, expiry: expiry}
       end
 
     output = format_tokens(tokens, format)

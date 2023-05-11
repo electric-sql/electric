@@ -21,6 +21,9 @@ defmodule Electric.Satellite.Auth.JWT do
 
   require Logger
 
+  # 15 mins
+  @token_max_age 60 * 15
+
   defguardp supported_signing_alg?(alg)
             when alg in ~w[HS256 HS384 HS512 RS256 RS384 RS512 ES256 ES384 ES512]
 
@@ -73,9 +76,10 @@ defmodule Electric.Satellite.Auth.JWT do
 
     token_config =
       %{}
-      |> Joken.Config.add_claim("iat", nil, &(&1 < current_time()))
-      |> Joken.Config.add_claim("nbf", nil, &(&1 < current_time()))
-      |> Joken.Config.add_claim("exp", nil, &(&1 > current_time()))
+      # Subtracting one second from generated "iat" and "nbf" claims is necessary for tests to pass.
+      |> Joken.Config.add_claim("iat", fn -> current_time() - 1 end, &(&1 < current_time()))
+      |> Joken.Config.add_claim("nbf", fn -> current_time() - 1 end, &(&1 < current_time()))
+      |> add_exp_claim(in: @token_max_age)
       |> maybe_add_claim("iss", opts[:iss])
       |> maybe_add_claim("aud", opts[:aud])
 
@@ -107,46 +111,22 @@ defmodule Electric.Satellite.Auth.JWT do
   defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
   defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
 
+  defp add_exp_claim(token_config, in: seconds),
+    do:
+      Joken.Config.add_claim(
+        token_config,
+        "exp",
+        fn -> current_time() + seconds end,
+        &(&1 > current_time())
+      )
+
+  defp add_exp_claim(token_config, at: unix_time),
+    do: Joken.Config.add_claim(token_config, "exp", fn -> unix_time end, &(&1 > current_time()))
+
   defp maybe_add_claim(token_config, _claim, nil), do: token_config
 
   defp maybe_add_claim(token_config, claim, val),
-    do: Joken.Config.add_claim(token_config, claim, nil, &(&1 == val))
-
-  defmodule Token do
-    # 15 mins
-    @token_max_age 60 * 15
-
-    # For internal use only. Create a valid access token for this app
-    @doc false
-    @spec create(binary, binary, binary, Keyword.t()) :: {:ok, binary} | no_return
-    def create(user_id, key, iss, opts \\ []) do
-      nonce =
-        :crypto.strong_rand_bytes(16)
-        |> Base.encode16(case: :lower)
-
-      custom_claims = %{
-        "user_id" => user_id,
-        "nonce" => nonce,
-        "type" => "access"
-      }
-
-      expiry = Keyword.get_lazy(opts, :expiry, &default_expiry/0)
-
-      token_opts = %{
-        alg: "HS256",
-        exp: expiry,
-        iss: iss
-      }
-
-      claims = Map.merge(custom_claims, token_opts)
-
-      {:ok, JWT.sign(claims, %{key: key})}
-    end
-
-    defp default_expiry do
-      System.os_time(:second) + @token_max_age
-    end
-  end
+    do: Joken.Config.add_claim(token_config, claim, fn -> val end, &(&1 == val))
 
   @impl true
   def validate_token(token, config) do
@@ -159,30 +139,25 @@ defmodule Electric.Satellite.Auth.JWT do
     end
   end
 
-  @impl true
-  def generate_token(user_id, config, opts) do
-    {:ok, iss} = Keyword.fetch(config, :issuer)
-    {:ok, key} = Keyword.fetch(config, :secret_key)
-
-    Token.create(user_id, key, iss, opts)
-  end
-
-  def generate_token(user_id, opts \\ []) do
-    with {__MODULE__, config} <- Electric.Satellite.Auth.provider() do
-      generate_token(user_id, config, opts)
-    else
-      {provider, _config} ->
-        {:error, "JWT authentication not configured, provider set to #{provider}"}
-    end
-  end
-
+  @doc false
+  # Only used in tests.
   def validate_token(token) do
-    with {__MODULE__, config} <- Electric.Satellite.Auth.provider() do
-      validate_token(token, config)
-    else
-      {provider, _config} ->
-        {:error, "JWT authentication not configured, provider set to #{provider}"}
-    end
+    {__MODULE__, config} = Auth.provider()
+    validate_token(token, config)
+  end
+
+  @doc false
+  # Used in tests and the electric.gen.token Mix task.
+  def create_token(user_id, opts \\ []) do
+    {__MODULE__, config} = Auth.provider()
+
+    token_config =
+      Enum.reduce(opts, config.joken_config, fn
+        {:expiry, unix_time}, acc -> add_exp_claim(acc, at: unix_time)
+      end)
+
+    extra_claims = JWTUtil.put_user_id(%{}, config.namespace, user_id)
+    Joken.generate_and_sign!(token_config, extra_claims, config.joken_signer)
   end
 
   ###

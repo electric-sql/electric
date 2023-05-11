@@ -23,18 +23,9 @@ defmodule Electric.Satellite.Auth do
   @doc "Validates the given token against the configuration provided"
   @callback validate_token(token :: binary, config :: map) :: validation_result()
 
-  @doc "Creates a token for the given user id. Only really for testing purposes"
-  @callback generate_token(user_id :: binary, config :: Access.t(), opts :: Keyword.t()) ::
-              {:ok, binary} | {:error, binary()}
-
   @spec validate_token(binary, provider) :: validation_result()
   def validate_token(token, {module, config} = _provider) do
     module.validate_token(token, config)
-  end
-
-  @spec generate_token(binary, provider) :: {:ok, binary} | {:error, binary}
-  def generate_token(user_id, {module, config} = _provider, opts \\ []) do
-    module.generate_token(user_id, config, opts)
   end
 
   @doc """

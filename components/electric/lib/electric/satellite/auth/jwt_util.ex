@@ -38,6 +38,21 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   end
 
   @doc """
+  Put the User ID into the claims map, optionally nesting it under a namespace.
+
+  If `namespace` is `nil` or an empty string, the User ID claim is put at the top level of `claims`.
+  """
+  @spec put_user_id(map, String.t() | nil, Auth.user_id()) :: map
+
+  def put_user_id(claims, namespace, user_id) when is_binary(namespace) and namespace != "" do
+    Map.update(claims, namespace, %{@user_id_key => user_id}, &Map.put(&1, @user_id_key, user_id))
+  end
+
+  def put_user_id(claims, _namespace, user_id) do
+    Map.put(claims, @user_id_key, user_id)
+  end
+
+  @doc """
   Convert a given token validation error reason into a %TokenError{} with a human-readable error description.
   """
   @spec translate_error_reason(term) :: TokenError.t()

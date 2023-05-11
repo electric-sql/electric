@@ -47,9 +47,4 @@ defmodule Electric.Satellite.Auth.Insecure do
       {:error, reason} -> {:error, JWTUtil.translate_error_reason(reason)}
     end
   end
-
-  @impl true
-  def generate_token(user_id, _config, _opts) do
-    {:ok, user_id}
-  end
 end

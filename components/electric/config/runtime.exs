@@ -11,8 +11,14 @@ alias Electric.Satellite.Auth
 
 auth_provider =
   if config_env() == :test do
-    auth_config = Auth.Insecure.build_config([])
-    {Auth.Insecure, auth_config}
+    auth_config =
+      Auth.JWT.build_config!(
+        alg: "HS256",
+        key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
+        iss: "electric-sql-test-issuer"
+      )
+
+    {Auth.JWT, auth_config}
   else
     case System.get_env("SATELLITE_AUTH_MODE", "jwt") do
       "insecure" ->
