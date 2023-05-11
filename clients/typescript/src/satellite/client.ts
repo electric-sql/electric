@@ -729,11 +729,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         replication.transactions[lastTxnIdx].changes.push(change)
       }
 
-      // Fixme: currently we have to explicitly ignore migration message
-      //        for `schema_migrations` table, because Electric is sending
-      //        this migration while it shouldn't because it is about
-      //        an Electric-specific meta table that should not exist on Satellite.
-      if (op.migrate && op.migrate.table!.name !== 'schema_migrations') {
+      if (op.migrate) {
         const stmts = op.migrate.stmts
         stmts.forEach((stmt) => {
           const change: SchemaChange = {
