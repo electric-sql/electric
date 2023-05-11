@@ -27,6 +27,7 @@ import {
   Statement,
   Transaction,
   Row,
+  MigrationTable,
 } from '../util/types'
 import { SatelliteConfig, SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -701,7 +702,7 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _updateRelations(rel: Relation) {
+  async _updateRelations(rel: Omit<Relation, 'id'>) {
     if (rel.tableType === SatRelation_RelationType.TABLE) {
       // this relation may be for a newly created table
       // or for a column that was added to an existing table
@@ -780,7 +781,7 @@ export class SatelliteProcess implements Satellite {
     }
     const processDDL = async (changes: SchemaChange[]) => {
       const createdTables: Set<string> = new Set()
-      const affectedTables: Set<string> = new Set()
+      const affectedTables: Map<string, MigrationTable> = new Map()
       changes.forEach((change) => {
         stmts.push({ sql: change.sql })
 
@@ -791,8 +792,9 @@ export class SatelliteProcess implements Satellite {
           // We will create/update triggers for this new/updated table
           // so store it in `tablenamesSet` such that those
           // triggers can be disabled while executing the transaction
-          const affectedTable = change.tableName
-          affectedTables.add(affectedTable)
+          const affectedTable = change.table.name
+          // store the table information to generate the triggers after this `forEach`
+          affectedTables.set(affectedTable, change.table)
           tablenamesSet.add(affectedTable)
 
           if (change.migrationType === SatOpMigrate_Type.CREATE_TABLE) {
@@ -802,10 +804,10 @@ export class SatelliteProcess implements Satellite {
       })
 
       // Also add statements to create the necessary triggers for the created/updated table
-      for (const affectedTableName of affectedTables) {
-        const triggers = this._generateTriggersForTable(affectedTableName)
+      affectedTables.forEach((table) => {
+        const triggers = this._generateTriggersForTable(table)
         stmts.push(...triggers)
-      }
+      })
 
       // Disable the newly created triggers
       // during the processing of this transaction
@@ -875,20 +877,26 @@ export class SatelliteProcess implements Satellite {
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
 
-  private _generateTriggersForTable(affectedTableName: string): Statement[] {
-    const relation = this.relations[affectedTableName]
-    const affectedTable = {
-      tableName: affectedTableName,
+  private _generateTriggersForTable(tbl: MigrationTable): Statement[] {
+    const table = {
+      tableName: tbl.name,
       namespace: 'main',
-      columns: relation.columns.map((col) => col.name),
-      primary: relation.columns
-        .filter((col) => col.primaryKey)
-        .map((col) => col.name),
-      foreignKeys: [], // TODO: will need to provide here the FKs once we also generate triggers for compensations for FKs
+      columns: tbl.columns.map((col) => col.name),
+      primary: tbl.pks,
+      foreignKeys: tbl.fks.map((fk) => {
+        if (fk.fkCols.length !== 1 || fk.pkCols.length !== 1)
+          throw new Error(
+            'Satellite does not yet support compound foreign keys.'
+          )
+        return {
+          table: fk.pkTable,
+          childKey: fk.fkCols[0],
+          parentKey: fk.pkCols[0],
+        }
+      }),
     }
-    const fullTableName =
-      affectedTable.namespace + '.' + affectedTable.tableName
-    return generateOplogTriggers(fullTableName, affectedTable)
+    const fullTableName = table.namespace + '.' + table.tableName
+    return generateOplogTriggers(fullTableName, table)
   }
 
   private async notifyChangesAndGCopLog(

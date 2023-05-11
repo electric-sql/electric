@@ -1,4 +1,5 @@
 import {
+  SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
@@ -78,8 +79,16 @@ export type DataChange = {
   tags: Tag[]
 }
 
+export type MigrationColumn = {
+  name: string
+}
+
+export type MigrationTable = Omit<SatOpMigrate_Table, '$type' | 'columns'> & {
+  columns: MigrationColumn[]
+}
+
 export type SchemaChange = {
-  tableName: string // table affected by the schema change
+  table: MigrationTable // table affected by the schema change
   migrationType: SatOpMigrate_Type
   sql: string
 }

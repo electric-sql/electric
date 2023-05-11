@@ -95,7 +95,12 @@ test.serial('setup populates DB', async (t: any) => {
 })
 
 const createTable = {
-  tableName: 'NewTable',
+  table: {
+    name: 'NewTable',
+    columns: [{ name: 'id' }, { name: 'foo' }, { name: 'bar' }],
+    fks: [],
+    pks: ['id'],
+  },
   migrationType: SatOpMigrate_Type.CREATE_TABLE,
   sql: 'CREATE TABLE NewTable(\
          id TEXT NOT NULL,\
@@ -106,7 +111,17 @@ const createTable = {
 }
 
 const addColumn = {
-  tableName: 'parent',
+  table: {
+    name: 'parent',
+    columns: [
+      { name: 'id' },
+      { name: 'value' },
+      { name: 'other' },
+      { name: 'baz' },
+    ],
+    fks: [],
+    pks: ['id'],
+  },
   migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
   sql: 'ALTER TABLE parent ADD baz TEXT',
 }
@@ -217,12 +232,6 @@ test.serial('apply migration containing only DDL', async (t: any) => {
     changes: [createTable, addColumn],
     lsn: new Uint8Array(),
   }
-
-  // For each schema change, Electric sends a `SatRelation` message
-  // that is handled by `_updateRelations` in order
-  // to update Satellite's relations
-  await satellite._updateRelations(addColumnRelation)
-  await satellite._updateRelations(newTableRelation)
 
   // Apply the migration transaction
   await satellite._applyTransaction(migrationTx)
@@ -385,7 +394,8 @@ test.serial(
     const rowsBeforeMigration = await fetchParentRows(adapter)
 
     // For each schema change, Electric sends a `SatRelation` message
-    // that is handled by `_updateRelations` in order
+    // before sending a DML operation that depends on a new or modified schema.
+    // The `SatRelation` message is handled by `_updateRelations` in order
     // to update Satellite's relations
     await satellite._updateRelations(addColumnRelation)
     await satellite._updateRelations(newTableRelation)
@@ -424,7 +434,7 @@ test.serial(
 test.serial(
   'apply migration containing DDL and conflicting DML',
   async (t: any) => {
-    // Same as previous test but DML 1 and DML 2 contain some conflicting operations
+    // Same as previous test but DML contains some conflicting operations
     const { satellite, adapter, txDate } = t.context
 
     // Fetch the shadow tag for row 1 such that delete will overwrite it
@@ -477,10 +487,12 @@ test.serial(
     )
 
     // For each schema change, Electric sends a `SatRelation` message
-    // that is handled by `_updateRelations` in order
-    // to update Satellite's relations
+    // before sending a DML operation that depends on a new or modified schema.
+    // The `SatRelation` message is handled by `_updateRelations` in order
+    // to update Satellite's relations.
+    // In this case, the DML operation deletes a row in `parent` table
+    // so we receive a `SatRelation` message for that table
     await satellite._updateRelations(addColumnRelation)
-    await satellite._updateRelations(newTableRelation)
 
     // Apply the migration transaction
     await satellite._applyTransaction(migrationTx)
@@ -573,10 +585,12 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
   const rowsBeforeMigration = await fetchParentRows(adapter)
 
   // For each schema change, Electric sends a `SatRelation` message
-  // that is handled by `_updateRelations` in order
-  // to update Satellite's relations
+  // before sending a DML operation that depends on a new or modified schema.
+  // The `SatRelation` message is handled by `_updateRelations` in order
+  // to update Satellite's relations.
+  // In this case, the DML operation adds a row in `parent` table
+  // so we receive a `SatRelation` message for that table
   await satellite._updateRelations(addColumnRelation)
-  await satellite._updateRelations(newTableRelation)
 
   // Apply the concurrent transactions
   await satellite._applyTransaction(txB)
