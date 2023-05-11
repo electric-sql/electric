@@ -104,7 +104,7 @@ defmodule Electric.Satellite.SerializationTest do
 
       msg = Serialization.serialize_relation(table, columns)
 
-      assert %Electric.Satellite.V13.SatRelation{
+      assert %SatRelation{
                schema_name: "something",
                table_type: :TABLE,
                table_name: "rotten",
