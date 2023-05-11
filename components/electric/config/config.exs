@@ -23,7 +23,8 @@ config :logger, :console,
     :instance_id,
     :regional_id,
     :client_id,
-    :user_id
+    :user_id,
+    :metadata
   ]
 
 config :logger,
