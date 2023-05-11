@@ -153,7 +153,8 @@ export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
     primaryKeyCols: JSON.parse(entry.primaryKey),
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
-    fullRow: newRow,
+    // if it is a delete, then `newRow` is empty so the full row is the old row
+    fullRow: entry.optype === OPTYPES.delete ? oldRow : newRow,
     tags: decodeTags(entry.clearTags),
   }
 
@@ -255,6 +256,7 @@ export const remoteOperationsToTableChanges = (
       existing.optype = entryChanges.optype
       for (const [key, value] of Object.entries(entryChanges.changes)) {
         existing.changes[key] = value
+        // HIER: enkel overschrijven indien geen delete
         existing.fullRow[key] = value.value
       }
     }

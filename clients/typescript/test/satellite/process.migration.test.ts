@@ -326,13 +326,13 @@ test.serial(
     const deleteRow = {
       id: 2,
       value: 'local',
+      other: null,
     }
 
     const deleteChange = {
       type: DataChangeType.DELETE,
       relation: relations['parent'],
-      record: deleteRow,
-      oldRecord: {},
+      oldRecord: deleteRow,
       tags: shadowTagsRow2,
     }
 
@@ -460,13 +460,13 @@ test.serial(
     const deleteRow = {
       id: 1,
       value: 'local',
+      other: null
     }
 
     const deleteChange = {
       type: DataChangeType.DELETE,
       relation: relations['parent'],
-      record: deleteRow,
-      oldRecord: {},
+      oldRecord: deleteRow,
       tags: shadowTagsRow1,
     }
 

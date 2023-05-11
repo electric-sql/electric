@@ -868,11 +868,19 @@ export class SatelliteProcess implements Satellite {
     const tablenames = Array.from(tablenamesSet)
     const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
 
-    await this.adapter.runInTransaction(
-      ...this._disableTriggers(notNewTableNames),
-      ...stmts,
-      ...this._enableTriggers(tablenames)
-    )
+    try {
+      await this.adapter.runInTransaction(
+        ...this._disableTriggers(notNewTableNames),
+        ...stmts,
+        ...this._enableTriggers(tablenames)
+      )
+    } catch(e: any) {
+      console.log("ERROR APPLYING TRANSACTION:\n" + [...this._disableTriggers(notNewTableNames),
+        ...stmts,
+        ...this._enableTriggers(tablenames)].map(o => JSON.stringify(o)).join("\n"))
+      console.log("CHANGES:\n" + JSON.stringify(transaction.changes))
+      throw e
+    }
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
@@ -1073,6 +1081,8 @@ function _applyDeleteOperation(
   tablenameStr: string
 ): Statement {
   const pkEntries = Object.entries(entryChanges.primaryKeyCols)
+  if (pkEntries.length === 0)
+    throw new Error("Can't apply delete operation. None of the columns in changes are marked as PK.")
   const params = pkEntries.reduce(
     (acc, [column, value]) => {
       acc.where.push(`${column} = ?`)
