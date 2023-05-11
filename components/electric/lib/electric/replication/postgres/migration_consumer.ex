@@ -106,7 +106,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   # FIXME: we need this to prevent extension metadata tables from being
-  # replicated between pg instances. Should be removedd once we're only
+  # replicated between pg instances. Should be removed once we're only
   # replicating a subset of tables, rather than all
   defp filter_transaction(%Transaction{changes: changes} = tx) do
     filtered =
@@ -116,6 +116,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
         %{relation: relation} = change when is_extension_relation(relation) ->
           Logger.debug("---- Filtering #{inspect(change)}")
+          false
+
+        # TODO: VAX-680 remove this special casing of schema_migrations table
+        # once we are selectivley replicating tables
+        %{relation: {"public", "schema_migrations"}} ->
           false
 
         _change ->

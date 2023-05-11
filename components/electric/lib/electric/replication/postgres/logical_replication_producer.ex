@@ -332,12 +332,16 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         # We do not encourage developers to use 'electric' schema, but some
         # tools like sysbench do that by default, instead of 'public' schema
 
-        with true <- msg.namespace == "electric",
-             true <- msg.name in ["migrations", "meta"] do
+        # TODO: VAX-680 remove this special casing of schema_migrations table
+        # once we are selectivley replicating tables
+        ignore? =
+          (msg.namespace == "electric" and msg.name in ["migrations", "meta"]) ||
+            (msg.namespace == "public" and msg.name == "schema_migrations")
+
+        if ignore? do
           {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
         else
-          false ->
-            false
+          false
         end
 
       true ->
