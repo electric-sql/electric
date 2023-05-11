@@ -14,11 +14,25 @@ auth_provider =
     auth_config = Auth.Insecure.build_config([])
     {Auth.Insecure, auth_config}
   else
-    case System.get_env("SATELLITE_AUTH_MODE") do
+    case System.get_env("SATELLITE_AUTH_MODE", "jwt") do
       "insecure" ->
         namespace = System.get_env("SATELLITE_AUTH_JWT_NAMESPACE")
         auth_config = Auth.Insecure.build_config(namespace: namespace)
         {Auth.Insecure, auth_config}
+
+      "jwt" ->
+        auth_config =
+          [
+            alg: System.get_env("SATELLITE_AUTH_JWT_ALG"),
+            key: System.get_env("SATELLITE_AUTH_JWT_KEY"),
+            namespace: System.get_env("SATELLITE_AUTH_JWT_NAMESPACE"),
+            iss: System.get_env("SATELLITE_AUTH_JWT_ISS"),
+            aud: System.get_env("SATELLITE_AUTH_JWT_AUD")
+          ]
+          |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
+          |> Auth.JWT.build_config!()
+
+        {Auth.JWT, auth_config}
 
       other ->
         raise "Unsupported auth mode: #{inspect(other)}"
