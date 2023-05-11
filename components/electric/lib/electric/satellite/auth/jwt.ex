@@ -17,6 +17,7 @@ defmodule Electric.Satellite.Auth.JWT do
 
   alias Electric.Satellite.Auth
   alias Electric.Satellite.Auth.ConfigError
+  alias Electric.Satellite.Auth.JWTUtil
 
   require Logger
 
@@ -109,12 +110,6 @@ defmodule Electric.Satellite.Auth.JWT do
     do: Joken.Config.add_claim(token_config, claim, nil, &(&1 == val))
 
   defmodule Token do
-    @spec verify(binary, binary, binary, Keyword.t()) ::
-            {:ok, %{binary => any}} | {:error, Keyword.t()}
-    def verify(token, key, iss, _opts \\ []) do
-      JWT.verify(token, %{key: key, iss: iss})
-    end
-
     # 15 mins
     @token_max_age 60 * 15
 
@@ -152,25 +147,12 @@ defmodule Electric.Satellite.Auth.JWT do
 
   @impl true
   def validate_token(token, config) do
-    {:ok, key} = Keyword.fetch(config, :secret_key)
-    {:ok, iss} = Keyword.fetch(config, :issuer)
-    Logger.debug(["Validating token for issuer: ", iss])
-
-    with {:ok, claims} <- Token.verify(token, key, iss, []),
-         {:claims, %{"user_id" => user_id, "type" => "access"}} <- {:claims, claims} do
+    with {:ok, claims} <- verify_and_decode(token, config),
+         :ok <- validate_claims(claims, config),
+         {:ok, user_id} <- JWTUtil.fetch_user_id(claims, config.namespace) do
       {:ok, %Auth{user_id: user_id}}
     else
-      {:claims, %{"type" => "refresh"}} ->
-        {:error, "refresh token not valid for authentication"}
-
-      {:claims, _claims} ->
-        {:error, "invalid access token"}
-
-      {:error, [exp: _]} ->
-        {:error, :expired}
-
-      {:error, errors} ->
-        {:error, "token verification failed: #{inspect(errors)}"}
+      {:error, reason} -> {:error, JWTUtil.translate_error_reason(reason)}
     end
   end
 
@@ -197,6 +179,27 @@ defmodule Electric.Satellite.Auth.JWT do
     else
       {provider, _config} ->
         {:error, "JWT authentication not configured, provider set to #{provider}"}
+    end
+  end
+
+  ###
+
+  defp verify_and_decode(token, config) do
+    with {:ok, header} <- Joken.peek_header(token),
+         :ok <- validate_signing_alg(header["alg"], config.alg) do
+      Joken.verify(token, config.joken_signer)
+    end
+  end
+
+  defp validate_signing_alg(alg, alg), do: :ok
+  defp validate_signing_alg(_, _), do: {:error, :signing_alg}
+
+  defp validate_claims(claims, config) do
+    required_claims_hook = {Joken.Hooks.RequiredClaims, config.required_claims}
+
+    with {:ok, _claims} <-
+           Joken.validate(config.joken_config, claims, nil, [required_claims_hook]) do
+      :ok
     end
   end
 end

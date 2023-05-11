@@ -1,8 +1,11 @@
 defmodule Electric.Satellite.Auth.JWTTest do
   use ExUnit.Case, async: true
 
-  import Electric.Satellite.Auth.JWT, only: [build_config!: 1]
+  import Electric.Satellite.Auth.JWT, only: [build_config!: 1, validate_token: 2]
+  alias Electric.Satellite.Auth
   alias Electric.Satellite.Auth.ConfigError
+
+  @namespace "https://electric-sql.com/jwt/claims"
 
   describe "build_config!()" do
     test "returns a clean map when all checks pass" do
@@ -68,6 +71,44 @@ defmodule Electric.Satellite.Auth.JWTTest do
       assert_raise ConfigError, message, fn ->
         build_config!(alg: "HS512", key: "key")
       end
+    end
+  end
+
+  describe "validate_token()" do
+    setup do
+      claims = %{
+        "iat" => DateTime.to_unix(~U[2023-05-01 00:00:00Z]),
+        "nbf" => DateTime.to_unix(~U[2023-05-01 00:00:00Z]),
+        "exp" => DateTime.to_unix(~U[2123-05-01 00:00:00Z]),
+        @namespace => %{"user_id" => "12345"}
+      }
+
+      %{claims: claims}
+    end
+
+    test "successfully validates a token signed using any of the supported HS* algorithms", %{
+      claims: claims
+    } do
+      key =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!'
+        |> Enum.shuffle()
+        |> List.to_string()
+
+      for alg <- ~w[HS256 HS384 HS512] do
+        signer = Joken.Signer.create(alg, key)
+        {:ok, token, _} = Joken.encode_and_sign(claims, signer)
+
+        config = build_config!(alg: alg, key: key, namespace: @namespace)
+        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+      end
+    end
+
+
+    test "rejects a token that has no signature" do
+      token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e30."
+
+      assert {:error, %Auth.TokenError{message: "Signing algorithm mismatch"}} ==
+               validate_token(token, config([]))
     end
   end
 end
