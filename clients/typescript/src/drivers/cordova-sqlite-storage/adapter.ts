@@ -1,20 +1,20 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import {
-  parseTableNames,
-  QualifiedTablename,
-  Row,
-  SqlValue,
-  Statement,
-} from '../../util'
-import { rowsFromResults } from '../generic/results'
+import { Row, SqlValue, Statement } from '../../util'
+import { rowsFromResults } from '../util/results'
 import { Database } from './database'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
-  constructor(public db: Database) {}
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
+  constructor(public db: Database) {
+    super()
+  }
 
   run({ sql, args }: Statement): Promise<RunResult> {
     if (args && !Array.isArray(args)) {
@@ -95,10 +95,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
         )
       })
     })
-  }
-
-  tableNames(statement: Statement): QualifiedTablename[] {
-    return parseTableNames(statement.sql)
   }
 }
 

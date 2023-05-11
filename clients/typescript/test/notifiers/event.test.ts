@@ -53,7 +53,7 @@ test('subscribe to actual data changes', async (t) => {
     notifications.push(x)
   })
 
-  const qualifiedTablename = new QualifiedTablename('main', 'items')
+  const qualifiedTablename = new QualifiedTablename('main', 'Items')
 
   source.actuallyChanged('test.db', [{ qualifiedTablename }])
 
@@ -74,7 +74,7 @@ test('actual data change subscriptions are scoped by dbName', async (t) => {
     notifications.push(x)
   })
 
-  const qualifiedTablename = new QualifiedTablename('main', 'items')
+  const qualifiedTablename = new QualifiedTablename('main', 'Items')
   const changes = [{ qualifiedTablename }]
 
   source.actuallyChanged('foo.db', changes)

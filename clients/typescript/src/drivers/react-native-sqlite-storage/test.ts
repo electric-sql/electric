@@ -3,7 +3,6 @@
 import { DbName } from '../../util/types'
 
 import {
-  ElectricNamespace,
   ElectrifyOptions,
   electrify as baseElectrify,
 } from '../../electric/index'
@@ -14,21 +13,29 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase, ElectrifiedDatabase } from './database'
+import { Database } from './index'
 import { enablePromiseRuntime, MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model'
 
-type RetVal<N extends Notifier> = Promise<[Database, N, ElectrifiedDatabase]>
+type RetVal<S extends DbSchema<any>, N extends Notifier> = Promise<
+  [Database, N, ElectricClient<S>]
+>
 
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
-export const initTestable = async <N extends Notifier = MockNotifier>(
+export const initTestable = async <
+  S extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(
   dbName: DbName,
+  dbDescription: S,
   promisesEnabled = false,
   config = testConfig,
   opts?: ElectrifyOptions
-): RetVal<N> => {
+): RetVal<S, N> => {
   let db = new MockDatabase(dbName)
   if (promisesEnabled) db = enablePromiseRuntime(db)
 
@@ -39,20 +46,19 @@ export const initTestable = async <N extends Notifier = MockNotifier>(
   const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const electric = new ElectricDatabase(db, namespace, promisesEnabled)
-
-  const electrified = await baseElectrify(
+  const dal = await baseElectrify(
     dbName,
-    db,
-    electric,
+    dbDescription,
     adapter,
-    migrator,
-    notifier,
     socketFactory,
-    console,
-    registry,
-    config
+    config,
+    {
+      notifier: notifier,
+      migrator: migrator,
+      console: console,
+      registry: registry,
+    }
   )
-  return [db, notifier, electrified as ElectrifiedDatabase<MockDatabase>]
+
+  return [db, notifier, dal]
 }

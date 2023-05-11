@@ -21,7 +21,7 @@ contributor license agreement. The
 The **ElectricSQL repositories** are defined as any repository hosted on the GitHub platform within the [electric-sql](https://github.com/electric-sql) organisation. By contributing code to any of the ElectricSQL repositories, for example by pushing commits to GitHub and / or by raising a Pull Request, you indicate your acceptance of the CLA.
 
 <blockquote>
-  :warning: Do not contributing code to any of the ElectricSQL repositories unless you accept the ElectricSQL Contributor License Agreement. Contributing code to the ElectricSQL repositories indicates your acceptance of the terms.
+  :warning: Do not contribute code to any of the ElectricSQL repositories unless you accept the ElectricSQL Contributor License Agreement. Contributing code to the ElectricSQL repositories indicates your acceptance of the terms.
 </blockquote>
 
 ## Contributor Guidelines

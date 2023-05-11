@@ -1,4 +1,5 @@
 import { electrify } from '../../src/drivers/cordova-sqlite-storage'
+import { dbSchema } from '../client/generated'
 
 const config = {
   app: 'app',
@@ -13,11 +14,11 @@ const opts = {
 
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
-    const db = await electrify(original, config)
-
-    // Use as normal, e.g.:
-    db.executeSql('select foo from bar', [], (results) => {
-      console.log('query results: ', results)
+    const { db } = await electrify(original, dbSchema, config)
+    await db.Items.findMany({
+      select: {
+        value: true,
+      },
     })
   })
 })

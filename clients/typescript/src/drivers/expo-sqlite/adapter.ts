@@ -1,19 +1,22 @@
-import { parseTableNames } from '../../util/parser'
-import { QualifiedTablename } from '../../util/tablename'
 import { AnyFunction, Row, Statement } from '../../util/types'
 
-import { Results, rowsFromResults } from '../generic/results'
+import { Results, rowsFromResults } from '../util/results'
 import { Database, Transaction } from './database'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
   db: Database
 
   constructor(db: Database) {
+    super()
     this.db = db
   }
 
@@ -53,24 +56,23 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
   query({ sql, args }: Statement): Promise<Row[]> {
     return new Promise((resolve: AnyFunction, reject: AnyFunction) => {
-      const success = (_tx: Transaction, results: Results) => {
-        resolve(rowsFromResults(results))
+      let res: Row[] = []
+      const storeRes = (_tx: Transaction, results: Results) => {
+        res = rowsFromResults(results)
       }
+
       const txFn = (tx: Transaction) => {
         tx.executeSql(
           sql,
           args as unknown as (number | string | null)[],
-          success,
-          reject
+          storeRes
         )
       }
 
-      this.db.readTransaction(txFn)
+      this.db.readTransaction(txFn, reject, () => {
+        resolve(res)
+      })
     })
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
   }
 }
 

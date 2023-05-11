@@ -2,11 +2,7 @@
 // specific dependencies.
 import { DbName } from '../../util/types'
 
-import {
-  ElectricNamespace,
-  ElectrifyOptions,
-  electrify,
-} from '../../electric/index'
+import { ElectrifyOptions, electrify } from '../../electric/index'
 
 import { MockMigrator } from '../../migrators/mock'
 import { Notifier } from '../../notifiers/index'
@@ -14,44 +10,56 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import {
-  Database,
-  ElectricDatabase,
-  ElectricWebSQLDatabase,
-  ElectrifiedDatabase,
-} from './database'
+import { Database } from './database'
 import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { MockConsoleClient } from '../../auth/mock'
 import { ElectricConfig } from '../../config'
+import { ElectricClient } from '../../client/model/client'
+import { DbSchema } from '../../client/model'
 
-type RetVal<N extends Notifier, D extends Database = Database> = Promise<
-  [D, N, ElectrifiedDatabase<D>]
->
+type RetVal<
+  S extends DbSchema<any>,
+  N extends Notifier,
+  D extends Database = Database
+> = Promise<[D, N, ElectricClient<S>]>
 const testConfig = { app: 'app', env: 'default', migrations: [] }
 
-export async function initTestable<N extends Notifier = MockNotifier>(
-  name: DbName
-): RetVal<N, MockDatabase>
-export async function initTestable<N extends Notifier = MockNotifier>(
+export async function initTestable<
+  S extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(name: DbName, dbDescription: S): RetVal<S, N, MockDatabase>
+export async function initTestable<
+  S extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(
   name: DbName,
+  dbDescription: S,
   webSql: false,
   config?: ElectricConfig,
   opts?: ElectrifyOptions
-): RetVal<N, MockDatabase>
-export async function initTestable<N extends Notifier = MockNotifier>(
+): RetVal<S, N, MockDatabase>
+export async function initTestable<
+  S extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(
   name: DbName,
+  dbDescription: S,
   webSql: true,
   config?: ElectricConfig,
   opts?: ElectrifyOptions
-): RetVal<N, MockWebSQLDatabase>
+): RetVal<S, N, MockWebSQLDatabase>
 
-export async function initTestable<N extends Notifier = MockNotifier>(
+export async function initTestable<
+  S extends DbSchema<any>,
+  N extends Notifier = MockNotifier
+>(
   dbName: DbName,
+  dbDescription: S,
   useWebSQLDatabase = false,
   config: ElectricConfig = testConfig,
   opts?: ElectrifyOptions
-): RetVal<N> {
+): RetVal<S, N> {
   const db = useWebSQLDatabase
     ? new MockWebSQLDatabase(dbName)
     : new MockDatabase(dbName)
@@ -63,26 +71,18 @@ export async function initTestable<N extends Notifier = MockNotifier>(
   const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
-  const namespace = new ElectricNamespace(adapter, notifier)
-
-  let electric: ElectricDatabase | ElectricWebSQLDatabase
-  if ('exec' in db) {
-    electric = new ElectricWebSQLDatabase(db, namespace)
-  } else {
-    electric = new ElectricDatabase(db, namespace)
-  }
-
-  const electrified = await electrify(
+  const dal = await electrify(
     dbName,
-    db,
-    electric,
+    dbDescription,
     adapter,
-    migrator,
-    notifier,
     socketFactory,
-    console,
-    registry,
-    config
+    config,
+    {
+      notifier: notifier,
+      migrator: migrator,
+      console: console,
+      registry: registry,
+    }
   )
-  return [db, notifier, electrified as ElectrifiedDatabase]
+  return [db, notifier, dal]
 }
