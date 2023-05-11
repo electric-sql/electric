@@ -4,43 +4,19 @@ defmodule Electric.Postgres.Schema.AST do
 
   @default_schema "public"
 
-  def create(%Pg.CreateStmt{} = action) do
-    map(action)
+  def create(%Pg.CreateStmt{} = action, %Schema.Update.Opts{} = opts) do
+    map(action, opts)
   end
 
-  defp create_table(%{node: {:column_def, _}} = node, table) do
-    add_column(node, table)
+  def constraint(condef, table, keys, opts \\ %Schema.Update.Opts{})
+
+  def constraint(%Pg.Node{node: {:constraint, constraint}}, table, keys, opts) do
+    constraint(constraint, table, keys, opts)
   end
 
-  # table constraint definition
-  defp create_table(%{node: {:constraint, con}}, table) do
-    case con do
-      %{contype: :CONSTR_PRIMARY} = pk ->
-        %{constraint: {:primary, pk}} = constraint = constraint(pk, table)
-
-        Enum.reduce(pk.keys, table, fn col_name, table ->
-          Schema.Update.update_column(
-            table,
-            col_name,
-            &Schema.Update.ensure_not_null_constraint/1
-          )
-        end)
-        |> cappend(constraint)
-
-      con ->
-        cappend(table, constraint(con, table))
-    end
-  end
-
-  def constraint(condef, table, keys \\ [])
-
-  def constraint(%Pg.Node{node: {:constraint, constraint}}, table, keys) do
-    constraint(constraint, table, keys)
-  end
-
-  def constraint(%{contype: :CONSTR_CHECK} = chk, table, _keys) do
+  def constraint(%{contype: :CONSTR_CHECK} = chk, table, _keys, opts) do
     # TODO: use the catalog protocol to get the keys from the chk expression
-    # _keys = constraint_keys(pk.keys, keys)
+    # _keys = constraint_keys(pk.keys, keys, opts)
     %Proto.Constraint{
       constraint:
         {:check,
@@ -48,13 +24,13 @@ defmodule Electric.Postgres.Schema.AST do
            name: Schema.constraint_name(chk.conname, table.name.name, [], "check"),
            deferrable: chk.deferrable,
            initdeferred: chk.initdeferred,
-           expr: AST.map(chk.raw_expr)
+           expr: map(chk.raw_expr, opts)
          }}
     }
   end
 
-  def constraint(%{contype: :CONSTR_PRIMARY} = pk, table, keys) do
-    keys = constraint_keys(pk.keys, keys)
+  def constraint(%{contype: :CONSTR_PRIMARY} = pk, table, keys, opts) do
+    keys = constraint_keys(pk.keys, keys, opts)
     name = Schema.constraint_name(blank(pk.conname) || pk.indexname, table.name.name, [], "pkey")
 
     %Proto.Constraint{
@@ -63,16 +39,16 @@ defmodule Electric.Postgres.Schema.AST do
          %Proto.Constraint.PrimaryKey{
            name: name,
            keys: keys,
-           including: Enum.map(pk.including, &map/1),
+           including: Enum.map(pk.including, &map(&1, opts)),
            deferrable: pk.deferrable,
            initdeferred: pk.initdeferred
          }}
     }
   end
 
-  def constraint(%{contype: :CONSTR_UNIQUE} = uniq, table, keys) do
-    keys = constraint_keys(uniq.keys, keys)
-    including = Enum.map(uniq.including, &map/1)
+  def constraint(%{contype: :CONSTR_UNIQUE} = uniq, table, keys, opts) do
+    keys = constraint_keys(uniq.keys, keys, opts)
+    including = Enum.map(uniq.including, &map(&1, opts))
     name = Schema.constraint_name(uniq.conname, table.name.name, keys ++ including, "key")
 
     %Proto.Constraint{
@@ -88,8 +64,8 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def constraint(%{contype: :CONSTR_FOREIGN} = fk, table, keys) do
-    keys = constraint_keys(fk.fk_attrs, keys)
+  def constraint(%{contype: :CONSTR_FOREIGN} = fk, table, keys, opts) do
+    keys = constraint_keys(fk.fk_attrs, keys, opts)
 
     name = Schema.constraint_name(fk.conname, table.name.name, keys, "fkey")
 
@@ -99,8 +75,8 @@ defmodule Electric.Postgres.Schema.AST do
          %Proto.Constraint.ForeignKey{
            name: name,
            fk_cols: keys,
-           pk_table: map(fk.pktable),
-           pk_cols: map(fk.pk_attrs),
+           pk_table: map(fk.pktable, opts),
+           pk_cols: map(fk.pk_attrs, opts),
            deferrable: fk.deferrable,
            initdeferred: fk.initdeferred,
            match_type: map_fk_match(fk.fk_matchtype),
@@ -110,7 +86,7 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def constraint(%{contype: :CONSTR_GENERATED} = gen, _table, _keys) do
+  def constraint(%{contype: :CONSTR_GENERATED} = gen, _table, _keys, opts) do
     %Proto.Constraint{
       constraint:
         {:generated,
@@ -120,29 +96,29 @@ defmodule Electric.Postgres.Schema.AST do
              case gen.generated_when do
                "a" -> :ALWAYS
              end,
-           expr: map(gen.raw_expr)
+           expr: map(gen.raw_expr, opts)
          }}
     }
   end
 
-  def constraint(%{contype: :CONSTR_NOTNULL} = nn, _table, _keys) do
+  def constraint(%{contype: :CONSTR_NOTNULL} = nn, _table, _keys, _opts) do
     %Proto.Constraint{constraint: {:not_null, %Proto.Constraint.NotNull{name: blank(nn.conname)}}}
   end
 
-  def constraint(%{contype: :CONSTR_NULL}, _table, _keys) do
+  def constraint(%{contype: :CONSTR_NULL}, _table, _keys, _opts) do
     nil
   end
 
-  def constraint(%{contype: :CONSTR_DEFAULT} = default, _table, _keys) do
+  def constraint(%{contype: :CONSTR_DEFAULT} = default, _table, _keys, opts) do
     %Proto.Constraint{
-      constraint: {:default, %Proto.Constraint.Default{expr: map(default.raw_expr)}}
+      constraint: {:default, %Proto.Constraint.Default{expr: map(default.raw_expr, opts)}}
     }
   end
 
-  defp constraint_keys(conkeys, colkeys) do
+  defp constraint_keys(conkeys, colkeys, opts) do
     case {conkeys, colkeys} do
       {[], [_ | _]} -> colkeys
-      {[_ | _], _} -> map(conkeys)
+      {[_ | _], _} -> map(conkeys, opts)
       {[], []} -> []
     end
   end
@@ -155,18 +131,18 @@ defmodule Electric.Postgres.Schema.AST do
     %{obj | constraints: Schema.order(obj.constraints ++ [constraint])}
   end
 
-  def add_column(%{node: {:column_def, %Pg.ColumnDef{} = coldef}}, table, opts \\ []) do
-    if opts[:if_not_exists] && Enum.any?(table.columns, &Schema.equal?(&1.name, coldef.colname)) do
+  def add_column(%{node: {:column_def, %Pg.ColumnDef{} = coldef}}, table, opts) do
+    if opts.if_not_exists && Enum.any?(table.columns, &Schema.equal?(&1.name, coldef.colname)) do
       table
     else
-      do_add_column(coldef, table)
+      do_add_column(coldef, table, opts)
     end
   end
 
-  defp do_add_column(coldef, table) do
+  defp do_add_column(coldef, table, opts) do
     column = %Proto.Column{
       name: coldef.colname,
-      type: map(coldef.type_name),
+      type: map(coldef.type_name, opts),
       constraints: []
     }
 
@@ -208,31 +184,52 @@ defmodule Electric.Postgres.Schema.AST do
     nil
   end
 
-  def map([]), do: []
+  defp oid_loader(opts) do
+    case Map.fetch(opts, :oid_loader) do
+      {:ok, fun} when is_function(fun, 3) ->
+        fun
 
-  def map([_ | _] = nodes) do
-    Enum.map(nodes, &map/1)
+      {:ok, fun} when is_function(fun) ->
+        raise ArgumentError, message: "oid_loader function is invalid"
+
+      _error ->
+        fn _type, _schema, _name -> {:ok, 0} end
+    end
   end
 
-  def map(nil), do: nil
+  def map(ast, opts \\ %Schema.Update.Opts{})
 
-  def map(%Pg.CreateStmt{} = action) do
-    name = map(action.relation)
+  def map([], _opts), do: []
+
+  def map([_ | _] = nodes, opts) do
+    Enum.map(nodes, &map(&1, opts))
+  end
+
+  def map(nil, _opts), do: nil
+
+  def map(%Pg.CreateStmt{} = action, opts) do
+    name = map(action.relation, opts)
+
+    {:ok, oid} = oid_loader(opts).(:table, name.schema, name.name)
 
     Enum.reduce(
       action.table_elts,
-      %Proto.Table{name: name, columns: [], constraints: []},
-      &create_table/2
+      %Proto.Table{name: name, oid: oid, columns: [], constraints: []},
+      &create_table(&1, &2, opts)
     )
   end
 
-  def map(%Pg.IndexStmt{} = stmt) do
-    index_columns = map(stmt.index_params)
-    index_including = map(stmt.index_including_params)
+  def map(%Pg.IndexStmt{} = stmt, opts) do
+    index_columns = map(stmt.index_params, opts)
+    index_including = map(stmt.index_including_params, opts)
+    table = map(stmt.relation, opts)
+
+    {:ok, oid} = oid_loader(opts).(:index, table.schema, table.name)
 
     %Proto.Index{
       name: stmt.idxname,
-      table: map(stmt.relation),
+      oid: oid,
+      table: table,
       unique: stmt.unique,
       columns: index_columns,
       including: Enum.map(index_including, & &1.name),
@@ -241,7 +238,7 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def map(%Pg.RangeVar{} = rangevar) do
+  def map(%Pg.RangeVar{} = rangevar, _opts) do
     %Proto.RangeVar{
       name: rangevar.relname,
       schema: optional_string(rangevar.schemaname) || @default_schema,
@@ -249,7 +246,7 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def map(%Pg.Node{node: {:a_expr, aexpr}}) do
+  def map(%Pg.Node{node: {:a_expr, aexpr}}, opts) do
     # assert that the expression has a single name
     [name] = aexpr.name
 
@@ -257,14 +254,14 @@ defmodule Electric.Postgres.Schema.AST do
       expr:
         {:aexpr,
          %Proto.Expression.AExpr{
-           name: map(name),
-           left: map(aexpr.lexpr),
-           right: map(aexpr.rexpr)
+           name: map(name, opts),
+           left: map(aexpr.lexpr, opts),
+           right: map(aexpr.rexpr, opts)
          }}
     }
   end
 
-  def map(%Pg.Node{node: {:bool_expr, bool_expr}}) do
+  def map(%Pg.Node{node: {:bool_expr, bool_expr}}, opts) do
     %Proto.Expression{
       expr:
         {:bool_expr,
@@ -275,45 +272,46 @@ defmodule Electric.Postgres.Schema.AST do
                :OR_EXPR -> :OR
                :NOT_EXPR -> :NOT
              end,
-           args: map(bool_expr.args)
+           args: map(bool_expr.args, opts)
          }}
     }
   end
 
-  def map(%Pg.Node{node: {:a_const, aconst}}) do
-    %Proto.Expression{expr: {:const, %Proto.Expression.Const{value: map(aconst.val)}}}
+  def map(%Pg.Node{node: {:a_const, aconst}}, opts) do
+    %Proto.Expression{expr: {:const, %Proto.Expression.Const{value: map(aconst.val, opts)}}}
   end
 
-  def map(%Pg.Node{node: {:type_cast, cast}}) do
+  def map(%Pg.Node{node: {:type_cast, cast}}, opts) do
     %Proto.Expression{
-      expr: {:cast, %Proto.Expression.Cast{type: map(cast.type_name), arg: map(cast.arg)}}
+      expr:
+        {:cast, %Proto.Expression.Cast{type: map(cast.type_name, opts), arg: map(cast.arg, opts)}}
     }
   end
 
-  def map({:sval, %Pg.String{sval: sval}}) do
+  def map({:sval, %Pg.String{sval: sval}}, _opts) do
     %Proto.Expression.Value{type: :STRING, value: sval}
   end
 
-  def map({:ival, %Pg.Integer{ival: val}}) do
+  def map({:ival, %Pg.Integer{ival: val}}, _opts) do
     %Proto.Expression.Value{type: :INTEGER, value: to_string(val)}
   end
 
-  def map({:fval, %Pg.Float{fval: val}}) do
+  def map({:fval, %Pg.Float{fval: val}}, _opts) do
     %Proto.Expression.Value{type: :FLOAT, value: to_string(val)}
   end
 
-  def map({:boolval, %Pg.Boolean{boolval: b}}) do
+  def map({:boolval, %Pg.Boolean{boolval: b}}, _opts) do
     %Proto.Expression.Value{type: :BOOLEAN, value: to_string(b)}
   end
 
-  def map(%{node: {:column_ref, %Pg.ColumnRef{} = colref}}) do
+  def map(%{node: {:column_ref, %Pg.ColumnRef{} = colref}}, opts) do
     case colref do
       %{fields: [node]} ->
-        %Proto.Expression{expr: {:col_ref, %Proto.Expression.ColumnRef{name: map(node)}}}
+        %Proto.Expression{expr: {:col_ref, %Proto.Expression.ColumnRef{name: map(node, opts)}}}
     end
   end
 
-  def map(%{node: {:sqlvalue_function, %Pg.SQLValueFunction{op: op} = _vfun}}) do
+  def map(%{node: {:sqlvalue_function, %Pg.SQLValueFunction{op: op} = _vfun}}, _opts) do
     # pgquery/c_src/libpg_query/src/pg_query_deparse.c:3190
     # TODO: tests for handling args to these value functions
     fun =
@@ -358,15 +356,15 @@ defmodule Electric.Postgres.Schema.AST do
     %Proto.Expression{expr: {:vfunction, fun}}
   end
 
-  def map(%{node: {:string, %Pg.String{sval: sval}}}) do
+  def map(%{node: {:string, %Pg.String{sval: sval}}}, _opts) do
     sval
   end
 
-  def map(%{node: {:list, %{items: items}}}) do
-    Enum.map(items, &map/1)
+  def map(%{node: {:list, %{items: items}}}, opts) do
+    Enum.map(items, &map(&1, opts))
   end
 
-  def map(%{node: {:index_elem, elem}}) do
+  def map(%{node: {:index_elem, elem}}, opts) do
     ordering =
       case elem.ordering do
         :SORTBY_DEFAULT -> :ASC
@@ -393,32 +391,32 @@ defmodule Electric.Postgres.Schema.AST do
       name: blank(elem.name),
       collation:
         case elem.collation do
-          [collation | _] -> map(collation)
+          [collation | _] -> map(collation, opts)
           [] -> nil
         end,
-      expr: map(elem.expr),
+      expr: map(elem.expr, opts),
       ordering: ordering,
       nulls_ordering: nulls_ordering
     }
   end
 
-  def map(%{node: {:func_call, func_call}}) do
-    name = map(func_call.funcname) |> remove_pg_catalog()
+  def map(%{node: {:func_call, func_call}}, opts) do
+    name = map(func_call.funcname, opts) |> remove_pg_catalog()
 
     func = %Proto.Expression.Function{
       name: name,
-      args: map(func_call.args)
+      args: map(func_call.args, opts)
     }
 
     %Proto.Expression{expr: {:function, func}}
   end
 
-  def map(%{node: {:null_test, %Pg.NullTest{} = nulltest}}) do
+  def map(%{node: {:null_test, %Pg.NullTest{} = nulltest}}, opts) do
     %Proto.Expression{
       expr:
         {:null_test,
          %Proto.Expression.NullTest{
-           arg: map(nulltest.arg),
+           arg: map(nulltest.arg, opts),
            type:
              case nulltest.nulltesttype do
                :IS_NULL -> :IS
@@ -429,12 +427,36 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
-  def map(%Pg.TypeName{} = type) do
+  def map(%Pg.TypeName{} = type, _opts) do
     %Proto.Column.Type{
       name: map_col_type_name(type.names),
       size: map_col_size(type.typmods),
       array: map_col_array(type.array_bounds)
     }
+  end
+
+  defp create_table(%{node: {:column_def, _}} = node, table, opts) do
+    add_column(node, table, opts)
+  end
+
+  # table constraint definition
+  defp create_table(%{node: {:constraint, con}}, table, opts) do
+    case con do
+      %{contype: :CONSTR_PRIMARY} = pk ->
+        %{constraint: {:primary, pk}} = constraint = constraint(pk, table, opts)
+
+        Enum.reduce(pk.keys, table, fn col_name, table ->
+          Schema.Update.update_column(
+            table,
+            col_name,
+            &Schema.Update.ensure_not_null_constraint/1
+          )
+        end)
+        |> cappend(constraint)
+
+      con ->
+        cappend(table, constraint(con, table, opts))
+    end
   end
 
   defp remove_pg_catalog(["pg_catalog", e]) do

@@ -1,6 +1,13 @@
 defmodule Electric.Postgres.Schema.Update do
   alias PgQuery, as: Pg
-  alias Electric.Postgres.{Schema, Schema.AST, Schema.Catalog, Schema.Proto}
+
+  alias Electric.Postgres.{
+    Extension,
+    Schema,
+    Schema.AST,
+    Schema.Catalog,
+    Schema.Proto
+  }
 
   require Logger
   import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
@@ -29,35 +36,66 @@ defmodule Electric.Postgres.Schema.Update do
     defstruct @keys
   end
 
-  def apply_stmt(schema, stmt) when is_binary(stmt) do
-    apply_stmt(schema, Electric.Postgres.parse!(stmt))
+  defmodule Opts do
+    @moduledoc false
+
+    defstruct [:oid_loader, if_not_exists: false]
+
+    @type t() :: %__MODULE__{
+            oid_loader: Extension.SchemaLoader.oid_loader(),
+            if_not_exists: boolean()
+          }
   end
 
-  def apply_stmt(schema, cmds) do
-    update_schema(cmds, schema)
+  def apply_stmt(schema, stmt, opts) when is_binary(stmt) do
+    apply_stmt(schema, Electric.Postgres.parse!(stmt), opts)
   end
 
-  defp update_schema([], schema) do
+  def apply_stmt(schema, cmds, opts) when is_list(opts) do
+    oid_loader =
+      case Keyword.fetch(opts, :oid_loader) do
+        {:ok, loader} when is_function(loader, 3) ->
+          loader
+
+        {:ok, _loader} ->
+          raise ArgumentError,
+            message:
+              "`:oid_loader` should be an arity-3 function (type :: :index | :table | :trigger | :view, schema :: binary(), name :: binary()) -> {:ok, integer()}"
+
+        :error ->
+          raise ArgumentError,
+            message: "missing `:oid_loader` option"
+      end
+
+    opts = %Opts{oid_loader: oid_loader}
+    apply_stmt(schema, cmds, opts)
+  end
+
+  def apply_stmt(schema, cmds, opts) do
+    update_schema(cmds, schema, opts)
+  end
+
+  defp update_schema([], schema, _opts) do
     schema
   end
 
-  defp update_schema([cmd | cmds], schema) do
-    {cascade, schema} = do_update(cmd, schema)
-    update_schema(cmds, update_schema(cascade, schema))
+  defp update_schema([cmd | cmds], schema, opts) do
+    {cascade, schema} = do_update(cmd, schema, opts)
+    update_schema(cmds, update_schema(cascade, schema, opts), opts)
   end
 
-  defp do_update(%Pg.CreateStmt{} = action, schema) do
+  defp do_update(%Pg.CreateStmt{} = action, schema, opts) do
     %{relation: name} = action
     Logger.info("CREATE TABLE #{name.relname} (...)")
 
-    table = AST.create(action)
+    table = AST.create(action, opts)
 
     schema = %{schema | tables: schema.tables ++ [table]}
     __MODULE__.Cascade.update(action, table, schema)
   end
 
-  defp do_update(%Pg.AlterTableStmt{} = action, schema) do
-    name = AST.map(action.relation)
+  defp do_update(%Pg.AlterTableStmt{} = action, schema, opts) do
+    name = AST.map(action.relation, opts)
 
     case {fetch_table(schema, name), action.missing_ok} do
       {{:ok, orig_table}, _} ->
@@ -71,7 +109,7 @@ defmodule Electric.Postgres.Schema.Update do
             end
           end)
 
-        schema = update_schema(cmds, %{schema | tables: tables})
+        schema = update_schema(cmds, %{schema | tables: tables}, opts)
 
         __MODULE__.Cascade.update(action.cmds, orig_table, schema)
 
@@ -85,7 +123,8 @@ defmodule Electric.Postgres.Schema.Update do
 
   defp do_update(
          %Pg.RenameStmt{rename_type: :OBJECT_COLUMN, relation_type: :OBJECT_TABLE} = action,
-         schema
+         schema,
+         _opts
        ) do
     Logger.info(
       "ALTER TABLE #{action.relation} RENAME COLUMN #{action.subname} TO #{action.newname}"
@@ -120,7 +159,7 @@ defmodule Electric.Postgres.Schema.Update do
     __MODULE__.Cascade.update(action, orig_table, schema)
   end
 
-  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABLE} = action, schema) do
+  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABLE} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.relation} RENAME TO #{action.newname}")
 
     {:ok, orig_table} = fetch_table(schema, action.relation)
@@ -143,7 +182,7 @@ defmodule Electric.Postgres.Schema.Update do
     __MODULE__.Cascade.update(action, orig_table, schema)
   end
 
-  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABCONSTRAINT} = action, schema) do
+  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABCONSTRAINT} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.relation} RENAME CONSTRAINT #{action.subname}")
     {:ok, table} = fetch_table(schema, action.relation)
 
@@ -167,7 +206,7 @@ defmodule Electric.Postgres.Schema.Update do
     __MODULE__.Cascade.update(action, table, schema)
   end
 
-  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_INDEX} = action, schema) do
+  defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_INDEX} = action, schema, _opts) do
     Logger.info("ALTER INDEX #{action.relation} RENAME TO \"#{action.newname}\"")
 
     tables =
@@ -207,7 +246,7 @@ defmodule Electric.Postgres.Schema.Update do
     {[], %{schema | tables: tables}}
   end
 
-  defp do_update(%Pg.DropStmt{remove_type: :OBJECT_TABLE} = action, schema) do
+  defp do_update(%Pg.DropStmt{remove_type: :OBJECT_TABLE} = action, schema, _opts) do
     tables = AST.map(action.objects)
     Logger.info("DROP TABLE #{Enum.join(tables, ",")}")
     table_names = Enum.map(tables, &Proto.range_var/1)
@@ -237,12 +276,12 @@ defmodule Electric.Postgres.Schema.Update do
     end)
   end
 
-  defp do_update(%Pg.DropStmt{remove_type: :OBJECT_INDEX} = action, schema) do
+  defp do_update(%Pg.DropStmt{remove_type: :OBJECT_INDEX} = action, schema, opts) do
     index_names = AST.map(action.objects)
-    do_update(%Schema.Update.DropIndex{names: index_names}, schema)
+    do_update(%Schema.Update.DropIndex{names: index_names}, schema, opts)
   end
 
-  defp do_update(%DropConstraint{} = action, schema) do
+  defp do_update(%DropConstraint{} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.table} DROP CONSTRAINT #{action.name}")
 
     {:ok, table} = fetch_table(schema, action.table)
@@ -265,7 +304,7 @@ defmodule Electric.Postgres.Schema.Update do
     __MODULE__.Cascade.update(action, table, schema)
   end
 
-  defp do_update(%DropIndex{} = cmd, schema) do
+  defp do_update(%DropIndex{} = cmd, schema, _opts) do
     indexes = Enum.map(cmd.names, &Proto.range_var/1)
     ids = Enum.group_by(indexes, & &1.schema, & &1.name)
 
@@ -288,7 +327,7 @@ defmodule Electric.Postgres.Schema.Update do
     {[], %{schema | tables: tables}}
   end
 
-  defp do_update(%Pg.IndexStmt{} = create_index, schema) do
+  defp do_update(%Pg.IndexStmt{} = create_index, schema, opts) do
     Logger.info("CREATE INDEX #{create_index.idxname} ...")
 
     index_columns = AST.map(create_index.index_params)
@@ -300,8 +339,6 @@ defmodule Electric.Postgres.Schema.Update do
         :tables,
         create_index.relation,
         fn table ->
-          # index = create_index.index
-
           name =
             case create_index.idxname do
               empty when empty in ["", nil] ->
@@ -317,8 +354,11 @@ defmodule Electric.Postgres.Schema.Update do
                 name
             end
 
+          {:ok, oid} = opts.oid_loader.(:index, table.name.schema, name)
+
           index = %Proto.Index{
             name: name,
+            oid: oid,
             table: table.name,
             unique: create_index.unique,
             columns: index_columns,
@@ -335,7 +375,7 @@ defmodule Electric.Postgres.Schema.Update do
     {[], schema}
   end
 
-  defp do_update(stmt, schema) do
+  defp do_update(stmt, schema, _opts) do
     Logger.warn("ignoring unsupported migration: #{inspect(stmt)}")
     {[], schema}
   end

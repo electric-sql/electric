@@ -1,10 +1,14 @@
 defmodule Electric.Postgres.SchemaTest do
   use Electric.Postgres.Case, async: true
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
   def assert_migrations(sqls) do
     Enum.each(sqls, fn {sql, table_ast} ->
       cmds = parse(sql)
-      schema = Schema.update(Schema.new(), cmds)
+      schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
       assert_valid_schema(schema)
 
       for {table_name, expected_ast} <- table_ast do
@@ -39,6 +43,7 @@ defmodule Electric.Postgres.SchemaTest do
   test "create table; alter .. set default" do
     ast1 = %Proto.Table{
       name: %Proto.RangeVar{schema: "public", name: "AiSq_XEbXrx"},
+      oid: 278,
       columns: [
         %Proto.Column{
           name: "Rkr_eTvsYB",
@@ -80,6 +85,7 @@ defmodule Electric.Postgres.SchemaTest do
 
     ast2 = %Proto.Table{
       name: %Proto.RangeVar{schema: "public", name: "ejbGPyO"},
+      oid: 43191,
       columns: [
         %Proto.Column{
           name: "RGkesnb",
@@ -170,6 +176,7 @@ defmodule Electric.Postgres.SchemaTest do
         %{
           "t1" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t1"},
+            oid: 48888,
             columns: [
               %Proto.Column{name: "c1", type: %Proto.Column.Type{name: "int4", array: [-1]}},
               %Proto.Column{
@@ -212,6 +219,7 @@ defmodule Electric.Postgres.SchemaTest do
         %{
           "t2" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "t2"},
+            oid: 8756,
             columns: [
               %Proto.Column{name: "c4", type: %Proto.Column.Type{name: "int4"}},
               %Proto.Column{name: "c5", type: %Proto.Column.Type{name: "bpchar", size: [1]}},
@@ -244,6 +252,7 @@ defmodule Electric.Postgres.SchemaTest do
   test "primary key sets not null" do
     ast = %Proto.Table{
       name: %Proto.RangeVar{schema: "public", name: "t1"},
+      oid: 48888,
       columns: [
         %Proto.Column{
           name: "oLoyTXvNOFD",
@@ -340,12 +349,14 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{name: "value", type: %Proto.Column.Type{name: "int4"}}
            ]
          },
          "b" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "b"},
+           oid: 22170,
            columns: [
              %Proto.Column{
                name: "b_id",
@@ -391,6 +402,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{name: "a_1", type: %Proto.Column.Type{name: "int4"}}
            ],
@@ -437,6 +449,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{name: "b_1", type: %Proto.Column.Type{name: "int4"}}
            ]
@@ -461,10 +474,12 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [%Proto.Column{name: "a_1", type: %Proto.Column.Type{name: "int4"}}]
          },
          "b" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "b"},
+           oid: 22170,
            columns: [
              %Proto.Column{name: "b_1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "b_2", type: %Proto.Column.Type{name: "int4"}}
@@ -493,6 +508,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{name: "a_1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "a_2", type: %Proto.Column.Type{name: "int4"}}
@@ -500,6 +516,7 @@ defmodule Electric.Postgres.SchemaTest do
          },
          "b" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "b"},
+           oid: 22170,
            columns: [
              %Proto.Column{name: "b_1", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "b_2", type: %Proto.Column.Type{name: "int4"}}
@@ -527,6 +544,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{
                name: "a_fish",
@@ -550,6 +568,7 @@ defmodule Electric.Postgres.SchemaTest do
          },
          "b" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "b"},
+           oid: 22170,
            columns: [
              %Proto.Column{
                name: "b_id",
@@ -606,6 +625,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "a" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "a"},
+           oid: 35758,
            columns: [
              %Proto.Column{name: "c3", type: %Proto.Column.Type{name: "int4"}},
              %Proto.Column{name: "c2", type: %Proto.Column.Type{name: "int4"}},
@@ -662,6 +682,7 @@ defmodule Electric.Postgres.SchemaTest do
           "a" => :error,
           "b" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "b"},
+            oid: 22170,
             columns: [
               %Proto.Column{
                 name: "b_id",
@@ -712,6 +733,7 @@ defmodule Electric.Postgres.SchemaTest do
           "a" => :error,
           "b" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "b"},
+            oid: 22170,
             columns: [
               %Proto.Column{name: "a_id", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -724,6 +746,7 @@ defmodule Electric.Postgres.SchemaTest do
           },
           "c" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "c"},
+            oid: 28901,
             columns: [
               %Proto.Column{name: "b_a_id", type: %Proto.Column.Type{name: "int4"}}
             ],
@@ -767,12 +790,14 @@ defmodule Electric.Postgres.SchemaTest do
           "a" => :error,
           "b" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "b"},
+            oid: 22170,
             columns: [
               %Proto.Column{name: "a_id", type: %Proto.Column.Type{name: "int4"}}
             ]
           },
           "c" => %Proto.Table{
             name: %Proto.RangeVar{schema: "public", name: "c"},
+            oid: 28901,
             columns: [
               %Proto.Column{name: "b_a_id", type: %Proto.Column.Type{name: "int4"}}
             ]
@@ -800,6 +825,7 @@ defmodule Electric.Postgres.SchemaTest do
        %{
          "c" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "c"},
+           oid: 35758,
            columns: [
              %Proto.Column{
                name: "a_id",
@@ -823,6 +849,7 @@ defmodule Electric.Postgres.SchemaTest do
          },
          "b" => %Proto.Table{
            name: %Proto.RangeVar{schema: "public", name: "b"},
+           oid: 22170,
            columns: [
              %Proto.Column{
                name: "b_id",
@@ -875,6 +902,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "my_index",
+             oid: 29864,
              table: %Proto.RangeVar{schema: "public", name: "my_table"},
              columns: [
                %Proto.Index.Column{name: "c1"},
@@ -887,7 +915,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -928,7 +956,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -952,7 +980,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -973,7 +1001,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -991,6 +1019,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i1",
+             oid: 45134,
              table: %Proto.RangeVar{schema: "public", name: "t2"},
              unique: false,
              columns: [
@@ -1004,7 +1033,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1022,6 +1051,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i1",
+             oid: 45134,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1039,6 +1069,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i1",
+             oid: 45134,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1074,7 +1105,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1102,7 +1133,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1121,7 +1152,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1140,6 +1171,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i2",
+             oid: 20591,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: true,
              columns: [
@@ -1152,7 +1184,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1170,7 +1202,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1188,6 +1220,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i2",
+             oid: 45134,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1205,6 +1238,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "i2",
+             oid: 45134,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1218,7 +1252,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1246,7 +1280,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 
@@ -1266,6 +1300,7 @@ defmodule Electric.Postgres.SchemaTest do
          Schema.order([
            %Proto.Index{
              name: "t1_c1_c2_c3_idx",
+             oid: 32502,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1277,6 +1312,7 @@ defmodule Electric.Postgres.SchemaTest do
            },
            %Proto.Index{
              name: "t1_c1_c2_c3_idx1",
+             oid: 4884,
              table: %Proto.RangeVar{schema: "public", name: "t1"},
              unique: false,
              columns: [
@@ -1291,7 +1327,7 @@ defmodule Electric.Postgres.SchemaTest do
 
       for {sql, indexes} <- sqls do
         cmds = parse(sql)
-        schema = Schema.update(Schema.new(), cmds)
+        schema = Schema.update(Schema.new(), cmds, oid_loader: &oid_loader/3)
 
         assert_valid_schema(schema)
 

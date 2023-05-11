@@ -12,6 +12,10 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
     {:ok, liteconn: liteconn}
   end
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
   def to_sqlite(pgsql, cxt, opts \\ []) do
     sqls =
       pgsql

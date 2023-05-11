@@ -100,11 +100,19 @@ defmodule Electric.Satellite.SerializationTest do
       {:ok, origin: origin}
     end
 
+    def oid_loader(type, schema, name) do
+      {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+    end
+
+    def schema_update(schema \\ Schema.new(), cmds) do
+      Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+    end
+
     defp migrate_schema(tx, version, cxt) do
       schema =
         Enum.reduce(tx.changes, Schema.new(), fn
           %{relation: {"electric", "ddl_commands"}, record: %{"query" => sql}}, schema ->
-            Schema.update(schema, sql)
+            schema_update(schema, sql)
 
           _op, schema ->
             schema

@@ -16,7 +16,7 @@ defmodule Electric.Postgres.Schema do
     %Proto.Schema{}
   end
 
-  defdelegate update(schema, cmds), to: __MODULE__.Update, as: :apply_stmt
+  defdelegate update(schema, cmds, opts), to: __MODULE__.Update, as: :apply_stmt
 
   def table_names(%Proto.Schema{} = schema) do
     Enum.map(schema.tables, fn %{name: name} ->
