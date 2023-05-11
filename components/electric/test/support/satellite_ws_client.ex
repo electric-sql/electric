@@ -86,9 +86,10 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def gen_schema() do
     %{
-      schema_name: "public",
-      table_name: "entries",
+      schema: "public",
+      name: "entries",
       oid: 11111,
+      primary_keys: ["id"],
       columns: [
         %{name: "id", type: :uuid},
         %{name: "content", type: :varchar},
@@ -239,8 +240,9 @@ defmodule Electric.Test.SatelliteWsClient do
   @doc """
   Serialize relation that is represented in internal Electric format
   """
-  def send_relation_internal(conn, schema, name, oid, columns) do
-    sat_rel = Serialization.serialize_relation(schema, name, oid, columns)
+  # def send_relation_internal(conn, schema, name, oid, columns) do
+  def send_relation_internal(conn, %{columns: columns} = table_info) do
+    sat_rel = Serialization.serialize_relation(table_info, columns)
     send_data(conn, sat_rel)
   end
 

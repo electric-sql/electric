@@ -380,9 +380,7 @@ defmodule Electric.Satellite.Protocol do
           columns = SchemaRegistry.fetch_table_columns!(relation)
 
           Serialization.serialize_relation(
-            table_info.schema,
-            table_info.name,
-            table_info.oid,
+            table_info,
             columns
           )
         end

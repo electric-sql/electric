@@ -9,8 +9,8 @@ defmodule Electric.Test.SatelliteMockedClient do
   """
 
   @spec start_replicate_table(term(), list()) :: {:ok, pid()} | {:error, term()}
-  def start_replicate_table(schema, connect_opts) do
-    GenServer.start_link(__MODULE__, {schema, connect_opts})
+  def start_replicate_table(table_info, connect_opts) do
+    GenServer.start_link(__MODULE__, {table_info, connect_opts})
   end
 
   @doc """
@@ -62,18 +62,19 @@ defmodule Electric.Test.SatelliteMockedClient do
               conn: :origin
   end
 
-  def init({%{schema_name: schema, table_name: table, oid: oid, columns: columns}, opts}) do
+  def init({table_info, opts}) do
+    %{schema: schema, name: name, columns: columns, oid: oid} = table_info
     {:ok, conn} = SatelliteWsClient.connect_and_spawn(opts)
-    SatelliteWsClient.send_relation_internal(conn, schema, table, oid, columns)
+    SatelliteWsClient.send_relation_internal(conn, table_info)
 
     {:ok,
      %State{
        oplog_table: :ets.new(:oplog, [:ordered_set, :public]),
        shadow_table: :ets.new(:shadow, [:set, :public]),
        user_table: :ets.new(:user_t, [:set, :public]),
-       relation_id: {schema, table},
+       relation_id: {schema, name},
        relations_mapping: %{
-         {schema, table} => {oid, Enum.map(columns, fn %{name: name} -> name end)}
+         {schema, name} => {oid, Enum.map(columns, fn %{name: name} -> name end)}
        },
        origin: Keyword.get(opts, :id),
        conn: conn
