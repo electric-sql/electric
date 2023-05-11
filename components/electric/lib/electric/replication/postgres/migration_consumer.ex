@@ -7,12 +7,22 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   alias Ecto.Adapter.Transaction
   alias Electric.Replication.Connectors
 
+  alias Electric.Postgres.LogicalReplication.Messages.{
+    Relation
+  }
+
   alias Electric.Replication.Changes.{
     NewRecord,
     Transaction
   }
 
-  alias Electric.Postgres.{Extension, Extension.SchemaLoader, Schema}
+  alias Electric.Postgres.{
+    Extension,
+    Extension.SchemaLoader,
+    Extension.SchemaCache,
+    Schema,
+    SchemaRegistry
+  }
 
   require Logger
 
@@ -39,6 +49,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @impl GenStage
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
+    %{publication: publication} = Connectors.get_replication_opts(conn_config)
+
     Logger.metadata(pg_producer: origin)
 
     {:ok, producer} = Keyword.fetch(opts, :producer)
@@ -47,12 +59,18 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     {:ok, loader} =
       opts
-      |> SchemaLoader.get(:backend)
+      |> SchemaLoader.get(:backend, SchemaCache)
       |> SchemaLoader.connect(conn_config)
 
     Logger.info("Starting #{__MODULE__} using #{elem(loader, 0)} backend")
 
-    state = %{producer: producer, loader: loader, opts: opts}
+    state = %{
+      origin: origin,
+      publication: publication,
+      producer: producer,
+      loader: loader,
+      opts: opts
+    }
 
     {:producer_consumer, state}
   end
@@ -77,6 +95,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   defp filter_events([], acc) do
     Enum.reverse(acc)
+  end
+
+  defp filter_events([%Relation{} | events], acc) do
+    filter_events(events, acc)
   end
 
   defp filter_events([event | events], acc) do
@@ -120,6 +142,32 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   defp process_events([%Transaction{changes: changes} | events], {migrations, state}) do
     process_events(events, process_transaction(changes, {migrations, state}))
+  end
+
+  defp process_events([%Relation{} = relation | events], {migrations, state}) do
+    # TODO: look at the schema registry as-is and see if it can't be replaced
+    # with the new materialised schema information held by electric
+    {table, columns} = Relation.to_schema_table(relation)
+    {:ok, pks} = SchemaLoader.primary_keys(state.loader, table.schema, table.name)
+
+    table = %{table | primary_keys: pks}
+
+    # FIXME: Since we use fake oids for our schema, we need to keep them consistent
+    # so retrieve the generated oid from the registry and use it if it exists
+    # This function is slow because it doesn't return until the timeout
+    table =
+      case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
+        {:ok, existing_table} ->
+          %{table | oid: existing_table.oid}
+
+        :error ->
+          table
+      end
+
+    :ok = SchemaRegistry.add_replicated_tables(state.publication, [table])
+    :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+
+    process_events(events, {migrations, state})
   end
 
   defp process_events([_event | events], {migrations, state}) do

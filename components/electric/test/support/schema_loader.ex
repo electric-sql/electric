@@ -42,11 +42,26 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   @impl true
   def relation_oid({_versions, opts}, type, schema, name) do
+    notify(opts, {:relation_oid, type, schema, name})
+
     with %{} = oids <- get_in(opts, [:oids, type]),
          {:ok, oid} <- Map.fetch(oids, {schema, name}) do
       {:ok, oid}
     else
       _ -> {:error, "no oid defined for #{type}:#{schema}.#{name} in #{inspect(opts)}"}
+    end
+  end
+
+  @impl true
+  def primary_keys({_versions, opts}, schema, name) do
+    notify(opts, {:primary_keys, schema, name})
+
+    with {:ok, pks} <- Map.fetch(opts, :pks),
+         {:ok, tpks} <- Map.fetch(pks, {schema, name}) do
+      {:ok, tpks}
+    else
+      :error ->
+        {:error, "no pks defined for #{schema}.#{name} in #{inspect(opts)}"}
     end
   end
 

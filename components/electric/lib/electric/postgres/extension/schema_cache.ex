@@ -69,6 +69,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:relation_oid, type, schema, name})
   end
 
+  @impl SchemaLoader
+  def primary_keys(origin, schema, name) do
+    GenServer.call(name(origin), {:primary_keys, schema, name})
+  end
+
   @spec table_primary_keys(Connectors.origin(), binary | nil, binary) ::
           {:ok, [binary()]} | {:error, term()}
   def table_primary_keys(origin, schema, table) do
@@ -130,6 +135,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:relation_oid, type, schema, name}, _from, state) do
     {:reply, SchemaLoader.relation_oid(state.backend, type, schema, name), state}
+  end
+
+  def handle_call({:primary_keys, schema, name}, _from, state) do
+    {:reply, SchemaLoader.primary_keys(state.backend, schema, name), state}
   end
 
   def handle_call({:primary_keys, oid}, _from, state) do

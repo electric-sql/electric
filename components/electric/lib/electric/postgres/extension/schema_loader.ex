@@ -9,6 +9,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type oid() :: integer()
   @type rel_type() :: :table | :index | :view | :trigger
   @type oid_result() :: {:ok, integer()} | {:error, term()}
+  @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
@@ -16,6 +17,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
   @callback save(state(), version(), Schema.t()) :: {:ok, state()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
+  @callback primary_keys(state(), schema(), name()) :: pk_result()
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -52,6 +54,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   def relation_oid({module, state}, rel_type, schema, table) do
     module.relation_oid(state, rel_type, schema, table)
   end
+
+  def primary_keys({module, state}, schema, table) do
+    module.primary_keys(state, schema, table)
+  end
 end
 
 defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
@@ -86,7 +92,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
   @pg_class_query """
-  SELECT c.oid FROM pg_class c 
+  SELECT c.oid
+  FROM pg_class c 
     INNER JOIN pg_namespace n ON c.relnamespace = n.oid
   WHERE
       n.nspname = $1
@@ -105,5 +112,26 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
          {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
       {:ok, String.to_integer(oid)}
     end
+  end
+
+  @primary_keys_query """
+  SELECT a.attname
+  FROM pg_class c 
+    INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+    INNER JOIN pg_index i ON i.indrelid = c.oid
+    INNER JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+  WHERE
+      n.nspname = $1
+      AND c.relname = $2
+      AND c.relkind = 'r'
+      AND i.indisprimary
+  LIMIT 1;
+  """
+
+  @impl true
+  def primary_keys(conn, schema, name) do
+    {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name]) |> dbg
+
+    {:ok, Enum.map(pks_data, &elem(&1, 0))}
   end
 end

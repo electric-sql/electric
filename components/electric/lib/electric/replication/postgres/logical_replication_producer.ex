@@ -2,11 +2,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
-  alias Electric.Postgres.Extension.SchemaCache
   alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Postgres.Client
@@ -139,28 +137,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           %{state | relations: Map.put(state.relations, msg.id, msg)}
       end
 
-    # TODO: look at the schema registry as-is and see if it can't be replaced
-    # with the new materialised schema information held by electric
-    {table, columns} = Relation.to_schema_table(msg)
-    {:ok, pks} = SchemaCache.table_primary_keys(state.origin, table.oid)
-
-    table = %{table | primary_keys: pks}
-
-    # FIXME: Since we use fake oids for our schema, we need to keep them consistent
-    # so retrieve the generated oid from the registry and use it if it exists
-    table =
-      case SchemaRegistry.fetch_table_info({table.schema, table.name}) do
-        {:ok, existing_table} ->
-          %{table | oid: existing_table.oid}
-
-        :error ->
-          table
-      end
-
-    :ok = SchemaRegistry.add_replicated_tables(state.publication, [table])
-    :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
-
-    {:noreply, [], state}
+    {:noreply, [msg], state}
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do

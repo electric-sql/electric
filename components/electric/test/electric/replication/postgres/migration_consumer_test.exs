@@ -6,6 +6,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     Transaction
   }
 
+  alias Electric.Postgres.LogicalReplication.Messages.{
+    Relation
+  }
+
   alias Electric.Replication.Postgres.MigrationConsumer
 
   alias Electric.Postgres.MockSchemaLoader
@@ -59,11 +63,27 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, producer} = start_supervised({FakeProducer, producer_name})
 
+      # provide fake oids for the new tables
+      oids = %{
+        table: %{
+          {"public", "something_else"} => 1111,
+          {"public", "other_thing"} => 2222,
+          {"public", "yet_another_thing"} => 3333
+        }
+      }
+
+      pks = %{
+        {"public", "mistakes"} => ["id"]
+      }
+
       {:ok, pid} =
         start_supervised(
           {MigrationConsumer,
-           {[origin: origin],
-            [producer: producer_name, backend: {MockSchemaLoader, parent: self()}]}}
+           {[origin: origin, replication: [publication: "all_tables"]],
+            [
+              producer: producer_name,
+              backend: {MockSchemaLoader, parent: self(), oids: oids, pks: pks}
+            ]}}
         )
 
       {:ok, _consumer} = start_supervised({FakeConsumer, {pid, self()}})
@@ -71,10 +91,39 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, origin: origin, producer: producer}
     end
 
+    test "migration consumer stage captures relations", cxt do
+      %{producer: producer} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      events = [
+        %Relation{
+          id: 1234,
+          namespace: "public",
+          name: "mistakes",
+          replica_identity: :all_columns,
+          columns: [
+            %Relation.Column{flags: [:key], name: "id", type: :uuid, type_modifier: nil},
+            %Relation.Column{flags: [], name: "value", type: :text, type_modifier: nil},
+            %Relation.Column{flags: [], name: "price", type: :int4, type_modifier: nil}
+          ]
+        }
+      ]
+
+      GenStage.call(producer, {:emit, events})
+      # relation messages are filtered out
+      refute_receive {FakeConsumer, :events, _}, 500
+      assert_receive {MockSchemaLoader, {:primary_keys, "public", "mistakes"}}, 500
+
+      assert {:ok, info} =
+               Electric.Postgres.SchemaRegistry.fetch_table_info({"public", "mistakes"})
+
+      assert %{name: "mistakes", schema: "public", oid: 1234, primary_keys: ["id"]} = info
+    end
+
     test "migration consumer stage captures migration records", cxt do
       %{origin: origin, producer: producer} = cxt
       version = "20220421"
-      assert_receive {MockSchemaLoader, {:connect, [origin: ^origin]}}
+      assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
         %Transaction{
@@ -138,7 +187,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     test "migration consumer filters non-migration records", cxt do
       %{origin: origin, producer: producer} = cxt
       version = "20220421"
-      assert_receive {MockSchemaLoader, {:connect, [origin: ^origin]}}
+      assert_receive {MockSchemaLoader, {:connect, _}}
 
       raw_events = [
         %Transaction{
