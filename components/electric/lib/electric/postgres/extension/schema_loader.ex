@@ -130,7 +130,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @impl true
   def primary_keys(conn, schema, name) do
-    {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name]) |> dbg
+    {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
 
     {:ok, Enum.map(pks_data, &elem(&1, 0))}
   end
