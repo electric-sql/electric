@@ -1,6 +1,16 @@
 defmodule Electric.Postgres.ExtensionTest do
   use ExUnit.Case, async: false
 
+  alias Electric.Postgres.Schema
+
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
+  def schema_update(schema \\ Schema.new(), cmds) do
+    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  end
+
   defmodule MigrationCreateThing do
     @behaviour Electric.Postgres.Extension.Migration
 
@@ -139,7 +149,7 @@ defmodule Electric.Postgres.ExtensionTest do
         version = "20230405171534_1"
 
         schema =
-          Schema.update(
+          schema_update(
             schema,
             Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
           )
@@ -148,7 +158,7 @@ defmodule Electric.Postgres.ExtensionTest do
         assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
 
         schema =
-          Schema.update(
+          schema_update(
             schema,
             Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
           )
@@ -171,7 +181,7 @@ defmodule Electric.Postgres.ExtensionTest do
         version = "20230405171534_1"
 
         schema =
-          Schema.update(
+          schema_update(
             schema,
             Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
           )
@@ -181,7 +191,7 @@ defmodule Electric.Postgres.ExtensionTest do
         assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
 
         schema =
-          Schema.update(
+          schema_update(
             schema,
             Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
           )
