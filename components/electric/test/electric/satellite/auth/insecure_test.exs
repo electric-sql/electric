@@ -40,6 +40,27 @@ defmodule Electric.Satellite.Auth.InsecureTest do
       assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
     end
 
+    test "validates the iat claim" do
+      token = unsigned_token(%{"iat" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: ~S'Invalid "iat" claim value: ' <> _}} =
+               validate_token(token, config([]))
+    end
+
+    test "validates the nbf claim" do
+      token = unsigned_token(%{"nbf" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: "Token is not yet valid"}} ==
+               validate_token(token, config([]))
+    end
+
+    test "validates the exp claim" do
+      token = unsigned_token(%{"exp" => DateTime.to_unix(~U[2023-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: "Expired token"}} ==
+               validate_token(token, config([]))
+    end
+
     test "verifies that user_id is present and is not empty" do
       for claims <- [
             %{@namespace => %{}},
@@ -97,6 +118,27 @@ defmodule Electric.Satellite.Auth.InsecureTest do
       claims = %{"user_id" => "111"}
       token = signed_token(claims)
       assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+    end
+
+    test "validates the iat claim" do
+      token = signed_token(%{"iat" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: ~S'Invalid "iat" claim value: ' <> _}} =
+               validate_token(token, config([]))
+    end
+
+    test "validates the nbf claim" do
+      token = signed_token(%{"nbf" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: "Token is not yet valid"}} ==
+               validate_token(token, config([]))
+    end
+
+    test "validates the exp claim" do
+      token = signed_token(%{"exp" => DateTime.to_unix(~U[2023-05-01 00:00:00Z])})
+
+      assert {:error, %Auth.TokenError{message: "Expired token"}} ==
+               validate_token(token, config([]))
     end
 
     test "verifies that user_id is present and is not empty" do

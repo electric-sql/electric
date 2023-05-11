@@ -43,4 +43,13 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   @spec translate_error_reason(term) :: TokenError.t()
 
   def translate_error_reason(:user_id), do: %TokenError{message: "Missing or invalid 'user_id'"}
+
+  def translate_error_reason(message: "Invalid token", claim: "exp", claim_val: _),
+    do: %TokenError{message: "Expired token"}
+
+  def translate_error_reason(message: "Invalid token", claim: "nbf", claim_val: _),
+    do: %TokenError{message: "Token is not yet valid"}
+
+  def translate_error_reason(message: "Invalid token", claim: claim, claim_val: val),
+    do: %TokenError{message: "Invalid #{inspect(claim)} claim value: #{inspect(val)}"}
 end
