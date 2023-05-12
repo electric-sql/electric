@@ -144,6 +144,7 @@ export const localEntryToChanges = (
 // Convert an `OplogEntry` to a `ShadowEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
 export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
+  console.log("remoteENTRY:\n" + JSON.stringify(entry))
   const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
   const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
 

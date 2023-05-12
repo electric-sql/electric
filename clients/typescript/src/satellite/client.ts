@@ -578,6 +578,8 @@ export class SatelliteClient extends EventEmitter implements Client {
       return
     }
 
+    const existingRelation = this.inbound.relations.get(message.relationId)
+
     const relation = {
       id: message.relationId,
       schema: message.schemaName,
@@ -589,6 +591,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         primaryKey: c.primaryKey,
       })),
     }
+
+    console.log("existing relation:\n" + JSON.stringify(existingRelation))
+    console.log("updating relation:\n" + JSON.stringify(relation))
 
     this.inbound.relations.set(relation.id, relation)
     this.emit('relation', relation)
@@ -653,6 +658,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (op.commit) {
         const { commit_timestamp, lsn, changes, origin } =
           replication.transactions[lastTxnIdx]
+        console.log("changes before emit tx:\n" + JSON.stringify(changes))
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
@@ -712,6 +718,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (op.delete) {
         const rid = op.delete.relationId
         const rel = replication.relations.get(rid)
+        console.log("relation for delete is:\n" + JSON.stringify(rel))
         if (!rel) {
           throw new SatelliteError(
             SatelliteErrorCode.PROTOCOL_VIOLATION,

@@ -659,6 +659,7 @@ export class SatelliteProcess implements Satellite {
         return generateTag(local_origin, timestamp)
       }
     )
+    console.log("INCOMING:\n" + JSON.stringify(incoming))
     const incomingTableChanges = remoteOperationsToTableChanges(incoming)
 
     for (const [tablename, incomingMapping] of Object.entries(
@@ -731,6 +732,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _applyTransaction(transaction: Transaction) {
+    console.log("transaction in applyTx:\n" + JSON.stringify(transaction))
     const origin = transaction.origin!
     const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
 
@@ -762,6 +764,7 @@ export class SatelliteProcess implements Satellite {
         ...transaction,
         changes: changes,
       }
+      console.log("changes in applyTx:\n" + JSON.stringify(changes))
       const entries = fromTransaction(tx, this.relations)
 
       // Before applying DML statements we need to assign a timestamp to pending operations.
@@ -774,6 +777,7 @@ export class SatelliteProcess implements Satellite {
         firstDMLChunk = false
       }
 
+      console.log("ENTRIES in applyTx:\n" + JSON.stringify(entries))
       const { statements, tablenames } = await this._apply(entries, origin)
       entries.forEach((e) => opLogEntries.push(e))
       statements.forEach((s) => stmts.push(s))
