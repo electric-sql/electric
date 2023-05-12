@@ -87,6 +87,49 @@ defmodule Electric.Satellite.SerializationTest do
     assert serialized_data == expected
   end
 
+  describe "relations" do
+    test "correctly set the pk flag" do
+      table = %{
+        schema: "something",
+        name: "rotten",
+        oid: 2234,
+        primary_keys: ["id1", "id2"]
+      }
+
+      columns = [
+        %{name: "id1", type: :uuid, type_modifier: nil, part_of_identity: true},
+        %{name: "id2", type: :uuid, type_modifier: nil, part_of_identity: true},
+        %{name: "content", type: :char, type_modifier: nil, part_of_identity: true}
+      ]
+
+      msg = Serialization.serialize_relation(table, columns)
+
+      assert %SatRelation{
+               schema_name: "something",
+               table_type: :TABLE,
+               table_name: "rotten",
+               relation_id: 2234,
+               columns: [
+                 %SatRelationColumn{
+                   name: "id1",
+                   type: "uuid",
+                   primaryKey: true
+                 },
+                 %SatRelationColumn{
+                   name: "id2",
+                   type: "uuid",
+                   primaryKey: true
+                 },
+                 %SatRelationColumn{
+                   name: "content",
+                   type: "char",
+                   primaryKey: false
+                 }
+               ]
+             } = msg
+    end
+  end
+
   describe "migrations" do
     setup do
       origin = "postgres_1"
