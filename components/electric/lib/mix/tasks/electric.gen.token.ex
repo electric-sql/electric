@@ -44,6 +44,9 @@ defmodule Mix.Tasks.Electric.Gen.Token do
       System.halt(1)
     end
 
+    # Load the runtime configuration defined in config/runtime.exs.
+    Mix.Task.run("app.config", [])
+
     path = args[:output]
     # if we're writing to a file, default to csv format
     default_text_format = if path, do: "csv", else: "cli"
