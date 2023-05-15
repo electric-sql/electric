@@ -7,13 +7,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   alias Ecto.Adapter.Transaction
   alias Electric.Replication.Connectors
 
-  alias Electric.Postgres.LogicalReplication.Messages.{
-    Relation
-  }
-
   alias Electric.Replication.Changes.{
     NewRecord,
-    Transaction
+    Transaction,
+    Relation
   }
 
   alias Electric.Postgres.{

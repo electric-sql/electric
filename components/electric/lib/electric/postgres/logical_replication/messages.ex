@@ -35,8 +35,6 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
   end
 
   defmodule Relation do
-    alias Electric.Postgres.SchemaRegistry
-
     defstruct([:id, :namespace, :name, :replica_identity, :columns])
 
     @type t() :: %__MODULE__{
@@ -46,27 +44,6 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
             replica_identity: :default | :nothing | :all_columns | :index,
             columns: [Messages.Relation.Column.t()]
           }
-
-    # Convert a Relation message into a table structure as used by the SchemaRegistry
-    @spec to_schema_table(t()) :: {SchemaRegistry.replicated_table(), [SchemaRegistry.column()]}
-    def to_schema_table(%__MODULE__{} = relation) do
-      {%{
-         name: relation.name,
-         schema: relation.namespace,
-         oid: relation.id,
-         replica_identity: relation.replica_identity,
-         primary_keys: []
-       },
-       Enum.map(
-         relation.columns,
-         &%{
-           name: &1.name,
-           part_of_identity?: :key in &1.flags,
-           type: &1.type,
-           type_modifier: &1.type_modifier
-         }
-       )}
-    end
   end
 
   defmodule Insert do

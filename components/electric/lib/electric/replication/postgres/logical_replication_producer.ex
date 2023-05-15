@@ -22,6 +22,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Type
   }
 
+  alias Electric.Replication.Changes
+
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -137,7 +139,22 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           %{state | relations: Map.put(state.relations, msg.id, msg)}
       end
 
-    {:noreply, [msg], state}
+    # Mapping from a `LogicalReplication.Messages.Relation` to a
+    # `Electric.Replication.Changes.Relation` is a little superfluous but keeps
+    # the clean line between pg logical replication and this internal change
+    # stream.
+    # The Relation messages are used and then dropped by the
+    # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
+    # this producer. 
+    relation =
+      Changes.Relation
+      |> struct(Map.from_struct(msg))
+      |> Map.put(
+        :columns,
+        Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
+      )
+
+    {:noreply, [relation], state}
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
