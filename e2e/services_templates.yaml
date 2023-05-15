@@ -26,8 +26,8 @@ services:
       LOG_LEVEL: debug
       GLOBAL_CLUSTER_ID: integration-tests.electric
       MIGRATIONS_DIR: /migrations
-      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
-      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
+      SATELLITE_AUTH_JWT_ALG: HS256
+      SATELLITE_AUTH_JWT_KEY: integration-tests-signing-key-example
     init: true
     privileged: true
 
@@ -62,8 +62,8 @@ services:
     image: "node:18"
     user: "${UID}:${GID}"
     environment:
-      SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
-      SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
+      SATELLITE_AUTH_JWT_ALG: HS256
+      SATELLITE_AUTH_JWT_KEY: integration-tests-signing-key-example
       HOME: ${E2E_ROOT}/satellite_client
       SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
       NODE_DISABLE_COLORS: 1

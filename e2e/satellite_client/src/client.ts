@@ -11,20 +11,19 @@ import { dbSchema, Electric } from './generated/models'
 setLogLevel('DEBUG')
 
 function auth_token() {
-  const mockIss =
-    process.env.SATELLITE_AUTH_SIGNING_ISS || 'dev.electric-sql.com'
-  const mockKey =
-    process.env.SATELLITE_AUTH_SIGNING_KEY ||
+  const jwtAlg: jwt.Algorithm =
+    (process.env.SATELLITE_AUTH_JWT_ALG || 'HS256') as jwt.Algorithm
+  const jwtKey =
+    process.env.SATELLITE_AUTH_JWT_KEY ||
     'integration-tests-signing-key-example'
 
   const iat = Math.floor(Date.now() / 1000) - 1000
 
   return jwt.sign(
-    { user_id: 'test-user', type: 'access', iat },
-    mockKey,
+    { user_id: 'test-user', iat },
+    jwtKey,
     {
-      issuer: mockIss,
-      algorithm: 'HS256',
+      algorithm: jwtAlg,
       expiresIn: '2h',
     }
   )
