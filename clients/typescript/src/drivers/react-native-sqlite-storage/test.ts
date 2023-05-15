@@ -50,6 +50,7 @@ export const initTestable = async <
     adapter,
     socketFactory,
     config,
+    { clientId: '', token: 'test-token' },
     {
       notifier: notifier,
       migrator: migrator,

@@ -12,11 +12,16 @@ import {
 import { dbSchema, Post } from '../generated'
 
 const db = new Database(':memory:')
-const electric = await electrify(db, dbSchema, {
-  app: 'CRUD-Test',
-  env: 'env',
-  migrations: [],
-})
+const electric = await electrify(
+  db,
+  dbSchema,
+  {
+    app: 'CRUD-Test',
+    env: 'env',
+    migrations: [],
+  },
+  { clientId: '', token: 'test-token' }
+)
 
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)
 //       then check that we can find users and include their authored posts and include the category of those posts
