@@ -156,7 +156,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     # FIXME: Since we use fake oids for our schema, we need to keep them consistent
     # so retrieve the generated oid from the registry and use it if it exists
-    # This function is slow because it doesn't return until the timeout
     table =
       case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
         {:ok, existing_table} ->
