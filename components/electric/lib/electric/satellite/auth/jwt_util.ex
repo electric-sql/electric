@@ -55,7 +55,7 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   @doc """
   Convert a given token validation error reason into a %TokenError{} with a human-readable error description.
   """
-  @spec translate_error_reason(term) :: TokenError.t()
+  @spec translate_error_reason(term) :: %TokenError{}
 
   def translate_error_reason(:token_malformed), do: %TokenError{message: "Invalid token"}
   def translate_error_reason(:user_id), do: %TokenError{message: "Missing or invalid 'user_id'"}
