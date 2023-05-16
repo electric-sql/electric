@@ -13,8 +13,12 @@ defmodule Electric.Replication.Row do
     field(:row, Vax.Types.Map)
   end
 
-  @spec new(schema :: String.t(), table :: String.t(), record :: map(), keys :: [String.t(), ...],
-          tags: [String.t(), ...]
+  @spec new(
+          schema :: String.t(),
+          table :: String.t(),
+          record :: map(),
+          keys :: [String.t(), ...],
+          tags :: [String.t()]
         ) ::
           t()
   def new(schema, table, record, primary_keys, tags \\ []) do
