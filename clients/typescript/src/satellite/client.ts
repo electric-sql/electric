@@ -305,10 +305,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  subscribeToRelations(callback: (relation: Relation) => Promise<void>) {
-    this.on('relation', async (relation) => {
-      await callback(relation)
-    })
+  subscribeToRelations(callback: (relation: Relation) => void) {
+    this.on('relation', callback)
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
