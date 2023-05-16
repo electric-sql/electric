@@ -14,7 +14,7 @@ defmodule Electric.Postgres.Dialect do
   @callback to_sql(pg_query(), Keyword.t()) :: sql() | no_return()
   @callback type_name(column_type()) :: sql() | no_return()
 
-  @spec to_sql(pg_query() | String.t(), t(), Keyword.t()) :: sql() | no_return()
+  @spec to_sql([pg_query()] | pg_query() | String.t(), t(), Keyword.t()) :: sql() | no_return()
   def to_sql(model, dialect, opts \\ [])
 
   def to_sql(stmt, dialect, opts) when is_binary(stmt) do

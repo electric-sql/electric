@@ -242,7 +242,7 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   # def send_relation_internal(conn, schema, name, oid, columns) do
   def send_relation_internal(conn, %{columns: columns} = table_info) do
-    sat_rel = Serialization.serialize_relation(table_info, columns)
+    sat_rel = Serialization.serialize_relation(Map.drop(table_info, [:columns]), columns)
     send_data(conn, sat_rel)
   end
 
