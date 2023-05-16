@@ -14,6 +14,17 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
           }
   end
 
+  defmodule Message do
+    defstruct [:transactional?, :lsn, :prefix, :content]
+
+    @type t() :: %__MODULE__{
+      transactional?: boolean(),
+      lsn: Lsn.t(),
+      prefix: String.t(),
+      content: binary()
+    }
+  end
+
   defmodule Commit do
     defstruct([:flags, :lsn, :end_lsn, :commit_timestamp])
 

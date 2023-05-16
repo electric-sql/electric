@@ -5,6 +5,7 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
+    Message,
     Commit,
     Origin,
     Relation,
@@ -70,6 +71,17 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
       final_lsn: decode_lsn(lsn),
       commit_timestamp: pgtimestamp_to_timestamp(timestamp),
       xid: xid
+    }
+  end
+
+  defp decode_message_impl(<<"M", flags::8, lsn::binary-8, rest::binary>>) do
+    [prefix, <<_::32, content::binary>>] = String.split(rest, <<0>>, parts: 2)
+
+    %Message{
+      transactional?: flags == 1,
+      lsn: decode_lsn(lsn),
+      prefix: prefix,
+      content: content
     }
   end
 
