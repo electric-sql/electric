@@ -138,6 +138,19 @@ defmodule Electric.Satellite.Auth.JWTTest do
       end
     end
 
+    test "rejects a token with invalid signature" do
+      signer = Joken.Signer.create("HS256", "12345678901234567890123456789012")
+      {:ok, jwt, _} = Joken.encode_and_sign(%{"user_is" => "test-user"}, signer)
+      [header, payload, original_signature] = String.split(jwt, ".")
+
+      for signature <- [original_signature, "", "abcdefg"] do
+        token = header <> "." <> payload <> "." <> signature
+
+        assert {:error, %Auth.TokenError{message: "Invalid token signature"}} ==
+                 validate_token(token, config([]))
+      end
+    end
+
     test "rejects a token that has no signature" do
       token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e30."
 
