@@ -456,13 +456,11 @@ defmodule Electric.Test.SatelliteWsClient do
       %{token: token} ->
         {:ok, token}
 
-      %{auth_provider: provider, user_id: user_id} ->
-        Electric.Satellite.Auth.generate_token(user_id, provider)
+      %{auth_config: config, user_id: user_id} ->
+        {:ok, Electric.Satellite.Auth.JWT.create_token(user_id, config: config)}
 
       %{user_id: user_id} ->
-        # use the configured provider
-        provider = Electric.Satellite.Auth.provider()
-        Electric.Satellite.Auth.generate_token(user_id, provider)
+        {:ok, Electric.Satellite.Auth.JWT.create_token(user_id)}
 
       invalid ->
         raise ArgumentError,

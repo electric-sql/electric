@@ -8,11 +8,11 @@
 [macro client_session user_id session_id]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                    secret_key: "integration-tests-signing-key-example"}
+    # alg and key here must be the same as the ones configured in e2e/services_templates.yaml
+    !auth_config = Electric.Satellite.Auth.JWT.build_config!(alg: "HS256", key: "integration-tests-signing-key-example")
     ?$eprompt
     !{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn( \
-            [ auth: %{auth_provider: provider, user_id: "$user_id"}, \
+            [ auth: %{auth_config: auth_config, user_id: "$user_id"}, \
                 id: "$client_id", \
                 debug: true, \
                 sub: "0", \

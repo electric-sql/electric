@@ -148,8 +148,12 @@ defmodule Electric.Satellite.Auth.JWT do
 
   @doc false
   # Used in tests and the electric.gen.token Mix task.
-  def create_token(user_id, opts \\ []) do
-    {__MODULE__, config} = Auth.provider()
+  def create_token(user_id, opts \\ []) when is_list(opts) do
+    {config, opts} =
+      Keyword.pop_lazy(opts, :config, fn ->
+        {__MODULE__, config} = Auth.provider()
+        config
+      end)
 
     token_config =
       Enum.reduce(opts, config.joken_config, fn

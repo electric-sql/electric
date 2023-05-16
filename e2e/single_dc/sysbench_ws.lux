@@ -40,15 +40,13 @@
 [shell ws1]
     [invoke log "Start WS client and start consuming data"]
     [invoke start_elixir_test 1]
-    # issuer and secret key here must be the same as the issuer in the
-    # config [:electric, Electric.Satellite.Auth, :provider]
-    !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
-                  secret_key: "integration-tests-signing-key-example"}
+    # alg and key here must be the same as the ones configured in e2e/services_templates.yaml
+    !auth_config = Electric.Satellite.Auth.JWT.build_config!(alg: "HS256", key: "integration-tests-signing-key-example")
     ?$eprompt
     !{ok, pid} = Electric.Test.SatelliteMockedClient.start_replicate_table( \
             Electric.Test.SatelliteWsClient.gen_schema(), \
             [ \
-            {:auth, %{auth_provider: provider, user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
+            {:auth, %{auth_config: auth_config, user_id: "5a9a8b1d-263d-4cad-90f8-9190396161d7"}}, \
             {:id, "ws1"}, \
             {:sub, "0"}, \
             {:auto_in_sub, true}, \
