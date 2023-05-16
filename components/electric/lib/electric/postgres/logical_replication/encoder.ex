@@ -3,6 +3,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
+    Message,
     Commit,
     Origin,
     Relation,
@@ -66,6 +67,13 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     timestamp = timestamp_to_pgtimestamp(commit_timestamp)
 
     <<"B", lsn::binary-8, timestamp::integer-64, xid::integer-32>>
+  end
+
+  def encode(%Message{content: content} = data) when byte_size(content) <= 0x7FFFFFFF do
+    flag = if data.transactional?, do: 1, else: 0
+
+    <<"M", flag::8, encode_lsn(data.lsn)::binary-8, data.prefix::binary, 0,
+      byte_size(data.content)::32, data.content::binary>>
   end
 
   def encode(%Commit{} = data) do
