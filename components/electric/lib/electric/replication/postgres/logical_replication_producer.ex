@@ -154,7 +154,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
       )
 
-    {:noreply, [relation], state}
+    queue = :queue.in(relation, state.queue)
+    state = %{state | queue: queue}
+
+    dispatch_events(state, [])
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
@@ -351,9 +354,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
         # TODO: VAX-680 remove this special casing of schema_migrations table
         # once we are selectivley replicating tables
-        ignore? =
-          (msg.namespace == "electric" and msg.name in ["migrations", "meta"]) ||
-            (msg.namespace == "public" and msg.name == "schema_migrations")
+        # ||
+        ignore? = msg.namespace == "electric" and msg.name in ["migrations", "meta"]
+        # (msg.namespace == "public" and msg.name == "schema_migrations")
 
         if ignore? do
           {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
