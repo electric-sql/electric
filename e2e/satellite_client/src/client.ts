@@ -5,7 +5,7 @@ import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
-import * as fs from 'fs'
+// import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { dbSchema, Electric } from './generated/models'
 
@@ -80,6 +80,14 @@ export const set_subscribers = (db: Electric) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
+}
+
+export const get_tables = async (electric: Electric) => {
+  return electric.db.raw({sql: `SELECT name FROM sqlite_master WHERE type='table';`})
+}
+
+export const get_columns = async (electric: Electric, table: string) => {
+  return electric.db.raw({sql: `SELECT * FROM pragma_table_info(@name);`, args: [table]})
 }
 
 export const get_items = async (electric: Electric) => {
