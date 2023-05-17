@@ -14,12 +14,20 @@ We have replaced the canned data with a local stack running electric in docker.
 
 Run the electric local-stack which is in `/local-stack`
 
+see here https://electric-sql.com/docs/overview/examples
+
 ```bash
 cd ../../local-stack
 source .envrc
-docker-compose up
+docker compose pull
+docker compose up -d
 ```
+
 This will start a local Postgres and the Electric service on your machine.
+
+You can then talk to the Postgres with psql using the password `password`:
+
+```psql -h 127.0.0.1 -U postgres -d electric ```
 
 ### Configure Postgres Database
 
@@ -37,8 +45,11 @@ run:
 cd db
 yalc add prisma-generator-electric
 yarn
-npx prisma migrate
+npx prisma migrate reset
 ```
+
+This will both, reset the Postgres and push all the migrations to it, and regenerate the typescript client code matching
+the schema to be used by the `elecrtic-sql` client, it writes it into `../client/web/src/generated/models`
 
 ### Run web app
 
@@ -48,7 +59,9 @@ The app is a React application to install and run it:
 
 ```bash
 cd client/web
+nvm use v16.20.0
 yalc add electric-sql
+yarn
 yarn build
 yarn start
 ```

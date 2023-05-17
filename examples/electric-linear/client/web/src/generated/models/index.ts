@@ -172,8 +172,8 @@ export const issueUncheckedUpdateManyInputSchema: z.ZodType<Prisma.issueUnchecke
 
 export const StringFilterSchema: z.ZodType<Prisma.StringFilter> = z.object({
   equals: z.string().optional(),
-  in: z.string().array().optional(),
-  notIn: z.string().array().optional(),
+  in: z.union([ z.string().array(),z.string() ]).optional(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -214,8 +214,8 @@ export const issueMinOrderByAggregateInputSchema: z.ZodType<Prisma.issueMinOrder
 
 export const StringWithAggregatesFilterSchema: z.ZodType<Prisma.StringWithAggregatesFilter> = z.object({
   equals: z.string().optional(),
-  in: z.string().array().optional(),
-  notIn: z.string().array().optional(),
+  in: z.union([ z.string().array(),z.string() ]).optional(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -236,8 +236,8 @@ export const StringFieldUpdateOperationsInputSchema: z.ZodType<Prisma.StringFiel
 
 export const NestedStringFilterSchema: z.ZodType<Prisma.NestedStringFilter> = z.object({
   equals: z.string().optional(),
-  in: z.string().array().optional(),
-  notIn: z.string().array().optional(),
+  in: z.union([ z.string().array(),z.string() ]).optional(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -250,8 +250,8 @@ export const NestedStringFilterSchema: z.ZodType<Prisma.NestedStringFilter> = z.
 
 export const NestedStringWithAggregatesFilterSchema: z.ZodType<Prisma.NestedStringWithAggregatesFilter> = z.object({
   equals: z.string().optional(),
-  in: z.string().array().optional(),
-  notIn: z.string().array().optional(),
+  in: z.union([ z.string().array(),z.string() ]).optional(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -267,8 +267,8 @@ export const NestedStringWithAggregatesFilterSchema: z.ZodType<Prisma.NestedStri
 
 export const NestedIntFilterSchema: z.ZodType<Prisma.NestedIntFilter> = z.object({
   equals: z.number().optional(),
-  in: z.number().array().optional(),
-  notIn: z.number().array().optional(),
+  in: z.union([ z.number().array(),z.number() ]).optional(),
+  notIn: z.union([ z.number().array(),z.number() ]).optional(),
   lt: z.number().optional(),
   lte: z.number().optional(),
   gt: z.number().optional(),

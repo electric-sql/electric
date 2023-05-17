@@ -7,7 +7,7 @@ export type { issue as Issue } from './generated/models'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
-const discriminator = 'prod-5'
+const discriminator = 'prod-7'
 const distPath = '/'
 
 const dbName = `${config.app}-${config.env}-${discriminator}.db`

@@ -12,6 +12,11 @@
 /build
 /dist
 
+#wa-sql
+public/wa-sqlite-async.mjs
+public/wa-sqlite-async.wasm
+yarn.lock
+
 # misc
 .DS_Store
 .env.local

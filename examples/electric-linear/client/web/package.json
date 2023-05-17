@@ -25,7 +25,6 @@
     "dayjs": "^1.10.4",
     "electric-sql": "file:.yalc/electric-sql",
     "fs-extra": "^10.1.0",
-    "prisma-generator-electric": "file:.yalc/prisma-generator-electric",
     "react": ">= 17.0.2",
     "react-beautiful-dnd": "^13.1.0",
     "react-contexify": "^5.0.0",
