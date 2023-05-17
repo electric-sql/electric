@@ -21,6 +21,7 @@ defmodule Electric.Replication.Changes do
   @type db_identifier() :: String.t()
   @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
+  @type relation_id() :: non_neg_integer
 
   # Tag is of the form 'origin@timestamp' where:
   # origin - is a unique source id (UUID for Satellite clients)
@@ -184,7 +185,7 @@ defmodule Electric.Replication.Changes do
     defstruct [:id, :namespace, :name, :replica_identity, :columns]
 
     @type t() :: %__MODULE__{
-            id: Messages.relation_id(),
+            id: Changes.relation_id(),
             namespace: String.t(),
             name: String.t(),
             replica_identity: :default | :nothing | :all_columns | :index,
