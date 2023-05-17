@@ -27,20 +27,28 @@ This example uses [Prisma](https://www.prisma.io/) to manage Postgres schema.
 Prisma is a Node.js ORM for managing DB.
 
 There are a set of Postgres migrations in `db/prisma/migrations`. 
-To apply them to the local Postgres you will need to have node >=16.20.0 and yarn installed, then run:
+To apply them to the local Postgres you will need to have node >=16.20.0 and yarn installed.
+
+The dependency on `prisma-generator-electric` is being managed with yalc at the moment see [here](using_yalc.md)
+
+run:
 
 ```bash
 cd db
+yalc add prisma-generator-electric
 yarn
 npx prisma migrate
 ```
 
 ### Run web app
 
+The dependency on `electric-sql` is being managed with yalc at the moment see [here](using_yalc.md)
+
 The app is a React application to install and run it:
 
 ```bash
 cd client/web
+yalc add electric-sql
 yarn build
 yarn start
 ```
