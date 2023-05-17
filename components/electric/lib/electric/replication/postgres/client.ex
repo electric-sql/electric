@@ -338,6 +338,10 @@ defmodule Electric.Replication.Postgres.Client do
   Returns `:ok` on success.
   """
   def start_replication(conn, publication, slot, handler) do
+    Logger.debug(
+      "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
+    )
+
     opts = 'proto_version \'1\', publication_names \'#{publication}\''
 
     conn

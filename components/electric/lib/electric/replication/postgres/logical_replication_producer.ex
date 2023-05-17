@@ -84,6 +84,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     publication = repl_opts.publication
     slot = repl_opts.slot
 
+    Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
+
     with {:ok, conn} <- Client.connect(conn_opts),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
