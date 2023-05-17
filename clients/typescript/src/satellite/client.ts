@@ -598,7 +598,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handlePingReq() {
-    Log.info(`respond to ping with last ack ${toHexString(this.inbound.ack_lsn ?? new Uint8Array())}`)
+    Log.info(
+      `respond to ping with last ack ${toHexString(
+        this.inbound.ack_lsn ?? new Uint8Array()
+      )}`
+    )
     const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
     this.sendMessage(pong)
   }
