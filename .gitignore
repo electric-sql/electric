@@ -29,3 +29,6 @@ electric-*.tar
 
 /archives
 .node_repl_history
+
+# mac specific
+.DS_Store

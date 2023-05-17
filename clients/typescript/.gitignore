@@ -6,3 +6,4 @@ test.db
 .tmp/
 build/
 .tool-versions
+package-lock.json

@@ -1,0 +1,26 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+//generator client {
+  //provider = "prisma-client-js"
+//}
+
+generator electric {
+  provider      = "./node_modules/prisma-generator-electric/dist/bin.js"
+  output        = "../../client/web/src/generated/models"
+  relationModel = false
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model issue {
+  id            String      @id @default(uuid())
+  name          String
+  priority      String
+  title         String
+  description   String
+  status        String
+}
