@@ -22,6 +22,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
 
+    event_trigger_tags =
+      for action <- ["CREATE", "ALTER", "DROP"],
+          obj <- ["TABLE", "INDEX", "VIEW"],
+          do: "'#{action} #{obj}'"
+
     [
       """
       CREATE TABLE #{version_table} (
@@ -170,8 +175,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       ##################
       """
       CREATE EVENT TRIGGER #{schema}_event_trigger_ddl_end ON ddl_command_end
+          WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
           EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
-
       """
     ]
   end
