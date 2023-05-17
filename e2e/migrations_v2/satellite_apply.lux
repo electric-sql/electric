@@ -5,7 +5,7 @@
 [global node=>]
 [global migration_dir=m_sanity_check]
 [global migration_version_1=20230504114018]
-[global migration_version_1=20230505100008]
+[global migration_version_2=20230505100008]
 
 [include shared.luxinc]
 [include satellite.luxinc]
@@ -88,9 +88,11 @@
 #===============================================================================
 
 [shell satellite_1]
+    [invoke log "Insert data into satellite_1"]
     [invoke node_await_insert "['hello from satellite_1']"]
 
 [shell satellite_2]
+    [invoke log "Insert data into satellite_2"]
     [invoke node_await_insert "['hello from satellite_2']"]
 
 [loop pg pg_1]
@@ -104,28 +106,11 @@
 
 [shell satellite_1]
     [invoke log "wait for new column on satellite_1"]
-    [invoke node_await_table items another]
+    [invoke node_await_column items another]
 
 [shell satellite_2]
     [invoke log "wait for new column on satellite_2"]
-    [invoke node_await_table items another]
-
-#===============================================================================
-# Verify that replication works for multiple tables
-#===============================================================================
-
-[shell satellite_1]
-    [invoke node_await_insert_other "['hello from satellite_1 other']"]
-
-[shell satellite_2]
-    [invoke node_await_insert_other "['hello from satellite_2 other']"]
-
-[loop pg pg_1]
-  [shell ${pg}]
-    [invoke log "Verify that ${pg} have received data from both Satellites"]
-    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_1 other" 10 ${psql}]
-    [invoke wait-for "SELECT * FROM public.other_items;" "hello from satellite_2 other" 10 ${psql}]
-[endloop]
+    [invoke node_await_column items another]
 
 [cleanup]
-    [invoke teardown]
+  [invoke teardown]

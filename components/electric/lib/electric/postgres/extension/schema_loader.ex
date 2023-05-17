@@ -18,6 +18,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t()) :: {:ok, state()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
+  @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -57,6 +58,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def primary_keys({module, state}, schema, table) do
     module.primary_keys(state, schema, table)
+  end
+
+  def refresh_subscription({module, state}, name) do
+    module.refresh_subscription(state, name)
   end
 end
 
@@ -133,5 +138,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
 
     {:ok, Enum.map(pks_data, &elem(&1, 0))}
+  end
+
+  @impl true
+  def refresh_subscription(conn, name) do
+    query = ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
+
+    with {:ok, [], []} <- :epgsql.squery(conn, query) do
+      :ok
+    end
   end
 end

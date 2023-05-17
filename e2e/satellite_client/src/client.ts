@@ -87,7 +87,7 @@ export const get_tables = async (electric: Electric) => {
 }
 
 export const get_columns = async (electric: Electric, table: string) => {
-  return electric.db.raw({sql: `SELECT * FROM pragma_table_info(@name);`, args: [table]})
+  return electric.db.raw({sql: `SELECT * FROM pragma_table_info(?);`, args: [table]})
 }
 
 export const get_items = async (electric: Electric) => {

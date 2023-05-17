@@ -27,7 +27,6 @@ services:
       ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     depends_on:
       - pg_1
-      - pg_2
       - vaxine_1
 
   pg_1:
@@ -36,13 +35,6 @@ services:
       service: postgresql
     ports:
       - "54321:5432"
-
-  pg_2:
-    extends:
-      file: ../services_templates.yaml
-      service: postgresql
-    ports:
-      - "54322:5432"
 
   elixir_client_1:
     extends:

@@ -27,7 +27,7 @@
 [endmacro]
 
 [macro node_await_column table column]
-    [invoke wait-for "await client.get_columns(db, "${table}")" "${column}" 10 $node]
+    [invoke wait-for "await client.get_columns(db, '${table}')" "${column}" 10 $node]
 [endmacro]
 
 [macro node_await_insert keys]
