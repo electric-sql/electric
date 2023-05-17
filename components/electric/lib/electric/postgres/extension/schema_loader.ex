@@ -69,6 +69,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
 
+  require Logger
+
   @behaviour Extension.SchemaLoader
 
   @impl true
@@ -144,8 +146,18 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   def refresh_subscription(conn, name) do
     query = ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
 
-    with {:ok, [], []} <- :epgsql.squery(conn, query) do
-      :ok
+    case :epgsql.squery(conn, query) do
+      {:ok, [], []} ->
+        :ok
+
+      # "ALTER SUBSCRIPTION ... REFRESH is not allowed for disabled subscriptions"
+      # ignore this as it's due to race conditions with the rest of the system
+      {:error, {:error, :error, "55000", :object_not_in_prerequisite_state, _, _}} ->
+        Logger.warn("Unable to refresh DISABLED subscription #{name}")
+        :ok
+
+      error ->
+        error
     end
   end
 end
