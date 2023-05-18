@@ -168,7 +168,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
           table
       end
 
-    :ok = SchemaRegistry.add_replicated_tables(state.publication, [table])
+    :ok = SchemaRegistry.put_replicated_tables(state.publication, [table])
     :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
 
     # update the subscription to add any new

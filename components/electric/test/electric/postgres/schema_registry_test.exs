@@ -49,7 +49,7 @@ defmodule Electric.Postgres.SchemaRegistryTest do
     assert SchemaRegistry.put_replicated_tables(@name, @publication, tables) == :ok
     table = gen_table("table_4")
 
-    assert SchemaRegistry.add_replicated_tables(@name, @publication, [table]) == :ok
+    assert SchemaRegistry.put_replicated_tables(@name, @publication, [table]) == :ok
     assert SchemaRegistry.fetch_replicated_tables(@name, @publication) == {:ok, tables ++ [table]}
 
     for t <- tables ++ [table] do
@@ -60,7 +60,7 @@ defmodule Electric.Postgres.SchemaRegistryTest do
   test "can add a new table to an empty publication" do
     table = gen_table("table_4")
 
-    assert SchemaRegistry.add_replicated_tables(@name, @publication, [table]) == :ok
+    assert SchemaRegistry.put_replicated_tables(@name, @publication, [table]) == :ok
     assert SchemaRegistry.fetch_replicated_tables(@name, @publication) == {:ok, [table]}
 
     for t <- [table] do
@@ -81,7 +81,7 @@ defmodule Electric.Postgres.SchemaRegistryTest do
 
     table2 = %{table | primary_keys: []}
 
-    assert SchemaRegistry.add_replicated_tables(@name, @publication, [table2]) == :ok
+    assert SchemaRegistry.put_replicated_tables(@name, @publication, [table2]) == :ok
 
     assert SchemaRegistry.fetch_replicated_tables(@name, @publication) ==
              {:ok, tables ++ [table2]}
