@@ -97,7 +97,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
             _v := (SELECT to_char(#{@current_tx_ts}, 'YYYYMMDDHH24MISS_FF3'));
             -- TODO: we should instead abort the transaction
             --       not doing that now because it would break everything
-            RAISE WARN 'assigning automatic migration version id: %', _v;
+            RAISE WARNING 'assigning automatic migration version id: %', _v;
             SELECT v.txid, v.txts, v.version INTO txid, txts, version FROM #{schema}.migration_version(_v) v;
           ELSE
             RAISE DEBUG 'got active version %', version;
