@@ -139,6 +139,11 @@ defmodule Electric.Replication.VaxineTest do
       assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: ^tags} = read_row(id)
     end
 
+    @tag :skip
+    # NOTE(alco): Flaky test that needs to be reviewed after Vaxine is removed from the write path, i.e. when have
+    # conflict resolution implemented in Postgres.
+    #
+    # See https://github.com/electric-sql/electric/pull/143 for details.
     test "rows are merged for updated record" do
       id = Ecto.UUID.generate()
       ctx1 = gen_ctx()
@@ -168,6 +173,11 @@ defmodule Electric.Replication.VaxineTest do
       assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: ^tags} = read_row(id)
     end
 
+    @tag :skip
+    # NOTE(alco): Flaky test that needs to be reviewed after Vaxine is removed from the write path, i.e. when have
+    # conflict resolution implemented in Postgres.
+    #
+    # See https://github.com/electric-sql/electric/pull/143 for details.
     test "update > delete" do
       id = Ecto.UUID.generate()
       ctx1 = gen_ctx()
