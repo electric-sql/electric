@@ -16,18 +16,18 @@ defmodule Electric.Postgres.Replication do
   #
   # - creation of indexes doesn't affect any tables so that list should be empty
   @spec migrate(Schema.t(), version(), binary(), Electric.Postgres.Dialect.t()) ::
-          {:ok, [%SatOpMigrate{}]}
+          {:ok, [%SatOpMigrate{}], [{binary, binary}]}
   def migrate(schema, version, stmt, dialect \\ @default_dialect) do
     ast = Electric.Postgres.parse!(stmt)
 
     case propagatable_stmt?(ast) do
       [] ->
-        {:ok, []}
+        {:ok, [], []}
 
       propagate_ast ->
-        msg = build_replication_msg(propagate_ast, version, schema, dialect)
+        {msg, relations} = build_replication_msg(propagate_ast, version, schema, dialect)
 
-        {:ok, [msg]}
+        {:ok, [msg], relations}
     end
   end
 
@@ -69,9 +69,12 @@ defmodule Electric.Postgres.Replication do
   end
 
   defp build_replication_msg(ast, version, schema, dialect) do
+    affected_tables = affected_tables(ast, dialect)
+
+    relations = Enum.map(affected_tables, &{&1.schema, &1.name})
+
     tables =
-      ast
-      |> affected_tables(dialect)
+      affected_tables
       |> Enum.map(&Schema.fetch_table!(schema, &1))
       |> Enum.map(&replication_msg_table(&1, dialect))
 
@@ -90,11 +93,11 @@ defmodule Electric.Postgres.Replication do
         }
       )
 
-    %SatOpMigrate{
-      version: version,
-      table: table,
-      stmts: stmts
-    }
+    {%SatOpMigrate{
+       version: version,
+       table: table,
+       stmts: stmts
+     }, relations}
   end
 
   # FIXME: not all ddl commands are suitable for passing to the clients.
