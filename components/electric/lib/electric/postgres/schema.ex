@@ -119,7 +119,7 @@ defmodule Electric.Postgres.Schema do
           name: col.name,
           type: String.to_atom(col.type.name),
           type_modifier: -1,
-          part_of_identity: nil
+          part_of_identity?: nil
         }
       end)
 

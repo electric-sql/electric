@@ -1047,8 +1047,8 @@ defmodule Electric.Postgres.TableTest do
              }
 
       assert columns == [
-               %{name: "c1", type: :int4, type_modifier: -1, part_of_identity: nil},
-               %{name: "c2", type: :int4, type_modifier: -1, part_of_identity: nil}
+               %{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: nil},
+               %{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: nil}
              ]
     end
   end
