@@ -47,7 +47,7 @@ import {
   Relation,
   SchemaChange,
   OutgoingReplication,
-  Transaction,
+  Transaction, isDataChange,
 } from '../util/types'
 import {
   base64,
@@ -367,24 +367,27 @@ export class SatelliteClient extends EventEmitter implements Client {
     transaction: DataTransaction,
     replication: Replication
   ): void {
-    transaction.changes.forEach((change) => {
-      const relation = change.relation
-      if (!this.outbound.relations.has(relation.id)) {
-        replication.relations.set(relation.id, relation)
+    transaction
+      .changes
+      .filter(isDataChange) // filter our schema changes as they do not have a `relation` field
+      .forEach((change) => {
+        const relation = change.relation
+        if (!this.outbound.relations.has(relation.id)) {
+          replication.relations.set(relation.id, relation)
 
-        const satRelation = SatRelation.fromPartial({
-          relationId: relation.id,
-          schemaName: relation.schema, // TODO
-          tableName: relation.table,
-          tableType: relation.tableType,
-          columns: relation.columns.map((c) =>
-            SatRelationColumn.fromPartial({ name: c.name, type: c.type })
-          ),
-        })
+          const satRelation = SatRelation.fromPartial({
+            relationId: relation.id,
+            schemaName: relation.schema, // TODO
+            tableName: relation.table,
+            tableType: relation.tableType,
+            columns: relation.columns.map((c) =>
+              SatRelationColumn.fromPartial({ name: c.name, type: c.type })
+            ),
+          })
 
-        this.sendMessage(satRelation)
-      }
-    })
+          this.sendMessage(satRelation)
+        }
+      })
   }
 
   private transactionToSatOpLog(transaction: DataTransaction): SatOpLog {
