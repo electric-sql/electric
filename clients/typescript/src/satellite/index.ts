@@ -61,7 +61,7 @@ export interface Client {
   isClosed(): boolean
   startReplication(lsn?: LSN): Promise<void | SatelliteError>
   stopReplication(): Promise<void | SatelliteError>
-  subscribeToRelations(callback: (relation: Relation) => Promise<void>): void
+  subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
   ): void

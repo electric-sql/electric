@@ -223,6 +223,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_info(:send_keepalive, state) when replication_started?(state) do
+    Logger.debug("#{__MODULE__}: <KeepAlive>")
+
     state.current_lsn
     |> Messaging.replication_keepalive()
     |> state.send_fn.()

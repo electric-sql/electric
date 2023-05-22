@@ -18,6 +18,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t()) :: {:ok, state()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
+  @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -58,11 +59,17 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   def primary_keys({module, state}, schema, table) do
     module.primary_keys(state, schema, table)
   end
+
+  def refresh_subscription({module, state}, name) do
+    module.refresh_subscription(state, name)
+  end
 end
 
 defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
+
+  require Logger
 
   @behaviour Extension.SchemaLoader
 
@@ -133,5 +140,24 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
 
     {:ok, Enum.map(pks_data, &elem(&1, 0))}
+  end
+
+  @impl true
+  def refresh_subscription(conn, name) do
+    query = ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
+
+    case :epgsql.squery(conn, query) do
+      {:ok, [], []} ->
+        :ok
+
+      # "ALTER SUBSCRIPTION ... REFRESH is not allowed for disabled subscriptions"
+      # ignore this as it's due to race conditions with the rest of the system
+      {:error, {:error, :error, "55000", :object_not_in_prerequisite_state, _, _}} ->
+        Logger.warn("Unable to refresh DISABLED subscription #{name}")
+        :ok
+
+      error ->
+        error
+    end
   end
 end

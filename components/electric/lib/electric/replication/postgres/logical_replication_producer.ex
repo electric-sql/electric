@@ -22,6 +22,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Type
   }
 
+  alias Electric.Replication.Changes
+
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -82,6 +84,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     publication = repl_opts.publication
     slot = repl_opts.slot
 
+    Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
+
     with {:ok, conn} <- Client.connect(conn_opts),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
@@ -137,7 +141,25 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           %{state | relations: Map.put(state.relations, msg.id, msg)}
       end
 
-    {:noreply, [msg], state}
+    # Mapping from a `LogicalReplication.Messages.Relation` to a
+    # `Electric.Replication.Changes.Relation` is a little superfluous but keeps
+    # the clean line between pg logical replication and this internal change
+    # stream.
+    # The Relation messages are used and then dropped by the
+    # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
+    # this producer. 
+    relation =
+      Changes.Relation
+      |> struct(Map.from_struct(msg))
+      |> Map.put(
+        :columns,
+        Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
+      )
+
+    queue = :queue.in(relation, state.queue)
+    state = %{state | queue: queue}
+
+    dispatch_events(state, [])
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
@@ -334,9 +356,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
         # TODO: VAX-680 remove this special casing of schema_migrations table
         # once we are selectivley replicating tables
-        ignore? =
-          (msg.namespace == "electric" and msg.name in ["migrations", "meta"]) ||
-            (msg.namespace == "public" and msg.name == "schema_migrations")
+        # ||
+        ignore? = msg.namespace == "electric" and msg.name in ["migrations", "meta"]
+        # (msg.namespace == "public" and msg.name == "schema_migrations")
 
         if ignore? do
           {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}

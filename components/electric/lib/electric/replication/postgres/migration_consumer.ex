@@ -7,13 +7,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   alias Ecto.Adapter.Transaction
   alias Electric.Replication.Connectors
 
-  alias Electric.Postgres.LogicalReplication.Messages.{
-    Relation
-  }
-
   alias Electric.Replication.Changes.{
     NewRecord,
-    Transaction
+    Transaction,
+    Relation
   }
 
   alias Electric.Postgres.{
@@ -49,7 +46,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @impl GenStage
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
-    %{publication: publication} = Connectors.get_replication_opts(conn_config)
+
+    %{publication: publication, subscription: subscription} =
+      Connectors.get_replication_opts(conn_config)
 
     Logger.metadata(pg_producer: origin)
 
@@ -67,6 +66,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     state = %{
       origin: origin,
       publication: publication,
+      subscription: subscription,
       producer: producer,
       loader: loader,
       opts: opts
@@ -159,7 +159,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     # FIXME: Since we use fake oids for our schema, we need to keep them consistent
     # so retrieve the generated oid from the registry and use it if it exists
-    # This function is slow because it doesn't return until the timeout
     table =
       case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
         {:ok, existing_table} ->
@@ -169,8 +168,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
           table
       end
 
-    :ok = SchemaRegistry.add_replicated_tables(state.publication, [table])
+    :ok = SchemaRegistry.put_replicated_tables(state.publication, [table])
     :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+
+    # update the subscription to add any new
+    # tables (this only works when data has been added -- doing it at the
+    # point of receiving the migration has no effect).
+    state = refresh_subscription(state)
 
     process_events(events, {migrations, state})
   end
@@ -210,6 +214,12 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       end)
 
     save_schema(state, version, schema, stmts)
+  end
+
+  defp refresh_subscription(state) do
+    Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
+    :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
+    state
   end
 
   defp load_schema(state) do

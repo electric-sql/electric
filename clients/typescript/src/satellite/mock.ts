@@ -151,9 +151,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     return Promise.resolve()
   }
 
-  subscribeToRelations(
-    _callback: (relation: Relation) => Promise<void>
-  ): void {}
+  subscribeToRelations(_callback: (relation: Relation) => void): void {}
 
   subscribeToTransactions(
     _callback: (transaction: Transaction) => Promise<void>

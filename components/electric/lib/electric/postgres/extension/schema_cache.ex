@@ -74,16 +74,9 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:primary_keys, schema, name})
   end
 
-  @spec table_primary_keys(Connectors.origin(), binary | nil, binary) ::
-          {:ok, [binary()]} | {:error, term()}
-  def table_primary_keys(origin, schema, table) do
-    GenServer.call(name(origin), {:primary_keys, schema, table})
-  end
-
-  @spec table_primary_keys(Connectors.origin(), pos_integer()) ::
-          {:ok, [binary()]} | {:error, term()}
-  def table_primary_keys(origin, oid) when is_integer(oid) do
-    GenServer.call(name(origin), {:primary_keys, oid})
+  @impl SchemaLoader
+  def refresh_subscription(origin, name) do
+    GenServer.call(name(origin), {:refresh_subscription, name})
   end
 
   @impl GenServer
@@ -141,23 +134,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.primary_keys(state.backend, schema, name), state}
   end
 
-  def handle_call({:primary_keys, oid}, _from, state) do
-    {:ok, conn} =
-      state.conn_config
-      |> Connectors.get_connection_opts(replication: false)
-      |> :epgsql.connect()
-
-    result = Electric.Replication.Postgres.Client.query_table_pks(conn, oid)
-
-    {:reply, result, state, {:continue, {:close, conn}}}
-  end
-
-  @impl GenServer
-  def handle_continue({:close, conn}, state) do
-    :ok = :epgsql.close(conn)
-    {:noreply, state}
-  end
-
+  # # Version of loading primary keys using the materialised schema info
   # def handle_call({:primary_keys, ns, table}, _from, %{current: {_version, schema}} = state) do
   #   result =
   #     with {:ok, table} <- Schema.fetch_table(schema, {ns, table}) do
@@ -177,6 +154,16 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   #
   #   {:reply, result, state}
   # end
+
+  def handle_call({:refresh_subscription, name}, _from, state) do
+    {:reply, SchemaLoader.refresh_subscription(state.backend, name), state}
+  end
+
+  @impl GenServer
+  def handle_continue({:close, conn}, state) do
+    :ok = :epgsql.close(conn)
+    {:noreply, state}
+  end
 
   defp load_current_schema(state) do
     case SchemaLoader.load(state.backend) do

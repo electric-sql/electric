@@ -95,6 +95,7 @@
   "scripts": {
     "dev": "tsmodule dev",
     "build": "rm -rf ./dist && tsc && tsmodule build",
+    "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
     "posttest": "npm run typecheck",

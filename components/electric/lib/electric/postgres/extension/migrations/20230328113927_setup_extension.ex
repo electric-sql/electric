@@ -22,6 +22,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
 
+    event_trigger_tags =
+      for action <- ["CREATE", "ALTER", "DROP"],
+          obj <- ["TABLE", "INDEX", "VIEW"],
+          do: "'#{action} #{obj}'"
+
     [
       """
       CREATE TABLE #{version_table} (
@@ -88,14 +93,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
               FROM #{version_table} v
               WHERE #{is_current_txid("v.")} LIMIT 1;
 
-          RAISE DEBUG 'got current version %', version;
-
           IF NOT FOUND THEN
             _v := (SELECT to_char(#{@current_tx_ts}, 'YYYYMMDDHH24MISS_FF3'));
             -- TODO: we should instead abort the transaction
             --       not doing that now because it would break everything
             RAISE WARNING 'assigning automatic migration version id: %', _v;
             SELECT v.txid, v.txts, v.version INTO txid, txts, version FROM #{schema}.migration_version(_v) v;
+          ELSE
+            RAISE DEBUG 'got active version %', version;
           END IF;
       END;
       $function$ LANGUAGE PLPGSQL;
@@ -107,6 +112,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       DECLARE
           trid int8;
       BEGIN
+          RAISE DEBUG 'capture migration: % => %', _version, current_query();
           INSERT INTO #{ddl_table} (txid, txts, version, query) VALUES
                 (_txid, _txts, _version, current_query())
               RETURNING id INTO trid;
@@ -142,25 +148,13 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       BEGIN
           RAISE DEBUG 'command_end_handler:: version: % :: start', _version;
 
-          _capture := true;
+          SELECT v.txid, v.txts, v.version
+            INTO _txid, _txts, _version
+            FROM #{schema}.current_migration_version() v;
 
-          FOR v_cmd_rec IN SELECT * FROM pg_event_trigger_ddl_commands()
-          LOOP
-               RAISE INFO 'command type %', v_cmd_rec.command_tag;
-               -- think that black listing is easier than whitelisting atm
-               IF v_cmd_rec.command_tag IN ('CREATE PUBLICATION', 'ALTER PUBLICATION', 'CREATE SUBSCRIPTION', 'ALTER SUBSCRIPTION') THEN
-                 _capture := false;
-               END IF;
-          END LOOP;
+          trid := (SELECT #{schema}.create_active_migration(_txid, _txts, _version));
 
-          IF _capture = true THEN
-            RAISE INFO 'capturing command';
-            SELECT v.txid, v.txts, v.version
-              INTO _txid, _txts, _version
-              FROM #{schema}.current_migration_version() v;
-            trid := (SELECT #{schema}.create_active_migration(_txid, _txts, _version));
-          END IF;
-
+          RAISE DEBUG 'create_active_migration = %', trid;
           RAISE DEBUG 'command_end_handler:: version: % :: end', _version;
       END;
       $function$
@@ -169,8 +163,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       ##################
       """
       CREATE EVENT TRIGGER #{schema}_event_trigger_ddl_end ON ddl_command_end
+          WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
           EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
-
       """
     ]
   end

@@ -460,7 +460,7 @@ test.serial(
     const deleteRow = {
       id: 1,
       value: 'local',
-      other: null
+      other: null,
     }
 
     const deleteChange = {

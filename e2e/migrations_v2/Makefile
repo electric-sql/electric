@@ -14,4 +14,4 @@ build:
 clean:
 
 start_dev_env:
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 

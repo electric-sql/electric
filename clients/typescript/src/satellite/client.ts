@@ -27,6 +27,7 @@ import {
   getProtocolVersion,
   getFullTypeName,
 } from '../util/proto'
+import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
@@ -305,10 +306,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  subscribeToRelations(callback: (relation: Relation) => Promise<void>) {
-    this.on('relation', async (relation) => {
-      await callback(relation)
-    })
+  subscribeToRelations(callback: (relation: Relation) => void) {
+    this.on('relation', callback)
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -604,7 +603,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handlePingReq() {
-    Log.info(`respond to ping with last ack ${this.inbound.ack_lsn}`)
+    Log.info(
+      `respond to ping with last ack ${toHexString(
+        this.inbound.ack_lsn ?? new Uint8Array()
+      )}`
+    )
     const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
     this.sendMessage(pong)
   }

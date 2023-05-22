@@ -703,19 +703,24 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _updateRelations(rel: Omit<Relation, 'id'>) {
+  _updateRelations(rel: Omit<Relation, 'id'>) {
     if (rel.tableType === SatRelation_RelationType.TABLE) {
       // this relation may be for a newly created table
       // or for a column that was added to an existing table
       const tableName = rel.table
 
       if (this.relations[tableName] === undefined) {
-        // the relation is for a new table
-        const localTableNames = await this._getLocalTableNames()
-        const id = localTableNames.length
+        let id = 0
+        // generate an id for the new relation as (the highest existing id) + 1
+        // TODO: why not just use the relation.id coming from pg?
+        for (const r of Object.values(this.relations)) {
+          if (r.id > id) {
+            id = r.id
+          }
+        }
         const relation = {
           ...rel,
-          id: id,
+          id: id + 1,
         }
         this.relations[tableName] = relation
       } else {
@@ -878,11 +883,18 @@ export class SatelliteProcess implements Satellite {
         ...stmts,
         ...this._enableTriggers(tablenames)
       )
-    } catch(e: any) {
-      console.log("ERROR APPLYING TRANSACTION:\n" + [...this._disableTriggers(notNewTableNames),
-        ...stmts,
-        ...this._enableTriggers(tablenames)].map(o => JSON.stringify(o)).join("\n"))
-      console.log("CHANGES:\n" + JSON.stringify(transaction.changes))
+    } catch (e: any) {
+      console.log(
+        'ERROR APPLYING TRANSACTION:\n' +
+          [
+            ...this._disableTriggers(notNewTableNames),
+            ...stmts,
+            ...this._enableTriggers(tablenames),
+          ]
+            .map((o) => JSON.stringify(o))
+            .join('\n')
+      )
+      console.log('CHANGES:\n' + JSON.stringify(transaction.changes))
       throw e
     }
 
@@ -1086,7 +1098,9 @@ function _applyDeleteOperation(
 ): Statement {
   const pkEntries = Object.entries(entryChanges.primaryKeyCols)
   if (pkEntries.length === 0)
-    throw new Error("Can't apply delete operation. None of the columns in changes are marked as PK.")
+    throw new Error(
+      "Can't apply delete operation. None of the columns in changes are marked as PK."
+    )
   const params = pkEntries.reduce(
     (acc, [column, value]) => {
       acc.where.push(`${column} = ?`)

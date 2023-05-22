@@ -76,17 +76,6 @@ defmodule Electric.Postgres.SchemaRegistry do
   end
 
   @doc """
-  Add the tables to the given publication.
-
-  Unlike `put_replicated_tables/3` this function appends tables to the existing
-  set for the publication rather than overwriting it.
-  """
-  @spec add_replicated_tables(registry(), String.t(), [replicated_table()]) :: :ok
-  def add_replicated_tables(agent \\ __MODULE__, publication, tables) do
-    GenServer.call(agent, {:add_replicated_tables, publication, tables})
-  end
-
-  @doc """
   List information on tables which are replicated as part of the publication.
   """
   @spec fetch_replicated_tables(registry(), String.t()) :: {:ok, [replicated_table()]} | :error
@@ -209,20 +198,6 @@ defmodule Electric.Postgres.SchemaRegistry do
 
   @impl true
   def handle_call({:put_replicated_tables, publication, tables}, _from, state) do
-    tables
-    |> Enum.map(&{{:table, {&1.schema, &1.name}, :info}, &1.oid, &1})
-    |> then(&[{{:publication, publication, :tables}, tables} | &1])
-    |> then(&:ets.insert(state.ets_table, &1))
-
-    state =
-      state
-      |> send_pending_calls({:fetch_replicated_tables, publication}, tables)
-      |> notify_new_tables(tables)
-
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:add_replicated_tables, publication, tables}, _from, state) do
     oids = MapSet.new(tables, & &1.oid)
 
     existing =
@@ -237,12 +212,14 @@ defmodule Electric.Postgres.SchemaRegistry do
     |> then(&[{{:publication, publication, :tables}, existing ++ tables} | &1])
     |> then(&:ets.insert(state.ets_table, &1))
 
-    state = notify_new_tables(state, tables)
+    state =
+      state
+      |> send_pending_calls({:fetch_replicated_tables, publication}, tables)
+      |> notify_new_tables(tables)
 
     {:reply, :ok, state}
   end
 
-  @impl true
   def handle_call({:put_table_columns, table, table_oid, columns}, _from, state) do
     :ets.insert(state.ets_table, {{:table, table, :columns}, table_oid, columns})
 
@@ -252,7 +229,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     {:reply, :ok, state}
   end
 
-  @impl true
   def handle_call({:clear_replicated_tables, publication}, _from, state) do
     case :ets.match(state.ets_table, {{:publication, publication, :tables}, :"$1"}) do
       [] ->
@@ -268,7 +244,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:fetch_replicated_tables, publication} = key, from, state) do
     case :ets.match(state.ets_table, {{:publication, publication, :tables}, :"$1"}) do
       [] ->
@@ -279,7 +254,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:fetch_table_info, {schema, name}} = key, from, state) do
     case :ets.match(state.ets_table, {{:table, {schema, name}, :info}, :_, :"$1"}) do
       [] ->
@@ -290,7 +264,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:fetch_table_info, oid} = key, from, state) do
     case :ets.match(state.ets_table, {{:table, :_, :info}, oid, :"$1"}) do
       [] ->
@@ -321,7 +294,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:fetch_table_columns, {schema, name}} = key, from, state) do
     case :ets.match(state.ets_table, {{:table, {schema, name}, :columns}, :_, :"$1"}) do
       [] ->
@@ -332,7 +304,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:fetch_table_columns, oid} = key, from, state) do
     case :ets.match(state.ets_table, {{:table, :_, :columns}, oid, :"$1"}) do
       [] ->
@@ -343,13 +314,11 @@ defmodule Electric.Postgres.SchemaRegistry do
     end
   end
 
-  @impl true
   def handle_call({:mark_origin_ready, origin}, _, state) do
     :ets.insert(state.ets_table, {{:origin, origin, :ready?}, true})
     {:reply, :ok, state}
   end
 
-  @impl true
   def handle_call({:is_origin_ready?, origin}, _, state) do
     case :ets.match(state.ets_table, {{:origin, origin, :ready?}, :"$1"}) do
       [] -> {:reply, false, state}
@@ -372,7 +341,6 @@ defmodule Electric.Postgres.SchemaRegistry do
     {:reply, table, state}
   end
 
-  @impl true
   def handle_call(:stop, _, state) do
     {:stop, :normal, state}
   end

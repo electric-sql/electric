@@ -1,6 +1,8 @@
 defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Changes
+
   alias Electric.Replication.Changes.{
     NewRecord,
     Transaction
@@ -96,7 +98,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
-        %Relation{
+        %Changes.Relation{
           id: 1234,
           namespace: "public",
           name: "mistakes",
@@ -110,7 +112,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       ]
 
       GenStage.call(producer, {:emit, events})
-      # relation messages are filtered out
+
       refute_receive {FakeConsumer, :events, _}, 500
       assert_receive {MockSchemaLoader, {:primary_keys, "public", "mistakes"}}, 500
 

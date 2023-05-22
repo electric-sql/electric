@@ -4,9 +4,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
 
-  alias Electric.Postgres.LogicalReplication.Messages.{Relation}
-
-  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction}
+  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction, Relation}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn

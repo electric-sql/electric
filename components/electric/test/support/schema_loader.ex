@@ -65,6 +65,12 @@ defmodule Electric.Postgres.MockSchemaLoader do
     end
   end
 
+  @impl true
+  def refresh_subscription({_versions, opts}, name) do
+    notify(opts, {:refresh_subscription, name})
+    :ok
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end
