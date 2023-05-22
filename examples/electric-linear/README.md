@@ -45,7 +45,7 @@ run:
 cd db
 yalc add prisma-generator-electric
 yarn
-npx prisma migrate reset
+npx prisma migrate dev
 ```
 
 This will both, reset the Postgres and push all the migrations to it, and regenerate the typescript client code matching
