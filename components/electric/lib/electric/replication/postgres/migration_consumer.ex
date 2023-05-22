@@ -157,24 +157,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     table = %{table | primary_keys: pks}
 
-    # FIXME: Since we use fake oids for our schema, we need to keep them consistent
-    # so retrieve the generated oid from the registry and use it if it exists
-    table =
-      case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
-        {:ok, existing_table} ->
-          %{table | oid: existing_table.oid}
-
-        :error ->
-          table
-      end
-
-    :ok = SchemaRegistry.put_replicated_tables(state.publication, [table])
-    :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+    state =
+      register_relation(table, columns, state)
+      |> refresh_subscription()
 
     # update the subscription to add any new
     # tables (this only works when data has been added -- doing it at the
     # point of receiving the migration has no effect).
-    state = refresh_subscription(state)
 
     process_events(events, {migrations, state})
   end
@@ -216,6 +205,24 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     save_schema(state, version, schema, stmts)
   end
 
+  defp register_relation(table, columns, state) do
+    Logger.debug("Registering relation #{table.schema}.#{table.name}")
+
+    table =
+      case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
+        {:ok, existing_table} ->
+          %{table | oid: existing_table.oid}
+
+        :error ->
+          table
+      end
+
+    :ok = SchemaRegistry.put_replicated_tables(state.publication, [table])
+    :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)
+
+    state
+  end
+
   defp refresh_subscription(state) do
     Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
     :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
@@ -231,7 +238,12 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp save_schema(state, version, schema, _stmts) do
     Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
     {:ok, loader} = SchemaLoader.save(state.loader, version, schema)
-    %{state | loader: loader}
+
+    # TODO: remove this once we've dropped the schemaregistry component
+    Enum.reduce(schema.tables, %{state | loader: loader}, fn table, state ->
+      {:ok, table_info, columns} = Schema.registry_info(table)
+      register_relation(table_info, columns, state)
+    end)
   end
 
   @impl GenStage

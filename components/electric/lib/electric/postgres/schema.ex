@@ -99,6 +99,33 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  # TODO: remove this once we've cut out the SchemaRegistry component and are just
+  # using this serialised schema information
+  def registry_info(%Proto.Table{} = table) do
+    {:ok, pks} = primary_keys(table)
+
+    table_info = %{
+      schema: table.name.schema,
+      name: table.name.name,
+      oid: table.oid,
+      primary_keys: pks,
+      # we set all replicated tables to this mode
+      replica_identity: :all_columns
+    }
+
+    columns =
+      Enum.map(table.columns, fn col ->
+        %{
+          name: col.name,
+          type: String.to_atom(col.type.name),
+          type_modifier: -1,
+          part_of_identity: nil
+        }
+      end)
+
+    {:ok, table_info, columns}
+  end
+
   def struct_order(list) do
     Enum.sort(list)
   end
