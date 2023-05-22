@@ -122,30 +122,29 @@ The Electric application is configured using environment variables. Everything t
 
 **Authentication**
 
-By default, Electric uses JWT-based authentication, so a valid and signed token must be provided to it. At a minimum,
-the signature algorithm and an appropriate key must be configured via the environment variables `SATELLITE_AUTH_JWT_ALG`
-and `SATELLITE_AUTH_JWT_KEY`.
-
-The auth token must have a `"user_id"` claim at the top level or under a namespace key if it is configured via
-`SATELLITE_AUTH_JWT_NAMESPACE`.
+By default, Electric uses JWT-based authentication. At a minimum, the signature algorithm and an appropriate key must be
+configured via the environment variables `SATELLITE_AUTH_JWT_ALG` and `SATELLITE_AUTH_JWT_KEY`.
 
 You also have the option of using the `"insecure"` authentication mode in development and for testing. In this mode,
 the algorithm and key configuration options are ignored. Both unsigned and signed JWTs are accepted, no signature
 verification is performed in the latter case.
 
-You can generate a valid token using these configuration values by running `mix electric.gen.token`, e.g:
+The auth token must have a `"user_id"` claim at the top level or under a namespace key if it is configured via
+`SATELLITE_AUTH_JWT_NAMESPACE`.
+
+For development and testing purposes, you can generate a valid token using these configuration values by running `mix
+electric.gen.token`, e.g:
 
 ```shell
 $ export SATELLITE_AUTH_JWT_ALG=HS256
 $ export SATELLITE_AUTH_JWT_KEY=00000000000000000000000000000000
-$ mix electric.gen.token my_user my_other_user
+$ mix electric.gen.token my_user_id
 ```
 
-The generated token(s) must be passed in the `token` field of the `SatAuthReq`
-protocol message.
+This token can be used with the Electric server running in either `insecure` or `jwt` mode. In the latter case, the Electric server must
+be configured with the same algorithm and key for the token to pass verification.
 
-For them to work, you must run the electric server configured with the same
-`SATELLITE_AUTH_JWT_ALG` and `SATELLITE_AUTH_JWT_KEY` set.
+See our official docs to learn about authentication in detail.
 
 ## Migrations
 
