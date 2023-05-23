@@ -224,7 +224,7 @@ defmodule Electric.Satellite.Serialization do
         {%{oid: relation_id}, columns} = fetch_relation(relation)
         column_names = for %{name: column_name} <- columns, do: column_name
 
-        {:new, relation_id, columns,
+        {:new, relation_id, column_names,
          Map.put(known_relations, relation, {relation_id, column_names})}
 
       {relation_id, columns} ->
