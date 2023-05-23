@@ -137,6 +137,48 @@ test('findUnique query with selection of NULL value', (t) => {
   )
 })
 
+test('findUnique query with selection of non-NULL value', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: null },
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IS NOT NULL) LIMIT 2"
+  )
+})
+
+test('findUnique query with selection of row that does not equal a value', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: 5 },
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo != (5)) LIMIT 2"
+  )
+})
+
 test('findMany allows results to be ordered', (t) => {
   const query = tbl
     .findMany({
