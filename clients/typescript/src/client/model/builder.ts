@@ -225,7 +225,10 @@ function addFilters<T, Q extends QueryBuilder & WhereMixin>(
   }, q)
 }
 
-function makeFilter(fieldValue: unknown, fieldName: string): { sql: string, args?: unknown[] } {
+function makeFilter(
+  fieldValue: unknown,
+  fieldName: string
+): { sql: string; args?: unknown[] } {
   if (fieldValue === null) return { sql: `${fieldName} IS NULL` }
   else if (typeof fieldValue === 'object') {
     // an object containing filters is provided
@@ -233,7 +236,7 @@ function makeFilter(fieldValue: unknown, fieldName: string): { sql: string, args
     const filterSchema = z
       .object({
         in: z.any().array().optional(),
-        not: z.any().optional() // fixme: make this a XOR such that exactly one of the filters must be provided
+        not: z.any().optional(), // fixme: make this a XOR such that exactly one of the filters must be provided
       })
       .strict('Unsupported filter in where clause')
     // TODO: remove this schema check once we support all filters
@@ -244,19 +247,16 @@ function makeFilter(fieldValue: unknown, fieldName: string): { sql: string, args
     if ('in' in obj) {
       const values = obj.in
       return { sql: `${fieldName} IN ?`, args: values }
-    }
-    else if ('not' in obj) {
+    } else if ('not' in obj) {
       const value = obj.not
       if (value === null) {
         // needed because `WHERE field != NULL` is not valid SQL
         return { sql: `${fieldName} IS NOT NULL` }
+      } else {
+        return { sql: `${fieldName} != ?`, args: [value] }
       }
-      else {
-        return { sql: `${fieldName} != ?`, args: [ value ]}
-      }
-    }
-    else {
-      throw new Error("Object provided to where argument is missing a filter")
+    } else {
+      throw new Error('Object provided to where argument is missing a filter')
     }
   }
   // needed because `WHERE field = NULL` is not valid SQL
