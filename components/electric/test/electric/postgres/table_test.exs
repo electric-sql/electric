@@ -996,4 +996,60 @@ defmodule Electric.Postgres.TableTest do
       _schema = schema_update(cmds)
     end
   end
+
+  describe "to_relation" do
+    test "correctly maps a schema table to the SchemaRegistry representation" do
+      table = %Proto.Table{
+        name: %Proto.RangeVar{schema: "public", name: "t1"},
+        oid: 48888,
+        columns: [
+          %Proto.Column{
+            name: "c1",
+            type: %Proto.Column.Type{name: "int4"},
+            constraints: [
+              %Proto.Constraint{
+                constraint: {:not_null, %Proto.Constraint.NotNull{}}
+              }
+            ]
+          },
+          %Proto.Column{
+            name: "c2",
+            type: %Proto.Column.Type{name: "int4"},
+            constraints: [
+              %Proto.Constraint{
+                constraint: {:not_null, %Proto.Constraint.NotNull{}}
+              }
+            ]
+          }
+        ],
+        constraints: [
+          %Proto.Constraint{
+            constraint:
+              {:primary,
+               %Proto.Constraint.PrimaryKey{
+                 name: "t1_pkey",
+                 keys: ["c1", "c2"],
+                 deferrable: false,
+                 initdeferred: false
+               }}
+          }
+        ]
+      }
+
+      assert {:ok, table_info, columns} = Schema.registry_info(table)
+
+      assert table_info == %{
+               schema: "public",
+               name: "t1",
+               oid: 48888,
+               primary_keys: ["c1", "c2"],
+               replica_identity: :all_columns
+             }
+
+      assert columns == [
+               %{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: nil},
+               %{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: nil}
+             ]
+    end
+  end
 end
