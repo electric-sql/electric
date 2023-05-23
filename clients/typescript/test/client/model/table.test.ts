@@ -577,7 +577,7 @@ test.serial('findMany allows results to be ordered', async (t) => {
 test.serial('findMany supports `not` and `in` filters', async (t) => {
   const res = await tbl.findMany({
     where: {
-      id: { not: 3, in: [1,2,3] }
+      id: { not: 3, in: [1, 2, 3] },
     },
     orderBy: [
       {

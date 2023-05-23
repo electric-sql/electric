@@ -231,7 +231,7 @@ function makeFilter(
   fieldValue: unknown,
   fieldName: string
 ): Array<{ sql: string; args?: unknown[] }> {
-  if (fieldValue === null) return [ { sql: `${fieldName} IS NULL` } ]
+  if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
   else if (typeof fieldValue === 'object') {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
@@ -242,8 +242,8 @@ function makeFilter(
       })
       .strict()
       .refine(
-        data => 'in' in data || 'not' in data,
-        'Please provide at least one filter.',
+        (data) => 'in' in data || 'not' in data,
+        'Please provide at least one filter.'
       )
     // TODO: remove this schema check once we support all filters
     //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
@@ -270,7 +270,7 @@ function makeFilter(
     return filters
   }
   // needed because `WHERE field = NULL` is not valid SQL
-  else return [ { sql: `${fieldName} = ?`, args: [fieldValue] } ]
+  else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
 }
 
 function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {

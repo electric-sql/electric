@@ -1,6 +1,6 @@
 import test from 'ava'
 import { Builder } from '../../../src/client/model/builder'
-import {ZodError} from "zod";
+import { ZodError } from 'zod'
 
 const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 
@@ -198,23 +198,25 @@ test('findUnique query supports several filters', (t) => {
 })
 
 test('findUnique query with no filters throws an error', (t) => {
-  const error = t.throws(() => {
-    tbl
-      .findUnique({
+  const error = t.throws(
+    () => {
+      tbl.findUnique({
         where: {
           id: 'i2',
           nbr: 21,
-          foo: { },
+          foo: {},
         },
       })
-  }, { instanceOf: ZodError })
+    },
+    { instanceOf: ZodError }
+  )
 
-  t.deepEqual((error as ZodError).issues,  [
+  t.deepEqual((error as ZodError).issues, [
     {
-      "code": "custom",
-      "message": "Please provide at least one filter.",
-      "path": []
-    }
+      code: 'custom',
+      message: 'Please provide at least one filter.',
+      path: [],
+    },
   ])
 })
 
