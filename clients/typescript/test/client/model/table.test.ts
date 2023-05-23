@@ -574,6 +574,24 @@ test.serial('findMany allows results to be ordered', async (t) => {
   t.deepEqual(res, [post1, post3, post2])
 })
 
+test.serial('findMany supports `not` and `in` filters', async (t) => {
+  const res = await tbl.findMany({
+    where: {
+      id: { not: 3, in: [1,2,3] }
+    },
+    orderBy: [
+      {
+        title: 'asc',
+      },
+      {
+        contents: 'desc',
+      },
+    ],
+  })
+
+  t.deepEqual(res, [post1, post2])
+})
+
 test.serial('update query', async (t) => {
   // Regular update
   const res = await tbl.update({

@@ -1,5 +1,6 @@
 import test from 'ava'
 import { Builder } from '../../../src/client/model/builder'
+import {ZodError} from "zod";
 
 const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 
@@ -177,6 +178,44 @@ test('findUnique query with selection of row that does not equal a value', (t) =
     query,
     "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo != (5)) LIMIT 2"
   )
+})
+
+test('findUnique query supports several filters', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: 5, in: [1, 2, 3] },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title, contents FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IN (1, 2, 3)) AND (foo != (5)) LIMIT 2"
+  )
+})
+
+test('findUnique query with no filters throws an error', (t) => {
+  const error = t.throws(() => {
+    tbl
+      .findUnique({
+        where: {
+          id: 'i2',
+          nbr: 21,
+          foo: { },
+        },
+      })
+  }, { instanceOf: ZodError })
+
+  t.deepEqual((error as ZodError).issues,  [
+    {
+      "code": "custom",
+      "message": "Please provide at least one filter.",
+      "path": []
+    }
+  ])
 })
 
 test('findMany allows results to be ordered', (t) => {
