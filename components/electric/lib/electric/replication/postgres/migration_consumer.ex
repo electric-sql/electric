@@ -238,12 +238,12 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp save_schema(state, version, schema, _stmts) do
     Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
     {:ok, loader} = SchemaLoader.save(state.loader, version, schema)
-
     # TODO: remove this once we've dropped the schemaregistry component
     Enum.reduce(schema.tables, %{state | loader: loader}, fn table, state ->
       {:ok, table_info, columns} = Schema.registry_info(table)
       register_relation(table_info, columns, state)
     end)
+    |> refresh_subscription()
   end
 
   @impl GenStage
