@@ -55,7 +55,7 @@ export const open_db = async (
     debug: true,
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return await electrify(original, dbSchema, config, {clientId: '', token: auth_token()})
+  return await electrify(original, dbSchema, config, {token: auth_token()})
 }
 
 export const set_subscribers = (db: Electric) => {

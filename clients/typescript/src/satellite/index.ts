@@ -1,4 +1,4 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -25,7 +25,7 @@ export interface Registry {
     notifier: Notifier,
     socketFactory: SocketFactory,
     config: ElectricConfig,
-    authState?: AuthState
+    authConfig: AuthConfig
   ): Promise<Satellite>
   ensureAlreadyStarted(dbName: DbName): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
@@ -45,7 +45,7 @@ export interface Satellite {
   migrator: Migrator
   notifier: Notifier
 
-  start(authState?: AuthState): Promise<ConnectionWrapper>
+  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
   stop(): Promise<void>
 }
 

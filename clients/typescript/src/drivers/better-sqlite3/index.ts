@@ -15,7 +15,7 @@ import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
-import { AuthState } from '../../auth/index'
+import { AuthConfig } from '../../auth/index'
 
 export { DatabaseAdapter }
 export type { Database }
@@ -24,7 +24,7 @@ export const electrify = async <DB extends DbSchema<any>, T extends Database>(
   db: T,
   dbDescription: DB,
   config: ElectricConfig,
-  authState?: AuthState,
+  authConfig: AuthConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db.name
@@ -37,7 +37,7 @@ export const electrify = async <DB extends DbSchema<any>, T extends Database>(
     adapter,
     socketFactory,
     config,
-    authState,
+    authConfig,
     opts
   )
 

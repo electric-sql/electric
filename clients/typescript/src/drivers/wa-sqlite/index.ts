@@ -5,7 +5,7 @@ import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
 import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 import { ElectricClient, DbSchema } from '../../client/model'
 import { Database } from './database'
-import { AuthState } from '../../auth/index'
+import { AuthConfig } from '../../auth/index'
 
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database }
@@ -14,7 +14,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
   config: ElectricConfig,
-  authState?: AuthState,
+  authConfig: AuthConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
   const dbName = db.name
@@ -27,7 +27,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
     adapter,
     socketFactory,
     config,
-    authState,
+    authConfig,
     opts
   )
 

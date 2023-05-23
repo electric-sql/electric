@@ -12,7 +12,6 @@ const config = {
 const conn = new Database(':memory:')
 
 const { notifier, adapter, db } = await electrify(conn, dbSchema, config, {
-  clientId: '',
   token: 'test-token',
 })
 

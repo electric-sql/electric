@@ -20,7 +20,7 @@ const electric = await electrify(
     env: 'env',
     migrations: [],
   },
-  { clientId: '', token: 'test-token' }
+  { token: 'test-token' }
 )
 
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)

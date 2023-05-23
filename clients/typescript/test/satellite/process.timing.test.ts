@@ -55,7 +55,7 @@ test.beforeEach(async (t) => {
     await migrator.up()
   }
 
-  const token = 'test_token'
+  const authState = { clientId: '', token: 'test-token' }
 
   t.context = {
     dbName,
@@ -68,7 +68,7 @@ test.beforeEach(async (t) => {
     satellite,
     tableInfo,
     timestamp,
-    token,
+    authState,
   }
 })
 
@@ -80,11 +80,11 @@ test.afterEach.always(async (t) => {
 })
 
 test('throttled snapshot respects window', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, token } =
+  const { adapter, notifier, runMigrations, satellite, authState } =
     t.context as any
   await runMigrations()
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._throttledSnapshot()
   const numNotifications = notifier.notifications.length
 

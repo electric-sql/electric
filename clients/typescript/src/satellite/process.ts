@@ -1,6 +1,6 @@
 import throttle from 'lodash.throttle'
 
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import {
@@ -116,7 +116,7 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
   }
 
-  async start(authState?: AuthState): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -124,7 +124,11 @@ export class SatelliteProcess implements Satellite {
       throw new Error('Invalid database schema.')
     }
 
-    await this._setAuthState(authState)
+    const clientId =
+      authConfig.clientId && authConfig.clientId !== ''
+        ? authConfig.clientId
+        : await this._getClientId()
+    await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
     if (this._authStateSubscription === undefined) {
       const handler = this._updateAuthState.bind(this)
@@ -183,14 +187,8 @@ export class SatelliteProcess implements Satellite {
     return { connectionPromise }
   }
 
-  async _setAuthState(authState?: AuthState): Promise<void | Error> {
-    if (!authState) {
-      throw new Error('Not implemented')
-    }
-
-    const clientId =
-      authState.clientId !== '' ? authState.clientId : await this._getClientId()
-    this._authState = { ...authState, clientId }
+  async _setAuthState(authState: AuthState): Promise<void | Error> {
+    this._authState = authState
   }
 
   setClientListeners(): void {

@@ -9,7 +9,7 @@ import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
-import { AuthState } from '../auth/index'
+import { AuthConfig } from '../auth/index'
 
 export { ElectricNamespace }
 
@@ -36,7 +36,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   adapter: DatabaseAdapter,
   socketFactory: SocketFactory,
   config: ElectricConfig,
-  authState?: AuthState,
+  authConfig: AuthConfig,
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
@@ -57,7 +57,7 @@ export const electrify = async <DB extends DbSchema<any>>(
     notifier,
     socketFactory,
     configWithDefaults,
-    authState
+    authConfig
   )
 
   return namespace

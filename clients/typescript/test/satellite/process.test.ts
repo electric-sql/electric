@@ -57,8 +57,9 @@ interface TestNotifier extends EventNotifier {
 
 interface TestSatellite extends Satellite {
   _lastSentRowId: number
+  _authState: AuthState
 
-  _setAuthState(authState?: AuthState): Promise<void>
+  _setAuthState(authState: AuthState): Promise<void>
   _performSnapshot(): Promise<Date>
   _getEntries(): Promise<OplogEntry[]>
   _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
@@ -71,13 +72,15 @@ interface TestSatellite extends Satellite {
 }
 
 type ContextType = {
+  dbName: string
   adapter: DatabaseAdapter
   notifier: TestNotifier
   satellite: TestSatellite
   client: MockSatelliteClient
   runMigrations: () => Promise<void>
   tableInfo: TableInfo
-  token: string
+  timestamp: number
+  authState: AuthState
 }
 
 // Speed up the intervals for testing.
@@ -116,7 +119,7 @@ test.beforeEach(async (t) => {
     await migrator.up()
   }
 
-  const token = 'test_token'
+  const authState = { clientId: '', token: 'test-token' }
 
   t.context = {
     dbName,
@@ -129,12 +132,12 @@ test.beforeEach(async (t) => {
     satellite,
     tableInfo,
     timestamp,
-    token,
+    authState,
   }
 })
 
 test.afterEach.always(async (t) => {
-  const { dbName, satellite } = t.context as any
+  const { dbName, satellite } = t.context as ContextType
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
@@ -143,15 +146,15 @@ test.afterEach.always(async (t) => {
 })
 
 test('setup starts a satellite process', async (t) => {
-  const { satellite } = t.context as any
+  const { satellite } = t.context as ContextType
 
   t.true(satellite instanceof SatelliteProcess)
 })
 
 test('start creates system tables', async (t) => {
-  const { adapter, satellite, token } = t.context as ContextType
+  const { adapter, satellite, authState } = t.context as ContextType
 
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   const sql = "select name from sqlite_master where type = 'table'"
   const rows = await adapter.query({ sql })
@@ -175,13 +178,13 @@ test('load metadata', async (t) => {
 })
 
 test('set persistent client id', async (t) => {
-  const { satellite, token } = t.context as any
+  const { satellite, authState } = t.context as ContextType
 
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
   const clientId1 = satellite['_authState']['clientId']
   await satellite.stop()
 
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   const clientId2 = satellite['_authState']['clientId']
 
@@ -189,7 +192,7 @@ test('set persistent client id', async (t) => {
 })
 
 test('cannot UPDATE primary key', async (t) => {
-  const { adapter, runMigrations } = t.context as any
+  const { adapter, runMigrations } = t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -202,10 +205,11 @@ test('cannot UPDATE primary key', async (t) => {
 })
 
 test('snapshot works', async (t) => {
-  const { satellite } = t.context as any
-  const { adapter, notifier, runMigrations, token } = t.context as ContextType
+  const { satellite } = t.context as ContextType
+  const { adapter, notifier, runMigrations, authState } =
+    t.context as ContextType
   await runMigrations()
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
@@ -254,13 +258,13 @@ test('snapshot works', async (t) => {
 // })
 
 test('starting and stopping the process works', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, token } =
-    t.context as any
+  const { adapter, notifier, runMigrations, satellite, authState } =
+    t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   await sleepAsync(opts.pollingInterval)
 
@@ -277,14 +281,14 @@ test('starting and stopping the process works', async (t) => {
 
   t.is(notifier.notifications.length, 2)
 
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
   await sleepAsync(0)
 
   t.is(notifier.notifications.length, 3)
 })
 
 test('snapshots on potential data change', async (t) => {
-  const { adapter, notifier, runMigrations } = t.context as any
+  const { adapter, notifier, runMigrations } = t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -300,7 +304,8 @@ test('snapshots on potential data change', async (t) => {
 // If last operation is a DELETE, concurrent INSERT shall resurrect deleted
 // values as in 'INSERT wins over DELETE and restored deleted values'
 test('snapshot of INSERT after DELETE', async (t) => {
-  const { adapter, runMigrations, satellite, token } = t.context as any
+  const { adapter, runMigrations, satellite, authState } =
+    t.context as ContextType
   try {
     await runMigrations()
 
@@ -310,7 +315,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
     await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
 
-    await satellite._setAuthState({ clientId: '', token })
+    await satellite._setAuthState(authState)
     await satellite._performSnapshot()
     const entries = await satellite._getEntries()
     const clientId = satellite['_authState']['clientId']
@@ -327,7 +332,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
 })
 
 test('take snapshot and merge local wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -348,7 +353,7 @@ test('take snapshot and merge local wins', async (t) => {
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const localTime = await satellite._performSnapshot()
   const clientId = satellite['_authState']['clientId']
 
@@ -377,7 +382,7 @@ test('take snapshot and merge local wins', async (t) => {
 })
 
 test('take snapshot and merge incoming wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -385,7 +390,7 @@ test('take snapshot and merge incoming wins', async (t) => {
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
   await satellite._performSnapshot()
 
@@ -429,14 +434,14 @@ test('take snapshot and merge incoming wins', async (t) => {
 })
 
 test('apply does not add anything to oplog', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
   await runMigrations()
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   const localTimestamp = await satellite._performSnapshot()
@@ -480,7 +485,7 @@ test('apply does not add anything to oplog', async (t) => {
 })
 
 test('apply incoming with no local', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -498,7 +503,7 @@ test('apply incoming with no local', async (t) => {
       otherValue: 1,
     }
   )
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
   const sql = 'SELECT * from parent WHERE id=1'
@@ -510,17 +515,17 @@ test('apply incoming with no local', async (t) => {
 })
 
 test('apply empty incoming', async (t) => {
-  const { runMigrations, satellite, token } = t.context as any
+  const { runMigrations, satellite, authState } = t.context as ContextType
   await runMigrations()
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._apply([])
 
   t.true(true)
 })
 
 test('apply incoming with null on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, token } =
+  const { runMigrations, satellite, adapter, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -539,7 +544,7 @@ test('apply incoming with null on column with default', async (t) => {
     }
   )
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
@@ -550,7 +555,7 @@ test('apply incoming with null on column with default', async (t) => {
 })
 
 test('apply incoming with undefined on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, token } =
+  const { runMigrations, satellite, adapter, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -568,7 +573,7 @@ test('apply incoming with undefined on column with default', async (t) => {
     }
   )
 
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
   const sql = `SELECT * from main.parent WHERE value='incoming'`
@@ -579,9 +584,9 @@ test('apply incoming with undefined on column with default', async (t) => {
 })
 
 test('INSERT wins over DELETE and restored deleted values', async (t) => {
-  const { runMigrations, satellite, tableInfo, token } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context as any
   await runMigrations()
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   const localTs = new Date().getTime()
@@ -650,9 +655,9 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
 })
 
 test('merge incoming with empty local', async (t) => {
-  const { runMigrations, satellite, tableInfo, token } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context as any
   await runMigrations()
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   const localTs = new Date().getTime()
@@ -690,7 +695,7 @@ test('merge incoming with empty local', async (t) => {
 })
 
 test('advance oplog cursor', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context as any
+  const { adapter, runMigrations, satellite } = t.context as ContextType
   await runMigrations()
 
   // fake current propagated rowId
@@ -728,7 +733,7 @@ test('advance oplog cursor', async (t) => {
 })
 
 test('compensations: referential integrity is enforced', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context as any
+  const { adapter, runMigrations, satellite } = t.context as ContextType
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
@@ -746,13 +751,13 @@ test('compensations: referential integrity is enforced', async (t) => {
 })
 
 test('compensations: incoming operation breaks referential integrity', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, timestamp, token } =
+  const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
     t.context as any
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
 
   const incoming = [
     generateLocalOplogEntry(
@@ -775,13 +780,13 @@ test('compensations: incoming operation breaks referential integrity', async (t)
 })
 
 test('compensations: incoming operations accepted if restore referential integrity', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, timestamp, token } =
+  const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
     t.context as any
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   const incoming = [
@@ -829,7 +834,7 @@ test('compensations: incoming operations accepted if restore referential integri
 })
 
 test('compensations: using triggers with flag 0', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
   await runMigrations()
 
@@ -840,7 +845,7 @@ test('compensations: using triggers with flag 0', async (t) => {
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
@@ -867,7 +872,7 @@ test('compensations: using triggers with flag 0', async (t) => {
 })
 
 test('compensations: using triggers with flag 1', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, token } =
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as ContextType
   await runMigrations()
 
@@ -878,7 +883,7 @@ test('compensations: using triggers with flag 1', async (t) => {
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
-  await satellite._setAuthState({ clientId: '', token })
+  await satellite._setAuthState(authState)
   await satellite._performSnapshot()
   await satellite._ack(1, true)
 
@@ -1019,9 +1024,10 @@ test('get transactions from opLogEntries', async (t) => {
 })
 
 test('rowid acks updates meta', async (t) => {
-  const { runMigrations, satellite, client, token } = t.context as ContextType
+  const { runMigrations, satellite, client, authState } =
+    t.context as ContextType
   await runMigrations()
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   const lsn1 = numberToBytes(1)
   client['emit']('ack_lsn', lsn1, false)
@@ -1031,9 +1037,10 @@ test('rowid acks updates meta', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, token } = t.context as ContextType
+  const { runMigrations, satellite, adapter, authState } =
+    t.context as ContextType
   await runMigrations()
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
@@ -1072,10 +1079,10 @@ test('handling connectivity state change stops queueing operations', async (t) =
 })
 
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
-  const { satellite } = t.context as any
-  const { runMigrations, adapter, token } = t.context as ContextType
+  const { satellite } = t.context as ContextType
+  const { runMigrations, adapter, authState } = t.context as ContextType
   await runMigrations()
-  await satellite.start({ clientId: '', token })
+  await satellite.start(authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,

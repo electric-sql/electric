@@ -75,7 +75,7 @@ export async function initTestable<
     adapter,
     socketFactory,
     config,
-    { clientId: '', token: 'test-token' },
+    { token: 'test-token' },
     {
       notifier: notifier,
       migrator: migrator,

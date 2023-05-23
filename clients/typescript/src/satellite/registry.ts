@@ -1,4 +1,4 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig } from '../auth/index'
 import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -43,7 +43,7 @@ export abstract class BaseRegistry implements Registry {
     _notifier: Notifier,
     _socketFactory: SocketFactory,
     _config: ElectricConfig,
-    _authState?: AuthState,
+    _authConfig?: AuthConfig,
     _opts?: SatelliteOverrides
   ): Promise<Satellite> {
     throw `Subclasses must implement startProcess`
@@ -56,7 +56,7 @@ export abstract class BaseRegistry implements Registry {
     notifier: Notifier,
     socketFactory: SocketFactory,
     config: ElectricConfig,
-    authState?: AuthState,
+    authConfig?: AuthConfig,
     opts?: SatelliteOverrides
   ): Promise<Satellite> {
     // If we're in the process of stopping the satellite process for this
@@ -73,7 +73,7 @@ export abstract class BaseRegistry implements Registry {
           notifier,
           socketFactory,
           config,
-          authState,
+          authConfig,
           opts
         )
       )
@@ -108,7 +108,7 @@ export abstract class BaseRegistry implements Registry {
       notifier,
       socketFactory,
       config,
-      authState
+      authConfig
     ).then((satellite) => {
       delete startingPromises[dbName]
 
@@ -194,7 +194,7 @@ export class GlobalRegistry extends BaseRegistry {
     notifier: Notifier,
     socketFactory: SocketFactory,
     config: Required<ElectricConfig>,
-    authState?: AuthState
+    authConfig: AuthConfig
   ): Promise<Satellite> {
     const foundErrors = validateConfig(config)
     if (foundErrors.length > 0) {
@@ -228,7 +228,7 @@ export class GlobalRegistry extends BaseRegistry {
       satelliteConfig,
       satelliteDefaults
     )
-    await satellite.start(authState)
+    await satellite.start(authConfig)
 
     return satellite
   }
