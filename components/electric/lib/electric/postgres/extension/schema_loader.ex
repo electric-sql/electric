@@ -132,7 +132,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       AND c.relname = $2
       AND c.relkind = 'r'
       AND i.indisprimary
-  LIMIT 1;
   """
 
   @impl true
