@@ -117,7 +117,7 @@ defmodule Electric.Postgres.Schema do
       Enum.map(table.columns, fn col ->
         %{
           name: col.name,
-          type: String.to_atom(col.type.name),
+          type: col_type(col.type.name),
           type_modifier: -1,
           part_of_identity?: nil
         }
@@ -125,6 +125,20 @@ defmodule Electric.Postgres.Schema do
 
     {:ok, table_info, columns}
   end
+
+  defp col_type(t) when t in ["serial", "serial4"] do
+    :int4
+  end
+
+  defp col_type("serial8") do
+    :int8
+  end
+
+  defp col_type("serial2") do
+    :int2
+  end
+
+  defp col_type(t), do: String.to_atom(t)
 
   def struct_order(list) do
     Enum.sort(list)
