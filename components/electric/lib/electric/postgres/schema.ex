@@ -118,7 +118,7 @@ defmodule Electric.Postgres.Schema do
         %{
           name: col.name,
           type: col_type(col.type.name),
-          type_modifier: -1,
+          type_modifier: List.first(col.type.size, -1),
           part_of_identity?: nil
         }
       end)
