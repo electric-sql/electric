@@ -65,11 +65,12 @@ In contrast, `satellite_apply.lux` waits for the Satellites to receive the migra
 
 [shell satellite_1]
     [invoke log "wait for items table on satellite_1"]
-    [invoke node_await_table items]
+    [invoke node_await_table "name: 'items'"]
+
 
 [shell satellite_2]
     [invoke log "wait for items table on satellite_2"]
-    [invoke node_await_table items]
+    [invoke node_await_table "name: 'items'"]
 
 #==============================================================================
 # Let Satellites insert rows in the newly created table
