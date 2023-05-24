@@ -243,6 +243,9 @@ function makeFilter(
       lte: z.any().optional(),
       gt: z.any().optional(),
       gte: z.any().optional(),
+      startsWith: z.string().optional(),
+      endsWith: z.string().optional(),
+      contains: z.string().optional(),
     }
 
     const fsHandlers = {
@@ -253,6 +256,9 @@ function makeFilter(
       lte: makeLteFilter.bind(null),
       gt: makeGtFilter.bind(null),
       gte: makeGteFilter.bind(null),
+      startsWith: makeStartsWithFilter.bind(null),
+      endsWith: makeEndsWithFilter.bind(null),
+      contains: makeContainsFilter.bind(null),
     }
 
     const filterSchema = z
@@ -334,6 +340,27 @@ function makeGteFilter(
   value: unknown
 ): { sql: string; args?: unknown[] } {
   return { sql: `${fieldName} >= ?`, args: [value] }
+}
+
+function makeStartsWithFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`${value}%`] }
+}
+
+function makeEndsWithFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`%${value}`] }
+}
+
+function makeContainsFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`%${value}%`] }
 }
 
 function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {

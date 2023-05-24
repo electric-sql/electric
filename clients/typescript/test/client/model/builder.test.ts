@@ -324,6 +324,57 @@ test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
   )
 })
 
+test('findMany supports startsWith filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          startsWith: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('foo%'))"
+  )
+})
+
+test('findMany supports endsWith filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          endsWith: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo'))"
+  )
+})
+
+test('findMany supports contains filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          contains: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo%'))"
+  )
+})
+
 test('update query', (t) => {
   const query = tbl
     .update({
