@@ -58,6 +58,7 @@ defmodule Electric.MixProject do
       {:gun, "~> 2.0.0-rc.2"},
       {:cowboy, "~> 2.9.0"},
       {:gen_stage, "~> 1.1.2"},
+      {:ets, "~> 0.9.0"},
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
