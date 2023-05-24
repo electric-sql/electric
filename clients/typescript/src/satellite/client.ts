@@ -369,8 +369,6 @@ export class SatelliteClient extends EventEmitter implements Client {
   ): void {
     transaction.changes.forEach((change) => {
       const relation = change.relation
-      console.log('Change:\n' + JSON.stringify(change))
-      console.log('Relation:\n' + JSON.stringify(relation))
       if (!this.outbound.relations.has(relation.id)) {
         replication.relations.set(relation.id, relation)
 
@@ -593,9 +591,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       })),
     }
 
-    console.log('existing relation:\n' + JSON.stringify(existingRelation))
-    console.log('updating relation:\n' + JSON.stringify(relation))
-
     this.inbound.relations.set(relation.id, relation)
     this.emit('relation', relation)
   }
@@ -663,7 +658,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (op.commit) {
         const { commit_timestamp, lsn, changes, origin } =
           replication.transactions[lastTxnIdx]
-        console.log('changes before emit tx:\n' + JSON.stringify(changes))
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
@@ -723,7 +717,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (op.delete) {
         const rid = op.delete.relationId
         const rel = replication.relations.get(rid)
-        console.log('relation for delete is:\n' + JSON.stringify(rel))
         if (!rel) {
           throw new SatelliteError(
             SatelliteErrorCode.PROTOCOL_VIOLATION,

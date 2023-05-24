@@ -144,7 +144,6 @@ export const localEntryToChanges = (
 // Convert an `OplogEntry` to a `ShadowEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
 export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
-  console.log('remoteENTRY:\n' + JSON.stringify(entry))
   const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
   const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
 
@@ -377,13 +376,19 @@ export const opLogEntryToChange = (
     oldRecord = JSON.parse(entry.oldRow)
   }
 
+  const relation = relations[`${entry.tablename}`]
+
+  if (typeof relation === 'undefined') {
+    throw new Error(`Could not find relation for ${entry.tablename}`)
+  }
+
   // FIXME: We should not loose UPDATE information here, as otherwise
   // it will be identical to setting all values in a transaction, instead
   // of updating values (different CR outcome)
   return {
     type:
       entry.optype == 'DELETE' ? DataChangeType.DELETE : DataChangeType.INSERT,
-    relation: relations[`${entry.tablename}`],
+    relation: relation,
     record,
     oldRecord,
     tags: decodeTags(entry.clearTags),
