@@ -235,15 +235,31 @@ function makeFilter(
   else if (typeof fieldValue === 'object') {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
+    const fs = {
+      in: z.any().array().optional(),
+      not: z.any().optional(),
+      notIn: z.any().optional(),
+      lt: z.any().optional(),
+      lte: z.any().optional(),
+      gt: z.any().optional(),
+      gte: z.any().optional(),
+    }
+
+    const fsHandlers = {
+      in: makeInFilter.bind(null),
+      not: makeNotFilter.bind(null),
+      notIn: makeNotInFilter.bind(null),
+      lt: makeLtFilter.bind(null),
+      lte: makeLteFilter.bind(null),
+      gt: makeGtFilter.bind(null),
+      gte: makeGteFilter.bind(null),
+    }
+
     const filterSchema = z
-      .object({
-        in: z.any().array().optional(),
-        not: z.any().optional(),
-        notIn: z.any().optional(),
-      })
+      .object(fs)
       .strict()
       .refine(
-        (data) => 'in' in data || 'not' in data || 'notIn' in data,
+        (data) => Object.keys(fs).some((filter) => filter in data),
         'Please provide at least one filter.'
       )
     // TODO: remove this schema check once we support all filters
@@ -252,28 +268,72 @@ function makeFilter(
     const obj = filterSchema.parse(fieldValue)
     const filters: Array<{ sql: string; args?: unknown[] }> = []
 
-    if ('in' in obj) {
-      const values = obj.in
-      filters.push({ sql: `${fieldName} IN ?`, args: values })
-    }
-    if ('notIn' in obj) {
-      const values = obj.notIn
-      filters.push({ sql: `${fieldName} NOT IN ?`, args: values })
-    }
-    if ('not' in obj) {
-      const value = obj.not
-      if (value === null) {
-        // needed because `WHERE field != NULL` is not valid SQL
-        filters.push({ sql: `${fieldName} IS NOT NULL` })
-      } else {
-        filters.push({ sql: `${fieldName} != ?`, args: [value] })
+    Object.entries(fsHandlers).forEach((entry) => {
+      const [filter, handler] = entry
+      if (filter in obj) {
+        const sql = handler(fieldName, obj[filter as keyof typeof obj])
+        filters.push(sql)
       }
-    }
+    })
 
     return filters
   }
   // needed because `WHERE field = NULL` is not valid SQL
   else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
+}
+
+function makeInFilter(
+  fieldName: string,
+  values: unknown[] | undefined
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} IN ?`, args: values }
+}
+
+function makeNotInFilter(
+  fieldName: string,
+  values: unknown[] | undefined
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} NOT IN ?`, args: values }
+}
+
+function makeNotFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  if (value === null) {
+    // needed because `WHERE field != NULL` is not valid SQL
+    return { sql: `${fieldName} IS NOT NULL` }
+  } else {
+    return { sql: `${fieldName} != ?`, args: [value] }
+  }
+}
+
+function makeLtFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} < ?`, args: [value] }
+}
+
+function makeLteFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} <= ?`, args: [value] }
+}
+
+function makeGtFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} > ?`, args: [value] }
+}
+
+function makeGteFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} >= ?`, args: [value] }
 }
 
 function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {

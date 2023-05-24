@@ -304,6 +304,26 @@ test('findMany supports NOT IN filters in where argument', (t) => {
   )
 })
 
+test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        nbr: {
+          lt: 11,
+          lte: 10,
+          gt: 4,
+          gte: 5,
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr < (11)) AND (nbr <= (10)) AND (nbr > (4)) AND (nbr >= (5))'
+  )
+})
+
 test('update query', (t) => {
   const query = tbl
     .update({
