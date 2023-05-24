@@ -8,7 +8,6 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
 
 import {
@@ -49,14 +48,12 @@ test.beforeEach(async (t) => {
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
   const satellite = new SatelliteProcess(
     dbName,
     adapter,
     migrator,
     notifier,
     client,
-    console,
     satelliteConfig,
     opts
   )
@@ -67,6 +64,8 @@ test.beforeEach(async (t) => {
   const runMigrations = async () => {
     await migrator.up()
   }
+
+  const authState = { clientId: '', token: 'test-token' }
 
   t.context = {
     dbName,
@@ -79,6 +78,7 @@ test.beforeEach(async (t) => {
     satellite,
     tableInfo,
     timestamp,
+    authState,
   }
 })
 
@@ -92,10 +92,10 @@ test.afterEach.always(async (t) => {
 })
 
 test('basic rules for setting tags', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context as any
+  const { adapter, runMigrations, satellite, authState } = t.context as any
   await runMigrations()
 
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   await adapter.run({
@@ -146,9 +146,10 @@ test('basic rules for setting tags', async (t) => {
 })
 
 test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
+    t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
 
   const clientId = satellite['_authState']['clientId']
 
@@ -248,9 +249,10 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
 })
 
 test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
+    t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
 
   let stmts: Statement[] = []
 
@@ -338,9 +340,10 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
 })
 
 test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
+    t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
 
   let stmts: Statement[] = []
 
@@ -431,9 +434,10 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
 })
 
 test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
+    t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
   let stmts: Statement[] = []
 
@@ -542,9 +546,10 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
 
 test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', async (t) => {
   //
-  const { adapter, runMigrations, satellite, tableInfo } = t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } =
+    t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
 
   let stmts: Statement[] = []
@@ -618,9 +623,9 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 })
 
 test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
-  const { runMigrations, satellite, tableInfo } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context as any
   await runMigrations()
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
   const clientId = satellite['_authState']['clientId']
   let txDate1 = new Date().getTime()
 

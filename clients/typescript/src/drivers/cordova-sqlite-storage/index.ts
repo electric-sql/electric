@@ -14,6 +14,7 @@ import { Database } from './database'
 import { MockSocketFactory } from '../../sockets/mock'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
+import { AuthConfig } from '../../auth/index'
 
 export { DatabaseAdapter }
 export type { Database }
@@ -22,6 +23,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
   config: ElectricConfig,
+  authConfig: AuthConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db.dbname!
@@ -34,6 +36,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
     adapter,
     socketFactory,
     config,
+    authConfig,
     opts
   )
 

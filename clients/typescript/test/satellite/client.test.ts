@@ -58,8 +58,6 @@ test.beforeEach((t) => {
     server,
     client,
     clientId,
-    app: 'fake_id',
-    env: 'default',
     token: 'fake_token',
   }
 })

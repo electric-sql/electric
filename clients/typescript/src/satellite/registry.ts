@@ -1,11 +1,11 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig } from '../auth/index'
 import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'
 
-import { Satellite, Registry, ConsoleClient } from './index'
+import { Satellite, Registry } from './index'
 import {
   SatelliteClientOpts,
   SatelliteOverrides,
@@ -42,9 +42,8 @@ export abstract class BaseRegistry implements Registry {
     _migrator: Migrator,
     _notifier: Notifier,
     _socketFactory: SocketFactory,
-    _console: ConsoleClient,
     _config: ElectricConfig,
-    _authState?: AuthState,
+    _authConfig?: AuthConfig,
     _opts?: SatelliteOverrides
   ): Promise<Satellite> {
     throw `Subclasses must implement startProcess`
@@ -56,9 +55,8 @@ export abstract class BaseRegistry implements Registry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: ElectricConfig,
-    authState?: AuthState,
+    authConfig?: AuthConfig,
     opts?: SatelliteOverrides
   ): Promise<Satellite> {
     // If we're in the process of stopping the satellite process for this
@@ -74,9 +72,8 @@ export abstract class BaseRegistry implements Registry {
           migrator,
           notifier,
           socketFactory,
-          console,
           config,
-          authState,
+          authConfig,
           opts
         )
       )
@@ -110,9 +107,8 @@ export abstract class BaseRegistry implements Registry {
       migrator,
       notifier,
       socketFactory,
-      console,
       config,
-      authState
+      authConfig
     ).then((satellite) => {
       delete startingPromises[dbName]
 
@@ -197,9 +193,8 @@ export class GlobalRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: Required<ElectricConfig>,
-    authState?: AuthState
+    authConfig: AuthConfig
   ): Promise<Satellite> {
     const foundErrors = validateConfig(config)
     if (foundErrors.length > 0) {
@@ -230,11 +225,10 @@ export class GlobalRegistry extends BaseRegistry {
       migrator,
       notifier,
       client,
-      console,
       satelliteConfig,
       satelliteDefaults
     )
-    await satellite.start(authState)
+    await satellite.start(authConfig)
 
     return satellite
   }

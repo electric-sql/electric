@@ -11,7 +11,9 @@ const config = {
 
 const conn = new Database(':memory:')
 
-const { notifier, adapter, db } = await electrify(conn, dbSchema, config)
+const { notifier, adapter, db } = await electrify(conn, dbSchema, config, {
+  token: 'test-token',
+})
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0

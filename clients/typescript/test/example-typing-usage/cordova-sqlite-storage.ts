@@ -7,6 +7,10 @@ const config = {
   migrations: [],
 }
 
+const authConfig = {
+  token: 'test-token',
+}
+
 const opts = {
   name: 'example.db',
   location: 'default',
@@ -14,7 +18,7 @@ const opts = {
 
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
-    const { db } = await electrify(original, dbSchema, config)
+    const { db } = await electrify(original, dbSchema, config, authConfig)
     await db.Items.findMany({
       select: {
         value: true,

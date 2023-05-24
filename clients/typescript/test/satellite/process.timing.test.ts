@@ -8,7 +8,6 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
 import { randomValue } from '../../src/util/random'
 import { sleepAsync } from '../../src/util/timer'
 
@@ -16,17 +15,9 @@ import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
 import { SatelliteProcess } from '../../src/satellite/process'
 
 import { initTableInfo } from '../support/satellite-helpers'
-import { Satellite } from '../../src/satellite'
 
 import config from '../support/.electric/@config/index'
 const { migrations } = config
-
-type ContextType = {
-  dbName: string
-  adapter: DatabaseAdapter
-  satellite: Satellite
-  client: MockSatelliteClient
-}
 
 const satelliteConfig: SatelliteConfig = {
   app: 'test',
@@ -47,14 +38,12 @@ test.beforeEach(async (t) => {
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
   const satellite = new SatelliteProcess(
     dbName,
     adapter,
     migrator,
     notifier,
     client,
-    console,
     satelliteConfig,
     opts
   )
@@ -65,6 +54,8 @@ test.beforeEach(async (t) => {
   const runMigrations = async () => {
     await migrator.up()
   }
+
+  const authState = { clientId: '', token: 'test-token' }
 
   t.context = {
     dbName,
@@ -77,21 +68,23 @@ test.beforeEach(async (t) => {
     satellite,
     tableInfo,
     timestamp,
+    authState,
   }
 })
 
 test.afterEach.always(async (t) => {
-  const { dbName } = t.context as ContextType
+  const { dbName } = t.context as any
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
 })
 
 test('throttled snapshot respects window', async (t) => {
-  const { adapter, notifier, runMigrations, satellite } = t.context as any
+  const { adapter, notifier, runMigrations, satellite, authState } =
+    t.context as any
   await runMigrations()
 
-  await satellite._setAuthState()
+  await satellite._setAuthState(authState)
   await satellite._throttledSnapshot()
   const numNotifications = notifier.notifications.length
 
