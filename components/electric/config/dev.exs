@@ -38,35 +38,35 @@ config :electric, Electric.Replication.Connectors,
         vaxine_connection_timeout: 5000
       ]
     ]
-  ],
-  postgres_2: [
-    producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-    connection: [
-      host: 'localhost',
-      port: 54322,
-      database: 'electric',
-      username: 'electric',
-      password: 'password',
-      replication: 'database',
-      ssl: false
-    ],
-    replication: [
-      publication: "all_tables",
-      slot: "all_changes",
-      electric_connection: [
-        host: "host.docker.internal",
-        port: 5433,
-        dbname: "test"
-      ]
-    ],
-    downstream: [
-      producer: Electric.Replication.Vaxine.LogProducer,
-      producer_opts: [
-        vaxine_hostname: "localhost",
-        vaxine_port: 8088
-      ]
-    ]
   ]
+  # postgres_2: [
+  #   producer: Electric.Replication.Postgres.LogicalReplicationProducer,
+  #   connection: [
+  #     host: 'localhost',
+  #     port: 54322,
+  #     database: 'electric',
+  #     username: 'electric',
+  #     password: 'password',
+  #     replication: 'database',
+  #     ssl: false
+  #   ],
+  #   replication: [
+  #     publication: "all_tables",
+  #     slot: "all_changes",
+  #     electric_connection: [
+  #       host: "host.docker.internal",
+  #       port: 5433,
+  #       dbname: "test"
+  #     ]
+  #   ],
+  #   downstream: [
+  #     producer: Electric.Replication.Vaxine.LogProducer,
+  #     producer_opts: [
+  #       vaxine_hostname: "localhost",
+  #       vaxine_port: 8088
+  #     ]
+  #   ]
+  # ]
 
 config :electric, Electric.Replication.SQConnectors,
   vaxine_hostname: "localhost",
