@@ -17,7 +17,7 @@ const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const config: ElectricConfig = { app, env, migrations: [] }
-const authConfig: AuthConfig = { token: 'test-token '}
+const authConfig: AuthConfig = { token: 'test-token ' }
 const args = [
   dbName,
   adapter,
@@ -25,7 +25,7 @@ const args = [
   notifier,
   socketFactory,
   config,
-  authConfig
+  authConfig,
 ] as const
 
 test('starting a satellite process works', async (t) => {
