@@ -37,7 +37,7 @@ defmodule Electric.Replication.SatelliteConnector do
       },
       %{
         id: :vx_producer,
-        start: {Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
+        start: {Electric.Postgres.CachedWal.Producer, :start_link, name: name}
       }
     ]
 
