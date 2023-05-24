@@ -123,7 +123,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
       version = "20230405134615"
 
-      assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
 
       # there are lots of tests that validate the schema is being properly updated
       # assert Schema.table_names(schema) == [~s("public"."fish"), ~s("frog"), ~s("teeth"."front")]
@@ -163,7 +163,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
       schema = schema_update(schema, stmt)
 
-      assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema, version, stmt)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
       assert %SatOpMigrate{version: ^version} = msg
       %{stmts: stmts, table: table} = msg
@@ -207,7 +207,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
       version = "20230405134615"
 
-      assert {:ok, [_msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
 
       # there are lots of tests that validate the schema is being properly updated
       assert Schema.table_names(schema) == [~s("public"."fish")]
@@ -217,7 +217,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
       schema = schema_update(schema, stmt)
 
-      assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
 
       assert %SatOpMigrate{version: ^version} = msg
 
@@ -264,13 +264,13 @@ defmodule Electric.Postgres.ReplicationTest do
 
       version = "20230405134615"
 
-      assert {:ok, [_msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
 
       stmt = "CREATE INDEX fish_available_index ON public.fish (avilable);"
       schema = schema_update(schema, stmt)
 
       version = "20230405134616"
-      assert {:ok, [msg]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], []} = Replication.migrate(schema, version, stmt)
       assert %SatOpMigrate{version: ^version} = msg
 
       %{stmts: stmts, table: table} = msg
@@ -302,7 +302,7 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134615"
 
       for stmt <- stmts do
-        assert {:ok, []} = Replication.migrate(schema, version, stmt)
+        assert {:ok, [], []} = Replication.migrate(schema, version, stmt)
       end
     end
 

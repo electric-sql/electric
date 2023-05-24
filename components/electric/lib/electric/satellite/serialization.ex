@@ -72,7 +72,8 @@ defmodule Electric.Satellite.Serialization do
       origin: origin,
       schema: schema,
       ops: ops,
-      migration_version: version
+      migration_version: version,
+      new_relations: new_relations
     } = state
 
     state =
@@ -89,16 +90,22 @@ defmodule Electric.Satellite.Serialization do
 
           {:ok, schema} = maybe_load_schema(origin, schema, v)
 
-          ops =
+          {ops, new_relations} =
             case Replication.migrate(schema, v, sql) do
-              {:ok, [op]} ->
-                [%SatTransOp{op: {:migrate, op}} | ops]
+              {:ok, [op], relations} ->
+                {[%SatTransOp{op: {:migrate, op}} | ops], new_relations ++ relations}
 
-              {:ok, []} ->
-                ops
+              {:ok, [], []} ->
+                {ops, new_relations}
             end
 
-          %{state | ops: ops, migration_version: v, schema: schema}
+          %{
+            state
+            | ops: ops,
+              migration_version: v,
+              schema: schema,
+              new_relations: new_relations
+          }
 
         _ ->
           state
@@ -214,17 +221,21 @@ defmodule Electric.Satellite.Serialization do
   def fetch_relation_id(relation, known_relations) do
     case Map.get(known_relations, relation, nil) do
       nil ->
-        %{oid: relation_id} = SchemaRegistry.fetch_table_info!(relation)
+        {%{oid: relation_id}, columns} = fetch_relation(relation)
+        column_names = for %{name: column_name} <- columns, do: column_name
 
-        columns =
-          for %{name: column_name} <- SchemaRegistry.fetch_table_columns!(relation),
-              do: column_name
-
-        {:new, relation_id, columns, Map.put(known_relations, relation, {relation_id, columns})}
+        {:new, relation_id, column_names,
+         Map.put(known_relations, relation, {relation_id, column_names})}
 
       {relation_id, columns} ->
         {:existing, relation_id, columns}
     end
+  end
+
+  defp fetch_relation(relation) do
+    table = SchemaRegistry.fetch_table_info!(relation)
+
+    {table, SchemaRegistry.fetch_table_columns!(relation)}
   end
 
   @doc """

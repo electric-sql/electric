@@ -113,7 +113,7 @@ export function generateOplogTriggers(
     `
     CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
        AFTER DELETE ON ${tableFullName}
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == ' ${tableFullName}')
+       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
       VALUES ('${namespace}', '${tableName}', 'DELETE', json_object(${oldPKs}), NULL, json_object(${oldRows}), NULL);

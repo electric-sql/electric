@@ -79,13 +79,7 @@ export type DataChange = {
   tags: Tag[]
 }
 
-export type MigrationColumn = {
-  name: string
-}
-
-export type MigrationTable = Omit<SatOpMigrate_Table, '$type' | 'columns'> & {
-  columns: MigrationColumn[]
-}
+export type MigrationTable = Omit<SatOpMigrate_Table, '$type'>
 
 export type SchemaChange = {
   table: MigrationTable // table affected by the schema change
