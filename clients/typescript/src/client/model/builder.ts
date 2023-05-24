@@ -239,7 +239,7 @@ function makeFilter(
       .object({
         in: z.any().array().optional(),
         not: z.any().optional(),
-        notIn: z.any().optional()
+        notIn: z.any().optional(),
       })
       .strict()
       .refine(
