@@ -6,19 +6,6 @@ type ForeignKey = {
   parentKey: string
 }
 
-/*
-type Table = {
-  tableFullName: string,
-  table: {
-    tableName: string
-    namespace: string
-    columns: string[]
-    primary: string[]
-    foreignKeys: ForeignKey[]
-  }
-}
-*/
-
 type Table = {
   tableName: string
   namespace: string
@@ -120,52 +107,6 @@ export function generateOplogTriggers(
     END;
     `,
   ].map(mkStatement)
-
-  //return `
-  //-- Toggles for turning the triggers on and off
-  //INSERT OR IGNORE INTO _electric_trigger_settings(tablename,flag) VALUES ('${tableFullName}', 1);
-  //
-  ///* Triggers for table ${tableName} */
-  //
-  //-- ensures primary key is immutable
-  //DROP TRIGGER IF EXISTS update_ensure_${namespace}_${tableName}_primarykey;
-  //CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
-  //  BEFORE UPDATE ON ${tableFullName}
-  //BEGIN
-  //  SELECT
-  //    CASE
-  //      ${primary.map(col => `WHEN old.${col} != new.${col} THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`).join('\n')}
-  //    END;
-  //END;
-  //
-  //-- Triggers that add INSERT, UPDATE, DELETE operation to the _opslog table
-  //DROP TRIGGER IF EXISTS insert_${namespace}_${tableName}_into_oplog;
-  //CREATE TRIGGER insert_${namespace}_${tableName}_into_oplog
-  //   AFTER INSERT ON ${tableFullName}
-  //   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-  //BEGIN
-  //  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  //  VALUES ('${namespace}', '${tableName}', 'INSERT', json_object(${newPKs}), json_object(${newRows}), NULL, NULL);
-  //END;
-  //
-  //DROP TRIGGER IF EXISTS update_${namespace}_${tableName}_into_oplog;
-  //CREATE TRIGGER update_${namespace}_${tableName}_into_oplog
-  //   AFTER UPDATE ON ${tableFullName}
-  //   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-  //BEGIN
-  //  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  //  VALUES ('${namespace}', '${tableName}', 'UPDATE', json_object(${newPKs}), json_object(${newRows}), json_object(${oldRows}), NULL);
-  //END;
-  //
-  //DROP TRIGGER IF EXISTS delete_${namespace}_${tableName}_into_oplog;
-  //CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
-  //   AFTER DELETE ON ${tableFullName}
-  //   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == ' ${tableFullName}')
-  //BEGIN
-  //  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-  //  VALUES ('${namespace}', '${tableName}', 'DELETE', json_object(${oldPKs}), NULL, json_object(${oldRows}), NULL);
-  //END;
-  //`
 }
 
 /**

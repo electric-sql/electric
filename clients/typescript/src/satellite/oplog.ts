@@ -256,7 +256,6 @@ export const remoteOperationsToTableChanges = (
       existing.optype = entryChanges.optype
       for (const [key, value] of Object.entries(entryChanges.changes)) {
         existing.changes[key] = value
-        // HIER: enkel overschrijven indien geen delete
         existing.fullRow[key] = value.value
       }
     }

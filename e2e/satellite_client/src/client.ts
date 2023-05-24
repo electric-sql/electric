@@ -5,7 +5,6 @@ import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
-// import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { dbSchema, Electric } from './generated/models'
 
@@ -36,12 +35,6 @@ export class MockConsoleClient implements ConsoleClient {
     return { token, refreshToken: '' }
   }
 }
-
-// export const read_migrations = (migration_file: string) => {
-//   const data = fs.readFileSync(migration_file)
-//   const json_data = JSON.parse(data.toString())
-//   return json_data.migrations
-// }
 
 export const open_db = async (
   name: string,
