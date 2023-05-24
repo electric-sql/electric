@@ -341,7 +341,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.sendMissingRelations(next, this.outbound)
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
-      // console.log(`sending message with lsn ${JSON.stringify(next.lsn)}`)
       this.sendMessage(satOpLog)
       this.emit('ack_lsn', next.lsn, AckType.LOCAL_SEND)
     }

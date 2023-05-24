@@ -51,9 +51,6 @@ export class ElectricDatabase implements Database {
         this.db,
         this.sqlite3.str_value(str)
       )
-    } catch (e: any) {
-      console.log('EXEC ERROR for:\n' + statement.sql)
-      throw e
     } finally {
       release()
     }

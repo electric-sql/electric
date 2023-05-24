@@ -873,26 +873,11 @@ export class SatelliteProcess implements Satellite {
     const tablenames = Array.from(tablenamesSet)
     const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
 
-    try {
-      await this.adapter.runInTransaction(
-        ...this._disableTriggers(notNewTableNames),
-        ...stmts,
-        ...this._enableTriggers(tablenames)
-      )
-    } catch (e: any) {
-      console.log(
-        'ERROR APPLYING TRANSACTION:\n' +
-          [
-            ...this._disableTriggers(notNewTableNames),
-            ...stmts,
-            ...this._enableTriggers(tablenames),
-          ]
-            .map((o) => JSON.stringify(o))
-            .join('\n')
-      )
-      console.log('CHANGES:\n' + JSON.stringify(transaction.changes))
-      throw e
-    }
+    await this.adapter.runInTransaction(
+      ...this._disableTriggers(notNewTableNames),
+      ...stmts,
+      ...this._enableTriggers(tablenames)
+    )
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
