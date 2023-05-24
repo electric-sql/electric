@@ -577,8 +577,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       return
     }
 
-    const existingRelation = this.inbound.relations.get(message.relationId)
-
     const relation = {
       id: message.relationId,
       schema: message.schemaName,
