@@ -12,8 +12,8 @@ import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
   await makeContext(t)
-  const { satellite } = t.context as any
-  await satellite.start()
+  const { satellite, authState } = t.context as any
+  await satellite.start(authState)
   t.context['clientId'] = satellite['_authState']['clientId'] // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
