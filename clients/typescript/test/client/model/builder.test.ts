@@ -287,6 +287,23 @@ test('findMany supports IN filters in where argument', (t) => {
   )
 })
 
+test('findMany supports NOT IN filters in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        nbr: {
+          notIn: [1, 5, 18],
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr NOT IN (1, 5, 18))'
+  )
+})
+
 test('update query', (t) => {
   const query = tbl
     .update({

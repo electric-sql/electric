@@ -239,10 +239,11 @@ function makeFilter(
       .object({
         in: z.any().array().optional(),
         not: z.any().optional(),
+        notIn: z.any().optional()
       })
       .strict()
       .refine(
-        (data) => 'in' in data || 'not' in data,
+        (data) => 'in' in data || 'not' in data || 'notIn' in data,
         'Please provide at least one filter.'
       )
     // TODO: remove this schema check once we support all filters
@@ -250,12 +251,14 @@ function makeFilter(
 
     const obj = filterSchema.parse(fieldValue)
     const filters: Array<{ sql: string; args?: unknown[] }> = []
-    //const filtersSql: string[] = []
-    //let filtersArgs: any[] = []
 
-    if ('in' in obj && typeof obj.in !== 'undefined') {
+    if ('in' in obj) {
       const values = obj.in
       filters.push({ sql: `${fieldName} IN ?`, args: values })
+    }
+    if ('notIn' in obj) {
+      const values = obj.notIn
+      filters.push({ sql: `${fieldName} NOT IN ?`, args: values })
     }
     if ('not' in obj) {
       const value = obj.not
