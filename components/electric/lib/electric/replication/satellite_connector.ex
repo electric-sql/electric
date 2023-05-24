@@ -28,17 +28,15 @@ defmodule Electric.Replication.SatelliteConnector do
   def init(init_arg) do
     name = init_arg.name
     producer = init_arg.producer
-    vaxine_opts = init_arg.vaxine_opts
+    # vaxine_opts = init_arg.vaxine_opts
 
     children = [
       %{
         id: :vx_consumer,
         start: {Vaxine.LogConsumer, :start_link, [name, producer]}
       },
-      %{
-        id: :vx_producer,
-        start: {Vaxine.LogProducer, :start_link, [name, vaxine_opts]}
-      }
+      {Electric.Postgres.CachedWal.Producer,
+       name: Electric.Postgres.CachedWal.Producer.name(name)}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
