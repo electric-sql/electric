@@ -327,7 +327,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   defp send_all(reversed_messages, send_fn, origin) when is_function(send_fn, 1) do
-    {{first_lsn, _}, len} = list_last_and_length(reversed_messages)
+    {{first_lsn, _}, len} = Electric.Utils.list_last_and_length(reversed_messages)
     {last_lsn, _} = List.first(reversed_messages)
 
     Metrics.pg_slot_replication_event(origin, %{sent_total: len})
@@ -480,14 +480,4 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.map(&Map.fetch!(record, &1.name))
     |> List.to_tuple()
   end
-
-  # Get last element from the list and the list's length in one pass
-  # If list is empty, default is returned
-  @spec list_last_and_length(list(), any(), non_neg_integer()) :: {any(), non_neg_integer()}
-  defp list_last_and_length(list, default \\ nil, length_acc \\ 0)
-  defp list_last_and_length([], default, 0), do: {default, 0}
-  defp list_last_and_length([elem | []], _, length), do: {elem, length + 1}
-
-  defp list_last_and_length([_ | list], default, length),
-    do: list_last_and_length(list, default, length + 1)
 end
