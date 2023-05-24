@@ -1,10 +1,10 @@
 import test from 'ava'
 
+import { AuthConfig } from '../../src/auth'
 import { ElectricConfig } from '../../src/config/index'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
-import { ConsoleClient } from '../../src/satellite'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { SocketFactory } from '../../src/sockets'
 
@@ -16,16 +16,16 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
-const console = {} as ConsoleClient
 const config: ElectricConfig = { app, env, migrations: [] }
+const authConfig: AuthConfig = { token: 'test-token ' }
 const args = [
   dbName,
   adapter,
   migrator,
   notifier,
   socketFactory,
-  console,
   config,
+  authConfig,
 ] as const
 
 test('starting a satellite process works', async (t) => {
@@ -43,8 +43,8 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
-    config
+    config,
+    authConfig
   )
   const s2 = await mockRegistry.startProcess(
     'b.db',
@@ -52,8 +52,8 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
-    config
+    config,
+    authConfig
   )
   const s3 = await mockRegistry.startProcess(
     'c.db',
@@ -61,8 +61,8 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
-    config
+    config,
+    authConfig
   )
 
   t.true(s1 instanceof MockSatelliteProcess)
@@ -85,7 +85,6 @@ test('ensure starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
   const s2 = await mockRegistry.ensureStarted(
@@ -94,7 +93,6 @@ test('ensure starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
   const s3 = await mockRegistry.ensureStarted(
@@ -103,7 +101,6 @@ test('ensure starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
 
@@ -184,7 +181,6 @@ test('stopAll works', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
     mockRegistry.ensureStarted(
@@ -193,7 +189,6 @@ test('stopAll works', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
     mockRegistry.ensureStarted(
@@ -202,7 +197,6 @@ test('stopAll works', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
   ])
@@ -220,7 +214,6 @@ test('stopAll works even when starting', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
     mockRegistry.ensureStarted(
@@ -229,7 +222,6 @@ test('stopAll works even when starting', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
     mockRegistry.ensureStarted(
@@ -238,7 +230,6 @@ test('stopAll works even when starting', async (t) => {
       migrator,
       notifier,
       socketFactory,
-      console,
       config
     ),
   ]
@@ -258,7 +249,6 @@ test('stopAll works across running, stopping and starting', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
   await mockRegistry.ensureStarted(
@@ -267,7 +257,6 @@ test('stopAll works across running, stopping and starting', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
   const p1 = mockRegistry.ensureStarted(
@@ -276,7 +265,6 @@ test('stopAll works across running, stopping and starting', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
   const p2 = mockRegistry.ensureStarted(
@@ -285,7 +273,6 @@ test('stopAll works across running, stopping and starting', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    console,
     config
   )
 

@@ -1,4 +1,4 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -15,7 +15,7 @@ import {
   Relation,
 } from '../util/types'
 
-import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
+import { Client, ConnectionWrapper, Satellite } from './index'
 import {
   SatelliteOpts,
   SatelliteOverrides,
@@ -34,7 +34,6 @@ export class MockSatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   socketFactory: SocketFactory
-  console: ConsoleClient
   opts: SatelliteOpts
 
   constructor(
@@ -43,7 +42,6 @@ export class MockSatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
@@ -52,12 +50,11 @@ export class MockSatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.socketFactory = socketFactory
-    this.console = console
     this.config = config
     this.opts = opts
   }
 
-  async start(_authState?: AuthState): Promise<ConnectionWrapper> {
+  async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await sleepAsync(50)
     return {
       connectionPromise: new Promise((resolve) => resolve()),
@@ -76,9 +73,8 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: SatelliteConfig,
-    authState?: AuthState,
+    authConfig: AuthConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
@@ -89,11 +85,10 @@ export class MockRegistry extends BaseRegistry {
       migrator,
       notifier,
       socketFactory,
-      console,
       config,
       opts
     )
-    await satellite.start(authState)
+    await satellite.start(authConfig)
 
     return satellite
   }

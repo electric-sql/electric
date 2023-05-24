@@ -17,7 +17,5 @@ test('addDefaults adds expected defaults', async (t) => {
   t.is(configWithDefaults.replication.port, 443)
   t.is(configWithDefaults.replication.ssl, true)
 
-  t.is(configWithDefaults.console.host, `console.electric-sql.com`)
-
   t.pass()
 })

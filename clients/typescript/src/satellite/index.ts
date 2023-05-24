@@ -1,4 +1,4 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { ElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -26,9 +26,8 @@ export interface Registry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
     config: ElectricConfig,
-    authState?: AuthState
+    authConfig: AuthConfig
   ): Promise<Satellite>
   ensureAlreadyStarted(dbName: DbName): Promise<Satellite>
   stop(dbName: DbName): Promise<void>
@@ -48,7 +47,7 @@ export interface Satellite {
   migrator: Migrator
   notifier: Notifier
 
-  start(authState?: AuthState): Promise<ConnectionWrapper>
+  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
   stop(): Promise<void>
 }
 
@@ -72,19 +71,4 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
-}
-
-export type TokenRequest = {
-  app: string
-  env: string
-  clientId: string
-}
-
-export type TokenResponse = {
-  token: string
-  refreshToken: string
-}
-
-export interface ConsoleClient {
-  token(request: TokenRequest): Promise<TokenResponse>
 }
