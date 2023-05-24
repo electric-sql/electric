@@ -55,4 +55,17 @@ defmodule Electric.Utils do
   def translate(min_level, level, kind, message) do
     Logger.Translator.translate(min_level, level, kind, message)
   end
+
+  @doc """
+  Get the last element of the list and the list's length in one pass.
+
+  Returns the default element if the list is empty
+  """
+  @spec list_last_and_length(list(), any(), non_neg_integer()) :: {any(), non_neg_integer()}
+  def list_last_and_length(list, default \\ nil, length_acc \\ 0)
+  def list_last_and_length([], default, 0), do: {default, 0}
+  def list_last_and_length([elem | []], _, length), do: {elem, length + 1}
+
+  def list_last_and_length([_ | list], default, length),
+    do: list_last_and_length(list, default, length + 1)
 end
