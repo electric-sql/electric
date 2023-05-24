@@ -4,6 +4,7 @@ defmodule Electric.Satellite.Protocol do
   """
   require Logger
 
+  alias Electric.Postgres.CachedWal.Producer
   alias Electric.Utils
   use Electric.Satellite.Protobuf
 
@@ -394,7 +395,7 @@ defmodule Electric.Satellite.Protocol do
 
   @spec initiate_subscription(String.t(), any(), OutRep.t()) :: OutRep.t()
   def initiate_subscription(client, lsn, out_rep) do
-    {:via, :gproc, vaxine_producer} = Vaxine.LogProducer.get_name(client)
+    {:via, :gproc, vaxine_producer} = Producer.name(client)
     {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
 
@@ -428,7 +429,7 @@ defmodule Electric.Satellite.Protocol do
   defp validate_lsn(client_lsn, opts) do
     case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
       {true, _} ->
-        {:ok, 0}
+        {:ok, Lsn.from_integer(0)}
 
       {_, true} ->
         {:ok, :eof}
