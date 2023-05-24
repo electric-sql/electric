@@ -7,6 +7,46 @@
 
 import Config
 
+alias Electric.Satellite.Auth
+
+auth_provider =
+  if config_env() == :test do
+    auth_config =
+      Auth.JWT.build_config!(
+        alg: "HS256",
+        key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
+        iss: "electric-sql-test-issuer"
+      )
+
+    {Auth.JWT, auth_config}
+  else
+    case System.get_env("SATELLITE_AUTH_MODE", "jwt") do
+      "insecure" ->
+        namespace = System.get_env("SATELLITE_AUTH_JWT_NAMESPACE")
+        auth_config = Auth.Insecure.build_config(namespace: namespace)
+        {Auth.Insecure, auth_config}
+
+      "jwt" ->
+        auth_config =
+          [
+            alg: System.get_env("SATELLITE_AUTH_JWT_ALG"),
+            key: System.get_env("SATELLITE_AUTH_JWT_KEY"),
+            namespace: System.get_env("SATELLITE_AUTH_JWT_NAMESPACE"),
+            iss: System.get_env("SATELLITE_AUTH_JWT_ISS"),
+            aud: System.get_env("SATELLITE_AUTH_JWT_AUD")
+          ]
+          |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
+          |> Auth.JWT.build_config!()
+
+        {Auth.JWT, auth_config}
+
+      other ->
+        raise "Unsupported auth mode: #{inspect(other)}"
+    end
+  end
+
+config :electric, Electric.Satellite.Auth, provider: auth_provider
+
 if config_env() == :prod do
   config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
 
@@ -61,10 +101,4 @@ if config_env() == :prod do
     global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
     instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
     regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
-
-  auth_key = System.fetch_env!("SATELLITE_AUTH_SIGNING_KEY")
-  auth_iss = System.fetch_env!("SATELLITE_AUTH_SIGNING_ISS")
-
-  config :electric, Electric.Satellite.Auth,
-    provider: {Electric.Satellite.Auth.JWT, issuer: auth_iss, secret_key: auth_key}
 end
