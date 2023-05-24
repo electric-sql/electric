@@ -52,7 +52,7 @@ export class MockSatelliteProcess implements Satellite {
     this.opts = opts
   }
 
-  async start(_authConfig?: AuthConfig): Promise<ConnectionWrapper> {
+  async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await sleepAsync(50)
     return {
       connectionPromise: new Promise((resolve) => resolve()),
@@ -72,7 +72,7 @@ export class MockRegistry extends BaseRegistry {
     notifier: Notifier,
     socketFactory: SocketFactory,
     config: SatelliteConfig,
-    authConfig?: AuthConfig,
+    authConfig: AuthConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
