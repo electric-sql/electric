@@ -4,7 +4,6 @@ services:
     environment:
       LOG_LEVEL: debug
       GLOBAL_CLUSTER_ID: integration-tests.electric
-      MIGRATIONS_DIR: /migrations
       SATELLITE_AUTH_JWT_ALG: HS256
       SATELLITE_AUTH_JWT_KEY: integration-tests-signing-key-example
       OFFSET_STORAGE_FILE: /tmp/electric-offset-storage.dat
