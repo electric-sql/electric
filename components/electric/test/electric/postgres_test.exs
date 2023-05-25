@@ -15,94 +15,6 @@ defmodule Electric.PostgresTest do
     end
   end
 
-  defmodule Producer do
-    use GenStage
-
-    def start_link(opts) do
-      GenStage.start_link(__MODULE__, opts, name: __MODULE__)
-    end
-
-    def publish(pid, messages) do
-      GenStage.call(pid, {:publish, messages})
-    end
-
-    def init(_opts) do
-      {:producer, []}
-    end
-
-    def handle_demand(_demand, state) do
-      {:noreply, [], state}
-    end
-
-    def handle_call({:publish, events}, _from, state) do
-      {:reply, :ok, events, state}
-    end
-  end
-
-  defmodule Replication do
-    use Postgrex.ReplicationConnection
-
-    def start_link({state, opts}) do
-      extra_opts = [
-        auto_reconnect: false
-      ]
-
-      Postgrex.ReplicationConnection.start_link(__MODULE__, state, extra_opts ++ opts)
-    end
-
-    def stop(process) do
-      Postgrex.ReplicationConnection.call(process, :disconnect)
-    end
-
-    @impl true
-    def init(state) do
-      {:ok, Map.put(state, :step, :disconnected)}
-    end
-
-    @impl true
-    def handle_connect(state) do
-      query = "CREATE_REPLICATION_SLOT postgrex TEMPORARY LOGICAL pgoutput NOEXPORT_SNAPSHOT"
-      {:query, query, %{state | step: :create_slot}}
-    end
-
-    @impl true
-    def handle_call(:disconnect, _from, state) do
-      query = "DROP_REPLICATION_SLOT postgrex"
-      {:query, query, %{state | step: :drop_slot}}
-    end
-
-    @impl true
-    def handle_result(results, %{step: :create_slot} = state) when is_list(results) do
-      query =
-        "START_REPLICATION SLOT postgrex LOGICAL 0/0 (proto_version '1', publication_names 'pgx_test')"
-
-      Process.send_after(state.parent, {:replication, self()}, 200)
-
-      {:stream, query, [], %{state | step: :streaming}}
-    end
-
-    @impl true
-    # https://www.postgresql.org/docs/14/protocol-replication.html
-    def handle_data(<<?w, _wal_start::64, _wal_end::64, _clock::64, rest::binary>>, state) do
-      message = Electric.Postgres.LogicalReplication.Decoder.decode(rest)
-      Producer.publish(state.producer, [message])
-      {:noreply, state}
-    end
-
-    def handle_data(<<?k, wal_end::64, _clock::64, reply>>, state) do
-      messages =
-        case reply do
-          1 -> [<<?r, wal_end + 1::64, wal_end + 1::64, wal_end + 1::64, current_time()::64, 0>>]
-          0 -> []
-        end
-
-      {:noreply, messages, state}
-    end
-
-    @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
-    defp current_time(), do: System.os_time(:microsecond) - @epoch
-  end
-
   def connection_args(pg_config \\ Electric.Postgres.TestConnection.config()) do
     Enum.flat_map([:host, :port, :database, :username], fn arg ->
       if value = pg_config[arg] do
@@ -173,39 +85,6 @@ defmodule Electric.PostgresTest do
     # start the replication process here so that it will be stopped before
     # we get to the on_exit handler defined in the setup_all
     assert {:ok, _versions} = Electric.Postgres.Extension.migrate(conn)
-
-    {:ok, _, _} = :epgsql.squery(conn, "CREATE PUBLICATION pgx_test FOR ALL TABLES;")
-
-    # {:ok, _cols, _rows} =
-    #   :epgsql.equery(
-    #     conn,
-    #     "SELECT c.oid, relname FROM pg_class c INNER JOIN pg_namespace n ON c.relnamespace = n.oid WHERE n.nspname = $1 AND c.relkind = 'r'",
-    #     [
-    #       Electric.Postgres.Extension.schema()
-    #     ]
-    #   )
-
-    # FIXME: have turned off the capture of ddl statements through logical replication
-    # pending a re-write using `Electric.Replication.Postgres.LogicalReplicationProducer`
-    # {ddl_table_oid, _} =
-    #   Enum.find(rows, fn {_oid, name} -> name == Electric.Postgres.Extension.ddl_table() end)
-
-    # {:ok, producer} = start_supervised(Producer)
-
-    # {:ok, replication_pid} =
-    #   start_supervised(
-    #     {Replication, {%{parent: self(), producer: producer, ddl_oid: ddl_table_oid}, pg_config}}
-    #   )
-
-    # receive do
-    #   {:replication, _pid} ->
-    #     :ok
-    # end
-
-    # {:ok, rep_consumer} =
-    #   start_supervised(
-    #     {Electric.Postgres.ReplicationConsumer, schema: Schema.new(), producer: producer}
-    #   )
 
     namespace = "public"
 
@@ -449,10 +328,6 @@ defmodule Electric.PostgresTest do
 
       assert_schema_equal(schema, expected_schema)
 
-      # {:ok, replication_schema} =
-      #   Electric.Postgres.ReplicationConsumer.current_schema(cxt.replication_consumer)
-
-      # assert_schema_equal(replication_schema, expected_schema)
       assert_valid_schema(schema)
     after
       {:ok, _, _} = :epgsql.squery(cxt.conn, "DROP SCHEMA IF EXISTS #{namespace} CASCADE")
