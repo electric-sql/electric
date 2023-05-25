@@ -21,10 +21,12 @@ defmodule Electric.Postgres.Extension do
   @ddl_relation "ddl_commands"
   @schema_relation "schema"
 
-  @migration_table ~s("#{@schema}"."schema_migrations")
-  @version_table ~s("#{@schema}"."#{@version_relation}")
-  @ddl_table ~s("#{@schema}"."#{@ddl_relation}")
-  @schema_table ~s("#{@schema}"."schema")
+  electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
+
+  @migration_table electric.("schema_migrations")
+  @version_table electric.(@version_relation)
+  @ddl_table electric.(@ddl_relation)
+  @schema_table electric.("schema")
 
   @all_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
