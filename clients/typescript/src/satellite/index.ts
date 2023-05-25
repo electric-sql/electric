@@ -10,7 +10,9 @@ import {
   DbName,
   LSN,
   SatelliteError,
+  DataTransaction,
   Transaction,
+  Relation,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'
@@ -59,10 +61,11 @@ export interface Client {
   isClosed(): boolean
   startReplication(lsn?: LSN): Promise<void | SatelliteError>
   stopReplication(): Promise<void | SatelliteError>
+  subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
   ): void
-  enqueueTransaction(transaction: Transaction): void | SatelliteError
+  enqueueTransaction(transaction: DataTransaction): void | SatelliteError
   subscribeToAck(callback: AckCallback): void
   unsubscribeToAck(callback: AckCallback): void
   resetOutboundLogPositions(sent?: LSN, ack?: LSN): void

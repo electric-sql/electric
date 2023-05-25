@@ -3,7 +3,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   import Mock
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
-  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction}
+
+  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction, Relation}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
@@ -31,7 +32,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Transaction{} = transaction] = events
+    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
 
@@ -46,7 +47,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Transaction{} = transaction] = events
+    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
     assert length(transaction.changes) == 4
 
     assert [
@@ -69,7 +70,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       |> commit_and_get_messages()
       |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
 
-    assert [%Transaction{} = transaction] = events
+    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
     assert length(transaction.changes) == 5
 
     assert [

@@ -344,14 +344,14 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Transactions coming from Vaxine
-  @spec handle_out_trans([{Transaction.t(), term()}], State.t()) ::
+  @spec handle_out_transes([{Transaction.t(), term()}], State.t()) ::
           {[PB.sq_pb_msg()], State.t()}
   def handle_out_transes(events, state, acc \\ [])
 
   def handle_out_transes([{tx, _offset} = event | events], state, acc) do
     if Changes.belongs_to_user?(tx, state.auth.user_id) do
       {relations, transaction, out_rep} = handle_out_trans(event, state)
-      acc = [transaction | relations] ++ acc
+      acc = Enum.concat([transaction, relations, acc])
       handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
     else
       Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
@@ -365,7 +365,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
-          {[%SatRelation{}], %SatOpLog{}, OutRep.t()}
+          {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
   def handle_out_trans({trans, vx_offset}, %State{out_rep: out_rep}) do
     Logger.debug("trans: #{inspect(trans)} with offset #{inspect(vx_offset)}")
 
@@ -380,9 +380,7 @@ defmodule Electric.Satellite.Protocol do
           columns = SchemaRegistry.fetch_table_columns!(relation)
 
           Serialization.serialize_relation(
-            table_info.schema,
-            table_info.name,
-            table_info.oid,
+            table_info,
             columns
           )
         end

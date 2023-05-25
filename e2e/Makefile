@@ -3,7 +3,7 @@ include common.mk
 LUX_DIRS= \
 	single_dc \
 	multi_dc \
-	migrations
+	migrations_v2
 
 deps: lux
 	make -C satellite_client build

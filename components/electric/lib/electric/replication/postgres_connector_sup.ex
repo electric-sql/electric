@@ -5,6 +5,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres
   alias Electric.Replication.Vaxine
+  alias Electric.Postgres.Extension.SchemaCache
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(conn_config) do
@@ -24,19 +25,29 @@ defmodule Electric.Replication.PostgresConnectorSup do
     downstream = Connectors.get_downstream_opts(conn_config)
     vaxine_producer = Vaxine.LogProducer.get_name(origin)
     postgres_producer = Postgres.LogicalReplicationProducer.get_name(origin)
+    postgres_producer_consumer = Postgres.MigrationConsumer.name(origin)
 
     children = [
+      %{
+        id: :postgres_schema_cache,
+        start: {SchemaCache, :start_link, [conn_config]}
+      },
+      %{
+        id: :postgres_producer,
+        start: {Postgres.LogicalReplicationProducer, :start_link, [conn_config]}
+      },
+      %{
+        id: :postgres_migration_consumer,
+        start:
+          {Postgres.MigrationConsumer, :start_link, [conn_config, [producer: postgres_producer]]}
+      },
       %{
         id: :slot_server,
         start: {Postgres.SlotServer, :start_link, [conn_config, vaxine_producer]}
       },
       %{
         id: :vaxine_consumer,
-        start: {Vaxine.LogConsumer, :start_link, [origin, postgres_producer]}
-      },
-      %{
-        id: :postgres_producer,
-        start: {Postgres.LogicalReplicationProducer, :start_link, [conn_config]}
+        start: {Vaxine.LogConsumer, :start_link, [origin, postgres_producer_consumer]}
       },
       %{
         id: :vaxine_producer,

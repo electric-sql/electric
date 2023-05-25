@@ -1,7 +1,7 @@
 import throttle from 'lodash.throttle'
 
 import { AuthState } from '../auth/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter, RunResult } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,
@@ -9,46 +9,54 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, ConsoleClient } from './index'
+import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
+  Change as Chg,
   ConnectivityState,
+  DataChange,
   DbName,
+  isDataChange,
   LSN,
   Relation,
   RelationsCache,
   SatelliteError,
+  SchemaChange,
   SqlValue,
   Statement,
   Transaction,
+  Row,
+  MigrationTable,
 } from '../util/types'
-import { Satellite } from './index'
 import { SatelliteConfig, SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
 import { difference } from '../util/sets'
 import {
-  OPTYPES,
-  OplogEntry,
-  ShadowTableChanges,
-  localOperationsToTableChanges,
-  remoteOperationsToTableChanges,
-  fromTransaction,
-  toTransactions,
-  ShadowEntryChanges,
-  encodeTags,
   decodeTags,
-  ShadowEntry,
-  shadowTagsDefault,
-  newShadowEntry,
-  getShadowPrimaryKey,
+  encodeTags,
+  fromTransaction,
   generateTag,
+  getShadowPrimaryKey,
+  localOperationsToTableChanges,
+  newShadowEntry,
+  OplogEntry,
+  OPTYPES,
+  remoteOperationsToTableChanges,
+  ShadowEntry,
+  ShadowEntryChanges,
+  ShadowTableChanges,
+  shadowTagsDefault,
+  toTransactions,
 } from './oplog'
-import { SatRelation_RelationType } from '../_generated/protocol/satellite'
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
-import { RunResult } from '../electric/adapter'
 
 import Log from 'loglevel'
+import { generateOplogTriggers } from '../migrators/triggers'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -162,7 +170,6 @@ export class SatelliteProcess implements Satellite {
     setTimeout(this._throttledSnapshot, 0)
 
     // Need to reload primary keys after schema migration
-    // For now, we do it only at initialization
     this.relations = await this._getLocalRelations()
 
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
@@ -202,9 +209,8 @@ export class SatelliteProcess implements Satellite {
   }
 
   setClientListeners(): void {
-    this.client.subscribeToTransactions(async (transaction: Transaction) => {
-      this._applyTransaction(transaction)
-    })
+    this.client.subscribeToRelations(this._updateRelations.bind(this))
+    this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     // When a local transaction is sent, or an acknowledgement for
     // a remote transaction commit is received, we update lsn records.
     this.client.subscribeToAck(async (lsn, type) => {
@@ -469,15 +475,7 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key before
   // merging, for local and remote operations.
-  async _apply(
-    incoming: OplogEntry[],
-    incoming_origin: string,
-    lsn: LSN
-  ): Promise<void> {
-    Log.info(`apply incoming changes for LSN: ${lsn}`)
-    // assign timestamp to pending operations before apply
-    await this._performSnapshot()
-
+  async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
     const merged = this._mergeEntries(
       this._authState!.clientId,
@@ -487,16 +485,6 @@ export class SatelliteProcess implements Satellite {
     )
 
     const stmts: Statement[] = []
-    // switches off on transaction commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
-    // update lsn.
-    this._lsn = lsn
-    const lsn_base64 = base64.fromBytes(lsn)
-    stmts.push({
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
-      args: [lsn_base64, 'lsn'],
-    })
-
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
       for (const entryChanges of Object.values(mapping)) {
         const shadowEntry: ShadowEntry = {
@@ -519,12 +507,10 @@ export class SatelliteProcess implements Satellite {
     }
 
     const tablenames = Object.keys(merged)
-
-    await this.adapter.runInTransaction(
-      ...this._disableTriggers(tablenames),
-      ...stmts,
-      ...this._enableTriggers(tablenames)
-    )
+    return {
+      tablenames,
+      statements: stmts,
+    }
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
@@ -697,7 +683,8 @@ export class SatelliteProcess implements Satellite {
           local_origin,
           localChanges.changes,
           incoming_origin,
-          incomingChanges.changes
+          incomingChanges.changes,
+          incomingChanges.fullRow
         )
         let optype
 
@@ -715,27 +702,214 @@ export class SatelliteProcess implements Satellite {
     return incomingTableChanges
   }
 
-  async _applyTransaction(transaction: Transaction) {
-    const origin = transaction.origin!
+  _updateRelations(rel: Omit<Relation, 'id'>) {
+    if (rel.tableType === SatRelation_RelationType.TABLE) {
+      // this relation may be for a newly created table
+      // or for a column that was added to an existing table
+      const tableName = rel.table
 
-    const opLogEntries = fromTransaction(transaction, this.relations)
-    const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
-    await this._applyTransactionInternal(
-      origin,
-      commitTimestamp,
-      opLogEntries,
-      transaction.lsn
-    )
+      if (this.relations[tableName] === undefined) {
+        let id = 0
+        // generate an id for the new relation as (the highest existing id) + 1
+        // TODO: why not just use the relation.id coming from pg?
+        for (const r of Object.values(this.relations)) {
+          if (r.id > id) {
+            id = r.id
+          }
+        }
+        const relation = {
+          ...rel,
+          id: id + 1,
+        }
+        this.relations[tableName] = relation
+      } else {
+        // the relation is for an existing table
+        // update the information but keep the same ID
+        const id = this.relations[tableName].id
+        const relation = {
+          ...rel,
+          id: id,
+        }
+        this.relations[tableName] = relation
+      }
+    }
   }
 
-  async _applyTransactionInternal(
+  async _applyTransaction(transaction: Transaction) {
+    const origin = transaction.origin!
+    const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
+
+    // Transactions coming from the replication stream
+    // may contain DML operations manipulating data
+    // but may also contain DDL operations migrating schemas.
+    // DML operations are ran through conflict resolution logic.
+    // DDL operations are applied as is against the local DB.
+
+    const stmts: Statement[] = []
+    const tablenamesSet: Set<string> = new Set()
+    let newTables: Set<string> = new Set()
+    const opLogEntries: OplogEntry[] = []
+    const lsn = transaction.lsn
+    let firstDMLChunk = true
+
+    // switches off on transaction commit/abort
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    // update lsn.
+    this._lsn = lsn
+    const lsn_base64 = base64.fromBytes(lsn)
+    stmts.push({
+      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
+      args: [lsn_base64, 'lsn'],
+    })
+
+    const processDML = async (changes: DataChange[]) => {
+      const tx = {
+        ...transaction,
+        changes: changes,
+      }
+      const entries = fromTransaction(tx, this.relations)
+
+      // Before applying DML statements we need to assign a timestamp to pending operations.
+      // This only needs to be done once, even if there are several DML chunks
+      // because all those chunks are part of the same transaction.
+      if (firstDMLChunk) {
+        Log.info(`apply incoming changes for LSN: ${lsn}`)
+        // assign timestamp to pending operations before apply
+        await this._performSnapshot()
+        firstDMLChunk = false
+      }
+
+      const { statements, tablenames } = await this._apply(entries, origin)
+      entries.forEach((e) => opLogEntries.push(e))
+      statements.forEach((s) => stmts.push(s))
+      tablenames.forEach((n) => tablenamesSet.add(n))
+    }
+    const processDDL = async (changes: SchemaChange[]) => {
+      const createdTables: Set<string> = new Set()
+      const affectedTables: Map<string, MigrationTable> = new Map()
+      changes.forEach((change) => {
+        stmts.push({ sql: change.sql })
+
+        if (
+          change.migrationType === SatOpMigrate_Type.CREATE_TABLE ||
+          change.migrationType === SatOpMigrate_Type.ALTER_ADD_COLUMN
+        ) {
+          // We will create/update triggers for this new/updated table
+          // so store it in `tablenamesSet` such that those
+          // triggers can be disabled while executing the transaction
+          const affectedTable = change.table.name
+          // store the table information to generate the triggers after this `forEach`
+          affectedTables.set(affectedTable, change.table)
+          tablenamesSet.add(affectedTable)
+
+          if (change.migrationType === SatOpMigrate_Type.CREATE_TABLE) {
+            createdTables.add(affectedTable)
+          }
+        }
+      })
+
+      // Also add statements to create the necessary triggers for the created/updated table
+      affectedTables.forEach((table) => {
+        const triggers = this._generateTriggersForTable(table)
+        stmts.push(...triggers)
+      })
+
+      // Disable the newly created triggers
+      // during the processing of this transaction
+      stmts.push(...this._disableTriggers([...createdTables]))
+      newTables = new Set([...newTables, ...createdTables])
+    }
+
+    // Now process all changes per chunk.
+    // We basically take a prefix of changes of the same type
+    // which we call a `dmlChunk` or `ddlChunk` if the changes
+    // are DML statements, respectively, DDL statements.
+    // We process chunk per chunk in-order.
+    let dmlChunk: DataChange[] = []
+    let ddlChunk: SchemaChange[] = []
+
+    const changes = transaction.changes
+    for (let idx = 0; idx < changes.length; idx++) {
+      const change = changes[idx]
+      const changeType = (change: Chg): 'DML' | 'DDL' => {
+        return isDataChange(change) ? 'DML' : 'DDL'
+      }
+      const sameChangeTypeAsPrevious = (): boolean => {
+        return (
+          idx == 0 || changeType(changes[idx]) === changeType(changes[idx - 1])
+        )
+      }
+      const addToChunk = (change: Chg) => {
+        if (isDataChange(change)) dmlChunk.push(change)
+        else ddlChunk.push(change)
+      }
+      const processChunk = async (type: 'DML' | 'DDL') => {
+        if (type === 'DML') {
+          await processDML(dmlChunk)
+          dmlChunk = []
+        } else {
+          await processDDL(ddlChunk)
+          ddlChunk = []
+        }
+      }
+
+      addToChunk(change) // add the change in the right chunk
+      if (!sameChangeTypeAsPrevious()) {
+        // We're starting a new chunk
+        // process the previous chunk and clear it
+        const previousChange = changes[idx - 1]
+        await processChunk(changeType(previousChange))
+      }
+
+      if (idx === changes.length - 1) {
+        // we're at the last change
+        // process this chunk
+        const thisChange = changes[idx]
+        await processChunk(changeType(thisChange))
+      }
+    }
+
+    // Now run the DML and DDL statements in-order in a transaction
+    const tablenames = Array.from(tablenamesSet)
+    const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
+
+    await this.adapter.runInTransaction(
+      ...this._disableTriggers(notNewTableNames),
+      ...stmts,
+      ...this._enableTriggers(tablenames)
+    )
+
+    await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
+  }
+
+  private _generateTriggersForTable(tbl: MigrationTable): Statement[] {
+    const table = {
+      tableName: tbl.name,
+      namespace: 'main',
+      columns: tbl.columns.map((col) => col.name),
+      primary: tbl.pks,
+      foreignKeys: tbl.fks.map((fk) => {
+        if (fk.fkCols.length !== 1 || fk.pkCols.length !== 1)
+          throw new Error(
+            'Satellite does not yet support compound foreign keys.'
+          )
+        return {
+          table: fk.pkTable,
+          childKey: fk.fkCols[0],
+          parentKey: fk.pkCols[0],
+        }
+      }),
+    }
+    const fullTableName = table.namespace + '.' + table.tableName
+    return generateOplogTriggers(fullTableName, table)
+  }
+
+  private async notifyChangesAndGCopLog(
+    oplogEntries: OplogEntry[],
     origin: string,
-    commitTimestamp: Date,
-    opLogEntries: OplogEntry[],
-    lsn: LSN
+    commitTimestamp: Date
   ) {
-    await this._apply(opLogEntries, origin, lsn)
-    await this._notifyChanges(opLogEntries)
+    await this._notifyChanges(oplogEntries)
 
     if (origin == this._authState!.clientId) {
       /* Any outstanding transaction that originated on Satellite but haven't
@@ -827,9 +1001,7 @@ export class SatelliteProcess implements Satellite {
     return clientId
   }
 
-  // Fetch primary keys from local store and use them to identify incoming ops.
-  // TODO: Improve this code once with Migrator and consider simplifying oplog.
-  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
+  private async _getLocalTableNames(): Promise<Row[]> {
     const notIn = [
       this.opts.metaTable.tablename.toString(),
       this.opts.migrationsTable.tablename.toString(),
@@ -846,8 +1018,13 @@ export class SatelliteProcess implements Satellite {
         WHERE type = 'table'
           AND name NOT IN (${notIn.map(() => '?').join(',')})
     `
-    const tableNames = await this.adapter.query({ sql: tables, args: notIn })
+    return await this.adapter.query({ sql: tables, args: notIn })
+  }
 
+  // Fetch primary keys from local store and use them to identify incoming ops.
+  // TODO: Improve this code once with Migrator and consider simplifying oplog.
+  private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
+    const tableNames = await this._getLocalTableNames()
     const relations: RelationsCache = {}
 
     let id = 0
@@ -901,6 +1078,10 @@ function _applyDeleteOperation(
   tablenameStr: string
 ): Statement {
   const pkEntries = Object.entries(entryChanges.primaryKeyCols)
+  if (pkEntries.length === 0)
+    throw new Error(
+      "Can't apply delete operation. None of the columns in changes are marked as PK."
+    )
   const params = pkEntries.reduce(
     (acc, [column, value]) => {
       acc.where.push(`${column} = ?`)
@@ -917,11 +1098,11 @@ function _applyDeleteOperation(
 }
 
 function _applyNonDeleteOperation(
-  { changes, primaryKeyCols }: ShadowEntryChanges,
+  { fullRow, primaryKeyCols }: ShadowEntryChanges,
   tablenameStr: string
 ): Statement {
-  const columnNames = Object.keys(changes)
-  const columnValues = Object.values(changes).map((c) => c.value)
+  const columnNames = Object.keys(fullRow)
+  const columnValues = Object.values(fullRow)
   let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
     ', '
   )}) VALUES (${columnValues.map((_) => '?').join(',')})`
@@ -931,7 +1112,7 @@ function _applyNonDeleteOperation(
     .reduce(
       (acc, c) => {
         acc.where.push(`${c} = ?`)
-        acc.values.push(changes[c].value)
+        acc.values.push(fullRow[c])
         return acc
       },
       { where: [] as string[], values: [] as SqlValue[] }

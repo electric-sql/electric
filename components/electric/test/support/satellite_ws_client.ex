@@ -86,9 +86,10 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def gen_schema() do
     %{
-      schema_name: "public",
-      table_name: "entries",
+      schema: "public",
+      name: "entries",
       oid: 11111,
+      primary_keys: ["id"],
       columns: [
         %{name: "id", type: :uuid},
         %{name: "content", type: :varchar},
@@ -230,14 +231,18 @@ defmodule Electric.Test.SatelliteWsClient do
   """
   def send_tx_internal(conn, %Transaction{} = tx, lsn, relations) do
     {sat_oplog, [], _} = Serialization.serialize_trans(tx, lsn, relations)
-    send_data(conn, sat_oplog)
+
+    for op <- sat_oplog do
+      send_data(conn, op)
+    end
   end
 
   @doc """
   Serialize relation that is represented in internal Electric format
   """
-  def send_relation_internal(conn, schema, name, oid, columns) do
-    sat_rel = Serialization.serialize_relation(schema, name, oid, columns)
+  # def send_relation_internal(conn, schema, name, oid, columns) do
+  def send_relation_internal(conn, %{columns: columns} = table_info) do
+    sat_rel = Serialization.serialize_relation(table_info, columns)
     send_data(conn, sat_rel)
   end
 
@@ -540,9 +545,12 @@ defmodule Electric.Test.SatelliteWsClient do
         %SatTransOp{op: {:commit, _}}, acc ->
           acc
 
-        %SatTransOp{op: {key, op}}, acc ->
+        %SatTransOp{op: {key, %{tags: _} = op}}, acc ->
           acc1 = Map.update(acc, key, 1, fn n -> n + 1 end)
           Map.update(acc1, :tags, op.tags, fn tags -> op.tags ++ tags end)
+
+        %SatTransOp{op: {key, _op}}, acc ->
+          Map.update(acc, key, 1, fn n -> n + 1 end)
       end
     )
   end

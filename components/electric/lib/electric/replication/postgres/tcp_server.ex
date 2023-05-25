@@ -312,6 +312,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp handle_message(?c, "", %{mode: :copy} = state) do
     # End copy mode
 
+    Logger.debug("#{__MODULE__}: <EndCopy>")
+
     :ok = SlotServer.stop_replication(state.slot_server)
 
     Messaging.end_copy_mode()
@@ -326,8 +328,18 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp handle_message(?d, <<?r, data::binary>>, %State{mode: :copy} = state) do
     # Copy mode client status report
     # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
-    <<_written_wal::64, _flushed_wal::64, _applied_wal::64, _client_timestamp::64,
+    <<written_wal::64, flushed_wal::64, applied_wal::64, client_timestamp::64,
       immediate_response::8>> = data
+
+    info = [
+      written_wal: Lsn.from_integer(written_wal),
+      flushed_wal: Lsn.from_integer(flushed_wal),
+      applied_wal: Lsn.from_integer(applied_wal),
+      client_timestamp: client_timestamp,
+      immediate_response: immediate_response
+    ]
+
+    Logger.debug("#{__MODULE__}: <StatusUpdate> #{inspect(info)}")
 
     if immediate_response == 1 do
       SlotServer.send_keepalive(state.slot_server)
@@ -515,6 +527,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   defp handle_query(["IDENTIFY_SYSTEM"], state) do
+    Logger.debug("#{__MODULE__}: IDENTIFY_SYSTEM")
     # Getting system information
     # TODO: we're sending over `0/1` lsn as a consistent point of the system since that's
     #       what the slot are going to be started from. Is that going to be an issue when
@@ -525,12 +538,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
       xlogpos: [type: :text],
       dbname: [type: :text]
     )
-    |> Messaging.data_row([
-      to_string(node(self())),
-      1,
-      "0/1",
-      state.settings["database"]
-    ])
+    |> Messaging.data_row([to_string(node(self())), 1, "0/1", state.settings["database"]])
     |> Messaging.command_complete("IDENTIFY_SYSTEM")
     |> Messaging.ready()
   end
@@ -559,11 +567,15 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
     slot_name = String.trim(slot_name, ~s|"|)
     slot_server = SlotServer.get_slot_reg(slot_name)
+
     proc_ref = Process.monitor(Electric.lookup_pid(slot_server))
+
     target_lsn = Lsn.from_string(lsn_string)
 
     options = parse_replication_options(options)
     publication = String.trim(options["publication_names"], ~s|"|)
+
+    Logger.debug("#{__MODULE__}: START_REPLICATION SLOT #{slot_name} [#{publication}]")
 
     Logger.debug(
       "Starting replication mode for slot #{slot_name} (publication '#{publication}') starting from #{target_lsn}"
@@ -600,7 +612,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp tcp_send(nil, _), do: :ok
 
   defp tcp_send(data, %State{transport: transport, socket: socket}) when is_binary(data) do
-    transport.send(socket, data)
+    :ok = transport.send(socket, data)
   end
 
   defp parse_client_startup_settings(data) when is_binary(data) do

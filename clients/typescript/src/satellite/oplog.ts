@@ -1,12 +1,12 @@
 import Long from 'long'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  Change,
-  ChangeType,
+  DataChangeType,
   RelationsCache,
   Row,
   SqlValue,
-  Transaction,
+  DataTransaction,
+  DataChange,
 } from '../util/types'
 import { union } from '../util/sets'
 import { numberToBytes } from '../util/common'
@@ -51,6 +51,7 @@ export interface ShadowEntryChanges {
   }
   optype: ChangesOpType
   changes: OplogColumnChanges
+  fullRow: Row
   tags: Tag[]
 }
 
@@ -143,17 +144,19 @@ export const localEntryToChanges = (
 // Convert an `OplogEntry` to a `ShadowEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
 export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
+  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
+  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
+
   const result: ShadowEntryChanges = {
     namespace: entry.namespace,
     tablename: entry.tablename,
     primaryKeyCols: JSON.parse(entry.primaryKey),
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
+    // if it is a delete, then `newRow` is empty so the full row is the old row
+    fullRow: entry.optype === OPTYPES.delete ? oldRow : newRow,
     tags: decodeTags(entry.clearTags),
   }
-
-  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
-  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
 
   const timestamp = new Date(entry.timestamp).getTime()
 
@@ -166,11 +169,17 @@ export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
   return result
 }
 
-// Convert a list of `OplogEntry`s into a nested `OplogTableChanges` map of
-// `{tableName: {primaryKey: entryChanges}}` where the entryChanges has the
-// most recent `optype` and column `value`` from all of the operations.
-// Multiple OplogEntries that point to the same row will be merged to a
-// single OpLogEntryChanges object.
+/**
+ * Convert a list of `OplogEntry`s into a nested `OplogTableChanges` map of
+ * `{tableName: {primaryKey: entryChanges}}` where the entryChanges has the
+ * most recent `optype` and column `value` from all of the operations.
+ * Multiple OplogEntries that point to the same row will be merged to a
+ * single OpLogEntryChanges object.
+ *
+ * @param operations Array of local oplog entries.
+ * @param genTag Function that generates a tag from a timestamp.
+ * @returns An object of oplog table changes.
+ */
 export const localOperationsToTableChanges = (
   operations: OplogEntry[],
   genTag: (timestamp: Date) => Tag
@@ -247,6 +256,7 @@ export const remoteOperationsToTableChanges = (
       existing.optype = entryChanges.optype
       for (const [key, value] of Object.entries(entryChanges.changes)) {
         existing.changes[key] = value
+        existing.fullRow[key] = value.value
       }
     }
 
@@ -255,7 +265,7 @@ export const remoteOperationsToTableChanges = (
 }
 
 export const fromTransaction = (
-  transaction: Transaction,
+  transaction: DataTransaction,
   relations: RelationsCache
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
@@ -287,7 +297,7 @@ export const fromTransaction = (
 export const toTransactions = (
   opLogEntries: OplogEntry[],
   relations: RelationsCache
-): Transaction[] => {
+): DataTransaction[] => {
   if (opLogEntries.length == 0) {
     return []
   }
@@ -295,29 +305,7 @@ export const toTransactions = (
   const to_commit_timestamp = (timestamp: string): Long =>
     Long.UZERO.add(new Date(timestamp).getTime())
 
-  const opLogEntryToChange = (entry: OplogEntry): Change => {
-    let record, oldRecord
-    if (entry.newRow != null) {
-      record = JSON.parse(entry.newRow)
-    }
-
-    if (entry.oldRow != null) {
-      oldRecord = JSON.parse(entry.oldRow)
-    }
-
-    // FIXME: We should not loose UPDATE information here, as otherwise
-    // it will be identical to setting all values in a transaction, instead
-    // of updating values (different CR outcome)
-    return {
-      type: entry.optype == 'DELETE' ? ChangeType.DELETE : ChangeType.INSERT,
-      relation: relations[`${entry.tablename}`],
-      record,
-      oldRecord,
-      tags: decodeTags(entry.clearTags),
-    }
-  }
-
-  const init: Transaction = {
+  const init: DataTransaction = {
     commit_timestamp: to_commit_timestamp(opLogEntries[0].timestamp),
     lsn: numberToBytes(opLogEntries[0].rowid),
     changes: [],
@@ -338,7 +326,7 @@ export const toTransactions = (
         currTxn = nextTxn
       }
 
-      const change = opLogEntryToChange(txn)
+      const change = opLogEntryToChange(txn, relations)
       currTxn.changes.push(change)
       currTxn.lsn = numberToBytes(txn.rowid)
       return acc
@@ -372,6 +360,38 @@ export const encodeTags = (tags: Tag[]): string => {
 
 export const decodeTags = (tags: string): Tag[] => {
   return JSON.parse(tags)
+}
+
+export const opLogEntryToChange = (
+  entry: OplogEntry,
+  relations: RelationsCache
+): DataChange => {
+  let record, oldRecord
+  if (entry.newRow != null) {
+    record = JSON.parse(entry.newRow)
+  }
+
+  if (entry.oldRow != null) {
+    oldRecord = JSON.parse(entry.oldRow)
+  }
+
+  const relation = relations[`${entry.tablename}`]
+
+  if (typeof relation === 'undefined') {
+    throw new Error(`Could not find relation for ${entry.tablename}`)
+  }
+
+  // FIXME: We should not loose UPDATE information here, as otherwise
+  // it will be identical to setting all values in a transaction, instead
+  // of updating values (different CR outcome)
+  return {
+    type:
+      entry.optype == 'DELETE' ? DataChangeType.DELETE : DataChangeType.INSERT,
+    relation: relation,
+    record,
+    oldRecord,
+    tags: decodeTags(entry.clearTags),
+  }
 }
 
 const primaryKeyToStr = (primaryKeyJson: {
