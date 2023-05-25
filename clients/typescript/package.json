@@ -2,7 +2,7 @@
   "version": "0.4.3",
   "name": "electric-sql",
   "description": "ElectricSQL TypeScript client for developing local-first SQL apps. Supports JavaScript based mobile, web and edge applications.",
-  "repository": "https://github.com/electric-sql/typescript-client",
+  "repository": "https://github.com/electric-sql/electric/tree/main/clients/typescript",
   "author": "Electric DB Limited",
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",
@@ -34,7 +34,7 @@
     "web"
   ],
   "bugs": {
-    "url": "https://github.com/electric-sql/typescript-client/issues"
+    "url": "https://github.com/electric-sql/electric/issues"
   },
   "main": "dist/index.js",
   "type": "module",
