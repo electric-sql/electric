@@ -14,8 +14,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   itself (via the functions in the `Extension` module).
   """
 
-  # TODO: add caching of versions
-
   use GenServer
 
   alias Electric.Replication.Connectors
