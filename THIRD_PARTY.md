@@ -6,4 +6,4 @@ If you have a project that you'd like to be listed here, please open a pull requ
 
 ## Clients
 
-[Dart](https://github.com/SkillDevs/electric_dart): A Dart client implementation for Electric.
+[Electric Dart](https://github.com/SkillDevs/electric_dart) - A client implementation for ElectricSQL apps developed in Dart / Flutter
