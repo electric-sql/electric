@@ -13,9 +13,14 @@ defmodule Electric.Postgres.CachedWal.Producer do
   use GenStage
 
   alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.Lsn
 
   def start_link(opts) do
     GenStage.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
+  end
+
+  def name(param) do
+    {:via, :gproc, {:n, :l, {__MODULE__, param}}}
   end
 
   @impl GenStage
@@ -30,14 +35,16 @@ defmodule Electric.Postgres.CachedWal.Producer do
   end
 
   @impl GenStage
-  def handle_subscribe(:producer, options, _, state) do
+  def handle_subscribe(:consumer, options, _, state) do
     # TODO: The default value here shouldn't be present: that means the connecting client is empty and thus
     #       requires a complete sync, which shouldn't be handled just from the cached WAL section.
     #       But right now we don't have that functionality, so we start from the beginning of the cached log.
     starting_wal_position =
       case Keyword.fetch(options, :start_subscription) do
+        {:ok, :eof} -> raise "This producer doesn't currently support subscription starting from the tip of the stream"
+        {:ok, %Lsn{segment: 0, offset: 0}} -> get_first_lsn(state.cached_wal_module)
         {:ok, lsn} -> CachedWal.Api.get_wal_position_from_lsn(state.cached_wal_module, lsn)
-        :error -> {:ok, -1}
+        :error -> {:ok, 0}
       end
 
     with {:ok, starting_wal_position} <- starting_wal_position do
@@ -66,11 +73,19 @@ defmodule Electric.Postgres.CachedWal.Producer do
     case CachedWal.Api.next_segment(state.cached_wal_module, state.current_position) do
       {:ok, segment, new_position} ->
         %{state | current_position: new_position, demand: demand - 1}
-        |> send_events_from_cache([segment | events])
+        |> send_events_from_cache([{segment, segment.lsn} | events])
 
       :latest ->
         CachedWal.Api.request_notification(state.cached_wal_module, state.current_position)
         {:noreply, Enum.reverse(events), state}
+    end
+  end
+
+  defp get_first_lsn(module) do
+    case CachedWal.Api.next_segment(module, 0) do
+      :latest -> {:ok, 0}
+      {:error, :lsn_too_old} -> raise "Can't happen with current CachedWal implementation"
+      {:ok, _, wal_pos} -> {:ok, wal_pos}
     end
   end
 end

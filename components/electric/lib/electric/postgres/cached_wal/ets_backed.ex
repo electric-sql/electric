@@ -105,11 +105,11 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl GenStage
-  def handle_call({:request_notification, wal_pos}, from, state) do
+  def handle_call({:request_notification, wal_pos}, {from, _}, state) do
     ref = make_ref()
     state = Map.update!(state, :notification_requests, &Map.put(&1, ref, {wal_pos, from}))
 
-    if wal_pos < state.max_seen_wal_pos do
+    if wal_pos < state.last_seen_wal_pos do
       send(self(), :fulfill_notifications)
     end
 
@@ -134,26 +134,30 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl GenStage
   @spec handle_events([Transaction.t()], term(), state()) :: {:noreply, [], any}
   def handle_events(events, _, state) do
-    events = Enum.reject(events, &Enum.empty?(&1.changes))
-
     events
-    |> Enum.map(fn %Transaction{lsn: lsn} = tx -> {lsn_to_position(lsn), %{tx | ack_fn: nil}} end)
-    |> then(&ETS.Set.put(state.table, &1))
+    |> Stream.each(& &1.ack_fn.())
+    |> Stream.reject(&Enum.empty?(&1.changes))
+    |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
+      {lsn_to_position(lsn), %{tx | ack_fn: nil}}
+    end)
+    |> Enum.to_list()
+    |> tap(&ETS.Set.put(state.table, &1))
+    |> Electric.Utils.list_last_and_length()
+    |> case do
+      {_, 0} ->
+        # All transactions were empty
+        {:noreply, [], state}
 
-    {%Transaction{lsn: max_lsn}, total} =
-      events
-      |> Stream.each(& &1.ack_fn.())
-      |> Enum.to_list()
-      |> Electric.Utils.list_last_and_length()
+      {{position, _}, total} ->
+        state =
+          state
+          |> Map.put(:last_seen_wal_pos, position)
+          |> fulfill_notification_requests()
+          |> Map.update!(:current_cache_count, &(&1 + total))
+          |> trim_cache()
 
-    state =
-      state
-      |> Map.put(:last_seen_wal_pos, lsn_to_position(max_lsn))
-      |> fulfill_notification_requests()
-      |> Map.update!(:current_cache_count, &(&1 + total))
-      |> trim_cache()
-
-    {:noreply, [], state}
+        {:noreply, [], state}
+    end
   end
 
   @impl GenStage

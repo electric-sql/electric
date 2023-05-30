@@ -53,7 +53,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   """
   @spec request_notification(module(), wal_pos()) :: {:ok, await_ref()} | {:error, term()}
   def request_notification(module, wal_pos) do
-    module.request_notification(wal_pos, self())
+    module.request_notification(wal_pos)
   end
 
   @doc """
