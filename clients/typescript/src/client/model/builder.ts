@@ -160,7 +160,9 @@ export class Builder {
 
     // the filter below removes boolean filters like AND, OR, NOT
     // which are not columns and thus should not be selected
-    const fields = identificationFields.filter(f => this._fields.includes(f)).concat(selectedFields)
+    const fields = identificationFields
+      .filter((f) => this._fields.includes(f))
+      .concat(selectedFields)
     return q.fields(fields)
   }
 
@@ -233,9 +235,8 @@ function makeFilter(
 ): Array<{ sql: string; args?: unknown[] }> {
   if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
-    return makeBooleanFilter(fieldName, fieldValue)
-  }
-  else if (typeof fieldValue === 'object') {
+    return [makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)]
+  } else if (typeof fieldValue === 'object') {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {
@@ -291,57 +292,66 @@ function makeFilter(
   else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
 }
 
-function makeBooleanFilter(fieldName: string, fieldValue: unknown): Array<{ sql: string; args?: unknown[] }> {
-  switch (fieldName) {
-    case 'OR':
-      return [ makeOrFilter(fieldValue) ]
-    case 'AND':
-      throw new Error(`AND filter is not yet supported`)
-    case 'NOT':
-      throw new Error(`NOT filter is not yet supported`)
-    default:
-      throw new Error(`Unknown boolean filter: ${fieldName}`)
-  }
-}
-
-function joinStatements(statements: Array<{ sql: string; args?: unknown[] }>, connective: ' OR ' | ' AND '): { sql: string; args?: unknown[] } {
-  const sql = statements.map(s => s.sql).join(connective)
-  const args = statements.map(s => s.args).reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
+function joinStatements(
+  statements: Array<{ sql: string; args?: unknown[] }>,
+  connective: 'OR' | 'AND'
+): { sql: string; args?: unknown[] } {
+  const sql = statements.map((s) => s.sql).join(` ${connective} `)
+  const args = statements
+    .map((s) => s.args)
+    .reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
   return { sql, args }
 }
 
-function makeOrFilter(value: unknown): { sql: string; args?: unknown[] } {
-  const schema = z.any().array()
-  const objects = schema.parse(value)
-  const sqlStmts = objects.map(obj => {
+function makeBooleanFilter(
+  fieldName: 'AND' | 'OR' | 'NOT',
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
+  const sqlStmts = objects.map((obj) => {
     // Make the necessary filters for this object:
     //  - a filter for each field of this object
     //  - connect those filters into 1 filter using AND
     const fields = Object.keys(obj)
-    const stmts = fields.reduce((stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
-      const fieldValue = obj[fieldName as keyof typeof obj]
-      const stmts2 = makeFilter(fieldValue, fieldName)
-      return stmts.concat(stmts2)
-    }, [])
-    return joinStatements(stmts, ' AND ')
+    const stmts = fields.reduce(
+      (stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
+        const fieldValue = obj[fieldName as keyof typeof obj]
+        const stmts2 = makeFilter(fieldValue, fieldName)
+        return stmts.concat(stmts2)
+      },
+      []
+    )
+    return joinStatements(stmts, 'AND')
   })
 
-  // Join all filters in `sqlStmts` using OR
-  return joinStatements(sqlStmts, ' OR ')
+  if (fieldName === 'NOT') {
+    // Every statement in `sqlStmts` must be negated
+    // and the negated statements must then be connected by a conjunction (i.e. using AND)
+    const statements = sqlStmts.map(({ sql, args }) => {
+      return {
+        sql: sqlStmts.length > 1 ? `(NOT ${sql})` : `NOT ${sql}`, // ternary if to avoid obsolete parentheses
+        args: args,
+      }
+    })
+    return joinStatements(statements, 'AND')
+  } else {
+    // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
+    return joinStatements(sqlStmts, fieldName)
+  }
 }
 
 function makeInFilter(
   fieldName: string,
   values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} IN ?`, args: [ values ] }
+  return { sql: `${fieldName} IN ?`, args: [values] }
 }
 
 function makeNotInFilter(
   fieldName: string,
   values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} NOT IN ?`, args: [ values ] }
+  return { sql: `${fieldName} NOT IN ?`, args: [values] }
 }
 
 function makeNotFilter(

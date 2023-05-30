@@ -371,7 +371,7 @@ test('findMany supports contains filter in where argument', (t) => {
   )
 })
 
-test('findMany supports OR filter in where argument', (t) => {
+test('findMany supports boolean filters in where argument', (t) => {
   const query = tbl
     .findMany({
       where: {
@@ -385,14 +385,61 @@ test('findMany supports OR filter in where argument', (t) => {
             title: 'bar',
           },
         ],
-        nbr: 5
+        AND: [
+          {
+            contents: 'content',
+          },
+          {
+            nbr: 6,
+          },
+        ],
+        NOT: [
+          {
+            title: 'foobar',
+          },
+          {
+            title: 'barfoo',
+          },
+        ],
+        nbr: 5,
       },
     })
     .toString()
 
   t.is(
     query,
-    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (nbr = 5)"
+    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content' AND nbr = 6) AND ((NOT title = 'foobar') AND (NOT title = 'barfoo')) AND (nbr = 5)"
+  )
+})
+
+test('findMany supports single AND filter and single NOT filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        OR: [
+          {
+            title: {
+              contains: 'foo',
+            },
+          },
+          {
+            title: 'bar',
+          },
+        ],
+        AND: {
+          contents: 'content',
+        },
+        NOT: {
+          title: 'foobar',
+        },
+        nbr: 5,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content') AND (NOT title = 'foobar') AND (nbr = 5)"
   )
 })
 
