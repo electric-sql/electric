@@ -10,7 +10,7 @@ defmodule Electric.Satellite.Protocol do
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SchemaRegistry
-  alias Electric.Replication.Vaxine
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
@@ -365,13 +365,14 @@ defmodule Electric.Satellite.Protocol do
     {Enum.reverse(acc), state}
   end
 
+  # The offset here comes from the producer
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  def handle_out_trans({trans, vx_offset}, %State{out_rep: out_rep}) do
-    Logger.debug("trans: #{inspect(trans)} with offset #{inspect(vx_offset)}")
+  def handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
+    Logger.debug("trans: #{inspect(trans)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(trans, vx_offset, out_rep.relations)
+      Serialization.serialize_trans(trans, offset, out_rep.relations)
 
     serialized_relations =
       Enum.map(
@@ -437,7 +438,7 @@ defmodule Electric.Satellite.Protocol do
       {false, false} ->
         try do
           # FIXME: We need to verify that LSN corresponds to Vaxine internal format
-          lsn = :erlang.binary_to_term(client_lsn)
+          lsn = Lsn.from_string(client_lsn)
           {:ok, lsn}
         rescue
           _ ->
