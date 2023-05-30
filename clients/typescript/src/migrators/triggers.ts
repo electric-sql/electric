@@ -220,12 +220,12 @@ const createMetaTables: Statement[] = [
   -- The ops log table
   CREATE TABLE IF NOT EXISTS _electric_oplog (
     rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-    namespace String NOT NULL,
-    tablename String NOT NULL,
-    optype String NOT NULL,
-    primaryKey String NOT NULL,
-    newRow String,
-    oldRow String,
+    namespace TEXT NOT NULL,
+    tablename TEXT NOT NULL,
+    optype TEXT NOT NULL,
+    primaryKey TEXT NOT NULL,
+    newRow TEXT,
+    oldRow TEXT,
     timestamp TEXT
   );
   `,
