@@ -199,7 +199,7 @@ export function generateTriggers(tables: Tables, isInit: boolean): Statement[] {
   stmts.push(
     { sql: 'DROP TABLE IF EXISTS _electric_trigger_settings;' },
     {
-      sql: 'CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);',
+      sql: 'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
     },
     ...tableTriggers
   )
