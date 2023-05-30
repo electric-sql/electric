@@ -24,9 +24,9 @@ defmodule Electric.Satellite.Serialization do
   """
   @spec serialize_trans(Transaction.t(), term(), relation_mapping()) ::
           {[%SatOpLog{}], [Changes.relation()], relation_mapping()}
-  def serialize_trans(%Transaction{} = trans, vx_offset, known_relations) do
+  def serialize_trans(%Transaction{} = trans, offset, known_relations) do
     tm = DateTime.to_unix(trans.commit_timestamp, :millisecond)
-    lsn = :erlang.term_to_binary(vx_offset)
+    lsn = Electric.Postgres.CachedWal.Api.serialize_wal_position(offset)
 
     state = %{
       ops: [],

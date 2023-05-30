@@ -13,7 +13,6 @@ defmodule Electric.Postgres.CachedWal.Producer do
   use GenStage
 
   alias Electric.Postgres.CachedWal
-  alias Electric.Postgres.Lsn
 
   def start_link(opts) do
     GenStage.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
@@ -41,13 +40,13 @@ defmodule Electric.Postgres.CachedWal.Producer do
     #       But right now we don't have that functionality, so we start from the beginning of the cached log.
     starting_wal_position =
       case Keyword.fetch(options, :start_subscription) do
-        {:ok, :eof} ->
+        {:ok, :start_from_latest} ->
           raise "This producer doesn't currently support subscription starting from the tip of the stream"
 
         # TODO: Since we're always calling "next" against the ETS, the segment with initial position is never sent,
         #       so we need a value "before the first" - which is a 0. I'm not sure I like this assumption, maybe it's better to
         #       encode that into a special function on the `CachedWal.Api` to avoid assumptions outside of those modules.
-        {:ok, %Lsn{segment: 0, offset: 0}} ->
+        {:ok, :start_from_first} ->
           {:ok, 0}
 
         {:ok, lsn} ->
@@ -83,7 +82,7 @@ defmodule Electric.Postgres.CachedWal.Producer do
     case CachedWal.Api.next_segment(state.cached_wal_module, state.current_position) do
       {:ok, segment, new_position} ->
         %{state | current_position: new_position, demand: demand - 1}
-        |> send_events_from_cache([{segment, segment.lsn} | events])
+        |> send_events_from_cache([{segment, new_position} | events])
 
       :latest ->
         CachedWal.Api.request_notification(state.cached_wal_module, state.current_position)

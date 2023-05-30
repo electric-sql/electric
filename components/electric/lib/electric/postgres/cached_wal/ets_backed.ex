@@ -84,6 +84,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     GenStage.call(get_name(origin), {:cancel_notification, ref})
   end
 
+  @impl Api
+  def serialize_wal_position(wal_pos), do: Integer.to_string(wal_pos)
+
+  @impl Api
+  def parse_wal_position(binary) do
+    case Integer.parse(binary) do
+      {num, ""} -> {:ok, num}
+      _ -> :error
+    end
+  end
+
   # Internal API
 
   @impl GenStage
