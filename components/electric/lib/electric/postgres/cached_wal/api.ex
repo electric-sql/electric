@@ -19,6 +19,11 @@ defmodule Electric.Postgres.CachedWal.Api do
   @callback request_notification(wal_pos()) :: {:ok, await_ref()} | {:error, term()}
   @callback cancel_notification_request(await_ref()) :: :ok
 
+  @callback serialize_wal_position(wal_pos()) :: binary()
+  @callback parse_wal_position(binary()) :: {:ok, wal_pos()} | :error
+
+  @default_implementation Application.compile_env!(:electric, [__MODULE__, :implementation])
+
   @doc """
   Convert a "public" LSN position to an opaque pointer for the cached WAL.
 
@@ -28,7 +33,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   database directly to catch up.
   """
   @spec get_wal_position_from_lsn(module(), lsn()) :: {:ok, wal_pos()} | {:error, :lsn_too_old}
-  def get_wal_position_from_lsn(module, lsn) do
+  def get_wal_position_from_lsn(module \\ @default_implementation, lsn) do
     module.get_wal_position_from_lsn(lsn)
   end
 
@@ -42,7 +47,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   """
   @spec next_segment(module(), wal_pos()) ::
           {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
-  def next_segment(module, wal_pos) do
+  def next_segment(module \\ @default_implementation, wal_pos) do
     module.next_segment(wal_pos)
   end
 
@@ -54,7 +59,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   as soon as a new segment becomes available in the cache.
   """
   @spec request_notification(module(), wal_pos()) :: {:ok, await_ref()} | {:error, term()}
-  def request_notification(module, wal_pos) do
+  def request_notification(module \\ @default_implementation, wal_pos) do
     module.request_notification(wal_pos)
   end
 
@@ -62,7 +67,17 @@ defmodule Electric.Postgres.CachedWal.Api do
   Cancel a notification request issued previously by `request_notification/2`.
   """
   @spec cancel_notification_request(module(), await_ref()) :: :ok
-  def cancel_notification_request(module, await_ref) do
+  def cancel_notification_request(module \\ @default_implementation, await_ref) do
     module.cancel_notification_request(await_ref)
+  end
+
+  @spec parse_wal_position(module(), binary()) :: {:ok, wal_pos()} | :error
+  def parse_wal_position(module \\ @default_implementation, bin) do
+    module.parse_wal_position(bin)
+  end
+
+  @spec serialize_wal_position(module(), wal_pos()) :: binary()
+  def serialize_wal_position(module \\ @default_implementation, wal_pos) do
+    module.serialize_wal_position(wal_pos)
   end
 end

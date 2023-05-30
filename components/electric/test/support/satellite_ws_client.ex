@@ -540,7 +540,7 @@ defmodule Electric.Test.SatelliteWsClient do
       fn
         %SatTransOp{op: {:begin, %SatOpBegin{commit_timestamp: tmp, lsn: lsn, trans_id: id}}},
         _acc ->
-          %{commit_timestamp: tmp, lsn: :erlang.binary_to_term(lsn), trans_id: id}
+          %{commit_timestamp: tmp, lsn: lsn, trans_id: id}
 
         %SatTransOp{op: {:commit, _}}, acc ->
           acc
