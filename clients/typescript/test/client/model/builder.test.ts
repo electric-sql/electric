@@ -93,7 +93,7 @@ test('findUnique query', async (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title, contents FROM Post WHERE (id = ('i2')) AND (nbr = (21)) LIMIT 2"
+    "SELECT id, nbr, title, contents FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
   )
 })
 
@@ -113,7 +113,7 @@ test('findUnique query with selection', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) LIMIT 2"
+    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
   )
 })
 
@@ -122,8 +122,7 @@ test('findUnique query with selection of NULL value', (t) => {
     .findUnique({
       where: {
         id: 'i2',
-        nbr: 21,
-        foo: null,
+        nbr: null,
       },
       select: {
         title: true,
@@ -134,7 +133,7 @@ test('findUnique query with selection of NULL value', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IS NULL) LIMIT 2"
+    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr IS NULL) LIMIT 2"
   )
 })
 
@@ -143,8 +142,7 @@ test('findUnique query with selection of non-NULL value', (t) => {
     .findUnique({
       where: {
         id: 'i2',
-        nbr: 21,
-        foo: { not: null },
+        nbr: { not: null },
       },
       select: {
         title: true,
@@ -155,7 +153,7 @@ test('findUnique query with selection of non-NULL value', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IS NOT NULL) LIMIT 2"
+    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr IS NOT NULL) LIMIT 2"
   )
 })
 
@@ -164,8 +162,7 @@ test('findUnique query with selection of row that does not equal a value', (t) =
     .findUnique({
       where: {
         id: 'i2',
-        nbr: 21,
-        foo: { not: 5 },
+        nbr: { not: 5 },
       },
       select: {
         title: true,
@@ -176,7 +173,7 @@ test('findUnique query with selection of row that does not equal a value', (t) =
 
   t.is(
     query,
-    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo != (5)) LIMIT 2"
+    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr != 5) LIMIT 2"
   )
 })
 
@@ -185,15 +182,14 @@ test('findUnique query supports several filters', (t) => {
     .findUnique({
       where: {
         id: 'i2',
-        nbr: 21,
-        foo: { not: 5, in: [1, 2, 3] },
+        nbr: { not: 5, in: [1, 2, 3] },
       },
     })
     .toString()
 
   t.is(
     query,
-    "SELECT id, nbr, foo, title, contents FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IN (1, 2, 3)) AND (foo != (5)) LIMIT 2"
+    "SELECT id, nbr, title, contents FROM Post WHERE (id = 'i2') AND (nbr IN (1, 2, 3)) AND (nbr != 5) LIMIT 2"
   )
 })
 
@@ -320,7 +316,7 @@ test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
 
   t.is(
     query,
-    'SELECT nbr, id, title, contents FROM Post WHERE (nbr < (11)) AND (nbr <= (10)) AND (nbr > (4)) AND (nbr >= (5))'
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr < 11) AND (nbr <= 10) AND (nbr > 4) AND (nbr >= 5)'
   )
 })
 
@@ -337,7 +333,7 @@ test('findMany supports startsWith filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('foo%'))"
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE 'foo%')"
   )
 })
 
@@ -354,7 +350,7 @@ test('findMany supports endsWith filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo'))"
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE '%foo')"
   )
 })
 
@@ -371,7 +367,32 @@ test('findMany supports contains filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo%'))"
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE '%foo%')"
+  )
+})
+
+test('findMany supports OR filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        OR: [
+          {
+            title: {
+              contains: 'foo',
+            },
+          },
+          {
+            title: 'bar',
+          },
+        ],
+        nbr: 5
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (nbr = 5)"
   )
 })
 
@@ -385,7 +406,7 @@ test('update query', (t) => {
 
   t.is(
     query,
-    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = ('1')) RETURNING id, title, contents, nbr"
+    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = '1') RETURNING id, title, contents, nbr"
   )
 })
 
@@ -412,7 +433,7 @@ test('delete query', (t) => {
     })
     .toString()
 
-  t.is(query, "DELETE FROM Post WHERE (id = ('Foo')) AND (title = ('Bar'))")
+  t.is(query, "DELETE FROM Post WHERE (id = 'Foo') AND (title = 'Bar')")
 })
 
 test('deleteMany query', (t) => {
@@ -422,7 +443,7 @@ test('deleteMany query', (t) => {
     })
     .toString()
 
-  t.is(query1, "DELETE FROM Post WHERE (id = ('Foo')) AND (title = ('Bar'))")
+  t.is(query1, "DELETE FROM Post WHERE (id = 'Foo') AND (title = 'Bar')")
 
   const query2 = tbl
     .deleteMany({
