@@ -89,19 +89,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   @impl GenStage
   def handle_events(events, _from, state) do
-    {:noreply, filter_events(events, []), process_events(events, {[], state})}
+    {:noreply, filter_transactions(events), process_events(events, {[], state})}
   end
 
-  defp filter_events([], acc) do
-    Enum.reverse(acc)
-  end
-
-  defp filter_events([%Relation{} | events], acc) do
-    filter_events(events, acc)
-  end
-
-  defp filter_events([event | events], acc) do
-    filter_events(events, [filter_transaction(event) | acc])
+  defp filter_transactions(events) do
+    for event <- events, not match?(%Relation{}, event) do
+      filter_transaction(event)
+    end
   end
 
   # FIXME: we need this to prevent extension metadata tables from being
