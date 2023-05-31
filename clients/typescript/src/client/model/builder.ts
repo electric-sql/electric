@@ -99,8 +99,6 @@ export class Builder {
     return addFilters(fields, whereObject, queryWithReturn)
   }
 
-  // TODO: add support for boolean conditions in where statement of FindInput<T>
-
   /**
    * Creates a `SELECT fields FROM table WHERE conditions` query.
    * @param i Object containing optional `where` and `selection` fields.
@@ -160,7 +158,11 @@ export class Builder {
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
       )
 
-    const fields = identificationFields.concat(selectedFields)
+    // the filter below removes boolean filters like AND, OR, NOT
+    // which are not columns and thus should not be selected
+    const fields = identificationFields
+      .filter((f) => this._fields.includes(f))
+      .concat(selectedFields)
     return q.fields(fields)
   }
 
@@ -222,7 +224,7 @@ function addFilters<T, Q extends QueryBuilder & WhereMixin>(
     const fieldValue = whereObject[fieldName as keyof T]
     const filters = makeFilter(fieldValue, fieldName)
     return filters.reduce((query, filter) => {
-      return query.where(filter.sql, filter.args)
+      return query.where(filter.sql, ...(filter.args ?? []))
     }, query)
   }, q)
 }
@@ -232,9 +234,11 @@ function makeFilter(
   fieldName: string
 ): Array<{ sql: string; args?: unknown[] }> {
   if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
-  else if (typeof fieldValue === 'object') {
+  else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
+    return [makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)]
+  } else if (typeof fieldValue === 'object') {
     // an object containing filters is provided
-    // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
+    // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {
       in: z.any().array().optional(),
       not: z.any().optional(),
@@ -288,18 +292,66 @@ function makeFilter(
   else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
 }
 
+function joinStatements(
+  statements: Array<{ sql: string; args?: unknown[] }>,
+  connective: 'OR' | 'AND'
+): { sql: string; args?: unknown[] } {
+  const sql = statements.map((s) => s.sql).join(` ${connective} `)
+  const args = statements
+    .map((s) => s.args)
+    .reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
+  return { sql, args }
+}
+
+function makeBooleanFilter(
+  fieldName: 'AND' | 'OR' | 'NOT',
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
+  const sqlStmts = objects.map((obj) => {
+    // Make the necessary filters for this object:
+    //  - a filter for each field of this object
+    //  - connect those filters into 1 filter using AND
+    const fields = Object.keys(obj)
+    const stmts = fields.reduce(
+      (stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
+        const fieldValue = obj[fieldName as keyof typeof obj]
+        const stmts2 = makeFilter(fieldValue, fieldName)
+        return stmts.concat(stmts2)
+      },
+      []
+    )
+    return joinStatements(stmts, 'AND')
+  })
+
+  if (fieldName === 'NOT') {
+    // Every statement in `sqlStmts` must be negated
+    // and the negated statements must then be connected by a conjunction (i.e. using AND)
+    const statements = sqlStmts.map(({ sql, args }) => {
+      return {
+        sql: sqlStmts.length > 1 ? `(NOT ${sql})` : `NOT ${sql}`, // ternary if to avoid obsolete parentheses
+        args: args,
+      }
+    })
+    return joinStatements(statements, 'AND')
+  } else {
+    // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
+    return joinStatements(sqlStmts, fieldName)
+  }
+}
+
 function makeInFilter(
   fieldName: string,
   values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} IN ?`, args: values }
+  return { sql: `${fieldName} IN ?`, args: [values] }
 }
 
 function makeNotInFilter(
   fieldName: string,
   values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} NOT IN ?`, args: values }
+  return { sql: `${fieldName} NOT IN ?`, args: [values] }
 }
 
 function makeNotFilter(
