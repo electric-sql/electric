@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+message Schema { repeated Table tables = 1; }
+
+message RangeVar {
+  string name = 1;
+  optional string schema = 2;
+  optional string alias = 3;
+}
+
+message Table {
+  RangeVar name = 1;
+  repeated Column columns = 2;
+  repeated Constraint constraints = 3;
+  repeated Index indexes = 4;
+  int32 oid = 5;
+}
+
+message Column {
+  message Type {
+    string name = 1;
+    repeated int32 size = 2;
+    repeated int32 array = 3;
+  }
+  string name = 1;
+  Type type = 2;
+  repeated Constraint constraints = 3;
+}
+
+message Constraint {
+  message NotNull {
+    optional string name = 1;
+    bool deferrable = 3;
+    bool initdeferred = 4;
+  }
+
+  message PrimaryKey {
+    string name = 1;
+    repeated string keys = 3;
+    repeated string including = 4;
+    bool deferrable = 5;
+    bool initdeferred = 6;
+  }
+
+  message ForeignKey {
+    enum Action {
+      NO_ACTION = 0;
+      RESTRICT = 1;
+      CASCADE = 2;
+      SET_NULL = 3;
+      SET_DEFAULT = 4;
+    }
+    enum MatchType {
+      SIMPLE = 0;
+      FULL = 1;
+      PARTIAL = 2;
+    }
+    string name = 1;
+    bool deferrable = 2;
+    bool initdeferred = 3;
+    Action on_update = 5;
+    Action on_delete = 6;
+    MatchType match_type = 7;
+    repeated string fk_cols = 8;
+    RangeVar pk_table = 9;
+    repeated string pk_cols = 10;
+  }
+
+  message Unique {
+    string name = 1;
+    repeated string keys = 3;
+    repeated string including = 4;
+    bool deferrable = 5;
+    bool initdeferred = 6;
+  }
+
+  message Check {
+    string name = 1;
+    Expression expr = 2;
+    bool deferrable = 3;
+    bool initdeferred = 4;
+  }
+
+  message Generated {
+    enum When {
+      ALWAYS = 0;
+    }
+    string name = 1;
+    When when = 2;
+    Expression expr = 3;
+  }
+
+  message Default { Expression expr = 1; }
+
+  oneof constraint {
+    NotNull not_null = 1;
+    PrimaryKey primary = 2;
+    ForeignKey foreign = 3;
+    Unique unique = 4;
+    Check check = 5;
+    Generated generated = 6;
+    Default default = 7;
+  }
+}
+
+message Index {
+  enum NullsOrdering {
+    LAST = 0;
+    FIRST = 1;
+  }
+  enum Ordering {
+    ASC = 0;
+    DESC = 2;
+  }
+  message Column {
+    optional string name = 1;
+    optional string collation = 2;
+    optional Expression expr = 3;
+    Ordering ordering = 4;
+    NullsOrdering nulls_ordering = 5;
+  }
+
+  string name = 1;
+  RangeVar table = 2;
+  bool unique = 3;
+  repeated Column columns = 4;
+  // pg doesn't allow ordering or collation opts on included columns
+  // so just save the name
+  repeated string including = 5;
+  Expression where = 6;
+  string using = 7;
+  int32 oid = 8;
+}
+
+message Expression {
+  message Value {
+    enum Type {
+      STRING = 0;
+      INTEGER = 1;
+      FLOAT = 2;
+      BOOLEAN = 3;
+      BITSTRING = 4;
+    }
+    Type type = 1;
+    string value = 2;
+  }
+
+  message Const { Value value = 1; }
+
+  message ValueFunction {
+    string name = 1;
+    repeated Expression args = 2;
+  }
+
+  message Function {
+    string name = 1;
+    repeated Expression args = 2;
+  }
+
+  message Cast {
+    Column.Type type = 1;
+    Expression arg = 2;
+  }
+
+  // TODO: rename to `Infix`
+  message AExpr {
+    string name = 1;
+    Expression left = 2;
+    Expression right = 3;
+  }
+
+  message ColumnRef { string name = 1; }
+
+  message BoolExpr {
+    enum Op {
+      AND = 0;
+      OR = 1;
+      NOT = 2;
+    }
+    Op op = 1;
+    repeated Expression args = 2;
+  }
+
+  message NullTest {
+    enum TestType {
+      IS = 0;
+      IS_NOT = 1;
+    }
+    TestType type = 1;
+    Expression arg = 2;
+    bool isrow = 3;
+  }
+
+  oneof expr {
+    Value value = 1;
+    Const const = 2;
+    ValueFunction vfunction = 3;
+    Function function = 4;
+    Cast cast = 5;
+    AExpr aexpr = 6;
+    ColumnRef col_ref = 7;
+    BoolExpr bool_expr = 8;
+    NullTest null_test = 9;
+  }
+}

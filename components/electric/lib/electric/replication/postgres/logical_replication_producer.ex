@@ -2,6 +2,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
   alias Electric.Postgres.LogicalReplication
@@ -20,6 +21,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Truncate,
     Type
   }
+
+  alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
     Transaction,
@@ -81,6 +84,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     publication = repl_opts.publication
     slot = repl_opts.slot
 
+    Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
+
     with {:ok, conn} <- Client.connect(conn_opts),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
@@ -126,14 +131,35 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
   defp process_message(%Relation{} = msg, state) do
-    case ignore_relations(msg, state) do
-      {true, state} ->
-        Logger.debug("ignore relation from electric schema #{inspect(msg)}")
-        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
+    state =
+      case ignore_relations(msg, state) do
+        {true, state} ->
+          Logger.debug("ignore relation from electric schema #{inspect(msg)}")
+          %{state | relations: Map.put(state.relations, msg.id, msg)}
 
-      false ->
-        {:noreply, [], %{state | relations: Map.put(state.relations, msg.id, msg)}}
-    end
+        false ->
+          %{state | relations: Map.put(state.relations, msg.id, msg)}
+      end
+
+    # Mapping from a `LogicalReplication.Messages.Relation` to a
+    # `Electric.Replication.Changes.Relation` is a little superfluous but keeps
+    # the clean line between pg logical replication and this internal change
+    # stream.
+    # The Relation messages are used and then dropped by the
+    # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
+    # this producer. 
+    relation =
+      Changes.Relation
+      |> struct(Map.from_struct(msg))
+      |> Map.put(
+        :columns,
+        Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
+      )
+
+    queue = :queue.in(relation, state.queue)
+    state = %{state | queue: queue}
+
+    dispatch_events(state, [])
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
@@ -328,12 +354,16 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         # We do not encourage developers to use 'electric' schema, but some
         # tools like sysbench do that by default, instead of 'public' schema
 
-        with true <- msg.namespace == "electric",
-             true <- msg.name in ["migrations", "meta"] do
+        # TODO: VAX-680 remove this special casing of schema_migrations table
+        # once we are selectivley replicating tables
+        # ||
+        ignore? = msg.namespace == "electric" and msg.name in ["migrations", "meta"]
+        # (msg.namespace == "public" and msg.name == "schema_migrations")
+
+        if ignore? do
           {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
         else
-          false ->
-            false
+          false
         end
 
       true ->

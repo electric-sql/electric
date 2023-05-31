@@ -8,6 +8,9 @@ node_modules:
 build: node_modules
 	yarn build
 
+build-dev: node_modules
+	yarn build-dev
+
 tests:
 	yarn test
 

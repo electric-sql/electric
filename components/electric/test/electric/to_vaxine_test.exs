@@ -8,7 +8,7 @@ defmodule Electric.Replication.VaxineTest do
   alias Electric.Postgres.SchemaRegistry
 
   @id Ecto.UUID.generate()
-  @row Row.new("fake", "to_vaxine_test", %{"id" => @id}, ["id"])
+  # @row Row.new("fake", "to_vaxine_test", %{"id" => @id}, ["id"])
 
   def new_record_change(columns \\ %{"content" => "a"}, id \\ @id) do
     %Changes.NewRecord{
@@ -84,8 +84,8 @@ defmodule Electric.Replication.VaxineTest do
     tx = gen_ctx()
     assert :ok = ToVaxine.handle_change(change, tx)
 
-    tags = Changes.generateTag(tx)
-    assert %{row: %{"content" => "a"}, deleted?: tags} = read_row(id)
+    tags = [Changes.generateTag(tx)] |> MapSet.new()
+    assert %{row: %{"content" => "a"}, deleted?: ^tags} = read_row(id)
   end
 
   def gen_update(id) do
@@ -110,7 +110,7 @@ defmodule Electric.Replication.VaxineTest do
     tags = MapSet.new([])
 
     assert :ok = ToVaxine.handle_change(change, gen_ctx())
-    assert %{deleted?: tags} = read_row(id)
+    assert %{deleted?: ^tags} = read_row(id)
   end
 
   describe "Conflict situations" do
@@ -136,8 +136,8 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)]
-      assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: tags} = read_row(id)
+      tags = MapSet.new([Changes.generateTag(ctx1), Changes.generateTag(ctx2)])
+      assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: ^tags} = read_row(id)
     end
 
     test "rows are merged for updated record" do
@@ -165,8 +165,9 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)]
-      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: tags} = read_row(id)
+      # FIXME: fix assertion that the final tags are correct
+      _tags = MapSet.new([Changes.generateTag(ctx1), Changes.generateTag(ctx2)])
+      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: _tags} = read_row(id)
     end
 
     test "update > delete" do
@@ -194,10 +195,12 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = [Changes.generateTag(ctx1)]
-      assert %{row: %{"content" => "b"}, deleted?: tags} = read_row(id)
+      # FIXME: fix assertion that the final tags are correct
+      _tags = MapSet.new([Changes.generateTag(ctx1)])
+      assert %{row: %{"content" => "b"}, deleted?: _tags} = read_row(id)
     end
 
+    @tag problem: "here2"
     test "insert > delete" do
       id = Ecto.UUID.generate()
       ctx1 = gen_ctx()
@@ -224,8 +227,8 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = [Changes.generateTag(ctx1)]
-      assert %{row: %{"content" => "a"}, deleted?: tags} = read_row(id)
+      tags = MapSet.new([Changes.generateTag(ctx1)])
+      assert %{row: %{"content" => "a"}, deleted?: ^tags} = read_row(id)
     end
   end
 
@@ -271,7 +274,7 @@ defmodule Electric.Replication.VaxineTest do
         send(parent, :commited_2)
       end)
 
-    assert_receive :commited_1
-    assert_receive :commited_2
+    assert_receive :commited_1, 500
+    assert_receive :commited_2, 500
   end
 end

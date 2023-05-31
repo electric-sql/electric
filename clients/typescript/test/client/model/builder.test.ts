@@ -1,5 +1,6 @@
 import test from 'ava'
 import { Builder } from '../../../src/client/model/builder'
+import { ZodError } from 'zod'
 
 const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 
@@ -137,6 +138,88 @@ test('findUnique query with selection of NULL value', (t) => {
   )
 })
 
+test('findUnique query with selection of non-NULL value', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: null },
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IS NOT NULL) LIMIT 2"
+  )
+})
+
+test('findUnique query with selection of row that does not equal a value', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: 5 },
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo != (5)) LIMIT 2"
+  )
+})
+
+test('findUnique query supports several filters', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+        foo: { not: 5, in: [1, 2, 3] },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT id, nbr, foo, title, contents FROM Post WHERE (id = ('i2')) AND (nbr = (21)) AND (foo IN (1, 2, 3)) AND (foo != (5)) LIMIT 2"
+  )
+})
+
+test('findUnique query with no filters throws an error', (t) => {
+  const error = t.throws(
+    () => {
+      tbl.findUnique({
+        where: {
+          id: 'i2',
+          nbr: 21,
+          foo: {},
+        },
+      })
+    },
+    { instanceOf: ZodError }
+  )
+
+  t.deepEqual((error as ZodError).issues, [
+    {
+      code: 'custom',
+      message: 'Please provide at least one filter.',
+      path: [],
+    },
+  ])
+})
+
 test('findMany allows results to be ordered', (t) => {
   const query = tbl
     .findMany({
@@ -201,6 +284,94 @@ test('findMany supports IN filters in where argument', (t) => {
   t.is(
     query,
     'SELECT nbr, id, title, contents FROM Post WHERE (nbr IN (1, 5, 18))'
+  )
+})
+
+test('findMany supports NOT IN filters in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        nbr: {
+          notIn: [1, 5, 18],
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr NOT IN (1, 5, 18))'
+  )
+})
+
+test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        nbr: {
+          lt: 11,
+          lte: 10,
+          gt: 4,
+          gte: 5,
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    'SELECT nbr, id, title, contents FROM Post WHERE (nbr < (11)) AND (nbr <= (10)) AND (nbr > (4)) AND (nbr >= (5))'
+  )
+})
+
+test('findMany supports startsWith filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          startsWith: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('foo%'))"
+  )
+})
+
+test('findMany supports endsWith filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          endsWith: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo'))"
+  )
+})
+
+test('findMany supports contains filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        title: {
+          contains: 'foo',
+        },
+      },
+    })
+    .toString()
+
+  t.is(
+    query,
+    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE ('%foo%'))"
   )
 })
 

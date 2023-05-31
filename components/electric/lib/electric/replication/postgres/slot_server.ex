@@ -24,6 +24,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   alias Electric.Replication.DownstreamProducer
 
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
               config: nil,
@@ -221,6 +223,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   @impl true
   def handle_info(:send_keepalive, state) when replication_started?(state) do
+    Logger.debug("#{__MODULE__}: <KeepAlive>")
+
     state.current_lsn
     |> Messaging.replication_keepalive()
     |> state.send_fn.()
@@ -250,14 +254,28 @@ defmodule Electric.Replication.Postgres.SlotServer do
       when replication_started?(state) do
     state =
       Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
-        Logger.debug(
-          "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
-        )
+        transaction = filter_extension_relations(transaction)
 
-        {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
-        send_all(wal_messages, state.send_fn, origin)
+        case transaction do
+          %{changes: []} ->
+            state
 
-        %{state | current_lsn: new_lsn, sent_relations: relations, current_vx_offset: vx_offset}
+          transaction ->
+            Logger.debug(
+              "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
+            )
+
+            {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
+
+            send_all(wal_messages, state.send_fn, origin)
+
+            %{
+              state
+              | current_lsn: new_lsn,
+                sent_relations: relations,
+                current_vx_offset: vx_offset
+            }
+        end
       end)
 
     OffsetStorage.put_pg_relation(
@@ -282,6 +300,17 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   # Private function
+
+  defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
+    %{
+      tx
+      | changes:
+          Enum.reject(changes, fn
+            %{relation: relation} when is_extension_relation(relation) -> true
+            _ -> false
+          end)
+    }
+  end
 
   defp clear_replication(%State{} = state) do
     Process.demonitor(state.socket_process_ref)

@@ -154,7 +154,7 @@ defmodule Electric.Replication.Postgres.Client do
     {:ok, _, table_data} =
       @tables_query
       |> String.replace("$1", publication)
-      |> then(&:epgsql.squery(conn, &1))
+      |> then(&squery(conn, &1))
 
     tables =
       table_data
@@ -164,12 +164,12 @@ defmodule Electric.Replication.Postgres.Client do
     {:ok, _, columns_data} =
       @columns_query
       |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
-      |> then(&:epgsql.squery(conn, &1))
+      |> then(&squery(conn, &1))
 
     {:ok, _, pks_data} =
       @primary_keys_query
       |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
-      |> then(&:epgsql.squery(conn, &1))
+      |> then(&squery(conn, &1))
 
     pks = Enum.group_by(pks_data, &String.to_integer(elem(&1, 0)), &elem(&1, 1))
 
@@ -191,6 +191,24 @@ defmodule Electric.Replication.Postgres.Client do
     end)
   end
 
+  @spec query_table_pks(connection(), integer()) :: {:ok, [String.t()]} | no_return
+  def query_table_pks(conn, oid) do
+    primary_keys_query = """
+    SELECT i.indrelid, a.attname
+    FROM   pg_index i
+    JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+    WHERE  i.indrelid = '$1'
+    AND    i.indisprimary;
+    """
+
+    {:ok, _, pks_data} =
+      primary_keys_query
+      |> String.replace("$1", to_string(oid))
+      |> then(&squery(conn, &1))
+
+    {:ok, Enum.map(pks_data, &elem(&1, 1))}
+  end
+
   @spec query_migration_table(connection) :: [Electric.Postgres.SchemaRegistry.migration_table()]
   def query_migration_table(conn) do
     {:ok, _, table_data} = :epgsql.squery(conn, @migrations_query)
@@ -202,9 +220,9 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   def start_subscription(conn, name) do
-    with {:ok, _, _} <- :epgsql.squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
+    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
          {:ok, _, _} <-
-           :epgsql.squery(
+           squery(
              conn,
              ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
            ) do
@@ -214,7 +232,7 @@ defmodule Electric.Replication.Postgres.Client do
 
   @spec stop_subscription(connection, String.t()) :: :ok
   def stop_subscription(conn, name) do
-    with {:ok, _, _} <- :epgsql.squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
+    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
             DISABLE|) do
       :ok
     end
@@ -223,12 +241,12 @@ defmodule Electric.Replication.Postgres.Client do
   @spec create_publication(connection(), publication(), :all | binary | [binary]) ::
           {:ok, String.t()}
   def create_publication(conn, name, :all) do
-    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
+    # squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
     create_publication(conn, name, "ALL TABLES")
   end
 
   def create_publication(conn, name, tables) when is_list(tables) do
-    # :epgsql.squery(conn, "CREATE PUBLICATION #{name} FOR TABLE t1, t2")
+    # squery(conn, "CREATE PUBLICATION #{name} FOR TABLE t1, t2")
     table_list =
       tables
       |> Enum.map(&~s|"#{&1}"|)
@@ -238,22 +256,27 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   def create_publication(conn, name, table_spec) when is_binary(table_spec) do
-    case :epgsql.squery(conn, ~s|CREATE PUBLICATION "#{name}" FOR #{table_spec}|) do
+    case squery(conn, ~s|CREATE PUBLICATION "#{name}" FOR #{table_spec}|) do
       {:ok, _, _} -> {:ok, name}
       # TODO: Verify that the publication has the correct tables
       {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
     end
   end
 
+  defp squery(conn, query) do
+    Logger.debug("#{__MODULE__}: #{query}")
+    :epgsql.squery(conn, query)
+  end
+
   @spec get_system_id(connection()) :: {:ok, binary}
   def get_system_id(conn) do
-    {:ok, _, [{system_id, _, _, _}]} = :epgsql.squery(conn, "IDENTIFY_SYSTEM")
+    {:ok, _, [{system_id, _, _, _}]} = squery(conn, "IDENTIFY_SYSTEM")
     {:ok, system_id}
   end
 
   @spec create_slot(connection(), String.t()) :: {:ok, String.t()}
   def create_slot(conn, slot_name) do
-    case :epgsql.squery(
+    case squery(
            conn,
            ~s|CREATE_REPLICATION_SLOT "#{slot_name}" LOGICAL pgoutput NOEXPORT_SNAPSHOT|
          ) do
@@ -266,7 +289,7 @@ defmodule Electric.Replication.Postgres.Client do
   def create_subscription(conn, name, publication_name, connection_params) do
     connection_string = Enum.map_join(connection_params, " ", fn {k, v} -> "#{k}=#{v}" end)
 
-    case :epgsql.squery(
+    case squery(
            conn,
            ~s|CREATE SUBSCRIPTION "#{name}" CONNECTION '#{connection_string}' PUBLICATION "#{publication_name}" WITH (connect = false)|
          ) do
@@ -315,6 +338,10 @@ defmodule Electric.Replication.Postgres.Client do
   Returns `:ok` on success.
   """
   def start_replication(conn, publication, slot, handler) do
+    Logger.debug(
+      "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
+    )
+
     opts = 'proto_version \'1\', publication_names \'#{publication}\''
 
     conn

@@ -1,6 +1,6 @@
 defmodule Electric.Replication.PostgresConnectorMng do
   alias Electric.Migration.Utils
-  alias Electric.Postgres.SchemaRegistry
+  alias Electric.Postgres.{Extension, SchemaRegistry}
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
@@ -204,7 +204,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.debug("attempting to initialize #{origin}")
 
     Client.with_conn(conn_config, fn conn ->
-      with {:ok, _system_id} <- Client.get_system_id(conn),
+      with {:ok, _versions} <- Extension.migrate(conn),
+           {:ok, _system_id} <- Client.get_system_id(conn),
            {:ok, publication} <-
              Client.create_publication(conn, publication_name, publication_tables),
            {:ok, _} <- Client.create_slot(conn, slot_name),

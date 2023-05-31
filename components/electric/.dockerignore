@@ -3,6 +3,7 @@
 # The directory Mix will write compiled artifacts to.
 /_build/
 /.elixir_ls/
+/deps
 
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
@@ -28,3 +29,7 @@ electric-*.tar
 *offset_storage*.dat
 
 /integration_tests/
+
+/Dockerfile
+
+/dev
