@@ -89,7 +89,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   @impl GenStage
   def handle_events(events, _from, state) do
-    {:noreply, filter_transactions(events), process_events(events, {[], state})}
+    {:noreply, filter_transactions(events), process_relations_and_migrations(events, state)}
   end
 
   defp filter_transactions(events) do
@@ -127,22 +127,26 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     change
   end
 
-  defp process_events([], {[], state}) do
+  defp process_relations_and_migrations(events, state) do
+    grouped_events = Enum.group_by(events, & &1.__struct__)
+
     state
+    |> apply_relations(Map.get(grouped_events, Relation, []))
+    |> apply_migrations(Map.get(grouped_events, Transaction, []))
   end
 
-  defp process_events([], {migrations, state}) do
-    migrations
-    |> Enum.reverse()
+  defp apply_relations(state, relations) do
+    Enum.reduce(relations, state, &process_relation/2)
+  end
+
+  defp apply_migrations(state, transactions) do
+    transactions
+    |> Enum.flat_map(&transaction_changes_to_migrations/1)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Enum.reduce(state, &perform_migration/2)
   end
 
-  defp process_events([%Transaction{changes: changes} | events], {migrations, state}) do
-    process_events(events, process_transaction(changes, {migrations, state}))
-  end
-
-  defp process_events([%Relation{} = relation | events], {migrations, state}) do
+  defp process_relation(%Relation{} = relation, state) do
     # TODO: look at the schema registry as-is and see if it can't be replaced
     # with the new materialised schema information held by electric
     {table, columns} = Relation.to_schema_table(relation)
@@ -150,36 +154,19 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     table = %{table | primary_keys: pks}
 
-    state =
-      register_relation(table, columns, state)
-      |> refresh_subscription()
+    register_relation(table, columns, state)
+    |> refresh_subscription()
 
     # update the subscription to add any new
     # tables (this only works when data has been added -- doing it at the
     # point of receiving the migration has no effect).
-
-    process_events(events, {migrations, state})
   end
 
-  defp process_events([_event | events], {migrations, state}) do
-    process_events(events, {migrations, state})
-  end
-
-  defp process_transaction([], {migrations, state}) do
-    {migrations, state}
-  end
-
-  defp process_transaction(
-         [%NewRecord{relation: relation} = record | changes],
-         {migrations, state}
-       )
-       when is_ddl_relation(relation) do
-    {:ok, version, sql} = Extension.extract_ddl_version(record.record)
-    process_transaction(changes, {[{version, sql} | migrations], state})
-  end
-
-  defp process_transaction([_record | changes], {migrations, state}) do
-    process_transaction(changes, {migrations, state})
+  defp transaction_changes_to_migrations(%Transaction{changes: changes}) do
+    for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
+      {:ok, version, sql} = Extension.extract_ddl_version(record)
+      {version, sql}
+    end
   end
 
   defp perform_migration({version, stmts}, state) do
