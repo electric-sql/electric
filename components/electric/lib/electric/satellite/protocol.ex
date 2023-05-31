@@ -394,7 +394,7 @@ defmodule Electric.Satellite.Protocol do
     {serialized_relations, serialized_log, out_rep}
   end
 
-  @spec initiate_subscription(String.t(), binary, OutRep.t()) :: OutRep.t()
+  @spec initiate_subscription(String.t(), any(), OutRep.t()) :: OutRep.t()
   def initiate_subscription(client, lsn, out_rep) do
     {:via, :gproc, vaxine_producer} = Producer.name(client)
     {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
