@@ -1,95 +1,23 @@
-import { mkdir, rm as removeFile } from 'node:fs/promises'
-
 import test from 'ava'
-
-import Database from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-
-import { MockSatelliteClient } from '../../src/satellite/mock'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { MockNotifier } from '../../src/notifiers/mock'
-import { MockConsoleClient } from '../../src/auth/mock'
-import { randomValue } from '../../src/util/random'
+import Long from 'long'
 
 import {
   OPTYPES,
   generateTag,
   encodeTags,
-  //decodeTags,
+  opLogEntryToChange,
 } from '../../src/satellite/oplog'
-import { SatelliteConfig, satelliteDefaults } from '../../src/satellite/config'
-import { SatelliteProcess } from '../../src/satellite/process'
 
 import {
-  initTableInfo,
   generateRemoteOplogEntry,
   genEncodedTags,
 } from '../support/satellite-helpers'
 import { Statement } from '../../src/util/types'
 
-import config from '../support/.electric/@config/index'
-const { migrations } = config
+import { makeContext, cleanAndStopSatellite, relations } from './common'
 
-// Speed up the intervals for testing.
-const opts = Object.assign({}, satelliteDefaults, {
-  minSnapshotWindow: 40,
-  pollingInterval: 200,
-})
-
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
-
-test.beforeEach(async (t) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
-  const client = new MockSatelliteClient()
-  const console = new MockConsoleClient()
-  const satellite = new SatelliteProcess(
-    dbName,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    console,
-    satelliteConfig,
-    opts
-  )
-
-  const tableInfo = initTableInfo()
-  const timestamp = new Date().getTime()
-
-  const runMigrations = async () => {
-    await migrator.up()
-  }
-
-  t.context = {
-    dbName,
-    db,
-    adapter,
-    migrator,
-    notifier,
-    client,
-    runMigrations,
-    satellite,
-    tableInfo,
-    timestamp,
-  }
-})
-
-test.afterEach.always(async (t) => {
-  const { dbName, satellite } = t.context as any
-
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
-
-  await satellite.stop()
-})
+test.beforeEach(makeContext)
+test.afterEach.always(cleanAndStopSatellite)
 
 test('basic rules for setting tags', async (t) => {
   const { adapter, runMigrations, satellite } = t.context as any
@@ -133,7 +61,7 @@ test('basic rules for setting tags', async (t) => {
   shadow = await satellite._getOplogShadowEntry()
   t.is(shadow.length, 0)
 
-  let entries = await satellite._getEntries()
+  const entries = await satellite._getEntries()
   //console.log(entries)
   t.is(entries[0].clearTags, encodeTags([]))
   t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate1]))
@@ -227,17 +155,20 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
     undefined
   )
 
-  await satellite._applyTransactionInternal(
-    clientId,
-    txDate1,
-    [ackEntry],
-    new Uint8Array()
-  )
+  const ackDataChange = opLogEntryToChange(ackEntry, relations)
+  satellite.relations = relations // satellite must be aware of the relations in order to turn the `ackDataChange` DataChange into an OpLogEntry
+  const tx = {
+    origin: clientId,
+    commit_timestamp: Long.fromNumber((txDate1 as Date).getTime()),
+    changes: [ackDataChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(tx)
 
-  // validat that garbage collection have triggered
+  // validate that garbage collection has been triggered
   t.is(2, (await satellite._getEntries()).length)
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const shadow = await satellite._getOplogShadowEntry()
   t.like(
     shadow[0],
     {
@@ -252,7 +183,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
   await runMigrations()
   await satellite._setAuthState()
 
-  let stmts: Statement[] = []
+  const stmts: Statement[] = []
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
@@ -302,10 +233,27 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
     undefined
   )
 
-  await satellite._apply([prevEntry], 'remote')
-  await satellite._apply([nextEntry], 'remote')
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const prevChange = opLogEntryToChange(prevEntry, relations)
+  const prevTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(prevTs),
+    changes: [prevChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(prevTx)
+
+  const nextChange = opLogEntryToChange(nextEntry, relations)
+  const nextTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(nextTs),
+    changes: [nextChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(nextTx)
+
+  const shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
     {
       namespace: 'main',
@@ -324,7 +272,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
 
   //let entries= await satellite._getEntries()
   //console.log(entries)
-  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
   //console.log(table)
 
   // In both cases insert wins over delete, but
@@ -395,10 +343,27 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
     undefined
   )
 
-  await satellite._apply([prevEntry], 'remote')
-  await satellite._apply([nextEntry], 'remote')
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction`
 
-  let shadow = await satellite._getOplogShadowEntry()
+  const prevChange = opLogEntryToChange(prevEntry, relations)
+  const prevTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(prevTs),
+    changes: [prevChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(prevTx)
+
+  const nextChange = opLogEntryToChange(nextEntry, relations)
+  const nextTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(nextTs),
+    changes: [nextChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(nextTx)
+
+  const shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
     {
       namespace: 'main',
@@ -492,8 +457,25 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
     undefined
   )
 
-  await satellite._apply([prevEntry], 'remote')
-  await satellite._apply([nextEntry], 'remote')
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction`
+
+  const prevChange = opLogEntryToChange(prevEntry, relations)
+  const prevTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(prevTs),
+    changes: [prevChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(prevTx)
+
+  const nextChange = opLogEntryToChange(nextEntry, relations)
+  const nextTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(nextTs),
+    changes: [nextChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(nextTx)
 
   let shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
@@ -541,7 +523,6 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
 })
 
 test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', async (t) => {
-  //
   const { adapter, runMigrations, satellite, tableInfo } = t.context as any
   await runMigrations()
   await satellite._setAuthState()
@@ -572,12 +553,13 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   //console.log(entries)
 
   // For this key we receive transaction which was older
+  const electricEntrySameTs = new Date(entries[0].timestamp).getTime()
   let electricEntrySame = generateRemoteOplogEntry(
     tableInfo,
     entries[0].namespace,
     entries[0].tablename,
     OPTYPES.insert,
-    new Date(entries[0].timestamp).getTime(),
+    electricEntrySameTs,
     genEncodedTags(clientId, [txDate1]),
     JSON.parse(entries[0].newRow),
     undefined
@@ -585,12 +567,13 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 
   // For this key we had concurrent insert transaction from another node `remote`
   // with same timestamp
+  const electricEntryConflictTs = new Date(entries[1].timestamp).getTime()
   let electricEntryConflict = generateRemoteOplogEntry(
     tableInfo,
     entries[1].namespace,
     entries[1].tablename,
     OPTYPES.insert,
-    new Date(entries[1].timestamp).getTime(),
+    electricEntryConflictTs,
     encodeTags([
       generateTag(clientId, txDate1),
       generateTag('remote', txDate1),
@@ -599,7 +582,23 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
     undefined
   )
 
-  await satellite._apply([electricEntrySame, electricEntryConflict], clientId)
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction`
+
+  const electricEntrySameChange = opLogEntryToChange(
+    electricEntrySame,
+    relations
+  )
+  const electricEntryConflictChange = opLogEntryToChange(
+    electricEntryConflict,
+    relations
+  )
+  const tx = {
+    origin: clientId,
+    commit_timestamp: Long.fromNumber(new Date().getTime()), // commit_timestamp doesn't matter for this test, it is only used to GC the oplog
+    changes: [electricEntrySameChange, electricEntryConflictChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(tx)
 
   let shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
@@ -638,12 +637,13 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
     undefined
   )
 
+  const deleteDate = txDate1 + 1
   const deleteEntry = generateRemoteOplogEntry(
     tableInfo,
     'main',
     'parent',
     OPTYPES.delete,
-    txDate1 + 1,
+    deleteDate,
     genEncodedTags('remote', []),
     {
       id: 1,
@@ -652,7 +652,16 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
     undefined
   )
 
-  await satellite._apply([insertEntry], clientId)
+  satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s in `_applyTransaction`
+
+  const insertChange = opLogEntryToChange(insertEntry, relations)
+  const insertTx = {
+    origin: clientId,
+    commit_timestamp: Long.fromNumber(txDate1),
+    changes: [insertChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(insertTx)
 
   let shadow = await satellite._getOplogShadowEntry()
   const expectedShadow = [
@@ -665,7 +674,14 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  await satellite._apply([deleteEntry], clientId)
+  const deleteChange = opLogEntryToChange(deleteEntry, relations)
+  const deleteTx = {
+    origin: clientId,
+    commit_timestamp: Long.fromNumber(deleteDate),
+    changes: [deleteChange],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(deleteTx)
 
   shadow = await satellite._getOplogShadowEntry()
   t.deepEqual([], shadow)

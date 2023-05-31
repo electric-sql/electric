@@ -27,6 +27,7 @@ import {
   getProtocolVersion,
   getFullTypeName,
 } from '../util/proto'
+import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
@@ -34,16 +35,19 @@ import {
   AckCallback,
   AckType,
   AuthResponse,
-  ChangeType,
+  DataChangeType,
   LSN,
   RelationColumn,
   Replication,
   ReplicationStatus,
   SatelliteError,
   SatelliteErrorCode,
-  Transaction,
+  DataTransaction,
   Record,
   Relation,
+  SchemaChange,
+  OutgoingReplication,
+  Transaction,
 } from '../util/types'
 import {
   base64,
@@ -70,7 +74,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private notifier: Notifier
 
   private inbound: Replication
-  private outbound: Replication
+  private outbound: OutgoingReplication
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -150,7 +154,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     enqueued?: LSN,
     ack?: LSN,
     isReplicating?: ReplicationStatus
-  ): Replication {
+  ) {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
@@ -302,7 +306,11 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  enqueueTransaction(transaction: Transaction): void {
+  subscribeToRelations(callback: (relation: Relation) => void) {
+    this.on('relation', callback)
+  }
+
+  enqueueTransaction(transaction: DataTransaction): void {
     if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
@@ -333,7 +341,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.sendMissingRelations(next, this.outbound)
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
-      // console.log(`sending message with lsn ${JSON.stringify(next.lsn)}`)
       this.sendMessage(satOpLog)
       this.emit('ack_lsn', next.lsn, AckType.LOCAL_SEND)
     }
@@ -356,7 +363,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMissingRelations(
-    transaction: Transaction,
+    transaction: DataTransaction,
     replication: Replication
   ): void {
     transaction.changes.forEach((change) => {
@@ -379,7 +386,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  private transactionToSatOpLog(transaction: Transaction): SatOpLog {
+  private transactionToSatOpLog(transaction: DataTransaction): SatOpLog {
     const ops: SatTransOp[] = [
       SatTransOp.fromPartial({
         begin: {
@@ -400,7 +407,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         record = serializeRow(change.record, relation)
       }
       switch (change.type) {
-        case ChangeType.DELETE:
+        case DataChangeType.DELETE:
           changeOp = SatTransOp.fromPartial({
             delete: {
               oldRowData: oldRecord,
@@ -409,7 +416,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             },
           })
           break
-        case ChangeType.INSERT:
+        case DataChangeType.INSERT:
           changeOp = SatTransOp.fromPartial({
             insert: {
               rowData: record,
@@ -418,7 +425,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             },
           })
           break
-        case ChangeType.UPDATE:
+        case DataChangeType.UPDATE:
           changeOp = SatTransOp.fromPartial({
             update: {
               rowData: record,
@@ -574,10 +581,15 @@ export class SatelliteClient extends EventEmitter implements Client {
       schema: message.schemaName,
       table: message.tableName,
       tableType: message.tableType,
-      columns: message.columns.map((c) => ({ name: c.name, type: c.type })),
+      columns: message.columns.map((c) => ({
+        name: c.name,
+        type: c.type,
+        primaryKey: c.primaryKey,
+      })),
     }
 
     this.inbound.relations.set(relation.id, relation)
+    this.emit('relation', relation)
   }
 
   private handleTransaction(message: SatOpLog) {
@@ -585,7 +597,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handlePingReq() {
-    Log.info(`respond to ping with last ack ${this.inbound.ack_lsn}`)
+    Log.info(
+      `respond to ping with last ack ${toHexString(
+        this.inbound.ack_lsn ?? new Uint8Array()
+      )}`
+    )
     const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
     this.sendMessage(pong)
   }
@@ -666,7 +682,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.INSERT,
+          type: DataChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel),
           tags: op.insert.tags,
         }
@@ -686,7 +702,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.UPDATE,
+          type: DataChangeType.UPDATE,
           record: deserializeRow(op.update.rowData!, rel),
           oldRecord: deserializeRow(op.update.oldRowData, rel),
           tags: op.update.tags,
@@ -707,12 +723,24 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         const change = {
           relation: rel,
-          type: ChangeType.DELETE,
+          type: DataChangeType.DELETE,
           oldRecord: deserializeRow(op.delete.oldRowData!, rel),
           tags: op.delete.tags,
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
+      }
+
+      if (op.migrate) {
+        const stmts = op.migrate.stmts
+        stmts.forEach((stmt) => {
+          const change: SchemaChange = {
+            table: op.migrate!.table!,
+            migrationType: stmt.type,
+            sql: stmt.sql,
+          }
+          replication.transactions[lastTxnIdx].changes.push(change)
+        })
       }
     })
   }

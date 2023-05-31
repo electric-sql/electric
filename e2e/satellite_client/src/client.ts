@@ -5,7 +5,6 @@ import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
-import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { dbSchema, Electric } from './generated/models'
 
@@ -35,12 +34,6 @@ export class MockConsoleClient implements ConsoleClient {
     // Refresh token is not going to be used, so we don't mock it
     return { token, refreshToken: '' }
   }
-}
-
-export const read_migrations = (migration_file: string) => {
-  const data = fs.readFileSync(migration_file)
-  const json_data = JSON.parse(data.toString())
-  return json_data.migrations
 }
 
 export const open_db = async (
@@ -80,6 +73,14 @@ export const set_subscribers = (db: Electric) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
+}
+
+export const get_tables = async (electric: Electric) => {
+  return electric.db.raw({sql: `SELECT name FROM sqlite_master WHERE type='table';`})
+}
+
+export const get_columns = async (electric: Electric, table: string) => {
+  return electric.db.raw({sql: `SELECT * FROM pragma_table_info(?);`, args: [table]})
 }
 
 export const get_items = async (electric: Electric) => {
