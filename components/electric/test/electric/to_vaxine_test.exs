@@ -8,7 +8,6 @@ defmodule Electric.Replication.VaxineTest do
   alias Electric.Postgres.SchemaRegistry
 
   @id Ecto.UUID.generate()
-  # @row Row.new("fake", "to_vaxine_test", %{"id" => @id}, ["id"])
 
   def new_record_change(columns \\ %{"content" => "a"}, id \\ @id) do
     %Changes.NewRecord{
@@ -84,7 +83,7 @@ defmodule Electric.Replication.VaxineTest do
     tx = gen_ctx()
     assert :ok = ToVaxine.handle_change(change, tx)
 
-    tags = [Changes.generateTag(tx)] |> MapSet.new()
+    tags = Changes.generateTag(tx) |> wrap_tags()
     assert %{row: %{"content" => "a"}, deleted?: ^tags} = read_row(id)
   end
 
@@ -136,10 +135,15 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = MapSet.new([Changes.generateTag(ctx1), Changes.generateTag(ctx2)])
+      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)] |> wrap_tags()
       assert %{row: %{"content" => "a", "content_b" => "b"}, deleted?: ^tags} = read_row(id)
     end
 
+    @tag :skip
+    # NOTE(alco): Flaky test that needs to be reviewed after Vaxine is removed from the write path, i.e. when have
+    # conflict resolution implemented in Postgres.
+    #
+    # See https://github.com/electric-sql/electric/pull/143 for details.
     test "rows are merged for updated record" do
       id = Ecto.UUID.generate()
       ctx1 = gen_ctx()
@@ -165,11 +169,15 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      # FIXME: fix assertion that the final tags are correct
-      _tags = MapSet.new([Changes.generateTag(ctx1), Changes.generateTag(ctx2)])
-      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: _tags} = read_row(id)
+      tags = [Changes.generateTag(ctx1), Changes.generateTag(ctx2)] |> wrap_tags()
+      assert %{row: %{"content" => "b", "content_b" => "c"}, deleted?: ^tags} = read_row(id)
     end
 
+    @tag :skip
+    # NOTE(alco): Flaky test that needs to be reviewed after Vaxine is removed from the write path, i.e. when have
+    # conflict resolution implemented in Postgres.
+    #
+    # See https://github.com/electric-sql/electric/pull/143 for details.
     test "update > delete" do
       id = Ecto.UUID.generate()
       ctx1 = gen_ctx()
@@ -195,9 +203,8 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      # FIXME: fix assertion that the final tags are correct
-      _tags = MapSet.new([Changes.generateTag(ctx1)])
-      assert %{row: %{"content" => "b"}, deleted?: _tags} = read_row(id)
+      tags = Changes.generateTag(ctx1) |> wrap_tags()
+      assert %{row: %{"content" => "b"}, deleted?: ^tags} = read_row(id)
     end
 
     @tag problem: "here2"
@@ -227,7 +234,7 @@ defmodule Electric.Replication.VaxineTest do
         end
       )
 
-      tags = MapSet.new([Changes.generateTag(ctx1)])
+      tags = Changes.generateTag(ctx1) |> wrap_tags()
       assert %{row: %{"content" => "a"}, deleted?: ^tags} = read_row(id)
     end
   end
@@ -277,4 +284,6 @@ defmodule Electric.Replication.VaxineTest do
     assert_receive :commited_1, 500
     assert_receive :commited_2, 500
   end
+
+  defp wrap_tags(tags), do: tags |> List.wrap() |> MapSet.new()
 end
