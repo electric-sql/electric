@@ -220,24 +220,147 @@ function addFilters<T, Q extends QueryBuilder & WhereMixin>(
 ): Q {
   return fields.reduce<Q>((query: Q, fieldName: string) => {
     const fieldValue = whereObject[fieldName as keyof T]
-    if (fieldValue === null) return query.where(`${fieldName} IS NULL`)
-    else if (typeof fieldValue === 'object') {
-      // an object containing filters is provided
-      // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
-      const filterSchema = z
-        .object({
-          in: z.any().array(),
-        })
-        .strict('Unsupported filter in where clause')
-      // TODO: remove this schema check once we support all filters
-      //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
-
-      const values = filterSchema.parse(fieldValue).in
-      return query.where(`${fieldName} IN ?`, values)
-    }
-    // needed because `WHERE field = NULL` is not valid SQL
-    else return query.where(`${fieldName} = ?`, [fieldValue])
+    const filters = makeFilter(fieldValue, fieldName)
+    return filters.reduce((query, filter) => {
+      return query.where(filter.sql, filter.args)
+    }, query)
   }, q)
+}
+
+function makeFilter(
+  fieldValue: unknown,
+  fieldName: string
+): Array<{ sql: string; args?: unknown[] }> {
+  if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
+  else if (typeof fieldValue === 'object') {
+    // an object containing filters is provided
+    // e.g. users.findMany({ where: { id: in([1, 2, 3]) } })
+    const fs = {
+      in: z.any().array().optional(),
+      not: z.any().optional(),
+      notIn: z.any().optional(),
+      lt: z.any().optional(),
+      lte: z.any().optional(),
+      gt: z.any().optional(),
+      gte: z.any().optional(),
+      startsWith: z.string().optional(),
+      endsWith: z.string().optional(),
+      contains: z.string().optional(),
+    }
+
+    const fsHandlers = {
+      in: makeInFilter.bind(null),
+      not: makeNotFilter.bind(null),
+      notIn: makeNotInFilter.bind(null),
+      lt: makeLtFilter.bind(null),
+      lte: makeLteFilter.bind(null),
+      gt: makeGtFilter.bind(null),
+      gte: makeGteFilter.bind(null),
+      startsWith: makeStartsWithFilter.bind(null),
+      endsWith: makeEndsWithFilter.bind(null),
+      contains: makeContainsFilter.bind(null),
+    }
+
+    const filterSchema = z
+      .object(fs)
+      .strict()
+      .refine(
+        (data) => Object.keys(fs).some((filter) => filter in data),
+        'Please provide at least one filter.'
+      )
+    // TODO: remove this schema check once we support all filters
+    //       or remove the unsupported filters from the types and schemas that are generated from the Prisma schema
+
+    const obj = filterSchema.parse(fieldValue)
+    const filters: Array<{ sql: string; args?: unknown[] }> = []
+
+    Object.entries(fsHandlers).forEach((entry) => {
+      const [filter, handler] = entry
+      if (filter in obj) {
+        const sql = handler(fieldName, obj[filter as keyof typeof obj])
+        filters.push(sql)
+      }
+    })
+
+    return filters
+  }
+  // needed because `WHERE field = NULL` is not valid SQL
+  else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
+}
+
+function makeInFilter(
+  fieldName: string,
+  values: unknown[] | undefined
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} IN ?`, args: values }
+}
+
+function makeNotInFilter(
+  fieldName: string,
+  values: unknown[] | undefined
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} NOT IN ?`, args: values }
+}
+
+function makeNotFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  if (value === null) {
+    // needed because `WHERE field != NULL` is not valid SQL
+    return { sql: `${fieldName} IS NOT NULL` }
+  } else {
+    return { sql: `${fieldName} != ?`, args: [value] }
+  }
+}
+
+function makeLtFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} < ?`, args: [value] }
+}
+
+function makeLteFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} <= ?`, args: [value] }
+}
+
+function makeGtFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} > ?`, args: [value] }
+}
+
+function makeGteFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} >= ?`, args: [value] }
+}
+
+function makeStartsWithFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`${value}%`] }
+}
+
+function makeEndsWithFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`%${value}`] }
+}
+
+function makeContainsFilter(
+  fieldName: string,
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} LIKE ?`, args: [`%${value}%`] }
 }
 
 function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {

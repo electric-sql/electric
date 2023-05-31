@@ -27,6 +27,8 @@ jobs:
     defaults:
       run:
         working-directory: e2e
+    permissions:
+      packages: write
     env:
       VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
     steps:
