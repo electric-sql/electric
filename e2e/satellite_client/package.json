@@ -33,7 +33,7 @@
     "better-sqlite3": "^7.6.2",
     "exponential-backoff": "^3.1.0",
     "prisma": "^4.11.0",
-    "prisma-generator-electric": "file:../../generator",
+    "prisma-generator-electric": "workspace:*",
     "typescript": "^4.4.3"
   }
 }

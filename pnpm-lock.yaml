@@ -150,7 +150,7 @@ importers:
       jsonwebtoken: ^9.0.0
       loglevel: ^1.8.1
       prisma: ^4.11.0
-      prisma-generator-electric: file:../../generator
+      prisma-generator-electric: workspace:*
       tslint: ^6.1.3
       tslint-config-prettier: ^1.18.0
       typescript: ^4.4.3
@@ -173,7 +173,7 @@ importers:
       better-sqlite3: 7.6.2
       exponential-backoff: 3.1.1
       prisma: 4.15.0
-      prisma-generator-electric: file:generator
+      prisma-generator-electric: link:../../generator
       typescript: 4.9.5
 
   examples/todoMVC:
@@ -2250,6 +2250,7 @@ packages:
 
   /code-block-writer/11.0.3:
     resolution: {integrity: sha512-NiujjUFB4SwScJq2bwbYUtXbZhBSlY6vYzm++3Q6oC+U+injTqfPYFK8wS9COOmb2lueqp0ZRB4nK1VYeHgNyw==}
+    dev: false
 
   /code-excerpt/4.0.0:
     resolution: {integrity: sha512-xxodCmBen3iy2i0WtAK8FlFNrRzjUqjRsMfho58xT/wvZU1YTM3fCnRjcy1gJPMepaRlgm/0e6w8SpWHpn3/cA==}
@@ -7938,20 +7939,7 @@ packages:
 
   /zod/3.21.4:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
-
-  file:generator:
-    resolution: {directory: generator, type: directory}
-    name: prisma-generator-electric
-    version: 1.0.0
-    hasBin: true
-    dependencies:
-      '@prisma/generator-helper': 4.15.0
-      code-block-writer: 11.0.3
-      lodash: 4.17.21
-      zod: 3.21.4
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
+    dev: false
 
   github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1:
     resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/f8c816fcbb16ada623545ae556fe6073e4713cb1}
