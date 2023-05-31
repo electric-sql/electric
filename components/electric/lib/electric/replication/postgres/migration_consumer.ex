@@ -162,29 +162,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     # point of receiving the migration has no effect).
   end
 
-  defp transaction_changes_to_migrations(%Transaction{changes: changes}) do
-    for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
-      {:ok, version, sql} = Extension.extract_ddl_version(record)
-      {version, sql}
-    end
-  end
-
-  defp perform_migration({version, stmts}, state) do
-    {:ok, old_version, schema} = load_schema(state)
-
-    Logger.info("Applying migration #{old_version} -> #{version}")
-
-    oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
-
-    schema =
-      Enum.reduce(stmts, schema, fn stmt, schema ->
-        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
-        Schema.update(schema, stmt, oid_loader: oid_loader)
-      end)
-
-    save_schema(state, version, schema, stmts)
-  end
-
   defp register_relation(table, columns, state) do
     Logger.debug("Registering relation #{table.schema}.#{table.name}")
 
@@ -207,6 +184,29 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
     :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
     state
+  end
+
+  defp transaction_changes_to_migrations(%Transaction{changes: changes}) do
+    for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
+      {:ok, version, sql} = Extension.extract_ddl_version(record)
+      {version, sql}
+    end
+  end
+
+  defp perform_migration({version, stmts}, state) do
+    {:ok, old_version, schema} = load_schema(state)
+
+    Logger.info("Applying migration #{old_version} -> #{version}")
+
+    oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
+
+    schema =
+      Enum.reduce(stmts, schema, fn stmt, schema ->
+        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
+        Schema.update(schema, stmt, oid_loader: oid_loader)
+      end)
+
+    save_schema(state, version, schema, stmts)
   end
 
   defp load_schema(state) do
