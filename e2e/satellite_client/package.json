@@ -17,7 +17,7 @@
   "dependencies": {
     "@prisma/client": "^4.11.0",
     "@types/uuid": "^9.0.0",
-    "electric-sql": "file:../../clients/typescript",
+    "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
     "loglevel": "^1.8.1",
     "tslint": "^6.1.3",
