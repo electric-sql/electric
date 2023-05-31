@@ -1,6 +1,6 @@
 # Fully local development against the ElectricSQL stack
 
-## Running the local stack
+## Running a local stack
 
 Electric services are packaged as docker containers. They can be run locally using the `docker-compose.yaml` file in this directory:
 
@@ -10,11 +10,11 @@ source .envrc
 docker compose pull
 docker compose up -d
 
-# This starts 4 containers: 
-#	Postgres (expose port 5432), Vaxine, Electric (expose port 5133) and Local Console (expose port 4000).
+# This starts 4 containers:
+#	Postgres (exposes port 5432), Vaxine, Electric (exposes port 5133) and Local Console (exposes port 4000).
 ```
 
-> You can use a different image for the Electric server by customising `ELECTRIC_IMAGE`. If you change Electric image, make sure [the protocol version used in the client matches the protocol used in Electric](#Typescript client).
+> You can use a different image for the Electric server by customising `ELECTRIC_IMAGE`. If you change Electric image, make sure [the protocol version used in the client matches the protocol version used in Electric server](#Typescript client).
 
 The local console is required to emulate interaction with the ElectricSQL Cloud when using the CLI tooling. You might encounter errors if any of the specified ports are already taken on your machine - just edit the port binds and keep the new values in mind.
 
@@ -22,7 +22,7 @@ The local console is required to emulate interaction with the ElectricSQL Cloud 
 
 ### CLI tool
 
-Ensure that you have the CLI version 0.5.0 installed. If you haven't installed it yet, follow the [instructions](https://electric-sql.com/docs/usage/install) to install it. The CLI is preconfigured to point to the Console service running in ElectricSQL Cloud. You can set the `ELECTRIC_CONSOLE_URL` environment variable to point to the local console:
+Ensure that you have the CLI tool (0.5.0) installed. If you haven't installed it yet, follow the [instructions](https://electric-sql.com/docs/usage/install) to install it. The CLI is preconfigured to point to the Console service running in ElectricSQL Cloud. You can set the `ELECTRIC_CONSOLE_URL` environment variable to point to the local console:
 
 ```bash
 # This variable is also exported in `.envrc`
@@ -33,13 +33,13 @@ CLI usage against the local console is limited (i.e. no account or app managemen
 
 ### Typescript client
 
-The Typescript client used in an application must use the same protocol version as Electric. The `electric-sql` dependency, version [0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3), that is used in the [examples](https://github.com/electric-sql/examples) is compatible with Electric server version [0.1.3](https://github.com/electric-sql/electric/tree/0.1.3) that is preconfigured in the local stack and deployed in ElectricSQL Cloud.
+The Typescript client ant the Electric server must use the same protocol version to connect to each other. The `electric-sql` dependency ([0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3)) configured in the [examples](https://github.com/electric-sql/examples) is compatible with the Electric version ([0.1.3](https://github.com/electric-sql/electric/tree/0.1.3)) that is the default in the `.envrc`for the local stack and is deployed in ElectricSQL Cloud.
 
 ### Configure your application
 
 In the root of your application, use the CLI to configure your application to run against the local stack:
 
-> You can do the following commands for an existing application, or one of the examples.
+> You can run the following commands for an existing application or one of the examples.
 
 ```bash
 electric config add_env local
@@ -86,5 +86,5 @@ docker compose exec -it -e PGPASSWORD=password postgres_1 \
 
 If when running an application you get the following error: ```couldn't start replication: Error: server replied with error code: 5```, it means that client and server protocol versions do not match. You can check the proto file that each is using in the following files:
 
-* `[electric-root]/deps/satellite_proto/proto/satellite.proto` 
-* ` [typescrit-client]/proto/satellite.proto`
+* `[electric-root]/deps/satellite_proto/proto/satellite.proto`
+* `[typescrit-client]/proto/satellite.proto`
