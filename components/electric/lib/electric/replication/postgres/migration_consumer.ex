@@ -4,7 +4,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   """
   use GenStage
 
-  alias Ecto.Adapter.Transaction
   alias Electric.Replication.Connectors
 
   alias Electric.Replication.Changes.{
