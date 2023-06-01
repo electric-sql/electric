@@ -30,7 +30,7 @@
     "@types/jsonwebtoken": "^9.0.1",
     "@types/live-server": "^1.2.1",
     "@types/node": "^16.9.1",
-    "better-sqlite3": "^7.6.2",
+    "better-sqlite3": "^8.4.0",
     "exponential-backoff": "^3.1.0",
     "prisma": "^4.11.0",
     "prisma-generator-electric": "workspace:*",
