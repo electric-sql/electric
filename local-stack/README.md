@@ -11,7 +11,7 @@ docker compose pull
 docker compose up -d
 
 # This starts 4 containers:
-#	Postgres (exposes port 5432), Vaxine, Electric (exposes port 5133) and Local Console (exposes port 4000).
+# Postgres (exposes port 5432), Vaxine, Electric (exposes port 5133) and Local Console (exposes port 4000)
 ```
 
 > You can use a different image for the Electric server by customising `ELECTRIC_IMAGE`. If you change Electric image, make sure [the protocol version used in the client matches the protocol version used in Electric server](#Typescript client).
