@@ -391,8 +391,6 @@ defmodule Electric.Postgres.ExtensionTest do
           {:ok, ddl} =
             Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
 
-          # IO.puts(ddl)
-
           assert ddl == """
                  CREATE TABLE something (
                      id uuid NOT NULL,
@@ -435,8 +433,6 @@ defmodule Electric.Postgres.ExtensionTest do
 
           {:ok, ddl} =
             Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
-
-          # IO.puts(ddl)
 
           assert ddl == """
                  CREATE TABLE something (
