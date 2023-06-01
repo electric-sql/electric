@@ -1,18 +1,18 @@
 deps:
-	yarn install --frozen-lockfile
+	pnpm install --frozen-lockfile
 #	npm install tslint tslint-config-prettier
 
 node_modules:
-	yarn install --frozen-lockfile
+	pnpm install --frozen-lockfile
 
 build: node_modules
-	yarn build
+	pnpm run build
 
 build-dev: node_modules
-	yarn build-dev
+	pnpm run build-dev
 
 tests:
-	yarn test
+	pnpm run test
 
 style:
 	prettier --check --loglevel warn . && eslint src --quiet

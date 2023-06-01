@@ -1,3 +1,4 @@
+import type Long from 'long'
 import {
   SatOpMigrate_Table,
   SatOpMigrate_Type,

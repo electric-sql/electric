@@ -24,40 +24,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-          cache: yarn
-          cache-dependency-path: clients/typescript/yarn.lock
+          cache: pnpm
       - run: make deps
-      - run: yarn check-styleguide
+      - run: pnpm run check-styleguide
   check_types:
     name: Check types
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-          cache: yarn
-          cache-dependency-path: clients/typescript/yarn.lock
+          cache: pnpm
       - run: make deps
-      - run: yarn typecheck
+      - run: pnpm run typecheck
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: [14, 16, 18]
+        node-version: [16, 18, 20]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-          cache: yarn
-          cache-dependency-path: clients/typescript/yarn.lock
+          cache: pnpm
       - name: Install
         run: make deps
       - name: Build
