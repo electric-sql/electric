@@ -156,10 +156,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     register_relation(table, columns, state)
     |> refresh_subscription()
-
-    # update the subscription to add any new
-    # tables (this only works when data has been added -- doing it at the
-    # point of receiving the migration has no effect).
   end
 
   defp register_relation(table, columns, state) do
@@ -180,6 +176,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     state
   end
 
+  # update the subscription to add any new
+  # tables (this only works when data has been added -- doing it at the
+  # point of receiving the migration has no effect).
   defp refresh_subscription(state) do
     Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
     :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
