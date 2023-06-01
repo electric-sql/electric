@@ -277,7 +277,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
 
           constant("'#{value}'::timestamp with time zone")
         else
-          constant("'#{timestamp_format(t, false)}'::timestamp with time zone" |> dbg)
+          constant("'#{timestamp_format(t, false)}'::timestamp with time zone")
         end
       end)
     end)
