@@ -48,7 +48,6 @@ electric config update_env --set-as-default \
                            --console-host 127.0.0.1 \
                            --console-port 4000 \
                            local
-electric build
 ```
 
 ### Apply migrations locally
