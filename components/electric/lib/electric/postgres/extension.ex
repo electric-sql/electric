@@ -228,7 +228,7 @@ defmodule Electric.Postgres.Extension do
   defp disabling_event_triggers(conn, _module, fun) do
     disable =
       Enum.flat_map(@event_triggers, fn {_type, name} ->
-        case :epgsql.equery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = $1", [name]) do
+        case :epgsql.squery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = '#{name}'") do
           {:ok, _, [_]} ->
             [name]
 
