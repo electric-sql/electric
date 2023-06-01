@@ -4,6 +4,7 @@ defmodule Electric.Postgres.Lsn do
   """
   defstruct [:segment, :offset]
 
+  @type int64 :: 0..0xFFFFFFFFFFFFFFFF
   @type int32 :: 0..0xFFFFFFFF
   @type t :: %__MODULE__{
           segment: int32(),
