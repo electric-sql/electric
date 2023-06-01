@@ -20,8 +20,7 @@ pull:
 		vaxine \
 		sysbench \
 		elixir_client \
-		postgresql \
-		satellite_client
+		postgresql
 
 stop:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} stop_dev_env;)
