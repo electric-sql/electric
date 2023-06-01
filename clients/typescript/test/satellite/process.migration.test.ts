@@ -7,7 +7,7 @@ import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../../src/_generated/protocol/satellite'
-import { generateTag } from '../../src/satellite/oplog'
+import {generateTag, ShadowEntry} from '../../src/satellite/oplog'
 import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
@@ -259,15 +259,15 @@ test.serial(
      - Process the following migration tx: <DML 1> <DDL 1> <DML 2>
         - DML 1 is:
            insert non-conflicting row in existing table
-           non-conflict update to existing row
+           non-conflicting update to existing row
            delete row
         - DDL 1 is:
             Add column to table that is affected by the statements in DML 1
-            Create new table
+            also create a new table
         - DML 2 is:
             insert row in extended table with value for new column
             insert row in extended table without a value for the new column
-            Insert some rows in newly created table
+            insert some rows in newly created table
      - Check that the migration was successfully applied on the local DB
      - Check the modifications (insert, update, delete) to the rows
  */
@@ -317,11 +317,9 @@ test.serial(
 
     // Delete overwrites the insert for row with id 2
     // Thus, it overwrites the shadow tag for that row
-    const localEntries = await satellite._getEntries()
-    const shadowEntryForRow2 = await satellite._getOplogShadowEntry(
-      localEntries[1]
-    ) // shadow entry for insert of row with id 2
-    const shadowTagsRow2 = JSON.parse(shadowEntryForRow2[0].tags)
+    const shadowEntries = await satellite._getOplogShadowEntry() // returns all shadow entries
+    const shadowEntryForRow2 = shadowEntries.find((entry: ShadowEntry) => entry.primaryKey === 2) // shadow entry for insert of row with id 2
+    const shadowTagsRow2 = JSON.parse(shadowEntryForRow2.tags)
 
     const deleteRow = {
       id: 2,
@@ -438,11 +436,9 @@ test.serial(
     const { satellite, adapter, txDate } = t.context
 
     // Fetch the shadow tag for row 1 such that delete will overwrite it
-    const localEntries = await satellite._getEntries()
-    const shadowEntryForRow1 = await satellite._getOplogShadowEntry(
-      localEntries[0]
-    ) // shadow entry for insert of row with id 1
-    const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)
+    const shadowEntries = await satellite._getOplogShadowEntry() // returns all shadow entries
+    const shadowEntryForRow1 = shadowEntries.find((entry: ShadowEntry) => entry.primaryKey === 1) // shadow entry for insert of row with id 1
+    const shadowTagsRow1 = JSON.parse(shadowEntryForRow1.tags)
 
     // Locally update row with id 1
     await adapter.runInTransaction({

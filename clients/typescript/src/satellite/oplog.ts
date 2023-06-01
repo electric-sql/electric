@@ -93,7 +93,7 @@ export const OPTYPES: {
 export interface ShadowEntry {
   namespace: string
   tablename: string
-  primaryKey: string
+  primaryKey: SqlValue // type of the PK depends on the type of that column in the DB
   tags: string // json object
 }
 
