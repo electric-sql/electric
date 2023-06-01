@@ -7,7 +7,7 @@ import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../../src/_generated/protocol/satellite'
-import {generateTag, ShadowEntry} from '../../src/satellite/oplog'
+import { generateTag, ShadowEntry } from '../../src/satellite/oplog'
 import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
@@ -318,7 +318,9 @@ test.serial(
     // Delete overwrites the insert for row with id 2
     // Thus, it overwrites the shadow tag for that row
     const shadowEntries = await satellite._getOplogShadowEntry() // returns all shadow entries
-    const shadowEntryForRow2 = shadowEntries.find((entry: ShadowEntry) => entry.primaryKey === 2) // shadow entry for insert of row with id 2
+    const shadowEntryForRow2 = shadowEntries.find(
+      (entry: ShadowEntry) => entry.primaryKey === 2
+    ) // shadow entry for insert of row with id 2
     const shadowTagsRow2 = JSON.parse(shadowEntryForRow2.tags)
 
     const deleteRow = {
@@ -437,7 +439,9 @@ test.serial(
 
     // Fetch the shadow tag for row 1 such that delete will overwrite it
     const shadowEntries = await satellite._getOplogShadowEntry() // returns all shadow entries
-    const shadowEntryForRow1 = shadowEntries.find((entry: ShadowEntry) => entry.primaryKey === 1) // shadow entry for insert of row with id 1
+    const shadowEntryForRow1 = shadowEntries.find(
+      (entry: ShadowEntry) => entry.primaryKey === 1
+    ) // shadow entry for insert of row with id 1
     const shadowTagsRow1 = JSON.parse(shadowEntryForRow1.tags)
 
     // Locally update row with id 1
