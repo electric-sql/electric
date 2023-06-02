@@ -30,7 +30,7 @@ CLI usage against the local console is limited (i.e. no account or app managemen
 
 ### Typescript client
 
-The Typescript client and the Electric server must use the same protocol version. The `electric-sql` dependency ([0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3)) configured in the [examples](https://github.com/electric-sql/examples) is compatible with the Electric image ([0.1.3](https://github.com/electric-sql/electric/tree/0.1.3)) in `.envrc` for the local stack and the version deployed in the ElectricSQL Cloud.
+Use a typescript client version that is compatible with Electric. The `electric-sql` dependency ([0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3)) used in the provided [examples](https://github.com/electric-sql/examples) is compatible with the Electric image ([0.1.3](https://github.com/electric-sql/electric/tree/0.1.3)) that is deployed in the ElectricSQL Cloud and is preconfigured in  `.envrc`. Check the [troubleshooting](Compatible protocol version) section If you want to experiment with different versions of the server or the client.
 
 ### Configure your application
 
@@ -78,9 +78,9 @@ docker compose exec -it -e PGPASSWORD=password postgres_1 \
 
 ### Troubleshooting
 
-### Mismatch between server and client versions
+### Incompatible protocol versions
 
-If when running an application you get the following error: ```couldn't start replication: Error: server replied with error code: 5```, it means that client and server protocol versions do not match. You can check the proto file that each is using in the following locations:
+If you get the error message : ```couldn't start replication: Error: server replied with error code: 5``` while attempting to connect to Electric, it indicates there is a mismatch between the protocol versions the typescript client and the electric server are using. Electric restricts connections from any client that does not use the same major protocol version. To troubleshoot this issue, you can verify the protocol files used by the client and server in these locations:
 
-* `[electric]/deps/satellite_proto/proto/satellite.proto`
 * `[typescript-client]/proto/satellite.proto`
+* `[electric]/deps/satellite_proto/proto/satellite.proto`
