@@ -728,7 +728,7 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_table_constraints(regclass, OUT sql
     RETURNS SETOF text LANGUAGE sql AS $function$
   select
       ('CONSTRAINT ' || quote_ident(constraint_name) || ' ' || constraint_definition) as sql
-  from @schemaname@.@schemaname@.ddlx_get_constraints($1)
+  from @schemaname@.ddlx_get_constraints($1)
   where is_local
   order by constraint_type desc, constraint_name;
 $function$  strict;
@@ -765,8 +765,8 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_table(regclass, text[] defau
       coalesce(E'\n' ||
         array_to_string(
           array_cat(
-            (SELECT array_agg('    '||definition) FROM @schemaname@.@schemaname@.ddlx_describe($1) WHERE is_local),
-            (SELECT array_agg('    '||sql) FROM @schemaname@.@schemaname@.ddlx_table_constraints($1))
+            (SELECT array_agg('    '||definition) FROM @schemaname@.ddlx_describe($1) WHERE is_local),
+            (SELECT array_agg('    '||sql) FROM @schemaname@.ddlx_table_constraints($1))
           ),
           E',\n'
         ), '') || E'\n' ||  ')'
