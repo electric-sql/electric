@@ -403,6 +403,7 @@ defmodule Electric.Postgres.ExtensionTest do
                      CONSTRAINT val3_check CHECK (val3 > 10)
                  );
 
+
                  """
         end,
         cxt
@@ -443,6 +444,7 @@ defmodule Electric.Postgres.ExtensionTest do
                      CONSTRAINT something_pkey PRIMARY KEY (id),
                      CONSTRAINT val3_check CHECK (val3 > 10)
                  );
+
 
                  CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something USING btree (val1);
 
