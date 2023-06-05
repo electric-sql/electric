@@ -1,0 +1,45 @@
+{
+  "name": "react",
+  "version": "1.0.0",
+  "main": "builder.js",
+  "author": "ElectricSQL",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint src --fix",
+    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
+    "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
+    "prepare": "pnpm run prepare-wa-sqlite",
+    "build": "node builder.js",
+    "build-prod": "NODE_ENV=production node builder.js",
+    "start": "SERVE=true node builder.js"
+  },
+  "dependencies": {
+    "@aphro/absurd-sql": "^0.0.53",
+    "@aphro/sql.js": "^1.7.0",
+    "@prisma/client": "4.8.1",
+    "base-64": "^1.0.0",
+    "electric-sql": "workspace:*",
+    "fs-extra": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "uuid": "^9.0.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#breaking-changes",
+    "zod": "^3.20.2"
+  },
+  "devDependencies": {
+    "@types/node": "^16.9.1",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "@types/uuid": "^8.3.4",
+    "@typescript-eslint/eslint-plugin": "^5.48.2",
+    "@typescript-eslint/parser": "^5.48.2",
+    "esbuild": "^0.12.26",
+    "esbuild-plugin-inline-image": "^0.0.8",
+    "eslint": "^8.32.0",
+    "eslint-plugin-react": "^7.32.1",
+    "prettier": "^2.8.3",
+    "prisma": "4.8.1",
+    "prisma-generator-electric": "workspace:*",
+    "typescript": "^4.4.3"
+  }
+}
