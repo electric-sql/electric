@@ -1,6 +1,6 @@
 {
   "app": "items-example",
-  "debug": true,
+  "debug": false,
   "defaultEnv": "local",
   "directories": {
     "migrations": "migrations",
