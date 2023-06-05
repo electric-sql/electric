@@ -14,7 +14,7 @@ export default {
     "port": 4000,
     "ssl": false
   },
-  "debug": true,
+  "debug": false,
   "env": "local",
   "migrations": [
     {

@@ -4,7 +4,7 @@ generator client {
 
 generator electric {
   provider      = "./node_modules/prisma-generator-electric/dist/bin.js"
-  output        = "../prisma/generated/models"
+  output        = "../src/generated/models"
   relationModel = "false"
 }
 
