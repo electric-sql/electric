@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import './Example.css'
 
-import { dbSchema, Electric } from '../prisma/generated/models'
+import { dbSchema, Electric } from './generated/models'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 
