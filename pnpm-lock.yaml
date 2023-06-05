@@ -278,6 +278,134 @@ importers:
         specifier: ^4.4.3
         version: 4.9.5
 
+  examples/todoMVC:
+    dependencies:
+      '@aphro/absurd-sql':
+        specifier: ^0.0.53
+        version: 0.0.53
+      '@aphro/sql.js':
+        specifier: ^1.7.0
+        version: 1.7.0
+      '@prisma/client':
+        specifier: 4.8.1
+        version: 4.8.1(prisma@4.8.1)
+      base-64:
+        specifier: ^1.0.0
+        version: 1.0.0
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../clients/typescript
+      fs-extra:
+        specifier: ^10.0.0
+        version: 10.0.0
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.2.0(react@18.2.0)
+      uuid:
+        specifier: ^9.0.0
+        version: 9.0.0
+      wa-sqlite:
+        specifier: rhashimoto/wa-sqlite#breaking-changes
+        version: github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1
+      zod:
+        specifier: ^3.20.2
+        version: 3.21.4
+    devDependencies:
+      '@types/node':
+        specifier: ^16.9.1
+        version: 16.18.34
+      '@types/react':
+        specifier: ^18.0.18
+        version: 18.2.7
+      '@types/react-dom':
+        specifier: ^18.0.11
+        version: 18.2.4
+      '@types/uuid':
+        specifier: ^8.3.4
+        version: 8.3.4
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^5.48.2
+        version: 5.59.8(@typescript-eslint/parser@5.59.8)(eslint@8.41.0)(typescript@4.9.5)
+      '@typescript-eslint/parser':
+        specifier: ^5.48.2
+        version: 5.59.8(eslint@8.41.0)(typescript@4.9.5)
+      esbuild:
+        specifier: ^0.12.26
+        version: 0.12.26
+      esbuild-plugin-inline-image:
+        specifier: ^0.0.8
+        version: 0.0.8
+      eslint:
+        specifier: ^8.32.0
+        version: 8.41.0
+      eslint-plugin-react:
+        specifier: ^7.32.1
+        version: 7.32.2(eslint@8.41.0)
+      prettier:
+        specifier: ^2.8.3
+        version: 2.8.8
+      prisma:
+        specifier: 4.8.1
+        version: 4.8.1
+      prisma-generator-electric:
+        specifier: workspace:*
+        version: link:../../generator
+      typescript:
+        specifier: ^4.4.3
+        version: 4.9.5
+
+  examples/web-wa-sqlite:
+    dependencies:
+      '@prisma/client':
+        specifier: 4.8.1
+        version: 4.8.1(prisma@4.8.1)
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../clients/typescript
+      fs-extra:
+        specifier: ^10.0.0
+        version: 10.0.0
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.2.0(react@18.2.0)
+      wa-sqlite:
+        specifier: rhashimoto/wa-sqlite#breaking-changes
+        version: github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1
+      zod:
+        specifier: ^3.20.2
+        version: 3.21.4
+    devDependencies:
+      '@types/node':
+        specifier: ^16.9.1
+        version: 16.18.34
+      '@types/react':
+        specifier: ^18.0.18
+        version: 18.2.7
+      '@types/react-dom':
+        specifier: ^18.0.11
+        version: 18.2.4
+      esbuild:
+        specifier: ^0.12.26
+        version: 0.12.26
+      esbuild-plugin-inline-image:
+        specifier: ^0.0.8
+        version: 0.0.8
+      prisma:
+        specifier: 4.8.1
+        version: 4.8.1
+      prisma-generator-electric:
+        specifier: workspace:*
+        version: link:../../generator
+      typescript:
+        specifier: ^4.4.3
+        version: 4.9.5
+
   generator:
     dependencies:
       '@prisma/generator-helper':
@@ -2663,6 +2791,20 @@ packages:
       prisma: 4.15.0
     dev: true
 
+  /@prisma/client@4.8.1(prisma@4.8.1):
+    resolution: {integrity: sha512-d4xhZhETmeXK/yZ7K0KcVOzEfI5YKGGEr4F5SBV04/MU4ncN/HcE28sy3e4Yt8UFW0ZuImKFQJE+9rWt9WbGSQ==}
+    engines: {node: '>=14.17'}
+    requiresBuild: true
+    peerDependencies:
+      prisma: '*'
+    peerDependenciesMeta:
+      prisma:
+        optional: true
+    dependencies:
+      '@prisma/engines-version': 4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe
+      prisma: 4.8.1
+    dev: false
+
   /@prisma/debug@4.15.0:
     resolution: {integrity: sha512-dkbPz+gOVlWDBAaOEseSpAUz9NppT38UlwdryPyrwct6OClLirNC7wH+TpAQk5OZp9x59hNnfDz+T7XvL1v0/Q==}
     dependencies:
@@ -2676,10 +2818,18 @@ packages:
     resolution: {integrity: sha512-sVOig4tjGxxlYaFcXgE71f/rtFhzyYrfyfNFUsxCIEJyVKU9rdOWIlIwQ2NQ7PntvGnn+x0XuFo4OC1jvPJKzg==}
     dev: true
 
+  /@prisma/engines-version@4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe:
+    resolution: {integrity: sha512-MHSOSexomRMom8QN4t7bu87wPPD+pa+hW9+71JnVcF3DqyyO/ycCLhRL1we3EojRpZxKvuyGho2REQsMCvxcJw==}
+    dev: false
+
   /@prisma/engines@4.15.0:
     resolution: {integrity: sha512-FTaOCGs0LL0OW68juZlGxFtYviZa4xdQj/rQEdat2txw0s3Vu/saAPKjNVXfIgUsGXmQ72HPgNr6935/P8FNAA==}
     requiresBuild: true
     dev: true
+
+  /@prisma/engines@4.8.1:
+    resolution: {integrity: sha512-93tctjNXcIS+i/e552IO6tqw17sX8liivv8WX9lDMCpEEe3ci+nT9F+1oHtAafqruXLepKF80i/D20Mm+ESlOw==}
+    requiresBuild: true
 
   /@prisma/fetch-engine@4.15.0:
     resolution: {integrity: sha512-J5HVpRpLxsw9iDLcwwwxL09DXhERnutMiSwyfgHwCQhTHcETc5++XGZlHZtG4toykO3tploCDynXhJc6Fe/u2A==}
@@ -3165,7 +3315,7 @@ packages:
   /@types/cross-spawn@6.0.2:
     resolution: {integrity: sha512-KuwNhp3eza+Rhu8IFI5HUXRP0LIhqH5cAjubUvGXXthh4YYBuP2ntwEX+Cz8GJoZUHlKo247wPWOfA9LYEq4cw==}
     dependencies:
-      '@types/node': 20.2.5
+      '@types/node': 18.16.16
 
   /@types/debug@4.1.8:
     resolution: {integrity: sha512-/vPO1EPOs306Cvhwv7KfVfYvOJqA/S/AXjaHQiJboCZzcNDb+TIJFN9/2C9DZ//ijSKWioNyUxD792QmDJ+HKQ==}
@@ -3279,9 +3429,6 @@ packages:
   /@types/node@18.16.16:
     resolution: {integrity: sha512-NpaM49IGQQAUlBhHMF82QH80J08os4ZmyF9MkpCzWAGuOHqE4gTEbhzd7L3l5LmWuZ6E0OiC1FweQ4tsiW35+g==}
 
-  /@types/node@20.2.5:
-    resolution: {integrity: sha512-JJulVEQXmiY9Px5axXHeYGLSjhkZEnD+MDPDGbCbIAbMslkKwmygtZFy1X6s/075Yo94sf8GuSlFfPzysQrWZQ==}
-
   /@types/normalize-package-data@2.4.1:
     resolution: {integrity: sha512-Gj7cI7z+98M282Tqmp2K5EIsoouUEzbBJhQQzDE3jSIRk6r9gsz0oUokqIUR4u1R3dMHo0pDHM7sNOHyhulypw==}
     dev: true
@@ -3297,7 +3444,7 @@ packages:
   /@types/react-dom@18.2.4:
     resolution: {integrity: sha512-G2mHoTMTL4yoydITgOGwWdWMVd8sNgyEP85xVmMKAPUBwQWm9wBPQUmvbeF4V3WBY1P7mmL4BkjQ0SqUpf1snw==}
     dependencies:
-      '@types/react': 18.2.7
+      '@types/react': 17.0.20
     dev: true
 
   /@types/react-native-sqlite-storage@6.0.0:
@@ -3309,6 +3456,14 @@ packages:
     deprecated: This is a stub types definition. react-native-uuid provides its own type definitions, so you do not need this installed.
     dependencies:
       react-native-uuid: 2.0.1
+    dev: true
+
+  /@types/react@17.0.20:
+    resolution: {integrity: sha512-wWZrPlihslrPpcKyCSlmIlruakxr57/buQN1RjlIeaaTWDLtJkTtRW429MoQJergvVKc4IWBpRhWw7YNh/7GVA==}
+    dependencies:
+      '@types/prop-types': 15.7.5
+      '@types/scheduler': 0.16.3
+      csstype: 3.1.2
     dev: true
 
   /@types/react@18.2.7:
@@ -3329,6 +3484,10 @@ packages:
 
   /@types/semver@7.5.0:
     resolution: {integrity: sha512-G8hZ6XJiHnuhQKR7ZmysCeJWE08o8T0AXtk5darsCaTVsYZhhgUrq53jizaR2FvsoeCwJhlmwTjkXBY5Pn/ZHw==}
+    dev: true
+
+  /@types/uuid@8.3.4:
+    resolution: {integrity: sha512-c/I8ZRb51j+pYGAu5CrFMRxqZ2ke4y2grEBO5AUjgSkSk+qT2Ea+OdWElz/OiMf5MNpn2b17kuVBwZLQJXzihw==}
     dev: true
 
   /@types/uuid@9.0.1:
@@ -5865,6 +6024,10 @@ packages:
     dev: true
     optional: true
 
+  /esbuild-plugin-inline-image@0.0.8:
+    resolution: {integrity: sha512-L2Wwq7z9HALpq2hfxYHfQrrIyl/ivfRgiAULohVC/WKrGydPzfANGCrt5wSlxxWW4fuiPOc3BIA9Yp00h2QPVQ==}
+    dev: true
+
   /esbuild-sunos-64@0.15.12:
     resolution: {integrity: sha512-nkl251DpoWoBO9Eq9aFdoIt2yYmp4I3kvQjba3jFKlMXuqQ9A4q+JaqdkCouG3DHgAGnzshzaGu6xofGcXyPXg==}
     engines: {node: '>=12'}
@@ -5936,6 +6099,12 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
+
+  /esbuild@0.12.26:
+    resolution: {integrity: sha512-YmTkhPKjvTJ+G5e96NyhGf69bP+hzO0DscqaVJTi5GM34uaD4Ecj7omu5lJO+NrxCUBRhy2chONLK1h/2LwoXA==}
+    hasBin: true
+    requiresBuild: true
+    dev: true
 
   /esbuild@0.15.12:
     resolution: {integrity: sha512-PcT+/wyDqJQsRVhaE9uX/Oq4XLrFh0ce/bs2TJh4CSaw9xuvI+xFrH2nAYOADbhQjUgAhNWC5LKoUsakm4dxng==}
@@ -6944,6 +7113,15 @@ packages:
       graceful-fs: 4.2.11
       jsonfile: 2.4.0
       klaw: 1.3.1
+    dev: false
+
+  /fs-extra@10.0.0:
+    resolution: {integrity: sha512-C5owb14u9eJwizKGdchcDUQeFtlSHHthBk8pbX9Vc1PFZrLombudjDnNns88aYslCyF6IY5SUw3Roz6xShcEIQ==}
+    engines: {node: '>=12'}
+    dependencies:
+      graceful-fs: 4.2.11
+      jsonfile: 6.1.0
+      universalify: 2.0.0
     dev: false
 
   /fs-extra@11.1.1:
@@ -8399,7 +8577,6 @@ packages:
       universalify: 2.0.0
     optionalDependencies:
       graceful-fs: 4.2.11
-    dev: true
 
   /jsonwebtoken@9.0.0:
     resolution: {integrity: sha512-tuGfYXxkQGDPnLJ7SibiQgVgeDgfbPq2k2ICcbgqW8WxWLBAxKQM/ZCu/IT8SOSwmaYl4dpTFCW5xZv7YbbWUw==}
@@ -10411,6 +10588,14 @@ packages:
       '@prisma/engines': 4.15.0
     dev: true
 
+  /prisma@4.8.1:
+    resolution: {integrity: sha512-ZMLnSjwulIeYfaU1O6/LF6PEJzxN5par5weykxMykS9Z6ara/j76JH3Yo2AH3bgJbPN4Z6NeCK9s5fDkzf33cg==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+    requiresBuild: true
+    dependencies:
+      '@prisma/engines': 4.8.1
+
   /process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
@@ -10626,7 +10811,6 @@ packages:
       loose-envify: 1.4.0
       react: 18.2.0
       scheduler: 0.23.0
-    dev: true
 
   /react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -11247,7 +11431,6 @@ packages:
     resolution: {integrity: sha512-CtuThmgHNg7zIZWAXi3AsyIzA3n4xx7aNyjwC2VJldO2LMVDhFK+63xGqq6CsJH4rTAt6/M+N4GhZiDYPx9eUw==}
     dependencies:
       loose-envify: 1.4.0
-    dev: true
 
   /semver-diff@4.0.0:
     resolution: {integrity: sha512-0Ju4+6A8iOnpL/Thra7dZsSlOHYAHIeMxfhWQRI1/VLcT3WDBZKKtQt/QkBOsiIN9ZpuvHE6cGZ0x4glCMmfiA==}
@@ -12569,7 +12752,6 @@ packages:
   /universalify@2.0.0:
     resolution: {integrity: sha512-hAZsKq7Yy11Zu1DE0OzWjw7nnLZmJZYTDZZyEFHZdUhV8FkH5MCfoU1XMaxXovpyW5nq5scPqq0ZDP9Zyl04oQ==}
     engines: {node: '>= 10.0.0'}
-    dev: true
 
   /unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -12613,7 +12795,7 @@ packages:
       is-yarn-global: 0.4.1
       latest-version: 7.0.0
       pupa: 3.1.0
-      semver: 7.5.0
+      semver: 7.5.1
       semver-diff: 4.0.0
       xdg-basedir: 5.1.0
     dev: true
@@ -12724,7 +12906,7 @@ packages:
       extsprintf: 1.3.0
     dev: true
 
-  /vite@3.2.7(@types/node@20.2.5):
+  /vite@3.2.7(@types/node@18.16.16):
     resolution: {integrity: sha512-29pdXjk49xAP0QBr0xXqu2s5jiQIXNvE/xwd0vUizYT2Hzqe4BksNNoWllFVXJf4eLZ+UlVQmXfB4lWrc+t18g==}
     engines: {node: ^14.18.0 || >=16.0.0}
     hasBin: true
@@ -12749,7 +12931,7 @@ packages:
       terser:
         optional: true
     dependencies:
-      '@types/node': 20.2.5
+      '@types/node': 18.16.16
       esbuild: 0.15.18
       postcss: 8.4.24
       resolve: 1.22.2
@@ -12782,7 +12964,7 @@ packages:
     dependencies:
       '@types/chai': 4.3.5
       '@types/chai-subset': 1.3.3
-      '@types/node': 20.2.5
+      '@types/node': 18.16.16
       chai: 4.3.7
       debug: 4.3.4
       local-pkg: 0.4.3
@@ -12790,7 +12972,7 @@ packages:
       tinybench: 2.5.0
       tinypool: 0.3.1
       tinyspy: 1.1.1
-      vite: 3.2.7(@types/node@20.2.5)
+      vite: 3.2.7(@types/node@18.16.16)
     transitivePeerDependencies:
       - less
       - sass
@@ -13223,4 +13405,3 @@ packages:
     resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/f8c816fcbb16ada623545ae556fe6073e4713cb1}
     name: wa-sqlite
     version: 0.9.3
-    dev: true
