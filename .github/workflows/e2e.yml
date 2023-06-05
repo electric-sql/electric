@@ -71,7 +71,7 @@ jobs:
         working-directory: components/electric
       - run: make docker-build-ci
         env:
-          ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
         working-directory: components/electric
       - run: make pretest_compile
         working-directory: components/electric
@@ -94,7 +94,7 @@ jobs:
       - run: make test
         id: tests
         env:
-          ELECTRIC_IMAGE_NAME: ghcr.io/${{ github.repository }}/electric
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
           ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
 
       - name: Upload lux logs
