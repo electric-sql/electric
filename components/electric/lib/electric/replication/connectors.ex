@@ -31,7 +31,6 @@ defmodule Electric.Replication.Connectors do
           publication: String.t(),
           slot: String.t(),
           subscription: String.t(),
-          publication_tables: :all | [binary] | binary,
           electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()},
           opts: Keyword.t()
         }
@@ -48,6 +47,8 @@ defmodule Electric.Replication.Connectors do
           producer: module(),
           producer_opts: downstream_producer_opts()
         }
+
+  alias Electric.Postgres.Extension
 
   def start_link(extra_args) do
     DynamicSupervisor.start_link(__MODULE__, extra_args, name: __MODULE__)
@@ -90,14 +91,12 @@ defmodule Electric.Replication.Connectors do
 
   @spec get_replication_opts(config()) :: replication_opts()
   def get_replication_opts(config) do
-    origin = origin(config)
-
     config
     |> Keyword.fetch!(:replication)
     |> Map.new()
-    |> Map.put_new(:slot, "electric_replication")
-    |> Map.put_new(:publication_tables, :all)
-    |> Map.put_new(:subscription, to_string(origin))
+    |> Map.put(:slot, Extension.slot_name())
+    |> Map.put(:publication, Extension.publication_name())
+    |> Map.put(:subscription, Extension.subscription_name())
   end
 
   @spec get_connection_opts(config()) :: connection_opts()

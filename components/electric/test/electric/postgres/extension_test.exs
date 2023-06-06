@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.ExtensionTest do
-  use ExUnit.Case, async: false
+  use Electric.Extension.Case, async: false
 
   alias Electric.Postgres.{Schema, Schema.Proto}
 
@@ -38,37 +38,9 @@ defmodule Electric.Postgres.ExtensionTest do
     ]
   end
 
-  alias Ecto.Adapter.Schema
   alias Electric.Postgres.{Extension, Schema}
 
-  setup do
-    pg_config = Electric.Postgres.TestConnection.config()
-
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
-
-    {:ok, conn: conn}
-  end
-
-  defmodule RollbackError do
-    # use a special error to abort the transaction so we can be sure that some other problem isn't
-    # happening in the tx and being swallowed
-    defexception [:message]
-  end
-
-  def tx(fun, cxt) do
-    assert_raise RollbackError, fn ->
-      :epgsql.with_transaction(
-        cxt.conn,
-        fn tx ->
-          fun.(tx)
-          raise RollbackError, message: "rollback"
-        end,
-        reraise: true
-      )
-    end
-  end
-
-  def migrate(conn, _cxt, migration_module) do
+  def migrate_module(conn, _cxt, migration_module) do
     {:ok, _} = Extension.migrate(conn, migration_module)
 
     versions = Enum.map(migration_module.migrations(), & &1.version())
@@ -118,12 +90,12 @@ defmodule Electric.Postgres.ExtensionTest do
   test "uses migration table to track applied migrations", cxt do
     tx(
       fn conn ->
-        {:ok, rows} = migrate(conn, cxt, MigrationsV1)
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV1)
         # FIXME: we no longer need the electric.migrations table 
         assert rows == [["migrations"], ["schema_migrations"], ["things"]]
-        {:ok, rows} = migrate(conn, cxt, MigrationsV2)
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV2)
         assert rows == [["migrations"], ["other_things"], ["schema_migrations"], ["things"]]
-        {:ok, rows} = migrate(conn, cxt, MigrationsV3)
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV3)
         assert rows == [["migrations"], ["schema_migrations"], ["things"]]
       end,
       cxt
@@ -132,10 +104,6 @@ defmodule Electric.Postgres.ExtensionTest do
 
   test "default migrations are valid", cxt do
     tx(&migrate/1, cxt)
-  end
-
-  def migrate(conn) do
-    assert {:ok, [2023_03_28_11_39_27, 2023_04_24_15_44_25]} = Extension.migrate(conn)
   end
 
   test "we can retrieve and set the current schema json", cxt do
@@ -262,6 +230,31 @@ defmodule Electric.Postgres.ExtensionTest do
         versions = Enum.map(versions, fn {v, _, s} -> {v, s} end)
 
         assert versions == Enum.slice(migrations, 2..-1)
+      end,
+      cxt
+    )
+  end
+
+  test "migration capture", cxt do
+    tx(
+      fn conn ->
+        migrate(conn)
+
+        sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
+        sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
+        sql3 = "ALTER TABLE buttercup ADD COLUMN petal text;"
+        sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text;"
+
+        for sql <- [sql1, sql2, sql3, sql4] do
+          {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+        end
+
+        assert {:ok, [row1, row2, row3, row4]} = Extension.ddl_history(conn)
+
+        assert {1, txid, timestamp, ^sql1} = row1
+        assert {2, ^txid, ^timestamp, ^sql2} = row2
+        assert {3, ^txid, ^timestamp, ^sql3} = row3
+        assert {4, ^txid, ^timestamp, ^sql4} = row4
       end,
       cxt
     )
