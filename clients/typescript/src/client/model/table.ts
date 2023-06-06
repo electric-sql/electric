@@ -24,6 +24,7 @@ import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
 import { parseTableNames, Row, Statement } from '../../util'
+import { NarrowInclude } from '../input/inputNarrowing'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -90,7 +91,7 @@ export class Table<
     this._tables = new Map()
     const tableDescription = this._dbDescription.getTableDescription(tableName)
     this._schema = tableDescription.modelSchema
-    this.createSchema = tableDescription.createSchema
+    this.createSchema = specialiseCreateSchema(tableDescription.createSchema)
     this.createManySchema = tableDescription.createManySchema
     this.findUniqueSchema = tableDescription.findUniqueSchema
     this.findSchema = tableDescription.findSchema
@@ -99,6 +100,18 @@ export class Table<
     this.upsertSchema = tableDescription.upsertSchema
     this.deleteSchema = tableDescription.deleteSchema
     this.deleteManySchema = tableDescription.deleteManySchema
+
+    function specialiseCreateSchema<T extends z.ZodTypeAny>(s: T): T {
+      const schema = s as unknown as z.AnyZodObject
+      return schema.merge(
+        z.object({
+          select: schema.shape.select
+            .unwrap() // `select` is an optional field, unwrap its schema out of the optional
+            .omit({ _count: true }) // remove `_count` field
+            .optional(), // wrap it back into an optional
+        })
+      ) as unknown as T
+    }
   }
 
   setTables(tables: Map<TableName, AnyTable>) {
@@ -296,10 +309,26 @@ export class Table<
       (rel: Relation, cont: () => void) => {
         const { fromField, toField, relationField, relatedTable } = rel
         // fetch the object in the relation field and recursively create that object
-        const relatedObject = (data[relationField] as { create: object }).create
-        // TODO: return an error if user provided a createMany, connect, connectOrCreate
-        //       the former will not be supported because you can pass an array of related objects to `create`
-        //       the latter 2 should eventually be implemented at some point
+
+        const createRelatedObjSchema = z.object({
+          create: z.any(),
+        })
+
+        // Return an error if user provided a createMany, connect, connectOrCreate
+        // the former will not be supported because you can pass an array of related objects to `create`
+        // the latter 2 should eventually be implemented at some point
+        let relatedObject = null
+        try {
+          relatedObject = createRelatedObjSchema.parse(
+            data[relationField]
+          ).create
+        } catch (err) {
+          if (err instanceof z.ZodError && err.name === 'unrecognized_keys')
+            throw new InvalidArgumentError(
+              'Unsupported operation. Currently, only `create` is supported on relation fields.'
+            )
+          else throw err
+        }
 
         const relatedTbl = this._tables.get(relatedTable)!
         relatedTbl._create(
@@ -655,7 +684,7 @@ export class Table<
 
   private fetchIncludes(
     rows: Kind<GetPayload, T>[],
-    include: Include | undefined,
+    include: NarrowInclude<Include> | undefined,
     db: DB,
     onResult: (res: Kind<GetPayload, T>[]) => void,
     onError: (err: any) => void
