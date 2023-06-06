@@ -21,6 +21,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     ddl_table = Extension.ddl_table()
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
+    event_triggers = Extension.event_triggers()
 
     event_trigger_tags =
       for action <- ["CREATE", "ALTER", "DROP"],
@@ -162,7 +163,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       """,
       ##################
       """
-      CREATE EVENT TRIGGER #{schema}_event_trigger_ddl_end ON ddl_command_end
+      CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
           WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
           EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
       """
