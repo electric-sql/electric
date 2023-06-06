@@ -210,7 +210,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
            # {:ok, _system_id} <- Client.get_system_id(conn),
            # {:ok, publication} <-
            #   Client.create_publication(conn, publication, publication_tables),
-           {:ok, _} <- Client.create_slot(conn, slot_name),
+           # {:ok, _} <- Client.create_slot(conn, slot_name),
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
            tables <- Client.query_replicated_tables(conn, publication),
