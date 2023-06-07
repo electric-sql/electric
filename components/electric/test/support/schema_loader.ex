@@ -35,9 +35,9 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def save({versions, opts}, version, schema) do
-    notify(opts, {:save, version, schema})
-    {:ok, {[{version, schema} | versions], opts}}
+  def save({versions, opts}, version, schema, stmts) do
+    notify(opts, {:save, version, schema, stmts})
+    {:ok, {[{version, schema, stmts} | versions], opts}}
   end
 
   @impl true

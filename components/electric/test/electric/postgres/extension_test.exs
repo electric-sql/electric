@@ -153,7 +153,11 @@ defmodule Electric.Postgres.ExtensionTest do
             Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
           )
 
-        assert :ok = Extension.save_schema(conn, version, schema)
+        assert :ok =
+                 Extension.save_schema(conn, version, schema, [
+                   "CREATE TABLE first (id uuid PRIMARY KEY);"
+                 ])
+
         assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
 
         schema =
@@ -163,7 +167,12 @@ defmodule Electric.Postgres.ExtensionTest do
           )
 
         version = "20230405171534_2"
-        assert :ok = Extension.save_schema(conn, version, schema)
+
+        assert :ok =
+                 Extension.save_schema(conn, version, schema, [
+                   "ALTER TABLE first ADD value text;"
+                 ])
+
         assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
       end,
       cxt
@@ -185,7 +194,11 @@ defmodule Electric.Postgres.ExtensionTest do
             Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
           )
 
-        assert :ok = Extension.save_schema(conn, version, schema)
+        assert :ok =
+                 Extension.save_schema(conn, version, schema, [
+                   "CREATE TABLE first (id uuid PRIMARY KEY);"
+                 ])
+
         assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
         assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
 
@@ -196,9 +209,54 @@ defmodule Electric.Postgres.ExtensionTest do
           )
 
         version = "20230405171534_2"
-        assert :ok = Extension.save_schema(conn, version, schema)
+
+        assert :ok =
+                 Extension.save_schema(conn, version, schema, [
+                   "ALTER TABLE first ADD value text;"
+                 ])
+
         assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
         assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
+      end,
+      cxt
+    )
+  end
+
+  test "we can retrieve the sql of applied migrations", cxt do
+    migrations = [
+      {"0001",
+       [
+         "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);",
+         "CREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);",
+         "CREATE INDEX a_idx ON a (value);"
+       ]},
+      {"0002", ["CREATE TABLE c (id uuid PRIMARY KEY, value text NOT NULL);"]},
+      {"0003", ["CREATE TABLE d (id uuid PRIMARY KEY, value text NOT NULL);"]},
+      {"0004", ["CREATE TABLE e (id uuid PRIMARY KEY, value text NOT NULL);"]}
+    ]
+
+    tx(
+      fn conn ->
+        migrate(conn)
+
+        _schema =
+          Enum.reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
+            schema =
+              Enum.reduce(stmts, schema, fn stmt, schema ->
+                schema_update(
+                  schema,
+                  stmt
+                )
+              end)
+
+            assert :ok = Extension.save_schema(conn, version, schema, stmts)
+            schema
+          end)
+
+        assert {:ok, ^migrations} = Extension.migration_history(conn)
+
+        assert {:ok, versions} = Extension.migration_history(conn, "0002")
+        assert versions == Enum.slice(migrations, 2..-1)
       end,
       cxt
     )

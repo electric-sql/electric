@@ -152,16 +152,16 @@ defmodule Electric.Satellite.SerializationTest do
     end
 
     defp migrate_schema(tx, version, cxt) do
-      schema =
-        Enum.reduce(tx.changes, Schema.new(), fn
+      {stmts, schema} =
+        Enum.flat_map_reduce(tx.changes, Schema.new(), fn
           %{relation: {"electric", "ddl_commands"}, record: %{"query" => sql}}, schema ->
-            schema_update(schema, sql)
+            {[sql], schema_update(schema, sql)}
 
           _op, schema ->
-            schema
+            {[], schema}
         end)
 
-      assert {:ok, _} = SchemaCache.save(cxt.origin, version, schema)
+      assert {:ok, _} = SchemaCache.save(cxt.origin, version, schema, stmts)
 
       tx
     end

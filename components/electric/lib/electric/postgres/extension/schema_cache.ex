@@ -58,8 +58,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def save(origin, version, schema) do
-    GenServer.call(name(origin), {:save, version, schema})
+  def save(origin, version, schema, stmts) do
+    GenServer.call(name(origin), {:save, version, schema, stmts})
   end
 
   @impl SchemaLoader
@@ -119,8 +119,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.load(state.backend, version), state}
   end
 
-  def handle_call({:save, version, schema}, _from, state) do
-    {:ok, backend} = SchemaLoader.save(state.backend, version, schema)
+  def handle_call({:save, version, schema, stmts}, _from, state) do
+    {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
     {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
   end
 

@@ -15,7 +15,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
   @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
-  @callback save(state(), version(), Schema.t()) :: {:ok, state()}
+  @callback save(state(), version(), Schema.t(), [String.t()]) :: {:ok, state()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
@@ -46,8 +46,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
     module.load(state, version)
   end
 
-  def save({module, state}, version, schema) do
-    with {:ok, state} <- module.save(state, version, schema) do
+  def save({module, state}, version, schema, stmts) do
+    with {:ok, state} <- module.save(state, version, schema, stmts) do
       {:ok, {module, state}}
     end
   end
@@ -91,8 +91,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def save(conn, version, schema) do
-    with :ok <- Extension.save_schema(conn, version, schema) do
+  def save(conn, version, schema, stmts) do
+    with :ok <- Extension.save_schema(conn, version, schema, stmts) do
       {:ok, conn}
     end
   end
