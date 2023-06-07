@@ -8,8 +8,6 @@ services:
       service: vaxine
     environment:
       NODE_NAME: "vaxine@vaxine_1"
-    volumes:
-      - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
     ports:
       - "8087:8087"
       - "8088:8088"
@@ -20,8 +18,6 @@ services:
       service: vaxine
     environment:
       NODE_NAME: "vaxine@vaxine_2"
-    volumes:
-      - ${VAXINE_VOLUME}/vaxine_2:/vaxine-data
     ports:
       - "8089:8087"
       - "8090:8088"
@@ -32,8 +28,6 @@ services:
       service: vaxine
     environment:
       NODE_NAME: "vaxine@vaxine_3"
-    volumes:
-      - ${VAXINE_VOLUME}/vaxine_3:/vaxine-data
     ports:
       - "8091:8087"
       - "8092:8088"
