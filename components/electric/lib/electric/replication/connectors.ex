@@ -91,12 +91,14 @@ defmodule Electric.Replication.Connectors do
 
   @spec get_replication_opts(config()) :: replication_opts()
   def get_replication_opts(config) do
+    origin = origin(config)
+
     config
     |> Keyword.fetch!(:replication)
     |> Map.new()
     |> Map.put(:slot, Extension.slot_name())
     |> Map.put(:publication, Extension.publication_name())
-    |> Map.put(:subscription, Extension.subscription_name())
+    |> Map.put(:subscription, to_string(origin))
   end
 
   @spec get_connection_opts(config()) :: connection_opts()

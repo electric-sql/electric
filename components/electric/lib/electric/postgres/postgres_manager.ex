@@ -193,7 +193,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   def initialize_postgres(%State{origin: origin, repl_config: repl_config} = state) do
     publication = Map.fetch!(repl_config, :publication)
-    slot_name = Map.fetch!(repl_config, :slot)
     subscription = Map.fetch!(repl_config, :subscription)
     electric_connection = Map.fetch!(repl_config, :electric_connection)
 
@@ -207,21 +206,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Client.with_conn(conn_config, fn conn ->
       with {:ok, _versions} <- Extension.migrate(conn),
-           # {:ok, _system_id} <- Client.get_system_id(conn),
-           # {:ok, publication} <-
-           #   Client.create_publication(conn, publication, publication_tables),
-           # {:ok, _} <- Client.create_slot(conn, slot_name),
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
            tables <- Client.query_replicated_tables(conn, publication),
-           migrations <- Client.query_migration_table(conn),
            :ok <- Client.close(conn) do
         tables
         |> Enum.map(&Map.delete(&1, :columns))
         |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
 
         Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
-        SchemaRegistry.put_migration_tables(origin, migrations)
 
         Logger.info("Successfully initialized origin #{origin}")
 

@@ -87,6 +87,8 @@ BEGIN
     _quoted_name := format('%I.%I', _schema, _table);
     _oid := (SELECT _quoted_name::regclass);
 
+    RAISE NOTICE 'Electrify table %', _quoted_name;
+
     IF NOT EXISTS (SELECT pc.oid FROM pg_class pc WHERE pc.oid = _oid AND pc.relkind = 'r') THEN
         RAISE EXCEPTION '% is not an ordinary table', _quoted_name;
     END IF;
