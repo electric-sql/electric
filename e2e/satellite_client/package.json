@@ -10,8 +10,8 @@
     "build": "npx prisma generate && npm run fix_client && rm -rf ./dist && tsmodule build",
     "run_node": "node dist/client.js",
     "test": "ava",
-    "pretest": "yarn build",
-    "prepublishOnly": "yarn test",
+    "pretest": "npm run build",
+    "prepublishOnly": "npm run test",
     "lint": "eslint src --fix"
   },
   "dependencies": {
