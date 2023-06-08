@@ -49,12 +49,32 @@ export type NarrowUpdateManyData<T> = Removed<
   'set' | 'increment' | 'decrement' | 'multiply' | 'divide'
 >
 
-/**
- * Narrows select types to remove the unsupported `_count` and `cursor` properties.
- */
-export type NarrowSelect<T> = Removed<T, '_count' | 'cursor'>
+type StripPrimitives<T> = T extends object ? T : never // strips primitives from union types
+type OnlyPrimitives<T> = StripPrimitives<T> extends never ? T : never // contains only primitives if nothing is left after stripping all primitives
+type StripRelationFields<T> = T extends object // filter out object properties
+  ? T extends (infer V)[] // if it is an array of type V[]
+    ? StripRelationFields<V>[] // recursively filter out object properties in the type of the elements V
+    : {
+        // otherwise it is an object
+        // remove properties whose type contains an object,
+        // e.g. author?: boolean | UserArgs
+        //      is a relation property and UserArgs is an object,
+        //      so we remove such properties
+        [K in keyof T]: OnlyPrimitives<T[K]>
+      }
+  : T
 
-export type NarrowInclude<T> = NarrowSelect<T>
+/**
+ * Narrow include types to remove the unsupported `_count` and `cursor` properties.
+ */
+export type NarrowInclude<T> = Removed<T, '_count' | 'cursor'>
+
+/**
+ * Narrows select types to remove the unsupported `_count` and `cursor` properties
+ * but also related fields as we do not yet support selecting related objects.
+ */
+export type NarrowSelect<T> = NarrowInclude<StripRelationFields<T>>
+// TODO: remove `StripRelationFields` once we support selecting related objects
 
 /**
  * Narrows where types by removing the unsupported relational filters
@@ -65,10 +85,10 @@ export type NarrowInclude<T> = NarrowSelect<T>
 export type NarrowWhere<T> = RemovedType<
   Removed<T, 'every' | 'some' | 'none'>,
   'mode',
-  'default' | 'insensitive' | 'undefined'
+  'default' | 'insensitive' | undefined
 >
 
-export type NarrowOrderBy<T> = Removed<T, '_count'>
+export type NarrowOrderBy<T> = StripRelationFields<T>
 
 /**
  * Narrows the type of create arguments to remove unsupported properties.
