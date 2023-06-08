@@ -42,7 +42,10 @@ defmodule Electric.Postgres.CachedWal.Producer do
     starting_wal_position =
       case Keyword.fetch(options, :start_subscription) do
         {:ok, :eof} -> raise "This producer doesn't currently support subscription starting from the tip of the stream"
-        {:ok, %Lsn{segment: 0, offset: 0}} -> get_first_lsn(state.cached_wal_module)
+        # TODO: Since we're always calling "next" against the ETS, the segment with initial position is never sent,
+        #       so we need a value "before the first" - which is a 0. I'm not sure I like this assumption, maybe it's better to
+        #       encode that into a special function on the `CachedWal.Api` to avoid assumptions outside of those modules.
+        {:ok, %Lsn{segment: 0, offset: 0}} -> {:ok, 0}
         {:ok, lsn} -> CachedWal.Api.get_wal_position_from_lsn(state.cached_wal_module, lsn)
         :error -> {:ok, 0}
       end
@@ -78,14 +81,6 @@ defmodule Electric.Postgres.CachedWal.Producer do
       :latest ->
         CachedWal.Api.request_notification(state.cached_wal_module, state.current_position)
         {:noreply, Enum.reverse(events), state}
-    end
-  end
-
-  defp get_first_lsn(module) do
-    case CachedWal.Api.next_segment(module, 0) do
-      :latest -> {:ok, 0}
-      {:error, :lsn_too_old} -> raise "Can't happen with current CachedWal implementation"
-      {:ok, _, wal_pos} -> {:ok, wal_pos}
     end
   end
 end
