@@ -18,6 +18,8 @@ services:
     extends:
       file: ../services_templates.yaml
       service: electric
+    ports:
+      - "5050:5050"
     environment:
       VAXINE_HOST: vaxine_1
       ELECTRIC_HOST: electric_1

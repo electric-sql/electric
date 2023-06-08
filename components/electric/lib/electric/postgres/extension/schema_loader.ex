@@ -7,10 +7,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type name() :: binary()
   @type schema() :: name()
   @type oid() :: integer()
+  @type ddl() :: String.t()
   @type rel_type() :: :table | :index | :view | :trigger
   @type oid_result() :: {:ok, integer()} | {:error, term()}
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
+  @type migration() :: {version(), [ddl(), ...]}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
@@ -19,6 +21,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
+  @callback migration_history(state(), version() | nil) :: {:ok, [migration()]} | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -63,6 +66,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   def refresh_subscription({module, state}, name) do
     module.refresh_subscription(state, name)
   end
+
+  def migration_history({module, state}, version) do
+    module.migration_history(state, version)
+  end
 end
 
 defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
@@ -75,9 +82,17 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @impl true
   def connect(conn_config, _opts) do
-    conn_config
-    |> Connectors.get_connection_opts(replication: false)
-    |> :epgsql.connect()
+    # NOTE: use `__connection__: conn` in tests to pass an existing connection 
+    #       to this backend
+    case Keyword.fetch(conn_config, :__connection__) do
+      {:ok, conn} ->
+        {:ok, conn}
+
+      :error ->
+        conn_config
+        |> Connectors.get_connection_opts(replication: false)
+        |> :epgsql.connect()
+    end
   end
 
   @impl true
@@ -158,5 +173,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       error ->
         error
     end
+  end
+
+  @impl true
+  def migration_history(conn, version) do
+    Extension.migration_history(conn, version)
   end
 end

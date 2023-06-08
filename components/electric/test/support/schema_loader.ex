@@ -71,6 +71,22 @@ defmodule Electric.Postgres.MockSchemaLoader do
     :ok
   end
 
+  @impl true
+  def migration_history({versions, opts}, version) do
+    notify(opts, {:migration_history, version})
+
+    migrations =
+      case version do
+        nil ->
+          for {v, _schema, stmts} <- versions, do: {v, stmts}
+
+        version when is_binary(version) ->
+          for {v, _schema, stmts} <- versions, v > version, do: {v, stmts}
+      end
+
+    {:ok, migrations}
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end

@@ -1,6 +1,7 @@
 defmodule Electric.Postgres do
   alias PgQuery
 
+  @spec parse!(String.t()) :: [struct()] | no_return()
   def parse!(sql) do
     sql
     |> PgQuery.parse!()
