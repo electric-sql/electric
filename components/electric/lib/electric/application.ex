@@ -11,6 +11,12 @@ defmodule Electric.Application do
 
     auth_provider = Electric.Satellite.Auth.provider()
 
+    postgres_connector_opts =
+      case Application.get_env(:electric, Electric.Replication.Connectors, []) do
+        [{name, config}] -> Keyword.put(config, :origin, to_string(name))
+        [] -> []
+      end
+
     children = [
       Electric.Telemetry,
       Electric.Postgres.SchemaRegistry,
@@ -21,7 +27,8 @@ defmodule Electric.Application do
       Electric.Satellite.ClientManager,
       Electric.Satellite.WsServer.child_spec(
         port: sqlite_server_port(),
-        auth_provider: auth_provider
+        auth_provider: auth_provider,
+        pg_connector_opts: postgres_connector_opts
       ),
       Electric.Replication.Connectors
     ]

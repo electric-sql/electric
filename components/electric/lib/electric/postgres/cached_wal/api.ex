@@ -2,7 +2,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @moduledoc """
   Behavior for accessing cached wal
   """
-  @type lsn :: Electric.Replication.Lsn
+  @type lsn :: Electric.Postgres.Lsn.t()
 
   @typedoc "Position in the cached write-ahead log"
   @type wal_pos :: term()
@@ -13,10 +13,17 @@ defmodule Electric.Postgres.CachedWal.Api do
   @typedoc "Wal segment, where segment is just an abstraction term within Electric"
   @type segment :: Electric.Replication.Changes.Transaction.t()
 
+  @callback get_current_lsn() :: {:ok, lsn} | :empty_db | {:error, term}
   @callback get_wal_position_from_lsn(lsn()) :: {:ok, wal_pos()} | {:error, term()}
-  @callback next_segment(wal_pos()) :: {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
+  @callback next_segment(wal_pos()) ::
+              {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
   @callback request_notification(wal_pos()) :: {:ok, await_ref()} | {:error, term()}
   @callback cancel_notification_request(await_ref()) :: :ok
+
+  @spec get_current_lsn(module()) :: {:ok, lsn} | :empty_db | {:error, term}
+  def get_current_lsn(module) do
+    module.get_current_lsn()
+  end
 
   @doc """
   Convert a "public" LSN position to an opaque pointer for the cached WAL.
@@ -39,7 +46,8 @@ defmodule Electric.Postgres.CachedWal.Api do
   (i.e. out of the cached window), in which case an error will be returned, and the client is expected
   to query source database directly to catch up.
   """
-  @spec next_segment(module(), wal_pos()) :: {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
+  @spec next_segment(module(), wal_pos()) ::
+          {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
   def next_segment(module, wal_pos) do
     module.next_segment(wal_pos)
   end

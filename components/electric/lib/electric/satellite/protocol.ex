@@ -95,7 +95,8 @@ defmodule Electric.Satellite.Protocol do
               ping_tref: nil,
               transport: nil,
               socket: nil,
-              auth_provider: nil
+              auth_provider: nil,
+              pg_connector_opts: []
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -108,7 +109,8 @@ defmodule Electric.Satellite.Protocol do
             socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
-            auth_provider: Electric.Satellite.Auth.provider()
+            auth_provider: Electric.Satellite.Auth.provider(),
+            pg_connector_opts: Keyword.t()
           }
   end
 
@@ -208,8 +210,16 @@ defmodule Electric.Satellite.Protocol do
 
       Metrics.satellite_replication_event(%{started: 1})
 
-      out_rep = initiate_subscription(state.client_id, lsn, out_rep)
-      {[%SatInStartReplicationResp{}], %State{state | out_rep: out_rep}}
+      state =
+        if lsn == %Lsn{segment: 0, offset: 0} do
+          send(self(), :perform_initial_sync_and_subscribe)
+          state
+        else
+          out_rep = initiate_subscription(state.client_id, lsn, out_rep)
+          %State{state | out_rep: out_rep}
+        end
+
+      {[%SatInStartReplicationResp{}], state}
     else
       error ->
         Logger.warn("Bad start replication options: #{inspect(error)}")
