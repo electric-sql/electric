@@ -9,6 +9,14 @@ defmodule Electric.Application do
   def start(_type, _args) do
     auth_provider = Electric.Satellite.Auth.provider()
 
+    # NOTE(alco): Intentionally making the assumption here that there's only a single connector configured.
+    # With Vaxine and multi-master PG replication going away, this is going to become the new reality soon.
+    postgres_connector_opts =
+      case Application.get_env(:electric, Electric.Replication.Connectors, []) do
+        [{name, config}] -> Keyword.put(config, :origin, to_string(name))
+        [] -> []
+      end
+
     children = [
       Electric.Telemetry,
       Electric.Postgres.OidDatabase,
@@ -19,7 +27,8 @@ defmodule Electric.Application do
       Electric.Replication.Connectors,
       Electric.Satellite.WsServer.child_spec(
         port: sqlite_server_port(),
-        auth_provider: auth_provider
+        auth_provider: auth_provider,
+        pg_connector_opts: postgres_connector_opts
       ),
       Electric.PostgresServer.child_spec(port: postgres_server_port())
     ]

@@ -44,7 +44,8 @@ defmodule Electric.Satellite.WsServerTest do
       Electric.Satellite.WsServer.start_link(
         name: :ws_test,
         port: port,
-        auth_provider: Auth.provider()
+        auth_provider: Auth.provider(),
+        pg_connector_opts: []
       )
 
     server_id = Electric.regional_id()
