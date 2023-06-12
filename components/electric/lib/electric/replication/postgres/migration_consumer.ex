@@ -212,8 +212,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     SchemaLoader.load(state.loader)
   end
 
-  # TODO: include the stmts in the saved schema row
-  # https://linear.app/electric-sql/issue/VAX-650/record-migration-alongside-final-schema
   defp save_schema(state, version, schema, stmts) do
     Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
     {:ok, loader} = SchemaLoader.save(state.loader, version, schema, stmts)

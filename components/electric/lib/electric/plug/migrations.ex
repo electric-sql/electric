@@ -71,15 +71,18 @@ defmodule Electric.Plug.Migrations do
 
   defp migrations_zipfile(migrations, dialect) do
     file_list =
-      Enum.flat_map(migrations, fn {version, stmts} ->
-        sql = Enum.map(stmts, &Electric.Postgres.Dialect.to_sql(&1, dialect))
+      Enum.map(migrations, fn {version, stmts} ->
+        sql =
+          stmts
+          |> Enum.map(&Electric.Postgres.Dialect.to_sql(&1, dialect))
+          |> Enum.join("\n\n")
 
-        [
-          {
-            version |> Path.join("migration.sql") |> to_charlist(),
-            Enum.join(sql, "\n\n")
-          }
-        ]
+        filename =
+          version
+          |> Path.join("migration.sql")
+          |> to_charlist()
+
+        {filename, sql}
       end)
 
     with {:ok, {_, zip}} <- :zip.create('migrations.zip', file_list, [:memory]) do
