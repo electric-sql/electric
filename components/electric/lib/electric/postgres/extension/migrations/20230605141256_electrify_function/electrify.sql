@@ -52,7 +52,6 @@ DECLARE
     _table text;
     _quoted_name text;
     _ident text[];
-    _sql text;
     _oid regclass;
     _create_sql text;
 BEGIN
@@ -93,21 +92,18 @@ BEGIN
         RAISE EXCEPTION '% is not an ordinary table', _quoted_name;
     END IF;
 
+    EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
+
     IF NOT EXISTS (
         SELECT pr.oid FROM pg_publication_rel pr
         INNER JOIN pg_publication pp ON pr.prpubid = pp.oid
         WHERE pp.pubname = '<%= publication_name %>'
         AND pr.prrelid = _oid
         ) THEN
-        _sql := format('<%= publication_sql %>;', _schema, _table);
-
-        EXECUTE _sql;
+        EXECUTE format('<%= publication_sql %>;', _schema, _table);
     ELSE
         RAISE WARNING 'table %.% is already electrified', _schema, _table;
     END IF;
-
-    _sql := format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
-    EXECUTE _sql;
 
     INSERT INTO <%= electrified_table %> (schema_name, table_name, oid)
         VALUES (_schema, _table, _oid) 
@@ -117,7 +113,7 @@ BEGIN
     -- insert the required ddl into the migrations table
     SELECT <%= schema %>.ddlx_create(_oid) INTO _create_sql; 
 
-    RAISE WARNING '%', _create_sql;
+    RAISE DEBUG '%', _create_sql;
 
     PERFORM <%= schema %>.capture_ddl(_create_sql);
 END;
@@ -156,12 +152,10 @@ DECLARE
     _capture bool := false;
     _table_id int8;
 BEGIN
-    RAISE WARNING 'command_end_handler:: start';
+    RAISE DEBUG 'command_end_handler:: start';
 
     FOR _cmd IN SELECT * FROM pg_event_trigger_ddl_commands() 
     LOOP
-        RAISE WARNING '% // classid: %; objid: %; objsubid: %, object_type: %, object_identity: %',
-            _cmd.command_tag, _cmd.classid, _cmd.objid, _cmd.objsubid, _cmd.object_type, _cmd.object_identity; 
             -- don't capture create table events, those are inserted by the electrify call
         CASE 
             WHEN _cmd.object_type = 'table' THEN
@@ -204,7 +198,7 @@ DECLARE
 BEGIN
     FOR _cmd IN SELECT * FROM pg_event_trigger_dropped_objects() 
     LOOP
-        RAISE WARNING 'DROP // classid: %; objid: %; objsubid: %, object_type: %',
+        RAISE DEBUG 'DROP // classid: %; objid: %; objsubid: %, object_type: %',
             _cmd.classid, _cmd.objid, _cmd.objsubid, _cmd.object_type; 
         CASE 
             WHEN _cmd.object_type = 'table' THEN
