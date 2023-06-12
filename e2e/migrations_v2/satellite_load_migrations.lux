@@ -40,7 +40,7 @@
 
 [shell satellite_2]
     -$fail_pattern
-    [invoke setup_client 2 "electric_1" 5133 $migrations]
+    [invoke setup_client_with_migrations 2 "electric_1" 5133 $migrations]
 
 [invoke log "Both satellites connected"]
 
