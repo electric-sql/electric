@@ -17,7 +17,7 @@
     [invoke connect_to_electric $electric $port $migrations]
 [endmacro]
 
-[macro setup_client satellite_number electric port migrations]
+[macro setup_client satellite_number electric port]
     [invoke setup_client_with_migrations satellite_number electric port "[]"]
 [endmacro]
 

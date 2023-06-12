@@ -21,17 +21,13 @@
     [
       {
         statements: [
-          'CREATE TABLE IF NOT EXISTS foo (
-             bar TEXT PRIMARY KEY NOT NULL
-           );'
+          'CREATE TABLE IF NOT EXISTS foo ( bar TEXT PRIMARY KEY NOT NULL );'
         ],
         version: '1'
       },
       {
         statements: [
-          'CREATE TABLE IF NOT EXISTS bar (
-             baz TEXT PRIMARY KEY NOT NULL
-           );'
+          'CREATE TABLE IF NOT EXISTS bar ( baz TEXT PRIMARY KEY NOT NULL );'
         ],
         version: '2'
       }
