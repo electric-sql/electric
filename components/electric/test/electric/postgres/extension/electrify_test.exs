@@ -229,7 +229,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
       fn conn ->
         migrate(conn)
 
-        query = """
+        relreplident = """
         SELECT relreplident FROM pg_class WHERE relname = $1;
         """
 
@@ -247,7 +247,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
 
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        assert {:ok, _cols, [{?f}]} = :epgsql.equery(conn, query, ["buttercup"])
+        assert {:ok, _cols, [{?f}]} = :epgsql.equery(conn, relreplident, ["buttercup"])
       end,
       cxt
     )

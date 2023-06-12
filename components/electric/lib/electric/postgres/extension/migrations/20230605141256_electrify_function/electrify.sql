@@ -1,10 +1,14 @@
 -- vim: set shiftwidth=4:tabstop=4
--- hard to manage weird table names here.
--- quick guide for future documentation:
--- 1. if you don't have spaces or require case-sensitivity you can just pass the schema.tablename as a string:
---    `CALL electric.electrify('public.my_table')`
--- 2. if you do have spaces (god help you) then you need to quote things within the param string
---    `CALL electric.electrify('"my schema"."my table"')`
+--
+-- you can call electrify using one of these variants:
+--
+-- 1. `CALL electric.electrify('my_table')`
+-- 2. `CALL electric.electrify('my_schema', 'my_table')`
+-- 3. `CALL electric.electrify('my_schema.my_table')`
+--
+-- the first two formats also support special characters in the table/schema name:
+--
+-- 4. `CALL electric.electrify('My Schema', 'My Table')`
 
 CREATE OR REPLACE FUNCTION <%= schema %>.__pg_version() RETURNS integer AS $function$
     SELECT setting::int FROM pg_settings WHERE name = 'server_version_num'
