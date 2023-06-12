@@ -12,7 +12,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type oid_result() :: {:ok, integer()} | {:error, term()}
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
-  @type migration() :: {version(), [ddl(), ...]}
+  @type migration() :: {version(), Schema.t(), [ddl(), ...]}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}

@@ -29,8 +29,8 @@ defmodule Electric.Postgres.Extension do
   @schema_table electric.("schema")
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
-  @migration_history_query ~s(SELECT "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
-  @partial_migration_history_query ~s(SELECT "version", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
+  @migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
+  @partial_migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
   @schema_version_query ~s(SELECT "schema", "version" FROM #{@schema_table} WHERE "version" = $1 LIMIT 1)
   # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem 
@@ -109,16 +109,22 @@ defmodule Electric.Postgres.Extension do
   def migration_history(conn, after_version \\ nil)
 
   def migration_history(conn, nil) do
-    with {:ok, [_, _], rows} <- :epgsql.equery(conn, @migration_history_query, []) do
-      {:ok, rows}
+    with {:ok, [_, _, _], rows} <- :epgsql.equery(conn, @migration_history_query, []) do
+      {:ok, load_migrations(rows)}
     end
   end
 
   def migration_history(conn, after_version) when is_binary(after_version) do
-    with {:ok, [_, _], rows} <-
+    with {:ok, [_, _, _], rows} <-
            :epgsql.equery(conn, @partial_migration_history_query, [after_version]) do
-      {:ok, rows}
+      {:ok, load_migrations(rows)}
     end
+  end
+
+  defp load_migrations(rows) do
+    Enum.map(rows, fn {version, schema_json, stmts} ->
+      {version, Proto.Schema.json_decode!(schema_json), stmts}
+    end)
   end
 
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do

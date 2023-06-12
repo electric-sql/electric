@@ -253,9 +253,14 @@ defmodule Electric.Postgres.ExtensionTest do
             schema
           end)
 
-        assert {:ok, ^migrations} = Extension.migration_history(conn)
+        assert {:ok, versions} = Extension.migration_history(conn)
+
+        assert migrations == Enum.map(versions, fn {v, _, s} -> {v, s} end)
 
         assert {:ok, versions} = Extension.migration_history(conn, "0002")
+
+        versions = Enum.map(versions, fn {v, _, s} -> {v, s} end)
+
         assert versions == Enum.slice(migrations, 2..-1)
       end,
       cxt

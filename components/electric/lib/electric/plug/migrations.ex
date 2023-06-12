@@ -1,5 +1,6 @@
 defmodule Electric.Plug.Migrations do
   use Plug.Router
+  use Electric.Satellite.Protobuf
 
   alias Electric.Postgres.Extension.SchemaCache
 
@@ -71,22 +72,57 @@ defmodule Electric.Plug.Migrations do
 
   defp migrations_zipfile(migrations, dialect) do
     file_list =
-      Enum.map(migrations, fn {version, stmts} ->
+      Enum.flat_map(migrations, fn {version, schema, stmts} ->
+        ops = translate_stmts(version, schema, stmts, dialect)
+
         sql =
-          stmts
-          |> Enum.map(&Electric.Postgres.Dialect.to_sql(&1, dialect))
+          ops
+          |> Enum.flat_map(fn op -> Enum.map(op.stmts, & &1.sql) end)
           |> Enum.join("\n\n")
 
-        filename =
-          version
-          |> Path.join("migration.sql")
-          |> to_charlist()
+        metadata =
+          ops
+          |> Enum.map(&table_metadata_proto/1)
+          |> then(
+            &%{
+              version: version,
+              ops: &1,
+              format: "SatOpMigrate",
+              protocol_version: PB.get_long_proto_vsn()
+            }
+          )
+          |> Jason.encode!()
 
-        {filename, sql}
+        [
+          {zip_filename(version, "migration.sql"), sql},
+          {zip_filename(version, "metadata.json"), metadata}
+        ]
       end)
 
     with {:ok, {_, zip}} <- :zip.create('migrations.zip', file_list, [:memory]) do
       {:ok, zip}
     end
+  end
+
+  defp translate_stmts(version, schema, stmts, dialect) do
+    Enum.flat_map(stmts, fn stmt ->
+      {:ok, msgs, _relations} =
+        Electric.Postgres.Replication.migrate(schema, version, stmt, dialect)
+
+      msgs
+    end)
+  end
+
+  defp table_metadata_proto(table_proto) do
+    table_proto
+    |> SatOpMigrate.encode!()
+    |> IO.iodata_to_binary()
+    |> Base.encode64()
+  end
+
+  defp zip_filename(version, filename) do
+    version
+    |> Path.join(filename)
+    |> to_charlist()
   end
 end

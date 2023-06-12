@@ -78,10 +78,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
     migrations =
       case version do
         nil ->
-          for {v, _schema, stmts} <- versions, do: {v, stmts}
+          versions
 
         version when is_binary(version) ->
-          for {v, _schema, stmts} <- versions, v > version, do: {v, stmts}
+          for {v, schema, stmts} <- versions, v > version, do: {v, schema, stmts}
       end
 
     {:ok, migrations}
