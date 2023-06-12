@@ -2,8 +2,7 @@ import { Statement } from '../util'
 
 export { BundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
-export { parseMetadata, makeMigration } from './builder'
-export type { MetaData } from './builder'
+export { loadMigrations } from './builder'
 
 export interface Migration {
   statements: string[]
