@@ -1,0 +1,66 @@
+[doc Test that migrations are loaded when Satellite starts]
+
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global node=>]
+
+[include shared.luxinc]
+[include satellite.luxinc]
+
+#===============================================================================
+# Setup test
+#===============================================================================
+
+[invoke setup]
+
+#===============================================================================
+# Beginning of the actual test
+#===============================================================================
+
+[global migrations=
+    """
+    [
+      {
+        statements: [
+          'CREATE TABLE IF NOT EXISTS foo (
+             bar TEXT PRIMARY KEY NOT NULL
+           );'
+        ],
+        version: '1'
+      },
+      {
+        statements: [
+          'CREATE TABLE IF NOT EXISTS bar (
+             baz TEXT PRIMARY KEY NOT NULL
+           );'
+        ],
+        version: '2'
+      }
+    ]
+    """]
+
+[shell satellite_1]
+    -$fail_pattern
+    [invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations]
+
+[shell satellite_2]
+    -$fail_pattern
+    [invoke setup_client 2 "electric_1" 5133 $migrations]
+
+[invoke log "Both satellites connected"]
+
+#==============================================
+# Verify that Satellite applied the migrations
+#==============================================
+
+[shell satellite_1]
+    [invoke log "Verifying that migrations have been loaded on satellite_1"]
+    [invoke node_await_table "foo"]
+    [invoke node_await_table "bar"]
+
+[shell satellite_2]
+    [invoke log "Verifying that migrations have been loaded on satellite_2"]
+    [invoke node_await_table "foo"]
+    [invoke node_await_table "bar"]
+
+[cleanup]
+  [invoke teardown]
