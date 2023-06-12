@@ -10,9 +10,7 @@ node_modules:
 # By default we would like to build in docker, as we intend
 # to run tests with Satellite in it
 build:
-	make -C ${PROJECT_ROOT}/generator build
-	make -C ${PROJECT_ROOT}/clients/typescript build-dev
-	make docker-make MK_TARGET=local-build MK_DOCKER=${NODEJS_DOCKER}
+	docker build -f ./Dockerfile -t satellite_client:local ${PROJECT_ROOT}
 
 local-build: node_modules
 	yarn upgrade electric-sql

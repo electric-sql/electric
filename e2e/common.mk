@@ -101,8 +101,7 @@ start_elixir_test_%:
 
 start_satellite_client_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
-		--rm --entrypoint=/bin/bash \
-		--workdir=${E2E_ROOT}/satellite_client \
+		--rm \
 		satellite_client_$*
 
 VAXINE_BRANCH?=main

@@ -28,11 +28,13 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-          cache: yarn
-          cache-dependency-path: clients/typescript/yarn.lock
+          cache: pnpm
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}

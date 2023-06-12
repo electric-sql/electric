@@ -24,7 +24,7 @@ export class ExtendedDMMFFieldBase
   readonly isId: DMMF.Field['isId']
   readonly isReadOnly: DMMF.Field['isReadOnly']
   readonly type: DMMF.Field['type']
-  readonly dbNames?: DMMF.Field['dbNames']
+  readonly dbName?: DMMF.Field['dbName']
   readonly isGenerated: DMMF.Field['isGenerated']
   readonly isUpdatedAt: DMMF.Field['isUpdatedAt']
   readonly hasDefaultValue: DMMF.Field['hasDefaultValue']
@@ -60,7 +60,7 @@ export class ExtendedDMMFFieldBase
     this.isId = field.isId
     this.isReadOnly = field.isReadOnly
     this.type = field.type
-    this.dbNames = field.dbNames
+    this.dbName = field.dbName
     this.isGenerated = field.isGenerated
     this.isUpdatedAt = field.isUpdatedAt
     this.hasDefaultValue = field.hasDefaultValue

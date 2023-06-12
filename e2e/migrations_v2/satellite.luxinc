@@ -13,7 +13,6 @@
 
 [macro setup_client satellite_number electric port]
     [invoke start_satellite $satellite_number]
-    !yarn node
     ?$node
     [invoke connect_to_electric $electric $port]
 [endmacro]

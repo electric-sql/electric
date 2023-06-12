@@ -1,8 +1,8 @@
 deps:
-	yarn install --frozen-lockfile
+	pnpm install --frozen-lockfile
 
 build: deps
-	yarn build
+	pnpm run build
 
 tests:
-	CI=true yarn test
+	CI=true pnpm run test

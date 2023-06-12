@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
-import jwt from 'jsonwebtoken'
 import { ElectricConfig } from 'electric-sql'
 import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
+import jwt from 'jsonwebtoken'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
