@@ -28,12 +28,14 @@ defmodule Electric.Postgres.Extension do
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
 
-  @all_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "version" ASC)
+  @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
+  @migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
+  @partial_migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
   @schema_version_query ~s(SELECT "schema", "version" FROM #{@schema_table} WHERE "version" = $1 LIMIT 1)
   # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem 
   # that will go away once we stop replicating all tables by default)
-  @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema") VALUES ($1, $2) ON CONFLICT ("id") DO NOTHING]
+  @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema", "migration_ddl") VALUES ($1, $2, $3) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
   @event_triggers %{ddl_command_end: "#{@schema}_event_trigger_ddl_end"}
 
@@ -88,19 +90,41 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  def save_schema(conn, version, %Proto.Schema{} = schema) do
+  def save_schema(conn, version, %Proto.Schema{} = schema, stmts) do
     with {:ok, iodata} <- Proto.Schema.json_encode(schema),
          json = IO.iodata_to_binary(iodata),
-         {:ok, n} when n in [0, 1] <- :epgsql.equery(conn, @save_schema_query, [version, json]) do
+         {:ok, n} when n in [0, 1] <-
+           :epgsql.equery(conn, @save_schema_query, [version, json, stmts]) do
       Logger.info("Saved schema version #{version}")
       :ok
     end
   end
 
   def list_schema_versions(conn) do
-    with {:ok, [_, _], rows} <- :epgsql.equery(conn, @all_schema_query, []) do
+    with {:ok, [_, _, _], rows} <- :epgsql.equery(conn, @all_schema_query, []) do
       {:ok, rows}
     end
+  end
+
+  def migration_history(conn, after_version \\ nil)
+
+  def migration_history(conn, nil) do
+    with {:ok, [_, _, _], rows} <- :epgsql.equery(conn, @migration_history_query, []) do
+      {:ok, load_migrations(rows)}
+    end
+  end
+
+  def migration_history(conn, after_version) when is_binary(after_version) do
+    with {:ok, [_, _, _], rows} <-
+           :epgsql.equery(conn, @partial_migration_history_query, [after_version]) do
+      {:ok, load_migrations(rows)}
+    end
+  end
+
+  defp load_migrations(rows) do
+    Enum.map(rows, fn {version, schema_json, stmts} ->
+      {version, Proto.Schema.json_decode!(schema_json), stmts}
+    end)
   end
 
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do

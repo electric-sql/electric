@@ -42,6 +42,10 @@ defmodule Electric.Postgres.Dialect.SQLite do
   @impl true
   def to_sql(stmt, opts \\ [])
 
+  def to_sql(stmts, opts) when is_list(stmts) do
+    Enum.map(stmts, &to_sql(&1, opts))
+  end
+
   def to_sql(%Pg.CreateStmt{} = stmt, opts) do
     %{if_not_exists: ine} = stmt
     pretty = Keyword.get(opts, :pretty, true)

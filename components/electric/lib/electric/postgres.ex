@@ -1,6 +1,11 @@
 defmodule Electric.Postgres do
   alias PgQuery
 
+  @spec parse!(String.t()) :: [struct()] | no_return()
+  def parse!(stmts) when is_list(stmts) do
+    Enum.flat_map(stmts, &parse!/1)
+  end
+
   def parse!(sql) do
     sql
     |> PgQuery.parse!()

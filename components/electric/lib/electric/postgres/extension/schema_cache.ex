@@ -42,6 +42,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Electric.name(__MODULE__, origin)
   end
 
+  def instance() do
+    Electric.name(__MODULE__, :instance)
+  end
+
   @impl SchemaLoader
   def connect(conn_config, _opts) do
     {:ok, Connectors.origin(conn_config)}
@@ -58,8 +62,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def save(origin, version, schema) do
-    GenServer.call(name(origin), {:save, version, schema})
+  def save(origin, version, schema, stmts) do
+    GenServer.call(name(origin), {:save, version, schema, stmts})
   end
 
   @impl SchemaLoader
@@ -77,6 +81,15 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:refresh_subscription, name})
   end
 
+  def migration_history(version) do
+    GenServer.call(instance(), {:migration_history, version})
+  end
+
+  @impl SchemaLoader
+  def migration_history(origin, version) do
+    GenServer.call(name(origin), {:migration_history, version})
+  end
+
   @impl GenServer
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
@@ -88,6 +101,17 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       opts
       |> SchemaLoader.get(:backend)
       |> SchemaLoader.connect(conn_config)
+
+    # we now only have a single instance to 
+    case Electric.safe_reg(instance(), 0) do
+      true ->
+        Logger.info("Registered SchemaCache instance")
+        :ok
+
+      {:error, :already_registered} ->
+        Logger.warning("Multiple SchemaCache instances registered")
+        :ok
+    end
 
     state = %{
       origin: origin,
@@ -119,8 +143,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.load(state.backend, version), state}
   end
 
-  def handle_call({:save, version, schema}, _from, state) do
-    {:ok, backend} = SchemaLoader.save(state.backend, version, schema)
+  def handle_call({:save, version, schema, stmts}, _from, state) do
+    {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
     {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
   end
 
@@ -130,6 +154,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:primary_keys, schema, name}, _from, state) do
     {:reply, SchemaLoader.primary_keys(state.backend, schema, name), state}
+  end
+
+  def handle_call({:migration_history, version}, _from, state) do
+    {:reply, SchemaLoader.migration_history(state.backend, version), state}
   end
 
   # # Version of loading primary keys using the materialised schema info
