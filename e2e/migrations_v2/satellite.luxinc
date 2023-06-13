@@ -18,7 +18,7 @@
 [endmacro]
 
 [macro setup_client satellite_number electric port]
-    [invoke setup_client_with_migrations satellite_number electric port "[]"]
+    [invoke setup_client_with_migrations $satellite_number $electric $port "[]"]
 [endmacro]
 
 [macro node_await_get match]
