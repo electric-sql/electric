@@ -37,7 +37,7 @@ defmodule Electric.Postgres.Extension do
   @partial_migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
   @schema_version_query ~s(SELECT "schema", "version" FROM #{@schema_table} WHERE "version" = $1 LIMIT 1)
-  # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem 
+  # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem
   # that will go away once we stop replicating all tables by default)
   @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema", "migration_ddl") VALUES ($1, $2, $3) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
@@ -193,6 +193,7 @@ defmodule Electric.Postgres.Extension do
     [
       Migrations.Migration_20230328113927,
       Migrations.Migration_20230424154425_DDLX,
+      Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction
     ]
   end

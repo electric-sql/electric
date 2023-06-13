@@ -91,7 +91,7 @@ defmodule Electric.Postgres.ExtensionTest do
     tx(
       fn conn ->
         {:ok, rows} = migrate_module(conn, cxt, MigrationsV1)
-        # FIXME: we no longer need the electric.migrations table 
+        # FIXME: we no longer need the electric.migrations table
         assert rows == [["migrations"], ["schema_migrations"], ["things"]]
         {:ok, rows} = migrate_module(conn, cxt, MigrationsV2)
         assert rows == [["migrations"], ["other_things"], ["schema_migrations"], ["things"]]
@@ -404,9 +404,31 @@ defmodule Electric.Postgres.ExtensionTest do
              """
     end
 
+    test_tx "table electrification creates shadow tables", fn conn ->
+      sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql3 = "CALL electric.electrify('buttercup')"
+
+      for sql <- [sql1, sql2, sql3] do
+        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      end
+
+      assert {:ok, _, [{"1"}]} =
+               :epgsql.squery(
+                 conn,
+                 "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__buttercup' AND nspname = 'electric'"
+               )
+
+      assert {:ok, _, []} =
+               :epgsql.squery(
+                 conn,
+                 "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__daisy' AND nspname = 'electric'"
+               )
+    end
+
     test_tx "electrified?/2", fn conn ->
-      sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-      sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
+      sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
 
       for sql <- [sql1, sql2, sql3] do
