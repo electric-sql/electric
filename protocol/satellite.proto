@@ -138,7 +138,7 @@ message SatInStartReplicationResp {
 
     // Error returned by the Producer when replication fails to start
     message SatInStartReplicationError {
-        // The error codes
+        // error code enum
         enum Code {
             // Required to satisfy linter
             CODE_UNSPECIFIED = 0;
@@ -153,8 +153,11 @@ message SatInStartReplicationResp {
             SUBSCRIPTION_NOT_FOUND = 3;
         }
 
+        // error code
+        Code code = 1;
+
         // a human-readable description of the error
-        string message = 1;
+        string message = 2;
     }
 }
 
@@ -360,28 +363,28 @@ message SatOpMigrate {
 }
 
 // (Consumer) Request for a new subscriptions
-message SubscribeReq {
+message SatSubscribeReq {
     // Shape subscription requests
-    repeated ShapeSubReq shape_request = 2;
+    repeated SatShapeSubReq shape_request = 2;
 }
 
 // (Producer) Acknowledgment that subscription was accepted
-message SubscribeResp {
+message SatSubscribeResp {
     // Identifier of the request for further reference
     string subscription_id = 1;
 }
 
 // Shape subscription request
-message ShapeSubReq {
+message SatShapeSubReq {
     // Identifier of the request
     string request_id = 1;
 
     // The shape definition
-    ShapeDef shape_definition = 2;
+    SatShapeDef shape_definition = 2;
 }
 
 // Top-level structure of a shape definition
-message ShapeDef {
+message SatShapeDef {
     // Select structure
     message Select {
         // table name for this select
@@ -394,28 +397,31 @@ message ShapeDef {
 
 // Error message returned by the Producer when it encounters
 // an error handling a subscription
-message SubscriptionError {
-    // The error codes
+message SatSubscriptionError {
+    // error code enum
     enum Code {
         // Required code
         CODE_UNSPECIFIED = 0;
 
         // A shape subscription request error
-        SHAPE_SUBSCRIPTION_ERROR = 2;
+        SHAPE_SUBSCRIPTION_ERROR = 1;
     }
 
-    // Subscription identifier this error refers to
-    string subscription_id = 1;
+    // error code
+    Code code = 1;
 
     // A human-readable description of the error
     string message = 2;
 
+    // Subscription identifier this error refers to
+    string subscription_id = 3;
+
     // Details of the shape subscription error
-    repeated ShapeSubError shape_subscription_error = 3;
+    repeated ShapeSubError shape_subscription_error = 4;
 
     // Shape subscription error
     message ShapeSubError {
-        // The error codes
+        // error code enum
         enum Code {
             // Required code
             CODE_UNSPECIFIED = 0;
@@ -424,26 +430,29 @@ message SubscriptionError {
             TABLE_NOT_FOUND = 1;
         }
 
-        // the shape request identifier that this error refers to
-        string request_id = 1;
+        // error code
+        Code code = 1;
 
         // a human-readable description of the error
         string message = 2;
+
+        // the shape request identifier that this error refers to
+        string request_id = 3;
     }
 }
 
 // Start delimiter for the incoming subscription data
-message SubscriptionDataBegin {
+message SatSubscriptionDataBegin {
     // Identifier of the subscription
     string subscription_id = 1;
 }
 
 // End delimiter for the incoming subscription data
-message SubscriptionDataEnd {
+message SatSubscriptionDataEnd {
 }
 
 // Start delimiter for the initial shape data
-message ShapeDataBegin {
+message SatShapeDataBegin {
     // Identifier of the request
     string request_id = 1;
     // The UUID of the shape on the Producer
@@ -451,5 +460,5 @@ message ShapeDataBegin {
 }
 
 // End delimiter for the initial shape data
-message ShapeDataEnd {
+message SatShapeDataEnd {
 }

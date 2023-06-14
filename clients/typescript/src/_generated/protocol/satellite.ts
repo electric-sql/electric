@@ -16,11 +16,11 @@ export const protobufPackage = "Electric.Satellite.v1_3";
  *
  * Server is expected to be one of the Electric instances, while Client is a
  * client application that talks to Electric via Satellite library, or any other
- * enitty that implements this protocol.
+ * entity that implements this protocol.
  *
  * Producer and Consumer are the corresponding roles Client and Server play in
  * replication process. Consumer requests replication from the Producer, and
- * periodically answer Ping requests form the Prodicer to acknowledge
+ * periodically answer Ping requests form the Producer to acknowledge
  * successful replication. Consumer may also send such Ping requests, if the
  * bidirectional replication is enabled. If one of the parties is not involved
  * in the replication lsn field may be left empty.
@@ -125,13 +125,15 @@ export interface SatInStartReplicationReq {
    * delivered when SYNC_MODE is used
    */
   syncBatchSize: number;
+  /** the subscriptions identifiers the client wants to resume subscription */
+  subscriptionIds: string[];
 }
 
 export enum SatInStartReplicationReq_Option {
   NONE = 0,
   /**
    * LAST_ACKNOWLEDGED - Flag that indicates to Producer, to start replication from the latest
-   * position that have been acknowledged by this Consumer. In such a case
+   * position that has been acknowledged by this Consumer. In such a case
    * provided lsn will be ignored
    */
   LAST_ACKNOWLEDGED = 1,
@@ -153,9 +155,33 @@ export enum SatInStartReplicationReq_Option {
   UNRECOGNIZED = -1,
 }
 
-/** (Producer) Acknowledgement that replication have been started */
+/** (Producer) The result of the start replication requests */
 export interface SatInStartReplicationResp {
   $type: "Electric.Satellite.v1_3.SatInStartReplicationResp";
+  /** returned in case replication fails to start */
+  error?: SatInStartReplicationResp_SatInStartReplicationError | undefined;
+}
+
+/** Error returned by the Producer when replication fails to start */
+export interface SatInStartReplicationResp_SatInStartReplicationError {
+  $type: "Electric.Satellite.v1_3.SatInStartReplicationResp.SatInStartReplicationError";
+  /** error code */
+  code: SatInStartReplicationResp_SatInStartReplicationError_Code;
+  /** a human-readable description of the error */
+  message: string;
+}
+
+/** error code enum */
+export enum SatInStartReplicationResp_SatInStartReplicationError_Code {
+  /** CODE_UNSPECIFIED - Required to satisfy linter */
+  CODE_UNSPECIFIED = 0,
+  /** BEHIND_WINDOW - requested LSN is behind the current replication window */
+  BEHIND_WINDOW = 1,
+  /** INVALID_POSITION - e.g. jumping ahead of the subscriptions cursor */
+  INVALID_POSITION = 2,
+  /** SUBSCRIPTION_NOT_FOUND - requested subscription not found */
+  SUBSCRIPTION_NOT_FOUND = 3,
+  UNRECOGNIZED = -1,
 }
 
 /** (Consumer) Request to stop replication */
@@ -163,7 +189,7 @@ export interface SatInStopReplicationReq {
   $type: "Electric.Satellite.v1_3.SatInStopReplicationReq";
 }
 
-/** (Producer) Acknowledgement that repliation have been stopped */
+/** (Producer) Acknowledgement that replication has been stopped */
 export interface SatInStopReplicationResp {
   $type: "Electric.Satellite.v1_3.SatInStopReplicationResp";
 }
@@ -330,7 +356,7 @@ export interface SatOpRow {
 
 /**
  * A migration message, originating in Postgres, captured via event triggers,
- * propated to electric, converted from postgres to the equivalent sqlite
+ * propagated to electric, converted from postgres to the equivalent sqlite
  * statement and inserted into the replication stream
  *
  * Each migration message includes the sql strings to execute on the satellite
@@ -409,6 +435,114 @@ export interface SatOpMigrate_Table {
   pks: string[];
 }
 
+/** (Consumer) Request for a new subscriptions */
+export interface SatSubscribeReq {
+  $type: "Electric.Satellite.v1_3.SatSubscribeReq";
+  /** Shape subscription requests */
+  shapeRequest: SatShapeSubReq[];
+}
+
+/** (Producer) Acknowledgment that subscription was accepted */
+export interface SatSubscribeResp {
+  $type: "Electric.Satellite.v1_3.SatSubscribeResp";
+  /** Identifier of the request for further reference */
+  subscriptionId: string;
+}
+
+/** Shape subscription request */
+export interface SatShapeSubReq {
+  $type: "Electric.Satellite.v1_3.SatShapeSubReq";
+  /** Identifier of the request */
+  requestId: string;
+  /** The shape definition */
+  shapeDefinition: SatShapeDef | undefined;
+}
+
+/** Top-level structure of a shape definition */
+export interface SatShapeDef {
+  $type: "Electric.Satellite.v1_3.SatShapeDef";
+  /** Selects for the Shape definition */
+  selects: SatShapeDef_Select[];
+}
+
+/** Select structure */
+export interface SatShapeDef_Select {
+  $type: "Electric.Satellite.v1_3.SatShapeDef.Select";
+  /** table name for this select */
+  tablename: string;
+}
+
+/**
+ * Error message returned by the Producer when it encounters
+ * an error handling a subscription
+ */
+export interface SatSubscriptionError {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionError";
+  /** error code */
+  code: SatSubscriptionError_Code;
+  /** A human-readable description of the error */
+  message: string;
+  /** Subscription identifier this error refers to */
+  subscriptionId: string;
+  /** Details of the shape subscription error */
+  shapeSubscriptionError: SatSubscriptionError_ShapeSubError[];
+}
+
+/** error code enum */
+export enum SatSubscriptionError_Code {
+  /** CODE_UNSPECIFIED - Required code */
+  CODE_UNSPECIFIED = 0,
+  /** SHAPE_SUBSCRIPTION_ERROR - A shape subscription request error */
+  SHAPE_SUBSCRIPTION_ERROR = 1,
+  UNRECOGNIZED = -1,
+}
+
+/** Shape subscription error */
+export interface SatSubscriptionError_ShapeSubError {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError";
+  /** error code */
+  code: SatSubscriptionError_ShapeSubError_Code;
+  /** a human-readable description of the error */
+  message: string;
+  /** the shape request identifier that this error refers to */
+  requestId: string;
+}
+
+/** error code enum */
+export enum SatSubscriptionError_ShapeSubError_Code {
+  /** CODE_UNSPECIFIED - Required code */
+  CODE_UNSPECIFIED = 0,
+  /** TABLE_NOT_FOUND - Table not found error */
+  TABLE_NOT_FOUND = 1,
+  UNRECOGNIZED = -1,
+}
+
+/** Start delimiter for the incoming subscription data */
+export interface SatSubscriptionDataBegin {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin";
+  /** Identifier of the subscription */
+  subscriptionId: string;
+}
+
+/** End delimiter for the incoming subscription data */
+export interface SatSubscriptionDataEnd {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd";
+}
+
+/** Start delimiter for the initial shape data */
+export interface SatShapeDataBegin {
+  $type: "Electric.Satellite.v1_3.SatShapeDataBegin";
+  /** Identifier of the request */
+  requestId: string;
+  /** The UUID of the shape on the Producer */
+  shapeUuid: string;
+}
+
+/** End delimiter for the initial shape data */
+export interface SatShapeDataEnd {
+  $type: "Electric.Satellite.v1_3.SatShapeDataEnd";
+}
+
 function createBaseSatPingReq(): SatPingReq {
   return { $type: "Electric.Satellite.v1_3.SatPingReq" };
 }
@@ -428,7 +562,7 @@ export const SatPingReq = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -470,14 +604,14 @@ export const SatPingResp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.lsn = reader.bytes();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -523,21 +657,21 @@ export const SatAuthHeaderPair = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.key = reader.int32() as any;
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.value = reader.string();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -587,28 +721,28 @@ export const SatAuthReq = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.id = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.token = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.headers.push(SatAuthHeaderPair.decode(reader, reader.uint32()));
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -656,21 +790,21 @@ export const SatAuthResp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.id = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.headers.push(SatAuthHeaderPair.decode(reader, reader.uint32()));
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -714,14 +848,14 @@ export const SatErrorResp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.errorType = reader.int32() as any;
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -748,6 +882,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     lsn: new Uint8Array(),
     options: [],
     syncBatchSize: 0,
+    subscriptionIds: [],
   };
 }
 
@@ -766,6 +901,9 @@ export const SatInStartReplicationReq = {
     if (message.syncBatchSize !== 0) {
       writer.uint32(24).int32(message.syncBatchSize);
     }
+    for (const v of message.subscriptionIds) {
+      writer.uint32(34).string(v!);
+    }
     return writer;
   },
 
@@ -777,19 +915,20 @@ export const SatInStartReplicationReq = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.lsn = reader.bytes();
           continue;
         case 2:
-          if (tag == 16) {
+          if (tag === 16) {
             message.options.push(reader.int32() as any);
+
             continue;
           }
 
-          if (tag == 18) {
+          if (tag === 18) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
               message.options.push(reader.int32() as any);
@@ -800,14 +939,21 @@ export const SatInStartReplicationReq = {
 
           break;
         case 3:
-          if (tag != 24) {
+          if (tag !== 24) {
             break;
           }
 
           message.syncBatchSize = reader.int32();
           continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.subscriptionIds.push(reader.string());
+          continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -824,6 +970,7 @@ export const SatInStartReplicationReq = {
     message.lsn = object.lsn ?? new Uint8Array();
     message.options = object.options?.map((e) => e) || [];
     message.syncBatchSize = object.syncBatchSize ?? 0;
+    message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     return message;
   },
 };
@@ -831,13 +978,16 @@ export const SatInStartReplicationReq = {
 messageTypeRegistry.set(SatInStartReplicationReq.$type, SatInStartReplicationReq);
 
 function createBaseSatInStartReplicationResp(): SatInStartReplicationResp {
-  return { $type: "Electric.Satellite.v1_3.SatInStartReplicationResp" };
+  return { $type: "Electric.Satellite.v1_3.SatInStartReplicationResp", error: undefined };
 }
 
 export const SatInStartReplicationResp = {
   $type: "Electric.Satellite.v1_3.SatInStartReplicationResp" as const,
 
-  encode(_: SatInStartReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatInStartReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.error !== undefined) {
+      SatInStartReplicationResp_SatInStartReplicationError.encode(message.error, writer.uint32(10).fork()).ldelim();
+    }
     return writer;
   },
 
@@ -848,8 +998,15 @@ export const SatInStartReplicationResp = {
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.error = SatInStartReplicationResp_SatInStartReplicationError.decode(reader, reader.uint32());
+          continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -861,13 +1018,91 @@ export const SatInStartReplicationResp = {
     return SatInStartReplicationResp.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatInStartReplicationResp>, I>>(_: I): SatInStartReplicationResp {
+  fromPartial<I extends Exact<DeepPartial<SatInStartReplicationResp>, I>>(object: I): SatInStartReplicationResp {
     const message = createBaseSatInStartReplicationResp();
+    message.error = (object.error !== undefined && object.error !== null)
+      ? SatInStartReplicationResp_SatInStartReplicationError.fromPartial(object.error)
+      : undefined;
     return message;
   },
 };
 
 messageTypeRegistry.set(SatInStartReplicationResp.$type, SatInStartReplicationResp);
+
+function createBaseSatInStartReplicationResp_SatInStartReplicationError(): SatInStartReplicationResp_SatInStartReplicationError {
+  return {
+    $type: "Electric.Satellite.v1_3.SatInStartReplicationResp.SatInStartReplicationError",
+    code: 0,
+    message: "",
+  };
+}
+
+export const SatInStartReplicationResp_SatInStartReplicationError = {
+  $type: "Electric.Satellite.v1_3.SatInStartReplicationResp.SatInStartReplicationError" as const,
+
+  encode(
+    message: SatInStartReplicationResp_SatInStartReplicationError,
+    writer: _m0.Writer = _m0.Writer.create(),
+  ): _m0.Writer {
+    if (message.code !== 0) {
+      writer.uint32(8).int32(message.code);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatInStartReplicationResp_SatInStartReplicationError {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatInStartReplicationResp_SatInStartReplicationError();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.code = reader.int32() as any;
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatInStartReplicationResp_SatInStartReplicationError>, I>>(
+    base?: I,
+  ): SatInStartReplicationResp_SatInStartReplicationError {
+    return SatInStartReplicationResp_SatInStartReplicationError.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatInStartReplicationResp_SatInStartReplicationError>, I>>(
+    object: I,
+  ): SatInStartReplicationResp_SatInStartReplicationError {
+    const message = createBaseSatInStartReplicationResp_SatInStartReplicationError();
+    message.code = object.code ?? 0;
+    message.message = object.message ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(
+  SatInStartReplicationResp_SatInStartReplicationError.$type,
+  SatInStartReplicationResp_SatInStartReplicationError,
+);
 
 function createBaseSatInStopReplicationReq(): SatInStopReplicationReq {
   return { $type: "Electric.Satellite.v1_3.SatInStopReplicationReq" };
@@ -888,7 +1123,7 @@ export const SatInStopReplicationReq = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -927,7 +1162,7 @@ export const SatInStopReplicationResp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -975,28 +1210,28 @@ export const SatRelationColumn = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.name = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.type = reader.string();
           continue;
         case 3:
-          if (tag != 24) {
+          if (tag !== 24) {
             break;
           }
 
           message.primaryKey = reader.bool();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1060,42 +1295,42 @@ export const SatRelation = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.schemaName = reader.string();
           continue;
         case 2:
-          if (tag != 16) {
+          if (tag !== 16) {
             break;
           }
 
           message.tableType = reader.int32() as any;
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.tableName = reader.string();
           continue;
         case 4:
-          if (tag != 32) {
+          if (tag !== 32) {
             break;
           }
 
           message.relationId = reader.uint32();
           continue;
         case 5:
-          if (tag != 42) {
+          if (tag !== 42) {
             break;
           }
 
           message.columns.push(SatRelationColumn.decode(reader, reader.uint32()));
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1142,14 +1377,14 @@ export const SatOpLog = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.ops.push(SatTransOp.decode(reader, reader.uint32()));
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1215,49 +1450,49 @@ export const SatTransOp = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.begin = SatOpBegin.decode(reader, reader.uint32());
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.commit = SatOpCommit.decode(reader, reader.uint32());
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.update = SatOpUpdate.decode(reader, reader.uint32());
           continue;
         case 4:
-          if (tag != 34) {
+          if (tag !== 34) {
             break;
           }
 
           message.insert = SatOpInsert.decode(reader, reader.uint32());
           continue;
         case 5:
-          if (tag != 42) {
+          if (tag !== 42) {
             break;
           }
 
           message.delete = SatOpDelete.decode(reader, reader.uint32());
           continue;
         case 6:
-          if (tag != 50) {
+          if (tag !== 50) {
             break;
           }
 
           message.migrate = SatOpMigrate.decode(reader, reader.uint32());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1336,42 +1571,42 @@ export const SatOpBegin = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.commitTimestamp = reader.uint64() as Long;
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.transId = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.lsn = reader.bytes();
           continue;
         case 4:
-          if (tag != 34) {
+          if (tag !== 34) {
             break;
           }
 
           message.origin = reader.string();
           continue;
         case 5:
-          if (tag != 40) {
+          if (tag !== 40) {
             break;
           }
 
           message.isMigration = reader.bool();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1431,28 +1666,28 @@ export const SatOpCommit = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.commitTimestamp = reader.uint64() as Long;
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.transId = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.lsn = reader.bytes();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1505,28 +1740,28 @@ export const SatOpInsert = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.relationId = reader.uint32();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.rowData = SatOpRow.decode(reader, reader.uint32());
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.tags.push(reader.string());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1588,35 +1823,35 @@ export const SatOpUpdate = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.relationId = reader.uint32();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.rowData = SatOpRow.decode(reader, reader.uint32());
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.oldRowData = SatOpRow.decode(reader, reader.uint32());
           continue;
         case 4:
-          if (tag != 34) {
+          if (tag !== 34) {
             break;
           }
 
           message.tags.push(reader.string());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1672,28 +1907,28 @@ export const SatOpDelete = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.relationId = reader.uint32();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.oldRowData = SatOpRow.decode(reader, reader.uint32());
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.tags.push(reader.string());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1755,35 +1990,35 @@ export const SatMigrationNotification = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.oldSchemaVersion = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.oldSchemaHash = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.newSchemaVersion = reader.string();
           continue;
         case 4:
-          if (tag != 34) {
+          if (tag !== 34) {
             break;
           }
 
           message.newSchemaHash = reader.string();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1832,21 +2067,21 @@ export const SatOpRow = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.nullsBitmask = reader.bytes();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.values.push(reader.bytes());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1896,28 +2131,28 @@ export const SatOpMigrate = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.version = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.stmts.push(SatOpMigrate_Stmt.decode(reader, reader.uint32()));
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.table = SatOpMigrate_Table.decode(reader, reader.uint32());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -1967,21 +2202,21 @@ export const SatOpMigrate_Stmt = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 8) {
+          if (tag !== 8) {
             break;
           }
 
           message.type = reader.int32() as any;
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.sql = reader.string();
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -2035,19 +2270,20 @@ export const SatOpMigrate_PgColumnType = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.name = reader.string();
           continue;
         case 2:
-          if (tag == 16) {
+          if (tag === 16) {
             message.array.push(reader.int32());
+
             continue;
           }
 
-          if (tag == 18) {
+          if (tag === 18) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
               message.array.push(reader.int32());
@@ -2058,12 +2294,13 @@ export const SatOpMigrate_PgColumnType = {
 
           break;
         case 3:
-          if (tag == 24) {
+          if (tag === 24) {
             message.size.push(reader.int32());
+
             continue;
           }
 
-          if (tag == 26) {
+          if (tag === 26) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
               message.size.push(reader.int32());
@@ -2074,7 +2311,7 @@ export const SatOpMigrate_PgColumnType = {
 
           break;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -2125,28 +2362,28 @@ export const SatOpMigrate_Column = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.name = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.sqliteType = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.pgType = SatOpMigrate_PgColumnType.decode(reader, reader.uint32());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -2199,28 +2436,28 @@ export const SatOpMigrate_ForeignKey = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.fkCols.push(reader.string());
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.pkTable = reader.string();
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.pkCols.push(reader.string());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -2274,35 +2511,35 @@ export const SatOpMigrate_Table = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          if (tag != 10) {
+          if (tag !== 10) {
             break;
           }
 
           message.name = reader.string();
           continue;
         case 2:
-          if (tag != 18) {
+          if (tag !== 18) {
             break;
           }
 
           message.columns.push(SatOpMigrate_Column.decode(reader, reader.uint32()));
           continue;
         case 3:
-          if (tag != 26) {
+          if (tag !== 26) {
             break;
           }
 
           message.fks.push(SatOpMigrate_ForeignKey.decode(reader, reader.uint32()));
           continue;
         case 4:
-          if (tag != 34) {
+          if (tag !== 34) {
             break;
           }
 
           message.pks.push(reader.string());
           continue;
       }
-      if ((tag & 7) == 4 || tag == 0) {
+      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
       reader.skipType(tag & 7);
@@ -2325,6 +2562,624 @@ export const SatOpMigrate_Table = {
 };
 
 messageTypeRegistry.set(SatOpMigrate_Table.$type, SatOpMigrate_Table);
+
+function createBaseSatSubscribeReq(): SatSubscribeReq {
+  return { $type: "Electric.Satellite.v1_3.SatSubscribeReq", shapeRequest: [] };
+}
+
+export const SatSubscribeReq = {
+  $type: "Electric.Satellite.v1_3.SatSubscribeReq" as const,
+
+  encode(message: SatSubscribeReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.shapeRequest) {
+      SatShapeSubReq.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscribeReq {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscribeReq();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.shapeRequest.push(SatShapeSubReq.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscribeReq>, I>>(base?: I): SatSubscribeReq {
+    return SatSubscribeReq.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscribeReq>, I>>(object: I): SatSubscribeReq {
+    const message = createBaseSatSubscribeReq();
+    message.shapeRequest = object.shapeRequest?.map((e) => SatShapeSubReq.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscribeReq.$type, SatSubscribeReq);
+
+function createBaseSatSubscribeResp(): SatSubscribeResp {
+  return { $type: "Electric.Satellite.v1_3.SatSubscribeResp", subscriptionId: "" };
+}
+
+export const SatSubscribeResp = {
+  $type: "Electric.Satellite.v1_3.SatSubscribeResp" as const,
+
+  encode(message: SatSubscribeResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.subscriptionId !== "") {
+      writer.uint32(10).string(message.subscriptionId);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscribeResp {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscribeResp();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.subscriptionId = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscribeResp>, I>>(base?: I): SatSubscribeResp {
+    return SatSubscribeResp.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscribeResp>, I>>(object: I): SatSubscribeResp {
+    const message = createBaseSatSubscribeResp();
+    message.subscriptionId = object.subscriptionId ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscribeResp.$type, SatSubscribeResp);
+
+function createBaseSatShapeSubReq(): SatShapeSubReq {
+  return { $type: "Electric.Satellite.v1_3.SatShapeSubReq", requestId: "", shapeDefinition: undefined };
+}
+
+export const SatShapeSubReq = {
+  $type: "Electric.Satellite.v1_3.SatShapeSubReq" as const,
+
+  encode(message: SatShapeSubReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.requestId !== "") {
+      writer.uint32(10).string(message.requestId);
+    }
+    if (message.shapeDefinition !== undefined) {
+      SatShapeDef.encode(message.shapeDefinition, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeSubReq {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeSubReq();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.requestId = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.shapeDefinition = SatShapeDef.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeSubReq>, I>>(base?: I): SatShapeSubReq {
+    return SatShapeSubReq.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeSubReq>, I>>(object: I): SatShapeSubReq {
+    const message = createBaseSatShapeSubReq();
+    message.requestId = object.requestId ?? "";
+    message.shapeDefinition = (object.shapeDefinition !== undefined && object.shapeDefinition !== null)
+      ? SatShapeDef.fromPartial(object.shapeDefinition)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeSubReq.$type, SatShapeSubReq);
+
+function createBaseSatShapeDef(): SatShapeDef {
+  return { $type: "Electric.Satellite.v1_3.SatShapeDef", selects: [] };
+}
+
+export const SatShapeDef = {
+  $type: "Electric.Satellite.v1_3.SatShapeDef" as const,
+
+  encode(message: SatShapeDef, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.selects) {
+      SatShapeDef_Select.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeDef {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeDef();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.selects.push(SatShapeDef_Select.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeDef>, I>>(base?: I): SatShapeDef {
+    return SatShapeDef.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeDef>, I>>(object: I): SatShapeDef {
+    const message = createBaseSatShapeDef();
+    message.selects = object.selects?.map((e) => SatShapeDef_Select.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeDef.$type, SatShapeDef);
+
+function createBaseSatShapeDef_Select(): SatShapeDef_Select {
+  return { $type: "Electric.Satellite.v1_3.SatShapeDef.Select", tablename: "" };
+}
+
+export const SatShapeDef_Select = {
+  $type: "Electric.Satellite.v1_3.SatShapeDef.Select" as const,
+
+  encode(message: SatShapeDef_Select, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.tablename !== "") {
+      writer.uint32(10).string(message.tablename);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeDef_Select {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeDef_Select();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tablename = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeDef_Select>, I>>(base?: I): SatShapeDef_Select {
+    return SatShapeDef_Select.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeDef_Select>, I>>(object: I): SatShapeDef_Select {
+    const message = createBaseSatShapeDef_Select();
+    message.tablename = object.tablename ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeDef_Select.$type, SatShapeDef_Select);
+
+function createBaseSatSubscriptionError(): SatSubscriptionError {
+  return {
+    $type: "Electric.Satellite.v1_3.SatSubscriptionError",
+    code: 0,
+    message: "",
+    subscriptionId: "",
+    shapeSubscriptionError: [],
+  };
+}
+
+export const SatSubscriptionError = {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionError" as const,
+
+  encode(message: SatSubscriptionError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.code !== 0) {
+      writer.uint32(8).int32(message.code);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.subscriptionId !== "") {
+      writer.uint32(26).string(message.subscriptionId);
+    }
+    for (const v of message.shapeSubscriptionError) {
+      SatSubscriptionError_ShapeSubError.encode(v!, writer.uint32(34).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionError {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscriptionError();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.code = reader.int32() as any;
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.subscriptionId = reader.string();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.shapeSubscriptionError.push(SatSubscriptionError_ShapeSubError.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscriptionError>, I>>(base?: I): SatSubscriptionError {
+    return SatSubscriptionError.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscriptionError>, I>>(object: I): SatSubscriptionError {
+    const message = createBaseSatSubscriptionError();
+    message.code = object.code ?? 0;
+    message.message = object.message ?? "";
+    message.subscriptionId = object.subscriptionId ?? "";
+    message.shapeSubscriptionError =
+      object.shapeSubscriptionError?.map((e) => SatSubscriptionError_ShapeSubError.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscriptionError.$type, SatSubscriptionError);
+
+function createBaseSatSubscriptionError_ShapeSubError(): SatSubscriptionError_ShapeSubError {
+  return { $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError", code: 0, message: "", requestId: "" };
+}
+
+export const SatSubscriptionError_ShapeSubError = {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError" as const,
+
+  encode(message: SatSubscriptionError_ShapeSubError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.code !== 0) {
+      writer.uint32(8).int32(message.code);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(26).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionError_ShapeSubError {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscriptionError_ShapeSubError();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.code = reader.int32() as any;
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.requestId = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscriptionError_ShapeSubError>, I>>(
+    base?: I,
+  ): SatSubscriptionError_ShapeSubError {
+    return SatSubscriptionError_ShapeSubError.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscriptionError_ShapeSubError>, I>>(
+    object: I,
+  ): SatSubscriptionError_ShapeSubError {
+    const message = createBaseSatSubscriptionError_ShapeSubError();
+    message.code = object.code ?? 0;
+    message.message = object.message ?? "";
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscriptionError_ShapeSubError.$type, SatSubscriptionError_ShapeSubError);
+
+function createBaseSatSubscriptionDataBegin(): SatSubscriptionDataBegin {
+  return { $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin", subscriptionId: "" };
+}
+
+export const SatSubscriptionDataBegin = {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin" as const,
+
+  encode(message: SatSubscriptionDataBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.subscriptionId !== "") {
+      writer.uint32(10).string(message.subscriptionId);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionDataBegin {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscriptionDataBegin();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.subscriptionId = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscriptionDataBegin>, I>>(base?: I): SatSubscriptionDataBegin {
+    return SatSubscriptionDataBegin.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscriptionDataBegin>, I>>(object: I): SatSubscriptionDataBegin {
+    const message = createBaseSatSubscriptionDataBegin();
+    message.subscriptionId = object.subscriptionId ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscriptionDataBegin.$type, SatSubscriptionDataBegin);
+
+function createBaseSatSubscriptionDataEnd(): SatSubscriptionDataEnd {
+  return { $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd" };
+}
+
+export const SatSubscriptionDataEnd = {
+  $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd" as const,
+
+  encode(_: SatSubscriptionDataEnd, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionDataEnd {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatSubscriptionDataEnd();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatSubscriptionDataEnd>, I>>(base?: I): SatSubscriptionDataEnd {
+    return SatSubscriptionDataEnd.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatSubscriptionDataEnd>, I>>(_: I): SatSubscriptionDataEnd {
+    const message = createBaseSatSubscriptionDataEnd();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatSubscriptionDataEnd.$type, SatSubscriptionDataEnd);
+
+function createBaseSatShapeDataBegin(): SatShapeDataBegin {
+  return { $type: "Electric.Satellite.v1_3.SatShapeDataBegin", requestId: "", shapeUuid: "" };
+}
+
+export const SatShapeDataBegin = {
+  $type: "Electric.Satellite.v1_3.SatShapeDataBegin" as const,
+
+  encode(message: SatShapeDataBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.requestId !== "") {
+      writer.uint32(10).string(message.requestId);
+    }
+    if (message.shapeUuid !== "") {
+      writer.uint32(18).string(message.shapeUuid);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeDataBegin {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeDataBegin();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.requestId = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.shapeUuid = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeDataBegin>, I>>(base?: I): SatShapeDataBegin {
+    return SatShapeDataBegin.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeDataBegin>, I>>(object: I): SatShapeDataBegin {
+    const message = createBaseSatShapeDataBegin();
+    message.requestId = object.requestId ?? "";
+    message.shapeUuid = object.shapeUuid ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeDataBegin.$type, SatShapeDataBegin);
+
+function createBaseSatShapeDataEnd(): SatShapeDataEnd {
+  return { $type: "Electric.Satellite.v1_3.SatShapeDataEnd" };
+}
+
+export const SatShapeDataEnd = {
+  $type: "Electric.Satellite.v1_3.SatShapeDataEnd" as const,
+
+  encode(_: SatShapeDataEnd, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeDataEnd {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeDataEnd();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeDataEnd>, I>>(base?: I): SatShapeDataEnd {
+    return SatShapeDataEnd.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeDataEnd>, I>>(_: I): SatShapeDataEnd {
+    const message = createBaseSatShapeDataEnd();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeDataEnd.$type, SatShapeDataEnd);
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
