@@ -3,7 +3,7 @@ import {
   loadMigrations,
   makeMigration,
   parseMetadata,
-  writeMigrationsToConfigFile,
+  buildMigrations,
 } from '../../src/migrators/loader'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
@@ -49,10 +49,9 @@ test('read migration meta data', async (t) => {
 })
 
 test('write migration to configuration file', async (t) => {
-  // Since the `configFile` is dynamically imported by `src/migrators/loader.ts`
-  // the path must be relative to the path of that file
-  const configFile = path.join(
-    './test/migrators/support/.electric/@config/index.js'
+  // compute absolute path to avoid differences between dynamic import and NodeJS' `fs` module
+  const configFile = path.resolve(
+    path.join('./test/migrators/support/.electric/@config/index.mjs')
   )
 
   // First read the config file and store its contents
@@ -61,7 +60,7 @@ test('write migration to configuration file', async (t) => {
   const ogConfigContents = await fs.readFile(configFile, 'utf8')
 
   // path to config file, relative from this file
-  const p = '../migrators/support/.electric/@config/index.js'
+  const p = '../migrators/support/.electric/@config/index.mjs'
   let i = 0
   // JS caches imported modules, so if we reload the configuration file
   // after it got changed by `writeMigrationsToConfigFile` we will get
@@ -72,7 +71,7 @@ test('write migration to configuration file', async (t) => {
     (await import(path.join(p.concat(`?foo=${i++}`)))).default
   const ogConfig = await importConfig()
 
-  await writeMigrationsToConfigFile(migrationsFolder, configFile)
+  await buildMigrations(migrationsFolder, configFile)
   const newConfig = await importConfig()
   const versions = newConfig.migrations.map((m: any) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])

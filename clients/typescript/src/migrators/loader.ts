@@ -137,24 +137,14 @@ export async function loadMigrations(
  * @param migrationsFolder Folder containing the migrations.
  * @param configFile Configuration file of an electric application.
  */
-export async function writeMigrationsToConfigFile(
+export async function buildMigrations(
   migrationsFolder: string,
   configFile: string
 ) {
   try {
-    const configObj = (await import(path.join('../..', configFile))).default // dynamically import the configuration file
+    const configObj = (await import(configFile)).default // dynamically import the configuration file
     const configSchema = z
-      .object({
-        app: z.string(),
-        migrations: z
-          .object({
-            statements: z.string().array(),
-            version: z.string(),
-          })
-          .strict()
-          .array()
-          .optional(),
-      })
+      .object({})
       .passthrough()
 
     const config = configSchema.parse(configObj)
@@ -164,6 +154,18 @@ export async function writeMigrationsToConfigFile(
     await fs.writeFile(
       configFile,
       `export default ${JSON.stringify(config, null, 2)}`
+    )
+    // make a .js version that re-exports the contents of tje .mjs file
+    // such that programs can import the config using `import config from `path/to/.electric/@config`
+    // with .mjs that is not possible because you would have to provide the full path to the `.mjs` file:
+    // `import config from `path/to/.electric/@config/index.mjs`
+    await fs.writeFile(
+      path.format({
+        ...path.parse(configFile),
+        base: '',
+        ext: '.js'
+      }),
+      `export { default } from './index.mjs'`
     )
   } catch (e) {
     if (e instanceof z.ZodError)
