@@ -14,5 +14,5 @@ datasource db {
 }
 
 model items {
-  value       String  @id
+  value String @id
 }

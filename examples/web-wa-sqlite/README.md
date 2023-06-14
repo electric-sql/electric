@@ -28,15 +28,43 @@ cd examples/web
 Install the dependencies:
 
 ```sh
-yarn
+pnpm install
 ```
 
 ## Run
 
-Build and run:
+First, setup and run the local stack:
+```
+cd ../../components/electric
+docker build -t electric:local-build .
+cd ../../local-stack
+source .envrc && docker-compose up
+```
 
+Then, create the necessary tables in Postgres on the local stack:
 ```sh
-yarn start
+docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
+
+```
+
+Then, build the typescript client and the generator:
+```sh
+cd clients/typescript
+pnpm build
+cd ../../generator
+pnpm build
+cd ../examples/web-wa-sqlite
+```
+
+Now, run the generator in order to build an Electric client for your app.
+```sh
+npx prisma generate
+```
+
+Now, build and run the app:
+```sh
+pnpm build
+pnpm start
 ```
 
 ## Sync

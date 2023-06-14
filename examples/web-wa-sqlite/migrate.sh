@@ -10,15 +10,19 @@
 helpFunction()
 {
    echo ""
-   echo "Usage: $0 -p prismaSchema"
+   echo "Usage: $0 -p prismaSchema -m migrationsFolder -c configFolder"
    echo -e "\t-p The path to the file containing the Prisma schema."
+   echo -e "\t-m The path to the folder containing the migrations."
+   echo -e "\t-c The path to the folder containing the configuration files."
    exit 1 # Exit script after printing help
 }
 
-while getopts "p:" opt
+while getopts "p:m:c:" opt
 do
    case "$opt" in
       p ) prisma="$OPTARG" ;;
+      m ) migrationsFolder="$OPTARG" ;;
+      c ) configFolder="$OPTARG" ;;
       ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
    esac
 done
@@ -31,11 +35,19 @@ fi
 
 # Make migrations folder if it does not already exist
 mkdir -p migrations
+mkdir .electric_migrations_tmp
 
 # Fetch the migrations from Electric endpoint
-cd migrations
-#wget --no-parent -r "link/to/endpoint"
+cd .electric_migrations_tmp
+curl "http://localhost:5050/api/migrations?dialect=sqlite" -o .electric_migrations.zip
+unzip -q .electric_migrations.zip # creates a 'migrations' folder
+rm .electric_migrations.zip
 cd ..
+rm -r ./migrations/* # otherwise the move may fail
+mv ./.electric_migrations_tmp/** ./migrations # move the contents of the 'electric_migrations_tmp' folder into the existing 'migrations' folder
+
+# Clean temporary migration files
+rm -rf .electric_migrations_tmp
 
 # Replace the data source in the Prisma schema to be SQLite
 sed -i'' -e 's/provider = "postgresql"/provider = "sqlite"/' $prisma
@@ -72,8 +84,23 @@ npx prisma generate --schema=$prisma
 rm prisma/electric-tmp.db
 
 # Fix the capitalization issues in the generated Prisma client
-sed -i'' -e 's/itemsAggregateArgs/ItemsAggregateArgs/g' prisma/generated/models/index.ts
-sed -i'' -e 's/itemsGroupByArgs/ItemsGroupByArgs/g' prisma/generated/models/index.ts
+sed -i'' -e 's/itemsAggregateArgs/ItemsAggregateArgs/g' src/generated/models/index.ts
+sed -i'' -e 's/itemsGroupByArgs/ItemsGroupByArgs/g' src/generated/models/index.ts
 
-rm prisma/generated/models/index.ts-e
+rm src/generated/models/index.ts-e
 rm prisma/schema.prisma-e
+
+# helper function to turn relative file paths into absolute paths
+function toAbsolutePath {
+  echo "$(cd "$(dirname "$1")"; pwd)/$(basename "$1")"
+}
+
+# Default to `./migrations` and `./.electric` if those arguments are not provided
+migrationsF=${migrationsFolder:-migrations}
+configF=${configFolder:-.electric}
+
+migrationsPath=$(toAbsolutePath "$migrationsF")
+configPath=$(toAbsolutePath "$configF")
+
+# Update the Electric configuration file with the new migrations
+node buildMigrations.mjs "$migrationsPath" "$configPath"
