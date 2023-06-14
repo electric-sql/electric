@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS "items" (
+  "value" TEXT NOT NULL,
+  CONSTRAINT "items_pkey" PRIMARY KEY ("value")
+) WITHOUT ROWID;

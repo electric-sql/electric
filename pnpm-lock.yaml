@@ -278,85 +278,6 @@ importers:
         specifier: ^4.4.3
         version: 4.9.5
 
-  examples/todoMVC:
-    dependencies:
-      '@aphro/absurd-sql':
-        specifier: ^0.0.53
-        version: 0.0.53
-      '@aphro/sql.js':
-        specifier: ^1.7.0
-        version: 1.7.0
-      '@prisma/client':
-        specifier: 4.8.1
-        version: 4.8.1(prisma@4.8.1)
-      base-64:
-        specifier: ^1.0.0
-        version: 1.0.0
-      electric-sql:
-        specifier: workspace:*
-        version: link:../../clients/typescript
-      fs-extra:
-        specifier: ^10.0.0
-        version: 10.0.0
-      react:
-        specifier: ^18.2.0
-        version: 18.2.0
-      react-dom:
-        specifier: ^18.2.0
-        version: 18.2.0(react@18.2.0)
-      uuid:
-        specifier: ^9.0.0
-        version: 9.0.0
-      wa-sqlite:
-        specifier: rhashimoto/wa-sqlite#breaking-changes
-        version: github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1
-      zod:
-        specifier: ^3.20.2
-        version: 3.21.4
-    devDependencies:
-      '@types/node':
-        specifier: ^16.9.1
-        version: 16.18.34
-      '@types/react':
-        specifier: ^18.0.18
-        version: 18.2.7
-      '@types/react-dom':
-        specifier: ^18.0.11
-        version: 18.2.4
-      '@types/uuid':
-        specifier: ^8.3.4
-        version: 8.3.4
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^5.48.2
-        version: 5.59.8(@typescript-eslint/parser@5.59.8)(eslint@8.41.0)(typescript@4.9.5)
-      '@typescript-eslint/parser':
-        specifier: ^5.48.2
-        version: 5.59.8(eslint@8.41.0)(typescript@4.9.5)
-      esbuild:
-        specifier: ^0.12.26
-        version: 0.12.26
-      esbuild-plugin-inline-image:
-        specifier: ^0.0.8
-        version: 0.0.8
-      eslint:
-        specifier: ^8.32.0
-        version: 8.41.0
-      eslint-plugin-react:
-        specifier: ^7.32.1
-        version: 7.32.2(eslint@8.41.0)
-      prettier:
-        specifier: ^2.8.3
-        version: 2.8.8
-      prisma:
-        specifier: 4.8.1
-        version: 4.8.1
-      prisma-generator-electric:
-        specifier: workspace:*
-        version: link:../../generator
-      typescript:
-        specifier: ^4.4.3
-        version: 4.9.5
-
   examples/web-wa-sqlite:
     dependencies:
       '@prisma/client':
@@ -3484,10 +3405,6 @@ packages:
 
   /@types/semver@7.5.0:
     resolution: {integrity: sha512-G8hZ6XJiHnuhQKR7ZmysCeJWE08o8T0AXtk5darsCaTVsYZhhgUrq53jizaR2FvsoeCwJhlmwTjkXBY5Pn/ZHw==}
-    dev: true
-
-  /@types/uuid@8.3.4:
-    resolution: {integrity: sha512-c/I8ZRb51j+pYGAu5CrFMRxqZ2ke4y2grEBO5AUjgSkSk+qT2Ea+OdWElz/OiMf5MNpn2b17kuVBwZLQJXzihw==}
     dev: true
 
   /@types/uuid@9.0.1:
