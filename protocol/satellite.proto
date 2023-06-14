@@ -119,12 +119,44 @@ message SatInStartReplicationReq {
     // Amount of message after which SatPingResp message is expected to be
     // delivered when SYNC_MODE is used
     int32 sync_batch_size = 3;
+
+    // the subscriptions identifiers the client wants to resume subscription
+    // discuss:
+    //  - lsn must match the last position sent by the producer for all subscriptions
+    //    i.e. a client cannot resume from a position further down in the stream (if that is possible at all)
+    //  - if a client does not request to resume subscriptions on reconnect,
+    //    drop those subscriptions on server immediatelly, otherwise security
+    //    violations are possible.
+    //  > In other words, subscriptions must be consumed without gaps
+    repeated string subscription_ids = 4;
 }
 
-// (Producer) Acknowledgement that replication have been started
+// (Producer) The result of the start replication requests
 message SatInStartReplicationResp {
-}
+    // returned in case replication fails to start
+    optional SatInStartReplicationError error = 1;
 
+    // Error returned by the Producer when replication fails to start
+    message SatInStartReplicationError {
+        // The error codes
+        enum Code {
+            // Required to satisfy linter
+            CODE_UNSPECIFIED = 0;
+
+            // requested LSN is behind the current replication window
+            BEHIND_WINDOW = 1;
+
+            // e.g. jumping ahead of the subscriptions cursor
+            INVALID_POSITION = 2;
+
+            // requested subscription not found
+            SUBSCRIPTION_NOT_FOUND = 3;
+        }
+
+        // a human-readable description of the error
+        string message = 1;
+    }
+}
 
 // (Consumer) Request to stop replication
 message SatInStopReplicationReq {
@@ -325,4 +357,99 @@ message SatOpMigrate {
     // The resulting table definition after applying these migrations
     // (a DDL statement can only affect one table at a time).
     optional Table table = 3;
+}
+
+// (Consumer) Request for a new subscriptions
+message SubscribeReq {
+    // Shape subscription requests
+    repeated ShapeSubReq shape_request = 2;
+}
+
+// (Producer) Acknowledgment that subscription was accepted
+message SubscribeResp {
+    // Identifier of the request for further reference
+    string subscription_id = 1;
+}
+
+// Shape subscription request
+message ShapeSubReq {
+    // Identifier of the request
+    string request_id = 1;
+
+    // The shape definition
+    ShapeDef shape_definition = 2;
+}
+
+// Top-level structure of a shape definition
+message ShapeDef {
+    // Select structure
+    message Select {
+        // table name for this select
+        string tablename = 1;
+    }
+
+    // Selects for the Shape definition
+    repeated Select selects = 1;
+}
+
+// Error message returned by the Producer when it encounters
+// an error handling a subscription
+message SubscriptionError {
+    // The error codes
+    enum Code {
+        // Required code
+        CODE_UNSPECIFIED = 0;
+
+        // A shape subscription request error
+        SHAPE_SUBSCRIPTION_ERROR = 2;
+    }
+
+    // Subscription identifier this error refers to
+    string subscription_id = 1;
+
+    // A human-readable description of the error
+    string message = 2;
+
+    // Details of the shape subscription error
+    repeated ShapeSubError shape_subscription_error = 3;
+
+    // Shape subscription error
+    message ShapeSubError {
+        // The error codes
+        enum Code {
+            // Required code
+            CODE_UNSPECIFIED = 0;
+
+            // Table not found error
+            TABLE_NOT_FOUND = 1;
+        }
+
+        // the shape request identifier that this error refers to
+        string request_id = 1;
+
+        // a human-readable description of the error
+        string message = 2;
+    }
+}
+
+// Start delimiter for the incoming subscription data
+message SubscriptionDataBegin {
+    // Identifier of the subscription
+    string subscription_id = 1;
+}
+
+// End delimiter for the incoming subscription data
+message SubscriptionDataEnd {
+}
+
+// Start delimiter for the initial shape data
+message ShapeDataBegin {
+    // Identifier of the request
+    string request_id = 1;
+    // The UUID of the shape on the Producer
+    string shape_uuid = 2;
+}
+
+// End delimiter for the initial shape data
+message ShapeDataEnd {
 }
