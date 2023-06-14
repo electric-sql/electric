@@ -185,24 +185,22 @@ export function generateTableTriggers(
 /**
  * Generates triggers for all the provided tables.
  * @param tables - Dictionary mapping full table names to the corresponding tables.
- * @param isInit - Flag to indicate if the meta tables need to be created and initialized.
  * @returns An array of SQLite statements that add the necessary oplog and compensation triggers for all tables.
  */
-export function generateTriggers(tables: Tables, isInit: boolean): Statement[] {
+export function generateTriggers(tables: Tables): Statement[] {
   const tableTriggers: Statement[] = []
   tables.forEach((_table, tableFullName) => {
     const triggers = generateTableTriggers(tableFullName, tables)
     tableTriggers.push(...triggers)
   })
 
-  const stmts = isInit ? createMetaTables : []
-  stmts.push(
+  const stmts = [
     { sql: 'DROP TABLE IF EXISTS _electric_trigger_settings;' },
     {
       sql: 'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
     },
     ...tableTriggers
-  )
+  ]
 
   return stmts
 }
@@ -214,39 +212,3 @@ function joinColsForJSON(cols: string[], target?: 'new' | 'old') {
     return cols.map((col) => `'${col}', ${target}.${col}`).join(', ')
   }
 }
-
-const createMetaTables: Statement[] = [
-  `
-  -- The ops log table
-  CREATE TABLE IF NOT EXISTS _electric_oplog (
-    rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-    namespace TEXT NOT NULL,
-    tablename TEXT NOT NULL,
-    optype TEXT NOT NULL,
-    primaryKey TEXT NOT NULL,
-    newRow TEXT,
-    oldRow TEXT,
-    timestamp TEXT
-  );
-  `,
-  `
-  -- Somewhere to keep our metadata
-  CREATE TABLE IF NOT EXISTS _electric_meta (
-    key TEXT PRIMARY KEY,
-    value BLOB
-  );
-  `,
-  `
-  -- Somewhere to track migrations
-  CREATE TABLE IF NOT EXISTS _electric_migrations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    sha256 TEXT NOT NULL,
-    applied_at TEXT NOT NULL
-  );
-  `,
-  `
-  -- Initialisation of the metadata table
-  INSERT INTO _electric_meta (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', 'MA=='), ('clientId', '');
-  `,
-].map(mkStatement)
