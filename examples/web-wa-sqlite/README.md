@@ -44,7 +44,10 @@ source .envrc && docker-compose up
 Then, create the necessary tables in Postgres on the local stack:
 ```sh
 docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
-
+electric=# CREATE TABLE IF NOT EXISTS "items" (
+  "value" TEXT NOT NULL,
+  CONSTRAINT "items_pkey" PRIMARY KEY ("value")
+);
 ```
 
 Then, build the typescript client and the generator:
@@ -56,9 +59,10 @@ pnpm build
 cd ../examples/web-wa-sqlite
 ```
 
-Now, run the generator in order to build an Electric client for your app.
+Now, run the migration script to fetch the migration we created above for the `items` table.
+This will create an Electric client for your app.
 ```sh
-npx prisma generate
+sh migrate.sh -p prisma/schema.prisma
 ```
 
 Now, build and run the app:
@@ -163,7 +167,7 @@ ALTER TABLE
 
 This database migration will automatically be picked up by Electric and will be streamed to the application
 which will apply migration on its local SQLite database.
-Since we only suppport additive migrations, the application continues to work.  
+Since we only support additive migrations, the application continues to work.  
 
 Then, remains to update the code of our application to do something with the new column.
 To this end, first run the migration script from within the top-level directory of this app:
@@ -192,7 +196,9 @@ Prisma schema loaded from prisma/schema.prisma
 
 The migration script updated the Electric client to incorporate the new column `other_value` on the `items` table.
 This new column is now also reflected in the type of the `items` table.
-(Currently, all migrations are defined in the `migrations` folder but in the future they will be fetched from the backend)
+If the application was offline when the backend was migrated,
+the missing migrations will automatically be fetched by the `migrate.sh` script
+and will be applied the next time that the application is started.
 
 Now, let's update the app. In `Example.tsx`, modify the `addItem` function to provide a value for the new column:
 
