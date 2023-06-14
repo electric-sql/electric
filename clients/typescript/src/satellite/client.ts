@@ -623,7 +623,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
-    const messageOrError = this.toMessage(data)
+    const messageOrError = toMessage(data)
     Log.info(`Received message ${JSON.stringify(messageOrError)}`)
     if (messageOrError instanceof Error) {
       this.emit('error', messageOrError)
@@ -751,19 +751,6 @@ export class SatelliteClient extends EventEmitter implements Client {
         })
       }
     })
-  }
-
-  private toMessage(data: Uint8Array): SatPbMsg | Error {
-    const code = data[0]
-    const type = getTypeFromCode(code)
-    const obj = getObjFromString(type)
-    if (obj == undefined) {
-      return new SatelliteError(
-        SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
-        `${code})`
-      )
-    }
-    return obj.decode(data.subarray(1))
   }
 
   private sendMessage(request: SatPbMsg) {
@@ -963,4 +950,17 @@ function serializeColumnData(column: string | number): Uint8Array {
 
 function serializeNullData(): Uint8Array {
   return typeEncoder.text('')
+}
+
+export function toMessage(data: Uint8Array): SatPbMsg | Error {
+  const code = data[0]
+  const type = getTypeFromCode(code)
+  const obj = getObjFromString(type)
+  if (obj == undefined) {
+    return new SatelliteError(
+      SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
+      `${code})`
+    )
+  }
+  return obj.decode(data.subarray(1))
 }
