@@ -106,6 +106,14 @@ defmodule Electric.Replication.Postgres.Client do
     :epgsql.close(conn)
   end
 
+  @types_query """
+  SELECT nspname, typname, pg_type.oid, typarray, typelem, typlen, typtype, typbasetype, typrelid, EXISTS(SELECT 1 FROM pg_type as t WHERE pg_type.oid = t.typarray) as is_array
+  FROM pg_type
+  JOIN pg_namespace ON typnamespace = pg_namespace.oid
+  WHERE typtype != 'c'
+  ORDER BY oid
+  """
+
   @tables_query """
   SELECT DISTINCT ON (t.schemaname, t.tablename)
     t.schemaname, t.tablename, c.oid, c.relreplident
@@ -138,6 +146,11 @@ defmodule Electric.Replication.Postgres.Client do
   @migrations_query """
   SELECT version, hash, applied_at FROM electric.migrations ORDER BY applied_at DESC;
   """
+
+  def query_oids(conn) do
+    {:ok, _, type_data} = squery(conn, @types_query)
+    {:ok, type_data}
+  end
 
   @spec query_replicated_tables(connection, publication | nil) ::
           [Electric.Postgres.SchemaRegistry.replicated_table()]

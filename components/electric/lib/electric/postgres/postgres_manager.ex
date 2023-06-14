@@ -4,6 +4,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
+  alias Electric.Postgres.OidDatabase
 
   @behaviour GenServer
   require Logger
@@ -208,6 +209,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
       with {:ok, _versions} <- Extension.migrate(conn),
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
+           {:ok, oids} <- Client.query_oids(conn),
+           OidDatabase.save_oids(oids),
            tables <- Client.query_replicated_tables(conn, publication),
            :ok <- Client.close(conn) do
         tables
