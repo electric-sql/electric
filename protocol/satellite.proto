@@ -8,18 +8,18 @@
 //
 // Server is expected to be one of the Electric instances, while Client is a
 // client application that talks to Electric via Satellite library, or any other
-// enitty that implements this protocol.
+// entity that implements this protocol.
 //
 // Producer and Consumer are the corresponding roles Client and Server play in
 // replication process. Consumer requests replication from the Producer, and
-// periodically answer Ping requests form the Prodicer to acknowledge
+// periodically answer Ping requests form the Producer to acknowledge
 // successful replication. Consumer may also send such Ping requests, if the
 // bidirectional replication is enabled. If one of the parties is not involved
 // in the replication lsn field may be left empty.
 syntax = "proto3";
 
 // NOTE: Part after Electric.Satellite is used as a version of the protocol
-// itseld where the format vMAJOR.MINOR is treated in the following way:
+// itself where the format vMAJOR.MINOR is treated in the following way:
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
@@ -100,7 +100,7 @@ message SatInStartReplicationReq {
     enum Option {
         NONE = 0;
         // Flag that indicates to Producer, to start replication from the latest
-        // position that have been acknowledged by this Consumer. In such a case
+        // position that has been acknowledged by this Consumer. In such a case
         // provided lsn will be ignored
         LAST_ACKNOWLEDGED = 1;
         // In sync mode consumer of the stream is expected to send SatPingResp
@@ -131,7 +131,7 @@ message SatInStopReplicationReq {
 
 }
 
-// (Producer) Acknowledgement that repliation have been stopped
+// (Producer) Acknowledgement that replication has been stopped
 message SatInStopReplicationResp {
 
 }
@@ -270,7 +270,7 @@ message SatOpRow {
 }
 
 // A migration message, originating in Postgres, captured via event triggers,
-// propated to electric, converted from postgres to the equivalent sqlite
+// propagated to electric, converted from postgres to the equivalent sqlite
 // statement and inserted into the replication stream
 //
 // Each migration message includes the sql strings to execute on the satellite
