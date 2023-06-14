@@ -120,15 +120,15 @@ message SatInStartReplicationReq {
     // delivered when SYNC_MODE is used
     int32 sync_batch_size = 3;
 
-    // the subscriptions identifiers the client wants to resume subscription
-    // discuss:
-    //  - lsn must match the last position sent by the producer for all subscriptions
-    //    i.e. a client cannot resume from a position further down in the stream (if that is possible at all)
-    //  - if a client does not request to resume subscriptions on reconnect,
-    //    drop those subscriptions on server immediatelly, otherwise security
-    //    violations are possible.
-    //  > In other words, subscriptions must be consumed without gaps
+    // the subscriptions identifiers the client wants to resume subscription    
     repeated string subscription_ids = 4;
+
+    // Note:
+    // - a client might resume replication only for a subset of previous subscriptions 
+    // in case the application cancelled some subscriptions while disconnected from the
+    // server. The server is responsible to keep/gc the remaining subscriptions.
+    // - the server must ensure that if the client skips a portion of the replication
+    // stream, the client is not able to read data it no longer has access to.
 }
 
 // (Producer) The result of the start replication requests
