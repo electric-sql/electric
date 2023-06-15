@@ -34,14 +34,25 @@ pnpm install
 ## Run
 
 First, setup and run the local stack:
-```
+```sh
 cd ../../components/electric
 docker build -t electric:local-build .
 cd ../../local-stack
-source .envrc && docker-compose up
 ```
 
-Then, create the necessary tables in Postgres on the local stack:
+Configure your environment to use the compiled image:
+```sh
+vim .envrc
+export ELECTRIC_IMAGE=electric:local-build
+```
+
+Launch the local stack:
+```sh
+source .envrc
+docker-compose up
+```
+
+Then, connect to Postgres and create the necessary tables:
 ```sh
 docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
 electric=# CREATE TABLE IF NOT EXISTS "items" (

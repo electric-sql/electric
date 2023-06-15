@@ -1,9 +1,6 @@
 import test from 'ava'
-import {
-  loadMigrations,
-  makeMigration,
-  parseMetadata,
-} from '../../src/migrators/builder'
+import { makeMigration, parseMetadata } from '../../src/migrators/builder'
+import { loadMigrations } from '../../src/cli'
 import {
   SatOpMigrate,
   SatOpMigrate_Table,
