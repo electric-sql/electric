@@ -34,6 +34,7 @@ import {
   Row,
   MigrationTable,
   SatelliteErrorCode,
+  ClientShapeDefinition,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -63,6 +64,7 @@ import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
+import { SubscriptionsManager } from '../util/subscriptions'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -97,6 +99,8 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
+  subscriptions: SubscriptionsManager
+
   constructor(
     dbName: DbName,
     adapter: DatabaseAdapter,
@@ -130,6 +134,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     this.relations = {}
+    this.subscriptions = new SubscriptionsManager()
   }
 
   async start(
@@ -239,6 +244,12 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this.client.close()
+  }
+
+  async subscribe(
+    _shapeDefinitions: ClientShapeDefinition[]
+  ): Promise<void | SatelliteError> {
+    return Promise.reject()
   }
 
   async _connectivityStateChange(

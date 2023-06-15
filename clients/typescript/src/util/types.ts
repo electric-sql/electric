@@ -44,6 +44,8 @@ export enum SatelliteErrorCode {
   UNKNOWN_DATA_TYPE,
   AUTH_ERROR,
 
+  SUBSCRIPTION_ALREADY_EXISTS,
+
   // start replication errors
   BEHIND_WINDOW,
   INVALID_POSITION,
@@ -152,3 +154,29 @@ export type ConnectivityState =
   | 'connected'
   | 'disconnected'
   | 'error'
+
+export type SubcriptionShapeDefinitions = {
+  [k: string]: ShapeDefinition[]
+}
+
+export type SubscribeResponse = {
+  subscriptionId: string
+}
+
+export type ClientShapeDefinition = {
+  select: ShapeSelect[]
+}
+
+export type ShapeRequestOrDefinition = {
+  uuid?: string
+  requestId?: string
+} & ClientShapeDefinition
+
+export type ShapeRequest = Required<Omit<ShapeRequestOrDefinition, 'uuid'>>
+export type ShapeDefinition = Required<
+  Omit<ShapeRequestOrDefinition, 'requestId'>
+>
+
+export type ShapeSelect = {
+  tablename: string
+}

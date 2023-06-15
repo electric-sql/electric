@@ -18,6 +18,7 @@ import {
   SatRelationColumn,
   SatAuthHeader,
   SatAuthHeaderPair,
+  SatSubscribeResp,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -123,6 +124,10 @@ export class SatelliteClient extends EventEmitter implements Client {
         },
         SatErrorResp: {
           handle: (error: SatErrorResp) => this.handleError(error),
+          isRpc: false,
+        },
+        SatSubscribeResp: {
+          handle: (sub: SatSubscribeResp) => this.handleSubscription(sub),
           isRpc: false,
         },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
@@ -635,6 +640,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       'error',
       new Error(`server replied with error code: ${error.errorType}`)
     )
+  }
+
+  private handleSubscription(sub: SatSubscribeResp) {
+    return sub.subscriptionId
   }
 
   // TODO: properly handle socket errors; update connectivity state

@@ -13,6 +13,9 @@ import {
   DataTransaction,
   Transaction,
   Relation,
+  SubscribeResponse,
+  ShapeDefinition,
+  ClientShapeDefinition,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'
@@ -53,6 +56,9 @@ export interface Satellite {
     opts?: SatelliteReplicationOptions
   ): Promise<ConnectionWrapper>
   stop(): Promise<void>
+  subscribe(
+    shapeDefinitions: ClientShapeDefinition[]
+  ): Promise<void | SatelliteError>
 }
 
 export interface Client {
