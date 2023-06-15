@@ -55,6 +55,7 @@
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
+    "./migrators/builder": "./dist/migrators/builder.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -89,6 +90,9 @@
       ],
       "client/model": [
         "./dist/client/model/index.d.ts"
+      ],
+      "migrators/builder": [
+        "./dist/migrators/builder.d.ts"
       ]
     }
   },

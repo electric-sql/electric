@@ -623,7 +623,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
-    const messageOrError = this.toMessage(data)
+    const messageOrError = toMessage(data)
     Log.info(`Received message ${JSON.stringify(messageOrError)}`)
     if (messageOrError instanceof Error) {
       this.emit('error', messageOrError)
@@ -732,6 +732,14 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
 
       if (op.migrate) {
+        // store the version of this migration transaction
+        // (within 1 transaction, every SatOpMigrate message
+        //  has the same version number)
+        // TODO: in the protocol: move the `version` field to the SatOpBegin message
+        //       or replace the `is_migration` field by an optional `version` field
+        const tx = replication.transactions[lastTxnIdx]
+        tx.migrationVersion = op.migrate.version
+
         const stmts = op.migrate.stmts
         stmts.forEach((stmt) => {
           const change: SchemaChange = {
@@ -739,23 +747,10 @@ export class SatelliteClient extends EventEmitter implements Client {
             migrationType: stmt.type,
             sql: stmt.sql,
           }
-          replication.transactions[lastTxnIdx].changes.push(change)
+          tx.changes.push(change)
         })
       }
     })
-  }
-
-  private toMessage(data: Uint8Array): SatPbMsg | Error {
-    const code = data[0]
-    const type = getTypeFromCode(code)
-    const obj = getObjFromString(type)
-    if (obj == undefined) {
-      return new SatelliteError(
-        SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
-        `${code})`
-      )
-    }
-    return obj.decode(data.subarray(1))
   }
 
   private sendMessage(request: SatPbMsg) {
@@ -955,4 +950,17 @@ function serializeColumnData(column: string | number): Uint8Array {
 
 function serializeNullData(): Uint8Array {
   return typeEncoder.text('')
+}
+
+export function toMessage(data: Uint8Array): SatPbMsg | Error {
+  const code = data[0]
+  const type = getTypeFromCode(code)
+  const obj = getObjFromString(type)
+  if (obj == undefined) {
+    return new SatelliteError(
+      SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
+      `${code})`
+    )
+  }
+  return obj.decode(data.subarray(1))
 }

@@ -12,23 +12,14 @@ export default {
   env: 'default',
   migrations: [
     {
-      encoding: 'escaped',
-      name: '20230123_170527_569_init',
-      postgres_body: '',
-      satellite_body: [
+      statements: [
         'DROP TABLE IF EXISTS _electric_trigger_settings;',
         'CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);',
       ],
-      sha256:
-        '01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b',
-      title: 'init',
+      version: '1',
     },
     {
-      encoding: 'escaped',
-      name: '20230123_170646_833_test_schema',
-      postgres_body:
-        '\nCREATE TABLE public.parent (\n  id bigint PRIMARY KEY,\n  value text,\n  other bigint DEFAULT 0);\nALTER TABLE public.parent REPLICA IDENTITY FULL;\n\nCREATE TABLE public.items (\n  value text PRIMARY KEY);\nALTER TABLE public.items REPLICA IDENTITY FULL;\n\nCREATE TABLE public.child (\n  id bigint PRIMARY KEY,\n  parent bigint NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id) MATCH SIMPLE);\nALTER TABLE public.child REPLICA IDENTITY FULL;\n',
-      satellite_body: [
+      statements: [
         'CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n) WITHOUT ROWID;',
         'CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;',
         'CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;',
@@ -66,9 +57,7 @@ export default {
         'DROP TRIGGER IF EXISTS delete_main_parent_into_oplog;',
         "CREATE TRIGGER delete_main_parent_into_oplog\n   AFTER DELETE ON main.parent\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'parent', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'value', old.value, 'other', old.other), NULL);\nEND;",
       ],
-      sha256:
-        '18fdba77e785b8f278386e1122e8435d9abf542a95920492a5772ac6d58031bf',
-      title: 'test schema',
+      version: '2',
     },
   ],
 }

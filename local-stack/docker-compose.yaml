@@ -43,7 +43,9 @@ services:
       ELECTRIC_REGIONAL_ID: region1
       ELECTRIC_INSTANCE_ID: electric_1
       CONNECTORS: postgres_1=postgresql://postgres:password@postgres_1:5432/electric
+      STATUS_PORT: "5050"
     ports:
+      - 5050:5050
       - 5133:5133
     volumes:
       - electric_data:/app/data

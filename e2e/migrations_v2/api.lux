@@ -1,0 +1,56 @@
+[doc Test that the API allows the client to download the migrations as a zip]
+
+[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
+[global eprompt=iex\(\d+\)>\s]
+[global psql=electric]
+[global user_id_1=1]
+[global migration_version_1=20230504114018]
+[global migration_version_2=20230608134524]
+
+[include shared.luxinc]
+[invoke setup]
+
+
+[shell pg_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    !BEGIN;
+    ?electric=\*#
+    !SELECT electric.migration_version('$migration_version_1');
+    ?electric=\*#
+    !CREATE TABLE mtable1 (id uuid PRIMARY KEY);
+    ?electric=\*#
+    !COMMIT;
+    ?electric=#
+
+[shell pg_1]
+    [invoke log "run migration $migration_version_2 on postgres"]
+    !BEGIN;
+    ?electric=\*#
+    !SELECT electric.migration_version('$migration_version_2');
+    ?electric=\*#
+    !CREATE TABLE mtable2 (id uuid PRIMARY KEY);
+    ?electric=\*#
+    !COMMIT;
+    ?electric=#
+
+[shell electric]
+    ?.* \[info\] Applying migration .* $migration_version_1
+    ?.* \[info\] Applying migration .* $migration_version_2
+
+
+[shell developer]
+    !cd $(mktemp -d)
+    ?SH-PROMPT:
+    !curl -v -o migrations.zip http://localhost:5050/api/migrations?dialect=sqlite
+    ?200 OK
+    !unzip migrations.zip
+    ?inflating: ${migration_version_1}/migration.sql
+    ?inflating: ${migration_version_2}/migration.sql
+    !cat "${migration_version_1}/migration.sql"
+    ?CREATE TABLE "mtable1" \(.*
+    !cat "${migration_version_2}/migration.sql"
+    ?CREATE TABLE "mtable2" \(.*
+
+[cleanup]
+    [invoke teardown]
+

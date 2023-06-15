@@ -18,7 +18,6 @@ COPY e2e/satellite_client ./e2e/satellite_client
 RUN pnpm install -r --filter satellite_client^...
 RUN pnpm run -r --filter satellite_client^... build
 RUN pnpm install -r --filter satellite_client
-RUN ls -lA e2e/satellite_client/node_modules/prisma-generator-electric/dist
 RUN pnpm run -r --filter satellite_client build
 
 RUN pnpm --filter satellite_client --prod deploy output

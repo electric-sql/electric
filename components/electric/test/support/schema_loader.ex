@@ -35,9 +35,9 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def save({versions, opts}, version, schema) do
-    notify(opts, {:save, version, schema})
-    {:ok, {[{version, schema} | versions], opts}}
+  def save({versions, opts}, version, schema, stmts) do
+    notify(opts, {:save, version, schema, stmts})
+    {:ok, {[{version, schema, stmts} | versions], opts}}
   end
 
   @impl true
@@ -69,6 +69,22 @@ defmodule Electric.Postgres.MockSchemaLoader do
   def refresh_subscription({_versions, opts}, name) do
     notify(opts, {:refresh_subscription, name})
     :ok
+  end
+
+  @impl true
+  def migration_history({versions, opts}, version) do
+    notify(opts, {:migration_history, version})
+
+    migrations =
+      case version do
+        nil ->
+          versions
+
+        version when is_binary(version) ->
+          for {v, schema, stmts} <- versions, v > version, do: {v, schema, stmts}
+      end
+
+    {:ok, migrations}
   end
 
   defp notify(%{parent: parent}, msg) when is_pid(parent) do

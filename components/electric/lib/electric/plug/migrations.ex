@@ -1,10 +1,11 @@
 defmodule Electric.Plug.Migrations do
-  alias Electric.Postgres.SchemaRegistry
-  alias Electric.Replication.PostgresConnector
-  alias Electric.Replication.PostgresConnectorMng
-
   use Plug.Router
+  use Electric.Satellite.Protobuf
+
+  alias Electric.Postgres.Extension.SchemaCache
+
   import Plug.Conn
+
   require Logger
 
   plug(:match)
@@ -18,37 +19,17 @@ defmodule Electric.Plug.Migrations do
   plug(:dispatch)
 
   get "/" do
-    data = migration_info()
+    conn = fetch_query_params(conn)
 
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(data))
-  end
-
-  get "/:origin" do
-    origin = get_origin(conn)
-    data = migration_info(origin)
-
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(data))
-  end
-
-  put "/:origin" do
-    with origin <- get_origin(conn),
-         conn <- fetch_query_params(conn),
-         vsn <- conn.body_params["vsn"],
-         true <- valid_vsn?(vsn) do
-      case PostgresConnectorMng.migrate(origin, vsn) do
-        :ok ->
-          send_resp(conn, 200, "ok")
-
-        {:error, error} ->
-          send_resp(conn, 403, Kernel.inspect(error))
-      end
+    with {:ok, dialect} <- get_dialect(conn),
+         {:ok, migrations} <- get_migrations(conn),
+         {:ok, body} <- migrations_zipfile(migrations, dialect) do
+      conn
+      |> put_resp_content_type("application/zip", nil)
+      |> send_resp(200, body)
     else
-      _error ->
-        send_resp(conn, 400, "Bad request")
+      {:error, reason} ->
+        json(conn, 403, %{error: to_string(reason)})
     end
   end
 
@@ -56,23 +37,92 @@ defmodule Electric.Plug.Migrations do
     send_resp(conn, 404, "Not found")
   end
 
-  defp get_origin(conn) do
-    conn.params["origin"]
+  defp json(conn, status, data) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, Jason.encode!(data))
   end
 
-  defp valid_vsn?(vsn) do
-    String.match?(vsn, ~r/^[\w\_]+$/)
-  end
-
-  def migration_info() do
-    origins = PostgresConnector.connectors()
-    Enum.map(origins, fn origin -> migration_info(origin) end)
-  end
-
-  defp migration_info(origin) do
-    case SchemaRegistry.fetch_table_migration(origin) do
-      nil -> "unknown"
-      [h | _] -> Map.put(h, :origin, origin)
+  defp get_dialect(%{query_params: %{"dialect" => dialect_name}}) do
+    case dialect_name do
+      "sqlite" -> {:ok, Electric.Postgres.Dialect.SQLite}
+      _ -> {:error, "unsupported dialect #{inspect(dialect_name)}"}
     end
+  end
+
+  defp get_dialect(_conn) do
+    {:error, "missing required parameter 'dialect'"}
+  end
+
+  defp get_migrations(%{query_params: %{"version" => empty}}) when empty in [nil, ""] do
+    migrations_for_version(nil)
+  end
+
+  defp get_migrations(%{query_params: %{"version" => version}}) do
+    migrations_for_version(version)
+  end
+
+  defp get_migrations(_conn) do
+    migrations_for_version(nil)
+  end
+
+  defp migrations_for_version(version) do
+    SchemaCache.migration_history(version)
+  end
+
+  defp migrations_zipfile(migrations, dialect) do
+    file_list =
+      Enum.flat_map(migrations, fn {version, schema, stmts} ->
+        ops = translate_stmts(version, schema, stmts, dialect)
+
+        sql =
+          ops
+          |> Enum.flat_map(fn op -> Enum.map(op.stmts, & &1.sql) end)
+          |> Enum.join("\n\n")
+
+        metadata =
+          ops
+          |> Enum.map(&table_metadata_proto/1)
+          |> then(
+            &%{
+              version: version,
+              ops: &1,
+              format: "SatOpMigrate",
+              protocol_version: PB.get_long_proto_vsn()
+            }
+          )
+          |> Jason.encode!()
+
+        [
+          {zip_filename(version, "migration.sql"), sql},
+          {zip_filename(version, "metadata.json"), metadata}
+        ]
+      end)
+
+    with {:ok, {_, zip}} <- :zip.create('migrations.zip', file_list, [:memory]) do
+      {:ok, zip}
+    end
+  end
+
+  defp translate_stmts(version, schema, stmts, dialect) do
+    Enum.flat_map(stmts, fn stmt ->
+      {:ok, msgs, _relations} =
+        Electric.Postgres.Replication.migrate(schema, version, stmt, dialect)
+
+      msgs
+    end)
+  end
+
+  defp table_metadata_proto(table_proto) do
+    table_proto
+    |> SatOpMigrate.encode!()
+    |> IO.iodata_to_binary()
+    |> Base.encode64()
+  end
+
+  defp zip_filename(version, filename) do
+    version
+    |> Path.join(filename)
+    |> to_charlist()
   end
 end

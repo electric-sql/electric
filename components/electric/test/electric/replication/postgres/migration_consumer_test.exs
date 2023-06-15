@@ -175,7 +175,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       assert_receive {FakeConsumer, :events, ^events}, 500
       assert_receive {MockSchemaLoader, :load}, 500
-      assert_receive {MockSchemaLoader, {:save, ^version, schema}}
+      assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}
       # only receive 1 save instruction
       refute_receive {MockSchemaLoader, {:save, _, _schema}}
 
@@ -248,7 +248,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       assert_receive {FakeConsumer, :events, ^filtered_events}, 500
       assert_receive {MockSchemaLoader, :load}, 500
-      assert_receive {MockSchemaLoader, {:save, ^version, _schema}}
+
+      assert_receive {MockSchemaLoader,
+                      {:save, ^version, _schema,
+                       ["create table something_else (id uuid primary key);"]}}
     end
   end
 end

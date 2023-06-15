@@ -31,7 +31,6 @@
     !make start_electric_1
     -$fail_pattern
     ?START_REPLICATION SLOT
-    # ?START_REPLICATION SLOT
 
 [shell start_env]
     [progress setup finished]
