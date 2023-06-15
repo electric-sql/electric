@@ -1,4 +1,4 @@
-import { buildMigrations } from 'electric-sql/migrators'
+import { buildMigrations } from 'electric-sql/migrators/builder'
 import path from 'path'
 
 // `process.argv` is an array containing the command line arguments.
