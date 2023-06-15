@@ -138,6 +138,27 @@ test.serial('replication start timeout', async (t) => {
   }
 })
 
+test.serial('connect subscription error', async (t) => {
+  const { client, server } = t.context
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({
+    error: {
+      code: Proto.SatInStartReplicationResp_SatInStartReplicationError_Code
+        .BEHIND_WINDOW,
+      message: 'Test',
+    },
+  })
+  await client.connect()
+
+  server.nextResponses([startResp])
+
+  try {
+    await client.startReplication()
+    t.fail()
+  } catch (e) {
+    t.is(e.code, SatelliteErrorCode.BEHIND_WINDOW)
+  }
+})
+
 test.serial('authentication success', async (t) => {
   const { client, server } = t.context
   await client.connect()

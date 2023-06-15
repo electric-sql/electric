@@ -9,7 +9,12 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, Satellite } from './index'
+import {
+  Client,
+  ConnectionWrapper,
+  Satellite,
+  SatelliteReplicationOptions,
+} from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -28,6 +33,7 @@ import {
   Transaction,
   Row,
   MigrationTable,
+  SatelliteErrorCode,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -61,6 +67,11 @@ import { generateOplogTriggers } from '../migrators/triggers'
 type ChangeAccumulator = {
   [key: string]: Change
 }
+
+const throwErrors = [
+  SatelliteErrorCode.INVALID_POSITION,
+  SatelliteErrorCode.BEHIND_WINDOW,
+]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -121,7 +132,10 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
   }
 
-  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+  async start(
+    authConfig: AuthConfig,
+    opts?: SatelliteReplicationOptions
+  ): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -187,7 +201,7 @@ export class SatelliteProcess implements Satellite {
       Log.info(`no lsn retrieved from store`)
     }
 
-    const connectionPromise = this._connectAndStartReplication()
+    const connectionPromise = this._connectAndStartReplication(opts)
     return { connectionPromise }
   }
 
@@ -249,7 +263,9 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(): Promise<void | SatelliteError> {
+  async _connectAndStartReplication(
+    opts?: SatelliteReplicationOptions
+  ): Promise<void | SatelliteError> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
@@ -261,7 +277,21 @@ export class SatelliteProcess implements Satellite {
       .connect()
       .then(() => this.client.authenticate(authState))
       .then(() => this.client.startReplication(this._lsn))
-      .catch((error) => {
+      .catch(async (error) => {
+        if (
+          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          opts?.clearOnBehindWindow
+        ) {
+          // extract and handle subscriptions
+          this._lsn = undefined
+          return this._setMeta('lsn', null).then(() =>
+            this._connectAndStartReplication()
+          )
+        }
+
+        if (error.code && throwErrors.find((te) => te == error.code)) {
+          throw error
+        }
         Log.warn(`couldn't start replication: ${error}`)
       })
   }

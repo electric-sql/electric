@@ -37,6 +37,8 @@ export type ConnectionWrapper = {
   connectionPromise: Promise<void | Error>
 }
 
+export type SatelliteReplicationOptions = { clearOnBehindWindow: boolean }
+
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {
@@ -46,7 +48,10 @@ export interface Satellite {
   migrator: Migrator
   notifier: Notifier
 
-  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
+  start(
+    authConfig: AuthConfig,
+    opts?: SatelliteReplicationOptions
+  ): Promise<ConnectionWrapper>
   stop(): Promise<void>
 }
 

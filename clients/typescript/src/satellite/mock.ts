@@ -13,6 +13,7 @@ import {
   DataTransaction,
   Transaction,
   Relation,
+  SatelliteErrorCode,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -22,6 +23,10 @@ import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
+import { bytesToNumber } from '../util/common'
+
+export const MOCK_BEHIND_WINDOW_LSN = 42
+export const MOCK_INVALID_POSITION_LSN = 27
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -129,6 +134,24 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
     const t = setTimeout(() => this.emit('outbound_started'), 100)
     this.timeouts.push(t)
+
+    if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.BEHIND_WINDOW,
+          'MOCK BEHIND_WINDOW_LSN ERROR'
+        )
+      )
+    }
+
+    if (lsn && bytesToNumber(lsn) == MOCK_INVALID_POSITION_LSN) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.INVALID_POSITION,
+          'MOCK INVALID_POSITION ERROR'
+        )
+      )
+    }
 
     return Promise.resolve()
   }

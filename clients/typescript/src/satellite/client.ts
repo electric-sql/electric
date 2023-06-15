@@ -26,6 +26,7 @@ import {
   SatPbMsg,
   getProtocolVersion,
   getFullTypeName,
+  startReplicationErrorToSatelliteError,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -63,7 +64,10 @@ import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
 
-type IncomingHandler = { handle: (msg: any) => any | void; isRpc: boolean }
+type IncomingHandler = {
+  handle: (msg: any) => void | AuthResponse
+  isRpc: boolean
+}
 
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
@@ -88,7 +92,8 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: true,
         },
         SatInStartReplicationResp: {
-          handle: () => this.handleStartResp(),
+          handle: (resp: SatInStartReplicationResp) =>
+            this.handleStartResp(resp),
           isRpc: true,
         },
         SatInStartReplicationReq: {
@@ -241,7 +246,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  startReplication(lsn?: LSN): Promise<void> {
+  startReplication(lsn?: LSN): Promise<void | SatelliteError> {
     if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
@@ -463,9 +468,14 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { serverId, error }
   }
 
-  private handleStartResp() {
+  private handleStartResp(resp: SatInStartReplicationResp) {
     if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
-      this.inbound.isReplicating = ReplicationStatus.ACTIVE
+      if (resp.error) {
+        this.inbound.isReplicating = ReplicationStatus.STOPPED
+        this.emit('error', startReplicationErrorToSatelliteError(resp.error))
+      } else {
+        this.inbound.isReplicating = ReplicationStatus.ACTIVE
+      }
     } else {
       this.emit(
         'error',

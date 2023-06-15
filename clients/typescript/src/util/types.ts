@@ -43,6 +43,11 @@ export enum SatelliteErrorCode {
   PROTOCOL_VIOLATION,
   UNKNOWN_DATA_TYPE,
   AUTH_ERROR,
+
+  // start replication errors
+  BEHIND_WINDOW,
+  INVALID_POSITION,
+  SUBSCRIPTION_NOT_FOUND,
 }
 
 export type AuthResponse = {

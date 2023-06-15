@@ -1,5 +1,6 @@
 import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
+import { SatelliteError, SatelliteErrorCode } from './types'
 
 type GetName<T extends { $type: string }> =
   T['$type'] extends `Electric.Satellite.v1_4.${infer K}` ? K : never
@@ -90,4 +91,19 @@ export function getProtocolVersion(): string {
 
 export function getFullTypeName(message: string): string {
   return getProtocolVersion() + '.' + message
+}
+
+export function startReplicationErrorToSatelliteError(
+  error: Pb.SatInStartReplicationResp_SatInStartReplicationError
+) {
+  switch (error.code) {
+    case Pb.SatInStartReplicationResp_SatInStartReplicationError_Code
+      .BEHIND_WINDOW:
+      return new SatelliteError(SatelliteErrorCode.BEHIND_WINDOW, error.message)
+    default:
+      return new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        `unexpected mapping for error: ${error.message}`
+      )
+  }
 }

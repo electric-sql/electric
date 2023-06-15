@@ -1,7 +1,11 @@
 import test from 'ava'
 
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { MockSatelliteClient } from '../../src/satellite/mock'
+import {
+  MOCK_BEHIND_WINDOW_LSN,
+  MOCK_INVALID_POSITION_LSN,
+  MockSatelliteClient,
+} from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 import { AuthState } from '../../src/auth/index'
@@ -33,10 +37,11 @@ import {
   Relation,
   SqlValue,
   DataTransaction,
+  SatelliteErrorCode,
 } from '../../src/util/types'
 import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
 import { Satellite } from '../../src/satellite'
-import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
+import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
 
@@ -1193,6 +1198,42 @@ test('garbage collection is triggered when transaction from the same origin is r
   await satellite._applyTransaction(transactions[0])
   const new_oplog = await satellite._getEntries()
   t.deepEqual(new_oplog, [])
+})
+
+// stub client and make satellite throw the error with option off/succeed with option on
+test('clear database on BEHIND_WINDOW', async (t) => {
+  const { satellite } = t.context as ContextType
+  const { runMigrations } = t.context as ContextType
+  await runMigrations()
+
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
+  await satellite._setMeta('lsn', base64lsn)
+  try {
+    const conn = await satellite.start(undefined, { clearOnBehindWindow: true })
+    await conn.connectionPromise
+    const lsnAfter = await satellite._getMeta('lsn')
+    t.not(lsnAfter, base64lsn)
+  } catch (e) {
+    t.fail('start should not throw')
+  }
+
+  // TODO: test clear subscriptions
+})
+
+test('throw other replication errors', async (t) => {
+  const { satellite } = t.context as ContextType
+  const { runMigrations } = t.context as ContextType
+  await runMigrations()
+
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
+  await satellite._setMeta('lsn', base64lsn)
+  try {
+    const conn = await satellite.start()
+    await conn.connectionPromise
+    t.fail('start should throw')
+  } catch (e) {
+    t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
+  }
 })
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
