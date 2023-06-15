@@ -6,10 +6,6 @@ defmodule Electric.Postgres.Case do
       alias Electric.{Postgres, Postgres.Schema, Postgres.Schema.Proto}
       alias Electric.Postgres.SQLGenerator
 
-      def esc(str) do
-        String.replace(str, "'", "''")
-      end
-
       def parse(sql) do
         Electric.Postgres.parse!(sql)
       end

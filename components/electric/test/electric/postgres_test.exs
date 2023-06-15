@@ -2,93 +2,18 @@ defmodule Electric.PostgresTest do
   use Electric.Postgres.Case, async: false
   use ExUnitProperties
 
-  @conf_arg_map %{database: "dbname"}
+  import Electric.Postgres.TestConnection
 
-  def cmd(exe, args) do
-    trace("$ " <> Enum.join([exe | args], " "))
-    System.cmd(exe, args, stderr_to_stdout: true)
-  end
-
-  def trace(s) do
-    unless is_nil(System.get_env("SQL_TRACE")) do
-      IO.puts(s)
-    end
-  end
-
-  def connection_args(pg_config \\ Electric.Postgres.TestConnection.config()) do
-    Enum.flat_map([:host, :port, :database, :username], fn arg ->
-      if value = pg_config[arg] do
-        ["--#{@conf_arg_map[arg] || arg}=#{value}"]
-      else
-        []
-      end
-    end)
-  end
-
-  def dropdb(dbname, config) do
-    Stream.repeatedly(fn ->
-      cmd(
-        "dropdb",
-        connection_args(config) ++ ["--force", dbname]
-      )
-    end)
-    |> Enum.take_while(fn
-      {_, 0} ->
-        false
-
-      {_, _} ->
-        Process.sleep(200)
-        true
-    end)
-  end
-
-  setup_all do
-    config = Electric.Postgres.TestConnection.config()
-    config = Keyword.delete(config, :database)
-    db_name = "electric_postgres_test_#{DateTime.utc_now() |> DateTime.to_unix()}"
-
-    # put the configured password into the env where the pg cli tools expects it to be
-    # if we're already getting the password from the env, then this does nothing
-    if password = Keyword.get(config, :password),
-      do: System.put_env("PGPASSWORD", to_string(password))
-
-    {_, 0} =
-      cmd(
-        "createdb",
-        connection_args(config) ++ ["-E", "UTF-8", "-T", "template0", db_name]
-      )
-
-    pg_config = Keyword.put(config, :database, db_name)
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
-
-    on_exit(fn ->
-      {:ok, conn} = :epgsql.connect(pg_config)
-
-      {:ok, _, _} =
-        :epgsql.equery(
-          conn,
-          "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
-          [db_name]
-        )
-
-      :epgsql.close(conn)
-
-      dropdb(db_name, config)
-    end)
-
-    {:ok, db: db_name, pg_config: pg_config, conn: conn}
-  end
-
-  setup(cxt) do
-    %{pg_config: pg_config, conn: conn} = cxt
+  setup do
+    context = setup_test_db()
 
     # start the replication process here so that it will be stopped before
     # we get to the on_exit handler defined in the setup_all
-    assert {:ok, _versions} = Electric.Postgres.Extension.migrate(conn)
+    assert {:ok, _versions} = Electric.Postgres.Extension.migrate(context.conn)
 
     namespace = "public"
 
-    sql_file = pg_config[:database] <> ".sql"
+    sql_file = context.db <> ".sql"
 
     write_log? = false
 
@@ -104,13 +29,7 @@ defmodule Electric.PostgresTest do
         do: IO.puts(["SQL log written to ", sql_file])
     end)
 
-    {
-      :ok,
-      pg_config: pg_config, namespace: namespace, sql_file: file
-      # replication_pid: replication_pid,
-      # producer: producer,
-      # replication_consumer: rep_consumer,
-    }
+    Map.merge(context, %{namespace: namespace, sql_file: file})
   end
 
   # generate random create table statements
@@ -139,12 +58,12 @@ defmodule Electric.PostgresTest do
     &Electric.Postgres.Extension.SchemaLoader.Epgsql.relation_oid(conn, &1, &2, &3)
   end
 
-  def exec(nil, schema, _conn, _cxt) do
+  def exec(nil, schema, _conn, _context) do
     schema
   end
 
-  def exec(sql, schema, conn, cxt) do
-    %{sql_file: sql_file} = cxt
+  def exec(sql, schema, conn, context) do
+    %{sql_file: sql_file} = context
     trace("> " <> sql <> ";")
     if sql_file, do: IO.write(sql_file, sql <> ";\n\n")
 
@@ -160,7 +79,7 @@ defmodule Electric.PostgresTest do
     generator |> Enum.take(1) |> hd()
   end
 
-  def migrate_schema(conn, namespace, command_count, cxt) do
+  def migrate_schema(conn, namespace, command_count, context) do
     types = [{:int, "integer"}]
 
     schema =
@@ -180,7 +99,7 @@ defmodule Electric.PostgresTest do
         )
       )
       |> Stream.take(5)
-      |> Enum.reduce(Schema.new(), &exec(&1, &2, conn, cxt))
+      |> Enum.reduce(Schema.new(), &exec(&1, &2, conn, context))
 
     StreamData.frequency([
       {4, StreamData.constant(:create_table)},
@@ -211,7 +130,7 @@ defmodule Electric.PostgresTest do
             |> hd())
         )
         |> take()
-        |> exec(schema, conn, cxt)
+        |> exec(schema, conn, context)
 
       {:alter_table, _size}, schema ->
         if Enum.empty?(schema.tables) do
@@ -236,7 +155,7 @@ defmodule Electric.PostgresTest do
             except: [:drop_not_null, :generated, :set_type, :alter_constraint]
           )
           |> take()
-          |> exec(schema, conn, cxt)
+          |> exec(schema, conn, context)
         end
 
       {:drop_table, _size}, schema ->
@@ -245,7 +164,7 @@ defmodule Electric.PostgresTest do
           [_, _ | _] ->
             SQLGenerator.Table.drop_table(schema: schema, cascade: true)
             |> take()
-            |> exec(schema, conn, cxt)
+            |> exec(schema, conn, context)
 
           _ ->
             schema
@@ -254,7 +173,7 @@ defmodule Electric.PostgresTest do
       {:create_index, _size}, schema ->
         SQLGenerator.Index.create_index(schema: schema, except: [:concurrently])
         |> take()
-        |> exec(schema, conn, cxt)
+        |> exec(schema, conn, context)
 
       {:alter_index, _size}, schema ->
         SQLGenerator.Index.alter_index(
@@ -262,7 +181,7 @@ defmodule Electric.PostgresTest do
           only_supported: true
         )
         |> take()
-        |> exec(schema, conn, cxt)
+        |> exec(schema, conn, context)
 
       {:drop_index, _size}, schema ->
         # you can't drop a constraint by dropping its index -- so exclude the implicit indexes from this list
@@ -276,26 +195,17 @@ defmodule Electric.PostgresTest do
               cascade: true
             )
             |> take()
-            |> exec(schema, conn, cxt)
+            |> exec(schema, conn, context)
         end
     end)
   end
 
   defp pg_schema(conn, pg_config, namespace) do
-    connection_args =
-      Enum.flat_map([:host, :port, :database, :username], fn arg ->
-        if value = pg_config[arg] do
-          ["--#{@conf_arg_map[arg] || arg}=#{value}"]
-        else
-          []
-        end
-      end)
-
     # pg uses PGPASSWORD and so do we
     {sql, 0} =
       cmd(
         "pg_dump",
-        connection_args ++
+        connection_args(pg_config) ++
           [
             "--schema=#{namespace}",
             "--schema-only",
@@ -313,8 +223,8 @@ defmodule Electric.PostgresTest do
   end
 
   @tag timeout: :infinity
-  property "pg schema tracking", cxt do
-    %{namespace: namespace, conn: conn} = cxt
+  property "pg schema tracking", context do
+    %{namespace: namespace, conn: conn} = context
 
     # to generate e.g. 1024 statements run
     # STMTS=1024 mix test
@@ -322,15 +232,15 @@ defmodule Electric.PostgresTest do
     statement_count = System.get_env("STMTS", "64") |> String.to_integer()
 
     try do
-      schema = migrate_schema(conn, namespace, statement_count, cxt)
+      schema = migrate_schema(conn, namespace, statement_count, context)
 
-      {expected_schema, _cmds} = pg_schema(conn, cxt.pg_config, namespace)
+      {expected_schema, _cmds} = pg_schema(conn, context.pg_config, namespace)
 
       assert_schema_equal(schema, expected_schema)
 
       assert_valid_schema(schema)
     after
-      {:ok, _, _} = :epgsql.squery(cxt.conn, "DROP SCHEMA IF EXISTS #{namespace} CASCADE")
+      {:ok, _, _} = :epgsql.squery(context.conn, "DROP SCHEMA IF EXISTS #{namespace} CASCADE")
     end
   end
 

@@ -1,4 +1,86 @@
 defmodule Electric.Postgres.TestConnection do
+  import ExUnit.Callbacks
+
+  @conf_arg_map %{database: "dbname"}
+
+  def cmd(exe, args) do
+    trace("$ " <> Enum.join([exe | args], " "))
+    System.cmd(exe, args, stderr_to_stdout: true)
+  end
+
+  def trace(s) do
+    unless is_nil(System.get_env("SQL_TRACE")) do
+      IO.puts(s)
+    end
+  end
+
+  def connection_args(pg_config \\ config()) do
+    Enum.flat_map([:host, :port, :database, :username], fn arg ->
+      if value = pg_config[arg] do
+        ["--#{@conf_arg_map[arg] || arg}=#{value}"]
+      else
+        []
+      end
+    end)
+  end
+
+  def dropdb(dbname, config) do
+    Stream.repeatedly(fn ->
+      cmd(
+        "dropdb",
+        connection_args(config) ++ ["--force", dbname]
+      )
+    end)
+    |> Enum.take_while(fn
+      {_, 0} ->
+        false
+
+      {_, _} ->
+        Process.sleep(200)
+        true
+    end)
+  end
+
+  def setup_test_db(setup_fun \\ fn _ -> nil end, teardown_fun \\ fn _ -> nil end) do
+    db_name = "electric_postgres_test_#{DateTime.utc_now() |> DateTime.to_unix()}"
+    config = config() |> Keyword.delete(:database)
+
+    # put the configured password into the env where the pg cli tools expects it to be
+    # if we're already getting the password from the env, then this does nothing
+    if password = Keyword.get(config, :password),
+      do: System.put_env("PGPASSWORD", to_string(password))
+
+    {_, 0} =
+      cmd(
+        "createdb",
+        connection_args(config) ++ ["-E", "UTF-8", "-T", "template0", db_name]
+      )
+
+    pg_config = Keyword.put(config, :database, db_name)
+    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
+
+    setup_fun.(conn)
+
+    on_exit(fn ->
+      {:ok, conn} = :epgsql.connect(pg_config)
+
+      teardown_fun.(conn)
+
+      {:ok, _, _} =
+        :epgsql.equery(
+          conn,
+          "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
+          [db_name]
+        )
+
+      :epgsql.close(conn)
+
+      dropdb(db_name, config)
+    end)
+
+    %{db: db_name, pg_config: pg_config, conn: conn}
+  end
+
   def config do
     [
       host: System.get_env("PG_HOST", "localhost"),
