@@ -3,12 +3,23 @@ import { SatOpMigrate } from '../_generated/protocol/satellite'
 import { base64, getProtocolVersion } from '../util'
 import { Migration } from './index'
 import { generateTriggersForTable } from '../satellite/process'
+
 import * as fs from 'fs/promises'
 import path from 'path'
 
 /*
- * This file defines functions to load migrations
+ * This file defines functions to build migrations
  * that were fetched from Electric's endpoint.
+ * To this end, we read and write files using NodeJS' `fs` module.
+ * However, Electric applications do not necessarily run on NodeJS.
+ * Thus, this functionality should only be used in dev mode
+ * to build migrations from files using NodeJS.
+ * In production, the built migrations are directly imported
+ * and thus this file is not used.
+ *
+ * IMPORTANT: Only use this file for building the migrations.
+ *            Do not to import or export this file from a file that is being used at runtime
+ *            as NodeJS may not be present which will cause the app to crash.
  */
 
 const metaDataSchema = z
@@ -143,9 +154,7 @@ export async function buildMigrations(
 ) {
   try {
     const configObj = (await import(configFile)).default // dynamically import the configuration file
-    const configSchema = z
-      .object({})
-      .passthrough()
+    const configSchema = z.object({}).passthrough()
 
     const config = configSchema.parse(configObj)
     const migrations = await loadMigrations(migrationsFolder)
@@ -163,7 +172,7 @@ export async function buildMigrations(
       path.format({
         ...path.parse(configFile),
         base: '',
-        ext: '.js'
+        ext: '.js',
       }),
       `export { default } from './index.mjs'`
     )

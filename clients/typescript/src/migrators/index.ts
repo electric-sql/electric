@@ -1,6 +1,5 @@
 import { Statement } from '../util'
 
-export { buildMigrations } from './loader'
 export { BundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
 

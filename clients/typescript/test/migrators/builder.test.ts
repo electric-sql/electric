@@ -4,7 +4,7 @@ import {
   makeMigration,
   parseMetadata,
   buildMigrations,
-} from '../../src/migrators/loader'
+} from '../../src/migrators/builder'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import fs from 'fs/promises'
