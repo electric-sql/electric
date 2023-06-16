@@ -436,22 +436,22 @@ export interface SatOpMigrate_Table {
 }
 
 /** (Consumer) Request for a new subscriptions */
-export interface SatSubscribeReq {
-  $type: "Electric.Satellite.v1_3.SatSubscribeReq";
-  /** Shape subscription requests */
-  shapeRequest: SatShapeSubReq[];
+export interface SatSubsReq {
+  $type: "Electric.Satellite.v1_3.SatSubsReq";
+  /** Shape requests */
+  shapeRequest: SatShapeReq[];
 }
 
 /** (Producer) Acknowledgment that subscription was accepted */
-export interface SatSubscribeResp {
-  $type: "Electric.Satellite.v1_3.SatSubscribeResp";
+export interface SatSubsResp {
+  $type: "Electric.Satellite.v1_3.SatSubsResp";
   /** Identifier of the request for further reference */
   subscriptionId: string;
 }
 
-/** Shape subscription request */
-export interface SatShapeSubReq {
-  $type: "Electric.Satellite.v1_3.SatShapeSubReq";
+/** Shape request */
+export interface SatShapeReq {
+  $type: "Electric.Satellite.v1_3.SatShapeReq";
   /** Identifier of the request */
   requestId: string;
   /** The shape definition */
@@ -476,32 +476,32 @@ export interface SatShapeDef_Select {
  * Error message returned by the Producer when it encounters
  * an error handling a subscription
  */
-export interface SatSubscriptionError {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionError";
+export interface SatSubsError {
+  $type: "Electric.Satellite.v1_3.SatSubsError";
   /** error code */
-  code: SatSubscriptionError_Code;
+  code: SatSubsError_Code;
   /** A human-readable description of the error */
   message: string;
   /** Subscription identifier this error refers to */
   subscriptionId: string;
-  /** Details of the shape subscription error */
-  shapeSubscriptionError: SatSubscriptionError_ShapeSubError[];
+  /** Details of the shape request error */
+  shapeRequestError: SatSubsError_ShapeReqError[];
 }
 
 /** error code enum */
-export enum SatSubscriptionError_Code {
+export enum SatSubsError_Code {
   /** CODE_UNSPECIFIED - Required code */
   CODE_UNSPECIFIED = 0,
-  /** SHAPE_SUBSCRIPTION_ERROR - A shape subscription request error */
-  SHAPE_SUBSCRIPTION_ERROR = 1,
+  /** SHAPE_REQUEST_ERROR - Error requesting shape */
+  SHAPE_REQUEST_ERROR = 1,
   UNRECOGNIZED = -1,
 }
 
-/** Shape subscription error */
-export interface SatSubscriptionError_ShapeSubError {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError";
+/** Shape request error */
+export interface SatSubsError_ShapeReqError {
+  $type: "Electric.Satellite.v1_3.SatSubsError.ShapeReqError";
   /** error code */
-  code: SatSubscriptionError_ShapeSubError_Code;
+  code: SatSubsError_ShapeReqError_Code;
   /** a human-readable description of the error */
   message: string;
   /** the shape request identifier that this error refers to */
@@ -509,7 +509,7 @@ export interface SatSubscriptionError_ShapeSubError {
 }
 
 /** error code enum */
-export enum SatSubscriptionError_ShapeSubError_Code {
+export enum SatSubsError_ShapeReqError_Code {
   /** CODE_UNSPECIFIED - Required code */
   CODE_UNSPECIFIED = 0,
   /** TABLE_NOT_FOUND - Table not found error */
@@ -518,15 +518,15 @@ export enum SatSubscriptionError_ShapeSubError_Code {
 }
 
 /** Start delimiter for the incoming subscription data */
-export interface SatSubscriptionDataBegin {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin";
+export interface SatSubsDataStart {
+  $type: "Electric.Satellite.v1_3.SatSubsDataStart";
   /** Identifier of the subscription */
   subscriptionId: string;
 }
 
 /** End delimiter for the incoming subscription data */
-export interface SatSubscriptionDataEnd {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd";
+export interface SatSubsDataEnd {
+  $type: "Electric.Satellite.v1_3.SatSubsDataEnd";
 }
 
 /** Start delimiter for the initial shape data */
@@ -2563,24 +2563,24 @@ export const SatOpMigrate_Table = {
 
 messageTypeRegistry.set(SatOpMigrate_Table.$type, SatOpMigrate_Table);
 
-function createBaseSatSubscribeReq(): SatSubscribeReq {
-  return { $type: "Electric.Satellite.v1_3.SatSubscribeReq", shapeRequest: [] };
+function createBaseSatSubsReq(): SatSubsReq {
+  return { $type: "Electric.Satellite.v1_3.SatSubsReq", shapeRequest: [] };
 }
 
-export const SatSubscribeReq = {
-  $type: "Electric.Satellite.v1_3.SatSubscribeReq" as const,
+export const SatSubsReq = {
+  $type: "Electric.Satellite.v1_3.SatSubsReq" as const,
 
-  encode(message: SatSubscribeReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatSubsReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     for (const v of message.shapeRequest) {
-      SatShapeSubReq.encode(v!, writer.uint32(18).fork()).ldelim();
+      SatShapeReq.encode(v!, writer.uint32(18).fork()).ldelim();
     }
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscribeReq {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsReq {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscribeReq();
+    const message = createBaseSatSubsReq();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2589,7 +2589,7 @@ export const SatSubscribeReq = {
             break;
           }
 
-          message.shapeRequest.push(SatShapeSubReq.decode(reader, reader.uint32()));
+          message.shapeRequest.push(SatShapeReq.decode(reader, reader.uint32()));
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -2600,37 +2600,37 @@ export const SatSubscribeReq = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscribeReq>, I>>(base?: I): SatSubscribeReq {
-    return SatSubscribeReq.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsReq>, I>>(base?: I): SatSubsReq {
+    return SatSubsReq.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscribeReq>, I>>(object: I): SatSubscribeReq {
-    const message = createBaseSatSubscribeReq();
-    message.shapeRequest = object.shapeRequest?.map((e) => SatShapeSubReq.fromPartial(e)) || [];
+  fromPartial<I extends Exact<DeepPartial<SatSubsReq>, I>>(object: I): SatSubsReq {
+    const message = createBaseSatSubsReq();
+    message.shapeRequest = object.shapeRequest?.map((e) => SatShapeReq.fromPartial(e)) || [];
     return message;
   },
 };
 
-messageTypeRegistry.set(SatSubscribeReq.$type, SatSubscribeReq);
+messageTypeRegistry.set(SatSubsReq.$type, SatSubsReq);
 
-function createBaseSatSubscribeResp(): SatSubscribeResp {
-  return { $type: "Electric.Satellite.v1_3.SatSubscribeResp", subscriptionId: "" };
+function createBaseSatSubsResp(): SatSubsResp {
+  return { $type: "Electric.Satellite.v1_3.SatSubsResp", subscriptionId: "" };
 }
 
-export const SatSubscribeResp = {
-  $type: "Electric.Satellite.v1_3.SatSubscribeResp" as const,
+export const SatSubsResp = {
+  $type: "Electric.Satellite.v1_3.SatSubsResp" as const,
 
-  encode(message: SatSubscribeResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatSubsResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.subscriptionId !== "") {
       writer.uint32(10).string(message.subscriptionId);
     }
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscribeResp {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsResp {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscribeResp();
+    const message = createBaseSatSubsResp();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2650,27 +2650,27 @@ export const SatSubscribeResp = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscribeResp>, I>>(base?: I): SatSubscribeResp {
-    return SatSubscribeResp.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsResp>, I>>(base?: I): SatSubsResp {
+    return SatSubsResp.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscribeResp>, I>>(object: I): SatSubscribeResp {
-    const message = createBaseSatSubscribeResp();
+  fromPartial<I extends Exact<DeepPartial<SatSubsResp>, I>>(object: I): SatSubsResp {
+    const message = createBaseSatSubsResp();
     message.subscriptionId = object.subscriptionId ?? "";
     return message;
   },
 };
 
-messageTypeRegistry.set(SatSubscribeResp.$type, SatSubscribeResp);
+messageTypeRegistry.set(SatSubsResp.$type, SatSubsResp);
 
-function createBaseSatShapeSubReq(): SatShapeSubReq {
-  return { $type: "Electric.Satellite.v1_3.SatShapeSubReq", requestId: "", shapeDefinition: undefined };
+function createBaseSatShapeReq(): SatShapeReq {
+  return { $type: "Electric.Satellite.v1_3.SatShapeReq", requestId: "", shapeDefinition: undefined };
 }
 
-export const SatShapeSubReq = {
-  $type: "Electric.Satellite.v1_3.SatShapeSubReq" as const,
+export const SatShapeReq = {
+  $type: "Electric.Satellite.v1_3.SatShapeReq" as const,
 
-  encode(message: SatShapeSubReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatShapeReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.requestId !== "") {
       writer.uint32(10).string(message.requestId);
     }
@@ -2680,10 +2680,10 @@ export const SatShapeSubReq = {
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeSubReq {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeReq {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatShapeSubReq();
+    const message = createBaseSatShapeReq();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2710,12 +2710,12 @@ export const SatShapeSubReq = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatShapeSubReq>, I>>(base?: I): SatShapeSubReq {
-    return SatShapeSubReq.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatShapeReq>, I>>(base?: I): SatShapeReq {
+    return SatShapeReq.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatShapeSubReq>, I>>(object: I): SatShapeSubReq {
-    const message = createBaseSatShapeSubReq();
+  fromPartial<I extends Exact<DeepPartial<SatShapeReq>, I>>(object: I): SatShapeReq {
+    const message = createBaseSatShapeReq();
     message.requestId = object.requestId ?? "";
     message.shapeDefinition = (object.shapeDefinition !== undefined && object.shapeDefinition !== null)
       ? SatShapeDef.fromPartial(object.shapeDefinition)
@@ -2724,7 +2724,7 @@ export const SatShapeSubReq = {
   },
 };
 
-messageTypeRegistry.set(SatShapeSubReq.$type, SatShapeSubReq);
+messageTypeRegistry.set(SatShapeReq.$type, SatShapeReq);
 
 function createBaseSatShapeDef(): SatShapeDef {
   return { $type: "Electric.Satellite.v1_3.SatShapeDef", selects: [] };
@@ -2826,20 +2826,20 @@ export const SatShapeDef_Select = {
 
 messageTypeRegistry.set(SatShapeDef_Select.$type, SatShapeDef_Select);
 
-function createBaseSatSubscriptionError(): SatSubscriptionError {
+function createBaseSatSubsError(): SatSubsError {
   return {
-    $type: "Electric.Satellite.v1_3.SatSubscriptionError",
+    $type: "Electric.Satellite.v1_3.SatSubsError",
     code: 0,
     message: "",
     subscriptionId: "",
-    shapeSubscriptionError: [],
+    shapeRequestError: [],
   };
 }
 
-export const SatSubscriptionError = {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionError" as const,
+export const SatSubsError = {
+  $type: "Electric.Satellite.v1_3.SatSubsError" as const,
 
-  encode(message: SatSubscriptionError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatSubsError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.code !== 0) {
       writer.uint32(8).int32(message.code);
     }
@@ -2849,16 +2849,16 @@ export const SatSubscriptionError = {
     if (message.subscriptionId !== "") {
       writer.uint32(26).string(message.subscriptionId);
     }
-    for (const v of message.shapeSubscriptionError) {
-      SatSubscriptionError_ShapeSubError.encode(v!, writer.uint32(34).fork()).ldelim();
+    for (const v of message.shapeRequestError) {
+      SatSubsError_ShapeReqError.encode(v!, writer.uint32(34).fork()).ldelim();
     }
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionError {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsError {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscriptionError();
+    const message = createBaseSatSubsError();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2888,7 +2888,7 @@ export const SatSubscriptionError = {
             break;
           }
 
-          message.shapeSubscriptionError.push(SatSubscriptionError_ShapeSubError.decode(reader, reader.uint32()));
+          message.shapeRequestError.push(SatSubsError_ShapeReqError.decode(reader, reader.uint32()));
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -2899,31 +2899,30 @@ export const SatSubscriptionError = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscriptionError>, I>>(base?: I): SatSubscriptionError {
-    return SatSubscriptionError.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsError>, I>>(base?: I): SatSubsError {
+    return SatSubsError.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscriptionError>, I>>(object: I): SatSubscriptionError {
-    const message = createBaseSatSubscriptionError();
+  fromPartial<I extends Exact<DeepPartial<SatSubsError>, I>>(object: I): SatSubsError {
+    const message = createBaseSatSubsError();
     message.code = object.code ?? 0;
     message.message = object.message ?? "";
     message.subscriptionId = object.subscriptionId ?? "";
-    message.shapeSubscriptionError =
-      object.shapeSubscriptionError?.map((e) => SatSubscriptionError_ShapeSubError.fromPartial(e)) || [];
+    message.shapeRequestError = object.shapeRequestError?.map((e) => SatSubsError_ShapeReqError.fromPartial(e)) || [];
     return message;
   },
 };
 
-messageTypeRegistry.set(SatSubscriptionError.$type, SatSubscriptionError);
+messageTypeRegistry.set(SatSubsError.$type, SatSubsError);
 
-function createBaseSatSubscriptionError_ShapeSubError(): SatSubscriptionError_ShapeSubError {
-  return { $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError", code: 0, message: "", requestId: "" };
+function createBaseSatSubsError_ShapeReqError(): SatSubsError_ShapeReqError {
+  return { $type: "Electric.Satellite.v1_3.SatSubsError.ShapeReqError", code: 0, message: "", requestId: "" };
 }
 
-export const SatSubscriptionError_ShapeSubError = {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionError.ShapeSubError" as const,
+export const SatSubsError_ShapeReqError = {
+  $type: "Electric.Satellite.v1_3.SatSubsError.ShapeReqError" as const,
 
-  encode(message: SatSubscriptionError_ShapeSubError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatSubsError_ShapeReqError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.code !== 0) {
       writer.uint32(8).int32(message.code);
     }
@@ -2936,10 +2935,10 @@ export const SatSubscriptionError_ShapeSubError = {
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionError_ShapeSubError {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsError_ShapeReqError {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscriptionError_ShapeSubError();
+    const message = createBaseSatSubsError_ShapeReqError();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2973,16 +2972,12 @@ export const SatSubscriptionError_ShapeSubError = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscriptionError_ShapeSubError>, I>>(
-    base?: I,
-  ): SatSubscriptionError_ShapeSubError {
-    return SatSubscriptionError_ShapeSubError.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsError_ShapeReqError>, I>>(base?: I): SatSubsError_ShapeReqError {
+    return SatSubsError_ShapeReqError.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscriptionError_ShapeSubError>, I>>(
-    object: I,
-  ): SatSubscriptionError_ShapeSubError {
-    const message = createBaseSatSubscriptionError_ShapeSubError();
+  fromPartial<I extends Exact<DeepPartial<SatSubsError_ShapeReqError>, I>>(object: I): SatSubsError_ShapeReqError {
+    const message = createBaseSatSubsError_ShapeReqError();
     message.code = object.code ?? 0;
     message.message = object.message ?? "";
     message.requestId = object.requestId ?? "";
@@ -2990,26 +2985,26 @@ export const SatSubscriptionError_ShapeSubError = {
   },
 };
 
-messageTypeRegistry.set(SatSubscriptionError_ShapeSubError.$type, SatSubscriptionError_ShapeSubError);
+messageTypeRegistry.set(SatSubsError_ShapeReqError.$type, SatSubsError_ShapeReqError);
 
-function createBaseSatSubscriptionDataBegin(): SatSubscriptionDataBegin {
-  return { $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin", subscriptionId: "" };
+function createBaseSatSubsDataStart(): SatSubsDataStart {
+  return { $type: "Electric.Satellite.v1_3.SatSubsDataStart", subscriptionId: "" };
 }
 
-export const SatSubscriptionDataBegin = {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionDataBegin" as const,
+export const SatSubsDataStart = {
+  $type: "Electric.Satellite.v1_3.SatSubsDataStart" as const,
 
-  encode(message: SatSubscriptionDataBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(message: SatSubsDataStart, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.subscriptionId !== "") {
       writer.uint32(10).string(message.subscriptionId);
     }
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionDataBegin {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsDataStart {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscriptionDataBegin();
+    const message = createBaseSatSubsDataStart();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3029,34 +3024,34 @@ export const SatSubscriptionDataBegin = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscriptionDataBegin>, I>>(base?: I): SatSubscriptionDataBegin {
-    return SatSubscriptionDataBegin.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsDataStart>, I>>(base?: I): SatSubsDataStart {
+    return SatSubsDataStart.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscriptionDataBegin>, I>>(object: I): SatSubscriptionDataBegin {
-    const message = createBaseSatSubscriptionDataBegin();
+  fromPartial<I extends Exact<DeepPartial<SatSubsDataStart>, I>>(object: I): SatSubsDataStart {
+    const message = createBaseSatSubsDataStart();
     message.subscriptionId = object.subscriptionId ?? "";
     return message;
   },
 };
 
-messageTypeRegistry.set(SatSubscriptionDataBegin.$type, SatSubscriptionDataBegin);
+messageTypeRegistry.set(SatSubsDataStart.$type, SatSubsDataStart);
 
-function createBaseSatSubscriptionDataEnd(): SatSubscriptionDataEnd {
-  return { $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd" };
+function createBaseSatSubsDataEnd(): SatSubsDataEnd {
+  return { $type: "Electric.Satellite.v1_3.SatSubsDataEnd" };
 }
 
-export const SatSubscriptionDataEnd = {
-  $type: "Electric.Satellite.v1_3.SatSubscriptionDataEnd" as const,
+export const SatSubsDataEnd = {
+  $type: "Electric.Satellite.v1_3.SatSubsDataEnd" as const,
 
-  encode(_: SatSubscriptionDataEnd, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+  encode(_: SatSubsDataEnd, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubscriptionDataEnd {
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatSubsDataEnd {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatSubscriptionDataEnd();
+    const message = createBaseSatSubsDataEnd();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -3069,17 +3064,17 @@ export const SatSubscriptionDataEnd = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<SatSubscriptionDataEnd>, I>>(base?: I): SatSubscriptionDataEnd {
-    return SatSubscriptionDataEnd.fromPartial(base ?? {});
+  create<I extends Exact<DeepPartial<SatSubsDataEnd>, I>>(base?: I): SatSubsDataEnd {
+    return SatSubsDataEnd.fromPartial(base ?? {});
   },
 
-  fromPartial<I extends Exact<DeepPartial<SatSubscriptionDataEnd>, I>>(_: I): SatSubscriptionDataEnd {
-    const message = createBaseSatSubscriptionDataEnd();
+  fromPartial<I extends Exact<DeepPartial<SatSubsDataEnd>, I>>(_: I): SatSubsDataEnd {
+    const message = createBaseSatSubsDataEnd();
     return message;
   },
 };
 
-messageTypeRegistry.set(SatSubscriptionDataEnd.$type, SatSubscriptionDataEnd);
+messageTypeRegistry.set(SatSubsDataEnd.$type, SatSubsDataEnd);
 
 function createBaseSatShapeDataBegin(): SatShapeDataBegin {
   return { $type: "Electric.Satellite.v1_3.SatShapeDataBegin", requestId: "", shapeUuid: "" };

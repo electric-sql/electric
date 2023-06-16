@@ -363,19 +363,19 @@ message SatOpMigrate {
 }
 
 // (Consumer) Request for a new subscriptions
-message SatSubscribeReq {
-    // Shape subscription requests
-    repeated SatShapeSubReq shape_request = 2;
+message SatSubsReq {
+    // Shape requests
+    repeated SatShapeReq shape_request = 2;
 }
 
 // (Producer) Acknowledgment that subscription was accepted
-message SatSubscribeResp {
+message SatSubsResp {
     // Identifier of the request for further reference
     string subscription_id = 1;
 }
 
-// Shape subscription request
-message SatShapeSubReq {
+// Shape request
+message SatShapeReq {
     // Identifier of the request
     string request_id = 1;
 
@@ -397,14 +397,14 @@ message SatShapeDef {
 
 // Error message returned by the Producer when it encounters
 // an error handling a subscription
-message SatSubscriptionError {
+message SatSubsError {
     // error code enum
     enum Code {
         // Required code
         CODE_UNSPECIFIED = 0;
 
-        // A shape subscription request error
-        SHAPE_SUBSCRIPTION_ERROR = 1;
+        // Error requesting shape
+        SHAPE_REQUEST_ERROR = 1;
     }
 
     // error code
@@ -416,11 +416,11 @@ message SatSubscriptionError {
     // Subscription identifier this error refers to
     string subscription_id = 3;
 
-    // Details of the shape subscription error
-    repeated ShapeSubError shape_subscription_error = 4;
+    // Details of the shape request error
+    repeated ShapeReqError shape_request_error = 4;
 
-    // Shape subscription error
-    message ShapeSubError {
+    // Shape request error
+    message ShapeReqError {
         // error code enum
         enum Code {
             // Required code
@@ -442,13 +442,13 @@ message SatSubscriptionError {
 }
 
 // Start delimiter for the incoming subscription data
-message SatSubscriptionDataBegin {
+message SatSubsDataStart {
     // Identifier of the subscription
     string subscription_id = 1;
 }
 
 // End delimiter for the incoming subscription data
-message SatSubscriptionDataEnd {
+message SatSubsDataEnd {
 }
 
 // Start delimiter for the initial shape data
