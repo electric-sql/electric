@@ -155,10 +155,6 @@ export type ConnectivityState =
   | 'disconnected'
   | 'error'
 
-export type SubcriptionShapeDefinitions = {
-  [k: string]: ShapeDefinition[]
-}
-
 export type SubscribeResponse = {
   subscriptionId: string
 }

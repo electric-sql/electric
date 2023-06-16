@@ -1,18 +1,42 @@
-// it is actually hard to do any form of garbage
-
 import {
   SatelliteError,
   SatelliteErrorCode,
   ShapeDefinition,
   ShapeRequest,
   ShapeRequestOrDefinition,
-  SubcriptionShapeDefinitions,
 } from './types'
 
+type SubcriptionShapeDefinitions = {
+  [k: string]: ShapeDefinition[]
+}
+
+type SubcriptionShapeRequests = {
+  [k: string]: ShapeRequest[]
+}
+
+// it is actually hard to do any form of garbage
 // collection of data because of intersections
-export class SubscriptionsManager {
-  private inFlight: { [k: string]: ShapeRequest[] }
-  private subToShapes: SubcriptionShapeDefinitions
+export interface SubscriptionsManager {
+  subscriptionRequested(
+    subId: string,
+    shapeRequests: ShapeRequest[]
+  ): Promise<void>
+
+  subscriptionDelivered(
+    subId: string,
+    reqToUuid: { [k: string]: string }
+  ): Promise<void>
+
+  shapesForActiveSubscription(
+    subId: string
+  ): Promise<ShapeDefinition[] | undefined>
+
+  unsubscribe(subId: string): Promise<void>
+}
+
+export class InMemorySubscriptionsManager {
+  protected inFlight: SubcriptionShapeRequests
+  protected subToShapes: SubcriptionShapeDefinitions
 
   constructor() {
     this.inFlight = {}
@@ -32,7 +56,7 @@ export class SubscriptionsManager {
 
   subscriptionDelivered(subId: string, reqToUuid: { [k: string]: string }) {
     if (!this.inFlight[subId]) {
-      // already unsubscribed. delivery is noop
+      // unknowns, or already unsubscribed. delivery is noop
       return
     }
 
@@ -54,7 +78,7 @@ export class SubscriptionsManager {
     }
   }
 
-  ShapesForActiveSubscription(subId: string): ShapeDefinition[] | undefined {
+  shapesForActiveSubscription(subId: string): ShapeDefinition[] | undefined {
     return this.subToShapes[subId]
   }
 
@@ -65,7 +89,67 @@ export class SubscriptionsManager {
   }
 
   // don't save inflight subscriptions
-  serialize(): SubcriptionShapeDefinitions {
-    return { ...this.subToShapes }
+  serialize(): string {
+    return JSON.stringify(this.subToShapes)
+  }
+
+  setState(
+    inFlight: SubcriptionShapeRequests,
+    subToShapes: SubcriptionShapeDefinitions
+  ) {
+    this.inFlight = inFlight
+    this.subToShapes = subToShapes
+  }
+}
+
+export class PersistentSubscriptionsManager implements SubscriptionsManager {
+  private manager: InMemorySubscriptionsManager
+  private loadFn: () => Promise<any>
+  private saveFn: (serialized: string) => Promise<void>
+
+  constructor(
+    loadFn: () => Promise<any>,
+    saveFn: (value: string) => Promise<void>
+  ) {
+    this.manager = new InMemorySubscriptionsManager()
+
+    this.loadFn = loadFn
+    this.saveFn = saveFn
+  }
+
+  async loadStateFromStorage() {
+    this.manager.setState({}, JSON.parse(await this.loadFn()))
+  }
+
+  subscriptionRequested(
+    subId: string,
+    shapeRequests: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
+  ): Promise<void> {
+    this.manager.subscriptionRequested(subId, shapeRequests)
+
+    return Promise.resolve()
+  }
+
+  shapesForActiveSubscription(
+    subId: string
+  ): Promise<ShapeDefinition[] | undefined> {
+    const res = this.manager.shapesForActiveSubscription(subId)
+
+    return Promise.resolve(res)
+  }
+
+  subscriptionDelivered(
+    subId: string,
+    reqToUuid: { [k: string]: string }
+  ): Promise<void> {
+    this.manager.subscriptionDelivered(subId, reqToUuid)
+
+    return this.saveFn(this.manager.serialize())
+  }
+
+  unsubscribe(subId: string): Promise<void> {
+    this.manager.unsubscribe(subId)
+
+    return this.saveFn(this.manager.serialize())
   }
 }

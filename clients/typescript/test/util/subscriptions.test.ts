@@ -1,14 +1,17 @@
 import test from 'ava'
 
-import { SubscriptionsManager } from '../../src/util/subscriptions'
+import {
+  InMemorySubscriptionsManager,
+  SubscriptionsManager,
+} from '../../src/util/subscriptions'
 
 type ContextType = {
-  manager: SubscriptionsManager
+  manager: InMemorySubscriptionsManager
 }
 
 test.beforeEach((t) => {
   t.context = {
-    manager: new SubscriptionsManager(),
+    manager: new InMemorySubscriptionsManager(),
   }
 })
 
@@ -42,18 +45,18 @@ test('some tests', (t) => {
 
   // no active subscription while inflight
   manager.subscriptionRequested(subId, [shapeRequest])
-  t.is(manager.ShapesForActiveSubscription(subId), undefined)
+  t.is(manager.shapesForActiveSubscription(subId), undefined)
 
   // active after subscription is delivered
   manager.subscriptionDelivered(subId, reqToUuid)
-  t.deepEqual(manager.ShapesForActiveSubscription(subId), [shapeDefinition])
+  t.deepEqual(manager.shapesForActiveSubscription(subId), [shapeDefinition])
 
   // redeliver is noop
   manager.subscriptionDelivered(subId, reqToUuid)
 
   // not active after unsubscribe
   manager.unsubscribe(subId)
-  t.is(manager.ShapesForActiveSubscription(subId), undefined)
+  t.is(manager.shapesForActiveSubscription(subId), undefined)
 
   // able to subscribe again after unsubscribe
   try {
