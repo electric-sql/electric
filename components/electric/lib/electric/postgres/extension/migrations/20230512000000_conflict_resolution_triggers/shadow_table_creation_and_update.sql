@@ -88,6 +88,7 @@ BEGIN
         END LOOP;
 
         -- Create a shadow table in the electric namespace and using the table name with `shadow__` prefix
+        -- If you update or modify this table structure, please make sure it is fully reflected in `Electric.Postgres.Schema.build_shadow_table/1`
         EXECUTE format(
             E'CREATE TABLE electric.%I (\n'
             '    _tags electric.tag[] DEFAULT array[]::electric.tag[],\n'
