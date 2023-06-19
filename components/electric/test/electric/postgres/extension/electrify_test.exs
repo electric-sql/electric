@@ -17,183 +17,134 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     end)
   end
 
-  test "inserts a row into the electrified table", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "inserts a row into the electrified table", fn conn ->
+    sql = "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    assert {:ok, [row]} = electrified(conn)
 
-        assert {:ok, [row]} = electrified(conn)
-
-        assert row[:table] == "buttercup"
-        assert row[:schema] == "public"
-      end,
-      cxt
-    )
+    assert row[:table] == "buttercup"
+    assert row[:schema] == "public"
   end
 
-  test "inserts the DDL for the table into the migration table", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "inserts the DDL for the table into the migration table", fn conn ->
+    sql = """
+    CREATE TABLE buttercup (
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      value text,
+      secret bool
+    );
+    """
 
-        sql = """
-        CREATE TABLE buttercup (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-          value text,
-          secret bool
-        );
-        """
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CALL electric.electrify('buttercup');"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    assert {:ok, [row]} = electrified(conn)
 
-        assert {:ok, [row]} = electrified(conn)
+    assert row[:table] == "buttercup"
+    assert row[:schema] == "public"
 
-        assert row[:table] == "buttercup"
-        assert row[:schema] == "public"
+    assert {:ok, [{_, _, _, query}]} = Extension.ddl_history(conn)
 
-        assert {:ok, [{_, _, _, query}]} = Extension.ddl_history(conn)
-
-        assert query =~ ~r/^CREATE TABLE buttercup/
-      end,
-      cxt
-    )
+    assert query =~ ~r/^CREATE TABLE buttercup/
   end
 
-  test "duplicate calls do nothing", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "duplicate calls do nothing", fn conn ->
+    sql = """
+    CREATE TABLE buttercup (
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      value text,
+      secret bool
+    );
+    """
 
-        sql = """
-        CREATE TABLE buttercup (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-          value text,
-          secret bool
-        );
-        """
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    assert {:ok, [row]} = electrified(conn)
 
-        assert {:ok, [row]} = electrified(conn)
-
-        assert row[:table] == "buttercup"
-        assert row[:schema] == "public"
-      end,
-      cxt
-    )
+    assert row[:table] == "buttercup"
+    assert row[:schema] == "public"
   end
 
-  test "handles quoted table names", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "handles quoted table names", fn conn ->
+    sql = "CREATE TABLE \"la la daisy\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CREATE TABLE \"la la daisy\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CREATE TABLE \"la la buttercup\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CREATE TABLE \"la la buttercup\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('public', 'la la daisy');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('la la buttercup');"
 
-        sql = "CALL electric.electrify('public', 'la la daisy');"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-        sql = "CALL electric.electrify('la la buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    assert {:ok, [row1, row2]} = electrified(conn)
 
-        assert {:ok, [row1, row2]} = electrified(conn)
-
-        assert row1[:table] == "la la daisy"
-        assert row1[:schema] == "public"
-        assert row2[:table] == "la la buttercup"
-        assert row2[:schema] == "public"
-      end,
-      cxt
-    )
+    assert row1[:table] == "la la daisy"
+    assert row1[:schema] == "public"
+    assert row2[:table] == "la la buttercup"
+    assert row2[:schema] == "public"
   end
 
-  test "allows for namespaced table names", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "allows for namespaced table names", fn conn ->
+    sql = "CREATE TABLE daisy (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CREATE TABLE daisy (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('public.daisy');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        sql = "CALL electric.electrify('public.daisy');"
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    assert {:ok, [row1]} = electrified(conn)
 
-        assert {:ok, [row1]} = electrified(conn)
-
-        assert row1[:table] == "daisy"
-        assert row1[:schema] == "public"
-      end,
-      cxt
-    )
+    assert row1[:table] == "daisy"
+    assert row1[:schema] == "public"
   end
 
-  test "fails if the table does not exist", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "fails if the table does not exist", fn conn ->
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
-
-        assert {:error, _msg} = :epgsql.squery(conn, sql)
-      end,
-      cxt
-    )
+    assert {:error, _msg} = :epgsql.squery(conn, sql)
   end
 
-  test "allows for specifying the schema", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "allows for specifying the schema", fn conn ->
+    sql = """
+    CREATE SCHEMA balloons;
+    """
 
-        sql = """
-        CREATE SCHEMA balloons;
-        """
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = """
+    CREATE TABLE balloons.buttercup (
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      value text,
+      secret bool
+    );
+    """
 
-        sql = """
-        CREATE TABLE balloons.buttercup (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-          value text,
-          secret bool
-        );
-        """
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('balloons', 'buttercup');"
 
-        sql = "CALL electric.electrify('balloons', 'buttercup');"
+    {:ok, _, _} = :epgsql.squery(conn, sql)
 
-        {:ok, _, _} = :epgsql.squery(conn, sql)
+    assert {:ok, [row]} = electrified(conn)
 
-        assert {:ok, [row]} = electrified(conn)
-
-        assert row[:schema] == "balloons"
-        assert row[:table] == "buttercup"
-      end,
-      cxt
-    )
+    assert row[:schema] == "balloons"
+    assert row[:table] == "buttercup"
   end
 
   def published_tables(conn) do
@@ -202,54 +153,39 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     |> Enum.reject(&(&1.schema == "electric"))
   end
 
-  test "adds the electrified table to the publication", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "adds the electrified table to the publication", fn conn ->
+    assert published_tables(conn) == []
 
-        assert published_tables(conn) == []
+    sql = "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), value text);"
 
-        sql =
-          "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), value text);"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-
-        assert [%{name: "buttercup"}] = published_tables(conn)
-      end,
-      cxt
-    )
+    assert [%{name: "buttercup"}] = published_tables(conn)
   end
 
-  test "sets the replication mode of the electrified table", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "sets the replication mode of the electrified table", fn conn ->
+    relreplident = """
+    SELECT relreplident FROM pg_class WHERE relname = $1;
+    """
 
-        relreplident = """
-        SELECT relreplident FROM pg_class WHERE relname = $1;
-        """
+    sql = """
+    CREATE TABLE buttercup (
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      value text,
+      secret bool
+    );
+    """
 
-        sql = """
-        CREATE TABLE buttercup (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-          value text,
-          secret bool
-        );
-        """
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    sql = "CALL electric.electrify('buttercup');"
 
-        sql = "CALL electric.electrify('buttercup');"
+    {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-
-        assert {:ok, _cols, [{?f}]} = :epgsql.equery(conn, relreplident, ["buttercup"])
-      end,
-      cxt
-    )
+    assert {:ok, _cols, [{?f}]} = :epgsql.equery(conn, relreplident, ["buttercup"])
   end
 end
