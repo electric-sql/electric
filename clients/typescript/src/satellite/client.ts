@@ -61,6 +61,7 @@ import { backOff, IBackOffOptions } from 'exponential-backoff'
 import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
+import isequal from 'lodash.isequal'
 
 type IncomingHandler = { handle: (msg: any) => any | void; isRpc: boolean }
 
@@ -368,7 +369,12 @@ export class SatelliteClient extends EventEmitter implements Client {
   ): void {
     transaction.changes.forEach((change) => {
       const relation = change.relation
-      if (!this.outbound.relations.has(relation.id)) {
+      if (
+        // this is a new relation
+        !this.outbound.relations.has(relation.id) ||
+        // or, the relation has changed
+        !isequal(this.outbound.relations.get(relation.id), relation)
+      ) {
         replication.relations.set(relation.id, relation)
 
         const satRelation = SatRelation.fromPartial({
