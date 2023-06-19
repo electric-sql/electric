@@ -21,7 +21,7 @@ Below are templated triggers added by Satellite
 
 -- These are toggles for turning the triggers on and off
 DROP TABLE IF EXISTS _electric_trigger_settings;
-CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);
+CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);
 INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);
 INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);
 INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);

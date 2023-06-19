@@ -17,7 +17,7 @@ export const data = {
         `INSERT INTO ${metaTable} (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', ''), ('clientId', ''), ('token', 'INITIAL_INVALID_TOKEN'), ('refreshToken', '');`,
         //`-- These are toggles for turning the triggers on and off\n`,
         `DROP TABLE IF EXISTS ${triggersTable};`,
-        `CREATE TABLE ${triggersTable} (tablename STRING PRIMARY KEY, flag INTEGER);`,
+        `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY, flag INTEGER);`,
         //`-- Somewhere to keep dependency tracking information\n`,
         `CREATE TABLE ${shadowTable} (\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey));`,
       ],
