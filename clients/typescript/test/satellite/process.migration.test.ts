@@ -231,6 +231,10 @@ test.serial('apply migration containing only DDL', async (t: any) => {
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [createTable, addColumn],
     lsn: new Uint8Array(),
+    // starts at 3, because the app already defines 2 migrations
+    // (see test/support/.electric/@config/index.js)
+    // which are loaded when Satellite is started
+    migrationVersion: '3',
   }
 
   // Apply the migration transaction
@@ -389,6 +393,7 @@ test.serial(
       commit_timestamp: Long.fromNumber(timestamp),
       changes: [...dml1, ...ddl1, ...dml2],
       lsn: new Uint8Array(),
+      migrationVersion: '4',
     }
 
     const rowsBeforeMigration = await fetchParentRows(adapter)
@@ -479,6 +484,7 @@ test.serial(
       commit_timestamp: Long.fromNumber(timestamp),
       changes: [...ddl, ...dml],
       lsn: new Uint8Array(),
+      migrationVersion: '5',
     }
 
     const rowsBeforeMigration = await fetchParentRows(adapter)
@@ -580,6 +586,7 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [...ddl, insertChangeB],
     lsn: new Uint8Array(),
+    migrationVersion: '6',
   }
 
   const rowsBeforeMigration = await fetchParentRows(adapter)

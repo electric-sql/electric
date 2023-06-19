@@ -1,9 +1,9 @@
-[macro connect_to_electric host port]
+[macro connect_to_electric host port migrations]
     !client = await import('./dist/client.js')
     ?$node
     # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
     # ?$node
-    !migrations = []
+    !migrations = $migrations
     !db = await client.open_db( process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME", \
                                 "$host", \
                                 $port, \
@@ -11,10 +11,14 @@
     ?$node
 [endmacro]
 
-[macro setup_client satellite_number electric port]
+[macro setup_client_with_migrations satellite_number electric port migrations]
     [invoke start_satellite $satellite_number]
     ?$node
-    [invoke connect_to_electric $electric $port]
+    [invoke connect_to_electric $electric $port $migrations]
+[endmacro]
+
+[macro setup_client satellite_number electric port]
+    [invoke setup_client_with_migrations $satellite_number $electric $port "[]"]
 [endmacro]
 
 [macro node_await_get match]

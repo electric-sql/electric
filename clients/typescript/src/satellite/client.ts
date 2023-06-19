@@ -738,6 +738,15 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
 
       if (op.migrate) {
+        // store the version of this migration transaction
+        // (within 1 transaction, every SatOpMigrate message
+        //  has the same version number)
+        // TODO: in the protocol: move the `version` field to the SatOpBegin message
+        //       or replace the `is_migration` field by an optional `version` field
+        //       --> see issue VAX-718 on linear.
+        const tx = replication.transactions[lastTxnIdx]
+        tx.migrationVersion = op.migrate.version
+
         const stmts = op.migrate.stmts
         stmts.forEach((stmt) => {
           const change: SchemaChange = {
@@ -745,7 +754,7 @@ export class SatelliteClient extends EventEmitter implements Client {
             migrationType: stmt.type,
             sql: stmt.sql,
           }
-          replication.transactions[lastTxnIdx].changes.push(change)
+          tx.changes.push(change)
         })
       }
     })

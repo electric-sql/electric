@@ -56,11 +56,15 @@ export type Transaction = {
   changes: Change[]
   // This field is only set by transactions coming from Electric
   origin?: string
+  migrationVersion?: string // the Postgres version number if this is a migration
 }
 
 // A transaction whose changes are only DML statements
 // i.e. the transaction does not contain migrations
-export type DataTransaction = Omit<Transaction, 'changes'> & {
+export type DataTransaction = Omit<
+  Transaction,
+  'changes' | 'migrationVersion'
+> & {
   changes: DataChange[]
 }
 

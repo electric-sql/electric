@@ -745,6 +745,8 @@ export class SatelliteProcess implements Satellite {
     // DML operations are ran through conflict resolution logic.
     // DDL operations are applied as is against the local DB.
 
+    // `stmts` will store all SQL statements
+    // that need to be executed
     const stmts: Statement[] = []
     const tablenamesSet: Set<string> = new Set()
     let newTables: Set<string> = new Set()
@@ -781,14 +783,17 @@ export class SatelliteProcess implements Satellite {
 
       const { statements, tablenames } = await this._apply(entries, origin)
       entries.forEach((e) => opLogEntries.push(e))
-      statements.forEach((s) => stmts.push(s))
+      statements.forEach((s) => {
+        stmts.push(s)
+      })
       tablenames.forEach((n) => tablenamesSet.add(n))
     }
     const processDDL = async (changes: SchemaChange[]) => {
       const createdTables: Set<string> = new Set()
       const affectedTables: Map<string, MigrationTable> = new Map()
       changes.forEach((change) => {
-        stmts.push({ sql: change.sql })
+        const changeStmt = { sql: change.sql }
+        stmts.push(changeStmt)
 
         if (
           change.migrationType === SatOpMigrate_Type.CREATE_TABLE ||
@@ -873,11 +878,20 @@ export class SatelliteProcess implements Satellite {
     const tablenames = Array.from(tablenamesSet)
     const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
 
-    await this.adapter.runInTransaction(
-      ...this._disableTriggers(notNewTableNames),
-      ...stmts,
-      ...this._enableTriggers(tablenames)
-    )
+    const allStatements = this._disableTriggers(notNewTableNames)
+      .concat(stmts)
+      .concat(this._enableTriggers(tablenames))
+
+    if (transaction.migrationVersion) {
+      // If a migration version is specified
+      // then the transaction is a migration
+      await this.migrator.apply({
+        statements: allStatements,
+        version: transaction.migrationVersion,
+      })
+    } else {
+      await this.adapter.runInTransaction(...allStatements)
+    }
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
   }
