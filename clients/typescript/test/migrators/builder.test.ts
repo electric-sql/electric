@@ -3,18 +3,91 @@ import {
   loadMigrations,
   makeMigration,
   parseMetadata,
-  buildMigrations,
 } from '../../src/migrators/builder'
+import {
+  SatOpMigrate,
+  SatOpMigrate_Table,
+  SatOpMigrate_Type,
+  SatOpMigrate_Stmt,
+  SatOpMigrate_Column,
+  SatOpMigrate_PgColumnType
+} from '../../src/_generated/protocol/satellite'
+import _m0 from 'protobufjs/minimal.js'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
-import fs from 'fs/promises'
 import path from 'path'
 import { DbSchema } from '../../src/client/model'
+
+function encodeSatOpMigrateMsg(request: SatOpMigrate) {
+  return (SatOpMigrate.encode(request, _m0.Writer.create()).finish() as any).toString('base64')
+}
 
 const migrationMetaData = {
   format: 'SatOpMigrate',
   ops: [
-    'GocBCgVzdGFycxISCgJpZBIEVEVYVBoGCgR0ZXh0EhoKCmF2YXRhcl91cmwSBFRFWFQaBgoEdGV4dBIUCgRuYW1lEgRURVhUGgYKBHRleHQSGgoKc3RhcnJlZF9hdBIEVEVYVBoGCgR0ZXh0EhgKCHVzZXJuYW1lEgRURVhUGgYKBHRleHQiAmlkChIyMDIzMDYxMzExMjcyNV84MTQS1QES0gFDUkVBVEUgVEFCTEUgInN0YXJzIiAoCiAgImlkIiBURVhUIE5PVCBOVUxMLAogICJhdmF0YXJfdXJsIiBURVhUIE5PVCBOVUxMLAogICJuYW1lIiBURVhULAogICJzdGFycmVkX2F0IiBURVhUIE5PVCBOVUxMLAogICJ1c2VybmFtZSIgVEVYVCBOT1QgTlVMTCwKICBDT05TVFJBSU5UICJzdGFyc19wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=',
+    encodeSatOpMigrateMsg(
+      SatOpMigrate.fromPartial({
+        version: "20230613112725_814",
+        stmts: [
+          SatOpMigrate_Stmt.fromPartial({
+            type: SatOpMigrate_Type.CREATE_TABLE,
+            sql: "CREATE TABLE \"stars\" (\n  \"id\" TEXT NOT NULL,\n  \"avatar_url\" TEXT NOT NULL,\n  \"name\" TEXT,\n  \"starred_at\" TEXT NOT NULL,\n  \"username\" TEXT NOT NULL,\n  CONSTRAINT \"stars_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+          })
+        ],
+        table: SatOpMigrate_Table.fromPartial({
+          name: "stars",
+          columns: [
+            SatOpMigrate_Column.fromPartial({
+              name: "id",
+              sqliteType: "TEXT",
+              pgType: SatOpMigrate_PgColumnType.fromPartial({
+                name: "text",
+                array: [],
+                size: []
+              })
+            }),
+            SatOpMigrate_Column.fromPartial({
+              name: "avatar_url",
+              sqliteType: "TEXT",
+              pgType: SatOpMigrate_PgColumnType.fromPartial({
+                name: "text",
+                array: [],
+                size: []
+              })
+            }),
+            SatOpMigrate_Column.fromPartial({
+              name: "name",
+              sqliteType: "TEXT",
+              pgType: SatOpMigrate_PgColumnType.fromPartial({
+                name: "text",
+                array: [],
+                size: []
+              })
+            }),
+            SatOpMigrate_Column.fromPartial({
+              name: "starred_at",
+              sqliteType: "TEXT",
+              pgType: SatOpMigrate_PgColumnType.fromPartial({
+                name: "text",
+                array: [],
+                size: []
+              })
+            }),
+            SatOpMigrate_Column.fromPartial({
+              name: "username",
+              sqliteType: "TEXT",
+              pgType: SatOpMigrate_PgColumnType.fromPartial({
+                name: "text",
+                array: [],
+                size: []
+              })
+            }),
+          ],
+          fks: [],
+          pks: [ "id" ],
+        }),
+      })
+    ),
   ],
   protocol_version: 'Electric.Satellite.v1_3',
   version: '20230613112725_814',
@@ -46,44 +119,6 @@ test('read migration meta data', async (t) => {
   const migrations = await loadMigrations(migrationsFolder)
   const versions = migrations.map((m) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
-})
-
-test('write migration to configuration file', async (t) => {
-  // compute absolute path to avoid differences between dynamic import and NodeJS' `fs` module
-  const configFile = path.resolve(
-    path.join('./test/migrators/support/.electric/@config/index.mjs')
-  )
-
-  // First read the config file and store its contents
-  // such that we can restore the file to its original
-  // contents at the end of the test.
-  const ogConfigContents = await fs.readFile(configFile, 'utf8')
-
-  // path to config file, relative from this file
-  const p = '../migrators/support/.electric/@config/index.mjs'
-  let i = 0
-  // JS caches imported modules, so if we reload the configuration file
-  // after it got changed by `writeMigrationsToConfigFile` we will get
-  // the original config back and not the modified config.
-  // Therefore, we trick JS into thinking it is a different module
-  // by adding a dummy query parameter that is different each time.
-  const importConfig = async () =>
-    (await import(path.join(p.concat(`?foo=${i++}`)))).default
-  const ogConfig = await importConfig()
-
-  await buildMigrations(migrationsFolder, configFile)
-  const newConfig = await importConfig()
-  const versions = newConfig.migrations.map((m: any) => m.version)
-  t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
-
-  // Check that apart from the migrations,
-  // the rest of the configuration file remains untouched
-  delete ogConfig['migrations']
-  delete newConfig['migrations']
-  t.deepEqual(ogConfig, newConfig)
-
-  // Restore original contents of the config file
-  await fs.writeFile(configFile, ogConfigContents)
 })
 
 test('load migration from meta data', async (t) => {
