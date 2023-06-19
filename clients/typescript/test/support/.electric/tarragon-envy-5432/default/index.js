@@ -14,7 +14,7 @@ export default {
     {
       statements: [
         'DROP TABLE IF EXISTS _electric_trigger_settings;',
-        'CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);',
+        'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
       ],
       version: '1',
     },
@@ -24,7 +24,7 @@ export default {
         'CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;',
         'CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;',
         'DROP TABLE IF EXISTS _electric_trigger_settings;',
-        'CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);',
+        'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",

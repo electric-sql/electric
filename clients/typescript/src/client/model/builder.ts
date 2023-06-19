@@ -86,6 +86,17 @@ export class Builder {
     i: UpdateManyInput<any, any>,
     idRequired = false
   ): QueryBuilder {
+    const unsupportedEntry = Object.entries(i.data).find((entry) => {
+      const [_key, value] = entry
+      return typeof value === 'object' && value !== null
+    })
+    if (unsupportedEntry)
+      throw new InvalidArgumentError(
+        `Unsupported value ${JSON.stringify(unsupportedEntry[1])} for field "${
+          unsupportedEntry[0]
+        }" in update query.`
+      )
+
     const query = squelPostgres
       .update()
       .table(this._tableName)
@@ -102,15 +113,18 @@ export class Builder {
   /**
    * Creates a `SELECT fields FROM table WHERE conditions` query.
    * @param i Object containing optional `where` and `selection` fields.
-   * @param limit Maximum number of objects to retrieve.
-   * @param offset Where to start in the table.
    * @param idRequired If true, will throw an error if no fields are provided in the `where` argument.
+   * @param selectWhereFields By default, `findWhere` selects the fields provided in the `where` argument. By providing `false` it will not automatically select those fields.
    */
   private findWhere(
     i: FindInput<any, any, any, any, any>,
     idRequired = false,
     selectWhereFields = true
   ): QueryBuilder {
+    if ('cursor' in i && typeof i.cursor !== 'undefined') {
+      throw new InvalidArgumentError('Unsupported cursor argument.')
+    }
+
     const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
 
@@ -158,11 +172,22 @@ export class Builder {
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
       )
 
+    const unknownField: string | undefined = selectedFields.find(
+      (f) => !this._fields.includes(f)
+    )
+    if (unknownField) {
+      // query selects a field that does not exist on this table
+      throw new InvalidArgumentError(
+        `Cannot select field ${unknownField} on table ${this._tableName}. Use 'include' to fetch related objects.`
+      )
+    }
+
     // the filter below removes boolean filters like AND, OR, NOT
     // which are not columns and thus should not be selected
     const fields = identificationFields
       .filter((f) => this._fields.includes(f))
       .concat(selectedFields)
+
     return q.fields(fields)
   }
 
@@ -182,6 +207,12 @@ export class Builder {
 
       const field = fields[0]
       const order = orderBy[field as keyof object]
+
+      if (typeof order === 'object' && order !== null)
+        throw new InvalidArgumentError(
+          `Ordering query results based on the '${field}' related object(s) is not yet supported`
+        )
+
       const squelOrder = order === 'asc' // squel expects 'true' for ascending order, 'false' for descending order
       return query.order(field, squelOrder)
     }, q)

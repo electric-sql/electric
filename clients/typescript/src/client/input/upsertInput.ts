@@ -1,7 +1,15 @@
+import {
+  NarrowInclude,
+  NarrowSelect,
+  NarrowUpdateData,
+  NarrowUpdateManyData,
+  NarrowUpsertCreate,
+} from './inputNarrowing'
+
 export interface UpsertInput<Create, Update, Select, WhereUnique, Include> {
-  select?: Select
+  select?: NarrowSelect<Select>
   where: WhereUnique
-  create: Create
-  update: Update
-  include?: Include
+  create: NarrowUpsertCreate<Create>
+  update: NarrowUpdateManyData<NarrowUpdateData<Update>>
+  include?: NarrowInclude<Include>
 }

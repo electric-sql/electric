@@ -108,6 +108,19 @@ export const insert_item = async (electric: Electric, keys: [string]) => {
   })
 }
 
+export const insert_extended_item = async (electric: Electric, keys: [string]) => {
+  for (const k of keys) {
+    await electric.db.raw({
+      sql: `INSERT INTO items(id, content, another) VALUES (?, ?, ?) RETURNING *;`,
+      args: [
+        uuidv4(),
+        k,
+        `${k} another`
+      ]
+    })
+  }
+}
+
 export const delete_item = async (electric: Electric, keys: [string]) => {
   for (const key of keys) {
     await electric.db.items.deleteMany({

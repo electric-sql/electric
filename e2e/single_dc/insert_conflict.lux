@@ -6,7 +6,7 @@
 [invoke setup]
 
 [shell pg_2]
-    !UPDATE pg_catalog.pg_subscription SET subenabled = false;
+    !ALTER SUBSCRIPTION postgres_2 DISABLE;
     ?$psql
 
 [shell pg_1]
