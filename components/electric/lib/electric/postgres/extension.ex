@@ -152,6 +152,14 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
+
+  @spec electrified?(conn(), String.t(), String.t()) :: boolean()
+  def electrified?(conn, schema \\ "public", table) do
+    {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
+    count == 1
+  end
+
   def electrified_indexes(conn) do
     with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
       {:ok, rows}

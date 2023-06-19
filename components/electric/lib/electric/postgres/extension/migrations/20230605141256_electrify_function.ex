@@ -43,7 +43,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       );
       """,
       """
-      CREATE INDEX electrified_table_name_idx ON #{electrified_table} (table_name);
+      CREATE INDEX electrified_table_name_idx ON #{electrified_table} (schema_name, table_name);
       CREATE INDEX electrified_table_name_oid ON #{electrified_table} (oid);
       """,
       """

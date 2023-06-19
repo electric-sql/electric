@@ -459,5 +459,28 @@ defmodule Electric.Postgres.ExtensionTest do
         cxt
       )
     end
+
+    test "electrified?/2", cxt do
+      tx(
+        fn conn ->
+          migrate(conn)
+
+          sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
+          sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
+          sql3 = "CALL electric.electrify('buttercup')"
+
+          for sql <- [sql1, sql2, sql3] do
+            {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+          end
+
+          assert Extension.electrified?(conn, "buttercup")
+          assert Extension.electrified?(conn, "public", "buttercup")
+
+          refute Extension.electrified?(conn, "daisy")
+          refute Extension.electrified?(conn, "public", "daisy")
+        end,
+        cxt
+      )
+    end
   end
 end
