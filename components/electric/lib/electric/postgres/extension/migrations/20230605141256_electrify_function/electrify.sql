@@ -28,6 +28,8 @@ BEGIN
 END;
 $function$ LANGUAGE PLPGSQL;
 
+-------------------------------------------------
+
 CREATE OR REPLACE FUNCTION <%= schema %>.capture_ddl(query text DEFAULT NULL) RETURNS int8 AS $function$
 DECLARE
     _txid xid8;
@@ -47,17 +49,15 @@ $function$ LANGUAGE PLPGSQL;
 
 -------------------------------------------------
 
-CREATE OR REPLACE PROCEDURE <%= schema %>.electrify(
+CREATE OR REPLACE FUNCTION <%= schema %>.__resolve_table_from_names(
     name1 text,
-    name2 text DEFAULT NULL
+    name2 text,
+    OUT schema_name name,
+    OUT table_name name,
+    OUT table_oid regclass
 ) AS $function$
 DECLARE
-    _schema name;
-    _table text;
-    _quoted_name text;
     _ident text[];
-    _oid regclass;
-    _create_sql text;
 BEGIN
     IF name1 IS NULL AND name2 IS NULL THEN
         RAISE EXCEPTION 'no valid table name given';
@@ -66,26 +66,47 @@ BEGIN
         IF strpos(name1, '.') > 0 THEN
             _ident := parse_ident(name1);
             IF array_length(_ident, 1) = 1 THEN
-                _table := _ident[1];
-                _oid := (SELECT quote_ident(_table)::regclass);
-                _schema := <%= schema %>.__table_schema(_oid);
+                table_name := _ident[1];
+                table_oid := (SELECT quote_ident(table_name)::regclass);
+                schema_name := <%= schema %>.__table_schema(table_oid);
             ELSIF array_length(_ident, 1) = 2 THEN
-                _schema := _ident[1];
-                _table := _ident[2];
+                schema_name := _ident[1];
+                table_name := _ident[2];
             ELSE
                 RAISE EXCEPTION 'invalid table name given %', name1;
             END IF;
         ELSE
-            _table := name1;
-            _oid := (SELECT quote_ident(_table)::regclass);
-            _schema := <%= schema %>.__table_schema(_oid);
+            table_name := name1;
+            table_oid := (SELECT quote_ident(table_name)::regclass);
+            schema_name := <%= schema %>.__table_schema(table_oid);
         END IF;
     ELSIF name1 IS NOT NULL AND name2 IS NOT NULL THEN
-        _table := name2;
-        _schema := name1;
+        table_name := name2;
+        schema_name := name1;
     ELSE
         RAISE EXCEPTION 'no valid table name given';
     END IF;
+END;
+$function$ LANGUAGE PLPGSQL STABLE;
+
+-------------------------------------------------
+
+CREATE OR REPLACE PROCEDURE <%= schema %>.electrify(
+    name1 text,
+    name2 text DEFAULT NULL
+) AS $function$
+DECLARE
+    _schema name;
+    _table text;
+    _quoted_name text;
+    _oid regclass;
+    _create_sql text;
+BEGIN
+    SELECT
+        table_name, schema_name, table_oid 
+    INTO
+        _table, _schema, _oid
+    FROM <%= schema %>.__resolve_table_from_names(name1, name2);
 
     _quoted_name := format('%I.%I', _schema, _table);
     _oid := (SELECT _quoted_name::regclass);
