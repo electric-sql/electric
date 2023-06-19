@@ -159,8 +159,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp register_relation(table, columns, state) do
-    Logger.debug("Registering relation #{table.schema}.#{table.name}")
-
     table =
       case SchemaRegistry.fetch_existing_table_info({table.schema, table.name}) do
         {:ok, existing_table} ->
@@ -169,6 +167,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         :error ->
           table
       end
+
+    Logger.debug(
+      "Registering relation #{table.schema}.#{table.name} [#{table.oid}] (#{Enum.map(columns, & &1.name) |> Enum.join(", ")})"
+    )
 
     :ok = SchemaRegistry.put_replicated_tables(state.publication, [table])
     :ok = SchemaRegistry.put_table_columns({table.schema, table.name}, columns)

@@ -44,6 +44,9 @@ importers:
       lodash.groupby:
         specifier: ^4.6.0
         version: 4.6.0
+      lodash.isequal:
+        specifier: ^4.5.0
+        version: 4.5.0
       lodash.mapvalues:
         specifier: ^4.6.0
         version: 4.6.0
@@ -183,9 +186,6 @@ importers:
       lint-staged:
         specifier: ^13.1.0
         version: 13.2.2
-      lodash.isequal:
-        specifier: ^4.5.0
-        version: 4.5.0
       prettier:
         specifier: 2.8.2
         version: 2.8.2
@@ -8644,7 +8644,7 @@ packages:
 
   /lodash.isequal@4.5.0:
     resolution: {integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==}
-    dev: true
+    dev: false
 
   /lodash.isplainobject@4.0.6:
     resolution: {integrity: sha512-oSXzaWypCMHkPC3NvBEaPHf0KsA5mvPrOPgQWDsbg8n7orZ290M0BmC/jgRZ4vcJ6DTAhjrsSYgdsW/F+MFOBA==}
