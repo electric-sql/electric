@@ -28,7 +28,7 @@ config :logger, :console,
 
 config :logger,
   handle_otp_reports: true,
-  handle_sasl_reports: true,
+  handle_sasl_reports: false,
   level: :debug
 
 config :electric, Electric.Replication.Postgres,
