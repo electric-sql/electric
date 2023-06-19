@@ -6,7 +6,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   def electrified(conn) do
     :epgsql.equery(
       conn,
-      "SELECT id, table_name, schema_name FROM #{Extension.electrified_table()} ORDER BY id ASC",
+      "SELECT id, table_name, schema_name FROM #{Extension.electrified_tracking_table()} ORDER BY id ASC",
       []
     )
     |> then(fn {:ok, _, rows} ->

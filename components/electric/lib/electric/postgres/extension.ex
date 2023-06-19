@@ -29,8 +29,8 @@ defmodule Electric.Postgres.Extension do
   @version_table electric.(@version_relation)
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
-  @electrified_table electric.(@electrified_table_relation)
-  @electrified_index electric.(@electrified_index_relation)
+  @electrified_tracking_table electric.(@electrified_table_relation)
+  @electrified_index_table electric.(@electrified_index_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
@@ -54,8 +54,8 @@ defmodule Electric.Postgres.Extension do
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
-  def electrified_table, do: @electrified_table
-  def electrified_index, do: @electrified_index
+  def electrified_tracking_table, do: @electrified_tracking_table
+  def electrified_index_table, do: @electrified_index_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -143,8 +143,8 @@ defmodule Electric.Postgres.Extension do
     end)
   end
 
-  @electrifed_table_query "SELECT id, schema_name, table_name, oid FROM #{@electrified_table} ORDER BY id ASC"
-  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index} ORDER BY id ASC"
+  @electrifed_table_query "SELECT id, schema_name, table_name, oid FROM #{@electrified_tracking_table} ORDER BY id ASC"
+  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
 
   def electrified_tables(conn) do
     with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_table_query, []) do
@@ -152,7 +152,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
+  @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
 
   @spec electrified?(conn(), String.t(), String.t()) :: boolean()
   def electrified?(conn, schema \\ "public", table) do

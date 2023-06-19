@@ -130,7 +130,7 @@ BEGIN
         RAISE WARNING 'table %.% is already electrified', _schema, _table;
     END IF;
 
-    INSERT INTO <%= electrified_table %> (schema_name, table_name, oid)
+    INSERT INTO <%= electrified_tracking_table %> (schema_name, table_name, oid)
         VALUES (_schema, _table, _oid) 
         ON CONFLICT ON CONSTRAINT unique_table_name
         DO NOTHING;
@@ -149,7 +149,7 @@ $function$ LANGUAGE PLPGSQL;
 CREATE OR REPLACE FUNCTION <%= schema %>.__table_is_electrified(classid oid, objid oid)
 RETURNS boolean AS $function$
 BEGIN
-    RETURN EXISTS (SELECT id FROM <%= electrified_table %> WHERE oid = objid);
+    RETURN EXISTS (SELECT id FROM <%= electrified_tracking_table %> WHERE oid = objid);
 END;
 $function$ LANGUAGE PLPGSQL;
 
@@ -160,7 +160,7 @@ RETURNS int8 AS $function$
 DECLARE 
     _eid int8;
 BEGIN
-    SELECT e.id INTO _eid FROM <%= electrified_table %> e
+    SELECT e.id INTO _eid FROM <%= electrified_tracking_table %> e
         INNER JOIN pg_index pi ON e.oid = pi.indrelid
         WHERE pi.indexrelid = objid;
     RETURN _eid;
@@ -197,7 +197,7 @@ BEGIN
                     -- without this, by the time we get the cmd in the event trigger the 
                     -- index has already been dropped and the lookups required no longer
                     -- exist
-                    INSERT INTO <%= electrified_index %> (id, table_id) VALUES (_cmd.objid, _table_id);
+                    INSERT INTO <%= electrified_index_table %> (id, table_id) VALUES (_cmd.objid, _table_id);
                     _capture := true;
                 END IF;
             ELSE NULL;
@@ -235,9 +235,9 @@ BEGIN
                     RAISE EXCEPTION 'dropping column electrified table %', _cmd.object_identity;
                 END IF;
             WHEN _cmd.object_type = 'index' THEN 
-                IF EXISTS (SELECT id FROM <%= electrified_index %> WHERE id = _cmd.objid) THEN
+                IF EXISTS (SELECT id FROM <%= electrified_index_table %> WHERE id = _cmd.objid) THEN
                     -- clean up the electrified index table
-                    DELETE FROM <%= electrified_index %> WHERE id = _cmd.objid;
+                    DELETE FROM <%= electrified_index_table %> WHERE id = _cmd.objid;
                     RAISE WARNING 'index is being dropped %', _capture;
                     _capture := true;
                 END IF;
