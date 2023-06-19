@@ -10,7 +10,7 @@ import {
   SatOpMigrate_Type,
   SatOpMigrate_Stmt,
   SatOpMigrate_Column,
-  SatOpMigrate_PgColumnType
+  SatOpMigrate_PgColumnType,
 } from '../../src/_generated/protocol/satellite'
 import _m0 from 'protobufjs/minimal.js'
 import Database from 'better-sqlite3'
@@ -19,7 +19,9 @@ import path from 'path'
 import { DbSchema } from '../../src/client/model'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
-  return (SatOpMigrate.encode(request, _m0.Writer.create()).finish() as any).toString('base64')
+  return (
+    SatOpMigrate.encode(request, _m0.Writer.create()).finish() as any
+  ).toString('base64')
 }
 
 const migrationMetaData = {
@@ -27,64 +29,64 @@ const migrationMetaData = {
   ops: [
     encodeSatOpMigrateMsg(
       SatOpMigrate.fromPartial({
-        version: "20230613112725_814",
+        version: '20230613112725_814',
         stmts: [
           SatOpMigrate_Stmt.fromPartial({
             type: SatOpMigrate_Type.CREATE_TABLE,
-            sql: "CREATE TABLE \"stars\" (\n  \"id\" TEXT NOT NULL,\n  \"avatar_url\" TEXT NOT NULL,\n  \"name\" TEXT,\n  \"starred_at\" TEXT NOT NULL,\n  \"username\" TEXT NOT NULL,\n  CONSTRAINT \"stars_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
-          })
+            sql: 'CREATE TABLE "stars" (\n  "id" TEXT NOT NULL,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL,\n  CONSTRAINT "stars_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n',
+          }),
         ],
         table: SatOpMigrate_Table.fromPartial({
-          name: "stars",
+          name: 'stars',
           columns: [
             SatOpMigrate_Column.fromPartial({
-              name: "id",
-              sqliteType: "TEXT",
+              name: 'id',
+              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
-                name: "text",
+                name: 'text',
                 array: [],
-                size: []
-              })
+                size: [],
+              }),
             }),
             SatOpMigrate_Column.fromPartial({
-              name: "avatar_url",
-              sqliteType: "TEXT",
+              name: 'avatar_url',
+              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
-                name: "text",
+                name: 'text',
                 array: [],
-                size: []
-              })
+                size: [],
+              }),
             }),
             SatOpMigrate_Column.fromPartial({
-              name: "name",
-              sqliteType: "TEXT",
+              name: 'name',
+              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
-                name: "text",
+                name: 'text',
                 array: [],
-                size: []
-              })
+                size: [],
+              }),
             }),
             SatOpMigrate_Column.fromPartial({
-              name: "starred_at",
-              sqliteType: "TEXT",
+              name: 'starred_at',
+              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
-                name: "text",
+                name: 'text',
                 array: [],
-                size: []
-              })
+                size: [],
+              }),
             }),
             SatOpMigrate_Column.fromPartial({
-              name: "username",
-              sqliteType: "TEXT",
+              name: 'username',
+              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
-                name: "text",
+                name: 'text',
                 array: [],
-                size: []
-              })
+                size: [],
+              }),
             }),
           ],
           fks: [],
-          pks: [ "id" ],
+          pks: ['id'],
         }),
       })
     ),
