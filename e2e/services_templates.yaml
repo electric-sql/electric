@@ -18,6 +18,9 @@ services:
       - /etc/group:/etc/group:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/shadow:/etc/shadow:ro
+    tmpfs:
+      - /vaxine-data
+      - /tmp
     privileged: true
 
   electric:
@@ -28,6 +31,7 @@ services:
       MIGRATIONS_DIR: /migrations
       SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
       SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
+      OFFSET_STORAGE_FILE: /tmp/electric-offset-storage.dat
     init: true
     privileged: true
 
@@ -47,6 +51,9 @@ services:
       - ./00_shared_init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
     command:
       - -c
       - config_file=/etc/postgresql.conf
@@ -65,16 +72,14 @@ services:
       SATELLITE_AUTH_SIGNING_ISS: dev.electric-sql.com
       SATELLITE_AUTH_SIGNING_KEY: integration-tests-signing-key-example
       HOME: ${E2E_ROOT}/satellite_client
-      SATELLITE_DB_PATH: "${SATELLITE_DB_PATH}"
+      SATELLITE_DB_PATH: /var/lib/satellite/data
       NODE_DISABLE_COLORS: 1
       NODE_REPL_HISTORY: ''
       TERM: dumb
       UID: ${UID}
       GID: ${GID}
-    volumes:
-      # Deliberately mount folder below root, so that yarn/npm would not try
-      # to access .git directory, as they do not handle git ls-remote properly
-      - ${SATELLITE_DB_PATH}:${SATELLITE_DB_PATH}:rw
+    tmpfs:
+      - /var/lib/satellite/data
     privileged: true
 
   elixir_client:

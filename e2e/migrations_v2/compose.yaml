@@ -8,8 +8,6 @@ services:
       service: vaxine
     environment:
       NODE_NAME: "vaxine@vaxine_1"
-    volumes:
-      - ${VAXINE_VOLUME}/vaxine_1:/vaxine-data
     ports:
       - "8087:8087"
       - "8088:8088"

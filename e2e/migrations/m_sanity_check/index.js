@@ -35,7 +35,7 @@
       "satellite_body": [
         "ALTER TABLE items ADD added_column TEXT DEFAULT '';",
         "DROP TABLE IF EXISTS _electric_trigger_settings;",
-        "CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);",
+        "CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.other_items', 1);",
         "DROP TRIGGER IF EXISTS update_ensure_main_items_primarykey;",

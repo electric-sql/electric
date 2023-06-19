@@ -791,7 +791,6 @@ export class SatelliteProcess implements Satellite {
       entries.forEach((e) => opLogEntries.push(e))
       statements.forEach((s) => {
         stmts.push(s)
-        txStmts.push(s)
       })
       tablenames.forEach((n) => tablenamesSet.add(n))
     }
@@ -801,7 +800,6 @@ export class SatelliteProcess implements Satellite {
       changes.forEach((change) => {
         const changeStmt = { sql: change.sql }
         stmts.push(changeStmt)
-        txStmts.push(changeStmt)
 
         if (
           change.migrationType === SatOpMigrate_Type.CREATE_TABLE ||

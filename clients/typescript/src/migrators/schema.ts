@@ -8,7 +8,7 @@ export const data = {
     {
       statements: [
         //`-- The ops log table\n`,
-        `CREATE TABLE IF NOT EXISTS ${oplogTable} (\n  rowid INTEGER PRIMARY KEY AUTOINCREMENT,\n  namespace String NOT NULL,\n  tablename String NOT NULL,\n  optype String NOT NULL,\n  primaryKey String NOT NULL,\n  newRow String,\n  oldRow String,\n  timestamp TEXT,  clearTags TEXT DEFAULT "[]" NOT NULL\n);`,
+        `CREATE TABLE IF NOT EXISTS ${oplogTable} (\n  rowid INTEGER PRIMARY KEY AUTOINCREMENT,\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  optype TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  newRow TEXT,\n  oldRow TEXT,\n  timestamp TEXT,  clearTags TEXT DEFAULT "[]" NOT NULL\n);`,
         //`-- Somewhere to keep our metadata\n`,
         `CREATE TABLE IF NOT EXISTS ${metaTable} (\n  key TEXT PRIMARY KEY,\n  value BLOB\n);`,
         //`-- Somewhere to track migrations\n`,
@@ -17,9 +17,9 @@ export const data = {
         `INSERT INTO ${metaTable} (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', ''), ('clientId', ''), ('token', 'INITIAL_INVALID_TOKEN'), ('refreshToken', '');`,
         //`-- These are toggles for turning the triggers on and off\n`,
         `DROP TABLE IF EXISTS ${triggersTable};`,
-        `CREATE TABLE ${triggersTable} (tablename STRING PRIMARY KEY, flag INTEGER);`,
+        `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY, flag INTEGER);`,
         //`-- Somewhere to keep dependency tracking information\n`,
-        `CREATE TABLE ${shadowTable} (\n  namespace String NOT NULL,\n  tablename String NOT NULL,\n  primaryKey String NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey));`,
+        `CREATE TABLE ${shadowTable} (\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey));`,
       ],
       version: '0',
     },

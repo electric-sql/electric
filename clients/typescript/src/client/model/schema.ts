@@ -172,6 +172,10 @@ export class DbSchema<T extends TableSchemas> {
     return this.extendedTables[table].fields
   }
 
+  hasRelationForField(table: TableName, field: FieldName): boolean {
+    return this.getRelations(table).some((r) => r.relationField === field)
+  }
+
   getRelationName(table: TableName, field: FieldName): RelationName {
     return this.getRelations(table).find((r) => r.relationField === field)!
       .relationName

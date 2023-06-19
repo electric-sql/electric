@@ -7,7 +7,7 @@
       "postgres_body": "",
       "satellite_body": [
         "DROP TABLE IF EXISTS _electric_trigger_settings;",
-        "CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);"
+        "CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);"
       ],
       "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
       "title": "init"
@@ -21,7 +21,7 @@
         "CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;",
         "CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;",
         "DROP TABLE IF EXISTS _electric_trigger_settings;",
-        "CREATE TABLE _electric_trigger_settings(tablename STRING PRIMARY KEY, flag INTEGER);",
+        "CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",

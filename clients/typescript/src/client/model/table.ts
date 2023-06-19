@@ -1,6 +1,11 @@
 import { CreateInput, CreateManyInput } from '../input/createInput'
 import { FindInput, FindUniqueInput } from '../input/findInput'
-import { validate } from '../validation/validation'
+import {
+  parseNestedCreate,
+  omitCountFromSelectAndIncludeSchema,
+  parseNestedUpdate,
+  validate,
+} from '../validation/validation'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { DatabaseAdapter } from '../../electric/adapter'
@@ -24,6 +29,7 @@ import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
 import { parseTableNames, Row, Statement } from '../../util'
+import { NarrowInclude } from '../input/inputNarrowing'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -90,11 +96,15 @@ export class Table<
     this._tables = new Map()
     const tableDescription = this._dbDescription.getTableDescription(tableName)
     this._schema = tableDescription.modelSchema
-    this.createSchema = tableDescription.createSchema
+    this.createSchema = omitCountFromSelectAndIncludeSchema(
+      tableDescription.createSchema
+    )
     this.createManySchema = tableDescription.createManySchema
     this.findUniqueSchema = tableDescription.findUniqueSchema
     this.findSchema = tableDescription.findSchema
-    this.updateSchema = tableDescription.updateSchema
+    this.updateSchema = omitCountFromSelectAndIncludeSchema(
+      tableDescription.updateSchema
+    )
     this.updateManySchema = tableDescription.updateManySchema
     this.upsertSchema = tableDescription.upsertSchema
     this.deleteSchema = tableDescription.deleteSchema
@@ -296,10 +306,11 @@ export class Table<
       (rel: Relation, cont: () => void) => {
         const { fromField, toField, relationField, relatedTable } = rel
         // fetch the object in the relation field and recursively create that object
-        const relatedObject = (data[relationField] as { create: object }).create
-        // TODO: return an error if user provided a createMany, connect, connectOrCreate
-        //       the former will not be supported because you can pass an array of related objects to `create`
-        //       the latter 2 should eventually be implemented at some point
+
+        // Return an error if user provided a createMany, connect, connectOrCreate
+        // the former will not be supported because you can pass an array of related objects to `create`
+        // the latter 2 should eventually be implemented at some point
+        const relatedObject = parseNestedCreate(data[relationField]).create
 
         const relatedTbl = this._tables.get(relatedTable)!
         relatedTbl._create(
@@ -368,7 +379,7 @@ export class Table<
         incomingRelations.forEach((rel: Relation) => {
           const { relationField } = rel
           if (hasOwn(data, relationField)) {
-            const relatedObjects = data[relationField].create
+            const relatedObjects = parseNestedCreate(data[relationField]).create
             if (Array.isArray(relatedObjects)) {
               // this is a one-to-many relation
               // create all the related objects
@@ -655,7 +666,7 @@ export class Table<
 
   private fetchIncludes(
     rows: Kind<GetPayload, T>[],
-    include: Include | undefined,
+    include: NarrowInclude<Include> | undefined,
     db: DB,
     onResult: (res: Kind<GetPayload, T>[]) => void,
     onError: (err: any) => void
@@ -669,6 +680,17 @@ export class Table<
       //       so try to remove it there and then rename this one to `forEachCont`
       forEach(
         (relationField: string, cont: () => void) => {
+          if (
+            !this._dbDescription.hasRelationForField(
+              this.tableName,
+              relationField
+            )
+          ) {
+            throw new InvalidArgumentError(
+              'Unexpected field `' + relationField + '` in `include` argument.'
+            )
+          }
+
           const relationName = this._dbDescription.getRelationName(
             this.tableName,
             relationField
@@ -677,11 +699,6 @@ export class Table<
             this.tableName,
             relationName
           )
-
-          if (typeof relation === 'undefined')
-            throw TypeError(
-              'Unexpected field `' + relationField + '` in `include` argument.'
-            )
 
           this.fetchInclude(
             rows,
@@ -1157,35 +1174,39 @@ export class Table<
         // and those related object(s) will be updated afterwards
         const fields = this._dbDescription.getFields(this.tableName)
         const nonRelationalData: Record<string, any> = pick(data.data, fields)
+        const nonRelationalFields: string[] = Object.keys(nonRelationalData)
         const nonRelationalObject = {
           ...data,
           data: nonRelationalData,
         }
 
-        // Update the record
-        const updateDataQuery = this._builder.update(nonRelationalObject)
-        db.query(
-          updateDataQuery,
-          this._schema,
-          (db, res) => {
-            const updatedObj = res[0] as typeof originalObject
-            // Some objects may be pointing to `originalObject`
-            // but the value they were pointing at may have changed
-            // so we need to update those FKs correspondingly
-            this.updateFKs(originalObject, updatedObj, db, onError, () => {
-              // Also update any related objects that are provided in the query
-              this.updateRelatedObjects(
-                data,
-                ogObject,
-                db,
-                nonRelationalData,
-                onError,
-                continuation
-              )
-            })
-          },
-          onError
-        )
+        const updateRelatedObjects = (db: DB, res: unknown[]) => {
+          const updatedObj = res[0] as typeof originalObject
+          // Some objects may be pointing to `originalObject`
+          // but the value they were pointing at may have changed
+          // so we need to update those FKs correspondingly
+          this.updateFKs(originalObject, updatedObj, db, onError, () => {
+            // Also update any related objects that are provided in the query
+            this.updateRelatedObjects(
+              data,
+              ogObject,
+              db,
+              nonRelationalData,
+              onError,
+              continuation
+            )
+          })
+        }
+
+        if (nonRelationalFields.length > 0) {
+          // Update the record
+          const updateDataQuery = this._builder.update(nonRelationalObject)
+          db.query(updateDataQuery, this._schema, updateRelatedObjects, onError)
+        } else {
+          // Nothing to update for this record
+          // but we may have to update related records
+          updateRelatedObjects(db, [ogObject])
+        }
       },
       onError
     )
@@ -1219,14 +1240,7 @@ export class Table<
         const dataRecord = data.data as Record<string, any>
 
         // fetch the related object and recursively update that object
-        const relationActions = dataRecord[relationField] as {
-          update?: object
-          updateMany?: object
-          //create?: object,
-          //upsert?: object,
-          //delete?: boolean
-        }
-
+        const relationActions = parseNestedUpdate(dataRecord[relationField])
         const updateObject = relationActions.update
 
         if (rel.isOutgoingRelation()) {

@@ -66,6 +66,10 @@
     [invoke node_await_table items]
 
 [shell pg_1]
+    !\pset pager off
+    ?$psql
+
+[shell pg_1]
     [invoke log "Insert data into postgres_1"]
     !INSERT INTO public.items (id, content) VALUES ('${pg_id1}', 'hello from pg_1');
     ?$psql
@@ -107,10 +111,21 @@
 [shell satellite_1]
     [invoke log "wait for new column on satellite_1"]
     [invoke node_await_column items another]
+    [invoke log "inserting row with value for new column"]
+    [invoke node_await_insert_extended "['extended row from satellite_1']"]
 
 [shell satellite_2]
     [invoke log "wait for new column on satellite_2"]
     [invoke node_await_column items another]
+    [invoke log "inserting row with value for new column"]
+    [invoke node_await_insert_extended "['extended row from satellite_2']"]
+
+[loop pg pg_1]
+  [shell ${pg}]
+    [invoke log "Verify that ${pg} has received extended rows from both Satellites"]
+    [invoke wait-for "SELECT * FROM public.items;" "extended row from satellite_1 another" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "extended row from satellite_2 another" 10 ${psql}]
+[endloop]
 
 [cleanup]
   [invoke teardown]
