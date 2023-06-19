@@ -365,7 +365,7 @@ message SatOpMigrate {
 // (Consumer) Request for a new subscriptions
 message SatSubsReq {
     // Shape requests
-    repeated SatShapeReq shape_request = 2;
+    repeated SatShapeReq shape_requests = 2;
 }
 
 // (Producer) Acknowledgment that subscription was accepted
@@ -441,8 +441,8 @@ message SatSubsError {
     }
 }
 
-// Start delimiter for the incoming subscription data
-message SatSubsDataStart {
+// Begin delimiter for the incoming subscription data
+message SatSubsDataBegin {
     // Identifier of the subscription
     string subscription_id = 1;
 }
@@ -451,12 +451,12 @@ message SatSubsDataStart {
 message SatSubsDataEnd {
 }
 
-// Start delimiter for the initial shape data
+// Begin delimiter for the initial shape data
 message SatShapeDataBegin {
     // Identifier of the request
     string request_id = 1;
     // The UUID of the shape on the Producer
-    string shape_uuid = 2;
+    string uuid = 2;
 }
 
 // End delimiter for the initial shape data
