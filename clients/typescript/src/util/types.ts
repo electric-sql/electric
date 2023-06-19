@@ -1,5 +1,6 @@
 import type Long from 'long'
 import {
+  SatOpLog,
   SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
@@ -45,6 +46,7 @@ export enum SatelliteErrorCode {
   AUTH_ERROR,
 
   SUBSCRIPTION_ALREADY_EXISTS,
+  UNEXPECTED_SUBSCRIPTION_STATE,
 
   // start replication errors
   BEHIND_WINDOW,
@@ -149,6 +151,9 @@ export enum AckType {
 
 export type AckCallback = (lsn: LSN, type: AckType) => void
 
+export type SubscriptionDeliveredCallback = (data: SubscriptionData) => void
+export type SubscriptionErrorCallback = (error: SatelliteError) => void
+
 export type ConnectivityState =
   | 'available'
   | 'connected'
@@ -160,13 +165,14 @@ export type SubscribeResponse = {
 }
 
 export type ClientShapeDefinition = {
-  select: ShapeSelect[]
+  selects: ShapeSelect[]
 }
 
 export type ShapeRequestOrDefinition = {
   uuid?: string
   requestId?: string
-} & ClientShapeDefinition
+  shapeDefinition: ClientShapeDefinition
+}
 
 export type ShapeRequest = Required<Omit<ShapeRequestOrDefinition, 'uuid'>>
 export type ShapeDefinition = Required<
@@ -176,3 +182,10 @@ export type ShapeDefinition = Required<
 export type ShapeSelect = {
   tablename: string
 }
+
+export type SubscriptionData = {
+  subscriptionId: string
+  transactions: SatOpLog[]
+  shapeReqToUuid: { [req: string]: string }
+}
+

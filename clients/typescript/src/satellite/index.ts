@@ -13,9 +13,10 @@ import {
   DataTransaction,
   Transaction,
   Relation,
-  SubscribeResponse,
-  ShapeDefinition,
   ClientShapeDefinition,
+  SubscriptionDeliveredCallback,
+  SubscribeResponse,
+  ShapeRequest,
 } from '../util/types'
 
 export { SatelliteProcess } from './process'
@@ -68,7 +69,10 @@ export interface Client {
   close(): Promise<void | SatelliteError>
   authenticate(authState: AuthState): Promise<AuthResponse | SatelliteError>
   isClosed(): boolean
-  startReplication(lsn?: LSN): Promise<void | SatelliteError>
+  startReplication(
+    lsn?: LSN,
+    subscriptionIds?: string[]
+  ): Promise<void | SatelliteError>
   stopReplication(): Promise<void | SatelliteError>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
@@ -81,4 +85,14 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
+
+  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse>
+  subscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionDeliveredCallback
+  ): void
+  unsubscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionDeliveredCallback
+  ): void
 }

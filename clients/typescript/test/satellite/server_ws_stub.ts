@@ -10,6 +10,13 @@ import {
   SatPingReq,
   SatPingResp,
   SatRelation,
+  SatShapeDataBegin,
+  SatShapeDataEnd,
+  SatSubsDataBegin,
+  SatSubsDataEnd,
+  SatSubsError,
+  SatSubsReq,
+  SatSubsResp,
 } from '../../src/_generated/protocol/satellite'
 
 const PORT = 30002
@@ -125,6 +132,60 @@ export class SatelliteWSServerStub {
                 Buffer.concat([
                   getSizeBuf(msg),
                   SatPingResp.encode(msg as SatPingResp).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatSubsResp.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatSubsResp.encode(msg as SatSubsResp).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatSubsError.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatSubsError.encode(msg as SatSubsError).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatSubsDataBegin.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatSubsDataBegin.encode(msg as SatSubsDataBegin).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatSubsDataEnd.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatSubsDataEnd.encode(msg as SatSubsDataEnd).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatShapeDataBegin.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatShapeDataBegin.encode(msg as SatShapeDataBegin).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatShapeDataEnd.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatShapeDataEnd.encode(msg as SatShapeDataEnd).finish(),
                 ])
               )
             }

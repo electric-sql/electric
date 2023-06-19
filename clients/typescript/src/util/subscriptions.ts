@@ -4,7 +4,14 @@ import {
   ShapeDefinition,
   ShapeRequest,
   ShapeRequestOrDefinition,
+  SubscriptionData,
 } from './types'
+
+import {
+  SatSubsDataBegin, // todo: fix proto
+  SatShapeDataBegin,
+  SatOpLog,
+} from '../_generated/protocol/satellite'
 
 type SubcriptionShapeDefinitions = {
   [k: string]: ShapeDefinition[]
@@ -14,8 +21,6 @@ type SubcriptionShapeRequests = {
   [k: string]: ShapeRequest[]
 }
 
-// it is actually hard to do any form of garbage
-// collection of data because of intersections
 export interface SubscriptionsManager {
   subscriptionRequested(
     subId: string,
@@ -151,5 +156,171 @@ export class PersistentSubscriptionsManager implements SubscriptionsManager {
     this.manager.unsubscribe(subId)
 
     return this.saveFn(this.manager.serialize())
+  }
+}
+
+export class SubscriptionsDataCache {
+  shapesRequested?: number
+  remainingShapes?: number
+  currentSubscriptionId?: string
+  currentShapeUuid?: string
+  inDelivery?: SubscriptionData
+
+  constructor() {}
+
+  subscriptionRequest(shapeCount: number) {
+    if (this.remainingShapes || this.currentSubscriptionId) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `received subscription request but a subscription is already being delivered`
+      )
+    }
+    this.shapesRequested = shapeCount
+  }
+
+  subscriptionResponse() {
+    if (!this.shapesRequested) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received subscribe response but no subscription has been requested`
+      )
+    }
+    this.remainingShapes = this.shapesRequested
+    this.shapesRequested = undefined
+  }
+
+  subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
+    if (!this.remainingShapes) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatSubsDataBegin but no subscription is being delivered`
+      )
+    }
+
+    if (this.currentSubscriptionId) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `received SatSubsDataStart for subscription ${subscriptionId} but a subscription is already being delivered`
+      )
+    }
+    this.currentSubscriptionId = subscriptionId
+
+    this.inDelivery = {
+      subscriptionId: subscriptionId,
+      transactions: new Array(),
+      shapeReqToUuid: {},
+    }
+  }
+
+  subscriptionDataEnd(): SubscriptionData {
+    if (!this.currentSubscriptionId || this.inDelivery == undefined) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatSubDataEnd but no subscription is being delivered`
+      )
+    }
+
+    if (this.remainingShapes != 0 || this.currentShapeUuid) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatSubDataEnd but not all shapes have been delivered`
+      )
+    }
+
+    this.currentSubscriptionId = undefined
+    const res = this.inDelivery
+    this.inDelivery = undefined
+    return res
+  }
+
+  shapeDataBegin(shape: SatShapeDataBegin) {
+    if (!this.currentSubscriptionId || this.inDelivery == undefined) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataBegin but no subscription is being delivered`
+      )
+    }
+
+    if (this.remainingShapes == 0) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataBegin but all shapes have been delivered for this subscription`
+      )
+    }
+
+    if (this.currentShapeUuid) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but a shape is already being delivered`
+      )
+    }
+
+    if (this.inDelivery.shapeReqToUuid[shape.requestId]) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but shape has already been delivered`
+      )
+    }
+
+    this.inDelivery.shapeReqToUuid[shape.requestId] = shape.uuid
+    this.currentShapeUuid = shape.uuid
+  }
+
+  shapeDataEnd() {
+    if (
+      !this.remainingShapes ||
+      !this.currentSubscriptionId ||
+      this.inDelivery == undefined
+    ) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataBegin but no subscription is being delivered`
+      )
+    }
+
+    if (!this.currentShapeUuid) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatShapeDataEnd but no shape is being delivered`
+      )
+    }
+
+    this.currentShapeUuid = undefined
+    this.remainingShapes--
+  }
+
+  transaction(transaction: SatOpLog) {
+    if (
+      !this.remainingShapes ||
+      !this.currentSubscriptionId ||
+      this.inDelivery == undefined ||
+      !this.currentShapeUuid
+    ) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatOpLog but no shape is being delivered`
+      )
+    }
+    this.inDelivery.transactions.push(transaction)
+  }
+
+  reset() {
+    this.remainingShapes = undefined
+    this.currentSubscriptionId = undefined
+    this.currentShapeUuid = undefined
+    this.inDelivery = undefined
   }
 }

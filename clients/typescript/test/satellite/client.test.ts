@@ -22,6 +22,7 @@ import {
   Relation,
   SatelliteErrorCode,
   DataTransaction,
+  ShapeRequest,
 } from '../../src/util/types'
 import * as Proto from '../../src/_generated/protocol/satellite'
 import { relations } from './common'
@@ -653,6 +654,174 @@ test.serial('default and null test', async (t) => {
 
     await client.startReplication()
   })
+})
+
+test.serial('subscription succesful', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  server.nextResponses([startResp])
+  await client.startReplication()
+
+  const shapeReq: ShapeRequest = {
+    requestId: 'fake',
+    shapeDefinition: {
+      selects: [{ tablename: 'fake' }],
+    },
+  }
+
+  const subscriptionId = 'THE_ID'
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  server.nextResponses([subsResp])
+
+  const res = await client.subscribe([shapeReq])
+  t.is(res.subscriptionId, subscriptionId)
+})
+
+test.serial('listen to subscription events: error', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  server.nextResponses([startResp])
+  await client.startReplication()
+
+  const shapeReq: ShapeRequest = {
+    requestId: 'fake',
+    shapeDefinition: {
+      selects: [{ tablename: 'fake' }],
+    },
+  }
+
+  const subscriptionId = 'THE_ID'
+
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const subsError = Proto.SatSubsError.fromPartial({
+    code: Proto.SatSubsError_Code.SHAPE_REQUEST_ERROR,
+    message: 'FAKE ERROR',
+    subscriptionId,
+  })
+  server.nextResponses([subsResp, subsError])
+
+  const success = () => t.fail()
+  const error = () => t.pass()
+
+  client.subscribeToSubscriptionEvents(success, error)
+  const res = await client.subscribe([shapeReq])
+  t.is(res.subscriptionId, subscriptionId)
+})
+
+test.serial('subscription incorrect protocol sequence', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  server.nextResponses([startResp])
+  await client.startReplication()
+
+  const requestId = 'THE_REQUEST_ID'
+  const subscriptionId = 'THE_SUBS_ID'
+  const uuid = 'THE_SHAPE_ID'
+  const tablename = 'THE_TABLE_ID'
+
+  const shapeReq: ShapeRequest = {
+    requestId,
+    shapeDefinition: {
+      selects: [{ tablename }],
+    },
+  }
+
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
+  const beginShape = Proto.SatShapeDataBegin.fromPartial({ requestId, uuid })
+  const endShape = Proto.SatShapeDataEnd.fromPartial({})
+  const endSub = Proto.SatSubsDataEnd.fromPartial({})
+  const satOpLog = Proto.SatOpLog.fromPartial({})
+
+  const testCases = [
+    [subsResp, beginShape],
+    [subsResp, endShape],
+    [subsResp, endSub],
+    [subsResp, beginSub, endShape],
+    [subsResp, beginSub, beginShape, endSub],
+    [subsResp, beginSub, endShape],
+    [subsResp, beginSub, beginShape, endShape, endSub],
+    [subsResp, beginSub, satOpLog],
+    [subsResp, beginSub, beginShape, endShape, satOpLog],
+    [subsResp, beginSub, beginShape, satOpLog, endSub],
+  ]
+
+  const promise = new Promise<void>((res) => {
+    const success = () => {
+      t.fail()
+      res()
+    }
+
+    const error = () => {
+      if (testCases.length == 0) {
+        t.pass()
+        res()
+      }
+    }
+    client.subscribeToSubscriptionEvents(success, error)
+  })
+
+  while (testCases.length > 0) {
+    server.nextResponses(testCases[0])
+    testCases.shift()
+    await client.subscribe([shapeReq, shapeReq])
+  }
+
+  await promise
+})
+
+test.serial('subscription correct protocol sequence', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  server.nextResponses([startResp])
+  await client.startReplication()
+
+  const requestId = 'THE_REQUEST_ID'
+  const subscriptionId = 'THE_SUBS_ID'
+  const uuid = 'THE_SHAPE_ID'
+  const tablename = 'THE_TABLE_ID'
+
+  const shapeReq: ShapeRequest = {
+    requestId,
+    shapeDefinition: {
+      selects: [{ tablename }],
+    },
+  }
+
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
+  const beginShape = Proto.SatShapeDataBegin.fromPartial({
+    requestId,
+    uuid,
+  })
+  const endShape = Proto.SatShapeDataEnd.fromPartial({})
+  const endSub = Proto.SatSubsDataEnd.fromPartial({})
+
+  const promise = new Promise<void>((res) => {
+    const success = () => {
+      t.pass()
+      res()
+    }
+
+    const error = () => {
+      t.fail()
+      res()
+    }
+    client.subscribeToSubscriptionEvents(success, error)
+  })
+
+  server.nextResponses([subsResp, beginSub, beginShape, endShape, endSub])
+  await client.subscribe([shapeReq])
+
+  await promise
 })
 
 function decode(data: Buffer): SatPbMsg {

@@ -64,7 +64,10 @@ import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
-import { SubscriptionsManager } from '../util/subscriptions'
+import {
+  PersistentSubscriptionsManager,
+  SubscriptionsManager,
+} from '../util/subscriptions'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -134,7 +137,10 @@ export class SatelliteProcess implements Satellite {
     )
 
     this.relations = {}
-    this.subscriptions = new SubscriptionsManager()
+
+    const loadFn = () => this._getMeta('subscriptions')
+    const saveFn = (value: string) => this._setMeta('subscriptions', value)
+    this.subscriptions = new PersistentSubscriptionsManager(loadFn, saveFn)
   }
 
   async start(

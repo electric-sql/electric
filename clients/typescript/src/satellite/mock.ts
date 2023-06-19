@@ -14,8 +14,13 @@ import {
   Transaction,
   Relation,
   SatelliteErrorCode,
+  ClientShapeDefinition,
+  ShapeRequestOrDefinition,
+  SubscribeResponse,
+  SubscriptionDeliveredCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
+import { randomValue } from '../util/random'
 
 import { Client, ConnectionWrapper, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
@@ -50,6 +55,11 @@ export class MockSatelliteProcess implements Satellite {
     this.notifier = notifier
     this.socketFactory = socketFactory
     this.opts = opts
+  }
+  subscribe(
+    _shapeDefinitions: ClientShapeDefinition[]
+  ): Promise<void | SatelliteError> {
+    return Promise.resolve()
   }
 
   async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
@@ -91,6 +101,27 @@ export class MockRegistry extends BaseRegistry {
 }
 
 export class MockSatelliteClient extends EventEmitter implements Client {
+  subscribe(
+    _shapes: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
+  ): Promise<SubscribeResponse> {
+    return Promise.resolve({
+      subscriptionId: randomValue(),
+    })
+  }
+  subscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionDeliveredCallback
+  ): void {
+    this.on('subscription_delivered', successCallback)
+    this.on('subscription_error', errorCallback)
+  }
+  unsubscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionDeliveredCallback
+  ): void {
+    this.removeListener('subscription_delivered', successCallback)
+    this.removeListener('subscription_error', errorCallback)
+  }
   replicating = false
   closed = true
   inboundAck: Uint8Array = DEFAULT_LOG_POS
@@ -125,10 +156,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(
-    lsn: LSN,
-    _resume?: boolean | undefined
-  ): Promise<void | SatelliteError> {
+  startReplication(lsn: LSN): Promise<void | SatelliteError> {
     this.replicating = true
     this.inboundAck = lsn
 
