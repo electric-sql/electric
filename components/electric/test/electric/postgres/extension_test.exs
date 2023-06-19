@@ -235,56 +235,6 @@ defmodule Electric.Postgres.ExtensionTest do
     )
   end
 
-  test "migration capture", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
-
-        sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql3 = "ALTER TABLE buttercup ADD COLUMN petal text;"
-        sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text;"
-
-        for sql <- [sql1, sql2, sql3, sql4] do
-          {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-        end
-
-        assert {:ok, [row1, row2, row3, row4]} = Extension.ddl_history(conn)
-
-        assert {1, txid, timestamp, ^sql1} = row1
-        assert {2, ^txid, ^timestamp, ^sql2} = row2
-        assert {3, ^txid, ^timestamp, ^sql3} = row3
-        assert {4, ^txid, ^timestamp, ^sql4} = row4
-      end,
-      cxt
-    )
-  end
-
-  test "migration capture", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
-
-        sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql3 = "ALTER TABLE buttercup ADD COLUMN petal text;"
-        sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text;"
-
-        for sql <- [sql1, sql2, sql3, sql4] do
-          {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-        end
-
-        assert {:ok, [row1, row2, row3, row4]} = Extension.ddl_history(conn)
-
-        assert {1, txid, timestamp, ^sql1} = row1
-        assert {2, ^txid, ^timestamp, ^sql2} = row2
-        assert {3, ^txid, ^timestamp, ^sql3} = row3
-        assert {4, ^txid, ^timestamp, ^sql4} = row4
-      end,
-      cxt
-    )
-  end
-
   test "logical replication ddl is not captured", cxt do
     tx(
       fn conn ->

@@ -1,33 +1,10 @@
 defmodule Electric.PlugTest do
-  use ExUnit.Case, async: false
+  use Electric.Extension.Case, async: false
   use Plug.Test
   use Electric.Satellite.Protobuf
 
   alias Electric.Postgres.{Extension, Schema}
   alias Electric.Postgres.Extension.SchemaCache
-
-  defmodule RollbackError do
-    # use a special error to abort the transaction so we can be sure that some other problem isn't
-    # happening in the tx and being swallowed
-    defexception [:message]
-  end
-
-  def tx(fun, cxt) do
-    assert_raise RollbackError, fn ->
-      :epgsql.with_transaction(
-        cxt.conn,
-        fn tx ->
-          fun.(tx)
-          raise RollbackError, message: "rollback"
-        end,
-        reraise: true
-      )
-    end
-  end
-
-  def migrate(conn) do
-    assert {:ok, [2023_03_28_11_39_27, 2023_04_24_15_44_25]} = Extension.migrate(conn)
-  end
 
   @migrations [
     {"0001",
@@ -44,14 +21,6 @@ defmodule Electric.PlugTest do
      ]},
     {"0004", ["CREATE TABLE e (id uuid PRIMARY KEY, value text NOT NULL);"]}
   ]
-
-  setup do
-    pg_config = Electric.Postgres.TestConnection.config()
-
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
-
-    {:ok, conn: conn}
-  end
 
   def oid_loader(type, schema, name) do
     {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
