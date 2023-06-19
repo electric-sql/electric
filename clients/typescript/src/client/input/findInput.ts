@@ -1,17 +1,24 @@
 //export type SelectInput<T> = { [field in keyof T]?: boolean }
 
+import {
+  NarrowInclude,
+  NarrowOrderBy,
+  NarrowSelect,
+  NarrowWhere,
+} from './inputNarrowing'
+
 export interface FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum> {
-  where?: Where
-  select?: Select
-  include?: Include
+  where?: NarrowWhere<Where>
+  select?: NarrowSelect<Select>
+  include?: NarrowInclude<Include>
   distinct?: ScalarFieldEnum[]
   take?: number
   skip?: number
-  orderBy?: OrderBy | OrderBy[]
+  orderBy?: NarrowOrderBy<OrderBy | OrderBy[]>
 }
 
 export interface FindUniqueInput<Select, Where, Include> {
   where: Where
-  select?: Select
-  include?: Include
+  select?: NarrowSelect<Select>
+  include?: NarrowInclude<Include>
 }

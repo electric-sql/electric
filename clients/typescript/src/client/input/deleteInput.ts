@@ -1,9 +1,11 @@
+import { NarrowInclude, NarrowSelect, NarrowWhere } from './inputNarrowing'
+
 export interface DeleteInput<Select, WhereUnique, Include> {
   where: WhereUnique
-  select?: Select
-  include?: Include
+  select?: NarrowSelect<Select>
+  include?: NarrowInclude<Include>
 }
 
 export interface DeleteManyInput<Where> {
-  where?: Where
+  where?: NarrowWhere<Where>
 }
