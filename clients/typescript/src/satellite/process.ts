@@ -748,12 +748,6 @@ export class SatelliteProcess implements Satellite {
     // `stmts` will store all SQL statements
     // that need to be executed
     const stmts: Statement[] = []
-    // `txStmts` will store the statements related to the transaction
-    // including the creation of triggers
-    // but not statements that disable/enable the triggers
-    // neither statements that update meta tables or modify pragmas.
-    // The `txStmts` is used to compute the hash of migration transactions
-    const txStmts: Statement[] = []
     const tablenamesSet: Set<string> = new Set()
     let newTables: Set<string> = new Set()
     const opLogEntries: OplogEntry[] = []
@@ -791,7 +785,6 @@ export class SatelliteProcess implements Satellite {
       entries.forEach((e) => opLogEntries.push(e))
       statements.forEach((s) => {
         stmts.push(s)
-        txStmts.push(s)
       })
       tablenames.forEach((n) => tablenamesSet.add(n))
     }
@@ -801,7 +794,6 @@ export class SatelliteProcess implements Satellite {
       changes.forEach((change) => {
         const changeStmt = { sql: change.sql }
         stmts.push(changeStmt)
-        txStmts.push(changeStmt)
 
         if (
           change.migrationType === SatOpMigrate_Type.CREATE_TABLE ||
@@ -825,7 +817,6 @@ export class SatelliteProcess implements Satellite {
       affectedTables.forEach((table) => {
         const triggers = this._generateTriggersForTable(table)
         stmts.push(...triggers)
-        txStmts.push(...triggers)
       })
 
       // Disable the newly created triggers

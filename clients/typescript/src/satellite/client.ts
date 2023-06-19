@@ -737,6 +737,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         //  has the same version number)
         // TODO: in the protocol: move the `version` field to the SatOpBegin message
         //       or replace the `is_migration` field by an optional `version` field
+        //       --> see issue VAX-718 on linear.
         const tx = replication.transactions[lastTxnIdx]
         tx.migrationVersion = op.migrate.version
 
