@@ -51,11 +51,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @type slot_name :: String.t()
   @type slot_reg :: Electric.reg_name()
 
+  @type opts ::
+          {:conn_config, Connectors.config()}
+          | {:producer, Electric.reg_name()}
+
   # Public interface
 
-  @spec start_link(Connectors.config(), Electric.reg_name()) :: GenServer.on_start()
-  def start_link(conn_config, producer) do
-    GenStage.start_link(__MODULE__, [conn_config, producer])
+  @spec start_link([opts(), ...]) :: GenServer.on_start()
+  def start_link(opts) do
+    GenStage.start_link(__MODULE__, opts)
   end
 
   @spec get_name(String.t()) :: Electric.reg_name()
@@ -117,7 +121,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Server callbacks
 
   @impl true
-  def init([conn_config, {:via, :gproc, producer}]) do
+  def init(opts) do
+    conn_config = Keyword.fetch!(opts, :conn_config)
+    {:via, :gproc, producer} = Keyword.fetch!(opts, :producer)
+
     origin = Connectors.origin(conn_config)
     replication_opts = Connectors.get_replication_opts(conn_config)
     downstream_opts = Connectors.get_downstream_opts(conn_config)
