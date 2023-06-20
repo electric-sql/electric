@@ -115,7 +115,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
   @pg_class_query """
   SELECT c.oid
-  FROM pg_class c 
+  FROM pg_class c
     INNER JOIN pg_namespace n ON c.relnamespace = n.oid
   WHERE
       n.nspname = $1
@@ -133,12 +133,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     with {:ok, relkind} <- Map.fetch(@relkind, rel_type),
          {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
       {:ok, String.to_integer(oid)}
+    else
+      _ -> {:error, :relation_missing}
     end
   end
 
   @primary_keys_query """
   SELECT a.attname
-  FROM pg_class c 
+  FROM pg_class c
     INNER JOIN pg_namespace n ON c.relnamespace = n.oid
     INNER JOIN pg_index i ON i.indrelid = c.oid
     INNER JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
