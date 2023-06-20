@@ -220,6 +220,7 @@ export class SatelliteProcess implements Satellite {
     this._authState = authState
   }
 
+  // TODO: subscribe to subscription events, handle them and update shape manager
   setClientListeners(): void {
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
@@ -252,6 +253,7 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
+  // TODO: update subscription manager and call client
   async subscribe(
     _shapeDefinitions: ClientShapeDefinition[]
   ): Promise<void | SatelliteError> {
@@ -290,6 +292,7 @@ export class SatelliteProcess implements Satellite {
     }
     const authState = this._authState
 
+    // TODO: add subscriptions to startReplication
     return this.client
       .connect()
       .then(() => this.client.authenticate(authState))
@@ -299,7 +302,9 @@ export class SatelliteProcess implements Satellite {
           error.code == SatelliteErrorCode.BEHIND_WINDOW &&
           opts?.clearOnBehindWindow
         ) {
-          // extract and handle subscriptions
+          // can't resume at position
+          // 1. TODO: gc subscriptions
+          // 2. start from empty state
           this._lsn = undefined
           return this._setMeta('lsn', null).then(() =>
             this._connectAndStartReplication()

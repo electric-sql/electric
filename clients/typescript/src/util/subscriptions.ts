@@ -106,7 +106,13 @@ export class InMemorySubscriptionsManager {
     this.subToShapes = subToShapes
   }
 }
-
+// TODO
+// The idea of the persistent subscriptions manager is to save the current
+// subscriptions in the database for durability along with the transaction
+// that applied the shape.
+// I am not sure this is the ideal interface, maybe it is better to get just
+// the serialized subscriptions, and let the applier create the statement as
+// part of the transaction. Happy to get rid of this code, if not ideal.
 export class PersistentSubscriptionsManager implements SubscriptionsManager {
   private manager: InMemorySubscriptionsManager
   private loadFn: () => Promise<any>

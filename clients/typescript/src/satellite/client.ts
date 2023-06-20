@@ -292,6 +292,20 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
+  // TODO: Reconnect with subscriptions
+  // Need to refine the protocol for syncing pending changes:
+  // Need to make sure that we clear oplog for operations that were
+  // delivered on the server and not acked by the client (e.g. because
+  // of a crash). If we fail to do this, we might re-introduce effects
+  // produced by the client that is not aware that were committed on the
+  // server.
+  // The server keeps track of what operations it has seen from a client,
+  // but this is a cache and not assured to be there.
+  // If client resumes from the replication window it is safe it will receive
+  // the acks for operations it has sent before the crash: the client will
+  // receive oplogs with local tags. When subscribing to initial shape data,
+  // we don't get those tags --- I think there is a limit of the guarantees
+  // that we can give.
   startReplication(
     lsn?: LSN,
     subscriptionIds?: string[]
