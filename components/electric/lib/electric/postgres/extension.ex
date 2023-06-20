@@ -359,4 +359,47 @@ defmodule Electric.Postgres.Extension do
 
     ~s|ALTER PUBLICATION "#{@publication_name}" ADD TABLE #{table}#{column_list}|
   end
+
+  @doc """
+  Returns a relation that is the shadow table of the passed-in relation.
+  """
+  def shadow_of({schema, table}), do: {@schema, "shadow__#{schema}__#{table}"}
+
+  @doc """
+  Returns true if a given relation is a shadow table under current naming convention.
+  """
+  defguard is_shadow_relation(relation)
+           when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
+                  byte_size(elem(relation, 1)) >= 8 and
+                  binary_part(elem(relation, 1), 0, 8) == "shadow__"
+
+  @doc """
+  Returns true if a given relation is a tombstone table under current naming convention.
+  """
+  defguard is_tombstone_relation(relation)
+           when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
+                  byte_size(elem(relation, 1)) >= 11 and
+                  binary_part(elem(relation, 1), 0, 11) == "tombstone__"
+
+  @doc """
+  Returns primary keys list for a given shadow record.
+
+  Utilizes implicit knowledge of the shadow table structure: its "implementation
+  detail" keys start with an underscore, and all its non-pk columns are "duplicated",
+  with one column having same name as the main table, and the other having the name
+  `__reordered_<original_column_name>`. We can thus remove all non-pk columns if
+  they have a paired reordered column.
+  """
+  def infer_shadow_primary_keys(record) when is_map(record) do
+    infer_shadow_primary_keys(Map.keys(record))
+  end
+
+  def infer_shadow_primary_keys(all_keys) when is_list(all_keys) do
+    known_keys = MapSet.new(all_keys)
+
+    Enum.reject(all_keys, fn
+      "_" <> _hidden_key -> true
+      key -> MapSet.member?(known_keys, "__reordered_" <> key)
+    end)
+  end
 end
