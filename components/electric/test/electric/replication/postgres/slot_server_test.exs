@@ -236,7 +236,8 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
         downstream: [producer: DownstreamProducerMock]
       ],
       producer: LogProducer.get_name(producer_name()),
-      preprocess_change_fn: nil
+      preprocess_change_fn: nil,
+      preprocess_relation_list_fn: & &1
     ]
   end
 

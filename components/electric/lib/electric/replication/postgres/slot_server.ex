@@ -21,6 +21,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
+  alias Electric.Postgres.ShadowTableTransformation
 
   alias Electric.Replication.DownstreamProducer
 
@@ -40,6 +41,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
               producer_pid: nil,
               sent_relations: %{},
               current_vx_offset: nil,
+              preprocess_relation_list_fn: nil,
+              preprocess_change_fn: nil,
               opts: []
   end
 
@@ -51,9 +54,23 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @type slot_name :: String.t()
   @type slot_reg :: Electric.reg_name()
 
+  @type column :: %{name: String.t()}
+  @type relations_map :: %{
+          optional(Changes.relation()) => %{
+            primary_keys: [String.t(), ...],
+            columns: [column()],
+            oid: non_neg_integer()
+          }
+        }
+  @type preprocess_change_fn ::
+          (Changes.change(), relations_map(), {DateTime.t(), String.t()} -> [Changes.change()])
+  @type preprocess_relation_list_fn :: ([Changes.relation()] -> [Changes.relation()])
+
   @type opts ::
           {:conn_config, Connectors.config()}
           | {:producer, Electric.reg_name()}
+          | {:preprocess_change_fn, preprocess_change_fn()}
+          | {:preprocess_relation_list_fn, preprocess_relation_list_fn()}
 
   # Public interface
 
@@ -135,7 +152,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
     :gproc.reg(name({:slot_name, slot}))
 
     Logger.metadata(origin: origin, pg_slot: slot)
-    Logger.debug("slot server started")
+
+    Logger.debug(
+      "slot server started, registered as #{inspect(name(origin))} and #{inspect(name({:slot_name, slot}))}"
+    )
 
     {:consumer,
      %State{
@@ -144,7 +164,24 @@ defmodule Electric.Replication.Postgres.SlotServer do
        origin: origin,
        producer_name: producer,
        producer: downstream_opts.producer,
-       opts: Map.get(replication_opts, :opts, [])
+       opts: Map.get(replication_opts, :opts, []),
+       # Under the current implementation, this function is always going to be
+       # `ShadowTableTransformation.split_change_into_main_and_shadow/3`,
+       # but I'm using the "plain" behaviour of SlotServer for working with Postgres, so it's
+       # "dependency-injected" here so that I can easily disable it
+       preprocess_change_fn:
+         Keyword.get(
+           opts,
+           :preprocess_change_fn,
+           &ShadowTableTransformation.split_change_into_main_and_shadow/3
+         ),
+       # Comment for `preprocess_change_fn` also relevant here
+       preprocess_relation_list_fn:
+         Keyword.get(
+           opts,
+           :preprocess_relation_list_fn,
+           &ShadowTableTransformation.add_shadow_relations/1
+         )
      }}
   end
 
@@ -366,15 +403,19 @@ defmodule Electric.Replication.Postgres.SlotServer do
     end
   end
 
-  defp convert_to_wal(%Changes.Transaction{commit_timestamp: ts, changes: changes}, state) do
+  defp convert_to_wal(
+         %Changes.Transaction{commit_timestamp: ts, changes: changes, origin: origin},
+         %State{} = state
+       ) do
     first_lsn = Lsn.increment(state.current_lsn)
 
-    # always fetch the table info from the schema registry, don't rely on 
+    # always fetch the table info from the schema registry, don't rely on
     # our cache, which is just to determine which relations to send
     # this keeps the column lists up to date in the case of migrations
     relations =
       changes
       |> Enum.map(& &1.relation)
+      |> state.preprocess_relation_list_fn.()
       |> Enum.uniq()
       |> Enum.map(&SchemaRegistry.fetch_table_info!/1)
       |> Enum.map(&Map.put(&1, :columns, SchemaRegistry.fetch_table_columns!(&1.oid)))
@@ -391,6 +432,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     # Final LSN as specified by `BEGIN` message should be after all LSNs of actual changes but before the LSN of the commit
     {messages, final_lsn} =
       changes
+      |> Enum.flat_map(&preprocess_changes(state, &1, relations, {ts, origin}))
       |> Enum.map(&changes_to_wal(&1, relations))
       |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
 
@@ -422,6 +464,12 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     {begin ++ relation_messages ++ messages ++ commit, relations, commit_lsn}
   end
+
+  defp preprocess_changes(%State{preprocess_change_fn: nil}, change, _, _), do: [change]
+
+  defp preprocess_changes(%State{preprocess_change_fn: fun}, change, relations, tag)
+       when is_function(fun, 3),
+       do: fun.(change, relations, tag)
 
   defp changes_to_wal(%Changes.NewRecord{record: data, relation: table}, relations) do
     %ReplicationMessages.Insert{
@@ -488,6 +536,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
+  # TODO: Should probably have backfilling of columns with defaults/nulls
   defp record_to_tuple(record, columns) do
     columns
     |> Enum.map(&Map.fetch!(record, &1.name))
