@@ -19,6 +19,8 @@
     ?electric=\*#
     !CREATE TABLE mtable1 (id uuid PRIMARY KEY);
     ?electric=\*#
+    !CALL electric.electrify('mtable1');
+    ?electric=\*#
     !COMMIT;
     ?electric=#
 
@@ -30,12 +32,14 @@
     ?electric=\*#
     !CREATE TABLE mtable2 (id uuid PRIMARY KEY);
     ?electric=\*#
+    !CALL electric.electrify('mtable2');
+    ?electric=\*#
     !COMMIT;
     ?electric=#
 
 [shell electric]
-    ?.* \[info\] Applying migration .* $migration_version_1
-    ?.* \[info\] Applying migration .* $migration_version_2
+    ?.* \[info\] Applying migration $migration_version_1
+    ?.* \[info\] Applying migration $migration_version_2
 
 
 [shell developer]

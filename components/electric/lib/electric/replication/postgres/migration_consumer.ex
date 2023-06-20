@@ -197,7 +197,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp perform_migration({version, stmts}, state) do
     {:ok, old_version, schema} = load_schema(state)
 
-    Logger.info("Applying migration #{old_version} -> #{version}")
+    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
 
     oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
 

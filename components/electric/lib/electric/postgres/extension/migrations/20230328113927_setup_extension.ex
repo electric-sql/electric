@@ -22,6 +22,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
     event_triggers = Extension.event_triggers()
+    publication_name = Extension.publication_name()
 
     event_trigger_tags =
       for action <- ["CREATE", "ALTER", "DROP"],
@@ -113,14 +114,17 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       """,
       ##################
       """
-      CREATE OR REPLACE FUNCTION #{schema}.create_active_migration(_txid #{@txid_type}, _txts timestamptz, _version text) RETURNS int8 AS
+      CREATE OR REPLACE FUNCTION #{schema}.create_active_migration(_txid #{@txid_type}, _txts timestamptz, _version text, _query text DEFAULT NULL) RETURNS int8 AS
       $function$
       DECLARE
           trid int8;
       BEGIN
-          RAISE DEBUG 'capture migration: % => %', _version, current_query();
+          IF _query IS NULL THEN
+              _query := current_query();
+          END IF;
+          RAISE DEBUG 'capture migration: % => %', _version, _query;
           INSERT INTO #{ddl_table} (txid, txts, version, query) VALUES
-                (_txid, _txts, _version, current_query())
+                (_txid, _txts, _version, _query)
               RETURNING id INTO trid;
           RETURN trid;
       END;
@@ -141,37 +145,25 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       LANGUAGE PLPGSQL;
       """,
       ##################
+      # this function is over-written by later versions
       """
-      CREATE OR REPLACE FUNCTION #{schema}.ddlx_command_end_handler() RETURNS EVENT_TRIGGER AS
-      $function$
-      DECLARE
-          _txid #{@txid_type};
-          _txts timestamptz;
-          _version text;
-          trid int8;
-          v_cmd_rec record;
-          _capture bool;
+      CREATE OR REPLACE FUNCTION #{schema}.ddlx_command_end_handler() 
+          RETURNS EVENT_TRIGGER AS $function$
       BEGIN
-          RAISE DEBUG 'command_end_handler:: version: % :: start', _version;
-
-          SELECT v.txid, v.txts, v.version
-            INTO _txid, _txts, _version
-            FROM #{schema}.current_migration_version() v;
-
-          trid := (SELECT #{schema}.create_active_migration(_txid, _txts, _version));
-
-          RAISE DEBUG 'create_active_migration = %', trid;
-          RAISE DEBUG 'command_end_handler:: version: % :: end', _version;
+          NULL;
       END;
-      $function$
-      LANGUAGE PLPGSQL;
+      $function$ LANGUAGE PLPGSQL;
       """,
       ##################
       """
       CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
           WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
           EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
+      """,
       """
+      CREATE PUBLICATION "#{publication_name}"; 
+      """,
+      Extension.add_table_to_publication_sql(ddl_table)
     ]
   end
 

@@ -31,6 +31,17 @@
         [sleep 1]
     [endloop]
 
+[shell pg_2]
+    [loop iter 1..10]
+        @Hello from b
+        !select * from entries;
+        ?electric=
+        [sleep 1]
+    [endloop]
+
+[shell electric]
+    [sleep 5]
+
 [cleanup]
     [invoke teardown]
 

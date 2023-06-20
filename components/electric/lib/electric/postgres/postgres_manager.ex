@@ -23,7 +23,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
               publication: String.t(),
               slot: String.t(),
               subscription: String.t(),
-              publication_tables: :all | [binary] | binary,
               electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
             },
             state: :reinit | :init | :subscription | :ready | :migration
@@ -192,39 +191,30 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def initialize_postgres(
-        %State{conn_config: conn_config, origin: origin, repl_config: repl_config} = state
-      ) do
-    publication_name = Map.fetch!(repl_config, :publication)
-    slot_name = Map.fetch!(repl_config, :slot)
-    subscription_name = Map.fetch!(repl_config, :subscription)
-    publication_tables = Map.fetch!(repl_config, :publication_tables)
-    reverse_connection = Map.fetch!(repl_config, :electric_connection)
+  def initialize_postgres(%State{origin: origin, repl_config: repl_config} = state) do
+    publication = Map.fetch!(repl_config, :publication)
+    subscription = Map.fetch!(repl_config, :subscription)
+    electric_connection = Map.fetch!(repl_config, :electric_connection)
 
-    Logger.debug("attempting to initialize #{origin}")
+    # get a config configuration without the replication parameter set
+    # so that we can use extended query syntax
+    conn_config = Connectors.get_connection_opts(state.config, replication: false)
+
+    Logger.debug(
+      "Attempting to initialize #{origin}: #{conn_config.username}@#{conn_config.host}:#{conn_config.port}"
+    )
 
     Client.with_conn(conn_config, fn conn ->
       with {:ok, _versions} <- Extension.migrate(conn),
-           {:ok, _system_id} <- Client.get_system_id(conn),
-           {:ok, publication} <-
-             Client.create_publication(conn, publication_name, publication_tables),
-           {:ok, _} <- Client.create_slot(conn, slot_name),
            {:ok, _} <-
-             Client.create_subscription(
-               conn,
-               subscription_name,
-               publication,
-               reverse_connection
-             ),
-           tables <- Client.query_replicated_tables(conn, publication_name),
-           migrations <- Client.query_migration_table(conn),
+             Client.create_subscription(conn, subscription, publication, electric_connection),
+           tables <- Client.query_replicated_tables(conn, publication),
            :ok <- Client.close(conn) do
         tables
         |> Enum.map(&Map.delete(&1, :columns))
-        |> then(&SchemaRegistry.put_replicated_tables(publication_name, &1))
+        |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
 
         Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
-        SchemaRegistry.put_migration_tables(origin, migrations)
 
         Logger.info("Successfully initialized origin #{origin}")
 

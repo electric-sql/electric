@@ -94,6 +94,7 @@
               --table-size=${table_size} \
               --tables=${tables} \
               --threads=1 \
+              --auto-inc=false \
               --pgsql-host=${host} \
               --pgsql-port=5432 \
               --pgsql-user=postgres \
@@ -118,3 +119,19 @@
               oltp_write_only run
     [invoke ok2 $dprompt]
 [endmacro]
+
+[macro electrify_table pg_id table_name]
+    [shell $pg_id]
+        [invoke electrify_table_tx $table_name]
+
+[endmacro]
+
+[macro electrify_table_tx table_name]
+    !BEGIN;
+    ?electric=\*#
+    !CALL electric.electrify('$table_name');
+    ?electric=\*#
+    !COMMIT;
+    ?electric=#
+[endmacro]
+

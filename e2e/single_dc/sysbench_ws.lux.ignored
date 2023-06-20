@@ -3,6 +3,8 @@
 [global psql=electric]
 [global dprompt=\w+!?@\w+:(\S+)[\#\$]]
 [global eprompt=iex\(\d+\)>\s]
+[global table_count=10]
+[global row_count=10]
 
 [include shared.luxinc]
 
@@ -16,21 +18,46 @@
 [shell sysbench_pg1]
     !make start_sysbench
     ?$dprompt
-    [invoke sysbench_prepare pg_1 10 10]
+    [invoke sysbench_prepare pg_1 0 $table_count]
     !exit
     [invoke ok]
 
 [shell sysbench_pg2]
     !make start_sysbench
     ?$dprompt
-    [invoke sysbench_prepare pg_2 0 10]
+    [invoke sysbench_prepare pg_2 0 $table_count]
     !exit
     [invoke ok]
 
 [invoke setup_rest]
 
+[invoke log "Electrify the sysbench tables on pg_1"]
+[shell pg_1]
+    [loop iter 1..$table_count]
+        [invoke electrify_table_tx "sbtest${iter}"]
+    [endloop]
+
+[invoke log "Electrify the sysbench tables on pg_2"]
+
+[shell pg_2]
+    [loop iter 1..$table_count]
+        [invoke electrify_table_tx "sbtest${iter}"]
+    [endloop]
+
+[invoke log "Generate data on pg_1"]
+[shell pg_1]
+    [loop t 1..$table_count]
+        [local table="sbtest${t}"]
+        !BEGIN;
+        ?electric=\*#
+        [invoke pseudo_sysbench $table $row_count]
+        ?electric=\*#
+        !COMMIT;
+        ?electric=#
+    [endloop]
+
 [macro wait_table table]
-    [invoke wait-for "select count(id) from ${table};" "  10" 10 $psql]
+    [invoke wait-for "select count(id) from ${table};" "  $row_count" 10 $psql]
 [endmacro]
 
 [shell pg_2]
