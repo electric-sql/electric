@@ -1,0 +1,27 @@
+{
+  "app": "linearlite",
+  "debug": false,
+  "defaultEnv": "local",
+  "directories": {
+    "migrations": "migrations",
+    "output": ".electric"
+  },
+  "environments": {
+    "default": {
+      "console": null,
+      "slug": "default"
+    },
+    "local": {
+      "console": {
+        "host": "127.0.0.1",
+        "port": 4000,
+        "ssl": false
+      },
+      "replication": {
+        "host": "127.0.0.1",
+        "port": 5133,
+        "ssl": false
+      }
+    }
+  }
+}
