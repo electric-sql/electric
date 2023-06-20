@@ -342,7 +342,7 @@ defmodule Electric.Replication.Postgres.Client do
       "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
     )
 
-    opts = 'proto_version \'1\', publication_names \'#{publication}\''
+    opts = 'proto_version \'1\', publication_names \'#{publication}\', messages'
 
     conn
     |> :epgsql.start_replication(:erlang.binary_to_list(slot), handler, [], '0/0', opts)
