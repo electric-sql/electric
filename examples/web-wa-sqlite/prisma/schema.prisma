@@ -9,10 +9,6 @@ generator electric {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("PRISMA_DB_URL")
-}
-
-model items {
-  value String @id
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }

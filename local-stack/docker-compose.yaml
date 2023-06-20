@@ -24,6 +24,7 @@ services:
       - 5432:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./compose/postgres/data:/home/data
 
   vaxine_1:
     extends:

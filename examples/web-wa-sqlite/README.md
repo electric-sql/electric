@@ -84,7 +84,7 @@ pnpm start
 
 ## Sync
 
-The application is setup to work with the local stack.
+The application is set up to work with the local stack.
 
 Run the local stack.
 Then open [localhost:3001](http://localhost:3001) in two different browsers (so they're backed by different databases) and try it out. You'll see data being replicated between the client applications.

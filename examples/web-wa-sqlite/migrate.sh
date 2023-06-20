@@ -49,9 +49,10 @@ mv ./.electric_migrations_tmp/** ./migrations # move the contents of the 'electr
 # Clean temporary migration files
 rm -rf .electric_migrations_tmp
 
-# Replace the data source in the Prisma schema to be SQLite
-sed -i'' -e 's/provider = "postgresql"/provider = "sqlite"/' $prisma
-sed -i'' -e "s/env(\"PRISMA_DB_URL\")/\"file:electric-tmp.db\"/" $prisma
+# Modify the data source in the Prisma schema to a temporary DB
+DATABASE_URL_TMP="$DATABASE_URL"
+export DATABASE_URL="file:electric-tmp.db"
+#sed -i'' -e "s/file:..\/db\/dev.db/file:electric-tmp.db/" $prisma
 
 # Create empty temporary DB
 touch prisma/electric-tmp.db
@@ -75,7 +76,7 @@ npx prisma db pull --schema=$prisma
 # because Prisma won't generate createMany/updateMany/... schemas
 # if the data source is a SQLite DB.
 sed -i'' -e 's/provider = "sqlite"/provider = "postgresql"/' $prisma
-sed -i'' -e "s/\"file:electric-tmp.db\"/env(\"PRISMA_DB_URL\")/" $prisma
+#sed -i'' -e "s/\"file:electric-tmp.db\"/env(\"PRISMA_DB_URL\")/" $prisma
 
 # Generate a client from the Prisma schema
 npx prisma generate --schema=$prisma
@@ -86,6 +87,11 @@ rm prisma/electric-tmp.db
 # Fix the capitalization issues in the generated Prisma client
 sed -i'' -e 's/itemsAggregateArgs/ItemsAggregateArgs/g' src/generated/models/index.ts
 sed -i'' -e 's/itemsGroupByArgs/ItemsGroupByArgs/g' src/generated/models/index.ts
+
+# Modify data source back to the original DB
+sed -i'' -e 's/provider = "postgresql"/provider = "sqlite"/' $prisma
+#sed -i'' -e "s/env(\"PRISMA_DB_URL\")/\"file:..\/db\/dev.db\"/" $prisma
+export DATABASE_URL="$DATABASE_URL_TMP"
 
 rm src/generated/models/index.ts-e
 rm prisma/schema.prisma-e
