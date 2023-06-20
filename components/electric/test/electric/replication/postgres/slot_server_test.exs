@@ -102,15 +102,6 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       {:ok, server: server, send_fn: send_back_message(self()), producer: producer}
     end
 
-    test "downstream_connected? calls downstream producer to check if its connected", %{
-      server: server,
-      producer: producer
-    } do
-      refute SlotServer.downstream_connected?(server)
-      DownstreamProducerMock.set_expected_producer_connected(producer, true)
-      assert SlotServer.downstream_connected?(server)
-    end
-
     test "starts and reports current LSN", %{server: server} do
       assert %Lsn{segment: 0, offset: 1} = SlotServer.get_current_lsn(server)
     end
