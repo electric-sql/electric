@@ -147,7 +147,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
     downstream_opts = Connectors.get_downstream_opts(conn_config)
     slot = replication_opts.subscription
 
-    :gproc.nb_wait(producer)
     :gproc.reg(name(origin))
     :gproc.reg(name({:slot_name, slot}))
 
@@ -228,8 +227,18 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Metrics.pg_slot_replication_event(state.origin, %{start: 1})
 
-    # FIXME: handle_continue should be supported on gen_stage
-    send(self(), {:start_from_lsn, start_lsn})
+    :gproc.await(state.producer_name, 1_000)
+
+    vx_offset = get_vx_offset(state.slot_name, start_lsn)
+    Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
+
+    GenStage.async_subscribe(self(), [
+      {:to, {:via, :gproc, state.producer_name}},
+      {:cancel, :temporary}
+      | producer_info()
+    ])
+
+    send(self(), :send_keepalive)
 
     {:reply, :ok, [],
      %{state | publication: publication, send_fn: send_fn, timer: timer, socket_process_ref: ref}}
@@ -249,25 +258,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_info({:start_from_lsn, start_lsn}, state) do
-    send(self(), :send_keepalive)
-
-    vx_offset = get_vx_offset(state.slot_name, start_lsn)
-
-    Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
-
-    DownstreamProducer.start_replication(
-      state.producer,
-      state.producer_pid,
-      vx_offset
-    )
-
-    {:noreply, [], %{state | current_lsn: start_lsn}}
-  end
-
-  @impl true
   def handle_info(:send_keepalive, state) when replication_started?(state) do
-    Logger.debug("#{__MODULE__}: <KeepAlive>")
+    # Logger.debug("#{__MODULE__}: <KeepAlive>")
 
     state.current_lsn
     |> Messaging.replication_keepalive()
@@ -283,12 +275,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
     Logger.debug("request subscription")
 
-    :ok =
-      GenStage.async_subscribe(self(), [
-        {:to, pid},
-        {:cancel, :temporary}
-        | producer_info()
-      ])
+    GenStage.async_subscribe(self(), [
+      {:to, pid},
+      {:cancel, :temporary}
+      | producer_info()
+    ])
 
     {:noreply, [], %State{state | producer_pid: pid}}
   end
