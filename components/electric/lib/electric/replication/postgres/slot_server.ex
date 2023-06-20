@@ -482,9 +482,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   defp record_to_tuple(record, columns) do
-    columns
-    |> Enum.map(&Map.fetch!(record, &1.name))
-    |> List.to_tuple()
+    Enum.map(columns, &Map.fetch!(record, &1.name))
   end
 
   # Get last element from the list and the list's length in one pass

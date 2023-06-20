@@ -163,21 +163,21 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                  48>>
              ) == %Insert{
                relation_id: 24576,
-               tuple_data: {"baz", "560"}
+               tuple_data: ["baz", "560"]
              }
     end
 
     test "decodes insert messages with null values" do
       assert decode(<<73, 0, 0, 96, 0, 78, 0, 2, 110, 116, 0, 0, 0, 3, 53, 54, 48>>) == %Insert{
                relation_id: 24576,
-               tuple_data: {nil, "560"}
+               tuple_data: [nil, "560"]
              }
     end
 
     test "decodes insert messages with unchanged toasted values" do
       assert decode(<<73, 0, 0, 96, 0, 78, 0, 2, 117, 116, 0, 0, 0, 3, 53, 54, 48>>) == %Insert{
                relation_id: 24576,
-               tuple_data: {:unchanged_toast, "560"}
+               tuple_data: [:unchanged_toast, "560"]
              }
     end
 
@@ -189,7 +189,7 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                relation_id: 24576,
                changed_key_tuple_data: nil,
                old_tuple_data: nil,
-               tuple_data: {"example", "560"}
+               tuple_data: ["example", "560"]
              }
     end
 
@@ -201,8 +201,8 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
              ) == %Update{
                relation_id: 24576,
                changed_key_tuple_data: nil,
-               old_tuple_data: {"baz", "560"},
-               tuple_data: {"example", "560"}
+               old_tuple_data: ["baz", "560"],
+               tuple_data: ["example", "560"]
              }
     end
 
@@ -212,9 +212,9 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                  0, 0, 7, 101, 120, 97, 109, 112, 108, 101, 116, 0, 0, 0, 3, 53, 54, 48>>
              ) == %Update{
                relation_id: 24576,
-               changed_key_tuple_data: {"baz", nil},
+               changed_key_tuple_data: ["baz", nil],
                old_tuple_data: nil,
-               tuple_data: {"example", "560"}
+               tuple_data: ["example", "560"]
              }
     end
 
@@ -224,7 +224,7 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                  110>>
              ) == %Delete{
                relation_id: 24576,
-               changed_key_tuple_data: {"example", nil}
+               changed_key_tuple_data: ["example", nil]
              }
     end
 
@@ -234,7 +234,7 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                  48>>
              ) == %Delete{
                relation_id: 24576,
-               old_tuple_data: {"baz", "560"}
+               old_tuple_data: ["baz", "560"]
              }
     end
   end
