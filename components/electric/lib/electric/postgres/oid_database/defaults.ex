@@ -10,7 +10,5 @@ defmodule Electric.Postgres.OidDatabase.Defaults do
                  |> Enum.map(&List.to_tuple/1)
                  |> Enum.map(&pg_type_from_tuple/1)
 
-  def write_defaults(table) do
-    ETS.Set.put(table, @pg_oid_values)
-  end
+  def get_defaults(), do: @pg_oid_values
 end
