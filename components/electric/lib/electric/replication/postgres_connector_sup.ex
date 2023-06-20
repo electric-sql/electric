@@ -42,10 +42,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
         start:
           {Postgres.MigrationConsumer, :start_link, [conn_config, [producer: postgres_producer]]}
       },
-      %{
-        id: :slot_server,
-        start: {Postgres.SlotServer, :start_link, [conn_config, vaxine_producer]}
-      },
+      {Postgres.SlotServer, conn_config: conn_config, producer: MagicProducer.name()},
       {CachedWal.EtsBacked,
        subscribe_to: [postgres_producer_consumer], name: CachedWal.EtsBacked},
       %{
