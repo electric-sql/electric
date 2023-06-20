@@ -1,7 +1,4 @@
 defmodule Electric.Postgres.OidDatabase do
-  # `ETS.Set.match!/2` has incorrect spec
-  @dialyzer {:nowarn_function, oid_for_name: 1}
-
   @ets_table_name :oid_database
 
   import Electric.Postgres.OidDatabase.PgType
@@ -18,6 +15,7 @@ defmodule Electric.Postgres.OidDatabase do
   @doc """
   Get an atom name by the type OID
   """
+  @spec name_for_oid(integer()) :: atom() | {:array, atom()}
   def name_for_oid(oid) do
     case :ets.lookup(@ets_table_name, oid) do
       [pg_type(is_array: false, name: name)] -> name
@@ -29,6 +27,7 @@ defmodule Electric.Postgres.OidDatabase do
   @doc """
   Get the type OID by the name atom
   """
+  @spec oid_for_name(atom() | {:array, atom()}) :: integer()
   def oid_for_name({:array, element_name}) do
     case :ets.match(@ets_table_name, pg_type(name: element_name, array_oid: :"$1")) do
       [[oid]] -> oid
@@ -43,6 +42,7 @@ defmodule Electric.Postgres.OidDatabase do
     end
   end
 
+  @spec type_length(integer() | atom() | {:array, atom()}) :: integer()
   def type_length(oid) when is_integer(oid) do
     case :ets.lookup(@ets_table_name, oid) do
       [pg_type(length: len)] -> len
