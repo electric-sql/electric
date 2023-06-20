@@ -1,0 +1,16 @@
+{
+    "name": "linearapp_server",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {},
+    "engines": {
+        "node": ">=16.20.0"
+    },
+    "devDependencies": {
+        "@types/node": "^18.16.3",
+        "prisma": "^4.13.0",
+        "ts-node": "^10.9.1",
+        "typescript": "^5.0.4",
+        "prisma-generator-electric": "workspace:*"
+    }
+}
