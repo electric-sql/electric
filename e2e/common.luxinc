@@ -44,24 +44,6 @@
     ?$prompt
 [endmacro]
 
-[macro wait_name name]
-    [loop iter 1..10]
-          @accepting connections
-          !docker exec -it -e PGPASSWORD=password single_dc_${name}_1 pg_isready -U electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-    ?SH-PROMPT:
-[endmacro]
-
-[macro wait_logs name match_spec]
-    [loop iter 1..10]
-          @${match_spec}
-          !docker logs single_dc_${name}_1
-          [sleep 1]
-    [endloop]
-[endmacro]
-
 [macro wait_port host port]
     [loop iter 1..10]
           @==0==

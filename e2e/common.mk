@@ -11,7 +11,6 @@ export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
 export ELIXIR_VERSION=1.13.4
 export OTP_VERSION=24.3
 export DEBIAN_VERSION=bullseye-20210902-slim
-export COMPOSE_COMPATIBILITY=true
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
@@ -124,7 +123,7 @@ endif
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U postgres -d electric
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -U postgres -d electric
 
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
