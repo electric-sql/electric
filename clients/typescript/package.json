@@ -89,6 +89,9 @@
       ],
       "client/model": [
         "./dist/client/model/index.d.ts"
+      ],
+      "migrators/builder": [
+        "./dist/migrators/builder.d.ts"
       ]
     }
   },

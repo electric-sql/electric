@@ -99,7 +99,9 @@ export class BundleMigrator implements Migrator {
 
   async apply({ statements, version }: StmtMigration): Promise<void> {
     if (!VALID_VERSION_EXP.test(version)) {
-      throw new Error(`Invalid migration name, must match ${VALID_VERSION_EXP}`)
+      throw new Error(
+        `Invalid migration version, must match ${VALID_VERSION_EXP}`
+      )
     }
 
     const applied = `INSERT INTO ${this.tableName}

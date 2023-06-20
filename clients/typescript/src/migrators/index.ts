@@ -2,6 +2,7 @@ import { Statement } from '../util'
 
 export { BundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
+export { loadMigrations } from './builder'
 
 export interface Migration {
   statements: string[]

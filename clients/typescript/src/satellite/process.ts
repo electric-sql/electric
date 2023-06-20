@@ -748,6 +748,12 @@ export class SatelliteProcess implements Satellite {
     // `stmts` will store all SQL statements
     // that need to be executed
     const stmts: Statement[] = []
+    // `txStmts` will store the statements related to the transaction
+    // including the creation of triggers
+    // but not statements that disable/enable the triggers
+    // neither statements that update meta tables or modify pragmas.
+    // The `txStmts` is used to compute the hash of migration transactions
+    const txStmts: Statement[] = []
     const tablenamesSet: Set<string> = new Set()
     let newTables: Set<string> = new Set()
     const opLogEntries: OplogEntry[] = []
@@ -815,8 +821,9 @@ export class SatelliteProcess implements Satellite {
 
       // Also add statements to create the necessary triggers for the created/updated table
       affectedTables.forEach((table) => {
-        const triggers = this._generateTriggersForTable(table)
+        const triggers = generateTriggersForTable(table)
         stmts.push(...triggers)
+        txStmts.push(...triggers)
       })
 
       // Disable the newly created triggers
@@ -894,28 +901,6 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
-  }
-
-  private _generateTriggersForTable(tbl: MigrationTable): Statement[] {
-    const table = {
-      tableName: tbl.name,
-      namespace: 'main',
-      columns: tbl.columns.map((col) => col.name),
-      primary: tbl.pks,
-      foreignKeys: tbl.fks.map((fk) => {
-        if (fk.fkCols.length !== 1 || fk.pkCols.length !== 1)
-          throw new Error(
-            'Satellite does not yet support compound foreign keys.'
-          )
-        return {
-          table: fk.pkTable,
-          childKey: fk.fkCols[0],
-          parentKey: fk.pkCols[0],
-        }
-      }),
-    }
-    const fullTableName = table.namespace + '.' + table.tableName
-    return generateOplogTriggers(fullTableName, table)
   }
 
   private async notifyChangesAndGCopLog(
@@ -1144,4 +1129,24 @@ function _applyNonDeleteOperation(
   }
 
   return { sql: insertStmt, args: columnValues }
+}
+
+export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
+  const table = {
+    tableName: tbl.name,
+    namespace: 'main',
+    columns: tbl.columns.map((col) => col.name),
+    primary: tbl.pks,
+    foreignKeys: tbl.fks.map((fk) => {
+      if (fk.fkCols.length !== 1 || fk.pkCols.length !== 1)
+        throw new Error('Satellite does not yet support compound foreign keys.')
+      return {
+        table: fk.pkTable,
+        childKey: fk.fkCols[0],
+        parentKey: fk.pkCols[0],
+      }
+    }),
+  }
+  const fullTableName = table.namespace + '.' + table.tableName
+  return generateOplogTriggers(fullTableName, table)
 }

@@ -1,0 +1,1 @@
+export { buildMigrations } from './migrator'
