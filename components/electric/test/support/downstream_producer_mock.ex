@@ -2,7 +2,6 @@ defmodule DownstreamProducerMock do
   use GenStage
   require Logger
 
-  alias Electric.Replication.Vaxine.LogProducer
   @behaviour Electric.Replication.DownstreamProducer
 
   defmodule State do
@@ -14,14 +13,12 @@ defmodule DownstreamProducerMock do
 
   @impl true
   def start_link(name, _opts \\ %{}) do
-    GenStage.start_link(__MODULE__, name)
+    GenStage.start_link(__MODULE__, [], name: name)
   end
 
   @impl true
-  def init(name) do
-    {:via, :gproc, name1} = LogProducer.get_name(name)
-    :gproc.reg(name1)
-    {:producer, %State{}, [{:dispatcher, GenStage.DemandDispatcher}, {:buffer_size, 1}]}
+  def init(_) do
+    {:producer, %State{}, buffer_size: 1}
   end
 
   @impl true

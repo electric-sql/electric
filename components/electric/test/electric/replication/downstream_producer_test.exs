@@ -2,7 +2,7 @@ defmodule Electric.Replication.DownstreamProducerTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.DownstreamProducer
-  @producer_name "producer"
+  @producer_name {:via, :gproc, {:n, :l, {DownstreamProducerMock, :tmp_producer}}}
 
   test "start_link/2 starts the producer" do
     assert {:ok, pid} = DownstreamProducer.start_link(DownstreamProducerMock, @producer_name)
