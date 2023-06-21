@@ -78,12 +78,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 end
 
 defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
-  alias Electric.Postgres.Extension
+  alias Electric.Postgres.{Extension, Extension.SchemaLoader}
   alias Electric.Replication.Connectors
 
   require Logger
 
-  @behaviour Extension.SchemaLoader
+  @behaviour SchemaLoader
 
   @impl true
   def connect(conn_config, _opts) do

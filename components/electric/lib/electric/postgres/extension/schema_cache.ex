@@ -22,7 +22,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   require Logger
 
-  @behaviour Electric.Postgres.Extension.SchemaLoader
+  @behaviour SchemaLoader
 
   def start_link({conn_config, opts}) do
     start_link(conn_config, opts)

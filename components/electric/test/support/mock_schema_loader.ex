@@ -1,7 +1,10 @@
 defmodule Electric.Postgres.MockSchemaLoader do
-  @behaviour Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.{
+    Extension.SchemaLoader,
+    Schema
+  }
 
-  alias Electric.Postgres.Schema
+  @behaviour SchemaLoader
 
   @impl true
   def connect(conn_config, opts) do
