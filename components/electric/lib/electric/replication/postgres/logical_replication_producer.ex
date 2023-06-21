@@ -2,7 +2,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
-  alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
   alias Electric.Postgres.LogicalReplication
@@ -155,7 +154,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     # stream.
     # The Relation messages are used and then dropped by the
     # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
-    # this producer. 
+    # this producer.
     relation =
       Changes.Relation
       |> struct(Map.from_struct(msg))
