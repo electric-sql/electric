@@ -4,11 +4,11 @@ import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { Electric, dbSchema } from './generated/models'
 export type { issue as Issue } from './generated/models'
 
-import config from '../../.electric/@config'
+import config from '../.electric/@config'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
-const discriminator = 'prod-10'
+const discriminator = 'prod-11'
 const distPath = '/'
 
 const dbName = `${config.app}-${config.env}-${discriminator}.db`

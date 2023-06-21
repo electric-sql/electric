@@ -1,12 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-generator electric {
-  provider      = "./node_modules/prisma-generator-electric/dist/bin.js"
-  output        = "../../client/web/src/generated/models"
-  relationModel = false
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
