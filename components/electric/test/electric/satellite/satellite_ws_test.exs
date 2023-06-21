@@ -1,7 +1,6 @@
 defmodule Electric.Satellite.WsServerTest do
-  alias Electric.Replication.Vaxine.LogConsumer
-  alias Electric.Replication.Vaxine.LogProducer
-  alias Electric.Replication.Vaxine
+  alias Electric.Replication.SatelliteConnector
+  alias Electric.Postgres.CachedWal.Producer
 
   alias Electric.Test.SatelliteWsClient, as: MockClient
   use Electric.Satellite.Protobuf
@@ -62,15 +61,20 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   setup_with_mocks([
-    {LogProducer, [:passthrough],
+    {SatelliteConnector, [:passthrough],
      [
-       start_link: fn a, b -> DownstreamProducerMock.start_link(a, b) end,
-       start_replication: fn a, b -> DownstreamProducerMock.start_replication(a, b) end
-     ]},
-    # [:passthrough],
-    {Vaxine, [],
-     [
-       transaction_to_vaxine: fn _tx, _pub -> :ok end
+       start_link: fn %{name: name, producer: producer} ->
+         Supervisor.start_link(
+           [
+             {Electric.DummyConsumer,
+              subscribe_to: [{producer, []}],
+              run_on_each_event: & &1.ack_fn.(),
+              name: :dummy_consumer},
+             {DownstreamProducerMock, Producer.name(name)}
+           ],
+           strategy: :one_for_one
+         )
+       end
      ]}
   ]) do
     {:ok, %{}}
@@ -277,7 +281,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
   end
 
-  describe "Outgoing replication (Vaxine -> Satellite)" do
+  describe "Outgoing replication (PG -> Satellite)" do
     test "common replication", cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
@@ -285,7 +289,7 @@ defmodule Electric.Satellite.WsServerTest do
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
         [{client_name, _client_pid}] = active_clients()
-        mocked_producer = LogProducer.get_name(client_name)
+        mocked_producer = Producer.name(client_name)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -297,7 +301,7 @@ defmodule Electric.Satellite.WsServerTest do
           %SatOpLog{ops: ops} = receive_trans()
           [%SatTransOp{op: begin} | _] = ops
           {:begin, %SatOpBegin{lsn: lsn}} = begin
-          assert :erlang.term_to_binary(n) == lsn
+          assert to_string(n) == lsn
         end)
       end)
     end
@@ -311,7 +315,7 @@ defmodule Electric.Satellite.WsServerTest do
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
         [{client_name, _client_pid}] = active_clients()
-        mocked_producer = LogProducer.get_name(client_name)
+        mocked_producer = Producer.name(client_name)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -324,7 +328,7 @@ defmodule Electric.Satellite.WsServerTest do
         assert last_received_lsn !== Kernel.inspect(limit)
 
         MockClient.send_data(conn, %SatInStartReplicationReq{lsn: last_received_lsn})
-        num_lsn = :erlang.binary_to_term(last_received_lsn)
+        num_lsn = last_received_lsn |> String.to_integer()
 
         :ok =
           DownstreamProducerMock.produce(
@@ -336,18 +340,18 @@ defmodule Electric.Satellite.WsServerTest do
           %SatOpLog{ops: ops} = receive_trans()
           [%SatTransOp{op: begin} | _] = ops
           {:begin, %SatOpBegin{lsn: lsn}} = begin
-          assert :erlang.term_to_binary(n) == lsn
+          assert to_string(n) == lsn
         end)
       end)
     end
   end
 
-  describe "Incoming replication (Satellite -> Vaxine)" do
+  describe "Incoming replication (Satellite -> PG)" do
     test "common replication", cxt do
       self = self()
 
-      with_mock Vaxine,
-        transaction_to_vaxine: fn tx, pub -> Process.send(self, {tx, pub, tx.origin}, []) end do
+      with_mock Electric.DummyConsumer, [:passthrough],
+        notify: fn _, ws_pid, events -> send(self, {:dummy_consumer, ws_pid, events}) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
           MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
@@ -398,14 +402,7 @@ defmodule Electric.Satellite.WsServerTest do
           MockClient.send_data(conn, op_log1)
           MockClient.send_data(conn, op_log2)
 
-          {tx, _pub, _origin} =
-            receive do
-              {%Transaction{} = tx, pub, origin} ->
-                {tx, pub, origin}
-            after
-              @default_wait ->
-                flunk("timeout")
-            end
+          assert_receive {:dummy_consumer, _, [%Transaction{} = tx]}
 
           assert tx.lsn == lsn
           assert tx.commit_timestamp == dt
@@ -422,6 +419,7 @@ defmodule Electric.Satellite.WsServerTest do
                  ]
 
           assert tx.origin !== ""
+
           assert_receive {^conn, %SatPingResp{lsn: ^lsn}}, @default_wait
 
           # After restart we still get same lsn
@@ -438,44 +436,34 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     test "stop subscription when consumer is not available, and restart when it's back", cxt do
-      self = self()
+      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
+        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
-      with_mock Vaxine,
-        transaction_to_vaxine: fn tx, pub -> Process.send(self, {tx, pub, tx.origin}, []) end do
-        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
-          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+        assert_receive {^conn, %SatInStartReplicationReq{}}, @default_wait
+        MockClient.send_data(conn, %SatInStartReplicationResp{})
 
-          assert_receive {^conn, %SatInStartReplicationReq{}}, @default_wait
-          MockClient.send_data(conn, %SatInStartReplicationResp{})
+        pid = Process.whereis(:dummy_consumer)
+        Process.monitor(pid)
+        Process.exit(pid, :terminate)
+        assert_receive {:DOWN, _, :process, ^pid, _}
 
-          [{client_name, _client_pid}] = active_clients()
-          {:via, :gproc, mocked_consumer} = LogConsumer.get_name(client_name)
-          pid = :gproc.whereis_name(mocked_consumer)
-          Process.monitor(pid)
-          Process.exit(pid, :terminate)
-          assert_receive {:DOWN, _, :process, ^pid, _}
-
-          assert_receive {^conn, %SatInStopReplicationReq{}}
-          assert_receive {^conn, %SatInStartReplicationReq{}}
-        end)
-      end
+        assert_receive {^conn, %SatInStopReplicationReq{}}
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+      end)
     end
   end
 
   # -------------------------------------------------------------------------------
 
   defp with_connect(opts, fun) do
-    case MockClient.connect_and_spawn(opts) do
-      {:ok, pid} when is_pid(pid) ->
-        try do
-          fun.(pid)
-        after
-          assert :ok = MockClient.disconnect(pid)
-        end
+    assert {:ok, pid} = MockClient.connect_and_spawn(opts)
+    assert is_pid(pid)
 
-      error ->
-        error
+    try do
+      fun.(pid)
+    after
+      assert :ok = MockClient.disconnect(pid)
     end
   end
 
