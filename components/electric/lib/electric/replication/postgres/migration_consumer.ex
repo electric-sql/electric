@@ -60,6 +60,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       |> SchemaLoader.get(:backend, SchemaCache)
       |> SchemaLoader.connect(conn_config)
 
+    refresh_sub? = Keyword.get(opts, :refresh_subscription, true)
+
     Logger.info("Starting #{__MODULE__} using #{elem(loader, 0)} backend")
 
     state = %{
@@ -68,7 +70,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       subscription: subscription,
       producer: producer,
       loader: loader,
-      opts: opts
+      opts: opts,
+      refresh_subscription: refresh_sub?
     }
 
     {:producer_consumer, state}
@@ -181,6 +184,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   # update the subscription to add any new
   # tables (this only works when data has been added -- doing it at the
   # point of receiving the migration has no effect).
+  defp refresh_subscription(%{refresh_subscription: false} = state) do
+    state
+  end
+
   defp refresh_subscription(state) do
     Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
     :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
@@ -236,6 +243,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   defp await_producer(producer) when is_pid(producer) do
     send(self(), {:subscribe, producer})
+    :ok
   end
 
   defp await_producer({:via, :gproc, name}) do
