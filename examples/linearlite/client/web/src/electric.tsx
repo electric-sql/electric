@@ -18,5 +18,9 @@ console.log(dbName)
 export const initElectric = async () => {
   const conn = await ElectricDatabase.init(dbName, distPath)
   console.log("initElectric");
+  console.log(conn);
+  console.log(dbSchema);
+  console.log(config);
+
   return electrify(conn, dbSchema, config)
 }

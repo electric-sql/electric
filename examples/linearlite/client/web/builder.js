@@ -74,7 +74,7 @@ let buildParams = {
   entryPoints: ["src/index.tsx"],
   loader: { ".ts": "tsx", ".woff": "file", ".woff2": "file"},
   outdir: "dist",
-  minify: shouldMinify,
+  minify: false,
   format: "cjs",
   bundle: true,
   sourcemap: true,
