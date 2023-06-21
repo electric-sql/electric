@@ -29,40 +29,71 @@ You can then talk to the Postgres with psql using the password `password`:
 
 ```psql -h 127.0.0.1 -U postgres -d electric ```
 
-### Configure Postgres Database
+### Configure Node
 
-This example uses [Prisma](https://www.prisma.io/) to manage Postgres schema. 
+This project is using Node v16.20.0 and pnpm to manage dependencies
+
+```
+nvm use v16.20.0
+npm install -g pnpm
+```
+
+### Install 
+
+In the root of the electric folder install all the js dependencies for submodules and examples:
+
+```
+pnpm install
+```
+
+Then build the electric code generator and the typescript client:
+
+```
+cd generator
+pnpm build
+cd ../clients/typescript
+pnpm build
+cd ../..
+```
+
+### Apply migrations to Postgres
+
+This example uses [Prisma](https://www.prisma.io/) to manage the Postgres schema. 
 Prisma is a Node.js ORM for managing DB.
 
 There are a set of Postgres migrations in `db/prisma/migrations`. 
 To apply them to the local Postgres you will need to have node >=16.20.0 and yarn installed.
 
-The dependency on `prisma-generator-electric` is being managed with yalc at the moment see [here](using_yalc.md)
-
 run:
 
 ```bash
 cd db
-yalc add prisma-generator-electric
-yarn
 npx prisma migrate dev
 ```
 
-This will both, reset the Postgres and push all the migrations to it, and regenerate the typescript client code matching
-the schema to be used by the `elecrtic-sql` client, it writes it into `../client/web/src/generated/models`
+This will push all the migrations to the database.
+
+### Electrify Postgres
+
+log into Postgres with password `password`
+
+```
+psql -h 127.0.0.1 -U postgres -d electric 
+
+```
+then run 
+```
+CALL electric.electrify('issue');
+```
+This will tell electric to sync the table `issue`
 
 ### Run web app
-
-The dependency on `electric-sql` is being managed with yalc at the moment see [here](using_yalc.md)
 
 The app is a React application to install and run it:
 
 ```bash
-cd client/web
-nvm use v16.20.0
-yalc add electric-sql
-yarn
-yarn build
-yarn start
+cd client
+pnpm build
+pnpm start
 ```
-The app should be available on `localhost:4002`
+The app should be available on `localhost:8000`
