@@ -118,4 +118,3 @@ async function readMetadataFile(path: string): Promise<MetaData> {
     else throw e
   }
 }
-
