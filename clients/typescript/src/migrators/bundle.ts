@@ -68,7 +68,7 @@ export class BundleMigrator implements Migrator {
       return []
     }
 
-    // The migrations table exists, so let's query the name and hash of
+    // The migrations table exists, so let's query the version of
     // the previously applied migrations.
     const existingRecords = `
       SELECT version FROM ${this.tableName}
@@ -112,5 +112,32 @@ export class BundleMigrator implements Migrator {
       sql: applied,
       args: [version, Date.now()],
     })
+  }
+
+  /**
+   * Applies the provided migration only if it has not yet been applied.
+   * @param migration The migration to apply.
+   * @returns A promise that resolves to a boolean
+   *          that indicates if the migration was applied.
+   */
+  async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
+    const versionExists = `
+      SELECT count(version) as numVersions FROM ${this.tableName}
+        WHERE version = ?
+    `
+    const [{ numVersions }] = await this.adapter.query({
+      sql: versionExists,
+      args: [migration.version],
+    })
+
+    const shouldApply = numVersions == 0
+
+    if (shouldApply) {
+      // This is a new migration because its version number
+      // is not in our migrations table.
+      await this.apply(migration)
+    }
+
+    return shouldApply
   }
 }

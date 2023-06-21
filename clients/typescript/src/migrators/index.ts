@@ -28,6 +28,7 @@ export function makeStmtMigration(migration: Migration): StmtMigration {
 export interface Migrator {
   up(): Promise<number>
   apply(migration: StmtMigration): Promise<void>
+  applyIfNotAlready(migration: StmtMigration): Promise<boolean>
 }
 
 export interface MigratorOptions {
