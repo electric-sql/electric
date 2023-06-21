@@ -2,6 +2,5 @@ packages:
   - 'clients/typescript'
   - 'e2e/satellite_client'
   - 'examples/*'
-  - 'examples/linearlite/db'
-  - 'examples/linearlite/client/web'
+  - 'examples/linearlite/*'
   - 'generator'
