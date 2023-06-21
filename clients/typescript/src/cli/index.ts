@@ -1,1 +1,1 @@
-export { buildMigrations } from './migrator'
+export { buildMigrations, loadMigrations } from './migrator'
