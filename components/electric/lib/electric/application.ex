@@ -13,6 +13,7 @@ defmodule Electric.Application do
 
     children = [
       Electric.Telemetry,
+      Electric.Postgres.OidDatabase,
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.OffsetStorage,
       {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},

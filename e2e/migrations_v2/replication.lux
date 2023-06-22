@@ -39,6 +39,8 @@
     ?electric=\*#
     !CREATE TABLE mtable1 (id uuid PRIMARY KEY);
     ?electric=\*#
+    !CALL electric.electrify('mtable1');
+    ?electric=\*#
     !COMMIT;
     ?electric=#
 

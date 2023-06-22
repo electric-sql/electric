@@ -90,21 +90,29 @@ defmodule Electric.Satellite.Serialization do
 
           {:ok, schema} = maybe_load_schema(origin, schema, v)
 
-          {ops, new_relations} =
+          {ops, add_relations} =
             case Replication.migrate(schema, v, sql) do
               {:ok, [op], relations} ->
-                {[%SatTransOp{op: {:migrate, op}} | ops], new_relations ++ relations}
+                {[%SatTransOp{op: {:migrate, op}} | ops], relations}
 
               {:ok, [], []} ->
-                {ops, new_relations}
+                {ops, []}
             end
+
+          known_relations =
+            Enum.reduce(add_relations, state.known_relations, fn relation, known ->
+              {_relation_id, _column_names, known} = load_new_relation(relation, known)
+
+              known
+            end)
 
           %{
             state
             | ops: ops,
               migration_version: v,
               schema: schema,
-              new_relations: new_relations
+              new_relations: new_relations ++ add_relations,
+              known_relations: known_relations
           }
 
         _ ->
@@ -126,10 +134,10 @@ defmodule Electric.Satellite.Serialization do
 
     {rel_id, rel_cols, new_relations, known_relations} =
       case fetch_relation_id(relation, known_relations) do
-        {:new, relation_id, columns, known} ->
+        {:new, {relation_id, columns, known}} ->
           {relation_id, columns, [relation | new_relations], known}
 
-        {:existing, relation_id, columns} ->
+        {:existing, {relation_id, columns}} ->
           {relation_id, columns, new_relations, known_relations}
       end
 
@@ -221,15 +229,18 @@ defmodule Electric.Satellite.Serialization do
   def fetch_relation_id(relation, known_relations) do
     case Map.get(known_relations, relation, nil) do
       nil ->
-        {%{oid: relation_id}, columns} = fetch_relation(relation)
-        column_names = for %{name: column_name} <- columns, do: column_name
-
-        {:new, relation_id, column_names,
-         Map.put(known_relations, relation, {relation_id, column_names})}
+        {:new, load_new_relation(relation, known_relations)}
 
       {relation_id, columns} ->
-        {:existing, relation_id, columns}
+        {:existing, {relation_id, columns}}
     end
+  end
+
+  defp load_new_relation(relation, known_relations) do
+    {%{oid: relation_id}, columns} = fetch_relation(relation)
+    column_names = for %{name: column_name} <- columns, do: column_name
+
+    {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
   end
 
   defp fetch_relation(relation) do
