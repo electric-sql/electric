@@ -270,11 +270,9 @@ defmodule Electric.Satellite.Serialization do
   @doc """
   Serialize internal relation representation to Satellite PB format
   """
-  # @spec serialize_relation(String.t(), String.t(), integer(), [SchemaRegistry.column()]) ::
-  #         %SatRelation{}
-  # def serialize_relation(schema, name, oid, columns) do
   @spec serialize_relation(SchemaRegistry.replicated_table(), [SchemaRegistry.column()]) ::
           %SatRelation{}
+  @deprecated "don't use"
   def serialize_relation(table_info, columns) do
     %SatRelation{
       schema_name: table_info.schema,
@@ -283,6 +281,23 @@ defmodule Electric.Satellite.Serialization do
       relation_id: table_info.oid,
       columns: serialize_columns(columns, MapSet.new(table_info.primary_keys), [])
     }
+  end
+
+  @spec serialize_relation(Replication.Table.t()) :: %SatRelation{}
+  def serialize_relation(%Replication.Table{} = table) do
+    %SatRelation{
+      schema_name: table.schema,
+      table_type: :TABLE,
+      table_name: table.name,
+      relation_id: table.oid,
+      columns: serialize_table_columns(table.columns, MapSet.new(table.primary_keys))
+    }
+  end
+
+  defp serialize_table_columns(columns, pks) do
+    Enum.map(columns, fn %{name: name, type: type} ->
+      %SatRelationColumn{name: name, type: type, primaryKey: MapSet.member?(pks, name)}
+    end)
   end
 
   defp serialize_columns([%{name: name_str, type: type_atom} | rest], pks, acc) do
