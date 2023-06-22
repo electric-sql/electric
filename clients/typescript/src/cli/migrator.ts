@@ -57,6 +57,11 @@ export async function buildMigrations(
  * such that programs can import the config using `import config from `path/to/.electric/@config`
  * with .mjs that is not possible because you would have to provide the full path to the `.mjs` file:
  * `import config from `path/to/.electric/@config/index.mjs`
+ *
+ * Note: The config file has an `mjs` extension because it provides a default import
+ *       but when the CLI wants to import it NodeJS complains that it must configured
+ *       to allow modules:
+ *         Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
  */
 async function writeJsConfigFile(configFile: string) {
   await fs.writeFile(

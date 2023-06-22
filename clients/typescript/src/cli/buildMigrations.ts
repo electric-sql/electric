@@ -1,4 +1,4 @@
-import { buildMigrations } from './cli/index.js'
+import { buildMigrations } from './migrator'
 import path from 'path'
 
 // `process.argv` is an array containing the command line arguments.

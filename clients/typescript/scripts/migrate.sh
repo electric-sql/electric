@@ -103,4 +103,4 @@ migrationsPath=$(toAbsolutePath "$migrationsF")
 configPath=$(toAbsolutePath "$configF")
 
 # Update the Electric configuration file with the new migrations
-node ./node_modules/electric-sql/dist/buildMigrations.mjs "$migrationsPath" "$configPath"
+node ./node_modules/electric-sql/dist/cli/buildMigrations.js "$migrationsPath" "$configPath"
