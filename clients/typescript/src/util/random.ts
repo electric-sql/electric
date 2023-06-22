@@ -3,13 +3,18 @@ export const randomValue = (): string => {
 }
 
 export const genUUID = (): string => {
+  // best case, `crypto.randomUUID` is available
+  if (!!crypto && !!crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+
   const bytes = new Uint8Array(16)
 
   if (!!crypto && !!crypto.getRandomValues) {
-    // use the crypto api
+    // `crypto.getRandomValues` is available even in non-secure contexts
     crypto.getRandomValues(bytes)
   } else {
-    // fallback to Math.random
+    // fallback to Math.random, if the Crypto API is completely missing
     for (let i = 0; i < bytes.length; i++) {
       bytes[i] = Math.floor(Math.random() * 256)
     }
