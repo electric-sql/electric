@@ -745,7 +745,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp validate_schema_version(version) do
-    if is_nil(version) or Extension.SchemaCache.known_migration_version?(version) do
+    if is_nil(version) or Extension.SchemaCache.Global.known_migration_version?(version) do
       :ok
     else
       {:error, :bad_schema_version}

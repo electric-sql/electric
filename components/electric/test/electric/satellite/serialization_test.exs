@@ -89,18 +89,32 @@ defmodule Electric.Satellite.SerializationTest do
 
   describe "relations" do
     test "correctly set the pk flag" do
-      table = %{
+      table = %Electric.Postgres.Table{
         schema: "something",
         name: "rotten",
         oid: 2234,
-        primary_keys: ["id1", "id2"]
+        primary_keys: ["id1", "id2"],
+        columns: [
+          %Electric.Postgres.Column{
+            name: "id1",
+            type: "uuid",
+            type_modifier: nil,
+            part_of_identity: true
+          },
+          %Electric.Postgres.Column{
+            name: "id2",
+            type: :uuid,
+            type_modifier: nil,
+            part_of_identity: true
+          },
+          %Electric.Postgres.Column{
+            name: "content",
+            type: :char,
+            type_modifier: nil,
+            part_of_identity: true
+          }
+        ]
       }
-
-      columns = [
-        %{name: "id1", type: :uuid, type_modifier: nil, part_of_identity: true},
-        %{name: "id2", type: :uuid, type_modifier: nil, part_of_identity: true},
-        %{name: "content", type: :char, type_modifier: nil, part_of_identity: true}
-      ]
 
       msg = Serialization.serialize_relation(table, columns)
 

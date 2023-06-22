@@ -6,6 +6,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type version() :: binary()
   @type name() :: binary()
   @type schema() :: name()
+  @type relation() :: {schema(), name()}
   @type oid() :: integer()
   @type ddl() :: String.t()
   @type rel_type() :: :table | :index | :view | :trigger
@@ -20,6 +21,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t(), [String.t()]) :: {:ok, state()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
+  @callback primary_keys(state(), relation()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) :: {:ok, [migration()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
@@ -62,6 +64,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def primary_keys({module, state}, schema, table) do
     module.primary_keys(state, schema, table)
+  end
+
+  def primary_keys({_module, _state} = impl, {schema, table}) do
+    primary_keys(impl, schema, table)
   end
 
   def refresh_subscription({module, state}, name) do
@@ -161,6 +167,11 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
 
     {:ok, Enum.map(pks_data, &elem(&1, 0))}
+  end
+
+  @impl true
+  def primary_keys(conn, {schema, name}) do
+    primary_keys(conn, schema, name)
   end
 
   @impl true

@@ -499,7 +499,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:ok, table} = SchemaRegistry.fetch_table_info({schema, table})
 
     Messaging.row_description(oid: :oid, relreplident: :char, relkind: :char)
-    |> Messaging.data_row({to_string(table.oid), atom_to_identity(table.replica_identity), "f"})
+    |> Messaging.data_row([to_string(table.oid), atom_to_identity(table.replica_identity), "f"])
     |> Messaging.command_complete("SELECT 1")
     |> Messaging.ready()
   end

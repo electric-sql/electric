@@ -143,12 +143,17 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp serialize_change(record, state) do
-    %{ops: ops, new_relations: new_relations, known_relations: known_relations} = state
+    %{
+      ops: ops,
+      new_relations: new_relations,
+      known_relations: known_relations,
+      origin: origin
+    } = state
 
     relation = record.relation
 
     {rel_id, rel_cols, new_relations, known_relations} =
-      case fetch_relation_id(relation, known_relations) do
+      case fetch_relation_id(origin, relation, known_relations) do
         {:new, {relation_id, columns, known}} ->
           {relation_id, columns, [relation | new_relations], known}
 
@@ -241,10 +246,10 @@ defmodule Electric.Satellite.Serialization do
     %SatOpRow{nulls_bitmask: bitmask, values: Enum.reverse(values)}
   end
 
-  def fetch_relation_id(relation, known_relations) do
+  def fetch_relation_id(origin, relation, known_relations) do
     case Map.get(known_relations, relation, nil) do
       nil ->
-        {:new, load_new_relation(relation, known_relations)}
+        {:new, load_new_relation(origin, relation, known_relations)}
 
       {relation_id, columns} ->
         {:existing, {relation_id, columns}}
@@ -258,10 +263,8 @@ defmodule Electric.Satellite.Serialization do
     {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
   end
 
-  defp fetch_relation(relation) do
-    table = SchemaRegistry.fetch_table_info!(relation)
-
-    {table, SchemaRegistry.fetch_table_columns!(relation)}
+  defp fetch_relation(origin, relation) do
+    Extension.SchemaCache.relation!(origin, relation)
   end
 
   @doc """
@@ -301,6 +304,13 @@ defmodule Electric.Satellite.Serialization do
     Enum.reverse(acc)
   end
 
+  @type cached_relations() :: %{
+          PB.relation_id() => %{
+            :schema => String.t(),
+            :table => String.t(),
+            :columns => [String.t()]
+          }
+        }
   @doc """
   Deserialize from Satellite PB format to internal format
   """
@@ -357,7 +367,7 @@ defmodule Electric.Satellite.Serialization do
         {nil, [trans | complete]}
 
       %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
-        relation = fetch_relation(relations, relation_id)
+        relation = fetch_known_relation(relations, relation_id)
 
         transop =
           case op do
@@ -390,7 +400,7 @@ defmodule Electric.Satellite.Serialization do
     end)
   end
 
-  defp fetch_relation(relations, relation_id) do
+  defp fetch_known_relation(relations, relation_id) do
     Map.get(relations, relation_id)
   end
 

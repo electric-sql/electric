@@ -78,6 +78,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def primary_keys({_versions, _opts} = state, {schema, name}) do
+    primary_keys(state, schema, name)
+  end
+
+  @impl true
   def refresh_subscription({_versions, opts}, name) do
     notify(opts, {:refresh_subscription, name})
     :ok

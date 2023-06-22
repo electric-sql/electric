@@ -18,7 +18,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   alias Electric.Replication.Connectors
   alias Electric.Postgres.Extension.SchemaLoader
-  # alias Electric.Postgres.Schema
+  alias Electric.Postgres.Schema
 
   require Logger
 
@@ -77,6 +77,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
+  def primary_keys(origin, {schema, name}) do
+    primary_keys(origin, schema, name)
+  end
+
+  @impl SchemaLoader
   def refresh_subscription(origin, name) do
     GenServer.call(name(origin), {:refresh_subscription, name})
   end
@@ -90,13 +95,43 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:migration_history, version})
   end
 
-  def known_migration_version?(version) do
-    GenServer.call(instance(), {:known_migration_version?, version})
-  end
-
   @impl SchemaLoader
   def known_migration_version?(origin, version) do
     GenServer.call(name(origin), {:known_migration_version?, version})
+  end
+
+  def relation(origin, oid) when is_integer(oid) do
+    GenServer.call(name(origin), {:relation, oid})
+  end
+
+  def relation(origin, {_schema, _name} = relation) do
+    GenServer.call(name(origin), {:relation, relation})
+  end
+
+  def relation(origin, {_schema, _name} = relation, version) do
+    GenServer.call(name(origin), {:relation, relation, version})
+  end
+
+  def relation!(origin, relation) do
+    case relation(origin, relation) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError, message: "unknown relation #{inspect(relation)}: #{inspect(error)}"
+    end
+  end
+
+  def relation!(origin, relation, version) do
+    case relation(origin, relation, version) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError,
+          message:
+            "unknown relation #{inspect(relation)} for version #{inspect(version)}: #{inspect(error)}"
+    end
   end
 
   @impl GenServer
@@ -173,6 +208,45 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
+  def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state),
+           {:table, {:ok, table}} <- {:table, Schema.lookup_oid(schema, oid)} do
+        {Schema.table_info(table), state}
+      else
+        {:table, :error} -> {{:error, "invalid table oid: #{inspect(oid)}"}, state}
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state),
+           {:table, {:ok, table}} <- {:table, Schema.fetch_table(schema, relation)} do
+        {Schema.table_info(table), state}
+      else
+        {:table, :error} -> {{:error, "invalid table #{inspect(relation)}"}, state}
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:relation, relation, version}, _from, state) do
+    {result, state} =
+      with {:ok, ^version, schema} <- SchemaLoader.load(state.backend, version),
+           {:table, {:ok, table}} <- {:table, Schema.fetch_table(schema, relation)} do
+        {Schema.table_info(table), state}
+      else
+        {:table, :error} -> {{:error, "invalid table #{inspect(relation)}"}, state}
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
+  end
+
   # # Version of loading primary keys using the materialised schema info
   # def handle_call({:primary_keys, ns, table}, _from, %{current: {_version, schema}} = state) do
   #   result =
@@ -202,6 +276,14 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_continue({:close, conn}, state) do
     :ok = :epgsql.close(conn)
     {:noreply, state}
+  end
+
+  defp current_schema(%{current: nil} = state) do
+    load_current_schema(state)
+  end
+
+  defp current_schema(%{current: {version, schema}} = state) do
+    {{:ok, version, schema}, state}
   end
 
   defp load_current_schema(state) do

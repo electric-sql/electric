@@ -70,6 +70,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   `fetch_replicated_tables/2` yields a list of all tables within the publication,
   and `fetch_table_info/2` yields one of the tables saved here, either by name or oid.
   """
+  @deprecated "don't use this module"
   @spec put_replicated_tables(registry(), String.t(), [replicated_table()]) :: :ok
   def put_replicated_tables(agent \\ __MODULE__, publication, tables) do
     GenServer.call(agent, {:put_replicated_tables, publication, tables})
@@ -78,6 +79,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   @doc """
   List information on tables which are replicated as part of the publication.
   """
+  @deprecated "don't use this module"
   @spec fetch_replicated_tables(registry(), String.t()) :: {:ok, [replicated_table()]} | :error
   def fetch_replicated_tables(agent \\ __MODULE__, publication) do
     GenServer.call(agent, {:fetch_replicated_tables, publication})
@@ -87,6 +89,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Delete all information related to a given publication
   """
   @spec clear_replicated_tables(registry(), String.t()) :: :ok
+  @deprecated "don't use this module"
   def clear_replicated_tables(agent \\ __MODULE__, publication) do
     GenServer.call(agent, {:clear_replicated_tables, publication})
   end
@@ -102,6 +105,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   See note on OIDs in the module documentation.
   """
   @spec fetch_table_info(registry(), table_name() | oid()) :: {:ok, replicated_table()} | :error
+  @deprecated "don't use this module"
   def fetch_table_info(agent \\ __MODULE__, table) when is_tuple(table) or is_integer(table) do
     GenServer.call(agent, {:fetch_table_info, table})
   end
@@ -112,6 +116,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   See `fetch_table_info/2` for details.
   """
   @spec fetch_table_info!(registry(), table_name() | oid()) :: replicated_table()
+  @deprecated "don't use this module"
   def fetch_table_info!(agent \\ __MODULE__, table) do
     {:ok, value} = fetch_table_info(agent, table)
     value
@@ -120,6 +125,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   @doc """
   Fetch information about a single table without waiting for later resolution.
   """
+  @deprecated "don't use this module"
   def fetch_existing_table_info(agent \\ __MODULE__, table)
       when is_tuple(table) or is_integer(table) do
     GenServer.call(agent, {:fetch_existing_table_info, table})
@@ -129,6 +135,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   Save information about columns of a particular table.
   """
   @spec put_table_columns(registry(), table_name(), [column()]) :: :ok
+  @deprecated "don't use this module"
   def put_table_columns(agent \\ __MODULE__, table, columns) do
     %{oid: oid} = fetch_table_info!(agent, table)
     GenServer.call(agent, {:put_table_columns, table, oid, columns})
@@ -141,6 +148,7 @@ defmodule Electric.Postgres.SchemaRegistry do
   See note on OIDs in the module documentation.
   """
   @spec fetch_table_columns(registry(), table_name() | oid()) :: {:ok, [column()]} | :error
+  @deprecated "don't use this module"
   def fetch_table_columns(agent \\ __MODULE__, table)
 
   def fetch_table_columns(agent, table) when is_tuple(table) or is_integer(table) do
@@ -152,6 +160,7 @@ defmodule Electric.Postgres.SchemaRegistry do
 
   See `fetch_table_columns/2` for details
   """
+  @deprecated "don't use this module"
   @spec fetch_table_columns!(registry(), table_name() | oid()) :: [column()]
   def fetch_table_columns!(agent \\ __MODULE__, table) do
     {:ok, value} = fetch_table_columns(agent, table)
@@ -176,11 +185,13 @@ defmodule Electric.Postgres.SchemaRegistry do
   Store migration tables information
   """
   @spec put_migration_tables(registry(), origin(), migration_table()) :: :ok
+  @deprecated "don't use this module"
   def put_migration_tables(agent \\ __MODULE__, origin, table) when is_binary(origin) do
     GenServer.call(agent, {:migration_tables, origin, table})
   end
 
   @spec fetch_table_migration(registry(), origin()) :: migration_table() | nil
+  @deprecated "don't use this module"
   def fetch_table_migration(agent \\ __MODULE__, origin) when is_binary(origin) do
     GenServer.call(agent, {:fetch_table_migration, origin})
   end

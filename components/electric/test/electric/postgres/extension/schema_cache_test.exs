@@ -102,11 +102,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         migration_transaction(version, stmts)
       end
 
+    produce_txs(producer, txs)
+
+    {:ok, producer}
+  end
+
+  defp produce_txs(producer, txs) when is_list(txs) do
     MockProducer.produce(producer, txs)
 
     assert_receive {MockConsumer, :events, ^txs}, 1000
-
-    {:ok, producer}
   end
 
   defp migration_transaction(version, stmts) do
@@ -121,6 +125,11 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     %Transaction{changes: changes}
   end
 
+  defp table_oid(conn, schema, name) do
+    {:ok, [_], [{oid}]} = :epgsql.squery(conn, "SELECT '#{schema}.#{name}'::regclass::oid")
+    String.to_integer(oid)
+  end
+
   describe "load" do
     test_tx "load/1 retrieves the current schema", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
@@ -132,11 +141,9 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert {:ok, table_a} = Schema.fetch_table(schema2, {"public", "a"})
       assert {:ok, table_b} = Schema.fetch_table(schema2, {"b", "b"})
 
-      assert {:ok, [_], [{oid}]} = :epgsql.squery(conn, "SELECT 'public.a'::regclass::oid")
-      assert String.to_integer(oid) == table_a.oid
+      assert table_a.oid == table_oid(conn, "public", "a")
 
-      assert {:ok, [_], [{oid}]} = :epgsql.squery(conn, "SELECT 'b.b'::regclass::oid")
-      assert String.to_integer(oid) == table_b.oid
+      assert table_b.oid == table_oid(conn, "b", "b")
     end
 
     test_tx "load/2 retrieves the schema for the given version", fn conn, cxt ->
@@ -149,8 +156,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert {:ok, table_a} = Schema.fetch_table(schema1, {"public", "a"})
       assert :error = Schema.fetch_table(schema1, {"b", "b"})
 
-      assert {:ok, [_], [{oid}]} = :epgsql.squery(conn, "SELECT 'public.a'::regclass::oid")
-      assert String.to_integer(oid) == table_a.oid
+      assert table_a.oid == table_oid(conn, "public", "a")
     end
   end
 
@@ -159,8 +165,209 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       {:ok, _producer} = bootstrap(conn, cxt)
 
       assert {:ok, ["aid"]} = Extension.SchemaCache.primary_keys(cxt.origin, "public", "a")
+      assert {:ok, ["aid"]} = Extension.SchemaCache.primary_keys(cxt.origin, {"public", "a"})
 
       assert {:ok, ["bid1", "bid2"]} = Extension.SchemaCache.primary_keys(cxt.origin, "b", "b")
+      assert {:ok, ["bid1", "bid2"]} = Extension.SchemaCache.primary_keys(cxt.origin, {"b", "b"})
+    end
+  end
+
+  describe "relation" do
+    test_tx "relation/2 retrieves the current table info", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+
+      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
+
+      assert table_info == %Electric.Postgres.Table{
+               schema: "public",
+               name: "a",
+               oid: table_oid(conn, "public", "a"),
+               primary_keys: ["aid"],
+               replica_identity: :index,
+               columns: [
+                 %Electric.Postgres.Column{
+                   name: "aid",
+                   type: "uuid",
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 },
+                 %Electric.Postgres.Column{
+                   name: "avalue",
+                   type: "text",
+                   type_modifier: -1,
+                   part_of_identity?: false
+                 }
+               ]
+             }
+    end
+
+    test_tx "relation/2 accepts oids", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+
+      oid = table_oid(conn, "public", "a")
+
+      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, oid)
+
+      assert table_info == %Electric.Postgres.Table{
+               schema: "public",
+               name: "a",
+               oid: table_oid(conn, "public", "a"),
+               primary_keys: ["aid"],
+               replica_identity: :index,
+               columns: [
+                 %Electric.Postgres.Column{
+                   name: "aid",
+                   type: "uuid",
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 },
+                 %Electric.Postgres.Column{
+                   name: "avalue",
+                   type: "text",
+                   type_modifier: -1,
+                   part_of_identity?: false
+                 }
+               ]
+             }
+    end
+
+    test_tx "relation/2 returns an up-to-date version after migrations", fn conn, cxt ->
+      {:ok, producer} = bootstrap(conn, cxt)
+
+      # we don't actually have to apply this migration to the db as this is a schema-only thing
+      version = "20230621115313"
+
+      stmts = [
+        "ALTER TABLE a ADD COLUMN aupdated timestamp with time zone;",
+        "ALTER TABLE a ADD COLUMN aname varchar(63);"
+      ]
+
+      produce_txs(producer, [migration_transaction(version, stmts)])
+
+      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
+
+      assert table_info.columns == [
+               %Electric.Postgres.Column{
+                 name: "aid",
+                 type: "uuid",
+                 type_modifier: -1,
+                 part_of_identity?: true
+               },
+               %Electric.Postgres.Column{
+                 name: "avalue",
+                 type: "text",
+                 type_modifier: -1,
+                 part_of_identity?: false
+               },
+               %Electric.Postgres.Column{
+                 name: "aupdated",
+                 type: "timestamptz",
+                 type_modifier: -1,
+                 part_of_identity?: false
+               },
+               %Electric.Postgres.Column{
+                 name: "aname",
+                 type: "varchar",
+                 type_modifier: 63,
+                 part_of_identity?: false
+               }
+             ]
+    end
+
+    test_tx "relation/3 returns specific schema version", fn conn, cxt ->
+      {:ok, producer} = bootstrap(conn, cxt)
+
+      [version1, version2] = cxt.versions
+
+      # we don't actually have to apply this migration to the db as this is a schema-only thing
+      version3 = "20230621115313"
+
+      stmts = [
+        "ALTER TABLE a ADD COLUMN aupdated timestamp with time zone;",
+        "ALTER TABLE a ADD COLUMN aname varchar(63);"
+      ]
+
+      produce_txs(producer, [migration_transaction(version3, stmts)])
+
+      assert {:ok, table_info} =
+               Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version3)
+
+      assert table_info.columns == [
+               %Electric.Postgres.Column{
+                 name: "aid",
+                 type: "uuid",
+                 type_modifier: -1,
+                 part_of_identity?: true
+               },
+               %Electric.Postgres.Column{
+                 name: "avalue",
+                 type: "text",
+                 type_modifier: -1,
+                 part_of_identity?: false
+               },
+               %Electric.Postgres.Column{
+                 name: "aupdated",
+                 type: "timestamptz",
+                 type_modifier: -1,
+                 part_of_identity?: false
+               },
+               %Electric.Postgres.Column{
+                 name: "aname",
+                 type: "varchar",
+                 type_modifier: 63,
+                 part_of_identity?: false
+               }
+             ]
+
+      assert {:ok, table_info} =
+               Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version1)
+
+      assert table_info.columns == [
+               %Electric.Postgres.Column{
+                 name: "aid",
+                 type: "uuid",
+                 type_modifier: -1,
+                 part_of_identity?: true
+               },
+               %Electric.Postgres.Column{
+                 name: "avalue",
+                 type: "text",
+                 type_modifier: -1,
+                 part_of_identity?: false
+               }
+             ]
+
+      assert {:error, _} = Extension.SchemaCache.relation(cxt.origin, {"b", "b"}, version1)
+
+      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"b", "b"}, version2)
+
+      assert table_info == %Electric.Postgres.Table{
+               schema: "b",
+               name: "b",
+               oid: table_oid(conn, "b", "b"),
+               primary_keys: ["bid1", "bid2"],
+               replica_identity: :index,
+               columns: [
+                 %Electric.Postgres.Column{
+                   name: "bid1",
+                   type: "int4",
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 },
+                 %Electric.Postgres.Column{
+                   name: "bid2",
+                   type: "int4",
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 },
+                 %Electric.Postgres.Column{
+                   name: "bvalue",
+                   type: "text",
+                   type_modifier: -1,
+                   part_of_identity?: false
+                 }
+               ]
+             }
     end
   end
 end

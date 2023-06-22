@@ -82,6 +82,12 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  def lookup_oid(schema, oid) when is_integer(oid) do
+    with %_{} = table <- Enum.find(schema.tables, :error, &(&1.oid == oid)) do
+      {:ok, table}
+    end
+  end
+
   def primary_keys(%Proto.Table{} = table) do
     pk =
       Enum.find_value(table.constraints, nil, fn
@@ -126,31 +132,30 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
-  # TODO: remove this once we've cut out the SchemaRegistry component and are just
-  # using this serialised schema information
-  def registry_info(%Proto.Table{} = table) do
+  @spec table_info(%Proto.Table{}) :: {:ok, Electric.Postgres.Table.t()}
+  def table_info(%Proto.Table{} = table) do
     {:ok, pks} = primary_keys(table)
 
-    table_info = %{
+    columns =
+      for col <- table.columns do
+        %Electric.Postgres.Column{
+          name: col.name,
+          type: col_type(col.type),
+          type_modifier: List.first(col.type.size, -1),
+          part_of_identity?: col.name in pks
+        }
+      end
+
+    table_info = %Electric.Postgres.Table{
       schema: table.name.schema,
       name: table.name.name,
       oid: table.oid,
       primary_keys: pks,
-      # we set all replicated tables to this mode
-      replica_identity: :all_columns
+      replica_identity: :index,
+      columns: columns
     }
 
-    columns =
-      Enum.map(table.columns, fn col ->
-        %{
-          name: col.name,
-          type: col_type(col.type),
-          type_modifier: List.first(col.type.size, -1),
-          part_of_identity?: nil
-        }
-      end)
-
-    {:ok, table_info, columns}
+    {:ok, table_info}
   end
 
   defp col_type(%{name: name, array: [_]}), do: {:array, col_type(name)}
