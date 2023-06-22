@@ -93,8 +93,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, origin: origin, producer: producer}
     end
 
-    test "migration consumer stage captures relations", cxt do
-      %{producer: producer} = cxt
+    test "migration consumer refreshes subscription after receiving a relation", cxt do
+      %{producer: producer, origin: origin} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
@@ -114,12 +114,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       GenStage.call(producer, {:emit, events})
 
       refute_receive {FakeConsumer, :events, _}, 500
-      assert_receive {MockSchemaLoader, {:primary_keys, "public", "mistakes"}}, 500
-
-      assert {:ok, info} =
-               Electric.Postgres.SchemaRegistry.fetch_table_info({"public", "mistakes"})
-
-      assert %{name: "mistakes", schema: "public", oid: 1234, primary_keys: ["id"]} = info
+      assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 500
     end
 
     test "migration consumer stage captures migration records", cxt do
