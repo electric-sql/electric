@@ -11,6 +11,7 @@ defmodule Electric.Postgres.CachedWal.Producer do
   how better to organize the `WsServer` code to read from WAL within the same process.
   """
   use GenStage
+  require Logger
 
   alias Electric.Postgres.CachedWal
 
@@ -24,6 +25,8 @@ defmodule Electric.Postgres.CachedWal.Producer do
 
   @impl GenStage
   def init(opts) do
+    Logger.metadata(component: "CachedWal.Producer")
+
     {:producer,
      %{
        cached_wal_module:
@@ -35,6 +38,8 @@ defmodule Electric.Postgres.CachedWal.Producer do
 
   @impl GenStage
   def handle_subscribe(:consumer, options, _, state) do
+    Logger.debug("Got a subscription request with options #{inspect(options)}")
+
     # TODO: The default value here shouldn't be present: that means the connecting client is empty and thus
     #       requires a complete sync, which shouldn't be handled just from the cached WAL section.
     #       But right now we don't have that functionality, so we start from the beginning of the cached log.
