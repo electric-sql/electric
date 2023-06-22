@@ -6,21 +6,25 @@
 [global migration_dir=m_sanity_check]
 [global migration_version_1=20230504114018]
 [global migration_version_2=20230505100008]
+[global migration_version_3=20230622101323]
 
 [include shared.luxinc]
 [include satellite.luxinc]
 
 [macro migrate_pg version ddl]
-  [shell pg_1]
-      [invoke log "run migration ${version} on postgres"]
-      !BEGIN;
-      ?electric=\*#
-      !SELECT electric.migration_version('$version');
-      ?electric=\*#
-      !${ddl}
-      ?electric=\*#
-      !COMMIT;
-      ?electric=#
+    [shell pg_1]
+        [invoke log "run migration ${version} on postgres"]
+        !BEGIN;
+        ?electric=\*#
+        !SELECT electric.migration_version('$version');
+        ?electric=\*#
+        !${ddl}
+        ?electric=\*#
+        !COMMIT;
+        ?electric=#
+
+    [shell electric]
+        ?.* \[info\] Applying migration $version
 [endmacro]
 
 #===============================================================================
@@ -67,6 +71,7 @@
 [global pg_id1=f989b58b-980d-4d3c-b178-adb6ae8222f1]
 [global pg_id2=a7a7d9be-a51c-4f86-a4ff-dfdc0c016fe2]
 [global pg_id3=4bc27df5-0a7e-4695-b386-e39ddab231a4]
+[global pg_id4=0c25514b-b9a4-4ec9-86ef-c1a780b2a332]
 
 [shell satellite_1]
     [invoke log "wait for items table on satellite_1"]
@@ -98,6 +103,25 @@
     [invoke node_await_get ${pg_id1}]
     [invoke node_await_get ${pg_id3}]
 
+[invoke migrate_pg $migration_version_2 "ALTER TABLE public.items ADD COLUMN increment text;"]
+
+[shell pg_1]
+    [invoke log "Insert data into new column"]
+    !INSERT INTO public.items (id, content, increment) VALUES ('${pg_id4}', '${migration_version_2}/content', '${migration_version_2}/increment');
+    ?$psql
+
+[shell satellite_1]
+    [invoke log "wait for new column on satellite_1"]
+    [invoke node_await_column items increment]
+    [invoke node_await_column_value items content '${migration_version_2}/content']
+    [invoke node_await_column_value items increment '${migration_version_2}/increment']
+
+[shell satellite_2]
+    [invoke log "wait for new column on satellite_2"]
+    [invoke node_await_column items increment]
+    [invoke node_await_column_value items content '${migration_version_2}/content']
+    [invoke node_await_column_value items increment '${migration_version_2}/increment']
+
 #===============================================================================
 # Verify that Satellite -> PG works
 #===============================================================================
@@ -117,25 +141,25 @@
     [invoke wait-for "SELECT * FROM public.items;" "hello from satellite_2" 10 ${psql}]
 [endloop]
 
-[invoke migrate_pg $migration_version_2 "ALTER TABLE public.items ADD COLUMN another text;"]
+[invoke migrate_pg $migration_version_3 "ALTER TABLE public.items ADD COLUMN another text;"]
 
 [shell satellite_1]
     [invoke log "wait for new column on satellite_1"]
     [invoke node_await_column items another]
     [invoke log "inserting row with value for new column"]
-    [invoke node_await_insert_extended "['extended row from satellite_1']"]
+    [invoke node_await_insert_extended "{content: '${migration_version_3}/satellite_1 content', another: '${migration_version_3}/satellite_2 another'}"]
 
 [shell satellite_2]
     [invoke log "wait for new column on satellite_2"]
     [invoke node_await_column items another]
     [invoke log "inserting row with value for new column"]
-    [invoke node_await_insert_extended "['extended row from satellite_2']"]
+    [invoke node_await_insert_extended "{content: '${migration_version_3}/satellite_2 content', another: '${migration_version_3}/satellite_2 another'}"]
 
 [loop pg pg_1]
   [shell ${pg}]
     [invoke log "Verify that ${pg} has received extended rows from both Satellites"]
-    [invoke wait-for "SELECT * FROM public.items;" "extended row from satellite_1 another" 10 ${psql}]
-    [invoke wait-for "SELECT * FROM public.items;" "extended row from satellite_2 another" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "${migration_version_3}/satellite_2 another" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "${migration_version_3}/satellite_2 another" 10 ${psql}]
 [endloop]
 
 [cleanup]
