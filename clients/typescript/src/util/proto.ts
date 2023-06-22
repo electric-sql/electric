@@ -124,11 +124,10 @@ export function getFullTypeName(message: string): string {
 }
 
 export function startReplicationErrorToSatelliteError(
-  error: Pb.SatInStartReplicationResp_SatInStartReplicationError
+  error: Pb.SatInStartReplicationResp_ReplicationError
 ) {
   switch (error.code) {
-    case Pb.SatInStartReplicationResp_SatInStartReplicationError_Code
-      .BEHIND_WINDOW:
+    case Pb.SatInStartReplicationResp_ReplicationError_Code.BEHIND_WINDOW:
       return new SatelliteError(SatelliteErrorCode.BEHIND_WINDOW, error.message)
     default:
       return new SatelliteError(
