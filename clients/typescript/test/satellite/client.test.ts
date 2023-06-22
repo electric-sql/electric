@@ -583,7 +583,7 @@ test.serial('default and null test', async (t) => {
   })
 
   const serializedRow: Proto.SatOpRow = {
-    $type: 'Electric.Satellite.v1_3.SatOpRow',
+    $type: 'Electric.Satellite.v1_4.SatOpRow',
     nullsBitmask: new Uint8Array([40]),
     values: [
       new Uint8Array([

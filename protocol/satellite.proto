@@ -23,7 +23,7 @@ syntax = "proto3";
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v1_3;
+package Electric.Satellite.v1_4;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -134,10 +134,10 @@ message SatInStartReplicationReq {
 // (Producer) The result of the start replication requests
 message SatInStartReplicationResp {
     // returned in case replication fails to start
-    optional SatInStartReplicationError error = 1;
+    optional ReplicationError error = 1;
 
     // Error returned by the Producer when replication fails to start
-    message SatInStartReplicationError {
+    message ReplicationError {
         // error code enum
         enum Code {
             // Required to satisfy linter
@@ -362,7 +362,7 @@ message SatOpMigrate {
     optional Table table = 3;
 }
 
-// (Consumer) Request for a new subscriptions
+// (Consumer) Request for new subscriptions
 message SatSubsReq {
     // Shape requests
     repeated SatShapeReq shape_requests = 2;
