@@ -43,6 +43,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "electric": "dist/cli/bin.js"
+  },
   "exports": {
     "./package.json": "./package.json",
     "./browser": "./dist/drivers/absurd-sql/index.js",
@@ -97,8 +100,8 @@
   },
   "scripts": {
     "dev": "tsmodule dev",
-    "build": "rm -rf ./dist && tsc && tsmodule build",
-    "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",
+    "build": "rm -rf ./dist && tsc && tsmodule build && cp -R ./scripts/* ./dist",
+    "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev && cp -R ./scripts/* ./dist",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
     "posttest": "npm run typecheck",
