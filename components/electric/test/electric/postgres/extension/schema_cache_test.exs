@@ -47,6 +47,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   alias Electric.Replication.Postgres
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Schema
+  alias Electric.Postgres.Replication.{Column, Table}
 
   alias Electric.Replication.Changes.{
     NewRecord,
@@ -178,24 +179,24 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
 
-      assert table_info == %Electric.Postgres.Table{
+      assert table_info == %Table{
                schema: "public",
                name: "a",
                oid: table_oid(conn, "public", "a"),
                primary_keys: ["aid"],
                replica_identity: :index,
                columns: [
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "aid",
                    type: "uuid",
                    type_modifier: -1,
-                   part_of_identity?: true
+                   identity?: true
                  },
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "avalue",
                    type: "text",
                    type_modifier: -1,
-                   part_of_identity?: false
+                   identity?: false
                  }
                ]
              }
@@ -208,24 +209,24 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, oid)
 
-      assert table_info == %Electric.Postgres.Table{
+      assert table_info == %Table{
                schema: "public",
                name: "a",
                oid: table_oid(conn, "public", "a"),
                primary_keys: ["aid"],
                replica_identity: :index,
                columns: [
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "aid",
                    type: "uuid",
                    type_modifier: -1,
-                   part_of_identity?: true
+                   identity?: true
                  },
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "avalue",
                    type: "text",
                    type_modifier: -1,
-                   part_of_identity?: false
+                   identity?: false
                  }
                ]
              }
@@ -247,29 +248,29 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
 
       assert table_info.columns == [
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aid",
                  type: "uuid",
                  type_modifier: -1,
-                 part_of_identity?: true
+                 identity?: true
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "avalue",
                  type: "text",
                  type_modifier: -1,
-                 part_of_identity?: false
+                 identity?: false
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aupdated",
                  type: "timestamptz",
                  type_modifier: -1,
-                 part_of_identity?: false
+                 identity?: false
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aname",
                  type: "varchar",
                  type_modifier: 63,
-                 part_of_identity?: false
+                 identity?: false
                }
              ]
     end
@@ -293,29 +294,29 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version3)
 
       assert table_info.columns == [
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aid",
                  type: "uuid",
                  type_modifier: -1,
-                 part_of_identity?: true
+                 identity?: true
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "avalue",
                  type: "text",
                  type_modifier: -1,
-                 part_of_identity?: false
+                 identity?: false
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aupdated",
                  type: "timestamptz",
                  type_modifier: -1,
-                 part_of_identity?: false
+                 identity?: false
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aname",
                  type: "varchar",
                  type_modifier: 63,
-                 part_of_identity?: false
+                 identity?: false
                }
              ]
 
@@ -323,17 +324,17 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version1)
 
       assert table_info.columns == [
-               %Electric.Postgres.Column{
+               %Column{
                  name: "aid",
                  type: "uuid",
                  type_modifier: -1,
-                 part_of_identity?: true
+                 identity?: true
                },
-               %Electric.Postgres.Column{
+               %Column{
                  name: "avalue",
                  type: "text",
                  type_modifier: -1,
-                 part_of_identity?: false
+                 identity?: false
                }
              ]
 
@@ -341,30 +342,30 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"b", "b"}, version2)
 
-      assert table_info == %Electric.Postgres.Table{
+      assert table_info == %Table{
                schema: "b",
                name: "b",
                oid: table_oid(conn, "b", "b"),
                primary_keys: ["bid1", "bid2"],
                replica_identity: :index,
                columns: [
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "bid1",
                    type: "int4",
                    type_modifier: -1,
-                   part_of_identity?: true
+                   identity?: true
                  },
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "bid2",
                    type: "int4",
                    type_modifier: -1,
-                   part_of_identity?: true
+                   identity?: true
                  },
-                 %Electric.Postgres.Column{
+                 %Column{
                    name: "bvalue",
                    type: "text",
                    type_modifier: -1,
-                   part_of_identity?: false
+                   identity?: false
                  }
                ]
              }

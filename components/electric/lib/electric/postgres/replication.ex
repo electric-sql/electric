@@ -4,6 +4,46 @@ defmodule Electric.Postgres.Replication do
   alias PgQuery, as: Pg
   alias Electric.Postgres.{Dialect, Schema, Schema.AST, Schema.Proto}
 
+  defmodule Column do
+    alias Electric.Postgres
+
+    defstruct [
+      :name,
+      :type,
+      type_modifier: -1,
+      identity?: false
+    ]
+
+    @type t() :: %__MODULE__{
+            name: Postgres.name(),
+            type: binary(),
+            type_modifier: integer(),
+            identity?: boolean() | nil
+          }
+  end
+
+  defmodule Table do
+    alias Electric.Postgres
+
+    defstruct [
+      :schema,
+      :name,
+      :oid,
+      primary_keys: [],
+      replica_identity: :index,
+      columns: []
+    ]
+
+    @type t() :: %__MODULE__{
+            schema: Postgres.name(),
+            name: Postgres.name(),
+            oid: Postgres.oid(),
+            primary_keys: [Postgres.name()],
+            replica_identity: :all_columns | :default | :nothing | :index,
+            columns: [Column.t()]
+          }
+  end
+
   @type version() :: binary()
 
   @default_dialect Dialect.SQLite

@@ -132,21 +132,21 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
-  @spec table_info(%Proto.Table{}) :: {:ok, Electric.Postgres.Table.t()}
+  @spec table_info(%Proto.Table{}) :: {:ok, Electric.Postgres.Replication.Table.t()}
   def table_info(%Proto.Table{} = table) do
     {:ok, pks} = primary_keys(table)
 
     columns =
       for col <- table.columns do
-        %Electric.Postgres.Column{
+        %Electric.Postgres.Replication.Column{
           name: col.name,
           type: col_type(col.type),
           type_modifier: List.first(col.type.size, -1),
-          part_of_identity?: col.name in pks
+          identity?: col.name in pks
         }
       end
 
-    table_info = %Electric.Postgres.Table{
+    table_info = %Electric.Postgres.Replication.Table{
       schema: table.name.schema,
       name: table.name.name,
       oid: table.oid,

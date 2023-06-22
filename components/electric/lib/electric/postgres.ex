@@ -1,6 +1,8 @@
 defmodule Electric.Postgres do
   alias PgQuery
-  alias __MODULE__
+
+  @type name() :: String.t()
+  @type oid() :: non_neg_integer()
 
   @spec parse!(String.t()) :: [struct()] | no_return()
   def parse!(stmts) when is_list(stmts) do
@@ -73,43 +75,4 @@ defmodule Electric.Postgres do
   def json_types, do: @json_types
   def bool_types, do: @bool_types
   def uuid_types, do: @uuid_types
-
-  @type name() :: String.t()
-  @type oid() :: non_neg_integer()
-
-  defmodule Column do
-    defstruct [
-      :name,
-      :type,
-      type_modifier: -1,
-      part_of_identity?: false
-    ]
-
-    @type t() :: %__MODULE__{
-            name: Postgres.name(),
-            type: binary(),
-            type_modifier: integer(),
-            part_of_identity?: boolean() | nil
-          }
-  end
-
-  defmodule Table do
-    defstruct [
-      :schema,
-      :name,
-      :oid,
-      primary_keys: [],
-      replica_identity: :index,
-      columns: []
-    ]
-
-    @type t() :: %__MODULE__{
-            schema: Postgres.name(),
-            name: Postgres.name(),
-            oid: Postgres.oid(),
-            primary_keys: [Postgres.name()],
-            replica_identity: :all_columns | :default | :nothing | :index,
-            columns: [Postgres.Column.t()]
-          }
-  end
 end

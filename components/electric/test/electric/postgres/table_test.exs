@@ -999,6 +999,8 @@ defmodule Electric.Postgres.TableTest do
 
   describe "to_relation" do
     test "correctly maps a schema table to the SchemaRegistry representation" do
+      alias Electric.Postgres.Replication.{Column, Table}
+
       table = %Proto.Table{
         name: %Proto.RangeVar{schema: "public", name: "t1"},
         oid: 48888,
@@ -1036,20 +1038,19 @@ defmodule Electric.Postgres.TableTest do
         ]
       }
 
-      assert {:ok, table_info, columns} = Schema.registry_info(table)
+      assert {:ok, table_info} = Schema.table_info(table)
 
-      assert table_info == %{
+      assert table_info == %Table{
                schema: "public",
                name: "t1",
                oid: 48888,
                primary_keys: ["c1", "c2"],
-               replica_identity: :all_columns
+               replica_identity: :index,
+               columns: [
+                 %Column{name: "c1", type: "int4", type_modifier: -1, identity?: true},
+                 %Column{name: "c2", type: "int4", type_modifier: -1, identity?: true}
+               ]
              }
-
-      assert columns == [
-               %{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: nil},
-               %{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: nil}
-             ]
     end
   end
 end
