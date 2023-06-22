@@ -116,7 +116,7 @@ defmodule Electric.Satellite.Serialization do
 
           known_relations =
             Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-              {_relation_id, _column_names, known} = load_new_relation(relation, known)
+              {_relation_id, _column_names, known} = load_new_relation(origin, relation, known)
 
               known
             end)
@@ -256,8 +256,8 @@ defmodule Electric.Satellite.Serialization do
     end
   end
 
-  defp load_new_relation(relation, known_relations) do
-    {%{oid: relation_id}, columns} = fetch_relation(relation)
+  defp load_new_relation(origin, relation, known_relations) do
+    %{oid: relation_id, columns: columns} = fetch_relation(origin, relation)
     column_names = for %{name: column_name} <- columns, do: column_name
 
     {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
