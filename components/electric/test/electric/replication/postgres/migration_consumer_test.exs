@@ -78,13 +78,15 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "mistakes"} => ["id"]
       }
 
+      backend = MockSchemaLoader.backend_spec(oids: oids, pks: pks)
+
       {:ok, pid} =
         start_supervised(
           {MigrationConsumer,
            {[origin: origin, replication: []],
             [
               producer: producer_name,
-              backend: {MockSchemaLoader, parent: self(), oids: oids, pks: pks}
+              backend: backend
             ]}}
         )
 

@@ -12,6 +12,11 @@ defmodule Electric.Postgres.Schema do
 
   @type t() :: %Proto.Schema{}
 
+  @type mbinary() :: binary() | nil
+  @type schema() :: mbinary()
+  @type name() ::
+          binary() | {schema(), binary()} | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
+
   def new do
     %Proto.Schema{}
   end
@@ -88,6 +93,16 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  @spec primary_keys(t(), name(), name()) :: {:ok, [name()]} | {:error, any()}
+  def primary_keys(schema, sname, tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      primary_keys(table)
+    else
+      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
+    end
+  end
+
+  @spec primary_keys(%Proto.Table{}) :: {:ok, [name()]} | {:error, any()}
   def primary_keys(%Proto.Table{} = table) do
     pk =
       Enum.find_value(table.constraints, nil, fn
@@ -241,10 +256,6 @@ defmodule Electric.Postgres.Schema do
     binary_part(n, 0, len)
   end
 
-  @type mbinary() :: binary() | nil
-  @type schema() :: mbinary()
-  @type name() ::
-          binary() | {schema(), binary()} | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
   @spec equal?(name(), name()) :: boolean
   def equal?(n1, n2, search_paths \\ @search_paths) do
     Enum.any?(qualified_names(n1, search_paths), fn n1 ->

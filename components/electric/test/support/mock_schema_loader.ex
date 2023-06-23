@@ -4,13 +4,62 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Schema
   }
 
+  def oid_loader(type, schema, name) do
+    {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+  end
+
+  def schema_update(schema \\ Schema.new(), cmds) do
+    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  end
+
+  @spec migrate_versions([{version :: binary(), [stmt :: binary()]}]) :: [
+          {version :: binary(), Schema.t()}
+        ]
+  def migrate_versions(migrations) do
+    {versions, _schema} =
+      Enum.map_reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
+        schema = Enum.reduce(stmts, schema, &schema_update(&2, &1))
+        {{version, schema}, schema}
+      end)
+
+    versions
+  end
+
+  def backend_spec(opts) do
+    versions = migrate_versions(Keyword.get(opts, :migrations, []))
+    oid_loader = Keyword.get(opts, :oids, &oid_loader/3) |> make_oid_loader()
+    parent = Keyword.get(opts, :parent, self())
+    pks = Keyword.get(opts, :pks, nil)
+
+    {__MODULE__, [parent: parent, versions: versions, oid_loader: oid_loader, pks: pks]}
+  end
+
+  defp make_oid_loader(fun) when is_function(fun, 3) do
+    fun
+  end
+
+  defp make_oid_loader(oids) when is_map(oids) do
+    fn type, schema, name ->
+      with %{} = oids <- oids[type],
+           {:ok, oid} <- Map.fetch(oids, {schema, name}) do
+        {:ok, oid}
+      else
+        _ -> {:error, "no oid defined for #{type}:#{schema}.#{name} in #{inspect(oids)}"}
+      end
+    end
+  end
+
   @behaviour SchemaLoader
 
   @impl true
   def connect(conn_config, opts) do
-    opts = Map.new(opts)
+    {versions, opts} =
+      opts
+      |> Map.new()
+      |> Map.pop(:versions, [])
+
     notify(opts, {:connect, conn_config})
-    {:ok, {[], opts}}
+    {:ok, {versions, opts}}
   end
 
   @impl true
@@ -53,6 +102,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def relation_oid({_versions, %{oid_loader: oid_loader}}, type, schema, name)
+      when is_function(oid_loader, 3) do
+    oid_loader.(type, schema, name)
+  end
+
   def relation_oid({_versions, opts}, type, schema, name) do
     notify(opts, {:relation_oid, type, schema, name})
 
@@ -65,16 +119,25 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def primary_keys({_versions, opts}, schema, name) do
+  def primary_keys({_versions, %{pks: pks} = opts}, schema, name) when is_map(pks) do
     notify(opts, {:primary_keys, schema, name})
 
-    with {:ok, pks} <- Map.fetch(opts, :pks),
-         {:ok, tpks} <- Map.fetch(pks, {schema, name}) do
+    with {:ok, tpks} <- Map.fetch(pks, {schema, name}) do
       {:ok, tpks}
     else
       :error ->
         {:error, "no pks defined for #{schema}.#{name} in #{inspect(opts)}"}
     end
+  end
+
+  def primary_keys({[{_version, schema} | _versions], opts}, sname, tname) do
+    notify(opts, {:primary_keys, sname, tname})
+
+    Schema.primary_keys(schema, sname, tname)
+  end
+
+  def primary_keys({[], _opts}, sname, tname) do
+    {:error, "unknown table #{sname}.#{tname} and no primary keys configured"}
   end
 
   @impl true
