@@ -1,7 +1,7 @@
 import test from 'ava'
 import fs from 'fs/promises'
 import path from 'path'
-import { buildMigrations } from '../../src/cli'
+import { buildMigrations } from '../../../src/cli/migrations/builder'
 
 const migrationsFolder = path.join('./test/migrators/support/migrations')
 
@@ -23,7 +23,7 @@ test('write migration to configuration file', async (t) => {
   await fs.writeFile(testConfigFile, ogConfigContents)
 
   // path to config file, relative from this file
-  const p = '../cli/support/config/index-tmp.mjs'
+  const p = '../support/config/index-tmp.mjs'
 
   let i = 0
   const importConfig = async () =>

@@ -1,7 +1,12 @@
 import * as z from 'zod'
 import path from 'path'
 import * as fs from 'fs/promises'
-import { Migration, parseMetadata, MetaData, makeMigration } from '../migrators'
+import {
+  Migration,
+  parseMetadata,
+  MetaData,
+  makeMigration,
+} from '../../migrators'
 
 /*
  * This file defines functions to build migrations
@@ -75,6 +80,22 @@ async function writeJsConfigFile(configFile: string) {
 }
 
 /**
+ * Reads the provided `migrationsFolder` and returns an array
+ * of all the migrations that are present in that folder.
+ * Each of those migrations are in their respective folder.
+ * @param migrationsFolder
+ */
+export async function getMigrationNames(
+  migrationsFolder: string
+): Promise<string[]> {
+  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
+  const dirs = contents.filter((dirent) => dirent.isDirectory())
+  // the directory names encode the order of the migrations
+  // therefore we sort them by name to get them in chronological order
+  return dirs.map((dir) => dir.name).sort()
+}
+
+/**
  * Loads all migrations that are present in the provided migrations folder.
  * @param migrationsFolder Folder where migrations are stored.
  * @returns An array of migrations.
@@ -82,11 +103,7 @@ async function writeJsConfigFile(configFile: string) {
 export async function loadMigrations(
   migrationsFolder: string
 ): Promise<Migration[]> {
-  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
-  const dirs = contents.filter((dirent) => dirent.isDirectory())
-  // the directory names encode the order of the migrations
-  // therefore we sort them by name to get them in chronological order
-  const dirNames = dirs.map((dir) => dir.name).sort()
+  const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
   )
