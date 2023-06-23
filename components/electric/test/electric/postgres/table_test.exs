@@ -1047,8 +1047,8 @@ defmodule Electric.Postgres.TableTest do
                primary_keys: ["c1", "c2"],
                replica_identity: :index,
                columns: [
-                 %Column{name: "c1", type: "int4", type_modifier: -1, identity?: true},
-                 %Column{name: "c2", type: "int4", type_modifier: -1, identity?: true}
+                 %Column{name: "c1", type: :int4, type_modifier: -1, identity?: true},
+                 %Column{name: "c2", type: :int4, type_modifier: -1, identity?: true}
                ]
              }
     end

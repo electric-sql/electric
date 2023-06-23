@@ -16,7 +16,7 @@ defmodule Electric.Postgres.Replication do
 
     @type t() :: %__MODULE__{
             name: Postgres.name(),
-            type: binary(),
+            type: atom(),
             type_modifier: integer(),
             identity?: boolean() | nil
           }

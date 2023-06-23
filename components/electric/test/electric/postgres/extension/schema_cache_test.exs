@@ -188,13 +188,13 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: "uuid",
+                   type: :uuid,
                    type_modifier: -1,
                    identity?: true
                  },
                  %Column{
                    name: "avalue",
-                   type: "text",
+                   type: :text,
                    type_modifier: -1,
                    identity?: false
                  }
@@ -218,13 +218,13 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: "uuid",
+                   type: :uuid,
                    type_modifier: -1,
                    identity?: true
                  },
                  %Column{
                    name: "avalue",
-                   type: "text",
+                   type: :text,
                    type_modifier: -1,
                    identity?: false
                  }
@@ -250,25 +250,25 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: "uuid",
+                 type: :uuid,
                  type_modifier: -1,
                  identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: "text",
+                 type: :text,
                  type_modifier: -1,
                  identity?: false
                },
                %Column{
                  name: "aupdated",
-                 type: "timestamptz",
+                 type: :timestamptz,
                  type_modifier: -1,
                  identity?: false
                },
                %Column{
                  name: "aname",
-                 type: "varchar",
+                 type: :varchar,
                  type_modifier: 63,
                  identity?: false
                }
@@ -296,25 +296,25 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: "uuid",
+                 type: :uuid,
                  type_modifier: -1,
                  identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: "text",
+                 type: :text,
                  type_modifier: -1,
                  identity?: false
                },
                %Column{
                  name: "aupdated",
-                 type: "timestamptz",
+                 type: :timestamptz,
                  type_modifier: -1,
                  identity?: false
                },
                %Column{
                  name: "aname",
-                 type: "varchar",
+                 type: :varchar,
                  type_modifier: 63,
                  identity?: false
                }
@@ -326,13 +326,13 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: "uuid",
+                 type: :uuid,
                  type_modifier: -1,
                  identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: "text",
+                 type: :text,
                  type_modifier: -1,
                  identity?: false
                }
@@ -351,19 +351,19 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "bid1",
-                   type: "int4",
+                   type: :int4,
                    type_modifier: -1,
                    identity?: true
                  },
                  %Column{
                    name: "bid2",
-                   type: "int4",
+                   type: :int4,
                    type_modifier: -1,
                    identity?: true
                  },
                  %Column{
                    name: "bvalue",
-                   type: "text",
+                   type: :text,
                    type_modifier: -1,
                    identity?: false
                  }

@@ -296,7 +296,7 @@ defmodule Electric.Satellite.Serialization do
 
   defp serialize_table_columns(columns, pks) do
     Enum.map(columns, fn %{name: name, type: type} ->
-      %SatRelationColumn{name: name, type: type, primaryKey: MapSet.member?(pks, name)}
+      %SatRelationColumn{name: name, type: to_string(type), primaryKey: MapSet.member?(pks, name)}
     end)
   end
 

@@ -140,7 +140,7 @@ defmodule Electric.Replication.Changes do
             &%Column{
               name: &1.name,
               identity?: :key in &1.flags,
-              type: to_string(&1.type),
+              type: &1.type,
               type_modifier: &1.type_modifier
             }
           )
