@@ -4,36 +4,30 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   alias Electric.Replication.Postgres.SlotServer
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.MockSchemaLoader
 
   setup _ do
-    SchemaRegistry.put_replicated_tables("fake_publication", [
-      %{
-        schema: "fake",
-        name: "slot_server_test",
-        oid: 100_003,
-        replica_identity: :all_columns
-      }
-    ])
+    migrations = [
+      {"001",
+       [
+         "CREATE TABLE fake.slot_server_test (id uuid PRIMARY KEY NOT NULL, content varchar)"
+       ]}
+    ]
 
-    SchemaRegistry.put_table_columns({"fake", "slot_server_test"}, [
-      %{
-        name: "id",
-        type: :uuid,
-        type_modifier: 0,
-        part_of_identity?: nil
-      },
-      %{
-        name: "content",
-        type: :varchar,
-        type_modifier: -1,
-        part_of_identity?: nil
-      }
-    ])
+    backend =
+      MockSchemaLoader.backend_spec(
+        migrations: migrations,
+        oids: %{
+          table: %{
+            {"fake", "slot_server_test"} => 100_003
+          }
+        }
+      )
 
-    on_exit(fn -> SchemaRegistry.clear_replicated_tables("fake_publication") end)
+    start_supervised({SchemaCache, {[origin: "fake_publication"], [backend: backend]}})
 
     :ok
   end

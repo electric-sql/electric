@@ -512,7 +512,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defp column_to_wal(column) do
     # If `nil`, Postgres also expects the `:key` flag to be set
-    flags = if column.part_of_identity? != false, do: [:key], else: []
+    flags = if column.identity? != false, do: [:key], else: []
 
     %ReplicationMessages.Relation.Column{
       flags: flags,
