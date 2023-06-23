@@ -70,7 +70,7 @@ defmodule Electric.Plug.Migrations do
   end
 
   defp migrations_for_version(version) do
-    SchemaCache.migration_history(version)
+    SchemaCache.Global.migration_history(version)
   end
 
   defp migrations_zipfile(migrations, dialect) do

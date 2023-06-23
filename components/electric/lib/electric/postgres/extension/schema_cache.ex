@@ -1,3 +1,66 @@
+defmodule Electric.Postgres.Extension.SchemaCache.Global do
+  @moduledoc """
+  A wrapper around multiple SchemaCache instances to allow for usage from
+  processes that have no concept of a postgres "origin".
+
+  Every SchemaCache instance calls `register/1` but only one succeeds. This
+  one instance handles calls to `SchemaRegistry.Global`.
+  """
+
+  alias Electric.Postgres.Extension.SchemaCache
+
+  require Logger
+
+  @name Electric.name(SchemaCache, :__global__)
+
+  def name, do: @name
+
+  def register(origin) do
+    case Electric.reg_or_locate(@name, origin) do
+      :ok ->
+        # Kept as a warning to remind us that this is wrong... ;)
+        Logger.warning("SchemaCache #{inspect(origin)} registered as the global instance")
+
+      {:error, :already_registered, {_pid, registered_origin}} ->
+        Logger.error(
+          "Failed to register SchemaCache #{inspect(origin)} as global: #{inspect(registered_origin)} is already registered"
+        )
+    end
+  end
+
+  def primary_keys({_schema, _name} = relation) do
+    SchemaCache.primary_keys(@name, relation)
+  end
+
+  def primary_keys(schema, name) when is_binary(schema) and is_binary(name) do
+    SchemaCache.primary_keys(@name, schema, name)
+  end
+
+  def migration_history(version) do
+    SchemaCache.migration_history(@name, version)
+  end
+
+  def relation(oid) when is_integer(oid) do
+    SchemaCache.relation(@name, oid)
+  end
+
+  def relation({_schema, _name} = relation) do
+    SchemaCache.relation(@name, relation)
+  end
+
+  def relation({_schema, _name} = relation, version) when is_binary(version) do
+    SchemaCache.relation(@name, relation, version)
+  end
+
+  def relation!(relation) do
+    SchemaCache.relation!(@name, relation)
+  end
+
+  def relation!(relation, version) do
+    SchemaCache.relation!(@name, relation, version)
+  end
+end
+
 defmodule Electric.Postgres.Extension.SchemaCache do
   @moduledoc """
   Per-Postgres instance schema load/save functionality.
@@ -19,10 +82,13 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   alias Electric.Replication.Connectors
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaCache.Global
 
   require Logger
 
   @behaviour SchemaLoader
+
+  @instance Global.name()
 
   def start_link({conn_config, opts}) do
     start_link(conn_config, opts)
@@ -42,8 +108,13 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Electric.name(__MODULE__, origin)
   end
 
+  @spec name(Electric.reg_name()) :: Electric.reg_name()
+  def name(ref) when is_tuple(ref) do
+    ref
+  end
+
   def instance() do
-    Electric.name(__MODULE__, :instance)
+    @instance
   end
 
   @impl SchemaLoader
@@ -53,46 +124,42 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @impl SchemaLoader
   def load(origin) do
-    GenServer.call(name(origin), {:load, :current})
+    call(origin, {:load, :current})
   end
 
   @impl SchemaLoader
   def load(origin, version) do
-    GenServer.call(name(origin), {:load, {:version, version}})
+    call(origin, {:load, {:version, version}})
   end
 
   @impl SchemaLoader
   def save(origin, version, schema, stmts) do
-    GenServer.call(name(origin), {:save, version, schema, stmts})
+    call(origin, {:save, version, schema, stmts})
   end
 
   @impl SchemaLoader
   def relation_oid(origin, type, schema, name) do
-    GenServer.call(name(origin), {:relation_oid, type, schema, name})
-  end
-
-  @impl SchemaLoader
-  def primary_keys(origin, schema, name) do
-    GenServer.call(name(origin), {:primary_keys, schema, name})
+    call(origin, {:relation_oid, type, schema, name})
   end
 
   @impl SchemaLoader
   def primary_keys(origin, {schema, name}) do
-    primary_keys(origin, schema, name)
+    call(origin, {:primary_keys, schema, name})
+  end
+
+  @impl SchemaLoader
+  def primary_keys(origin, schema, name) do
+    call(origin, {:primary_keys, schema, name})
   end
 
   @impl SchemaLoader
   def refresh_subscription(origin, name) do
-    GenServer.call(name(origin), {:refresh_subscription, name})
-  end
-
-  def migration_history(version) do
-    GenServer.call(instance(), {:migration_history, version})
+    call(origin, {:refresh_subscription, name})
   end
 
   @impl SchemaLoader
   def migration_history(origin, version) do
-    GenServer.call(name(origin), {:migration_history, version})
+    call(origin, {:migration_history, version})
   end
 
   @impl SchemaLoader
@@ -101,15 +168,15 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def relation(origin, oid) when is_integer(oid) do
-    GenServer.call(name(origin), {:relation, oid})
+    call(origin, {:relation, oid})
   end
 
   def relation(origin, {_schema, _name} = relation) do
-    GenServer.call(name(origin), {:relation, relation})
+    call(origin, {:relation, relation})
   end
 
   def relation(origin, {_schema, _name} = relation, version) do
-    GenServer.call(name(origin), {:relation, relation, version})
+    call(origin, {:relation, relation, version})
   end
 
   def relation!(origin, relation) do
@@ -134,28 +201,30 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     end
   end
 
+  defp call(name, msg) when is_binary(name) do
+    call(name(name), msg)
+  end
+
+  defp call(name, msg) when is_tuple(name) do
+    GenServer.call(name, msg)
+  end
+
   @impl GenServer
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
 
     Logger.metadata(pg_producer: origin)
     Logger.info("Starting #{__MODULE__}")
+    # NOTE: this allows for a global SchemaCache instance even if the current configuration
+    #       requires there to be a schema cache per pg instance
+    # TODO: remove this in favour of a global (or namespace-able) consistent
+    #       path from pg <--> satellite
+    Global.register(origin)
 
     {:ok, backend} =
       opts
       |> SchemaLoader.get(:backend)
       |> SchemaLoader.connect(conn_config)
-
-    # we now only have a single instance to
-    case Electric.safe_reg(instance(), 0) do
-      true ->
-        Logger.info("Registered SchemaCache instance")
-        :ok
-
-      {:error, :already_registered} ->
-        Logger.warning("Multiple SchemaCache instances registered")
-        :ok
-    end
 
     state = %{
       origin: origin,

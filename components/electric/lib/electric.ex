@@ -33,6 +33,19 @@ defmodule Electric do
     end
   end
 
+  @spec reg_or_locate(reg_name(), any()) :: :ok | {:error, :already_registered, {pid(), any()}}
+  def reg_or_locate({:via, :gproc, name}, value) do
+    this = self()
+
+    case :gproc.reg_or_locate(name, value) do
+      {^this, ^value} ->
+        :ok
+
+      {other, other_value} ->
+        {:error, :already_registered, {other, other_value}}
+    end
+  end
+
   @doc """
   Helper function for gproc registration
   """
