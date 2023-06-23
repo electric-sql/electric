@@ -176,6 +176,15 @@ defmodule Electric.Postgres.MockSchemaLoader do
     not is_nil(List.keyfind(versions, version, 2))
   end
 
+  @impl true
+  def electrified_tables({[{_, schema} | _versions], _opts}) do
+    {:ok, Enum.map(schema.tables, &%{schema: &1.name.schema, name: &1.name.name, oid: &1.oid})}
+  end
+
+  def electrified_tables(_state) do
+    {:error, "electrified_tables: no schema defined"}
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end

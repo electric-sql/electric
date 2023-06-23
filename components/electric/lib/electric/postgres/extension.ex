@@ -188,7 +188,10 @@ defmodule Electric.Postgres.Extension do
 
   def electrified_tables(conn) do
     with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
-      {:ok, rows}
+      {:ok,
+       Enum.map(rows, fn {_id, schema, table, oid} ->
+         %{schema: schema, table: table, oid: String.to_integer(oid)}
+       end)}
     end
   end
 

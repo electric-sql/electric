@@ -3,8 +3,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   alias Electric.Replication.Connectors
 
   @type state() :: term()
-  @type version() :: binary()
-  @type name() :: binary()
+  @type version() :: String.t()
+  @type name() :: String.t()
   @type schema() :: name()
   @type relation() :: {schema(), name()}
   @type oid() :: integer()
@@ -14,6 +14,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
   @type migration() :: {version(), Schema.t(), [ddl(), ...]}
+  @type table_id() :: %{name: name(), schema: schema(), oid: oid()}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
@@ -25,6 +26,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) :: {:ok, [migration()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
+  @callback electrified_tables(state()) :: {:ok, [table_id()]} | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -80,6 +82,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def known_migration_version?({module, state}, version) do
     module.known_migration_version?(state, version)
+  end
+
+  def electrified_tables({module, state}) do
+    module.electrified_tables(state)
   end
 end
 
@@ -201,5 +207,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   @impl true
   def known_migration_version?(conn, version) do
     Extension.known_migration_version?(conn, version)
+  end
+
+  @impl true
+  def electrified_tables(conn) do
+    Extension.electrified_tables(conn)
   end
 end

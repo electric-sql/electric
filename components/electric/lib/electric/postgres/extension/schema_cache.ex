@@ -59,6 +59,10 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
   def relation!(relation, version) do
     SchemaCache.relation!(@name, relation, version)
   end
+
+  def electrified_tables() do
+    SchemaCache.electrified_tables(@name)
+  end
 end
 
 defmodule Electric.Postgres.Extension.SchemaCache do
@@ -164,7 +168,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @impl SchemaLoader
   def known_migration_version?(origin, version) do
-    GenServer.call(name(origin), {:known_migration_version?, version})
+    call(origin, {:known_migration_version?, version})
+  end
+
+  @impl SchemaLoader
+  def electrified_tables(origin) do
+    call(origin, :electrified_tables)
   end
 
   def relation(origin, oid) when is_integer(oid) do
@@ -275,6 +284,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:known_migration_version?, version}, _from, state) do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
+  end
+
+  def handle_call(:electrified_tables, _from, state) do
+    {:reply, SchemaLoader.electrified_tables(state.backend), state}
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
