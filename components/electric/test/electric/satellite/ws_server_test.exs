@@ -18,7 +18,8 @@ defmodule Electric.Satellite.WsServerTest do
     Transaction
   }
 
-  alias Electric.Postgres.SchemaRegistry
+  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.MockSchemaLoader
 
   alias Electric.Satellite.Auth
 
@@ -46,13 +47,25 @@ defmodule Electric.Satellite.WsServerTest do
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
 
-    columns = [{"id", :uuid}, {"electric_user_id", :varchar}, {"content", :varchar}]
+    migrations = [
+      {"001",
+       [
+         "CREATE TABLE #{@test_schema}.#{@test_table} " <>
+           "(id uuid PRIMARY KEY NOT NULL, electric_user_id varchar, content varchar)"
+       ]}
+    ]
 
-    Electric.Test.SchemaRegistryHelper.initialize_registry(
-      @test_publication,
-      {@test_schema, @test_table},
-      columns
-    )
+    backend =
+      MockSchemaLoader.backend_spec(
+        migrations: migrations,
+        oids: %{
+          table: %{
+            {"fake", "slot_server_test"} => 100_003
+          }
+        }
+      )
+
+    start_supervised({SchemaCache, {[origin: @test_publication], [backend: backend]}})
 
     port = 55133
 
@@ -68,7 +81,6 @@ defmodule Electric.Satellite.WsServerTest do
     server_id = Electric.instance_id()
 
     on_exit(fn ->
-      SchemaRegistry.clear_replicated_tables(@test_publication)
       :cowboy.stop_listener(:ws_test)
       Process.sleep(100)
     end)

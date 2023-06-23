@@ -6,7 +6,7 @@ defmodule Electric.Satellite.SerializationTest do
 
   alias Electric.Replication.Changes.Transaction
 
-  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache, SchemaRegistry}
+  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
 
   test "test row serialization" do
     data = %{"not_null" => <<"4">>, "null" => nil, "not_present" => <<"some other value">>}
@@ -184,21 +184,6 @@ defmodule Electric.Satellite.SerializationTest do
 
     test "writes to electric ddl table are recognised as migration ops", cxt do
       version = "20220421"
-
-      SchemaRegistry.put_replicated_tables("all_tables", [
-        %{schema: "public", name: "something_else", oid: 111, primary_keys: ["id"]},
-        %{schema: "public", name: "other_thing", oid: 222, primary_keys: ["id"]},
-        %{schema: "public", name: "yet_another_thing", oid: 333, primary_keys: ["id"]}
-      ])
-
-      Enum.each(
-        [
-          {{"public", "something_else"}, [%{name: "id", type: :uuid, type_modifier: -1}]},
-          {{"public", "other_thing"}, [%{name: "id", type: :uuid, type_modifier: -1}]},
-          {{"public", "yet_another_thing"}, [%{name: "id", type: :uuid, type_modifier: -1}]}
-        ],
-        fn {t, c} -> SchemaRegistry.put_table_columns(t, c) end
-      )
 
       tx = %Transaction{
         changes: [

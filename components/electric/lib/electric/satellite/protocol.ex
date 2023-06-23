@@ -853,7 +853,6 @@ defmodule Electric.Satellite.Protocol do
       fn relation ->
         relation
         |> SchemaCache.Global.relation!()
-        |> dbg
         |> Serialization.serialize_relation()
       end
     )
