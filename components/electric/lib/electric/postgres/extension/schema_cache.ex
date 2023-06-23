@@ -4,7 +4,7 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
   processes that have no concept of a postgres "origin".
 
   Every SchemaCache instance calls `register/1` but only one succeeds. This
-  one instance handles calls to `SchemaRegistry.Global`.
+  one instance handles calls to `SchemaCache.Global`.
   """
 
   alias Electric.Postgres.Extension.SchemaCache

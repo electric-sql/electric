@@ -14,8 +14,10 @@ defmodule Electric.Postgres.Replication do
       identity?: false
     ]
 
+    @type name() :: Postgres.name()
+
     @type t() :: %__MODULE__{
-            name: Postgres.name(),
+            name: name(),
             type: atom(),
             type_modifier: integer(),
             identity?: boolean() | nil

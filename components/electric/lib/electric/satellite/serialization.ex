@@ -1,5 +1,5 @@
 defmodule Electric.Satellite.Serialization do
-  alias Electric.Postgres.{Extension, Replication, SchemaRegistry}
+  alias Electric.Postgres.{Extension, Replication}
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -17,7 +17,7 @@ defmodule Electric.Satellite.Serialization do
   require Logger
 
   @type relation_mapping() ::
-          %{Changes.relation() => {PB.relation_id(), [SchemaRegistry.column_name()]}}
+          %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
   @doc """
   Serialize from internal format to Satellite PB format
@@ -269,19 +269,6 @@ defmodule Electric.Satellite.Serialization do
   @doc """
   Serialize internal relation representation to Satellite PB format
   """
-  @spec serialize_relation(SchemaRegistry.replicated_table(), [SchemaRegistry.column()]) ::
-          %SatRelation{}
-  @deprecated "don't use"
-  def serialize_relation(table_info, columns) do
-    %SatRelation{
-      schema_name: table_info.schema,
-      table_type: :TABLE,
-      table_name: table_info.name,
-      relation_id: table_info.oid,
-      columns: serialize_columns(columns, MapSet.new(table_info.primary_keys), [])
-    }
-  end
-
   @spec serialize_relation(Replication.Table.t()) :: %SatRelation{}
   def serialize_relation(%Replication.Table{} = table) do
     %SatRelation{
@@ -297,25 +284,6 @@ defmodule Electric.Satellite.Serialization do
     Enum.map(columns, fn %{name: name, type: type} ->
       %SatRelationColumn{name: name, type: to_string(type), primaryKey: MapSet.member?(pks, name)}
     end)
-  end
-
-  defp serialize_columns([%{name: name_str, type: type_atom} | rest], pks, acc) do
-    serialize_columns(
-      rest,
-      pks,
-      [
-        %SatRelationColumn{
-          name: name_str,
-          type: :erlang.atom_to_binary(type_atom),
-          primaryKey: MapSet.member?(pks, name_str)
-        }
-        | acc
-      ]
-    )
-  end
-
-  defp serialize_columns([], _pks, acc) do
-    Enum.reverse(acc)
   end
 
   @type cached_relations() :: %{
