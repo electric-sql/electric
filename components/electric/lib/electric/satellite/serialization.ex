@@ -116,7 +116,7 @@ defmodule Electric.Satellite.Serialization do
 
           known_relations =
             Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-              {_relation_id, _column_names, known} = load_new_relation(origin, relation, known)
+              {_relation_id, _column_names, known} = load_new_relation(relation, known)
 
               known
             end)
@@ -146,14 +146,13 @@ defmodule Electric.Satellite.Serialization do
     %{
       ops: ops,
       new_relations: new_relations,
-      known_relations: known_relations,
-      origin: origin
+      known_relations: known_relations
     } = state
 
     relation = record.relation
 
     {rel_id, rel_cols, new_relations, known_relations} =
-      case fetch_relation_id(origin, relation, known_relations) do
+      case fetch_relation_id(relation, known_relations) do
         {:new, {relation_id, columns, known}} ->
           {relation_id, columns, [relation | new_relations], known}
 
@@ -246,25 +245,25 @@ defmodule Electric.Satellite.Serialization do
     %SatOpRow{nulls_bitmask: bitmask, values: Enum.reverse(values)}
   end
 
-  def fetch_relation_id(origin, relation, known_relations) do
+  def fetch_relation_id(relation, known_relations) do
     case Map.get(known_relations, relation, nil) do
       nil ->
-        {:new, load_new_relation(origin, relation, known_relations)}
+        {:new, load_new_relation(relation, known_relations)}
 
       {relation_id, columns} ->
         {:existing, {relation_id, columns}}
     end
   end
 
-  defp load_new_relation(origin, relation, known_relations) do
-    %{oid: relation_id, columns: columns} = fetch_relation(origin, relation)
+  defp load_new_relation(relation, known_relations) do
+    %{oid: relation_id, columns: columns} = fetch_relation(relation)
     column_names = for %{name: column_name} <- columns, do: column_name
 
     {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
   end
 
-  defp fetch_relation(origin, relation) do
-    Extension.SchemaCache.relation!(origin, relation)
+  defp fetch_relation(relation) do
+    Extension.SchemaCache.Global.relation!(relation)
   end
 
   @doc """
