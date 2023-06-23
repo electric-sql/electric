@@ -19,7 +19,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
     "_tag",
     "_is_a_delete_operation",
     "_observed_tags",
-    "_modified_columns_bitmask"
+    "_modified_columns_bit_mask"
   ]
 
   describe "split_change_into_main_and_shadow/3" do
@@ -47,7 +47,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                "_is_a_delete_operation" => "f",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bitmask" =>
+               "_modified_columns_bit_mask" =>
                  ShadowTableTransformation.serialize_pg_array(["t", "t"])
              }
     end
@@ -77,7 +77,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                "_is_a_delete_operation" => "f",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bitmask" =>
+               "_modified_columns_bit_mask" =>
                  ShadowTableTransformation.serialize_pg_array(["f", "t"])
              }
     end
@@ -106,7 +106,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                "_is_a_delete_operation" => "t",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bitmask" =>
+               "_modified_columns_bit_mask" =>
                  ShadowTableTransformation.serialize_pg_array(["f", "f"])
              }
     end
