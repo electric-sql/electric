@@ -1,0 +1,67 @@
+[doc NodeJS Satellite sends and receives data to known tables]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+[invoke setup_client 2 "electric_1" 5133]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        content VARCHAR(64) NOT NULL,
+        content_text_null VARCHAR(64),
+        content_text_null_default VARCHAR(64) DEFAULT '',
+        intvalue_null integer,
+        intvalue_null_default integer DEFAULT 10
+        );
+        CALL electric.electrify('public.items');
+        """]
+    [invoke migrate_pg 20230504114018 $sql]
+
+[shell satellite_1]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "items"]
+[shell satellite_2]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "items"]
+
+[invoke log "PG & Satellites migrated and ready"]
+
+[shell satellite_1]
+    [invoke log "Insert data into satellite_1"]
+    [invoke node_await_insert "['hello from satellite_1']"]
+
+[shell satellite_2]
+    [invoke log "Insert data into satellite_2"]
+    [invoke node_await_insert "['hello from satellite_2']"]
+
+[shell pg_1]
+    [invoke log "Verify that pg has received data from both Satellites"]
+    [invoke wait-for "SELECT * FROM public.items;" "hello from satellite_1" 10 $psql]
+    [invoke wait-for "SELECT * FROM public.items;" "hello from satellite_2" 10 $psql]
+
+[invoke log "Verify that satellite inserts reached each other"]
+[shell satellite_1]
+    [invoke wait-for "await client.get_items(db)" "hello from satellite_2" 10 $node]
+
+[shell satellite_2]
+    [invoke wait-for "await client.get_items(db)" "hello from satellite_1" 10 $node]
+
+[shell pg_1]
+    [invoke log "Insert a row on PG side"]
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'hello from pg');
+    ?$psql
+
+[invoke log "Verify that pg insert has reached both Satellites"]
+[shell satellite_1]
+    [invoke node_await_get "00000000-0000-0000-0000-000000000000"]
+
+[shell satellite_2]
+    [invoke node_await_get "00000000-0000-0000-0000-000000000000"]
+
+[cleanup]
+  [invoke teardown]

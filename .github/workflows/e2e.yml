@@ -87,10 +87,6 @@ jobs:
 
       - run: make lux
 
-      - run: make vaxine
-
-      - run: make postgres
-
       - run: make test
         id: tests
         env:

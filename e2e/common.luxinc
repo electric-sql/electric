@@ -1,3 +1,6 @@
+[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
+[global eprompt=iex\(\d+\)>\s]
+
 [global _global_log_string_counter=0]
 [macro log string]
     [my old=$LUX_SHELLNAME]
@@ -61,6 +64,7 @@
         [sleep 1]
     [endloop]
     !\pset null '<NULL>'
+    !\pset pager off
 [endmacro]
 
 [macro start_elixir_test id]

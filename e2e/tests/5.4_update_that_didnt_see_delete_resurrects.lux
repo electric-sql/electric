@@ -1,0 +1,63 @@
+[doc When an update coming from Satellite doesn't have the latest DELETE operation in the observed tags, it restores the row]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    ?:ok
+    ?$eprompt
+
+[shell pg_1]
+    !\pset tuples_only
+    # Given an already-inserted row
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'original value');
+    ?$psql
+    # That was updated
+    !UPDATE entries SET content = 'updated value' WHERE id = '00000000-0000-0000-0000-000000000000';
+    ?$psql
+    # And then deleted
+    !DELETE FROM entries WHERE id = '00000000-0000-0000-0000-000000000000';
+    ?$psql
+
+[shell user_1_ws1]
+    ?%Electric.Satellite.V\d+.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
+    [my seen_tag=$1]
+    # We do an update having "seen" only the insert
+    """!
+    Electric.Test.SatelliteWsClient.entries_table_send_update(
+        conn,
+        "1", # lsn
+        DateTime.utc_now() |> DateTime.add(86400, :second) |> DateTime.to_unix(:millisecond), # + 1 day
+        "00000000-0000-0000-0000-000000000000", # id
+        %{"content" => "original value", "content_b" => nil}, # old
+        %{"content" => "original value", "content_b" => "new value"}, # new
+        ["$seen_tag"]
+    )
+    """
+    ?:ok
+    ?$eprompt
+
+[shell electric]
+    # Wait for it to be sent to PG
+    ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
+    ?pg_slot=postgres_1 \[debug\] Sending 6 messages to the subscriber: from (#Lsn<0/29>)
+    [my expected_lsn=$1]
+    ??<StatusUpdate> [written_wal: $expected_lsn
+
+[shell pg_1]
+    # We expect for the row to get "resurrected", updating only modified columns
+    !SELECT content, content_b FROM entries WHERE id = '00000000-0000-0000-0000-000000000000';
+    ??updated value | new value
+    ?$psql
+
+[shell user_1_ws1]
+    # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)origin: "client_1_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated value", "new value"\]
+
+[cleanup]
+    [invoke teardown]
