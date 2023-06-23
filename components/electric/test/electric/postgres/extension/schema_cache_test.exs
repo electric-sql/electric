@@ -371,4 +371,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
              }
     end
   end
+
+  describe "ready?" do
+    test "returns false if no schema cache exists for origin", cxt do
+      refute Extension.SchemaCache.ready?(cxt.origin)
+    end
+
+    test_tx "returns true if schema cache is online", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert Extension.SchemaCache.ready?(cxt.origin)
+    end
+  end
 end

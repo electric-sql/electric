@@ -113,7 +113,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
   require Logger
 
   alias Electric.Postgres.Messaging
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.OidDatabase
   alias Electric.Replication.Postgres.SlotServer
   alias Electric.Postgres.Extension.SchemaCache
@@ -408,7 +407,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   defp initialize_connection(%State{} = state, %{"replication" => "database"} = settings) do
-    if SchemaRegistry.is_origin_ready?(settings["application_name"]) do
+    if SchemaCache.ready?(settings["application_name"]) do
       # TODO: Verify the server settings, maybe make them dynamic?
       Messaging.authentication_ok()
       |> Messaging.parameter_status("application_name", settings["application_name"])

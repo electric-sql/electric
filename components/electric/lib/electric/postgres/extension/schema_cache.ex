@@ -121,6 +121,13 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     @instance
   end
 
+  def ready?(origin) do
+    case Electric.lookup_pid(name(origin)) do
+      pid when is_pid(pid) -> true
+      _ -> false
+    end
+  end
+
   @impl SchemaLoader
   def connect(conn_config, _opts) do
     {:ok, Connectors.origin(conn_config)}
