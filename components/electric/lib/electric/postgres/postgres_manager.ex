@@ -1,5 +1,5 @@
 defmodule Electric.Replication.PostgresConnectorMng do
-  alias Electric.Postgres.{Extension, SchemaRegistry}
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
@@ -73,7 +73,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
       {:ok, state1} ->
         :ok = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
-        SchemaRegistry.mark_origin_ready(origin)
 
         {:noreply, %State{state1 | state: :subscribe}, {:continue, :subscribe}}
 
