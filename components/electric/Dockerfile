@@ -21,9 +21,10 @@ RUN make build_tools
 
 COPY mix.*  /app/
 RUN make deps
-COPY config /app/config/
+COPY config/config.exs config/prod.exs /app/config/
 RUN mix deps.compile
 
+COPY config/runtime.exs /app/config/
 COPY lib    /app/lib/
 ARG ELECTRIC_VERSION=local
 RUN make compile release
