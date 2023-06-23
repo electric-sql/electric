@@ -16,12 +16,10 @@ export UID=$(shell id -u)
 export GID=$(shell id -g)
 
 ifdef USE_LOCAL_IMAGE
-	export VAXINE_IMAGE?=vaxine:local-build
 	export POSTGRESQL_IMAGE?=postgres:local-build
 	export SYSBENCH_IMAGE?=sysbench:local-build
 else
-	export VAXINE_IMAGE?=${DOCKER_REGISTRY}/vaxine:latest
-	export POSTGRESQL_IMAGE?=${DOCKER_REGISTRY}/postgres:latest
+	export POSTGRESQL_IMAGE?=postgres:14-alpine
 	export SYSBENCH_IMAGE?=${DOCKER_REGISTRY}/sysbench:latest
 endif
 
@@ -51,23 +49,10 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 	touch .sysbench_docker_build
 
 start_dev_env:
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1
 
 log_dev_env:
-	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
-
-
-ifdef LUX_EXTRA_LOGS
-export VAXINE_VOLUME=${LUX_EXTRA_LOGS}
-export SATELLITE_DB_PATH=${LUX_EXTRA_LOGS}
-else
-export SATELLITE_DB_PATH=.
-export VAXINE_VOLUME=.
-endif
-
-start_vaxine_%:
-	mkdir -p ${VAXINE_VOLUME}/vaxine_$*
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow pg_1
 
 start_electric_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
@@ -103,23 +88,6 @@ start_satellite_client_%:
 		--rm \
 		satellite_client_$*
 
-VAXINE_BRANCH?=main
-vaxine:
-ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/electric-sql/vaxine.git
-	cd vaxine && git checkout ${VAXINE_BRANCH} && make docker-build
-else
-	docker pull ${VAXINE_IMAGE}
-endif
-
-postgres:
-ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/electric-sql/postgres.git \
-		--branch replication-upsert --depth 1
-	cd postgres && ./configure && make docker-build
-else
-	docker pull ${POSTGRESQL_IMAGE}
-endif
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
@@ -141,4 +109,7 @@ docker-make:
 		make ${MK_TARGET}
 
 single_test:
-	${LUX} ${TEST}
+	${LUX} --progress doc ${TEST}
+
+single_test_debug:
+	${LUX} --debug ${TEST}

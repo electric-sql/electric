@@ -1,0 +1,92 @@
+[doc When applying incoming migrations, NodeJS Satellite updates internal caches appropriately to be able to send/recieve added columns]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+[invoke setup_client 2 "electric_1" 5133]
+
+[global migration_version_1=20230504114018]
+[global migration_version_2=20230505100008]
+[global migration_version_3=20230622101323]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        content VARCHAR(64) NOT NULL,
+        content_text_null VARCHAR(64),
+        content_text_null_default VARCHAR(64) DEFAULT '',
+        intvalue_null integer,
+        intvalue_null_default integer DEFAULT 10
+        );
+        CALL electric.electrify('public.items');
+        """]
+    [invoke migrate_pg 20230504114018 $sql]
+    !\d electric.shadow__public__items
+    !\d items
+
+[shell satellite_1]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "items"]
+[shell satellite_2]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "items"]
+
+[invoke log "PG & Satellites migrated and ready"]
+
+[shell pg_1]
+    [invoke log "Insert a row on PG side"]
+    # First insert, on the first schema
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'hello from pg');
+    ?$psql
+
+[invoke log "Verify that pg insert has reached both Satellites"]
+[shell satellite_1]
+    [invoke node_await_get "00000000-0000-0000-0000-000000000000"]
+
+[shell satellite_2]
+    [invoke node_await_get "00000000-0000-0000-0000-000000000000"]
+
+[shell pg_1]
+    # Migrate to a second version
+    [invoke migrate_pg $migration_version_2 "ALTER TABLE public.items ADD COLUMN increment text;"]
+    # And insert data which affect the new column
+    [invoke log "Insert data into new column"]
+    !INSERT INTO public.items (content, increment) VALUES ('${migration_version_2}/content', '${migration_version_2}/increment');
+    ?$psql
+
+[invoke log "Verify that pg insert has reached both Satellites"]
+[shell satellite_1]
+    [invoke node_await_column items increment]
+    [invoke node_await_column_value items content '${migration_version_2}/content']
+    [invoke node_await_column_value items increment '${migration_version_2}/increment']
+
+[shell satellite_2]
+    [invoke node_await_column items increment]
+    [invoke node_await_column_value items content '${migration_version_2}/content']
+    [invoke node_await_column_value items increment '${migration_version_2}/increment']
+
+[shell pg_1]
+    # Migrate to a third version
+    [invoke migrate_pg $migration_version_3 "ALTER TABLE public.items ADD COLUMN another text;"]
+
+[invoke log "Try to do an insert including a new column on both Satellites"]
+[shell satellite_1]
+    [invoke node_await_column items another]
+    [invoke node_await_insert_extended "{content: '${migration_version_3}/satellite_1 content', another: '${migration_version_3}/satellite_1 another'}"]
+
+[shell satellite_2]
+    [invoke node_await_column items another]
+    [invoke node_await_insert_extended "{content: '${migration_version_3}/satellite_2 content', another: '${migration_version_3}/satellite_2 another'}"]
+
+[shell pg_1]
+    [invoke log "Verify that PG has received extended rows from both Satellites"]
+    [invoke wait-for "SELECT * FROM public.items;" "${migration_version_3}/satellite_1 another" 10 ${psql}]
+    [invoke wait-for "SELECT * FROM public.items;" "${migration_version_3}/satellite_2 another" 10 ${psql}]
+
+
+[cleanup]
+  [invoke teardown]
