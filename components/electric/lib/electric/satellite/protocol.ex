@@ -34,7 +34,7 @@ defmodule Electric.Satellite.Protocol do
               sync_batch_size: nil
 
     @typedoc """
-    Incoming replication Satellite -> Vaxine
+    Incoming replication Satellite -> PG
     """
     @type t() :: %__MODULE__{
             pid: pid() | nil,
@@ -69,7 +69,7 @@ defmodule Electric.Satellite.Protocol do
               sync_batch_size: nil
 
     @typedoc """
-    Outgoing replication Vaxine -> Satellite
+    Outgoing replication PG -> Satellite
     """
     @type t() :: %__MODULE__{
             pid: pid() | nil,
@@ -225,7 +225,7 @@ defmodule Electric.Satellite.Protocol do
         {nil, %State{state | in_rep: %InRep{state.in_rep | status: :active}}}
 
       :paused ->
-        # Could be when vaxine is temporary unavailable
+        # Could be when consumer is temporary unavailable
         {%SatInStopReplicationReq{}, state}
     end
   end
@@ -343,24 +343,23 @@ defmodule Electric.Satellite.Protocol do
     Process.send(pid, {__MODULE__, :lsn_report, lsn}, [])
   end
 
-  # Transactions coming from Vaxine
-  @spec handle_out_transes([{Transaction.t(), term()}], State.t()) ::
+  @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) ::
           {[PB.sq_pb_msg()], State.t()}
-  def handle_out_transes(events, state, acc \\ [])
+  def handle_outgoing_txs(events, state, acc \\ [])
 
-  def handle_out_transes([{tx, _offset} = event | events], state, acc) do
+  def handle_outgoing_txs([{tx, _offset} = event | events], state, acc) do
     if Changes.belongs_to_user?(tx, state.auth.user_id) do
       {relations, transaction, out_rep} = handle_out_trans(event, state)
       acc = Enum.concat([transaction, relations, acc])
-      handle_out_transes(events, %State{state | out_rep: out_rep}, acc)
+      handle_outgoing_txs(events, %State{state | out_rep: out_rep}, acc)
     else
       Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
 
-      handle_out_transes(events, state, acc)
+      handle_outgoing_txs(events, state, acc)
     end
   end
 
-  def handle_out_transes([], state, acc) do
+  def handle_outgoing_txs([], state, acc) do
     {Enum.reverse(acc), state}
   end
 
@@ -395,8 +394,8 @@ defmodule Electric.Satellite.Protocol do
 
   @spec initiate_subscription(String.t(), any(), OutRep.t()) :: OutRep.t()
   def initiate_subscription(client, lsn, out_rep) do
-    {:via, :gproc, vaxine_producer} = Producer.name(client)
-    {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
+    {:via, :gproc, producer} = Producer.name(client)
+    {sub_pid, _} = :gproc.await(producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
 
     opts = [
