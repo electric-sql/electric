@@ -4,8 +4,6 @@ config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_da
 
 config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
-config :electric, Electric.Migrations, migration_file_name_suffix: "/postgres.sql"
-
 config :electric,
   global_cluster_id: "test.electric-db",
   instance_id: "instance-1.region-1.test.electric-db",

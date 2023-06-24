@@ -119,8 +119,5 @@ shell:
 shell_clean:
 	iex -S mix run --no-start
 
-apply_migration:
-	./dev/apply-local-migration.sh $(name)
-
 codespell:
 	codespell -L authentification --skip .git --skip deps
