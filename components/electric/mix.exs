@@ -30,22 +30,10 @@ defmodule Electric.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:vax, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vax"},
-      {:antidote_pb_codec,
-       git: "https://github.com/electric-sql/vaxine.git",
-       sparse: "apps/antidote_pb_codec",
-       override: true},
-      {:antidotec_pb,
-       git: "https://github.com/electric-sql/vaxine.git",
-       sparse: "apps/antidotec_pb",
-       override: true},
-      {:vx_client, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vx_client"},
       {:epgsql, "~> 4.2"},
+      {:backoff, "~> 1.1"},
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},
-      # TODO: shouldn't be needed, here for convenience
-      {:ecto_sql, "~> 3.0"},
-      {:postgrex, "~> 0.16.3"},
       {:postgresql_uri, "~> 0.1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:ranch, "~> 2.1", override: true},

@@ -154,7 +154,7 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  # Consumer (Vaxine) has reported that this lsn has been stored successfully
+  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully
   # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}
@@ -193,7 +193,7 @@ defmodule Electric.Satellite.WsServer do
       true ->
         GenStage.ask(from, 1)
 
-        case Protocol.handle_out_transes(events, state) do
+        case Protocol.handle_outgoing_txs(events, state) do
           {[], state} ->
             {[], state}
 

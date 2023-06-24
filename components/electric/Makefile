@@ -46,9 +46,6 @@ start_dev_env:
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
-start_dev_env_mounted:
-	mkdir -p _tmp_vaxine_data
-	docker compose -f dev/compose-mounts.yaml up -d
 
 stop_dev_env:
 	docker compose -f ${DC_CONFIG} down

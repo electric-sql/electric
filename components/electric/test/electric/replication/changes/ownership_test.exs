@@ -41,7 +41,7 @@ defmodule Electric.Replication.Changes.OwnershipTest do
 
   describe "belongs_to_user?/2" do
     test "accepts a transaction that belongs to the current user" do
-      user_id = Ecto.UUID.generate()
+      user_id = Electric.Utils.uuid4()
 
       transaction = %Transaction{
         changes: change_list([user_id], 5)
@@ -51,8 +51,8 @@ defmodule Electric.Replication.Changes.OwnershipTest do
     end
 
     test "rejects a transaction that contains any changes not owned by user" do
-      user_id1 = Ecto.UUID.generate()
-      user_id2 = Ecto.UUID.generate()
+      user_id1 = Electric.Utils.uuid4()
+      user_id2 = Electric.Utils.uuid4()
 
       transaction = %Transaction{
         changes: change_list([user_id1, user_id2], 5)
@@ -62,7 +62,7 @@ defmodule Electric.Replication.Changes.OwnershipTest do
     end
 
     test "accepts any rows where the electric_user_id is null or empty" do
-      user_id = Ecto.UUID.generate()
+      user_id = Electric.Utils.uuid4()
 
       for empty <- [nil, ""] do
         transaction = %Transaction{
@@ -79,7 +79,7 @@ defmodule Electric.Replication.Changes.OwnershipTest do
     end
 
     test "accepts any tables without a electric_user_id column" do
-      user_id = Ecto.UUID.generate()
+      user_id = Electric.Utils.uuid4()
 
       transaction = %Transaction{
         changes: [

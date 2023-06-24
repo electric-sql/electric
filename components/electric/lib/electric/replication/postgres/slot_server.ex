@@ -23,8 +23,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Replication.OffsetStorage
   alias Electric.Postgres.ShadowTableTransformation
 
-  alias Electric.Replication.DownstreamProducer
-
   import Electric.Postgres.Extension, only: [is_extension_relation: 1]
 
   defmodule State do
@@ -36,11 +34,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
               publication: nil,
               timer: nil,
               socket_process_ref: nil,
-              producer: nil,
               producer_name: nil,
               producer_pid: nil,
               sent_relations: %{},
-              current_vx_offset: nil,
+              current_source_position: nil,
               preprocess_relation_list_fn: nil,
               preprocess_change_fn: nil,
               opts: []
@@ -93,7 +90,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:n, :l, {__MODULE__, name}}
   end
 
-  defp producer_info() do
+  defp subscription_opts() do
     [min_demand: 10, max_demand: 50]
   end
 
@@ -144,7 +141,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     origin = Connectors.origin(conn_config)
     replication_opts = Connectors.get_replication_opts(conn_config)
-    downstream_opts = Connectors.get_downstream_opts(conn_config)
     slot = replication_opts.subscription
 
     :gproc.reg(name(origin))
@@ -162,7 +158,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
        slot_name: slot,
        origin: origin,
        producer_name: producer,
-       producer: downstream_opts.producer,
        opts: Map.get(replication_opts, :opts, []),
        # Under the current implementation, this function is always going to be
        # `ShadowTableTransformation.split_change_into_main_and_shadow/3`,
@@ -199,12 +194,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:reply, false, [], state}
   end
 
-  def handle_call(:downstream_connected?, _from, state) do
-    res = DownstreamProducer.connected?(state.producer, state.producer_pid)
-    Logger.debug("Requested downstream connection #{res}")
-    {:reply, res, [], state}
-  end
-
   @impl true
   def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
     Logger.warning("Replication already started #{state.slot_name}")
@@ -229,14 +218,18 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     :gproc.await(state.producer_name, 1_000)
 
-    vx_offset = get_vx_offset(state.slot_name, start_lsn)
-    Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
+    # TODO: We're currently not using this position in a the `SatelliteCollectorProducer`, but we should
+    position = get_pg_position(state.slot_name, start_lsn)
+    Logger.debug("Got position #{inspect(position)} for start_lsn #{inspect(start_lsn)}")
 
-    GenStage.async_subscribe(self(), [
-      {:to, {:via, :gproc, state.producer_name}},
-      {:cancel, :temporary}
-      | producer_info()
-    ])
+    GenStage.async_subscribe(
+      self(),
+      [
+        to: {:via, :gproc, state.producer_name},
+        cancel: :temporary,
+        starting_from: position
+      ] ++ subscription_opts()
+    )
 
     send(self(), :send_keepalive)
 
@@ -275,11 +268,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
     Logger.debug("request subscription")
 
-    GenStage.async_subscribe(self(), [
-      {:to, pid},
-      {:cancel, :temporary}
-      | producer_info()
-    ])
+    GenStage.async_subscribe(
+      self(),
+      [
+        to: pid,
+        cancel: :temporary
+      ] ++ subscription_opts()
+    )
 
     {:noreply, [], %State{state | producer_pid: pid}}
   end
@@ -288,7 +283,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_events(events, _from, %State{origin: origin} = state)
       when replication_started?(state) do
     state =
-      Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
+      Enum.reduce(events, state, fn {transaction, position}, state ->
         transaction = filter_extension_relations(transaction)
 
         case transaction do
@@ -308,15 +303,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
               state
               | current_lsn: new_lsn,
                 sent_relations: relations,
-                current_vx_offset: vx_offset
+                current_source_position: position
             }
         end
       end)
 
-    OffsetStorage.put_pg_relation(
+    OffsetStorage.save_pg_position(
       state.slot_name,
       state.current_lsn,
-      state.current_vx_offset
+      state.current_source_position
     )
 
     {:noreply, [], state}
@@ -376,21 +371,21 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.each(send_fn)
   end
 
-  defp get_vx_offset(slot_name, start_lsn) do
-    case OffsetStorage.get_vx_offset(slot_name, start_lsn) do
+  defp get_pg_position(slot_name, start_lsn) do
+    case OffsetStorage.get_pg_position(slot_name, start_lsn) do
       nil ->
         case OffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
-          {lsn, vx_offset} ->
+          {lsn, position} ->
             Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to #{inspect(lsn)}")
-            vx_offset
+            position
 
           nil ->
             Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to 0")
             nil
         end
 
-      vx_offset ->
-        vx_offset
+      position ->
+        position
     end
   end
 

@@ -7,8 +7,6 @@ defmodule Electric.Application do
   use Application
 
   def start(_type, _args) do
-    :ok = Logger.add_translator({Electric.Utils, :translate})
-
     auth_provider = Electric.Satellite.Auth.provider()
 
     children = [
