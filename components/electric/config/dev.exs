@@ -4,11 +4,6 @@ config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
 
 config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"
 
-config :electric, Electric.Migrations,
-  migration_file_name_suffix: "/postgres.sql",
-  # Currently unused in dev & likely to be soon removed, but must be set for now
-  dir: System.get_env("MIGRATIONS_DIR", "./migrations")
-
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,

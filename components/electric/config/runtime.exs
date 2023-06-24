@@ -57,10 +57,6 @@ if config_env() == :prod do
   config :electric, Electric.Replication.OffsetStorage,
     file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
 
-  config :electric, Electric.Migrations,
-    dir: System.fetch_env!("MIGRATIONS_DIR"),
-    migration_file_name_suffix: System.get_env("MIGRATIONS_FILE_NAME_SUFFIX", "/postgres.sql")
-
   config :electric,
     global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
     instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
