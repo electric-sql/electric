@@ -1,5 +1,5 @@
 defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Mock
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
