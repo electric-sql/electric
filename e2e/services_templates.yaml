@@ -83,20 +83,6 @@ services:
     privileged: true
 
   elixir_client:
-    image: ${BUILDER_IMAGE}
-    user: "${UID}:${GID}"
-    environment:
-      MIX_ENV: test
-      MIX_HOME:       ${E2E_ROOT}/elixir_client/
-      MIX_BUILD_ROOT: ${E2E_ROOT}/elixir_client/_build
-      MIX_DEPS_PATH:  ${E2E_ROOT}/elixir_client/deps
-      HEX_HOME:       ${E2E_ROOT}/elixir_client/.hex
-      UID: ${UID}
-      GID: ${GID}
-    volumes:
-      - ${PROJECT_ROOT}:${PROJECT_ROOT}:ro
-      - ${E2E_ROOT}/elixir_client:${E2E_ROOT}/elixir_client
-      - /etc/group:/etc/group:ro
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/shadow:/etc/shadow:ro
+    image: ${ELECTRIC_CLIENT_IMAGE}
+    command: start_iex
     privileged: true

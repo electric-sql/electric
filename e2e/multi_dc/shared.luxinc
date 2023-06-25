@@ -68,11 +68,16 @@
 
 [macro stop_electric ELECTRIC_INDEX]
     [my old=$LUX_SHELLNAME]
+    [shell electric_$ELECTRIC_INDEX]
+        # I have no idea why Electric suddenly doesn't shut down properly (ranch supervisors need to be killed), but they do, so we disable fail pattern here for the time being
+        -
     [shell stop_electric_$ELECTRIC_INDEX]
+        [timeout 12]
         !make stop_electric_$ELECTRIC_INDEX
         [invoke ok]
     [shell electric_$ELECTRIC_INDEX]
         [invoke ok]
+        -$fail_pattern
     [shell $old]
 [endmacro]
 

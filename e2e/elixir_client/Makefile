@@ -5,18 +5,12 @@ DOCKER_COMPOSE_FILE=../services_templates.yaml
 DOCKER_WORKDIR=${E2E_ROOT}/elixir_client
 
 export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
-export BUILDER_IMAGE=${DOCKER_REPO}/electric-builder:latest
+export ELECTRIC_CLIENT_IMAGE_NAME ?= electric-ws-client
 
 ELECTRIC_DIR=${PROJECT_ROOT}/components/electric
 
 build:
-	make docker-make MK_TARGET=local-build MK_DOCKER=${ELIXIR_BUILD_DOCKER}
-
-local-build:
-	(cd ${ELECTRIC_DIR} && make build_tools deps compile-test)
-
-run_elixir:
-	(cd ${ELECTRIC_DIR} && iex -S mix run --no-start --no-deps-check -e "Application.put_env(:elixir, :ansi_enabled, false)")
+	make -C ${ELECTRIC_DIR} docker-build-ws-client
 
 clean:
 	rm -rf _build
