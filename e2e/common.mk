@@ -27,8 +27,10 @@ endif
 
 ifeq (${ELECTRIC_IMAGE_NAME}${ELECTRIC_IMAGE_TAG},)
 	export ELECTRIC_IMAGE=electric:local-build
+	export ELECTRIC_CLIENT_IMAGE=electric-ws-client:local-build
 else
 	export ELECTRIC_IMAGE=${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
+	export ELECTRIC_CLIENT_IMAGE=${ELECTRIC_CLIENT_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 endif
 
 lux: ${LUX}
@@ -93,9 +95,7 @@ start_sysbench:
 
 start_elixir_test_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
-		--rm --entrypoint=/bin/bash \
-		--workdir=${E2E_ROOT}/elixir_client \
-		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
+		--rm \
 		elixir_client_$*
 
 start_satellite_client_%:

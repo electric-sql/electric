@@ -3,7 +3,7 @@ defmodule Electric.Test.SatelliteWsClient do
 
   """
   alias Electric.Satellite.Serialization
-  alias Electric.Replication.Changes.{Transaction}
+  alias Electric.Replication.Changes.Transaction
 
   use Electric.Satellite.Protobuf
 

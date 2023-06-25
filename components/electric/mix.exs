@@ -15,7 +15,15 @@ defmodule Electric.MixProject do
         coveralls: :test,
         "coveralls.lcov": :test,
         "coveralls.html": :test
-      ]
+      ],
+      releases: [
+        electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
+        ws_client: [
+          applications: [electric: :load, gun: :permanent],
+          include_executables_for: [:unix]
+        ]
+      ],
+      default_release: :electric
     ]
   end
 

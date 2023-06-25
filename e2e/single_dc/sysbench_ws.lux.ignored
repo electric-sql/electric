@@ -1,8 +1,6 @@
 [doc One-direction replication pg_1 -> pg_2]
 
 [global psql=electric]
-[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
-[global eprompt=iex\(\d+\)>\s]
 [global table_count=10]
 [global row_count=10]
 
