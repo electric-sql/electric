@@ -9,7 +9,7 @@ import { exec, StdioOptions } from 'child_process'
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
-const migrationDefaultOptions = {
+export const migrationDefaultOptions = {
   migrationsFolder: path.join(appRoot, 'migrations'),
   configFolder: path.join(appRoot, '.electric'),
   migrationEndpoint: 'http://localhost:5050/api/migrations?dialect=sqlite',
