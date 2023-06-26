@@ -472,8 +472,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
          ],
          _
        ) do
-    with [pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
-         {:ok, tables} <- SchemaCache.electrified_tables(pub) do
+    with [_pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
+         {:ok, tables} <- SchemaCache.Global.electrified_tables() do
       Messaging.row_description(schemaname: :name, tablename: :name)
       |> Messaging.data_rows(Enum.map(tables, &{&1.schema, &1.name}))
       |> Messaging.command_complete("SELECT #{length(tables)}")
