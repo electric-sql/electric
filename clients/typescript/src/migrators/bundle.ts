@@ -56,15 +56,15 @@ export class BundleMigrator implements Migrator {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
     const tableExists = `
-      SELECT count(name) as numTables FROM sqlite_master
+      SELECT 1 FROM sqlite_master
         WHERE type = 'table'
           AND name = ?
     `
-    const [{ numTables }] = await this.adapter.query({
+    const tables = await this.adapter.query({
       sql: tableExists,
       args: [this.tableName],
     })
-    if (numTables == 0) {
+    if (tables.length === 0) {
       return []
     }
 
@@ -122,15 +122,15 @@ export class BundleMigrator implements Migrator {
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
     const versionExists = `
-      SELECT count(version) as numVersions FROM ${this.tableName}
+      SELECT 1 FROM ${this.tableName}
         WHERE version = ?
     `
-    const [{ numVersions }] = await this.adapter.query({
+    const rows = await this.adapter.query({
       sql: versionExists,
       args: [migration.version],
     })
 
-    const shouldApply = numVersions == 0
+    const shouldApply = rows.length === 0
 
     if (shouldApply) {
       // This is a new migration because its version number
