@@ -23,6 +23,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @callback parse_wal_position(binary()) :: {:ok, wal_pos()} | :error
 
   @default_implementation Application.compile_env!(:electric, [__MODULE__, :implementation])
+  def default_module(), do: @default_implementation
 
   @doc """
   Convert a "public" LSN position to an opaque pointer for the cached WAL.
