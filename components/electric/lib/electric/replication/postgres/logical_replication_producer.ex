@@ -322,12 +322,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   # TODO: Typecast to meaningful Elixir types here later
-  @spec data_tuple_to_map([Relation.Column.t()], tuple()) :: term()
+  @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
   defp data_tuple_to_map(_columns, nil), do: %{}
 
   defp data_tuple_to_map(columns, tuple_data) do
     columns
-    |> Enum.zip(Tuple.to_list(tuple_data))
+    |> Enum.zip(tuple_data)
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 

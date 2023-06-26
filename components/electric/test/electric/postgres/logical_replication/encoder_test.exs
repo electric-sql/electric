@@ -150,7 +150,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes insert messages" do
       assert encode(%Insert{
                relation_id: 24576,
-               tuple_data: {"baz", "560"}
+               tuple_data: ["baz", "560"]
              }) ==
                <<73, 0, 0, 96, 0, 78, 0, 2, 116, 0, 0, 0, 3, 98, 97, 122, 116, 0, 0, 0, 3, 53, 54,
                  48>>
@@ -159,7 +159,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes insert messages with null values" do
       assert encode(%Insert{
                relation_id: 24576,
-               tuple_data: {nil, "560"}
+               tuple_data: [nil, "560"]
              }) ==
                <<73, 0, 0, 96, 0, 78, 0, 2, 110, 116, 0, 0, 0, 3, 53, 54, 48>>
     end
@@ -167,7 +167,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes insert messages with unchanged toasted values" do
       assert encode(%Insert{
                relation_id: 24576,
-               tuple_data: {:unchanged_toast, "560"}
+               tuple_data: [:unchanged_toast, "560"]
              }) ==
                <<73, 0, 0, 96, 0, 78, 0, 2, 117, 116, 0, 0, 0, 3, 53, 54, 48>>
     end
@@ -177,7 +177,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
                relation_id: 24576,
                changed_key_tuple_data: nil,
                old_tuple_data: nil,
-               tuple_data: {"example", "560"}
+               tuple_data: ["example", "560"]
              }) ==
                <<85, 0, 0, 96, 0, 78, 0, 2, 116, 0, 0, 0, 7, 101, 120, 97, 109, 112, 108, 101,
                  116, 0, 0, 0, 3, 53, 54, 48>>
@@ -187,8 +187,8 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
       assert encode(%Update{
                relation_id: 24576,
                changed_key_tuple_data: nil,
-               old_tuple_data: {"baz", "560"},
-               tuple_data: {"example", "560"}
+               old_tuple_data: ["baz", "560"],
+               tuple_data: ["example", "560"]
              }) ==
                <<85, 0, 0, 96, 0, 79, 0, 2, 116, 0, 0, 0, 3, 98, 97, 122, 116, 0, 0, 0, 3, 53, 54,
                  48, 78, 0, 2, 116, 0, 0, 0, 7, 101, 120, 97, 109, 112, 108, 101, 116, 0, 0, 0, 3,
@@ -198,9 +198,9 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes update messages with USING INDEX replica identity setting" do
       assert encode(%Update{
                relation_id: 24576,
-               changed_key_tuple_data: {"baz", nil},
+               changed_key_tuple_data: ["baz", nil],
                old_tuple_data: nil,
-               tuple_data: {"example", "560"}
+               tuple_data: ["example", "560"]
              }) ==
                <<85, 0, 0, 96, 0, 75, 0, 2, 116, 0, 0, 0, 3, 98, 97, 122, 110, 78, 0, 2, 116, 0,
                  0, 0, 7, 101, 120, 97, 109, 112, 108, 101, 116, 0, 0, 0, 3, 53, 54, 48>>
@@ -209,7 +209,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes DELETE messages with USING INDEX replica identity setting" do
       assert encode(%Delete{
                relation_id: 24576,
-               changed_key_tuple_data: {"example", nil}
+               changed_key_tuple_data: ["example", nil]
              }) ==
                <<68, 0, 0, 96, 0, 75, 0, 2, 116, 0, 0, 0, 7, 101, 120, 97, 109, 112, 108, 101,
                  110>>
@@ -218,7 +218,7 @@ defmodule Electric.Postgres.LogicalReplication.EncoderTest do
     test "encodes DELETE messages with FULL replica identity setting" do
       assert encode(%Delete{
                relation_id: 24576,
-               old_tuple_data: {"baz", "560"}
+               old_tuple_data: ["baz", "560"]
              }) ==
                <<68, 0, 0, 96, 0, 79, 0, 2, 116, 0, 0, 0, 3, 98, 97, 122, 116, 0, 0, 0, 3, 53, 54,
                  48>>
