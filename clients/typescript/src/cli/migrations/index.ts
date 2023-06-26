@@ -12,7 +12,7 @@ const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 const migrationDefaultOptions = {
   migrationsFolder: path.join(appRoot, 'migrations'),
   configFolder: path.join(appRoot, '.electric'),
-  migrationEndpoint: 'http://localhost:5050/api/migrations?dialect=sqlite'
+  migrationEndpoint: 'http://localhost:5050/api/migrations?dialect=sqlite',
 }
 
 type MigrationOptions = Partial<typeof migrationDefaultOptions>
@@ -108,7 +108,9 @@ async function loadMigrations(migrationsFolder: string): Promise<string[]> {
   const migrationFiles = migrationDirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'migration.sql')
   )
-  const migrations = await Promise.all(migrationFiles.map(migration => fs.readFile(migration, 'utf8')))
+  const migrations = await Promise.all(
+    migrationFiles.map((migration) => fs.readFile(migration, 'utf8'))
+  )
   return migrations
 }
 
@@ -117,16 +119,26 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
   return contents.split(/\r?\n/)
 }
 
-async function getDataSource(prismaSchema: string): Promise<DataSourceDescription> {
-  const lines = (await getFileLines(prismaSchema)).map(ln => ln)
-  const dataSourceStartIdx = lines.findIndex(ln => ln.trim().startsWith('datasource '))
+async function getDataSource(
+  prismaSchema: string
+): Promise<DataSourceDescription> {
+  const lines = (await getFileLines(prismaSchema)).map((ln) => ln)
+  const dataSourceStartIdx = lines.findIndex((ln) =>
+    ln.trim().startsWith('datasource ')
+  )
   if (dataSourceStartIdx === -1) {
-    throw new Error("Prisma schema does not define a datasource.")
+    throw new Error('Prisma schema does not define a datasource.')
   }
 
   const linesStartingAtDataSource = lines.slice(dataSourceStartIdx)
-  const providerIdx = dataSourceStartIdx + linesStartingAtDataSource.findIndex(ln => ln.trim().startsWith('provider '))
-  const urlIdx = dataSourceStartIdx + linesStartingAtDataSource.findIndex(ln => ln.trim().startsWith('url '))
+  const providerIdx =
+    dataSourceStartIdx +
+    linesStartingAtDataSource.findIndex((ln) =>
+      ln.trim().startsWith('provider ')
+    )
+  const urlIdx =
+    dataSourceStartIdx +
+    linesStartingAtDataSource.findIndex((ln) => ln.trim().startsWith('url '))
 
   const providerLine = lines[providerIdx]
   const urlLine = lines[urlIdx]
@@ -135,12 +147,12 @@ async function getDataSource(prismaSchema: string): Promise<DataSourceDescriptio
     dataSourceLineIdx: dataSourceStartIdx,
     provider: {
       lineIdx: providerIdx,
-      value: providerLine
+      value: providerLine,
     },
     url: {
       lineIdx: urlIdx,
-      value: urlLine
-    }
+      value: urlLine,
+    },
   }
 }
 
@@ -158,12 +170,16 @@ async function changeDataSourceToSQLite(prismaSchema: string, dbFile: string) {
  * @param provider The new provider
  * @param url The new url
  */
-async function setDataSource(prismaSchema: string, provider: string, url: string) {
+async function setDataSource(
+  prismaSchema: string,
+  provider: string,
+  url: string
+) {
   const ogDataSource = await getDataSource(prismaSchema)
   const providerLineIdx = ogDataSource.provider.lineIdx
   const urlLineIdx = ogDataSource.url.lineIdx
 
-  const lines = (await getFileLines(prismaSchema)).map(ln => ln)
+  const lines = (await getFileLines(prismaSchema)).map((ln) => ln)
   lines[providerLineIdx] = provider
   lines[urlLineIdx] = url
 
@@ -192,7 +208,10 @@ async function generateElectricClient(prismaSchema: string): Promise<void> {
   )
 }
 
-async function executeShellCommand(command: string, errMsg: string): Promise<void> {
+async function executeShellCommand(
+  command: string,
+  errMsg: string
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = exec(command, shellOpts)
     proc.stdout!.pipe(process.stdout)
@@ -202,8 +221,7 @@ async function executeShellCommand(command: string, errMsg: string): Promise<voi
       if (code === 0) {
         // Success
         resolve()
-      }
-      else {
+      } else {
         reject(errMsg + code)
       }
     })
@@ -216,10 +234,14 @@ async function executeShellCommand(command: string, errMsg: string): Promise<voi
  * @db The DB on which to apply the migrations
  */
 async function applyMigrations(migrations: string[], db: Database.Database) {
-  migrations.forEach(migration => db.exec(migration))
+  migrations.forEach((migration) => db.exec(migration))
 }
 
-async function fetchMigrations(endpoint: string, writeTo: string, tmpFolder: string): Promise<void> {
+async function fetchMigrations(
+  endpoint: string,
+  writeTo: string,
+  tmpFolder: string
+): Promise<void> {
   const options = new URL(endpoint)
   const zipFile = path.join(tmpFolder, 'migrations.zip')
   await new Promise((resolve, reject) => {
