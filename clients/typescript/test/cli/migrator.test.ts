@@ -1,7 +1,7 @@
 import test from 'ava'
 import fs from 'fs/promises'
 import path from 'path'
-import { buildMigrations } from '../../src/cli'
+import { buildMigrations } from '../../src/cli/migrations/builder'
 
 const migrationsFolder = path.join('./test/migrators/support/migrations')
 
