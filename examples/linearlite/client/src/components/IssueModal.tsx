@@ -51,8 +51,6 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   const [status, setStatus] = useState(Status.BACKLOG);
   const { db } = useElectric()!
 
-  // const dispatch = useDispatch<AppDispatch>();
-
   const handleSubmit = () => {
     if (title === '') {
       showWarning('Please enter a title before submiting', 'Title required');

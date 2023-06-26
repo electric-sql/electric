@@ -22,7 +22,7 @@ export default function LabelMenu({ id, button, className, onSelect }: Props) {
   if (keyword !== '') {
     let normalizedKeyword = keyword.toLowerCase().trim();
     labels = labels.filter(
-      (l) => l.name.toLowerCase().indexOf(normalizedKeyword) !== -1
+      (l) => l.name.toLowerCase().includes(normalizedKeyword)
     );
   }
 

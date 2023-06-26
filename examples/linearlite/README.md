@@ -1,11 +1,11 @@
 # linearlite
 
-This is an example of an team collaboration app such as [linear](https://linear.app) built using electric-sql.
+This is an example of a team collaboration app such as [linear](https://linear.app) built using electric-sql.
 
-This example is built on top of the excellent clone of the the Linear UI built by 
+This example is built on top of the excellent clone of the Linear UI built by 
 Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here 
 [https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone). 
-We have replaced the canned data with a local stack running electric in docker.
+We have replaced the canned data with a local stack running electric in Docker.
 
 
 ## Run example
@@ -61,7 +61,7 @@ cd ../..
 This example uses [Prisma](https://www.prisma.io/) to manage the Postgres schema. 
 Prisma is a Node.js ORM for managing DB.
 
-There are a set of Postgres migrations in `db/prisma/migrations`. 
+There is an initial Postgres migration in `db/prisma/migrations`. 
 To apply them to the local Postgres you will need to have node >=16.20.0 and yarn installed.
 
 run:
