@@ -54,23 +54,18 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def get_wal_position_from_lsn(lsn) do
-    with {:ok, table} <- ETS.Set.wrap_existing(@ets_table_name) do
-      if ETS.Set.has_key!(table, lsn_to_position(lsn)) do
-        {:ok, lsn_to_position(lsn)}
-      else
-        {:error, :lsn_too_old}
-      end
+    if :ets.member(@ets_table_name, lsn) do
+      {:ok, lsn_to_position(lsn)}
+    else
+      {:error, :lsn_too_old}
     end
   end
 
   @impl Api
   def next_segment(wal_pos) do
-    with {:ok, table} <- ETS.Set.wrap_existing(@ets_table_name),
-         {:ok, next_key} <- ETS.Set.next(table, wal_pos) do
-      {:ok, ETS.Set.get_element!(table, next_key, 2), next_key}
-    else
-      {:error, :end_of_table} -> :latest
-      error -> error
+    case :ets.next(@ets_table_name, wal_pos) do
+      :"$end_of_table" -> :latest
+      key -> {:ok, :ets.lookup_element(@ets_table_name, key, 2), key}
     end
   end
 
