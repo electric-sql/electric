@@ -24,49 +24,55 @@ defmodule Electric.Replication.InitialSync do
   """
   @spec transactions(Keyword.t(), atom) :: {Lsn.t(), [Transaction.t()]}
   def transactions(connector_opts, cached_wal_module \\ Electric.Postgres.CachedWal.EtsBacked) do
-    # NOTE(alco): this is a placeholder to show where schema migrations will fit into the initial sync, once implemented.
-    # Here we need to fetch ALL migrations from Postgres and convert them to %Transaction{} structs. On the client,
-    # already applied migrations need to be skipped, the rest need to be applied.
-    #
-    # Since this is an idempotent action, the client shouldn't update its cached LSN before it applies the initial DATA
-    # transaction. In other words, applying any of these migration transactions on the client should leave its LSN undefined.
-    migration_transactions = []
-
-    # It's important to store the current timestamp prior to fetching the current LSN to ensure that we're not creating
+    # It's important to store the current timestamp prior to fetching the cached LSN to ensure that we're not creating
     # a transaction "in the future" relative to the LSN.
     timestamp = DateTime.utc_now()
 
-    {data_transactions, lsn} =
-      if current_lsn = CachedWal.Api.get_current_lsn(cached_wal_module) do
-        tx = initial_data_transaction(connector_opts, current_lsn, timestamp)
-        {[{tx, current_lsn}], current_lsn}
-      else
-        {[], Lsn.from_integer(0)}
+    migration_transactions = migration_transactions(connector_opts, timestamp)
+
+    cached_lsn = CachedWal.Api.get_current_lsn(cached_wal_module)
+
+    data_transaction =
+      if cached_lsn do
+        initial_data_transaction(connector_opts, cached_lsn, timestamp)
       end
 
-    {lsn, migration_transactions ++ data_transactions}
+    current_lsn = cached_lsn || Lsn.from_integer(0)
+    txs_with_lsn = Enum.map(migration_transactions ++ List.wrap(data_transaction), &with_lsn/1)
+
+    {current_lsn, txs_with_lsn}
+  end
+
+  defp migration_transactions(connector_opts, commit_timestamp) do
+    {:ok, migrations} = Extension.SchemaCache.migration_history(nil)
+    lsn = Lsn.from_integer(0)
+
+    for {version, _schema, stmts} <- migrations do
+      records =
+        for sql <- stmts do
+          %NewRecord{
+            relation: Extension.ddl_relation(),
+            record: %{"version" => version, "query" => sql, "txid" => "", "txts" => ""}
+          }
+        end
+
+      build_transaction(connector_opts, records, lsn, commit_timestamp)
+    end
   end
 
   defp initial_data_transaction(connector_opts, lsn, commit_timestamp) do
     origin = Connectors.origin(connector_opts)
     conn_config = Connectors.get_connection_opts(connector_opts)
 
-    Client.with_conn(conn_config, fn conn ->
-      :epgsql.with_transaction(conn, fn conn ->
-        :ok = set_repeatable_read_transaction(conn)
-        new_records = fetch_data_from_all_tables(conn, origin)
-
-        %Transaction{
-          changes: new_records,
-          # NOTE(alco): not sure to which extent the value of this timestamp can affect the client.
-          commit_timestamp: commit_timestamp,
-          origin: origin,
-          publication: Connectors.get_replication_opts(connector_opts).publication,
-          lsn: lsn,
-          ack_fn: fn -> :ok end
-        }
+    new_records =
+      Client.with_conn(conn_config, fn conn ->
+        :epgsql.with_transaction(conn, fn conn ->
+          :ok = set_repeatable_read_transaction(conn)
+          fetch_data_from_all_tables(conn, origin)
+        end)
       end)
-    end)
+
+    build_transaction(connector_opts, new_records, lsn, commit_timestamp)
   end
 
   defp set_repeatable_read_transaction(conn) do
@@ -114,4 +120,20 @@ defmodule Electric.Replication.InitialSync do
       %NewRecord{relation: relation, record: row}
     end
   end
+
+  defp build_transaction(connector_opts, changes, lsn, commit_timestamp) do
+    publication = Connectors.get_replication_opts(connector_opts).publication
+
+    %Transaction{
+      changes: changes,
+      # NOTE(alco): not sure to which extent the value of this timestamp can affect the client.
+      commit_timestamp: commit_timestamp,
+      origin: Connectors.origin(connector_opts),
+      publication: publication,
+      lsn: lsn,
+      ack_fn: fn -> :ok end
+    }
+  end
+
+  defp with_lsn(%Transaction{lsn: lsn} = tx), do: {tx, lsn}
 end
