@@ -194,24 +194,6 @@ async function generateElectricClient(prismaSchema: string): Promise<void> {
 
 async function executeShellCommand(command: string, errMsg: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    /*
-    const process = spawn(command, [], shellOpts)
-    process.on('close', (code) => {
-      if (code === 0) {
-        // Success
-        resolve()
-      }
-      else {
-        reject(errMsg + code)
-      }
-    })
-
-     */
-
-    // TODO: once it works move back to using spawn because it produces better output
-    //       --> simply write the 2 npx commands to a shell script file
-    //           and then spawn that file and pass the prisma schema as 2 arguments: ['-p', prismaSchemaPath]
-
     const proc = exec(command, shellOpts)
     proc.stdout!.pipe(process.stdout)
     proc.stderr!.pipe(process.stderr)

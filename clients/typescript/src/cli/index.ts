@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-//import { spawn, StdioOptions } from 'child_process'
-//import path from 'path'
 import { migrate } from './migrations'
 
 const args = process.argv
@@ -38,20 +36,4 @@ function handleMigrate(...args: string[]) {
 
   const pathToPrismaSchema = args[0] ?? 'prisma/schema.prisma'
   migrate(pathToPrismaSchema)
-
-  /*
-  const appRoot = path.resolve() // path where the user ran `npx electric migrate`
-
-  const opts = {
-    cwd: appRoot,
-    stdio: 'inherit' as StdioOptions,
-  }
-
-  // Execute the migration.sh script
-  spawn(
-    './node_modules/electric-sql/dist/migrate.sh',
-    ['-p', pathToPrismaSchema],
-    opts
-  )
-  */
 }
