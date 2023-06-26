@@ -1,7 +1,6 @@
 import SearchIcon from '../assets/icons/search.svg';
 import Modal from '../components/Modal';
 import React, { useEffect, useRef } from 'react';
-// import { setTimeout } from 'timers';
 
 interface SearchOptionProps {
   name: string;
