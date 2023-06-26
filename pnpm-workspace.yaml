@@ -1,6 +1,5 @@
 packages:
   - 'clients/typescript'
   - 'e2e/satellite_client'
-  - 'examples/*'
-  - 'examples/linearlite/*'
+  - 'examples/**'
   - 'generator'
