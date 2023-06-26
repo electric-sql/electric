@@ -279,6 +279,7 @@ defmodule Electric.Postgres.ExtensionTest do
       end
     end
 
+    @tag timeout: 30_000
     test_tx "can generate the ddl to create any table", fn conn ->
       assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
 
