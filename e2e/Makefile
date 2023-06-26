@@ -9,17 +9,18 @@ deps: lux
 	make -C satellite_client build
 	make -C elixir_client build
 
-test: deps build pull
-	${LUX} ${LUX_DIRS}
-
 build:
 	$(foreach dir, $(LUX_DIRS),make -C ${dir} build;)
+
+test_only:
+	${LUX} ${LUX_DIRS}
+
+test: deps build pull test_only
 
 pull:
 	docker compose -f services_templates.yaml pull \
 		vaxine \
 		sysbench \
-		elixir_client \
 		postgresql
 
 stop:

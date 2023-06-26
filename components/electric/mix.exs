@@ -15,7 +15,17 @@ defmodule Electric.MixProject do
         coveralls: :test,
         "coveralls.lcov": :test,
         "coveralls.html": :test
-      ]
+      ],
+      releases: [
+        electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
+        ws_client: [
+          applications: [electric: :load, gun: :permanent],
+          include_executables_for: [:unix],
+          # Cannot be set to `false` until 1.14, so we're using an empty file
+          runtime_config_path: "config/ws_client_runtime.exs"
+        ]
+      ],
+      default_release: :electric
     ]
   end
 

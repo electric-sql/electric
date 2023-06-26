@@ -27,6 +27,9 @@ compile-%:
 release:
 	MIX_ENV="prod" mix release
 
+release_ws_client:
+	MIX_ENV="prod" mix release ws_client
+
 pretest_compile: deps
 	MIX_ENV="test" mix compile --force --warnings-as-error
 
@@ -62,14 +65,27 @@ ELECTRIC_VERSION ?= ${INFERRED_VERSION}
 docker-build:
 	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} -t electric:local-build .
 
+ifneq ($(GITHUB_ACTION),)
+CACHING_SETTINGS_ELECTRIC := --cache-to type=gha,mode=max,scope=${GITHUB_REF_NAME}-electric --cache-from type=gha,scope=${GITHUB_REF_NAME}-electric
+CACHING_SETTINGS_WS_CLIENT := --cache-to type=gha,mode=max,scope=${GITHUB_REF_NAME}-ws-client --cache-from type=gha,scope=${GITHUB_REF_NAME}-ws-client
+endif
+
 docker-build-ci:
-	mkdir -p deps
-	docker build --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+	docker buildx build --load --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
       -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
-      -t electric:local-build .
+      -t electric:local-build ${CACHING_SETTINGS_ELECTRIC}\
+			.
 ifeq (${TAG_AS_LATEST}, true)
 	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
 endif
+
+docker-build-ws-client:
+	docker buildx build --load --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+			--build-arg MAKE_RELEASE_TASK=release_ws_client \
+			--build-arg RELEASE_NAME=ws_client \
+      -t ${ELECTRIC_CLIENT_IMAGE_NAME}:${ELECTRIC_VERSION} \
+      -t electric-ws-client:local-build ${CACHING_SETTINGS_WS_CLIENT}\
+			.
 
 docker-build-ci-crossplatform:
 	mkdir -p deps

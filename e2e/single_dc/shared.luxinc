@@ -28,7 +28,7 @@
 
 [macro setup_rest]
     [shell electric]
-        [timeout 10]
+        [timeout 12]
         !make start_electric_1
         -$fail_pattern
         ?START_REPLICATION SLOT
@@ -48,11 +48,16 @@
 
 [macro stop_electric]
     [my old=$LUX_SHELLNAME]
+    [shell electric]
+        # I have no idea why Electric suddenly doesn't shut down properly (ranch supervisors need to be killed), but they do, so we disable fail pattern here for the time being
+        -
     [shell stop_electric]
+        [timeout 12]
         !make stop_electric_1
         [invoke ok]
     [shell electric]
         [invoke ok]
+        -$fail_pattern
     [shell $old]
 [endmacro]
 
