@@ -19,7 +19,7 @@ const commandHandlers = {
   migrate: handleMigrate,
 }
 
-if (!commandHandlers.hasOwnProperty(command)) {
+if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
   throw new Error('Unknown command: ' + command)
 }
 
