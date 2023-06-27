@@ -10,7 +10,7 @@ import { exec, StdioOptions } from 'child_process'
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
-  service: 'http://localhost:5050'
+  service: process.env.ELECTRIC_URL ?? 'http://localhost:5050'
 }
 
 export type GeneratorOptions = typeof defaultOptions
