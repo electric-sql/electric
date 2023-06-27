@@ -31,7 +31,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   # Public API
 
-
   @doc """
   Start the cache. See module docs for options
   """
@@ -46,7 +45,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def get_wal_position_from_lsn(lsn) do
-    if :ets.member(@ets_table_name, lsn) do
+    if :ets.member(@ets_table_name, lsn_to_position(lsn)) do
       {:ok, lsn_to_position(lsn)}
     else
       {:error, :lsn_too_old}

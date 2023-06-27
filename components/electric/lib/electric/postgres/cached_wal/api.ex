@@ -2,7 +2,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @moduledoc """
   Behavior for accessing cached wal
   """
-  @type lsn :: Electric.Replication.Lsn.t()
+  @type lsn :: Electric.Postgres.Lsn.t()
 
   @typedoc "Position in the cached write-ahead log"
   @type wal_pos :: term()
