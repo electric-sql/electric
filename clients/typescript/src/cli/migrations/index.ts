@@ -76,7 +76,6 @@ export async function migrate(
     // Remember the original data source such that we can restore it later
     const originalDataSource = await getDataSource(prismaSchema)
     await changeDataSourceToSQLite(prismaSchema, dbFile)
-    // TODO: The SQLite DB file is in the tmpFolder !!
 
     // Introspect the created DB to generate the Prisma schema
     await introspectDB(prismaSchema)

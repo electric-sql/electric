@@ -12,8 +12,8 @@ if (args.length < 3) {
   process.exit(9)
 }
 
-// When this file is called as follows: `node bin.js migrate`
-// the arguments will be the path to node, the path to bin.js, "migrate",
+// When this file is called as follows: `node index.js migrate`
+// the arguments will be the path to node, the path to index.js, "migrate",
 // followed by the rest of the arguments
 const [_node, _file, command, ...commandArgs] = process.argv
 
