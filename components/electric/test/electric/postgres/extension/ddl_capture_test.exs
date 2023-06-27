@@ -15,8 +15,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE is captured", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
+    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
     sql3 = "CALL electric.electrify('buttercup')"
     sql4 = "ALTER TABLE buttercup ADD COLUMN petal text;"
     sql5 = "ALTER TABLE daisy ADD COLUMN stem text, ADD COLUMN leaf text;"
@@ -32,8 +32,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "CREATE INDEX on electrified table is captured", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
+    sql1 =
+      "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "CALL electric.electrify('buttercup')"
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
     sql5 = "CREATE INDEX daisy_value_idx ON daisy (value);"
@@ -49,8 +51,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "DROP INDEX on electrified table is captured", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
+    sql1 =
+      "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "CALL electric.electrify('buttercup')"
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
     sql5 = "DROP INDEX buttercup_value_idx;"
@@ -70,8 +74,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "DROP electrified TABLE is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
+    sql1 =
+      "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "CALL electric.electrify('buttercup')"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)
@@ -86,8 +92,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE DROP COLUMN is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
+    sql1 =
+      "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "CALL electric.electrify('buttercup')"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)
@@ -102,8 +110,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE RENAME COLUMN is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY, value text);"
+    sql1 =
+      "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "CALL electric.electrify('buttercup')"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)

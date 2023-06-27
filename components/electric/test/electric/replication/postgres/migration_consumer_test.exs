@@ -182,7 +182,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       assert Enum.map(schema.tables, & &1.name.name) == [
                "something_else",
                "other_thing",
-               "yet_another_thing"
+               "yet_another_thing",
+               "shadow__public__something_else",
+               "shadow__public__other_thing",
+               "shadow__public__yet_another_thing"
              ]
     end
 
