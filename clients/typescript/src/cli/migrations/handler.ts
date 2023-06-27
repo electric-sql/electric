@@ -5,23 +5,18 @@ type GeneratorArgs = Partial<GeneratorOptions>
 /**
  * Handles calls to `npx electric-sql generate`.
  * The generate command supports the following arguments:
- *  - `npx electric-sql generate --service <url>`
+ *  - `--service <url>`
  *     Optional argument providing the url to connect to Electric.
  *     If not provided, it uses the url set in the `ELECTRIC_URL`
  *     environment variable. If that variable is not set, it
  *     resorts to the default url which is `http://localhost:5050`.
- *
+ *  - `--out <path>`
+ *     Optional argument to specify where to write the generated client.
+ *     If this argument is not provided the generated client is written
+ *     to `./src/generated/models`.
  * @param args Arguments passed to the generate command.
  */
 export async function handleGenerate(...args: string[]) {
-  if (args.length > 2) {
-    console.error(
-      'migrate command accepts 1 optional argument (--service) but got: ' +
-      args.length
-    )
-    process.exit(9)
-  }
-
   // merge default options with the provided arguments
   const opts: GeneratorOptions = {
     ...defaultOptions,
@@ -59,7 +54,7 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
   return genArgs
 
   function checkFlag(flag: string): keyof GeneratorArgs {
-    const supportedFlags = [ '--service' ]
+    const supportedFlags = [ '--service', '--out' ]
     if (supportedFlags.includes(flag))
       return flag.substring(2) as keyof GeneratorArgs // substring removes the double dash --
     else {

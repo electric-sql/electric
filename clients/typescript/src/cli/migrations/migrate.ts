@@ -10,7 +10,8 @@ import { exec, StdioOptions } from 'child_process'
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
-  service: process.env.ELECTRIC_URL ?? 'http://localhost:5050'
+  service: process.env.ELECTRIC_URL ?? 'http://localhost:5050',
+  out: path.join(appRoot, 'src/generated/models')
 }
 
 export type GeneratorOptions = typeof defaultOptions
@@ -92,7 +93,7 @@ export async function generate(
 
     // Create a fresh Prisma schema that will be used
     // to introspect the SQLite DB after migrating it
-    const prismaSchema = await createPrismaSchema(tmpFolder)
+    const prismaSchema = await createPrismaSchema(tmpFolder, opts)
 
     // Replace the data source in the Prisma schema to be SQLite
     // Remember the original data source such that we can restore it later
@@ -118,6 +119,10 @@ export async function generate(
     console.log('Building migrations...')
     await buildMigrations(migrationsFolder, configFile)
     console.log('Successfully built migrations')
+  } catch (e) {
+    console.error(
+      'generate command failed: ' + JSON.stringify(e)
+    )
   } finally {
     // Delete our temporary directory
     await fs.rm(tmpFolder, { recursive: true })
@@ -128,11 +133,12 @@ export async function generate(
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
-async function createPrismaSchema(folder: string) {
+async function createPrismaSchema(folder: string, { out }: GeneratorOptions) {
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
   const provider = path.join(appRoot, 'node_modules/prisma-generator-electric/dist/bin.js')
+  const output = path.resolve(out)
   const schema =
 `generator client {
   provider = "prisma-client-js"
@@ -140,7 +146,7 @@ async function createPrismaSchema(folder: string) {
 
 generator electric {
   provider      = "${provider}"
-  output        = "../../src/generated/models"
+  output        = "${output}"
   relationModel = "false"
 }
 
