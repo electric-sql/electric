@@ -1,7 +1,12 @@
 import * as z from 'zod'
 import path from 'path'
 import * as fs from 'fs/promises'
-import { Migration, parseMetadata, MetaData, makeMigration } from '../migrators'
+import {
+  Migration,
+  parseMetadata,
+  MetaData,
+  makeMigration,
+} from '../../migrators'
 
 /*
  * This file defines functions to build migrations
@@ -57,6 +62,11 @@ export async function buildMigrations(
  * such that programs can import the config using `import config from `path/to/.electric/@config`
  * with .mjs that is not possible because you would have to provide the full path to the `.mjs` file:
  * `import config from `path/to/.electric/@config/index.mjs`
+ *
+ * Note: The config file has an `mjs` extension because it provides a default import
+ *       but when the CLI wants to import it NodeJS complains that it must configured
+ *       to allow modules:
+ *         Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
  */
 async function writeJsConfigFile(configFile: string) {
   await fs.writeFile(
@@ -70,6 +80,22 @@ async function writeJsConfigFile(configFile: string) {
 }
 
 /**
+ * Reads the provided `migrationsFolder` and returns an array
+ * of all the migrations that are present in that folder.
+ * Each of those migrations are in their respective folder.
+ * @param migrationsFolder
+ */
+export async function getMigrationNames(
+  migrationsFolder: string
+): Promise<string[]> {
+  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
+  const dirs = contents.filter((dirent) => dirent.isDirectory())
+  // the directory names encode the order of the migrations
+  // therefore we sort them by name to get them in chronological order
+  return dirs.map((dir) => dir.name).sort()
+}
+
+/**
  * Loads all migrations that are present in the provided migrations folder.
  * @param migrationsFolder Folder where migrations are stored.
  * @returns An array of migrations.
@@ -77,11 +103,7 @@ async function writeJsConfigFile(configFile: string) {
 export async function loadMigrations(
   migrationsFolder: string
 ): Promise<Migration[]> {
-  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
-  const dirs = contents.filter((dirent) => dirent.isDirectory())
-  // the directory names encode the order of the migrations
-  // therefore we sort them by name to get them in chronological order
-  const dirNames = dirs.map((dir) => dir.name).sort()
+  const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
   )

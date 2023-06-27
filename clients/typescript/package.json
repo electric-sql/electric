@@ -43,6 +43,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "electric": "dist/cli/index.js"
+  },
   "exports": {
     "./package.json": "./package.json",
     "./browser": "./dist/drivers/absurd-sql/index.js",
@@ -135,11 +138,11 @@
     "frame-stream": "^3.0.1",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
+    "lodash.isequal": "^4.5.0",
     "lodash.mapvalues": "^4.6.0",
     "lodash.omitby": "^4.6.0",
     "lodash.partition": "^4.6.0",
     "lodash.pick": "^4.4.0",
-    "lodash.isequal": "^4.5.0",
     "lodash.throttle": "^4.1.1",
     "loglevel": "^1.8.1",
     "long": "^5.2.0",
@@ -161,6 +164,7 @@
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
+    "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
     "@types/lodash.isequal": "^4.5.6",
@@ -178,6 +182,7 @@
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
     "better-sqlite3": "^8.4.0",
+    "decompress": "^4.2.1",
     "eslint": "^8.22.0",
     "expo-sqlite": "^11.0.0",
     "husky": "^8.0.3",
