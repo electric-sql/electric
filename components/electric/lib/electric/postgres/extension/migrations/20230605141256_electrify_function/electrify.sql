@@ -119,21 +119,10 @@ BEGIN
 
     EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
 
-    IF NOT EXISTS (
-        SELECT pr.oid FROM pg_publication_rel pr
-        INNER JOIN pg_publication pp ON pr.prpubid = pp.oid
-        WHERE pp.pubname = '<%= publication_name %>'
-        AND pr.prrelid = _oid
-        ) THEN
-        EXECUTE format('<%= publication_sql %>;', _schema, _table);
-    ELSE
-        RAISE WARNING 'table %.% is already electrified', _schema, _table;
-    END IF;
-
     INSERT INTO <%= electrified_tracking_table %> (schema_name, table_name, oid)
-        VALUES (_schema, _table, _oid) 
-        ON CONFLICT ON CONSTRAINT unique_table_name
-        DO NOTHING;
+    VALUES (_schema, _table, _oid) 
+    ON CONFLICT ON CONSTRAINT unique_table_name
+    DO NOTHING;
 
     -- insert the required ddl into the migrations table
     SELECT <%= schema %>.ddlx_create(_oid) INTO _create_sql; 
@@ -141,6 +130,24 @@ BEGIN
     RAISE DEBUG '%', _create_sql;
 
     PERFORM <%= schema %>.capture_ddl(_create_sql);
+
+    IF NOT EXISTS (
+        SELECT pr.oid FROM pg_publication_rel pr
+        INNER JOIN pg_publication pp ON pr.prpubid = pp.oid
+        WHERE pp.pubname = '<%= publication_name %>'
+        AND pr.prrelid = _oid
+        ) THEN
+        EXECUTE format('<%= publication_sql %>;', _schema, _table);
+
+        -- We want to disable any possible hooks from `CREATE TABLE` statements
+        PERFORM set_config('<%= schema %>.is_in_event_trigger', 'true', true);
+        PERFORM <%= schema %>.ddlx_make_or_update_shadow_tables('CREATE TABLE', _schema, _oid);
+        PERFORM set_config('<%= schema %>.is_in_event_trigger', '', true);
+
+        EXECUTE format('<%= publication_sql %>;', '<%= schema %>', ('shadow__' || _schema || '__' || _table)::name);
+    ELSE
+        RAISE WARNING 'table %.% is already electrified', _schema, _table;
+    END IF;
 END;
 $function$ LANGUAGE PLPGSQL;
 
@@ -177,6 +184,8 @@ DECLARE
     _capture bool := false;
     _table_id int8;
 BEGIN
+    -- Usually, this would be a great place for `pg_trigger_depth()`, but for event triggers that's always 0.
+    IF (current_setting('electric.is_in_event_trigger', true) = 'true') THEN RETURN; END IF;
     RAISE DEBUG 'command_end_handler:: start';
 
     FOR _cmd IN SELECT * FROM pg_event_trigger_ddl_commands() 
@@ -207,6 +216,19 @@ BEGIN
     IF _capture THEN
         _trid := (SELECT <%= schema %>.capture_ddl());
         RAISE DEBUG 'create_active_migration = %', _trid;
+
+        -- We're going to alter multiple tables here. We don't want to re-trigger this function.
+        PERFORM set_config('<%= schema %>.is_in_event_trigger', 'true', true);
+        FOR _cmd IN (SELECT * FROM pg_event_trigger_ddl_commands())
+        LOOP
+            RAISE DEBUG '  Current statement touches a % in schema % with objid %', _cmd.object_type, _cmd.schema_name, _cmd.object_identity;
+            IF _cmd.object_type = 'table' AND <%= schema %>.__table_is_electrified(_cmd.classid, _cmd.objid) THEN
+                -- Since we're performing these calls only against already-electrified tables, this can only be an "ALTER TABLE" statement
+                -- which means we won't be creating new tables, which means we don't need to add them to publications
+                PERFORM <%= schema %>.ddlx_make_or_update_shadow_tables(_cmd.command_tag, _cmd.schema_name, _cmd.objid);
+            END IF;
+        END LOOP;
+        PERFORM set_config('<%= schema %>.is_in_event_trigger', '', true);
     END IF;
 
     RAISE DEBUG 'command_end_handler:: end';

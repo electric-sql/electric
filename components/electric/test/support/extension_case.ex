@@ -13,6 +13,7 @@ defmodule Electric.Extension.Case.Helpers do
         tx(
           fn conn ->
             migrate(conn)
+
             unquote(fun).(conn)
           end,
           cxt
@@ -46,6 +47,9 @@ defmodule Electric.Extension.Case.Helpers do
       |> Enum.map(&apply(&1, :version, []))
 
     ExUnit.Assertions.assert({:ok, ^expected_versions} = Extension.migrate(conn))
+
+    {:ok, oid} = Electric.Replication.Postgres.Client.query_oids(conn)
+    Electric.Postgres.OidDatabase.save_oids(oid)
 
     public_schema(conn, opts)
   end
