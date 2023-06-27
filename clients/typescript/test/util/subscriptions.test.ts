@@ -1,9 +1,8 @@
 import test from 'ava'
 
-import {
-  InMemorySubscriptionsManager,
-  SubscriptionsManager,
-} from '../../src/util/subscriptions'
+import { InMemorySubscriptionsManager } from '../../src/util/subscriptions'
+import { SubscriptionData, Transaction } from '../../src/util'
+import Long from 'long'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager
@@ -19,55 +18,71 @@ test('some tests', (t) => {
   const { manager } = t.context as ContextType
 
   // the ids
-  const subId = 'sub'
+  const subscriptionId = 'sub'
   const requestId = 'shaxx_1'
   const uuid = 'shape_1'
-  const reqToUuid = {
+  const shapeReqToUuid = {
     [requestId]: uuid,
   }
 
   // the shape
-  const select = [
-    {
-      tablename: 'table',
-    },
-  ]
+  const definition = {
+    selects: [
+      {
+        tablename: 'table',
+      },
+    ],
+  }
 
   const shapeRequest = {
     requestId,
-    select,
+    definition,
   }
 
   const shapeDefinition = {
     uuid,
-    select,
+    definition,
+  }
+
+  const transaction: Transaction = {
+    commit_timestamp: Long.ZERO,
+    lsn: new Uint8Array(),
+    changes: [],
+  }
+
+  const subscriptionData: SubscriptionData = {
+    subscriptionId,
+    transaction,
+    shapeReqToUuid,
   }
 
   // no active subscription while inflight
-  manager.subscriptionRequested(subId, [shapeRequest])
-  t.is(manager.shapesForActiveSubscription(subId), undefined)
+  manager.subscriptionRequested(subscriptionId, [shapeRequest])
+  t.is(manager.shapesForActiveSubscription(subscriptionId), undefined)
 
   // active after subscription is delivered
-  manager.subscriptionDelivered(subId, reqToUuid)
-  t.deepEqual(manager.shapesForActiveSubscription(subId), [shapeDefinition])
+  manager.subscriptionDelivered(subscriptionData)
+  t.deepEqual(manager.shapesForActiveSubscription(subscriptionId), [
+    shapeDefinition,
+  ])
 
   // redeliver is noop
-  manager.subscriptionDelivered(subId, reqToUuid)
+  manager.subscriptionDelivered(subscriptionData)
 
   // not active after unsubscribe
-  manager.unsubscribe(subId)
-  t.is(manager.shapesForActiveSubscription(subId), undefined)
+  manager.unsubscribe(subscriptionId)
+  t.is(manager.shapesForActiveSubscription(subscriptionId), undefined)
 
   // able to subscribe again after unsubscribe
   try {
-    manager.subscriptionRequested(subId, [shapeRequest])
+    manager.subscriptionRequested(subscriptionId, [shapeRequest])
   } catch {
     t.fail('throws if re-subscribing')
   }
 
   // but not if inflight
   try {
-    manager.subscriptionRequested(subId, [shapeRequest])
+    manager.subscriptionRequested(subscriptionId, [shapeRequest])
     t.fail('should throw')
   } catch {
     t.pass()

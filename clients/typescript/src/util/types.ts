@@ -1,6 +1,5 @@
 import type Long from 'long'
 import {
-  SatOpLog,
   SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
@@ -171,7 +170,7 @@ export type ClientShapeDefinition = {
 export type ShapeRequestOrDefinition = {
   uuid?: string
   requestId?: string
-  shapeDefinition: ClientShapeDefinition
+  definition: ClientShapeDefinition
 }
 
 export type ShapeRequest = Required<Omit<ShapeRequestOrDefinition, 'uuid'>>
@@ -185,7 +184,7 @@ export type ShapeSelect = {
 
 export type SubscriptionData = {
   subscriptionId: string
-  transactions: SatOpLog[]
+  transaction: Transaction
   shapeReqToUuid: { [req: string]: string }
 }
 

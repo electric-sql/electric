@@ -8,10 +8,11 @@ import {
 } from './types'
 
 import {
-  SatSubsDataBegin, // todo: fix proto
+  SatSubsDataBegin,
   SatShapeDataBegin,
-  SatOpLog,
+  SatTransOp,
 } from '../_generated/protocol/satellite'
+import EventEmitter from 'events'
 
 type SubcriptionShapeDefinitions = {
   [k: string]: ShapeDefinition[]
@@ -21,31 +22,53 @@ type SubcriptionShapeRequests = {
   [k: string]: ShapeRequest[]
 }
 
-export interface SubscriptionsManager {
-  subscriptionRequested(
-    subId: string,
-    shapeRequests: ShapeRequest[]
-  ): Promise<void>
-
-  subscriptionDelivered(
-    subId: string,
-    reqToUuid: { [k: string]: string }
-  ): Promise<void>
-
-  shapesForActiveSubscription(
-    subId: string
-  ): Promise<ShapeDefinition[] | undefined>
-
-  unsubscribe(subId: string): Promise<void>
+type SubscriptionDataInternal = {
+  subscriptionId: string
+  transaction: SatTransOp[]
+  shapeReqToUuid: { [req: string]: string }
 }
 
-export class InMemorySubscriptionsManager {
-  protected inFlight: SubcriptionShapeRequests
-  protected subToShapes: SubcriptionShapeDefinitions
+export type GarbageCollectShapeHandler = (
+  shapeDef: ShapeDefinition
+) => Promise<void>
+
+export interface SubscriptionsManager {
+  subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]): void
+
+  subscriptionDelivered(data: SubscriptionData): void
+
+  shapesForActiveSubscription(subId: string): ShapeDefinition[] | undefined
+
+  unsubscribe(subId: string): void
+
+  unsubscribeAll(): void
+
+  serialize(): string
+
+  subscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler): void
+  unsubscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler): void
+}
+
+export class InMemorySubscriptionsManager
+  extends EventEmitter
+  implements SubscriptionsManager
+{
+  private inFlight: SubcriptionShapeRequests
+  private subToShapes: SubcriptionShapeDefinitions
 
   constructor() {
+    super()
+
     this.inFlight = {}
     this.subToShapes = {}
+  }
+
+  subscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler) {
+    this.on('unsubscribe', callback)
+  }
+
+  unsubscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler) {
+    this.removeListener('unsubscribe', callback)
   }
 
   subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]) {
@@ -59,26 +82,29 @@ export class InMemorySubscriptionsManager {
     this.inFlight[subId] = shapeRequests
   }
 
-  subscriptionDelivered(subId: string, reqToUuid: { [k: string]: string }) {
-    if (!this.inFlight[subId]) {
+  subscriptionDelivered(data: SubscriptionData) {
+    const { subscriptionId, shapeReqToUuid } = data
+    if (!this.inFlight[subscriptionId]) {
       // unknowns, or already unsubscribed. delivery is noop
       return
     }
 
-    const inflight = this.inFlight[subId]
-    delete this.inFlight[subId]
+    const inflight = this.inFlight[subscriptionId]
+    delete this.inFlight[subscriptionId]
     for (const shapeReq of inflight) {
       const shapeRequestOrResolved = shapeReq as ShapeRequestOrDefinition
 
-      if (reqToUuid[shapeReq.requestId]) {
-        if (!this.subToShapes[subId]) {
-          this.subToShapes[subId] = new Array()
+      if (shapeReqToUuid[shapeReq.requestId]) {
+        if (!this.subToShapes[subscriptionId]) {
+          this.subToShapes[subscriptionId] = new Array()
         }
 
         // would like to understand how to do this properly
-        shapeRequestOrResolved.uuid = reqToUuid[shapeReq.requestId]
+        shapeRequestOrResolved.uuid = shapeReqToUuid[shapeReq.requestId]
         delete shapeRequestOrResolved.requestId
-        this.subToShapes[subId].push(shapeRequestOrResolved as ShapeDefinition)
+        this.subToShapes[subscriptionId].push(
+          shapeRequestOrResolved as ShapeDefinition
+        )
       }
     }
   }
@@ -87,10 +113,19 @@ export class InMemorySubscriptionsManager {
     return this.subToShapes[subId]
   }
 
-  // note when receiving a shape, the client might already unsubscribed it
   unsubscribe(subId: string) {
+    const subscription = this.shapesForActiveSubscription(subId)
+    if (subscription) {
+      subscription.forEach((s: ShapeDefinition) => this.emit('unsubscribe', s))
+    }
     delete this.inFlight[subId]
     delete this.subToShapes[subId]
+  }
+
+  unsubscribeAll(): void {
+    for (const subId in this.subToShapes) {
+      this.unsubscribe(subId)
+    }
   }
 
   // don't save inflight subscriptions
@@ -106,99 +141,42 @@ export class InMemorySubscriptionsManager {
     this.subToShapes = subToShapes
   }
 }
-// TODO
-// The idea of the persistent subscriptions manager is to save the current
-// subscriptions in the database for durability along with the transaction
-// that applied the shape.
-// I am not sure this is the ideal interface, maybe it is better to get just
-// the serialized subscriptions, and let the applier create the statement as
-// part of the transaction. Happy to get rid of this code, if not ideal.
-export class PersistentSubscriptionsManager implements SubscriptionsManager {
-  private manager: InMemorySubscriptionsManager
-  private loadFn: () => Promise<any>
-  private saveFn: (serialized: string) => Promise<void>
-
-  constructor(
-    loadFn: () => Promise<any>,
-    saveFn: (value: string) => Promise<void>
-  ) {
-    this.manager = new InMemorySubscriptionsManager()
-
-    this.loadFn = loadFn
-    this.saveFn = saveFn
-  }
-
-  async loadStateFromStorage() {
-    this.manager.setState({}, JSON.parse(await this.loadFn()))
-  }
-
-  subscriptionRequested(
-    subId: string,
-    shapeRequests: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
-  ): Promise<void> {
-    this.manager.subscriptionRequested(subId, shapeRequests)
-
-    return Promise.resolve()
-  }
-
-  shapesForActiveSubscription(
-    subId: string
-  ): Promise<ShapeDefinition[] | undefined> {
-    const res = this.manager.shapesForActiveSubscription(subId)
-
-    return Promise.resolve(res)
-  }
-
-  subscriptionDelivered(
-    subId: string,
-    reqToUuid: { [k: string]: string }
-  ): Promise<void> {
-    this.manager.subscriptionDelivered(subId, reqToUuid)
-
-    return this.saveFn(this.manager.serialize())
-  }
-
-  unsubscribe(subId: string): Promise<void> {
-    this.manager.unsubscribe(subId)
-
-    return this.saveFn(this.manager.serialize())
-  }
-}
 
 export class SubscriptionsDataCache {
-  shapesRequested?: number
-  remainingShapes?: number
-  currentSubscriptionId?: string
-  currentShapeUuid?: string
-  inDelivery?: SubscriptionData
+  ready: boolean
+  remainingShapes: Set<string>
+  currentShapeRequestId?: string
+  inDelivery?: SubscriptionDataInternal
 
-  constructor() {}
+  constructor() {
+    this.ready = false
+    this.remainingShapes = new Set()
+  }
 
-  subscriptionRequest(shapeCount: number) {
-    if (this.remainingShapes || this.currentSubscriptionId) {
+  subscriptionRequest(shapeRequestIds: string[]) {
+    if (this.remainingShapes.size != 0) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription request but a subscription is already being delivered`
       )
     }
-    this.shapesRequested = shapeCount
+    shapeRequestIds.forEach((rid) => this.remainingShapes.add(rid))
   }
 
   subscriptionResponse() {
-    if (!this.shapesRequested) {
+    if (this.remainingShapes.size == 0) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received subscribe response but no subscription has been requested`
       )
     }
-    this.remainingShapes = this.shapesRequested
-    this.shapesRequested = undefined
+    this.ready = true
   }
 
   subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
-    if (!this.remainingShapes) {
+    if (!this.ready) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -206,24 +184,23 @@ export class SubscriptionsDataCache {
       )
     }
 
-    if (this.currentSubscriptionId) {
+    if (this.inDelivery) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received SatSubsDataStart for subscription ${subscriptionId} but a subscription is already being delivered`
       )
     }
-    this.currentSubscriptionId = subscriptionId
 
     this.inDelivery = {
       subscriptionId: subscriptionId,
-      transactions: new Array(),
+      transaction: new Array(),
       shapeReqToUuid: {},
     }
   }
 
-  subscriptionDataEnd(): SubscriptionData {
-    if (!this.currentSubscriptionId || this.inDelivery == undefined) {
+  subscriptionDataEnd(): SubscriptionDataInternal {
+    if (!this.inDelivery) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -231,7 +208,7 @@ export class SubscriptionsDataCache {
       )
     }
 
-    if (this.remainingShapes != 0 || this.currentShapeUuid) {
+    if (this.remainingShapes.size > 0) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -239,14 +216,23 @@ export class SubscriptionsDataCache {
       )
     }
 
-    this.currentSubscriptionId = undefined
+    if (this.inDelivery.transaction.length == 0) {
+      this.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received SatSubDataEnd but no transaction was sent`
+      )
+    }
+
+    this.ready = false
+    this.remainingShapes = new Set()
     const res = this.inDelivery
     this.inDelivery = undefined
     return res
   }
 
   shapeDataBegin(shape: SatShapeDataBegin) {
-    if (!this.currentSubscriptionId || this.inDelivery == undefined) {
+    if (!this.inDelivery) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -254,7 +240,7 @@ export class SubscriptionsDataCache {
       )
     }
 
-    if (this.remainingShapes == 0) {
+    if (this.remainingShapes.size == 0) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -262,7 +248,7 @@ export class SubscriptionsDataCache {
       )
     }
 
-    if (this.currentShapeUuid) {
+    if (this.currentShapeRequestId) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -279,15 +265,11 @@ export class SubscriptionsDataCache {
     }
 
     this.inDelivery.shapeReqToUuid[shape.requestId] = shape.uuid
-    this.currentShapeUuid = shape.uuid
+    this.currentShapeRequestId = shape.requestId
   }
 
   shapeDataEnd() {
-    if (
-      !this.remainingShapes ||
-      !this.currentSubscriptionId ||
-      this.inDelivery == undefined
-    ) {
+    if (!this.inDelivery) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -295,7 +277,7 @@ export class SubscriptionsDataCache {
       )
     }
 
-    if (!this.currentShapeUuid) {
+    if (!this.currentShapeRequestId) {
       this.reset()
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -303,16 +285,17 @@ export class SubscriptionsDataCache {
       )
     }
 
-    this.currentShapeUuid = undefined
-    this.remainingShapes--
+    this.remainingShapes.delete(this.currentShapeRequestId)
+    this.currentShapeRequestId = undefined
   }
 
-  transaction(transaction: SatOpLog) {
+  // should work with transaction spanning
+  // multiple shapes
+  transaction(ops: SatTransOp[]) {
     if (
-      !this.remainingShapes ||
-      !this.currentSubscriptionId ||
-      this.inDelivery == undefined ||
-      !this.currentShapeUuid
+      this.remainingShapes.size == 0 ||
+      !this.inDelivery ||
+      !this.currentShapeRequestId
     ) {
       this.reset()
       throw new SatelliteError(
@@ -320,13 +303,41 @@ export class SubscriptionsDataCache {
         `Received SatOpLog but no shape is being delivered`
       )
     }
-    this.inDelivery.transactions.push(transaction)
+    for (const op of ops) {
+      if (op.begin && this.inDelivery.transaction.length != 0) {
+        this.reset()
+        throw new SatelliteError(
+          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+          `Received begin, but some operation has been delivered already`
+        )
+      }
+
+      if (!op.begin && this.inDelivery.transaction.length == 0) {
+        this.reset()
+        throw new SatelliteError(
+          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+          `Received some operation before receiving begin`
+        )
+      }
+
+      if (
+        this.inDelivery.transaction.length > 0 &&
+        this.inDelivery.transaction.at(-1)!.commit
+      ) {
+        this.reset()
+        throw new SatelliteError(
+          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+          `Received some message after commit`
+        )
+      }
+
+      this.inDelivery.transaction.push(op)
+    }
   }
 
   reset() {
-    this.remainingShapes = undefined
-    this.currentSubscriptionId = undefined
-    this.currentShapeUuid = undefined
+    this.remainingShapes = new Set()
+    this.currentShapeRequestId = undefined
     this.inDelivery = undefined
   }
 }

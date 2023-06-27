@@ -143,8 +143,7 @@ test.serial('connect subscription error', async (t) => {
   const { client, server } = t.context
   const startResp = Proto.SatInStartReplicationResp.fromPartial({
     error: {
-      code: Proto.SatInStartReplicationResp_SatInStartReplicationError_Code
-        .BEHIND_WINDOW,
+      code: Proto.SatInStartReplicationResp_ReplicationError_Code.BEHIND_WINDOW,
       message: 'Test',
     },
   })
@@ -666,7 +665,7 @@ test.serial('subscription succesful', async (t) => {
 
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
-    shapeDefinition: {
+    definition: {
       selects: [{ tablename: 'fake' }],
     },
   }
@@ -689,7 +688,7 @@ test.serial('listen to subscription events: error', async (t) => {
 
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
-    shapeDefinition: {
+    definition: {
       selects: [{ tablename: 'fake' }],
     },
   }
@@ -727,7 +726,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
 
   const shapeReq: ShapeRequest = {
     requestId,
-    shapeDefinition: {
+    definition: {
       selects: [{ tablename }],
     },
   }
@@ -738,6 +737,33 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const endShape = Proto.SatShapeDataEnd.fromPartial({})
   const endSub = Proto.SatSubsDataEnd.fromPartial({})
   const satOpLog = Proto.SatOpLog.fromPartial({})
+
+  const begin = Proto.SatOpBegin.fromPartial({
+    commitTimestamp: Long.ZERO,
+  })
+  const commit = Proto.SatOpCommit.fromPartial({})
+
+  const insert = Proto.SatOpInsert.fromPartial({})
+
+  const satTransOpBegin = Proto.SatTransOp.fromPartial({ begin })
+  const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert })
+  const satTransOpCommit = Proto.SatTransOp.fromPartial({ commit })
+
+  const wrongSatOpLog1 = Proto.SatOpLog.fromPartial({
+    ops: [satTransOpCommit],
+  })
+
+  const wrongSatOpLog2 = Proto.SatOpLog.fromPartial({
+    ops: [satTransOpInsert],
+  })
+
+  const wrongSatOpLog3 = Proto.SatOpLog.fromPartial({
+    ops: [satTransOpBegin, satTransOpBegin],
+  })
+
+  const wrongSatOpLog4 = Proto.SatOpLog.fromPartial({
+    ops: [satTransOpBegin, satTransOpInsert, satTransOpCommit, satTransOpBegin],
+  })
 
   const testCases = [
     [subsResp, beginShape],
@@ -750,79 +776,131 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     [subsResp, beginSub, satOpLog],
     [subsResp, beginSub, beginShape, endShape, satOpLog],
     [subsResp, beginSub, beginShape, satOpLog, endSub],
+    [subsResp, beginSub, beginShape, wrongSatOpLog1],
+    [subsResp, beginSub, beginShape, wrongSatOpLog2],
+    [subsResp, beginSub, beginShape, wrongSatOpLog3],
+    [subsResp, beginSub, beginShape, wrongSatOpLog4],
   ]
 
-  const promise = new Promise<void>((res) => {
-    const success = () => {
-      t.fail()
-      res()
+  const globalPromise = new Promise<void>(async (globalRes) => {
+    while (testCases.length > 0) {
+      server.nextResponses(testCases[0])
+      testCases.shift()
+
+      const promise = new Promise<void>((testCaseRes) => {
+        const success = () => {
+          t.fail()
+          testCaseRes()
+        }
+
+        const error = () => {
+          if (testCases.length == 0) {
+            t.pass()
+            globalRes()
+          }
+          client.unsubscribeToSubscriptionEvents(success, error)
+          testCaseRes()
+        }
+
+        client.subscribeToSubscriptionEvents(success, error)
+      })
+      await client.subscribe([shapeReq, shapeReq])
+      await promise
+    }
+  })
+
+  await globalPromise
+})
+
+test.serial(
+  'subscription correct protocol sequence with transaction across multiple shapes',
+  async (t) => {
+    await connectAndAuth(t.context)
+    const { client, server } = t.context
+
+    const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+    server.nextResponses([startResp])
+    await client.startReplication()
+
+    const requestId1 = 'THE_REQUEST_ID_1'
+    const requestId2 = 'THE_REQUEST_ID_2'
+    const subscriptionId = 'THE_SUBS_ID'
+    const uuid1 = 'THE_SHAPE_ID_1'
+    const uuid2 = 'THE_SHAPE_ID_2'
+    const tablename = 'THE_TABLE_ID'
+
+    const shapeReq1: ShapeRequest = {
+      requestId: requestId1,
+      definition: {
+        selects: [{ tablename }],
+      },
     }
 
-    const error = () => {
-      if (testCases.length == 0) {
+    const shapeReq2: ShapeRequest = {
+      requestId: requestId2,
+      definition: {
+        selects: [{ tablename }],
+      },
+    }
+
+    const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+    const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
+    const beginShape1 = Proto.SatShapeDataBegin.fromPartial({
+      requestId: requestId1,
+      uuid: uuid1,
+    })
+    const beginShape2 = Proto.SatShapeDataBegin.fromPartial({
+      requestId: requestId2,
+      uuid: uuid2,
+    })
+    const endShape = Proto.SatShapeDataEnd.fromPartial({})
+    const endSub = Proto.SatSubsDataEnd.fromPartial({})
+
+    const promise = new Promise<void>((res) => {
+      const success = () => {
         t.pass()
         res()
       }
-    }
-    client.subscribeToSubscriptionEvents(success, error)
-  })
 
-  while (testCases.length > 0) {
-    server.nextResponses(testCases[0])
-    testCases.shift()
-    await client.subscribe([shapeReq, shapeReq])
+      const error = (e: any) => {
+        t.fail(e)
+        res()
+      }
+      client.subscribeToSubscriptionEvents(success, error)
+    })
+
+    const begin = Proto.SatOpBegin.fromPartial({
+      commitTimestamp: Long.ZERO,
+    })
+    const commit = Proto.SatOpCommit.fromPartial({})
+
+    const satTransOpBegin = Proto.SatTransOp.fromPartial({ begin })
+    const satTransOpCommit = Proto.SatTransOp.fromPartial({ commit })
+
+    const satOpLog1 = Proto.SatOpLog.fromPartial({
+      ops: [satTransOpBegin],
+    })
+
+    const satOpLog2 = Proto.SatOpLog.fromPartial({
+      ops: [satTransOpCommit],
+    })
+
+    server.nextResponses([
+      subsResp,
+      beginSub,
+      beginShape1,
+      satOpLog1,
+      endShape,
+      beginShape2,
+      satOpLog2,
+      endShape,
+      endSub,
+    ])
+    await client.subscribe([shapeReq1, shapeReq2])
+
+    await promise
   }
-
-  await promise
-})
-
-test.serial('subscription correct protocol sequence', async (t) => {
-  await connectAndAuth(t.context)
-  const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
-
-  const requestId = 'THE_REQUEST_ID'
-  const subscriptionId = 'THE_SUBS_ID'
-  const uuid = 'THE_SHAPE_ID'
-  const tablename = 'THE_TABLE_ID'
-
-  const shapeReq: ShapeRequest = {
-    requestId,
-    shapeDefinition: {
-      selects: [{ tablename }],
-    },
-  }
-
-  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
-  const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
-  const beginShape = Proto.SatShapeDataBegin.fromPartial({
-    requestId,
-    uuid,
-  })
-  const endShape = Proto.SatShapeDataEnd.fromPartial({})
-  const endSub = Proto.SatSubsDataEnd.fromPartial({})
-
-  const promise = new Promise<void>((res) => {
-    const success = () => {
-      t.pass()
-      res()
-    }
-
-    const error = () => {
-      t.fail()
-      res()
-    }
-    client.subscribeToSubscriptionEvents(success, error)
-  })
-
-  server.nextResponses([subsResp, beginSub, beginShape, endShape, endSub])
-  await client.subscribe([shapeReq])
-
-  await promise
-})
+)
 
 function decode(data: Buffer): SatPbMsg {
   const code = data.readUInt8()

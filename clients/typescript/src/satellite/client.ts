@@ -60,6 +60,7 @@ import {
   SubscribeResponse,
   ShapeRequest,
   SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
 } from '../util/types'
 import {
   base64,
@@ -292,20 +293,10 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  // TODO: Reconnect with subscriptions
-  // Need to refine the protocol for syncing pending changes:
-  // Need to make sure that we clear oplog for operations that were
-  // delivered on the server and not acked by the client (e.g. because
-  // of a crash). If we fail to do this, we might re-introduce effects
-  // produced by the client that is not aware that were committed on the
-  // server.
-  // The server keeps track of what operations it has seen from a client,
-  // but this is a cache and not assured to be there.
-  // If client resumes from the replication window it is safe it will receive
-  // the acks for operations it has sent before the crash: the client will
-  // receive oplogs with local tags. When subscribing to initial shape data,
-  // we don't get those tags --- I think there is a limit of the guarantees
-  // that we can give.
+  // TODO: need to make sure that on re-connection we do not possibly
+  // re-send operations that have been accepted by the server but
+  // not acked by the client (because of a crash). Capture this with
+  // tests.
   startReplication(
     lsn?: LSN,
     subscriptionIds?: string[]
@@ -434,7 +425,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   subscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
-    errorCallback: SubscriptionDeliveredCallback
+    errorCallback: SubscriptionErrorCallback
   ): void {
     this.on('subscription_delivered', successCallback)
     this.on('subscription_error', errorCallback)
@@ -442,7 +433,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
-    errorCallback: SubscriptionDeliveredCallback
+    errorCallback: SubscriptionErrorCallback
   ): void {
     this.removeListener('subscription_delivered', successCallback)
     this.removeListener('subscription_error', errorCallback)
@@ -462,7 +453,9 @@ export class SatelliteClient extends EventEmitter implements Client {
       shapeRequests: this.shapeRequestToSatShapeReq(shapes),
     })
 
-    this.subscriptionsDataCache.subscriptionRequest(shapes.length)
+    this.subscriptionsDataCache.subscriptionRequest(
+      shapes.map((s) => s.requestId)
+    )
     return this.rpc<SubscribeResponse>(request)
   }
 
@@ -472,7 +465,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     const shapeReqs: SatShapeReq[] = new Array()
     for (const sr of shapeRequests) {
       const requestId = sr.requestId
-      const selects = sr.shapeDefinition.selects.map((s) => ({
+      const selects = sr.definition.selects.map((s) => ({
         tablename: s.tablename,
       }))
       const shapeDefinition = { selects }
@@ -591,6 +584,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
         this.emit('error', startReplicationErrorToSatelliteError(resp.err))
+        // TODO: make sure we GC on subscription errors
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
       }
@@ -726,16 +720,28 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.emit('relation', relation)
   }
 
+  private handleIncomingTransaction(transaction: Transaction) {
+    this.emit(
+      'transaction',
+      transaction,
+      () => (this.inbound.ack_lsn = transaction.lsn)
+    )
+  }
+
+  // TODO: server sends shapes over a single transaction
   private handleTransaction(message: SatOpLog) {
     // currently delivering a shape's data
     if (this.subscriptionsDataCache.inDelivery) {
       try {
-        this.subscriptionsDataCache.transaction(message)
+        this.subscriptionsDataCache.transaction(message.ops)
       } catch (e) {
         this.emit('subscription_error', e)
       }
     } else {
-      this.processOpLogMessage(message, this.inbound)
+      this.processOpLogMessage(
+        message,
+        this.handleIncomingTransaction.bind(this)
+      )
     }
   }
 
@@ -778,7 +784,17 @@ export class SatelliteClient extends EventEmitter implements Client {
         case SatSubsDataEnd.$type:
           const subsData = this.subscriptionsDataCache.subscriptionDataEnd()
           this.subscriptionsDataCache.reset()
-          this.emit('subscription_delivered', subsData)
+
+          const handleTransaction = (transaction: Transaction) => {
+            this.emit('subscription_delivered', {
+              subscriptionsId: subsData.subscriptionId,
+              transaction,
+              shapeReqToUuid: subsData.shapeReqToUuid,
+            })
+          }
+
+          const message = SatOpLog.fromPartial({ ops: subsData.transaction })
+          this.processOpLogMessage(message, handleTransaction)
           break
         case SatShapeDataBegin.$type:
           this.subscriptionsDataCache.shapeDataBegin(msg)
@@ -813,8 +829,9 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private processOpLogMessage(
     opLogMessage: SatOpLog,
-    replication: Replication
+    transactionHandler: (transaction: Transaction) => void
   ) {
+    const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {
         const transaction = {
@@ -836,12 +853,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           changes,
           origin,
         }
-        // in the future, emitting this event can be decoupled
-        this.emit(
-          'transaction',
-          transaction,
-          () => (this.inbound.ack_lsn = transaction.lsn)
-        )
+        transactionHandler(transaction)
         replication.transactions.splice(lastTxnIdx)
       }
 

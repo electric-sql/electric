@@ -18,6 +18,7 @@ import {
   ShapeRequestOrDefinition,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 import { randomValue } from '../util/random'
@@ -60,6 +61,10 @@ export class MockSatelliteProcess implements Satellite {
     _shapeDefinitions: ClientShapeDefinition[]
   ): Promise<void | SatelliteError> {
     return Promise.resolve()
+  }
+
+  unsubscribe(_shapeUuid: string): Promise<void | SatelliteError> {
+    throw new Error('Method not implemented.')
   }
 
   async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
@@ -110,14 +115,14 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   subscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
-    errorCallback: SubscriptionDeliveredCallback
+    errorCallback: SubscriptionErrorCallback
   ): void {
     this.on('subscription_delivered', successCallback)
     this.on('subscription_error', errorCallback)
   }
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
-    errorCallback: SubscriptionDeliveredCallback
+    errorCallback: SubscriptionErrorCallback
   ): void {
     this.removeListener('subscription_delivered', successCallback)
     this.removeListener('subscription_error', errorCallback)
