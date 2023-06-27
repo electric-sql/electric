@@ -22,7 +22,7 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
         Logger.warning("SchemaCache #{inspect(origin)} registered as the global instance")
 
       {:error, :already_registered, {_pid, registered_origin}} ->
-        Logger.error(
+        Logger.warning(
           "Failed to register SchemaCache #{inspect(origin)} as global: #{inspect(registered_origin)} is already registered"
         )
     end
