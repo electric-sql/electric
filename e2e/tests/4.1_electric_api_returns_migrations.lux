@@ -1,0 +1,49 @@
+[doc Electric API returns all applied migrations]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20230504114018]
+[shell pg_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+    SELECT electric.migration_version('$migration_version_1');
+    CREATE TABLE mtable1 (id uuid PRIMARY KEY);
+    CALL electric.electrify('mtable1');
+    COMMIT;
+    """
+    ?$psql
+
+[global migration_version_2=20230608134524]
+[shell pg_1]
+    [invoke log "run migration $migration_version_2 on postgres"]
+    """!
+    BEGIN;
+    SELECT electric.migration_version('$migration_version_2');
+    CREATE TABLE mtable2 (id uuid PRIMARY KEY);
+    CALL electric.electrify('mtable2');
+    COMMIT;
+    """
+    ?$psql
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+    ?? [info] Applying migration $migration_version_2
+
+
+[newshell developer]
+    !cd $(mktemp -d)
+    ?SH-PROMPT:
+    !curl -v -o migrations.zip http://localhost:5050/api/migrations?dialect=sqlite
+    ?200 OK
+    !unzip migrations.zip
+    ?inflating: ${migration_version_1}/migration.sql
+    ?inflating: ${migration_version_2}/migration.sql
+    !cat "${migration_version_1}/migration.sql"
+    ?CREATE TABLE "mtable1" \(.*
+    !cat "${migration_version_2}/migration.sql"
+    ?CREATE TABLE "mtable2" \(.*
+
+[cleanup]
+    [invoke teardown]

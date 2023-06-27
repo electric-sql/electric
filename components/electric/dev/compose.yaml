@@ -2,27 +2,6 @@
 version: "3.1"
 
 services:
-  vaxine:
-    image: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
-#    restart: always
-    environment:
-      RING_SIZE: "1"
-      ANTIDOTE_TXN_CERT: "false" # disabled because we must accept all transactions
-      ANTIDOTE_TXN_PROT: "clocksi"
-      ANTIDOTE_RECOVER_FROM_LOG: "true"
-      ANTIDOTE_META_DATA_ON_START: "true"
-      ANTIDOTE_SYNC_LOG: "true"
-      ANTIDOTE_ENABLE_LOGGING: "true"
-      ANTIDOTE_AUTO_START_READ_SERVERS: "true"
-      COOKIE: "secret"
-      NODE_NAME: "antidote@dc1n1"
-      DEBUG_LOGGER_LEVEL: "debug"
-    ports:
-      - "8087:8087"
-      - "8088:8088"
-    privileged: true
-    init: true
-
   db_a:
     image: europe-docker.pkg.dev/vaxine/vaxine-io/postgres:latest
 #    restart: always

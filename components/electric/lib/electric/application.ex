@@ -17,7 +17,6 @@ defmodule Electric.Application do
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.OffsetStorage,
       {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
-      Electric.VaxRepo,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
       Electric.Satellite.WsServer.child_spec(

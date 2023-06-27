@@ -12,6 +12,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     removing oldest entries (FIFO)
   """
 
+  require Logger
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.CachedWal.Api
@@ -86,6 +87,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl GenStage
   def init(opts) do
     set = ETS.Set.new!(name: @ets_table_name, ordered: true)
+    Logger.metadata(component: "CachedWal.EtsBacked")
 
     state = %{
       notification_requests: %{},
@@ -138,6 +140,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     # If/when we depend on seeing some LSN to perform some effect, we may want to update a value of some kind
     # with last seen LSN/txid regardless of whether the tx contained any changes.
     |> Stream.reject(&Enum.empty?(&1.changes))
+    |> Stream.each(&Logger.debug("Saving transaction with changes #{inspect(&1.changes)}"))
     |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
       {lsn_to_position(lsn), %{tx | ack_fn: nil}}
     end)

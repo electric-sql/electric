@@ -19,10 +19,7 @@ defmodule Electric.Plug.Status do
         end
       end)
 
-    vaxine = vaxine_ready?()
-
     data = %{
-      vaxine: vaxine,
       connectors: Map.new(origins)
     }
 
@@ -31,13 +28,5 @@ defmodule Electric.Plug.Status do
 
   match _ do
     send_resp(conn, 404, "Not found")
-  end
-
-  defp vaxine_ready?() do
-    try do
-      Electric.VaxRepo.checkout(fn -> true end, timeout: 100)
-    rescue
-      _ -> false
-    end
   end
 end

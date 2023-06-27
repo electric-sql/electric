@@ -1,0 +1,32 @@
+[doc NodeJS Satellite loads local migrations and applies them]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[global migrations=
+    """
+    [
+      {
+        statements: [
+          'CREATE TABLE IF NOT EXISTS foo ( bar TEXT PRIMARY KEY NOT NULL );'
+        ],
+        version: '1'
+      },
+      {
+        statements: [
+          'CREATE TABLE IF NOT EXISTS bar ( baz TEXT PRIMARY KEY NOT NULL );'
+        ],
+        version: '2'
+      }
+    ]
+    """]
+
+[invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations]
+
+[shell satellite_1]
+    [invoke log "Verifying that migrations have been loaded on satellite_1"]
+    [invoke node_await_table "foo"]
+    [invoke node_await_table "bar"]
+
+
+[cleanup]
+  [invoke teardown]

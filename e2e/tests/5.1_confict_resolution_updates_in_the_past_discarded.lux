@@ -1,0 +1,42 @@
+[doc Updates in the past are discarded]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    ?:ok
+    ?$eprompt
+
+
+[shell pg_1]
+    # Given an already-inserted row
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'sentinel value');
+    ?$psql
+
+[shell user_1_ws1]
+    # Send one update touching a single column
+    """!
+    Electric.Test.SatelliteWsClient.entries_table_send_update(
+        conn,
+        "1", # lsn
+        1686009600000, # Unix timestamp of ~U[2023-06-06 00:00:00Z] |> DateTime.to_unix(:millisecond)
+        "00000000-0000-0000-0000-000000000000", # id
+        %{"content" => "original value", "content_b" => nil}, # old
+        %{"content" => "updated on client 1", "content_b" => nil} # new
+    )
+    """
+    ?:ok
+    ?$eprompt
+
+
+[shell user_1_ws1]
+    # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp BUT with same value as before the update
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+
+[cleanup]
+    [invoke teardown]

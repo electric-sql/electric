@@ -76,11 +76,6 @@ jobs:
           key: ${{ runner.os }}-luxbuilt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}
 
       - run: make lux
-
-      - run: make vaxine
-
-      - run: make postgres
-
       - run: make deps pull
       - run: make test_only
         id: tests
