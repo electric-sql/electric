@@ -4,12 +4,12 @@ defmodule Electric.Satellite.Protocol do
   """
   require Logger
 
+  alias Electric.Postgres.CachedWal.Producer
   alias Electric.Utils
   use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SchemaRegistry
-  alias Electric.Replication.Vaxine
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
@@ -364,13 +364,14 @@ defmodule Electric.Satellite.Protocol do
     {Enum.reverse(acc), state}
   end
 
+  # The offset here comes from the producer
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  def handle_out_trans({trans, vx_offset}, %State{out_rep: out_rep}) do
-    Logger.debug("trans: #{inspect(trans)} with offset #{inspect(vx_offset)}")
+  def handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
+    Logger.debug("trans: #{inspect(trans)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(trans, vx_offset, out_rep.relations)
+      Serialization.serialize_trans(trans, offset, out_rep.relations)
 
     serialized_relations =
       Enum.map(
@@ -394,7 +395,7 @@ defmodule Electric.Satellite.Protocol do
 
   @spec initiate_subscription(String.t(), any(), OutRep.t()) :: OutRep.t()
   def initiate_subscription(client, lsn, out_rep) do
-    {:via, :gproc, vaxine_producer} = Vaxine.LogProducer.get_name(client)
+    {:via, :gproc, vaxine_producer} = Producer.name(client)
     {sub_pid, _} = :gproc.await(vaxine_producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
 
@@ -428,19 +429,15 @@ defmodule Electric.Satellite.Protocol do
   defp validate_lsn(client_lsn, opts) do
     case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
       {true, _} ->
-        {:ok, 0}
+        {:ok, :start_from_first}
 
       {_, true} ->
-        {:ok, :eof}
+        {:ok, :start_from_latest}
 
       {false, false} ->
-        try do
-          # FIXME: We need to verify that LSN corresponds to Vaxine internal format
-          lsn = :erlang.binary_to_term(client_lsn)
-          {:ok, lsn}
-        rescue
-          _ ->
-            {:error, :bad_lsn}
+        case Electric.Postgres.CachedWal.Api.parse_wal_position(client_lsn) do
+          {:ok, value} -> {:ok, value}
+          :error -> {:error, {:lsn_invalid, client_lsn}}
         end
     end
   end
