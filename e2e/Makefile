@@ -7,7 +7,7 @@ deps: lux
 test_only:
 	${LUX} tests
 
-test: deps build pull test_only
+test: deps pull test_only
 
 pull:
 	docker compose -f services_templates.yaml pull \
