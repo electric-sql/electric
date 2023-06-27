@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { migrate } from './migrations'
+import path from 'path'
 
 const args = process.argv
 
@@ -37,6 +38,6 @@ async function handleMigrate(...args: string[]) {
     process.exit(9)
   }
 
-  const pathToPrismaSchema = args[0] ?? 'prisma/schema.prisma'
+  const pathToPrismaSchema = args[0] ?? path.join('prisma/schema.prisma')
   await migrate(pathToPrismaSchema)
 }
