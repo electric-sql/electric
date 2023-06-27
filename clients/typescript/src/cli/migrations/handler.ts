@@ -11,7 +11,7 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     environment variable. If that variable is not set, it
  *     resorts to the default url which is `http://localhost:5050`.
  *  - `--out <path>`
- *     Optional argument to configure where to write the generated client.
+ *     Optional argument to specify where to write the generated client.
  *     If this argument is not provided the generated client is written
  *     to `./src/generated/models`.
  * @param args Arguments passed to the generate command.
