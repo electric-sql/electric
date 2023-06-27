@@ -68,13 +68,13 @@ async function handleInit(...args: string[]) {
   const appId = args[0]
   if (args.length === 0 || appId === '--force') {
     console.error("Please provide an app identifier to the 'init' command")
-    return
+    process.exit(9)
   }
   if (args.length > 2) {
     console.error(
       `init command accepts 2 arguments: the app identifier and an optional --force flag, but got ${args.length} arguments`
     )
-    return
+    process.exit(9)
   }
 
   const force = args[1] === '--force'
