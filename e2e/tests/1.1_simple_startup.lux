@@ -1,0 +1,11 @@
+[doc Sanity check test that environment starts correctly]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[newshell electric_curl]
+    !curl http://localhost:5050/api/status
+    ?{"connectors":{"postgres_1":true}}
+
+[cleanup]
+    [invoke teardown]

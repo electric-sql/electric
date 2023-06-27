@@ -163,6 +163,68 @@ defmodule Electric.Test.SatelliteWsClient do
     )
   end
 
+  def entries_table_send_insert(conn \\ __MODULE__, lsn, commit_time, data) do
+    columns = Enum.map(gen_schema().columns, & &1.name)
+
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:insert,
+       %SatOpInsert{
+         relation_id: gen_schema().oid,
+         row_data: Serialization.map_to_row(data, columns)
+       }}
+    )
+  end
+
+  def entries_table_send_update(
+        conn \\ __MODULE__,
+        lsn,
+        commit_time,
+        id,
+        old_data,
+        new_data,
+        tags \\ []
+      ) do
+    columns = Enum.map(gen_schema().columns, & &1.name)
+
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:update,
+       %SatOpUpdate{
+         relation_id: gen_schema().oid,
+         old_row_data: Serialization.map_to_row(Map.put(old_data, "id", id), columns),
+         row_data: Serialization.map_to_row(Map.put(new_data, "id", id), columns),
+         tags: tags
+       }}
+    )
+  end
+
+  def entries_table_send_delete(
+        conn \\ __MODULE__,
+        lsn,
+        commit_time,
+        old_data,
+        tags \\ []
+      ) do
+    columns = Enum.map(gen_schema().columns, & &1.name)
+
+    send_tx_data(
+      conn,
+      lsn,
+      commit_time,
+      {:delete,
+       %SatOpDelete{
+         relation_id: gen_schema().oid,
+         old_row_data: Serialization.map_to_row(old_data, columns),
+         tags: tags
+       }}
+    )
+  end
+
   def send_update_data(conn \\ __MODULE__, lsn, commit_time, id, value, old_value) do
     send_tx_data(
       conn,

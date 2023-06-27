@@ -1,0 +1,19 @@
+[doc ALTER TABLE statements for electrified tables also alter shadow tables]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[shell pg_1]
+    !BEGIN;
+    !ALTER TABLE entries ADD COLUMN new_column VARCHAR(64);
+    !COMMIT;
+    ?$psql
+    # Verify column structure of the shadow table:
+    !SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'electric' AND table_name = 'shadow__public__entries';
+    ?+new_column\s+\| USER-DEFINED
+    ?__reordered_new_column\s+\| character varying
+    ?$psql
+
+[cleanup]
+    [invoke teardown]
