@@ -134,6 +134,10 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   def handle_events(events, _, state) do
     events
     |> Stream.each(& &1.ack_fn.())
+    # Rejection of empty transactions is useful to not store data & not send empty txs to consumers,
+    # however that may lead to this cache thinking that the "latest" seen LSN is less than PG had actually sent.
+    # If/when we depend on seeing some LSN to perform some effect, we may want to update a value of some kind
+    # with last seen LSN/txid regardless of whether the tx contained any changes.
     |> Stream.reject(&Enum.empty?(&1.changes))
     |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
       {lsn_to_position(lsn), %{tx | ack_fn: nil}}
