@@ -46,7 +46,7 @@ defmodule Electric.PlugTest do
   end
 
   describe "/migrations" do
-    test_tx("returns migrations translated to given dialect", fn conn ->
+    test_tx "returns migrations translated to given dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
@@ -139,7 +139,7 @@ defmodule Electric.PlugTest do
       assert {:ok, %{"ops" => [_]}} = Jason.decode(json)
     end
 
-    test_tx("can return migrations after a certain point", fn conn ->
+    test_tx "can return migrations after a certain point", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})

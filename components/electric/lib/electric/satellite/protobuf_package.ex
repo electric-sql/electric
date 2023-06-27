@@ -1,5 +1,5 @@
 # File generated from protobuf file: ../../protocol/satellite.proto
-defmodule Electric.Satellite.V13 do
+defmodule Electric.Satellite.V14 do
   @moduledoc false
   @spec package() :: String.t()
   def package() do
