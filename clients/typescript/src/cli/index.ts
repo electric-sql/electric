@@ -5,9 +5,10 @@ import { migrate } from './migrations'
 const args = process.argv
 
 if (args.length < 3) {
-  throw new Error(
-    'Too few arguments passed to CLI bin. Expected at least a command but got none.'
+  console.error(
+    'Too few arguments passed to CLI bin. Expected at least one command but got none.'
   )
+  process.exit(9)
 }
 
 // When this file is called as follows: `node bin.js migrate`
@@ -20,20 +21,22 @@ const commandHandlers = {
 }
 
 if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
-  throw new Error('Unknown command: ' + command)
+  console.error('Unknown command: ' + command)
+  process.exit(9)
 }
 
 const handler = commandHandlers[command as keyof typeof commandHandlers]
-handler(...commandArgs)
+await handler(...commandArgs)
 
-function handleMigrate(...args: string[]) {
+async function handleMigrate(...args: string[]) {
   if (args.length > 1) {
-    throw new Error(
+    console.error(
       'migrate command accepts 1 optional argument (the path to the Prisma schema) but got: ' +
         args.length
     )
+    process.exit(9)
   }
 
   const pathToPrismaSchema = args[0] ?? 'prisma/schema.prisma'
-  migrate(pathToPrismaSchema)
+  await migrate(pathToPrismaSchema)
 }
