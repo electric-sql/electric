@@ -181,7 +181,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, Enum.map(schema.tables, &%{schema: &1.name.schema, name: &1.name.name, oid: &1.oid})}
   end
 
-  def electrified_tables(state) do
+  def electrified_tables(_state) do
     {:ok, []}
   end
 

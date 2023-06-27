@@ -222,7 +222,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   defp call(name, msg) when is_tuple(name) do
-    GenServer.call(name, msg)
+    GenServer.call(name, msg, :infinity)
   end
 
   @impl GenServer
@@ -254,7 +254,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     # continue to immediately refresh the electrified_tables cache
     # so that it's ready for when pg connects to electric as a 
     # replication consumer and asks for the list of replicated tables
-    {:ok, state}
+    {:ok, state, {:continue, :cache_table_list}}
   end
 
   @impl GenServer
@@ -279,7 +279,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_call({:save, version, schema, stmts}, _from, state) do
     {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
 
-    state = %{state | backend: backend, current: {version, schema}}
+    state = cache_table_list(%{state | backend: backend, current: {version, schema}})
 
     {:reply, {:ok, state.origin}, state}
   end
@@ -288,8 +288,26 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.relation_oid(state.backend, type, schema, name), state}
   end
 
-  def handle_call({:primary_keys, schema, name}, _from, state) do
-    {:reply, SchemaLoader.primary_keys(state.backend, schema, name), state}
+  # TODO: we shouldn't need this once vaxine is out of the read path
+  #       because this request comes from the need to serialise the
+  #       migration ddl commands through vaxine before they are distributed
+  #       to the clients.
+  def handle_call({:primary_keys, "electric", tname}, _from, state) do
+    pks =
+      case tname do
+        "ddl_commands" -> ["id"]
+      end
+
+    {:reply, {:ok, pks}, state}
+  end
+
+  def handle_call({:primary_keys, sname, tname}, _from, state) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {Schema.primary_keys(schema, sname, tname), state}
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call({:migration_history, version}, _from, state) do
@@ -343,30 +361,47 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, result, state}
   end
 
-  # # Version of loading primary keys using the materialised schema info
-  # def handle_call({:primary_keys, ns, table}, _from, %{current: {_version, schema}} = state) do
-  #   result =
-  #     with {:ok, table} <- Schema.fetch_table(schema, {ns, table}) do
-  #       Schema.primary_keys(table)
-  #     end
+  # Prevent deadlocks:
+  # the list of electrified tables is cached and this refresh_subscription call
+  # is done via an async Task because otherwise we get into a deadlock in the
+  # refresh-tables process:
   #
-  #   {:reply, result, state}
-  # end
+  # 1. we call refresh tables
+  # 2. pg **synchronously** queries the replication publication (electric)
+  #    for the list of replicated tables
+  # 3. the TcpServer calls this process to get the list of electrified tables
+  # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
+  # 5. deadlock
   #
-  # def handle_call({:primary_keys, ns, table}, _from, state) do
-  #   {result, state} =
-  #     with {{:ok, _version, schema}, state} <- load_current_schema(state),
-  #          {{:ok, table}, state} <-
-  #            {Schema.fetch_table(schema, {ns, table}), state} do
-  #       {Schema.primary_keys(table), state}
-  #     end
-  #
-  #   {:reply, result, state}
-  # end
-
-  def handle_call({:refresh_subscription, name}, _from, state) do
+  # so to avoid this we cache the table list and update it when the schema is changed
+  # which means that retrieving the list of electrified tables can be done without
+  # a db lookup so the refresh subscription query can be running at the same 
+  # time the call comes in for the table list from the pg replication tcp 
+  # connection.
+  def handle_call({:refresh_subscription, name}, from, state) do
+    # make sure that the table list is synced ready for the 
+    # request from the tcp server
     state = cache_table_list(state)
-    {:reply, SchemaLoader.refresh_subscription(state.backend, name), state}
+
+    Task.async(fn ->
+      result = SchemaLoader.refresh_subscription(state.backend, name)
+      GenServer.reply(from, result)
+      :ok
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  # task process done
+  def handle_info({ref, result}, state) when is_reference(ref) do
+    Logger.debug("task_complete: #{inspect(result)}")
+    {:noreply, state}
+  end
+
+  # Task process exited
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -379,18 +414,9 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:noreply, cache_table_list(state)}
   end
 
-  # the list of electrified tables is cached because otherwise
-  # we get into a deadlock in the refresh-tables process:
-  # 1. we call refresh tables
-  # 2. pg **synchronously** queries the replication publication (electric)
-  #    for the list of replicated tables
-  # 3. the TcpServer calls this process to get the list of electrified tables
-  # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
-  # 5. deadlock
-  #
-  # so to avoid this we cache the table list and update it when the schema is changed
   defp cache_table_list(state) do
     {:ok, tables} = SchemaLoader.electrified_tables(state.backend)
+
     %{state | electrified_tables: tables}
   end
 
