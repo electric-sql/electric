@@ -1,0 +1,19 @@
+[doc NodeJS Satellite accepts the incoming migration and applies it]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell satellite_1]
+    # We don't want to see shadow table in a migration streamed to Satellite
+    -shadow__public__entries|$fail_pattern
+    
+    # But we expect the electrified table to make it's way there
+    [invoke log "Verifying that migrations have been loaded on satellite_1"]
+    [invoke node_await_table "entries"]
+
+[cleanup]
+  [invoke teardown]

@@ -1,0 +1,73 @@
+[include ../common.luxinc]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric=]
+
+[newshell log]
+
+[macro setup]
+    [newshell postgres_logs]
+        [progress start development environment]
+        !make start_dev_env
+        [invoke ok]
+        -$fail_pattern
+        !make log_dev_env
+
+    [newshell pg_1]
+        [invoke start_psql pg_1]
+        -$fail_pattern
+        [timeout 2]
+
+    [newshell electric]
+        [timeout 5]
+        !make start_electric_1
+        -$fail_pattern
+        ?START_REPLICATION SLOT
+         [progress setup finished]
+[endmacro]
+
+[macro teardown]
+    [progress stop development environment]
+    !make stop_dev_env
+    [invoke ok]
+[endmacro]
+
+[macro client_session user_id session_id]
+    [invoke log "user ${user_id}: session ${session_id}: start"]
+    [local client_id=client_${user_id}_${session_id}]
+    !provider = {Electric.Satellite.Auth.JWT, issuer: "dev.electric-sql.com", \
+                    secret_key: "integration-tests-signing-key-example"}
+    ?$eprompt
+    """!{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn(
+                        auth: %{auth_provider: provider, user_id: "$user_id"},
+                        id: "$client_id",
+                        debug: true,
+                        sub: "0",
+                        auto_in_sub: true,
+                        format: :term,
+                        host: "electric_1",
+                        auto_ping: true)
+    """
+    ?+$eprompt
+    ?+sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{__uf__: \[\]\}
+[endmacro]
+
+[macro start_satellite name]
+[newshell satellite_${name}]
+    !make start_satellite_client_${name}
+[endmacro]
+
+[macro migrate_pg version ddl]
+    [invoke log "run migration ${version} on postgres"]
+    """!
+    BEGIN;
+    SELECT electric.migration_version('$version');
+    ${ddl}
+    COMMIT;
+    """
+    ?$psql
+    [my old=$LUX_SHELLNAME]
+    [shell electric]
+        ??[info] Applying migration $version
+    [shell $old]
+[endmacro]

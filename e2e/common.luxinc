@@ -64,6 +64,7 @@
         [sleep 1]
     [endloop]
     !\pset null '<NULL>'
+    !\pset pager off
 [endmacro]
 
 [macro start_elixir_test id]

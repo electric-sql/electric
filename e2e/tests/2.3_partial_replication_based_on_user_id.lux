@@ -1,0 +1,42 @@
+[doc Information streaming to Satellite gets filtered out based on the magical `electric_user_id` column]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+[invoke electrify_table pg_1 owned_entries]
+
+[global user_id_1=1]
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id_1 1]
+
+[global user_id_2=2]
+[newshell user_2_ws1]
+    [invoke start_elixir_test 2]
+    [invoke client_session $user_id_2 1]
+    # We expect to NOT see this row
+    -($fail_pattern|sentinel value)
+
+[shell pg_1]
+    !BEGIN;
+    !INSERT INTO owned_entries (id, electric_user_id, content) VALUES ('00000000-0000-0000-0000-000000000000', '1', 'sentinel value');
+    !COMMIT;
+    ?$psql
+
+[shell electric]
+    # We expect to send the transaction to both satellites
+    ?client_id=client_1_1 user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord
+    ?client_id=client_2_1 user_id=2 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord
+
+[shell user_1_ws1]
+    # And recieve it on Satellite 1. Assertion for the row missing on Satellite 2 is above
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    ?values: \["00000000-0000-0000-0000-000000000000", "1", "sentinel value"\]
+    ?\}
+    ?tags: \["postgres_1@\d{13,16}"\]
+    ?\}
+
+[cleanup]
+    [invoke teardown]
