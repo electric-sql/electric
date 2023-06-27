@@ -9,7 +9,6 @@ import { Satellite, Registry } from './index'
 import {
   SatelliteClientOpts,
   SatelliteOverrides,
-  SatelliteConfig,
   satelliteClientDefaults,
   satelliteDefaults,
   validateConfig,
@@ -201,11 +200,6 @@ export class GlobalRegistry extends BaseRegistry {
       throw Error(`invalid config: ${foundErrors}`)
     }
 
-    const satelliteConfig: SatelliteConfig = {
-      app: config.app,
-      env: config.env,
-    }
-
     const satelliteClientOpts: SatelliteClientOpts = {
       ...satelliteClientDefaults,
       host: config.replication.host,
@@ -225,7 +219,6 @@ export class GlobalRegistry extends BaseRegistry {
       migrator,
       notifier,
       client,
-      satelliteConfig,
       satelliteDefaults
     )
     await satellite.start(authConfig)

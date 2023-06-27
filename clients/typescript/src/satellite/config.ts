@@ -1,10 +1,5 @@
 import { QualifiedTablename } from '../util/tablename'
 
-export interface SatelliteConfig {
-  app: string
-  env: string
-}
-
 export interface SatelliteOpts {
   // The database table where Satellite keeps its processing metadata.
   metaTable: QualifiedTablename
@@ -61,12 +56,7 @@ export const validateConfig = (config: any) => {
     return errors
   }
 
-  const { app, replication } = config
-
-  if (!app) {
-    errors.push(`please provide an app identifier: ${config}`)
-    return errors
-  }
+  const { replication } = config
 
   if (replication) {
     const { host, port } = replication

@@ -8,7 +8,6 @@ import { MockSatelliteClient } from '../../src/satellite/mock'
 import { SatelliteProcess } from '../../src/satellite'
 import { initTableInfo } from '../support/satellite-helpers'
 import {
-  SatelliteConfig,
   satelliteDefaults,
   SatelliteOpts,
 } from '../../src/satellite/config'
@@ -67,11 +66,6 @@ export const opts = Object.assign({}, satelliteDefaults, {
   pollingInterval: 200,
 })
 
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
-
 type Opts = SatelliteOpts & {
   minSnapshotWindow: number
   pollingInterval: number
@@ -94,7 +88,6 @@ export const makeContext = async (
     migrator,
     notifier,
     client,
-    satelliteConfig,
     options
   )
 

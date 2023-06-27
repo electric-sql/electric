@@ -6,8 +6,6 @@ import configModule from '../support/.electric/@config/index'
 const config: ElectricConfig = configModule
 
 test('configure', async (t) => {
-  t.is(config.app, 'tarragon-envy-5432')
-
   if (config.migrations) {
     t.true(config.migrations.length > 0)
   } else {
@@ -21,9 +19,9 @@ test('hydrate', async (t) => {
   const hydrated = hydrateConfig(config)
 
   t.deepEqual(hydrated.replication, {
-    host: 'default.tarragon-envy-5432.db.electric-sql.com',
-    port: 443,
-    ssl: true,
+    host: '127.0.0.1',
+    port: 5133,
+    ssl: false,
   })
 
   t.false(hydrated.debug)

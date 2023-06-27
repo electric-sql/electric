@@ -16,8 +16,6 @@ const electric = await electrify(
   db,
   dbSchema,
   {
-    app: 'CRUD-Test',
-    env: 'env',
     migrations: [],
   },
   { token: 'test-token' }

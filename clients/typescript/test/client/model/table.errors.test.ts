@@ -13,8 +13,6 @@ import { InvalidArgumentError } from '../../../src/client/validation/errors/inva
 
 const db = new Database(':memory:')
 const electric = await electrify(db, dbSchema, {
-    app: 'CRUD-Test',
-    env: 'env',
     migrations: []
   },
   { token: 'test-token' }

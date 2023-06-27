@@ -9,14 +9,12 @@ import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { SocketFactory } from '../../src/sockets'
 
 const dbName = 'test.db'
-const app = 'app'
-const env = 'test'
 
 const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
-const config: ElectricConfig = { app, env, migrations: [] }
+const config: ElectricConfig = { migrations: [] }
 const authConfig: AuthConfig = { token: 'test-token ' }
 const args = [
   dbName,
