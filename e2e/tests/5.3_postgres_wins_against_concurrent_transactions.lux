@@ -58,7 +58,7 @@
     ??updated on pg
     ?$psql
     # By setting the column tag to the same timestamp, but source to `null`
-    !SELECT (shadow.content).source_id, (shadow.content).timestamp > (CURRENT_TIMESTAMP + interval '23 hours') FROM electric.shadow__public__entries as shadow WHERE id = '00000000-0000-0000-0000-000000000000';
+    !SELECT (shadow._tag_content).source_id, (shadow._tag_content).timestamp > (CURRENT_TIMESTAMP + interval '23 hours') FROM electric.shadow__public__entries as shadow WHERE id = '00000000-0000-0000-0000-000000000000';
     ?<NULL>\s+\| t
 
 [shell user_1_ws1]

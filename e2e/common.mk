@@ -70,7 +70,7 @@ stop_dev_env:
 	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
 	fi
-	docker compose -f ${DOCKER_COMPOSE_FILE} stop
+	docker compose -f ${DOCKER_COMPOSE_FILE} stop --timeout 1
 	docker compose -f ${DOCKER_COMPOSE_FILE} down
 
 start_sysbench:
