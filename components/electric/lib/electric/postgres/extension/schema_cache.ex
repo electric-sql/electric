@@ -247,9 +247,13 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       backend: backend,
       conn_config: conn_config,
       opts: opts,
-      current: nil
+      current: nil,
+      electrified_tables: []
     }
 
+    # continue to immediately refresh the electrified_tables cache
+    # so that it's ready for when pg connects to electric as a 
+    # replication consumer and asks for the list of replicated tables
     {:ok, state}
   end
 
@@ -274,7 +278,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:save, version, schema, stmts}, _from, state) do
     {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
-    {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
+
+    state = %{state | backend: backend, current: {version, schema}}
+
+    {:reply, {:ok, state.origin}, state}
   end
 
   def handle_call({:relation_oid, type, schema, name}, _from, state) do
@@ -293,8 +300,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
-  def handle_call(:electrified_tables, _from, state) do
-    {:reply, SchemaLoader.electrified_tables(state.backend), state}
+  def handle_call(:electrified_tables, _from, %{electrified_tables: tables} = state) do
+    {:reply, {:ok, tables}, state}
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
@@ -358,6 +365,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   # end
 
   def handle_call({:refresh_subscription, name}, _from, state) do
+    state = cache_table_list(state)
     {:reply, SchemaLoader.refresh_subscription(state.backend, name), state}
   end
 
@@ -365,6 +373,25 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_continue({:close, conn}, state) do
     :ok = :epgsql.close(conn)
     {:noreply, state}
+  end
+
+  def handle_continue(:cache_table_list, state) do
+    {:noreply, cache_table_list(state)}
+  end
+
+  # the list of electrified tables is cached because otherwise
+  # we get into a deadlock in the refresh-tables process:
+  # 1. we call refresh tables
+  # 2. pg **synchronously** queries the replication publication (electric)
+  #    for the list of replicated tables
+  # 3. the TcpServer calls this process to get the list of electrified tables
+  # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
+  # 5. deadlock
+  #
+  # so to avoid this we cache the table list and update it when the schema is changed
+  defp cache_table_list(state) do
+    {:ok, tables} = SchemaLoader.electrified_tables(state.backend)
+    %{state | electrified_tables: tables}
   end
 
   defp current_schema(%{current: nil} = state) do
