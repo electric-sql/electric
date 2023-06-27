@@ -76,6 +76,12 @@ export type DataTransaction = Omit<
   changes: DataChange[]
 }
 
+// TODO: put back migrationVersion?
+export type SubscriptionDataTransaction = Omit<
+  DataTransaction,
+  'commit_timestamp' | 'lsn' | 'origin' | 'migrationVersion'
+>
+
 export enum DataChangeType {
   INSERT = 'INSERT',
   UPDATE = 'UPDATE',
@@ -184,7 +190,7 @@ export type ShapeSelect = {
 
 export type SubscriptionData = {
   subscriptionId: string
-  transaction: Transaction
+  data: SubscriptionDataTransaction
   shapeReqToUuid: { [req: string]: string }
 }
 

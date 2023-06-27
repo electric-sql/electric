@@ -85,7 +85,7 @@ export class InMemorySubscriptionsManager
   subscriptionDelivered(data: SubscriptionData) {
     const { subscriptionId, shapeReqToUuid } = data
     if (!this.inFlight[subscriptionId]) {
-      // unknowns, or already unsubscribed. delivery is noop
+      // unknown, or already unsubscribed. delivery is noop
       return
     }
 
@@ -142,6 +142,12 @@ export class InMemorySubscriptionsManager
   }
 }
 
+
+// server sends tags, but no timestamp. Is this correct?
+// initial connect sends pending oplog, clears it (wait for server ack) and then can start making subscriptions.
+// ensure database is up-with-schema before receiving shape, otherwise need to send relation alongside and handle that.
+// client would process migrations if they are sent before subscription begin
+
 export class SubscriptionsDataCache {
   ready: boolean
   remainingShapes: Set<string>
@@ -151,6 +157,9 @@ export class SubscriptionsDataCache {
   constructor() {
     this.ready = false
     this.remainingShapes = new Set()
+  }
+  isDelivering(): boolean {
+    return this.inDelivery != undefined
   }
 
   subscriptionRequest(shapeRequestIds: string[]) {
@@ -213,14 +222,6 @@ export class SubscriptionsDataCache {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubDataEnd but not all shapes have been delivered`
-      )
-    }
-
-    if (this.inDelivery.transaction.length == 0) {
-      this.reset()
-      throw new SatelliteError(
-        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatSubDataEnd but no transaction was sent`
       )
     }
 
@@ -289,8 +290,6 @@ export class SubscriptionsDataCache {
     this.currentShapeRequestId = undefined
   }
 
-  // should work with transaction spanning
-  // multiple shapes
   transaction(ops: SatTransOp[]) {
     if (
       this.remainingShapes.size == 0 ||
@@ -304,38 +303,47 @@ export class SubscriptionsDataCache {
       )
     }
     for (const op of ops) {
-      if (op.begin && this.inDelivery.transaction.length != 0) {
+      if (op.begin || op.commit || op.update || op.delete) {
         this.reset()
         throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-          `Received begin, but some operation has been delivered already`
+          SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
+          `Received begin, commit, update or delete message, but these messages are not valid in subscriptions`
         )
       }
+      // leaving this code here until merge in case we want to add txn delimiters
+      // if (op.begin && this.inDelivery.transaction.length != 0) {
+      //   this.reset()
+      //   throw new SatelliteError(
+      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+      //     `Received begin, but some operation has been delivered already`
+      //   )
+      // }
 
-      if (!op.begin && this.inDelivery.transaction.length == 0) {
-        this.reset()
-        throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-          `Received some operation before receiving begin`
-        )
-      }
+      // if (!op.begin && this.inDelivery.transaction.length == 0) {
+      //   this.reset()
+      //   throw new SatelliteError(
+      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+      //     `Received some operation before receiving begin`
+      //   )
+      // }
 
-      if (
-        this.inDelivery.transaction.length > 0 &&
-        this.inDelivery.transaction.at(-1)!.commit
-      ) {
-        this.reset()
-        throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-          `Received some message after commit`
-        )
-      }
+      // if (
+      //   this.inDelivery.transaction.length > 0 &&
+      //   this.inDelivery.transaction.at(-1)!.commit
+      // ) {
+      //   this.reset()
+      //   throw new SatelliteError(
+      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+      //     `Received some message after commit`
+      //   )
+      // }
 
       this.inDelivery.transaction.push(op)
     }
   }
 
   reset() {
+    this.ready = false
     this.remainingShapes = new Set()
     this.currentShapeRequestId = undefined
     this.inDelivery = undefined

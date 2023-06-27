@@ -38,6 +38,7 @@ import {
   SqlValue,
   DataTransaction,
   SatelliteErrorCode,
+  ClientShapeDefinition,
 } from '../../src/util/types'
 import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
 import { Satellite } from '../../src/satellite'
@@ -1235,6 +1236,26 @@ test('throw other replication errors', async (t) => {
     t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
   }
 })
+
+test('persist subscription', async (t) => {
+  const { satellite } = t.context as ContextType
+  const { runMigrations } = t.context as ContextType
+  await runMigrations()
+
+  const conn = await satellite.start()
+  await conn.connectionPromise
+
+  const tablename = 'THE_TABLE_NAME'
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  await satellite.subscribe([shapeDef])
+})
+
+// handle subsciption data
+// handle subsciption error > clear database
 
 // Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
 // Document that we do not maintian the order of execution of incoming operations and therefore we defer foreign key checks to the outermost commit

@@ -61,6 +61,8 @@ import {
   ShapeRequest,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  DataChange,
+  SubscriptionData,
 } from '../util/types'
 import {
   base64,
@@ -720,28 +722,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.emit('relation', relation)
   }
 
-  private handleIncomingTransaction(transaction: Transaction) {
-    this.emit(
-      'transaction',
-      transaction,
-      () => (this.inbound.ack_lsn = transaction.lsn)
-    )
-  }
-
-  // TODO: server sends shapes over a single transaction
   private handleTransaction(message: SatOpLog) {
-    // currently delivering a shape's data
-    if (this.subscriptionsDataCache.inDelivery) {
+    if (!this.subscriptionsDataCache.isDelivering()) {
+      this.processOpLogMessage(message)
+    } else {
       try {
         this.subscriptionsDataCache.transaction(message.ops)
       } catch (e) {
         this.emit('subscription_error', e)
       }
-    } else {
-      this.processOpLogMessage(
-        message,
-        this.handleIncomingTransaction.bind(this)
-      )
     }
   }
 
@@ -782,19 +771,20 @@ export class SatelliteClient extends EventEmitter implements Client {
           this.subscriptionsDataCache.subscriptionDataBegin(msg)
           break
         case SatSubsDataEnd.$type:
-          const subsData = this.subscriptionsDataCache.subscriptionDataEnd()
+          const subs = this.subscriptionsDataCache.subscriptionDataEnd()
           this.subscriptionsDataCache.reset()
 
-          const handleTransaction = (transaction: Transaction) => {
-            this.emit('subscription_delivered', {
-              subscriptionsId: subsData.subscriptionId,
-              transaction,
-              shapeReqToUuid: subsData.shapeReqToUuid,
-            })
+          const subscriptionData: SubscriptionData = {
+            subscriptionId: subs.subscriptionId,
+            data: {
+              changes: subs.transaction.map(
+                this.proccessShapeDataOperations.bind(this)
+              ),
+            },
+            shapeReqToUuid: subs.shapeReqToUuid,
           }
 
-          const message = SatOpLog.fromPartial({ ops: subsData.transaction })
-          this.processOpLogMessage(message, handleTransaction)
+          this.emit('subscription_delivered', subscriptionData)
           break
         case SatShapeDataBegin.$type:
           this.subscriptionsDataCache.shapeDataBegin(msg)
@@ -827,10 +817,36 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  private processOpLogMessage(
-    opLogMessage: SatOpLog,
-    transactionHandler: (transaction: Transaction) => void
-  ) {
+  private proccessShapeDataOperations(op: SatTransOp): DataChange {
+    if (!op.insert) {
+      this.subscriptionsDataCache.reset()
+      throw new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
+        'invalid shape data operation'
+      )
+    }
+
+    const replication = this.inbound
+    const rid = op.insert.relationId
+    const rel = replication.relations.get(rid)
+    if (!rel) {
+      throw new SatelliteError(
+        SatelliteErrorCode.PROTOCOL_VIOLATION,
+        `missing relation ${op.insert.relationId} for incoming operation`
+      )
+    }
+
+    const change = {
+      relation: rel,
+      type: DataChangeType.INSERT,
+      record: deserializeRow(op.insert.rowData!, rel),
+      tags: op.insert.tags,
+    }
+
+    return change
+  }
+
+  private processOpLogMessage(opLogMessage: SatOpLog) {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {
@@ -853,7 +869,11 @@ export class SatelliteClient extends EventEmitter implements Client {
           changes,
           origin,
         }
-        transactionHandler(transaction)
+        this.emit(
+          'transaction',
+          transaction,
+          () => (this.inbound.ack_lsn = transaction.lsn)
+        )
         replication.transactions.splice(lastTxnIdx)
       }
 
