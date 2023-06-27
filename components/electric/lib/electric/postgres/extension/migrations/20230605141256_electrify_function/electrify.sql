@@ -184,7 +184,7 @@ DECLARE
     _capture bool := false;
     _table_id int8;
 BEGIN
-    -- Usually, this would be a great place for `pg_trigger_depth()`, but for event triggers that's always
+    -- Usually, this would be a great place for `pg_trigger_depth()`, but for event triggers that's always 0.
     IF (current_setting('electric.is_in_event_trigger', true) = 'true') THEN RETURN; END IF;
     RAISE DEBUG 'command_end_handler:: start';
 

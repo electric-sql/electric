@@ -389,6 +389,12 @@ defmodule Electric.Postgres.Extension do
   with one column having same name as the main table, and the other having the name
   `__reordered_<original_column_name>`. We can thus remove all non-pk columns if
   they have a paired reordered column.
+
+  The reason to use this function as opposed to querying `SchemaCache` is when we need
+  this information before the transaction got propagated to `MigrationsConsumer`. This
+  function's main place of use is in `PostgresReplicationProducer`, which will always
+  be ahead of `MigrationsConsumer`, and thus may need to access that information
+  before it's written to cache.
   """
   def infer_shadow_primary_keys(record) when is_map(record) do
     infer_shadow_primary_keys(Map.keys(record))
