@@ -35,6 +35,8 @@ config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
+config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
+
 config :electric, Electric.StatusPlug, port: 5050
 
 config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
