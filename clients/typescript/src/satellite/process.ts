@@ -29,7 +29,7 @@ import {
   Row,
   MigrationTable,
 } from '../util/types'
-import { SatelliteConfig, SatelliteOpts } from './config'
+import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
 import { difference } from '../util/sets'
 import {
@@ -69,7 +69,6 @@ export class SatelliteProcess implements Satellite {
   notifier: Notifier
   client: Client
 
-  config: SatelliteConfig
   opts: SatelliteOpts
 
   _authState?: AuthState
@@ -93,7 +92,6 @@ export class SatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     client: Client,
-    config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
     this.dbName = dbName
@@ -102,7 +100,6 @@ export class SatelliteProcess implements Satellite {
     this.notifier = notifier
     this.client = client
 
-    this.config = config
     this.opts = opts
 
     this._lastAckdRowId = 0

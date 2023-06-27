@@ -14,21 +14,16 @@ import {
   Transaction,
   Relation,
 } from '../util/types'
+import { ElectricConfig } from '../config/index'
 
 import { Client, ConnectionWrapper, Satellite } from './index'
-import {
-  SatelliteOpts,
-  SatelliteOverrides,
-  satelliteDefaults,
-  SatelliteConfig,
-} from './config'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
 
 export class MockSatelliteProcess implements Satellite {
-  config: SatelliteConfig
   dbName: DbName
   adapter: DatabaseAdapter
   migrator: Migrator
@@ -42,7 +37,6 @@ export class MockSatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
     this.dbName = dbName
@@ -50,7 +44,6 @@ export class MockSatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.socketFactory = socketFactory
-    this.config = config
     this.opts = opts
   }
 
@@ -73,8 +66,7 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: SatelliteConfig,
-    authConfig: AuthConfig,
+    config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
@@ -85,10 +77,9 @@ export class MockRegistry extends BaseRegistry {
       migrator,
       notifier,
       socketFactory,
-      config,
       opts
     )
-    await satellite.start(authConfig)
+    await satellite.start(config.auth)
 
     return satellite
   }

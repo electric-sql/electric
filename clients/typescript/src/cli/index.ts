@@ -16,7 +16,8 @@ if (args.length < 3) {
 // followed by the rest of the arguments
 const [_node, _file, command, ...commandArgs] = process.argv
 
-const commandHandlers = {
+type CommandHandlers = Record<string, (...args: string[]) => Promise<void>>
+const commandHandlers: CommandHandlers = {
   generate: handleGenerate,
 }
 
@@ -25,5 +26,5 @@ if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
   process.exit(9)
 }
 
-const handler = commandHandlers[command as keyof typeof commandHandlers]
+const handler = commandHandlers[command as keyof CommandHandlers]
 await handler(...commandArgs)

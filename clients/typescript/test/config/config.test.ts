@@ -1,30 +1,18 @@
 import test from 'ava'
+import { hydrateConfig } from '../../src/config'
 
-import { ElectricConfig, hydrateConfig } from '../../src/config/index'
-
-import configModule from '../support/.electric/@config/index'
-const config: ElectricConfig = configModule
-
-test('configure', async (t) => {
-  t.is(config.app, 'tarragon-envy-5432')
-
-  if (config.migrations) {
-    t.true(config.migrations.length > 0)
-  } else {
-    t.fail('migrations field should be set')
-  }
-})
-
-test('hydrate', async (t) => {
-  t.is(config.replication, undefined)
-
-  const hydrated = hydrateConfig(config)
-
-  t.deepEqual(hydrated.replication, {
-    host: 'default.tarragon-envy-5432.db.electric-sql.com',
-    port: 443,
-    ssl: true,
+test('hydrateConfig adds expected defaults', async (t) => {
+  const hydrated = hydrateConfig({
+    auth: {
+      token: 'test-token',
+    },
   })
+
+  t.is(hydrated.replication.host, '127.0.0.1')
+  t.is(hydrated.replication.port, 5133)
+  t.is(hydrated.replication.ssl, false)
+
+  t.is(hydrated.auth.token, 'test-token')
 
   t.false(hydrated.debug)
 })

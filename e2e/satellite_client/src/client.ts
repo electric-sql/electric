@@ -37,18 +37,15 @@ export const open_db = async (
 ): Promise<Electric> => {
   const original = new Database(name)
   const config: ElectricConfig = {
-    app: 'satellite_client',
-    env: 'default',
-    migrations: migrations,
-    replication: {
-      host: host,
-      port: port,
-      ssl: false,
-    },
+    url: `electric://${host}:${port}`,
     debug: true,
+    auth: {
+      token: auth_token()
+    }
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return await electrify(original, dbSchema, config, {token: auth_token()})
+  dbSchema.migrations = migrations
+  return await electrify(original, dbSchema, config)
 }
 
 export const set_subscribers = (db: Electric) => {

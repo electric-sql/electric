@@ -8,3 +8,4 @@ build/
 .tool-versions
 .github/
 src/_generated/
+test/client/generated

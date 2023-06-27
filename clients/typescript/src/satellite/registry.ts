@@ -1,5 +1,4 @@
-import { AuthConfig } from '../auth/index'
-import { ElectricConfig } from '../config/index'
+import { InternalElectricConfig, HydratedConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -9,7 +8,6 @@ import { Satellite, Registry } from './index'
 import {
   SatelliteClientOpts,
   SatelliteOverrides,
-  SatelliteConfig,
   satelliteClientDefaults,
   satelliteDefaults,
   validateConfig,
@@ -42,8 +40,7 @@ export abstract class BaseRegistry implements Registry {
     _migrator: Migrator,
     _notifier: Notifier,
     _socketFactory: SocketFactory,
-    _config: ElectricConfig,
-    _authConfig?: AuthConfig,
+    _config: InternalElectricConfig,
     _opts?: SatelliteOverrides
   ): Promise<Satellite> {
     throw `Subclasses must implement startProcess`
@@ -55,8 +52,7 @@ export abstract class BaseRegistry implements Registry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: ElectricConfig,
-    authConfig?: AuthConfig,
+    config: InternalElectricConfig,
     opts?: SatelliteOverrides
   ): Promise<Satellite> {
     // If we're in the process of stopping the satellite process for this
@@ -73,7 +69,6 @@ export abstract class BaseRegistry implements Registry {
           notifier,
           socketFactory,
           config,
-          authConfig,
           opts
         )
       )
@@ -107,8 +102,7 @@ export abstract class BaseRegistry implements Registry {
       migrator,
       notifier,
       socketFactory,
-      config,
-      authConfig
+      config
     ).then((satellite) => {
       delete startingPromises[dbName]
 
@@ -193,17 +187,11 @@ export class GlobalRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: Required<ElectricConfig>,
-    authConfig: AuthConfig
+    config: HydratedConfig
   ): Promise<Satellite> {
     const foundErrors = validateConfig(config)
     if (foundErrors.length > 0) {
       throw Error(`invalid config: ${foundErrors}`)
-    }
-
-    const satelliteConfig: SatelliteConfig = {
-      app: config.app,
-      env: config.env,
     }
 
     const satelliteClientOpts: SatelliteClientOpts = {
@@ -225,10 +213,9 @@ export class GlobalRegistry extends BaseRegistry {
       migrator,
       notifier,
       client,
-      satelliteConfig,
       satelliteDefaults
     )
-    await satellite.start(authConfig)
+    await satellite.start(config.auth)
 
     return satellite
   }
