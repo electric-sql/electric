@@ -159,7 +159,7 @@ export enum SatInStartReplicationReq_Option {
 export interface SatInStartReplicationResp {
   $type: "Electric.Satellite.v1_4.SatInStartReplicationResp";
   /** returned in case replication fails to start */
-  error?: SatInStartReplicationResp_ReplicationError | undefined;
+  err?: SatInStartReplicationResp_ReplicationError | undefined;
 }
 
 /** Error returned by the Producer when replication fails to start */
@@ -447,6 +447,18 @@ export interface SatSubsResp {
   $type: "Electric.Satellite.v1_4.SatSubsResp";
   /** Identifier of the request for further reference */
   subscriptionId: string;
+}
+
+/** (Consumer) Request to cancel subscriptions */
+export interface SatUnsubsReq {
+  $type: "Electric.Satellite.v1_4.SatUnsubsReq";
+  /** Identifiers of the subscription */
+  subscriptionIds: string[];
+}
+
+/** (Producer) Acknowledgment that the subscriptions were cancelled */
+export interface SatUnsubsResp {
+  $type: "Electric.Satellite.v1_4.SatUnsubsResp";
 }
 
 /** Shape request */
@@ -978,15 +990,15 @@ export const SatInStartReplicationReq = {
 messageTypeRegistry.set(SatInStartReplicationReq.$type, SatInStartReplicationReq);
 
 function createBaseSatInStartReplicationResp(): SatInStartReplicationResp {
-  return { $type: "Electric.Satellite.v1_4.SatInStartReplicationResp", error: undefined };
+  return { $type: "Electric.Satellite.v1_4.SatInStartReplicationResp", err: undefined };
 }
 
 export const SatInStartReplicationResp = {
   $type: "Electric.Satellite.v1_4.SatInStartReplicationResp" as const,
 
   encode(message: SatInStartReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.error !== undefined) {
-      SatInStartReplicationResp_ReplicationError.encode(message.error, writer.uint32(10).fork()).ldelim();
+    if (message.err !== undefined) {
+      SatInStartReplicationResp_ReplicationError.encode(message.err, writer.uint32(10).fork()).ldelim();
     }
     return writer;
   },
@@ -1003,7 +1015,7 @@ export const SatInStartReplicationResp = {
             break;
           }
 
-          message.error = SatInStartReplicationResp_ReplicationError.decode(reader, reader.uint32());
+          message.err = SatInStartReplicationResp_ReplicationError.decode(reader, reader.uint32());
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -1020,8 +1032,8 @@ export const SatInStartReplicationResp = {
 
   fromPartial<I extends Exact<DeepPartial<SatInStartReplicationResp>, I>>(object: I): SatInStartReplicationResp {
     const message = createBaseSatInStartReplicationResp();
-    message.error = (object.error !== undefined && object.error !== null)
-      ? SatInStartReplicationResp_ReplicationError.fromPartial(object.error)
+    message.err = (object.err !== undefined && object.err !== null)
+      ? SatInStartReplicationResp_ReplicationError.fromPartial(object.err)
       : undefined;
     return message;
   },
@@ -2652,6 +2664,95 @@ export const SatSubsResp = {
 };
 
 messageTypeRegistry.set(SatSubsResp.$type, SatSubsResp);
+
+function createBaseSatUnsubsReq(): SatUnsubsReq {
+  return { $type: "Electric.Satellite.v1_4.SatUnsubsReq", subscriptionIds: [] };
+}
+
+export const SatUnsubsReq = {
+  $type: "Electric.Satellite.v1_4.SatUnsubsReq" as const,
+
+  encode(message: SatUnsubsReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.subscriptionIds) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatUnsubsReq {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatUnsubsReq();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.subscriptionIds.push(reader.string());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatUnsubsReq>, I>>(base?: I): SatUnsubsReq {
+    return SatUnsubsReq.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatUnsubsReq>, I>>(object: I): SatUnsubsReq {
+    const message = createBaseSatUnsubsReq();
+    message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatUnsubsReq.$type, SatUnsubsReq);
+
+function createBaseSatUnsubsResp(): SatUnsubsResp {
+  return { $type: "Electric.Satellite.v1_4.SatUnsubsResp" };
+}
+
+export const SatUnsubsResp = {
+  $type: "Electric.Satellite.v1_4.SatUnsubsResp" as const,
+
+  encode(_: SatUnsubsResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatUnsubsResp {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatUnsubsResp();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatUnsubsResp>, I>>(base?: I): SatUnsubsResp {
+    return SatUnsubsResp.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatUnsubsResp>, I>>(_: I): SatUnsubsResp {
+    const message = createBaseSatUnsubsResp();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatUnsubsResp.$type, SatUnsubsResp);
 
 function createBaseSatShapeReq(): SatShapeReq {
   return { $type: "Electric.Satellite.v1_4.SatShapeReq", requestId: "", shapeDefinition: undefined };

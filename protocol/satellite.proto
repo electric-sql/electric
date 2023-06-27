@@ -134,7 +134,7 @@ message SatInStartReplicationReq {
 // (Producer) The result of the start replication requests
 message SatInStartReplicationResp {
     // returned in case replication fails to start
-    optional ReplicationError error = 1;
+    optional ReplicationError err = 1;
 
     // Error returned by the Producer when replication fails to start
     message ReplicationError {
@@ -372,6 +372,16 @@ message SatSubsReq {
 message SatSubsResp {
     // Identifier of the request for further reference
     string subscription_id = 1;
+}
+
+// (Consumer) Request to cancel subscriptions
+message SatUnsubsReq {
+    // Identifiers of the subscription
+    repeated string subscription_ids = 1;
+}
+
+// (Producer) Acknowledgment that the subscriptions were cancelled
+message SatUnsubsResp {    
 }
 
 // Shape request
