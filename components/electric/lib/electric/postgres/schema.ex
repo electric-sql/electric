@@ -346,8 +346,17 @@ defmodule Electric.Postgres.Schema do
     {:ok, pk_column_names} = primary_keys(main)
 
     {pks, non_pks} = Enum.split_with(stripped_columns, &(&1.name in pk_column_names))
-    timestamps = Enum.map(non_pks, &Map.put(&1, :type, @electric_tag_type))
-    reordered = Enum.map(non_pks, &Map.update!(&1, :name, fn n -> "__reordered_#{n}" end))
+
+    timestamps =
+      non_pks
+      |> Enum.map(&Map.put(&1, :type, @electric_tag_type))
+      |> Enum.map(&Map.update!(&1, :name, fn n -> String.slice("_tag_#{n}", 0..63) end))
+
+    reordered =
+      Enum.map(
+        non_pks,
+        &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
+      )
 
     %Proto.Table{
       # `MigrationConsumer` code currently has logic that for any incoming relation, we're the OID already in the `SchemaRegistry`.

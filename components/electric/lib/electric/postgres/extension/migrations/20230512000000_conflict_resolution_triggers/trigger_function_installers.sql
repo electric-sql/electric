@@ -75,19 +75,20 @@ DECLARE
     function_name TEXT := 'create_shadow_row_from_upsert___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     insertion_identifiers TEXT;
     insert_values TEXT;
     modified_columns_pattern TEXT;
     modified_columns_bitmask_merger TEXT := '';
 BEGIN
-    insertion_identifiers := electric.format_every_and_join(primary_key_list || non_pk_column_list, '%I');
+    insertion_identifiers := electric.format_every_and_join(primary_key_list || tag_column_list, '%I');
     insert_values := electric.append_string_unless_empty(
         electric.format_every_and_join(primary_key_list, 'NEW.%I'),
-        electric.format_every_and_join(non_pk_column_list, '__current_tag')
+        electric.format_every_and_join(tag_column_list, '__current_tag')
     );
 
     modified_columns_pattern := format('_modified_columns_bit_mask[%%2$s] = (NEW.%%1$I IS DISTINCT FROM OLD.%%1$I) OR COALESCE(%I._modified_columns_bit_mask[%%2$s], false)', shadow_table_name);
-    modified_columns_bitmask_merger := electric.format_every_and_join(non_pk_column_list, modified_columns_pattern, E',\n');
+    modified_columns_bitmask_merger := electric.format_every_and_join(tag_column_list, modified_columns_pattern, E',\n');
 
     IF modified_columns_bitmask_merger != '' THEN
         modified_columns_bitmask_merger := E',\n-- REPEATED BLOCK PER COLUMN\n' || modified_columns_bitmask_merger;
@@ -137,7 +138,7 @@ BEGIN
     insert_values,
     electric.format_every_and_join(primary_key_list, '%I'),
     modified_columns_bitmask_merger,
-    electric.append_string_unless_empty('_tag', electric.format_every_and_join(non_pk_column_list, '%I')));
+    electric.append_string_unless_empty('_tag', electric.format_every_and_join(tag_column_list, '%I')));
 
     RETURN function_name;
 END;
@@ -151,6 +152,7 @@ DECLARE
     function_name TEXT := 'update_shadow_row_from_delete___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     primary_key_where_clause TEXT;
 BEGIN
     primary_key_where_clause := electric.format_every_and_join(primary_key_list, '%1$I = OLD.%1$I', ' AND ');
@@ -186,7 +188,7 @@ BEGIN
     shadow_table_name,
     tombstone_table_name,
     primary_key_where_clause,
-    electric.append_string_unless_empty('_tag', electric.format_every_and_join(non_pk_column_list, '%I'))
+    electric.append_string_unless_empty('_tag', electric.format_every_and_join(tag_column_list, '%I'))
     );
 
     RETURN function_name;
@@ -201,6 +203,7 @@ DECLARE
     function_name TEXT := 'write_correct_max_tag___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     columns_to_write_blocks TEXT;
     where_pk_substitution TEXT;
     next_substitution_position_after_pk INTEGER;
@@ -209,7 +212,7 @@ DECLARE
 BEGIN
     next_substitution_position_after_pk := array_length(primary_key_list, 1) + 1;
     columns_to_write_blocks := electric.format_every_and_join(
-        non_pk_column_list,
+        tag_column_list,
         format($$
                 IF NEW._modified_columns_bit_mask[%%2$s] THEN
                 columns_to_write := array_append(columns_to_write, '%%1$I = $%s');
@@ -340,6 +343,7 @@ DECLARE
     function_name TEXT := 'shadow_insert_to_upsert___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
 BEGIN
     -- The `%n$I` placeholders use n-th argument for formatting.
     -- Generally, 1 is a function name, 2 is a shadow table name, 3 is a tombstone table name
@@ -369,10 +373,10 @@ BEGIN
     function_name,
     shadow_table_name,
     tombstone_table_name,
-    electric.format_every_and_join(primary_key_list || non_pk_column_list, '%I'),
+    electric.format_every_and_join(primary_key_list || tag_column_list, '%I'),
     electric.append_string_unless_empty(
         electric.format_every_and_join(primary_key_list, 'NEW.%I'),
-        electric.format_every_and_join(non_pk_column_list, 'NEW._tag')
+        electric.format_every_and_join(tag_column_list, 'NEW._tag')
     ),
     electric.format_every_and_join(primary_key_list, '%I'));
 
@@ -389,6 +393,7 @@ DECLARE
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
     reordered_insert_function_name TEXT := 'perform_reordered_op___' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     reordered_column_list TEXT[];
     tag_resolution_blocks TEXT;
     reordered_column_save TEXT;
@@ -396,7 +401,7 @@ DECLARE
 BEGIN
     reordered_column_list := electric.format_every(non_pk_column_list, '__reordered_%s');
     tag_resolution_blocks := electric.format_every_and_join(
-        non_pk_column_list,
+        tag_column_list,
         $$
             IF NEW._is_a_delete_operation OR NEW._tag < OLD.%1$I OR NOT NEW._modified_columns_bit_mask[%2$s] THEN
                 NEW.%1$I = OLD.%1$I;
@@ -468,6 +473,7 @@ DECLARE
     function_name TEXT := 'perform_reordered_op___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     reordered_column_list TEXT[];
     where_pks_equal_shadow TEXT;
     built_row_fill_pks TEXT;
@@ -513,10 +519,10 @@ BEGIN
 
     current_row_fill_from_reordered := electric.zip_format_every_and_join(non_pk_column_list, reordered_column_list, E'\n                current_row.%1$I = shadow_row.%2$I;', '');
 
-    built_row_overrides := electric.format_every_and_join(non_pk_column_list,
+    built_row_overrides := electric.zip_format_every_and_join(tag_column_list, non_pk_column_list,
         $$
             IF shadow_row.%1$I != shadow_row._tag THEN
-                built_row.%1$I = current_row.%1$I;
+                built_row.%2$I = current_row.%2$I;
             END IF;
         $$, '');
     

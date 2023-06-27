@@ -66,7 +66,7 @@ BEGIN
             -- Shadow table primary key duplicates the one on the main table, but other columns are of the `tag` type
             shadow_column_definitions :=
                 shadow_column_definitions
-                || format(E'    %I %s,\n', cols.col_name, (CASE WHEN cols.col_primary THEN cols.col_type || ' NOT NULL' ELSE 'electric.tag' END));
+                || format(E'    %I %s,\n', (CASE WHEN cols.col_primary THEN '' ELSE '_tag_' END) || cols.col_name, (CASE WHEN cols.col_primary THEN cols.col_type || ' NOT NULL' ELSE 'electric.tag' END));
 
             -- Reordered columns have the same type as the original columns, but will be stored in a shadow table.
             -- PK columns aren't reordered since we consider them immutable
@@ -163,7 +163,7 @@ BEGIN
                 -- Shadow table is missing a column, meaning it got added
                 shadow_column_definitions :=
                     shadow_column_definitions
-                    || format(E'    ADD COLUMN %I electric.tag,\n', cols.main_col_name);
+                    || format(E'    ADD COLUMN %I electric.tag,\n', '_tag_' || cols.main_col_name);
 
                 reordered_column_definitions :=
                     reordered_column_definitions

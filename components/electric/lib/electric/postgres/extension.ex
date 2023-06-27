@@ -400,12 +400,16 @@ defmodule Electric.Postgres.Extension do
     infer_shadow_primary_keys(Map.keys(record))
   end
 
-  def infer_shadow_primary_keys(all_keys) when is_list(all_keys) do
-    known_keys = MapSet.new(all_keys)
+  @known_shadow_columns ~w|_tags _last_modified _is_a_delete_operation _tag _observed_tags _modified_columns_bit_mask _resolved _currently_reordering|
+  def infer_shadow_primary_keys(all_keys) when is_list(all_keys),
+    do: Enum.reject(all_keys, &known_shadow_column?/1)
 
-    Enum.reject(all_keys, fn
-      "_" <> _hidden_key -> true
-      key -> MapSet.member?(known_keys, "__reordered_" <> key)
-    end)
+  defp known_shadow_column?("_tag_" <> _), do: true
+  defp known_shadow_column?("__reordered_" <> _), do: true
+
+  for known_key <- @known_shadow_columns do
+    defp known_shadow_column?(unquote(known_key)), do: true
   end
+
+  defp known_shadow_column?(_), do: false
 end
