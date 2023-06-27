@@ -26,8 +26,7 @@ defmodule Electric.Postgres.CachedWal.Producer do
   def init(opts) do
     {:producer,
      %{
-       cached_wal_module:
-         Keyword.get(opts, :cached_wal_module, CachedWal.Api.default_module()),
+       cached_wal_module: Keyword.get(opts, :cached_wal_module, CachedWal.Api.default_module()),
        current_position: nil,
        demand: 0
      }}
