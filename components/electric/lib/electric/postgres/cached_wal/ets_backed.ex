@@ -31,25 +31,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   # Public API
 
-  @doc """
-  Get a `:gproc` via-tuple based on the origin that fills this cache.
-
-  Origin is provided only as a legacy option, as in the future only one PG is ever going to be present
-  """
-  def get_name(origin \\ :default) do
-    {:via, :gproc, {:n, :l, {__MODULE__, origin}}}
-  end
 
   @doc """
   Start the cache. See module docs for options
   """
   def start_link(opts) do
-    genstage_opts = Keyword.take(opts, [:name])
-    GenStage.start_link(__MODULE__, opts, genstage_opts)
+    # We're globally registering this process since ets table name is hardcoded anyway, so no two instances can be started.
+    GenStage.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   def clear_cache(stage) do
-    GenStage.cast(stage, :clear)
+    GenStage.cast(stage, :clear_cache)
   end
 
   @impl Api
@@ -70,13 +62,13 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def request_notification(wal_pos, origin \\ :default) do
-    GenStage.call(get_name(origin), {:request_notification, wal_pos})
+  def request_notification(wal_pos) do
+    GenStage.call(__MODULE__, {:request_notification, wal_pos})
   end
 
   @impl Api
-  def cancel_notification_request(ref, origin \\ :default) do
-    GenStage.call(get_name(origin), {:cancel_notification, ref})
+  def cancel_notification_request(ref) do
+    GenStage.call(__MODULE__, {:cancel_notification, ref})
   end
 
   @impl Api
@@ -130,7 +122,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl GenStage
-  def handle_cast(:clear, state) do
+  def handle_cast(:clear_cache, state) do
     ETS.Set.delete_all!(state.table)
 
     # This doesn't do anything with notification requests, but this function is not meant to be used in production

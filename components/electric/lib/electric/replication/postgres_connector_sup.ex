@@ -47,7 +47,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
         start: {Postgres.SlotServer, :start_link, [conn_config, vaxine_producer]}
       },
       {CachedWal.EtsBacked,
-       subscribe_to: [postgres_producer_consumer], name: CachedWal.EtsBacked.get_name()},
+       subscribe_to: [postgres_producer_consumer], name: CachedWal.EtsBacked},
       %{
         id: :vaxine_producer,
         start: {Vaxine.LogProducer, :start_link, [origin, downstream.producer_opts]}
