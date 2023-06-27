@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { migrate } from './migrations'
-import path from 'path'
+import { handleGenerate } from './migrations'
 
 const args = process.argv
 
@@ -18,7 +17,7 @@ if (args.length < 3) {
 const [_node, _file, command, ...commandArgs] = process.argv
 
 const commandHandlers = {
-  migrate: handleMigrate,
+  generate: handleGenerate,
 }
 
 if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
@@ -28,16 +27,3 @@ if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
 
 const handler = commandHandlers[command as keyof typeof commandHandlers]
 await handler(...commandArgs)
-
-async function handleMigrate(...args: string[]) {
-  if (args.length > 1) {
-    console.error(
-      'migrate command accepts 1 optional argument (the path to the Prisma schema) but got: ' +
-        args.length
-    )
-    process.exit(9)
-  }
-
-  const pathToPrismaSchema = args[0] ?? path.join('prisma/schema.prisma')
-  await migrate(pathToPrismaSchema)
-}
