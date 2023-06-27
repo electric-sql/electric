@@ -36,7 +36,7 @@ config :electric, Electric.Replication.Postgres,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
 config :electric, Electric.Postgres.CachedWal.Api,
-  implementation: Electric.Postgres.CachedWal.EtsBacked
+  adapter: Electric.Postgres.CachedWal.EtsBacked
 
 config :electric, Electric.StatusPlug, port: 5050
 
