@@ -88,7 +88,7 @@ const migrationMetaData = {
       })
     ),
   ],
-  protocol_version: 'Electric.Satellite.v1_3',
+  protocol_version: 'Electric.Satellite.v1_4',
   version: '20230613112725_814',
 }
 
