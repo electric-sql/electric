@@ -70,13 +70,16 @@ pnpm build
 cd ../examples/web-wa-sqlite
 ```
 
-Now, run the migration script to fetch the migration we created above for the `items` table.
-This will create an Electric client for your app.
+Now, initialize the app and fetch the migration we created above for the `items` table:
 ```sh
-sh migrate.sh -p prisma/schema.prisma
+npx electric init items-example
+npx electric migrate
 ```
 
-Now, build and run the app:
+The migrate command fetches the migrations from the backend and generates an Electric client
+in `src/generated/models/index.ts`.
+
+Now, let's build and run the app:
 ```sh
 pnpm build
 pnpm start
@@ -84,7 +87,7 @@ pnpm start
 
 ## Sync
 
-The application is setup to work with the local stack.
+The application is set up to work with the local stack.
 
 Run the local stack.
 Then open [localhost:3001](http://localhost:3001) in two different browsers (so they're backed by different databases) and try it out. You'll see data being replicated between the client applications.
@@ -181,35 +184,17 @@ which will apply migration on its local SQLite database.
 Since we only support additive migrations, the application continues to work.  
 
 Then, remains to update the code of our application to do something with the new column.
-To this end, first run the migration script from within the top-level directory of this app:
+To this end, first run the `generate` script from within the top-level directory of this app:
 
 ```shell
-sh migrate.sh -p prisma/schema.prisma
-Prisma schema loaded from prisma/schema.prisma
-Datasource "db": SQLite database "electric-tmp.db" at "file:electric-tmp.db"
-
-✔ Introspected 1 model and wrote it into prisma/schema.prisma in 18ms
-      
-Run prisma generate to generate Prisma Client.
-
-┌─────────────────────────────────────────────────────────┐
-│  Update available 4.8.1 -> 4.14.1                       │
-│  Run the following to update                            │
-│    npm i --save-dev prisma@latest                       │
-│    npm i @prisma/client@latest                          │
-└─────────────────────────────────────────────────────────┘
-Prisma schema loaded from prisma/schema.prisma
-
-✔ Generated Prisma Client (4.8.1 | library) to ./node_modules/@prisma/client in 32ms
-
-✔ Generated Zod Prisma Types to ./prisma/generated/models in 17ms
+npx electric migrate
 ```
 
-The migration script updated the Electric client to incorporate the new column `other_value` on the `items` table.
+The `generate` script updates the Electric client to incorporate the new column `other_value` on the `items` table.
 This new column is now also reflected in the type of the `items` table.
 If the application was offline when the backend was migrated,
-the missing migrations will automatically be fetched by the `migrate.sh` script
-and will be applied the next time that the application is started.
+the missing migrations will automatically be fetched by the above script
+and will be applied the next time the application is started.
 
 Now, let's update the app. In `Example.tsx`, modify the `addItem` function to provide a value for the new column:
 

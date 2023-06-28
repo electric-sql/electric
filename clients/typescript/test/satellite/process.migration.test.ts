@@ -12,8 +12,8 @@ import isequal from 'lodash.isequal'
 
 test.beforeEach(async (t: any) => {
   await makeContext(t)
-  const { satellite } = t.context as any
-  await satellite.start()
+  const { satellite, authState } = t.context as any
+  await satellite.start(authState)
   t.context['clientId'] = satellite['_authState']['clientId'] // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
@@ -232,7 +232,7 @@ test.serial('apply migration containing only DDL', async (t: any) => {
     changes: [createTable, addColumn],
     lsn: new Uint8Array(),
     // starts at 3, because the app already defines 2 migrations
-    // (see test/support/.electric/@config/index.js)
+    // (see test/support/migrations/migrations.js)
     // which are loaded when Satellite is started
     migrationVersion: '3',
   }

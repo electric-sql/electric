@@ -7,42 +7,36 @@ const migrationsFolder = path.join('./test/migrators/support/migrations')
 
 test('write migration to configuration file', async (t) => {
   // compute absolute path to avoid differences between dynamic import and NodeJS' `fs` module
-  const ogConfigFile = path.resolve(
-    path.join('./test/cli/support/config/index.mjs')
+  const ogMigrationsFile = path.resolve(
+    path.join('./test/cli/support/migrations.js')
   )
 
   // First read the config file and store its contents
   // such that we can restore it later to its original contents
-  const ogConfigContents = await fs.readFile(ogConfigFile, 'utf8')
+  const ogConfigContents = await fs.readFile(ogMigrationsFile, 'utf8')
 
   // Make a temporary copy of the config file
   // on which this test will operate
-  const testConfigFile = path.resolve(
-    path.join('./test/cli/support/config/index-tmp.mjs')
+  const testMigrationsFile = path.resolve(
+    path.join('./test/cli/support/migrations-tmp.js')
   )
-  await fs.writeFile(testConfigFile, ogConfigContents)
+  await fs.writeFile(testMigrationsFile, ogConfigContents)
 
   // path to config file, relative from this file
-  const p = '../support/config/index-tmp.mjs'
+  const p = '../support/migrations-tmp.js'
 
   let i = 0
-  const importConfig = async () =>
+  const importMigrations = async () =>
     (await import(path.join(p.concat(`?foo=${i++}`)))).default
-  const ogConfig = await importConfig()
+  const ogMigrations = await importMigrations()
+  t.deepEqual(ogMigrations, [])
 
-  await buildMigrations(migrationsFolder, testConfigFile)
-  const newConfig = await importConfig()
-  const versions = newConfig.migrations.map((m: any) => m.version)
+  await buildMigrations(migrationsFolder, testMigrationsFile)
+  const newMigrations = await importMigrations()
+  const versions = newMigrations.map((m: any) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
-
-  // Check that apart from the migrations,
-  // the rest of the configuration file remains untouched
-  delete ogConfig['migrations']
-  delete newConfig['migrations']
-  t.deepEqual(ogConfig, newConfig)
 
   // Delete the temporary config file
   // we created for this test
-  await fs.unlink(testConfigFile)
-  await fs.unlink('./test/cli/support/config/index-tmp.js')
+  await fs.unlink(testMigrationsFile)
 })

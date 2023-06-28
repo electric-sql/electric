@@ -1,7 +1,20 @@
 #!/usr/bin/env node
 
-import { migrate } from './migrations'
-import path from 'path'
+import { handleGenerate } from './migrations'
+
+/*
+ * This file is the entry point of the CLI.
+ * When calling `npx electric <command> <args>`
+ * this file is executed with node, passing along
+ * the command and arguments provided by the user.
+ *
+ * Supported commands are:
+ *  - `npx electric-sql generate [--out where/to/write/generated/client --service <electricHost:electricPort>]`
+ *      --> Generates an Electric client based on the migrations exposed by Electric.
+ *          Electric must be running in order for this command to work.
+ *          The URL to the Electric migrations endpoint can be provided using the --service flag
+ *          only the host and port are needed.
+ */
 
 const args = process.argv
 
@@ -17,8 +30,9 @@ if (args.length < 3) {
 // followed by the rest of the arguments
 const [_node, _file, command, ...commandArgs] = process.argv
 
-const commandHandlers = {
-  migrate: handleMigrate,
+type CommandHandlers = Record<string, (...args: string[]) => Promise<void>>
+const commandHandlers: CommandHandlers = {
+  generate: handleGenerate,
 }
 
 if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
@@ -26,18 +40,5 @@ if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
   process.exit(9)
 }
 
-const handler = commandHandlers[command as keyof typeof commandHandlers]
+const handler = commandHandlers[command as keyof CommandHandlers]
 await handler(...commandArgs)
-
-async function handleMigrate(...args: string[]) {
-  if (args.length > 1) {
-    console.error(
-      'migrate command accepts 1 optional argument (the path to the Prisma schema) but got: ' +
-        args.length
-    )
-    process.exit(9)
-  }
-
-  const pathToPrismaSchema = args[0] ?? path.join('prisma/schema.prisma')
-  await migrate(pathToPrismaSchema)
-}

@@ -3,13 +3,12 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import { dbSchema } from './generated'
 
-const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
-}
-
 const conn = new Database(':memory:')
+const config = {
+  auth: {
+    token: 'test-token',
+  },
+}
 
 const { notifier, adapter, db } = await electrify(conn, dbSchema, config)
 

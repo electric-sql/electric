@@ -9,9 +9,9 @@ const promisesEnabled = true
 SQLite.enablePromise(promisesEnabled)
 
 const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
+  auth: {
+    token: 'test-token',
+  },
 }
 
 const original = await SQLite.openDatabase({ name: 'example.db' })
