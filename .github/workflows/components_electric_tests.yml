@@ -37,16 +37,29 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
 
+      - name: Restore dependencies
+        uses: actions/cache/restore@v3
+        with:
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mixdeps-
+      - run: mix deps.get
       - name: Cache dependencies
-        id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache/save@v3
         with:
           path: components/electric/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
-      - name: Cache compiled code
-        id: cache-build
-        uses: actions/cache@v3
+      - name: Restore compiled code
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+      - run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Save compiled code
+        uses: actions/cache/save@v3
         with:
           path: |
             components/electric/_build/*/lib
@@ -55,9 +68,6 @@ jobs:
 
       - name: Prepare auxiliary services
         run: make start_dev_env
-
-      - run: mix deps.get
-      - run: mix compile --force --all-warnings --warnings-as-errors
       - run: mix test
 
   formatting:
@@ -108,10 +118,17 @@ jobs:
         with:
           path: components/electric/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
-
-      - name: Cache compiled code
-        id: cache-build
-        uses: actions/cache@v3
+      - run: mix deps.get
+      - name: Restore compiled code
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            components/electric/_build/*/lib
+            !components/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+      - run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Save compiled code
+        uses: actions/cache/save@v3
         with:
           path: |
             components/electric/_build/*/lib
@@ -125,14 +142,12 @@ jobs:
           key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
           restore-keys: ${{ runner.os }}-plt--${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-
 
-      - run: mix deps.get
-      - run: mix compile --force --all-warnings --warnings-as-errors
       - run: mix dialyzer
         id: dialyzer
 
       - name: Cache PLT
         if: ${{ always() && steps.dialyzer.outcome != 'cancelled' }}
-        uses: actions/cache/restore@v3
+        uses: actions/cache/save@v3
         with:
           path: components/electric/_build/*/*.plt
           key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
