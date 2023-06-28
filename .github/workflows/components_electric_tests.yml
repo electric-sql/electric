@@ -6,8 +6,8 @@ on:
       - main
   pull_request:
     paths:
-      - 'components/electric/**'
-      - '!components/electric/**README.md'
+      - "components/electric/**"
+      - "!components/electric/**README.md"
 
 env:
   OTP_VERSION: "24.3"
@@ -18,29 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deps:
-    name: Get all the necessary dependencies
+  tests:
+    name: elixir tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: components/electric
+    env:
+      MIX_ENV: test
     steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          # Tags are required for proper version inference, and this is the only way to pull the tags in
           fetch-depth: 0
-      - name: Inject slug/short variables
-        uses: rlespinasse/github-slug-action@v4
+
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
 
-      - name: Try to reuse cached deps
+      - name: Cache dependencies
         id: cache-deps
         uses: actions/cache@v3
         with:
@@ -54,63 +51,18 @@ jobs:
           path: |
             components/electric/_build/*/lib
             !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
-
-      - run: make deps pretest_compile
-
-  tests:
-    name: elixir tests
-    runs-on: ubuntu-latest
-    needs: deps
-    defaults:
-      run:
-        working-directory: components/electric
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Inject slug/short variables
-        uses: rlespinasse/github-slug-action@v4
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{ env.OTP_VERSION }}
-          elixir-version: ${{ env.ELIXIR_VERSION }}
+          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Prepare auxiliary services
         run: make start_dev_env
 
-      - name: Restore dependencies
-        id: cache-deps
-        uses: actions/cache/restore@v3
-        with:
-          path: components/electric/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
-
-      - name: Restore compiled code
-        id: cache-build
-        uses: actions/cache/restore@v3
-        with:
-          path: |
-            components/electric/_build/*/lib
-            !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
-
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
-
-      - run: make pretest_compile
-
+      - run: mix deps.get
+      - run: mix compile --force --all-warnings --warnings-as-errors
       - run: mix test
-        env:
-          MIX_ENV: test
 
-  dialyzer:
-    name: dialyzer and formatting
+  formatting:
+    name: formatting
     runs-on: ubuntu-latest
-    needs: deps
     defaults:
       run:
         working-directory: components/electric
@@ -119,42 +71,62 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v3
+        with:
+          path: components/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+      - run: mix deps.get
+      - run: make check-format
 
-      - name: Inject slug/short variables
-        uses: rlespinasse/github-slug-action@v4
+  dialyzer:
+    name: dialyzer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: components/electric
+    env:
+      MIX_ENV: dev
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
 
-      - name: Restore dependencies
+      - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache/restore@v3
+        uses: actions/cache@v3
         with:
           path: components/electric/deps
           key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
 
-      - name: Restore compiled code
+      - name: Cache compiled code
         id: cache-build
-        uses: actions/cache/restore@v3
+        uses: actions/cache@v3
         with:
           path: |
             components/electric/_build/*/lib
             !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Cache PLT
         uses: actions/cache@v3
         with:
           path: components/electric/_build/*/*.plt
-          key: ${{ runner.os }}-plt-${{ github.ref_name }}
-          restore-keys: ${{ runner.os }}-plt-
+          key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
+          restore-keys: ${{ runner.os }}-plt--${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-
 
-      - uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.KEY_TO_ACCESS_SATELLITE_JS_PROTO }}
-      - run: make pretest_compile
-      - name: Dialyzer
-        run: make dialyzer
+      - run: mix deps.get
+      - run: mix compile --force --all-warnings --warnings-as-errors
+      - run: mix dialyzer
       - name: Check formatting
         run: make check-format
