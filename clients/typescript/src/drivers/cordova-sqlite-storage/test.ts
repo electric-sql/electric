@@ -17,6 +17,12 @@ import { ElectricClient } from '../../client/model/client'
 import { ElectricConfig } from '../../config'
 import { DbSchema } from '../../client/model'
 
+const testConfig = {
+  auth: {
+    token: 'test-token'
+  }
+}
+
 type RetVal<DB extends DbSchema<any>, N extends Notifier> = Promise<
   [Database, N, ElectricClient<DB>]
 >
@@ -27,7 +33,7 @@ export const initTestable = async <
 >(
   dbName: DbName,
   dbDescription: DB,
-  config: ElectricConfig = {},
+  config: ElectricConfig = testConfig,
   opts?: ElectrifyOptions
 ): RetVal<DB, N> => {
   const db = new MockDatabase(dbName)
@@ -44,7 +50,6 @@ export const initTestable = async <
     adapter,
     socketFactory,
     config,
-    { token: 'test-token' },
     {
       notifier: notifier,
       migrator: migrator,

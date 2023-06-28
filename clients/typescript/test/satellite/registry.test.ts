@@ -1,6 +1,5 @@
 import test from 'ava'
 
-import { AuthConfig } from '../../src/auth'
 import { ElectricConfig } from '../../src/config/index'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
@@ -14,8 +13,11 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
-const config: ElectricConfig = { }
-const authConfig: AuthConfig = { token: 'test-token ' }
+const config: ElectricConfig = {
+  auth: {
+    token: 'test-token '
+  }
+}
 const args = [
   dbName,
   adapter,
@@ -23,7 +25,6 @@ const args = [
   notifier,
   socketFactory,
   config,
-  authConfig,
 ] as const
 
 test('starting a satellite process works', async (t) => {
@@ -42,7 +43,6 @@ test('starting multiple satellite processes works', async (t) => {
     notifier,
     socketFactory,
     config,
-    authConfig
   )
   const s2 = await mockRegistry.startProcess(
     'b.db',
@@ -51,7 +51,6 @@ test('starting multiple satellite processes works', async (t) => {
     notifier,
     socketFactory,
     config,
-    authConfig
   )
   const s3 = await mockRegistry.startProcess(
     'c.db',
@@ -60,7 +59,6 @@ test('starting multiple satellite processes works', async (t) => {
     notifier,
     socketFactory,
     config,
-    authConfig
   )
 
   t.true(s1 instanceof MockSatelliteProcess)

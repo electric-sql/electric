@@ -70,8 +70,7 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    _config: ElectricConfig,
-    authConfig: AuthConfig,
+    config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
@@ -84,7 +83,7 @@ export class MockRegistry extends BaseRegistry {
       socketFactory,
       opts
     )
-    await satellite.start(authConfig)
+    await satellite.start(config.auth)
 
     return satellite
   }

@@ -15,8 +15,11 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   dbSchema,
-  {},
-  { token: 'test-token' }
+  {
+    auth: {
+      token: 'test-token'
+    }
+  },
 )
 
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)

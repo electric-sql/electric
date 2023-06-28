@@ -123,8 +123,11 @@ test('read migration meta data', async (t) => {
 test('load migration from meta data', async (t) => {
   const db = new Database(':memory:')
   const migration = makeMigration(parseMetadata(migrationMetaData))
-  const electric = await electrify(db, new DbSchema({}, [migration]), {},
-    { token: 'test-token' }
+  const electric = await electrify(db, new DbSchema({}, [migration]), {
+      auth: {
+        token: 'test-token'
+      }
+    },
   )
 
   // Check that the DB is initialized with the stars table

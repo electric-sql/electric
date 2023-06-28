@@ -1,10 +1,10 @@
 import { electrify } from '../../src/drivers/cordova-sqlite-storage'
 import { dbSchema } from '../client/generated'
 
-const config = {}
-
-const authConfig = {
-  token: 'test-token',
+const config = {
+  auth: {
+    token: 'test-token',
+  }
 }
 
 const opts = {
@@ -14,7 +14,7 @@ const opts = {
 
 document.addEventListener('deviceready', () => {
   window.sqlitePlugin.openDatabase(opts, async (original) => {
-    const { db } = await electrify(original, dbSchema, config, authConfig)
+    const { db } = await electrify(original, dbSchema, config)
     await db.Items.findMany({
       select: {
         value: true,

@@ -12,9 +12,11 @@ import { InvalidArgumentError } from '../../../src/client/validation/errors/inva
  */
 
 const db = new Database(':memory:')
-const electric = await electrify(db, dbSchema, {},
-  { token: 'test-token' }
-)
+const electric = await electrify(db, dbSchema, {
+  auth: {
+    token: 'test-token'
+  }
+})
 //const postTable = electric.db.Post
 const userTable = electric.db.User
 
