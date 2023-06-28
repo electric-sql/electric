@@ -10,7 +10,6 @@ defmodule Electric.Replication.Changes do
   identity is set to FULL.
   """
 
-  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Changes
 
   require Logger
