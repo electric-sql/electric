@@ -9,10 +9,14 @@ const config = {
   migrations: [],
 }
 
+const authConfig = {
+  token: 'test-token',
+}
+
 const original = new Database('example.db')
 
 // Electrify the DB and use the DAL to query the `Items` table
-const { db } = await electrify(original, dbSchema, config)
+const { db } = await electrify(original, dbSchema, config, authConfig)
 await db.Items.findMany({
   select: {
     value: true,

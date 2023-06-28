@@ -9,9 +9,13 @@ const config = {
   migrations: [],
 }
 
+const authConfig = {
+  token: 'test-token',
+}
+
 const original = SQLite.openDatabase('example.db')
 
-const { db } = await electrify(original, dbSchema, config)
+const { db } = await electrify(original, dbSchema, config, authConfig)
 await db.Items.findMany({
   select: {
     value: true,
