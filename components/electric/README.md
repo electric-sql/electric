@@ -92,23 +92,23 @@ make stop_dev_env
 
 The Electric application is configured using environment variables. Everything that doesn't have a default is required to run.
 
-| Variable                     | Default                     | Description                                                                                                                                                     |
-| ---------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ELECTRIC_HOST`              |                             | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS`             |
-| `CONNECTORS`                 | `""`                        | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster                                                       |
-|                              |                             |                                                                                                                                                                 |
-| `POSTGRES_REPLICATION_PORT`  | `5433`                      | Port for connections from PG instances as replication followers                                                                                                 |
-| `STATUS_PORT`                | `5050`                      | Port to expose health and status API endpoint                                                                                                                   |
-| `WEBSOCKET_PORT`             | `5133`                      | Port to expose the `/ws` path for the replication over the websocket                                                                                            |
-|                              |                             |                                                                                                                                                                 |
-| `OFFSET_STORAGE_FILE`        | `./offset_storage_data.dat` | Path to the file storing the mapping between connected Postgres, Satellite instances, and an internal event log. Should be persisted between Electric restarts. |
-|                              |                             |                                                                                                                                                                 |
-| `SATELLITE_AUTH_SIGNING_KEY` | `""`                        | Authentication token signing/validation secret key. See below.                                                                                                  |
-| `SATELLITE_AUTH_SIGNING_ISS` | `""`                        | Cluster ID which acts as the issuer for the authentication JWT. See below.                                                                                      |
-|                              |                             |                                                                                                                                                                 |
-| `GLOBAL_CLUSTER_ID`          |                             | Identifier of the cluster within the Electric cloud. When running locally, you can use any string                                                               |
-| `ELECTRIC_INSTANCE_ID`       |                             | Unique identifier of this Electric instance when running in the cluster. When running locally, you can use any string                                           |
-| `ELECTRIC_REGIONAL_ID`       |                             | Shared identifier for multiple Electric instance that connect to the same Vaxine DC when running in the cluster. When running locally, you can use any string   |
+| Variable                     | Default                     | Description                                                                                                                                                               |
+| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ELECTRIC_HOST`              |                             | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS`                       |
+| `CONNECTORS`                 | `""`                        | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster                                                                 |
+|                              |                             |                                                                                                                                                                           |
+| `POSTGRES_REPLICATION_PORT`  | `5433`                      | Port for connections from PG instances as replication followers                                                                                                           |
+| `STATUS_PORT`                | `5050`                      | Port to expose health and status API endpoint                                                                                                                             |
+| `WEBSOCKET_PORT`             | `5133`                      | Port to expose the `/ws` path for the replication over the websocket                                                                                                      |
+|                              |                             |                                                                                                                                                                           |
+| `OFFSET_STORAGE_FILE`        | `./offset_storage_data.dat` | Path to the file storing the mapping between connected Postgres, Satellite instances, and an internal event log. Should be persisted between Electric restarts.           |
+|                              |                             |                                                                                                                                                                           |
+| `SATELLITE_AUTH_SIGNING_KEY` | `""`                        | Authentication token signing/validation secret key. See below.                                                                                                            |
+| `SATELLITE_AUTH_SIGNING_ISS` | `""`                        | Cluster ID which acts as the issuer for the authentication JWT. See below.                                                                                                |
+|                              |                             |                                                                                                                                                                           |
+| `GLOBAL_CLUSTER_ID`          |                             | Identifier of the cluster within the Electric cloud. When running locally, you can use any string                                                                         |
+| `ELECTRIC_INSTANCE_ID`       |                             | Unique identifier of this Electric instance when running in the cluster. When running locally, you can use any string                                                     |
+| `ELECTRIC_REGIONAL_ID`       |                             | Shared identifier for multiple Electric instance that connect to the same DC when running in the cluster. When running locally, you can use any string. Currently unused. |
 
 **Authentication**
 
@@ -144,8 +144,9 @@ For them to work, you must run the electric server configured with the same
 ## Migrations
 
 Migrations are semi-automatically managed by the Postgres source. Once Postgres has been initialized by Electric (i.e. Electric had connected to it at least once), you will have two functions available in your SQL:
+
 1. `SELECT electric.migration_version(migration_version);`, where `migration_version` should be a monotonically growing value of your choice
-2. `CALL electric.electrify(table_name);`, where `table_name` is a string containing a schema-qualified name of the table you want electrified. 
+2. `CALL electric.electrify(table_name);`, where `table_name` is a string containing a schema-qualified name of the table you want electrified.
 
 When you want to do a migration (i.e. create a table), you need to run the `electric.migration_version` at the beginning of the transaction, and `electric.electrify` for every new table. Electrified tables and changes to them
 will reach the clients and be created there as well. For example:

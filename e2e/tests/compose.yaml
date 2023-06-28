@@ -14,7 +14,6 @@ services:
       file: ../services_templates.yaml
       service: electric
     environment:
-      VAXINE_HOST: vaxine_1
       ELECTRIC_HOST: electric_1
       CONNECTORS: >-
         postgres_1=postgresql://postgres:password@pg_1:5432/electric

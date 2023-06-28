@@ -1,7 +1,6 @@
 defmodule Electric.Replication.Changes do
   @moduledoc """
-  This module contain rules to convert changes coming from PostgreSQL
-  to Vaxine format.
+  This module contains structs that are intermediate representation of Postgres and Satellite transactions.
 
   Some of the core assumptions in this module:
   - We require PK always to be present for all tables
@@ -36,7 +35,7 @@ defmodule Electric.Replication.Changes do
             changes: [Changes.change()],
             commit_timestamp: DateTime.t(),
             origin: String.t(),
-            # this field is only set by Electric when propagating data down to Vaxine
+            # this field is only set by Electric
             origin_type: :postgresql | :satellite,
             publication: String.t(),
             lsn: Electric.Postgres.Lsn.t(),

@@ -20,4 +20,3 @@ stop:
 clean:
 	rm -rf lux
 	rm -rf postgres
-	rm -rf vaxine

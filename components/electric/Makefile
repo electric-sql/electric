@@ -52,7 +52,6 @@ export GID=$(shell id -g)
 
 stop_dev_env:
 	docker compose -f ${DC_CONFIG} down
-	rm -rf _tmp_vaxine_data
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-pgsql-%:
