@@ -49,7 +49,7 @@
     """
     ?+$eprompt
     ?+sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{__uf__: \[\]\}
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
 [endmacro]
 
 [macro start_satellite name]
