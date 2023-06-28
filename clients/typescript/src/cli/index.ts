@@ -2,6 +2,22 @@
 
 import { handleGenerate } from './migrations'
 
+/*
+ * This file is the entry point of the CLI.
+ * When calling `npx electric <command> <args>`
+ * this file is executed with node, passing along
+ * the command and arguments provided by the user.
+ *
+ * Supported commands are:
+ *  - `npx electric init <appId> [--force]`
+ *      --> Initialises your app with the necessary config files.
+ *          Will throw an error if some config files already exist.
+ *          Use the --force flag to override existing config files.
+ *  - `npx electric migrate [-p path/to/prisma/schema]`
+ *      --> Fetches all migrations from Electric and upgrades the client.
+ *          Electric must be running in order for this command to work.
+ */
+
 const args = process.argv
 
 if (args.length < 3) {
