@@ -10,19 +10,10 @@ defmodule Electric.Replication.Connectors do
   @type replication_config_opt() ::
           {:slot, binary()} | {:electric_connection, electric_connection_opts()}
   @type replication_config() :: [replication_config_opt(), ...]
-  @type downstream_config_producer_opt() ::
-          {:vaxine_hostname, binary()}
-          | {:vaxine_port, pos_integer()}
-          | {:vaxine_connection_timeout, pos_integer()}
-  @type downstream_producer_opts() :: [downstream_config_producer_opt()]
-  @type downstream_config_opt() ::
-          {:producer, module()} | {:producer_opts, downstream_producer_opts()}
-  @type downstream_config() :: [downstream_config_opt(), ...]
 
   @type config_opt() ::
           {:connection, connection_config()}
           | {:replication, replication_config()}
-          | {:downstream, downstream_config()}
           | {:origin, origin()}
 
   @type config() :: [config_opt(), ...]
@@ -42,10 +33,6 @@ defmodule Electric.Replication.Connectors do
           password: charlist(),
           replication: charlist(),
           ssl: boolean()
-        }
-  @type downstream_opts() :: %{
-          producer: module(),
-          producer_opts: downstream_producer_opts()
         }
 
   alias Electric.Postgres.Extension
@@ -109,13 +96,6 @@ defmodule Electric.Replication.Connectors do
     |> Keyword.fetch!(:connection)
     |> new_map_with_charlists()
     |> set_replication(replication?)
-  end
-
-  @spec get_downstream_opts(config()) :: downstream_opts()
-  def get_downstream_opts(config) do
-    config
-    |> Keyword.fetch!(:downstream)
-    |> Map.new()
   end
 
   defp new_map_with_charlists(list) do
