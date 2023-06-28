@@ -184,33 +184,13 @@ which will apply migration on its local SQLite database.
 Since we only support additive migrations, the application continues to work.  
 
 Then, remains to update the code of our application to do something with the new column.
-To this end, first run the migration script from within the top-level directory of this app:
+To this end, first run the `generate` script from within the top-level directory of this app:
 
 ```shell
 npx electric migrate
-Prisma schema loaded from prisma/schema.prisma
-Datasource "db": SQLite database "electric.db" at "file:/Users/kevin/Documents/Electric/development/electric/examples/web-wa-sqlite/.electric_migrations_tmp_lS1HMp/electric.db"
-
-- Introspecting based on datasource defined in prisma/schema.prisma
-✔ Introspected 1 model and wrote it into prisma/schema.prisma in 14ms
-      
-Run prisma generate to generate Prisma Client.
-
-Prisma schema loaded from prisma/schema.prisma
-
-✔ Generated Prisma Client (4.8.1 | library) to ./../../node_modules/.pnpm/@prisma+client@4.8.1_prisma@4.8.1/node_modules/@prisma/client in 31ms
-
-✔ Generated Zod Prisma Types to ./src/generated/models in 16ms
-You can now start using Prisma Client in your code. Reference: https://pris.ly/d/client
-
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
-
-Building migrations...
-Successfully built migrations
 ```
 
-The migration script updated the Electric client to incorporate the new column `other_value` on the `items` table.
+The `generate` script updates the Electric client to incorporate the new column `other_value` on the `items` table.
 This new column is now also reflected in the type of the `items` table.
 If the application was offline when the backend was migrated,
 the missing migrations will automatically be fetched by the above script
