@@ -44,7 +44,7 @@
     "dist"
   ],
   "bin": {
-    "electric": "dist/cli/index.js"
+    "electric-sql": "dist/cli/index.js"
   },
   "exports": {
     "./package.json": "./package.json",

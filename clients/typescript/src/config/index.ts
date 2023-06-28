@@ -1,54 +1,68 @@
-import { Migration } from '../migrators/index'
-
-type AppName = string
-type EnvName = string
-
-const DEFAULTS = {
-  domain: 'electric-sql.com',
-  env: 'default',
-}
+import { AuthConfig } from '../auth/index'
 
 export interface ElectricConfig {
-  app: AppName
-  env: EnvName
-  migrations: Migration[]
-  replication?: {
+  auth: AuthConfig
+  /**
+   * Optional path to the Electric sync service.
+   * Should have the following format:
+   * `electric://<host>:<port>`
+   * Defaults to:
+   * `electric://127.0.0.1:5133`
+   */
+  url?: string
+  /**
+   * Optional flag to activate debug mode
+   * which produces more verbose output.
+   * Defaults to `false`.
+   */
+  debug?: boolean
+}
+
+export type HydratedConfig = {
+  auth: AuthConfig
+  replication: {
     host: string
     port: number
     ssl: boolean
   }
-  console?: {
+  debug: boolean
+}
+
+export type InternalElectricConfig = {
+  auth: AuthConfig
+  replication?: {
     host: string
     port: number
     ssl: boolean
   }
   debug?: boolean
 }
-export type HydratedConfig = Required<ElectricConfig>
 
 export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
-  const domain = DEFAULTS.domain
-  const env = config.env ?? DEFAULTS.env
+  const auth = config.auth
+  if (!auth || !auth.token) {
+    throw new Error('Invalid configuration. Missing authentication token.')
+  }
 
-  const host = config.replication?.host ?? `${env}.${config.app}.db.${domain}`
-  const port = config.replication?.port ?? 443
-  const ssl = config.replication?.ssl ?? true
-  const replication = { ...config.replication, host, port, ssl }
+  const debug = config.debug ?? false
 
-  const consoleHost = config.console?.host ?? `console.${domain}`
-  const consoleSsl = config.console?.ssl ?? true
-  const consoleClient = {
-    host: consoleHost,
-    ssl: consoleSsl,
-    port: config.console?.port ?? (consoleSsl ? 443 : 80),
+  const url = config.url ?? 'electric://127.0.0.1:5133'
+  const matches = url.match(/(?:electric:\/\/)(.+):([0-9]*)/)
+  if (matches === null) {
+    throw new Error(
+      "Invalid Electric URL. Must be of the form: 'electric://<host>:<port>'"
+    )
+  }
+  const [_fullMatch, host, port] = matches
+  const replication = {
+    host,
+    port: parseInt(port, 10),
+    ssl: false,
   }
 
   return {
-    app: config.app,
-    env: env,
-    migrations: config.migrations ?? [],
-    replication: config.replication ?? replication,
-    console: config.console ?? consoleClient,
-    debug: config.debug ?? false,
+    auth,
+    replication,
+    debug,
   }
 }

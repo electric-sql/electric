@@ -4,9 +4,9 @@ import { electrify } from '../../src/drivers/expo-sqlite'
 import { dbSchema } from '../client/generated'
 
 const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
+  auth: {
+    token: 'test-token',
+  },
 }
 
 const original = SQLite.openDatabase('example.db')

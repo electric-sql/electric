@@ -5,9 +5,9 @@ import {
 } from '../../classes'
 
 /*
- * `writeTableDescriptions` loops over the dmmf and outputs table descriptions in this format:
+ * `writeTableSchemas` loops over the dmmf and outputs table descriptions in this format:
  *
- * const tableDescriptions = {
+ * const tableSchemas = {
  *   tableName1: {
  *     fields: [ ... ],
  *     relations: [ ... ],
@@ -72,7 +72,7 @@ export function writeTableSchemas(
     .blankLine()
 
   writer
-    .writeLine('export const dbSchema = new DbSchema(tableSchemas)')
+    .writeLine('export const dbSchema = new DbSchema(tableSchemas, migrations)')
     .writeLine('export type Electric = ElectricClient<typeof dbSchema>')
 }
 

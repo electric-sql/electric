@@ -1,4 +1,4 @@
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -14,27 +14,21 @@ import {
   Transaction,
   Relation,
 } from '../util/types'
+import { ElectricConfig } from '../config/index'
 
-import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
-import {
-  SatelliteOpts,
-  SatelliteOverrides,
-  satelliteDefaults,
-  SatelliteConfig,
-} from './config'
+import { Client, ConnectionWrapper, Satellite } from './index'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
 
 export class MockSatelliteProcess implements Satellite {
-  config: SatelliteConfig
   dbName: DbName
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
   socketFactory: SocketFactory
-  console: ConsoleClient
   opts: SatelliteOpts
 
   constructor(
@@ -43,8 +37,6 @@ export class MockSatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
-    config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
     this.dbName = dbName
@@ -52,12 +44,10 @@ export class MockSatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.socketFactory = socketFactory
-    this.console = console
-    this.config = config
     this.opts = opts
   }
 
-  async start(_authState?: AuthState): Promise<ConnectionWrapper> {
+  async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await sleepAsync(50)
     return {
       connectionPromise: new Promise((resolve) => resolve()),
@@ -76,9 +66,7 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    console: ConsoleClient,
-    config: SatelliteConfig,
-    authState?: AuthState,
+    config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     const opts = { ...satelliteDefaults, ...overrides }
@@ -89,11 +77,9 @@ export class MockRegistry extends BaseRegistry {
       migrator,
       notifier,
       socketFactory,
-      console,
-      config,
       opts
     )
-    await satellite.start(authState)
+    await satellite.start(config.auth)
 
     return satellite
   }

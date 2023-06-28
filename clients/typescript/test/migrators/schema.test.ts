@@ -10,8 +10,7 @@ import { satelliteDefaults } from '../../src/satellite/config'
 
 import { randomValue } from '../../src/util/random'
 
-import config from '../support/.electric/@config/index'
-const { migrations } = config
+import migrations from '../support/migrations/migrations.js'
 
 type Context = {
   dbName: string
