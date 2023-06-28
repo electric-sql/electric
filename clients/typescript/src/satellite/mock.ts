@@ -17,11 +17,7 @@ import {
 import { ElectricConfig } from '../config/index'
 
 import { Client, ConnectionWrapper, Satellite } from './index'
-import {
-  SatelliteOpts,
-  SatelliteOverrides,
-  satelliteDefaults,
-} from './config'
+import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'

@@ -19,31 +19,29 @@ export interface ElectricConfig {
 }
 
 export type HydratedConfig = {
-  auth: AuthConfig,
+  auth: AuthConfig
   replication: {
-    host: string,
-    port: number,
+    host: string
+    port: number
     ssl: boolean
-  },
+  }
   debug: boolean
 }
 
 export type InternalElectricConfig = {
-  auth: AuthConfig,
+  auth: AuthConfig
   replication?: {
-    host: string,
-    port: number,
+    host: string
+    port: number
     ssl: boolean
-  },
+  }
   debug?: boolean
 }
 
 export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   const auth = config.auth
-  if (!auth ||!auth.token) {
-    throw new Error(
-      'Invalid configuration. Missing authentication token.'
-    )
+  if (!auth || !auth.token) {
+    throw new Error('Invalid configuration. Missing authentication token.')
   }
 
   const debug = config.debug ?? false
@@ -55,7 +53,7 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
       "Invalid Electric URL. Must be of the form: 'electric://<host>:<port>'"
     )
   }
-  const [ _fullMatch, host, port ] = matches
+  const [_fullMatch, host, port] = matches
   const replication = {
     host,
     port: parseInt(port, 10),

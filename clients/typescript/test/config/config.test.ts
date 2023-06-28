@@ -4,8 +4,8 @@ import { hydrateConfig } from '../../src/config'
 test('hydrateConfig adds expected defaults', async (t) => {
   const hydrated = hydrateConfig({
     auth: {
-      token: 'test-token'
-    }
+      token: 'test-token',
+    },
   })
 
   t.is(hydrated.replication.host, '127.0.0.1')

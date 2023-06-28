@@ -15,8 +15,8 @@ const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const config: ElectricConfig = {
   auth: {
-    token: 'test-token '
-  }
+    token: 'test-token ',
+  },
 }
 const args = [
   dbName,
@@ -42,7 +42,7 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    config,
+    config
   )
   const s2 = await mockRegistry.startProcess(
     'b.db',
@@ -50,7 +50,7 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    config,
+    config
   )
   const s3 = await mockRegistry.startProcess(
     'c.db',
@@ -58,7 +58,7 @@ test('starting multiple satellite processes works', async (t) => {
     migrator,
     notifier,
     socketFactory,
-    config,
+    config
   )
 
   t.true(s1 instanceof MockSatelliteProcess)

@@ -22,8 +22,8 @@ import { DbSchema } from '../../client/model'
 
 const testConfig = {
   auth: {
-    token: 'test-token'
-  }
+    token: 'test-token',
+  },
 }
 
 type RetVal<S extends DbSchema<any>, N extends Notifier> = Promise<

@@ -6,7 +6,7 @@ import { dbSchema } from '../client/generated'
 const config = {
   auth: {
     token: 'test-token',
-  }
+  },
 }
 
 const original = SQLite.openDatabase('example.db')

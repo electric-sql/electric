@@ -45,9 +45,7 @@ export async function buildMigrations(
     )
   } catch (e) {
     if (e instanceof z.ZodError)
-      throw new Error(
-        'Could not build migrations:\n' + e.message
-      )
+      throw new Error('Could not build migrations:\n' + e.message)
     else throw e
   }
 }

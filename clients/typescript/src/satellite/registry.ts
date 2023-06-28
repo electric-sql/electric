@@ -102,7 +102,7 @@ export abstract class BaseRegistry implements Registry {
       migrator,
       notifier,
       socketFactory,
-      config,
+      config
     ).then((satellite) => {
       delete startingPromises[dbName]
 
@@ -187,7 +187,7 @@ export class GlobalRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: HydratedConfig,
+    config: HydratedConfig
   ): Promise<Satellite> {
     const foundErrors = validateConfig(config)
     if (foundErrors.length > 0) {

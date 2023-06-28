@@ -32,8 +32,5 @@ export const writeSingleFileImportStatements: WriteStatements = (
     'electric-sql/client/model'
   )
 
-  writeImport(
-    `migrations`,
-    './migrations'
-  )
+  writeImport(`migrations`, './migrations')
 }

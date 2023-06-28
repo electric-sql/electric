@@ -7,7 +7,7 @@ const conn = new Database(':memory:')
 const config = {
   auth: {
     token: 'test-token',
-  }
+  },
 }
 
 const { notifier, adapter, db } = await electrify(conn, dbSchema, config)

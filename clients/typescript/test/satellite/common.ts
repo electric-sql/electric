@@ -7,10 +7,7 @@ import { MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { SatelliteProcess } from '../../src/satellite'
 import { initTableInfo } from '../support/satellite-helpers'
-import {
-  satelliteDefaults,
-  SatelliteOpts,
-} from '../../src/satellite/config'
+import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 
 export const relations = {
   child: {
@@ -110,7 +107,7 @@ export const makeContext = async (
     satellite,
     tableInfo,
     timestamp,
-    authState
+    authState,
   }
 }
 
