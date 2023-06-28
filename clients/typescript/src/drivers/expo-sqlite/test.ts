@@ -13,17 +13,21 @@ import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
 import { MockDatabase, MockWebSQLDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
-import { MockConsoleClient } from '../../auth/mock'
 import { ElectricConfig } from '../../config'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
+
+const testConfig = {
+  auth: {
+    token: 'test-token',
+  },
+}
 
 type RetVal<
   S extends DbSchema<any>,
   N extends Notifier,
   D extends Database = Database
 > = Promise<[D, N, ElectricClient<S>]>
-const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export async function initTestable<
   S extends DbSchema<any>,
@@ -49,7 +53,6 @@ export async function initTestable<
   config?: ElectricConfig,
   opts?: ElectrifyOptions
 ): RetVal<S, N, MockWebSQLDatabase>
-
 export async function initTestable<
   S extends DbSchema<any>,
   N extends Notifier = MockNotifier
@@ -68,7 +71,6 @@ export async function initTestable<
   const migrator = opts?.migrator || new MockMigrator()
   const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
   const socketFactory = opts?.socketFactory || new MockSocketFactory()
-  const console = opts?.console || new MockConsoleClient()
   const registry = opts?.registry || new MockRegistry()
 
   const dal = await electrify(
@@ -80,7 +82,6 @@ export async function initTestable<
     {
       notifier: notifier,
       migrator: migrator,
-      console: console,
       registry: registry,
     }
   )

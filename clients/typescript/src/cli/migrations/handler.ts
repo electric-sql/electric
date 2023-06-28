@@ -20,7 +20,7 @@ export async function handleGenerate(...args: string[]) {
   // merge default options with the provided arguments
   const opts: GeneratorOptions = {
     ...defaultOptions,
-    ...parseGenerateArgs(args)
+    ...parseGenerateArgs(args),
   }
 
   await generate(opts)
@@ -42,7 +42,9 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
 
   if (flag) {
     // a flag was provided but without argument
-    console.error(`Missing argument for flag --${flag} passed to generate command.`)
+    console.error(
+      `Missing argument for flag --${flag} passed to generate command.`
+    )
     process.exit(9)
   }
 
@@ -54,9 +56,10 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
   return genArgs
 
   function checkFlag(flag: string): keyof GeneratorArgs {
-    const supportedFlags = [ '--service', '--out' ]
+    const supportedFlags = ['--service', '--out']
     if (supportedFlags.includes(flag))
-      return flag.substring(2) as keyof GeneratorArgs // substring removes the double dash --
+      return flag.substring(2) as keyof GeneratorArgs
+    // substring removes the double dash --
     else {
       console.error(`Unsupported flag '${flag}' passed to generate command.`)
       process.exit(9)

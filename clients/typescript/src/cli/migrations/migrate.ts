@@ -11,20 +11,10 @@ const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
   service: process.env.ELECTRIC_URL ?? 'http://localhost:5050',
-  out: path.join(appRoot, 'src/generated/models')
+  out: path.join(appRoot, 'src/generated/client'),
 }
 
 export type GeneratorOptions = typeof defaultOptions
-
-/*
-const migrationDefaultOptions = {
-  migrationsFolder: path.join(appRoot, 'migrations'),
-  configFolder: path.join(appRoot, '.electric'),
-  migrationEndpoint: 'http://localhost:5050/api/migrations?dialect=sqlite',
-}
-
-type MigrationOptions = Partial<typeof migrationDefaultOptions>
-*/
 
 /**
  * A `DataSourceDescription` object describes on which line the Prisma schema
@@ -57,13 +47,7 @@ type DataSourceDescription = {
  * @param migrationsFolder Absolute path to the migrations folder.
  * @param configFolder Absolute path to the configuration folder.
  */
-export async function generate(
-  //prismaSchemaPath = path.join(appRoot, 'prisma/schema.prisma'),
-  //providedOpts: MigrationOptions = {}
-  opts: GeneratorOptions
-) {
-  //const prismaSchema = path.resolve(prismaSchemaPath)
-
+export async function generate(opts: GeneratorOptions) {
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
   const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
@@ -71,12 +55,11 @@ export async function generate(
   try {
     const migrationsPath = path.join(tmpFolder, 'migrations')
     await fs.mkdir(migrationsPath)
-    const configPath = path.join(appRoot, '.electric')
-    const migrationEndpoint = opts.service +'/api/migrations?dialect=sqlite'
+    const migrationEndpoint = opts.service + '/api/migrations?dialect=sqlite'
 
     const migrationsFolder = path.resolve(migrationsPath)
-    const configFolder = path.resolve(configPath)
-    const configFile = path.join(configFolder, '@config/index.mjs')
+    const outFolder = path.resolve(opts.out)
+    const migrationsFile = path.join(outFolder, 'migrations.js')
 
     // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
     await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
@@ -113,16 +96,17 @@ export async function generate(
     )
 
     // Generate a client from the Prisma schema
+    console.log('Generating Electric client...')
     await generateElectricClient(prismaSchema)
+    const relativePath = path.relative(appRoot, opts.out)
+    console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
     // Build the migrations
     console.log('Building migrations...')
-    await buildMigrations(migrationsFolder, configFile)
+    await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
   } catch (e) {
-    console.error(
-      'generate command failed: ' + JSON.stringify(e)
-    )
+    console.error('generate command failed: ' + JSON.stringify(e))
   } finally {
     // Delete our temporary directory
     await fs.rm(tmpFolder, { recursive: true })
@@ -137,10 +121,12 @@ async function createPrismaSchema(folder: string, { out }: GeneratorOptions) {
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
-  const provider = path.join(appRoot, 'node_modules/prisma-generator-electric/dist/bin.js')
+  const provider = path.join(
+    appRoot,
+    'node_modules/prisma-generator-electric/dist/bin.js'
+  )
   const output = path.resolve(out)
-  const schema =
-`generator client {
+  const schema = `generator client {
   provider = "prisma-client-js"
 }
 

@@ -1,6 +1,6 @@
 import throttle from 'lodash.throttle'
 
-import { AuthState } from '../auth/index'
+import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter, RunResult } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import {
@@ -9,7 +9,7 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, ConsoleClient, Satellite } from './index'
+import { Client, ConnectionWrapper, Satellite } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -29,7 +29,7 @@ import {
   Row,
   MigrationTable,
 } from '../util/types'
-import { SatelliteConfig, SatelliteOpts } from './config'
+import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
 import { difference } from '../util/sets'
 import {
@@ -68,9 +68,7 @@ export class SatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   client: Client
-  console: ConsoleClient
 
-  config: SatelliteConfig
   opts: SatelliteOpts
 
   _authState?: AuthState
@@ -94,8 +92,6 @@ export class SatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     client: Client,
-    console: ConsoleClient,
-    config: SatelliteConfig,
     opts: SatelliteOpts
   ) {
     this.dbName = dbName
@@ -103,9 +99,7 @@ export class SatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
-    this.console = console
 
-    this.config = config
     this.opts = opts
 
     this._lastAckdRowId = 0
@@ -127,7 +121,7 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
   }
 
-  async start(authState?: AuthState): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -135,7 +129,11 @@ export class SatelliteProcess implements Satellite {
       throw new Error('Invalid database schema.')
     }
 
-    await this._setAuthState(authState)
+    const clientId =
+      authConfig.clientId && authConfig.clientId !== ''
+        ? authConfig.clientId
+        : await this._getClientId()
+    await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
     if (this._authStateSubscription === undefined) {
       const handler = this._updateAuthState.bind(this)
@@ -193,19 +191,8 @@ export class SatelliteProcess implements Satellite {
     return { connectionPromise }
   }
 
-  async _setAuthState(authState?: AuthState): Promise<void | Error> {
-    if (authState !== undefined) {
-      throw new Error('Not implemented')
-      // this._authState = authState
-    } else {
-      const app = this.config.app
-      const env = this.config.env
-      const clientId = await this._getClientId()
-      const token = await this._getMeta('token')
-      const refreshToken = await this._getMeta('refreshToken')
-
-      this._authState = { app, env, clientId, token, refreshToken }
-    }
+  async _setAuthState(authState: AuthState): Promise<void | Error> {
+    this._authState = authState
   }
 
   setClientListeners(): void {
@@ -272,26 +259,11 @@ export class SatelliteProcess implements Satellite {
 
     return this.client
       .connect()
-      .then(() => this.refreshAuthState(authState))
-      .then((freshAuthState) => this.client.authenticate(freshAuthState))
+      .then(() => this.client.authenticate(authState))
       .then(() => this.client.startReplication(this._lsn))
       .catch((error) => {
         Log.warn(`couldn't start replication: ${error}`)
       })
-  }
-
-  // TODO: fetch token every time, must add logic to check if token is still valid
-  async refreshAuthState(authState: AuthState): Promise<AuthState> {
-    try {
-      const { token, refreshToken } = await this.console.token(authState)
-      await this._setMeta('token', token)
-      await this._setMeta('refreshToken', token)
-      return { ...authState, token, refreshToken }
-    } catch (error) {
-      Log.warn(`unable to refresh token: ${error}`)
-    }
-
-    return { ...authState }
   }
 
   async _verifyTableStructure(): Promise<boolean> {

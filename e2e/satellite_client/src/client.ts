@@ -1,6 +1,5 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
-import { ConsoleClient, TokenRequest } from 'electric-sql/dist/satellite'
 import jwt from 'jsonwebtoken'
 
 import { setLogLevel } from 'electric-sql/debug'
@@ -10,30 +9,24 @@ import { dbSchema, Electric } from './generated/models'
 
 setLogLevel('DEBUG')
 
-// Console client throws an error when unable to fetch token which causes test to fail
-export class MockConsoleClient implements ConsoleClient {
-  token = async (request: TokenRequest) => {
-    const mockIss =
-      process.env.SATELLITE_AUTH_SIGNING_ISS || 'dev.electric-sql.com'
-    const mockKey =
-      process.env.SATELLITE_AUTH_SIGNING_KEY ||
-      'integration-tests-signing-key-example'
+function auth_token() {
+  const mockIss =
+    process.env.SATELLITE_AUTH_SIGNING_ISS || 'dev.electric-sql.com'
+  const mockKey =
+    process.env.SATELLITE_AUTH_SIGNING_KEY ||
+    'integration-tests-signing-key-example'
 
-    const iat = Math.floor(Date.now() / 1000) - 1000
+  const iat = Math.floor(Date.now() / 1000) - 1000
 
-    const token = jwt.sign(
-      { user_id: request.clientId, type: 'access', iat },
-      mockKey,
-      {
-        issuer: mockIss,
-        algorithm: 'HS256',
-        expiresIn: '2h',
-      }
-    )
-
-    // Refresh token is not going to be used, so we don't mock it
-    return { token, refreshToken: '' }
-  }
+  return jwt.sign(
+    { user_id: 'test-user', type: 'access', iat },
+    mockKey,
+    {
+      issuer: mockIss,
+      algorithm: 'HS256',
+      expiresIn: '2h',
+    }
+  )
 }
 
 export const open_db = async (
@@ -44,20 +37,15 @@ export const open_db = async (
 ): Promise<Electric> => {
   const original = new Database(name)
   const config: ElectricConfig = {
-    app: 'satellite_client',
-    env: 'default',
-    migrations: migrations,
-    replication: {
-      host: host,
-      port: port,
-      ssl: false,
-    },
+    url: `electric://${host}:${port}`,
     debug: true,
+    auth: {
+      token: auth_token()
+    }
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  return await electrify(original, dbSchema, config, {
-    console: new MockConsoleClient(),
-  })
+  dbSchema.migrations = migrations
+  return await electrify(original, dbSchema, config)
 }
 
 export const set_subscribers = (db: Electric) => {
