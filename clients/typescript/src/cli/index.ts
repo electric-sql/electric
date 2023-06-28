@@ -9,13 +9,11 @@ import { handleGenerate } from './migrations'
  * the command and arguments provided by the user.
  *
  * Supported commands are:
- *  - `npx electric init <appId> [--force]`
- *      --> Initialises your app with the necessary config files.
- *          Will throw an error if some config files already exist.
- *          Use the --force flag to override existing config files.
- *  - `npx electric migrate [-p path/to/prisma/schema]`
- *      --> Fetches all migrations from Electric and upgrades the client.
+ *  - `npx electric-sql generate [--out where/to/write/generated/client --service <electricHost:electricPort>]`
+ *      --> Generates an Electric client based on the migrations exposed by Electric.
  *          Electric must be running in order for this command to work.
+ *          The URL to the Electric migrations endpoint can be provided using the --service flag
+ *          only the host and port are needed.
  */
 
 const args = process.argv
