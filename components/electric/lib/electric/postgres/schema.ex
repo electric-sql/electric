@@ -147,6 +147,22 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
+  @spec table_info(t(), {name(), name()}) ::
+          {:ok, Electric.Postgres.Replication.Table.t()} | {:error, term()}
+  def table_info(schema, {sname, tname}) do
+    table_info(schema, sname, tname)
+  end
+
+  @spec table_info(t(), name(), name()) ::
+          {:ok, Electric.Postgres.Replication.Table.t()} | {:error, term()}
+  def table_info(schema, sname, tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      table_info(table)
+    else
+      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
+    end
+  end
+
   @spec table_info(%Proto.Table{}) :: {:ok, Electric.Postgres.Replication.Table.t()}
   def table_info(%Proto.Table{} = table) do
     {:ok, pks} = primary_keys(table)
@@ -173,7 +189,7 @@ defmodule Electric.Postgres.Schema do
     {:ok, table_info}
   end
 
-  defp col_type(%{name: name, array: [_]}), do: {:array, col_type(name)}
+  defp col_type(%{name: name, array: [_ | _]}), do: {:array, col_type(name)}
   defp col_type(%{name: name}), do: col_type(name)
 
   defp col_type("serial2"), do: :int2

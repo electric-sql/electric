@@ -998,9 +998,9 @@ defmodule Electric.Postgres.TableTest do
   end
 
   describe "to_relation" do
-    test "correctly maps a schema table to the SchemaRegistry representation" do
-      alias Electric.Postgres.Replication.{Column, Table}
+    alias Electric.Postgres.Replication.{Column, Table}
 
+    test "correctly maps a schema table to the SchemaRegistry representation" do
       table = %Proto.Table{
         name: %Proto.RangeVar{schema: "public", name: "t1"},
         oid: 48888,
@@ -1049,6 +1049,57 @@ defmodule Electric.Postgres.TableTest do
                columns: [
                  %Column{name: "c1", type: :int4, type_modifier: -1, identity?: true},
                  %Column{name: "c2", type: :int4, type_modifier: -1, identity?: true}
+               ]
+             }
+    end
+
+    test "handles array columns correctly" do
+      schema =
+        schema_update(
+          Enum.join(
+            [
+              "CREATE TABLE rray1 (id uuid PRIMARY KEY, values int4[]);",
+              "CREATE TABLE other.rray2 (id uuid PRIMARY KEY, values int4[3][4][5]);"
+            ],
+            "\n"
+          )
+        )
+
+      assert {:ok, table_info} = Schema.table_info(schema, "public", "rray1")
+
+      assert table_info == %Table{
+               schema: "public",
+               name: "rray1",
+               oid: 13362,
+               primary_keys: ["id"],
+               replica_identity: :index,
+               columns: [
+                 %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
+                 %Column{
+                   name: "values",
+                   type: {:array, :int4},
+                   type_modifier: -1,
+                   identity?: false
+                 }
+               ]
+             }
+
+      assert {:ok, table_info} = Schema.table_info(schema, {"other", "rray2"})
+
+      assert table_info == %Table{
+               schema: "other",
+               name: "rray2",
+               oid: 19056,
+               primary_keys: ["id"],
+               replica_identity: :index,
+               columns: [
+                 %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
+                 %Column{
+                   name: "values",
+                   type: {:array, :int4},
+                   type_modifier: -1,
+                   identity?: false
+                 }
                ]
              }
     end
