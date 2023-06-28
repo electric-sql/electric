@@ -118,7 +118,7 @@ export const makeContext = async (
     satellite,
     tableInfo,
     timestamp,
-    authState
+    authState,
   }
 }
 

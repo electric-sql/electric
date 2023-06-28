@@ -123,7 +123,10 @@ test('read migration meta data', async (t) => {
 test('load migration from meta data', async (t) => {
   const db = new Database(':memory:')
   const migration = makeMigration(parseMetadata(migrationMetaData))
-  const electric = await electrify(db, new DbSchema({}), {
+  const electric = await electrify(
+    db,
+    new DbSchema({}),
+    {
       app: 'migration-loader-test',
       env: 'env',
       migrations: [migration],
