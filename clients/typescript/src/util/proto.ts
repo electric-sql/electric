@@ -140,7 +140,7 @@ export function startReplicationErrorToSatelliteError(
 export function shapeRequestToSatShapeReq(
   shapeRequests: ShapeRequest[]
 ): Pb.SatShapeReq[] {
-  const shapeReqs: Pb.SatShapeReq[] = new Array()
+  const shapeReqs: Pb.SatShapeReq[] = []
   for (const sr of shapeRequests) {
     const requestId = sr.requestId
     const selects = sr.definition.selects.map((s) => ({

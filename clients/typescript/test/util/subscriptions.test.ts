@@ -1,8 +1,7 @@
 import test from 'ava'
 
 import { InMemorySubscriptionsManager } from '../../src/util/subscriptions'
-import { SubscriptionData, Transaction } from '../../src/util'
-import Long from 'long'
+import { SubscriptionData } from '../../src/util'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager
@@ -44,15 +43,9 @@ test('some tests', (t) => {
     definition,
   }
 
-  const transaction: Transaction = {
-    commit_timestamp: Long.ZERO,
-    lsn: new Uint8Array(),
-    changes: [],
-  }
-
   const subscriptionData: SubscriptionData = {
     subscriptionId,
-    transaction,
+    data: { changes: [] },
     shapeReqToUuid,
   }
 

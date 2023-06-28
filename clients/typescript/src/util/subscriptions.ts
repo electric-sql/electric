@@ -2,7 +2,6 @@ import {
   DataChange,
   DataChangeType,
   Relation,
-  RelationsCache,
   SatelliteError,
   SatelliteErrorCode,
   ShapeDefinition,
@@ -15,7 +14,6 @@ import {
   SatSubsDataBegin,
   SatShapeDataBegin,
   SatTransOp,
-  SatSubsError,
   SatSubsResp,
 } from '../_generated/protocol/satellite'
 import EventEmitter from 'events'
@@ -103,7 +101,7 @@ export class InMemorySubscriptionsManager
 
       if (shapeReqToUuid[shapeReq.requestId]) {
         if (!this.subToShapes[subscriptionId]) {
-          this.subToShapes[subscriptionId] = new Array()
+          this.subToShapes[subscriptionId] = []
         }
 
         // would like to understand how to do this properly
@@ -216,7 +214,7 @@ export class SubscriptionsDataCache extends EventEmitter {
 
     this.inDelivery = {
       subscriptionId: subscriptionId,
-      transaction: new Array(),
+      transaction: [],
       shapeReqToUuid: {},
     }
   }

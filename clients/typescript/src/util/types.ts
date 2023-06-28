@@ -194,4 +194,3 @@ export type SubscriptionData = {
   data: SubscriptionDataTransaction
   shapeReqToUuid: { [req: string]: string }
 }
-
