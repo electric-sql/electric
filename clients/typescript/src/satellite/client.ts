@@ -745,9 +745,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
   }
 
-  private handleSubscription(sub: SatSubsResp): SubscribeResponse {
-    this.subscriptionsDataCache.subscriptionResponse()
-    return { subscriptionId: sub.subscriptionId }
+  private handleSubscription(msg: SatSubsResp): SubscribeResponse {
+    this.subscriptionsDataCache.subscriptionResponse(msg)
+    return { subscriptionId: msg.subscriptionId }
   }
 
   private handleSubscriptionData(msg: SatSubscMsg): void {

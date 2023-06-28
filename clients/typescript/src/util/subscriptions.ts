@@ -16,6 +16,7 @@ import {
   SatShapeDataBegin,
   SatTransOp,
   SatSubsError,
+  SatSubsResp,
 } from '../_generated/protocol/satellite'
 import EventEmitter from 'events'
 import { deserializeRow } from '../satellite/client'
@@ -154,7 +155,7 @@ export class InMemorySubscriptionsManager
 // client would process migrations if they are sent before subscription begin
 
 export class SubscriptionsDataCache extends EventEmitter {
-  ready: boolean
+  requestedSubscription?: string
   remainingShapes: Set<string>
   currentShapeRequestId?: string
   inDelivery?: SubscriptionDataInternal
@@ -162,7 +163,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   constructor() {
     super()
 
-    this.ready = false
+    this.requestedSubscription = undefined
     this.remainingShapes = new Set()
   }
   isDelivering(): boolean {
@@ -180,7 +181,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     shapeRequestIds.forEach((rid) => this.remainingShapes.add(rid))
   }
 
-  subscriptionResponse() {
+  subscriptionResponse({ subscriptionId }: SatSubsResp) {
     if (this.remainingShapes.size == 0) {
       this.reset()
       this.subscriptionError(
@@ -188,20 +189,25 @@ export class SubscriptionsDataCache extends EventEmitter {
         `Received subscribe response but no subscription has been requested`
       )
     }
-    this.ready = true
+    this.requestedSubscription = subscriptionId
   }
 
   subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
-    if (!this.ready) {
-      this.reset()
+    if (!this.requestedSubscription) {
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubsDataBegin but no subscription is being delivered`
       )
     }
 
+    if (this.requestedSubscription != subscriptionId) {
+      this.subscriptionError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `subscription identifier in SatSubsDataBegin does not match the expected`
+      )
+    }
+
     if (this.inDelivery) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received SatSubsDataStart for subscription ${subscriptionId} but a subscription is already being delivered`
@@ -219,7 +225,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     relations: Map<number, Relation>
   ): SubscriptionDataInternal {
     if (!this.inDelivery) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubDataEnd but no subscription is being delivered`
@@ -227,7 +232,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
 
     if (this.remainingShapes.size > 0) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubDataEnd but not all shapes have been delivered`
@@ -245,7 +249,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       shapeReqToUuid: res.shapeReqToUuid,
     }
 
-    this.ready = false
+    this.requestedSubscription = undefined
     this.remainingShapes = new Set()
     this.inDelivery = undefined
 
@@ -255,7 +259,6 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   shapeDataBegin(shape: SatShapeDataBegin) {
     if (!this.inDelivery) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin but no subscription is being delivered`
@@ -263,7 +266,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
 
     if (this.remainingShapes.size == 0) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin but all shapes have been delivered for this subscription`
@@ -271,7 +273,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
 
     if (this.currentShapeRequestId) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but a shape is already being delivered`
@@ -279,7 +280,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
 
     if (this.inDelivery.shapeReqToUuid[shape.requestId]) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but shape has already been delivered`
@@ -292,7 +292,6 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   shapeDataEnd() {
     if (!this.inDelivery) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataEnd but no subscription is being delivered`
@@ -300,7 +299,6 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
 
     if (!this.currentShapeRequestId) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataEnd but no shape is being delivered`
@@ -317,7 +315,6 @@ export class SubscriptionsDataCache extends EventEmitter {
       !this.inDelivery ||
       !this.currentShapeRequestId
     ) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatOpLog but no shape is being delivered`
@@ -370,7 +367,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   }
 
   reset() {
-    this.ready = false
+    this.requestedSubscription = undefined
     this.remainingShapes = new Set()
     this.currentShapeRequestId = undefined
     this.inDelivery = undefined
