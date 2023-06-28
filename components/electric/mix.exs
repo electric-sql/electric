@@ -15,7 +15,17 @@ defmodule Electric.MixProject do
         coveralls: :test,
         "coveralls.lcov": :test,
         "coveralls.html": :test
-      ]
+      ],
+      releases: [
+        electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
+        ws_client: [
+          applications: [electric: :load, gun: :permanent],
+          include_executables_for: [:unix],
+          # Cannot be set to `false` until 1.14, so we're using an empty file
+          runtime_config_path: "config/ws_client_runtime.exs"
+        ]
+      ],
+      default_release: :electric
     ]
   end
 
@@ -23,29 +33,17 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:sasl, :logger]
+      extra_applications: [:logger]
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:vax, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vax"},
-      {:antidote_pb_codec,
-       git: "https://github.com/electric-sql/vaxine.git",
-       sparse: "apps/antidote_pb_codec",
-       override: true},
-      {:antidotec_pb,
-       git: "https://github.com/electric-sql/vaxine.git",
-       sparse: "apps/antidotec_pb",
-       override: true},
-      {:vx_client, git: "https://github.com/electric-sql/vaxine.git", sparse: "apps/vx_client"},
       {:epgsql, "~> 4.2"},
+      {:backoff, "~> 1.1"},
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},
-      # TODO: shouldn't be needed, here for convenience
-      {:ecto_sql, "~> 3.0"},
-      {:postgrex, "~> 0.16.3"},
       {:postgresql_uri, "~> 0.1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:ranch, "~> 2.1", override: true},
@@ -55,14 +53,15 @@ defmodule Electric.MixProject do
       {:excoveralls, "~> 0.14", only: :test, runtime: false},
       {:gproc, "~> 0.9.0"},
       {:protox, "~> 1.7"},
-      {:gun, "~> 2.0.0-rc.2"},
-      {:cowboy, "~> 2.9.0"},
+      {:gun, "~> 2.0"},
+      {:cowboy, "~> 2.9"},
       {:gen_stage, "~> 1.1.2"},
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
       {:telemetry_metrics_prometheus, "~> 1.1.0"},
       {:yajwt, "~> 1.4"},
+      {:ets, "~> 0.9.0"},
       {:stream_data, "~> 0.5", only: [:dev, :test]},
       {:exqlite, "~> 0.13.5", only: [:dev, :test]},
       {:tzdata, "~> 1.1", only: [:dev, :test]},

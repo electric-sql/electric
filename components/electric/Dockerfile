@@ -13,20 +13,24 @@ RUN apt-get update -y && \
     apt-get clean && \
     rm -f /var/lib/apt/lists/*_*
 
+RUN mix local.hex --force && mix local.rebar --force
+
 ENV MIX_ENV=prod
 
 WORKDIR /app
 COPY Makefile /app/
-RUN make build_tools
 
 COPY mix.*  /app/
-RUN make deps
-COPY config /app/config/
+RUN mix deps.get
+COPY config/config.exs config/prod.exs /app/config/
 RUN mix deps.compile
 
 COPY lib    /app/lib/
+COPY config/*runtime.exs /app/config/
+
 ARG ELECTRIC_VERSION=local
-RUN make compile release
+ARG MAKE_RELEASE_TASK=release
+RUN make compile ${MAKE_RELEASE_TASK}
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
@@ -47,9 +51,12 @@ RUN chown nobody /app
 
 FROM runner_setup AS runner
 
+ARG RELEASE_NAME=electric
 ## Vaxine configuration via environment variables
-COPY --from=builder /app/_build/prod/rel/electric ./
+COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
+RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
 VOLUME ./offset_storage_data.dat
 
-ENTRYPOINT /app/bin/electric start
+ENTRYPOINT ["/app/bin/entrypoint"]
+CMD ["start"]

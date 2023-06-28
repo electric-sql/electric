@@ -864,7 +864,7 @@ export class SatelliteProcess implements Satellite {
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
-      await this.migrator.apply({
+      await this.migrator.applyIfNotAlready({
         statements: allStatements,
         version: transaction.migrationVersion,
       })

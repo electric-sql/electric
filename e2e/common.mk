@@ -11,25 +11,24 @@ export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
 export ELIXIR_VERSION=1.13.4
 export OTP_VERSION=24.3
 export DEBIAN_VERSION=bullseye-20210902-slim
-export COMPOSE_COMPATIBILITY=true
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
 
 ifdef USE_LOCAL_IMAGE
-	export VAXINE_IMAGE?=vaxine:local-build
 	export POSTGRESQL_IMAGE?=postgres:local-build
 	export SYSBENCH_IMAGE?=sysbench:local-build
 else
-	export VAXINE_IMAGE?=${DOCKER_REGISTRY}/vaxine:latest
-	export POSTGRESQL_IMAGE?=${DOCKER_REGISTRY}/postgres:latest
+	export POSTGRESQL_IMAGE?=postgres:14-alpine
 	export SYSBENCH_IMAGE?=${DOCKER_REGISTRY}/sysbench:latest
 endif
 
 ifeq (${ELECTRIC_IMAGE_NAME}${ELECTRIC_IMAGE_TAG},)
 	export ELECTRIC_IMAGE=electric:local-build
+	export ELECTRIC_CLIENT_IMAGE=electric-ws-client:local-build
 else
 	export ELECTRIC_IMAGE=${ELECTRIC_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
+	export ELECTRIC_CLIENT_IMAGE=${ELECTRIC_CLIENT_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 endif
 
 lux: ${LUX}
@@ -50,23 +49,10 @@ SYSBENCH_COMMIT:=df89d34c410a2277e19f77e47e535d0890b2029b
 	touch .sysbench_docker_build
 
 start_dev_env:
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1 pg_2 pg_3
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color -d pg_1
 
 log_dev_env:
-	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow
-
-
-ifdef LUX_EXTRA_LOGS
-export VAXINE_VOLUME=${LUX_EXTRA_LOGS}
-export SATELLITE_DB_PATH=${LUX_EXTRA_LOGS}
-else
-export SATELLITE_DB_PATH=.
-export VAXINE_VOLUME=.
-endif
-
-start_vaxine_%:
-	mkdir -p ${VAXINE_VOLUME}/vaxine_$*
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix vaxine_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow pg_1
 
 start_electric_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
@@ -84,7 +70,7 @@ stop_dev_env:
 	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
 	fi
-	docker compose -f ${DOCKER_COMPOSE_FILE} stop
+	docker compose -f ${DOCKER_COMPOSE_FILE} stop --timeout 1
 	docker compose -f ${DOCKER_COMPOSE_FILE} down
 
 start_sysbench:
@@ -94,9 +80,7 @@ start_sysbench:
 
 start_elixir_test_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
-		--rm --entrypoint=/bin/bash \
-		--workdir=${E2E_ROOT}/elixir_client \
-		-e ELECTRIC_VERSION=`git describe --abbrev=7 --tags --always --first-parent` \
+		--rm \
 		elixir_client_$*
 
 start_satellite_client_%:
@@ -104,27 +88,10 @@ start_satellite_client_%:
 		--rm \
 		satellite_client_$*
 
-VAXINE_BRANCH?=main
-vaxine:
-ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/electric-sql/vaxine.git
-	cd vaxine && git checkout ${VAXINE_BRANCH} && make docker-build
-else
-	docker pull ${VAXINE_IMAGE}
-endif
-
-postgres:
-ifdef USE_LOCAL_IMAGE
-	git clone https://github.com/electric-sql/postgres.git \
-		--branch replication-upsert --depth 1
-	cd postgres && ./configure && make docker-build
-else
-	docker pull ${POSTGRESQL_IMAGE}
-endif
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}_$*_1 psql -h $* -U postgres -d electric
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -U postgres -d electric
 
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
@@ -142,4 +109,7 @@ docker-make:
 		make ${MK_TARGET}
 
 single_test:
-	${LUX} ${TEST}
+	${LUX} --progress doc ${TEST}
+
+single_test_debug:
+	${LUX} --debug ${TEST}

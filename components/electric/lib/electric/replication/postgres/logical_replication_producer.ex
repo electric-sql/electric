@@ -2,7 +2,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
-  alias Ecto.Changeset.Relation
   alias Electric.Telemetry.Metrics
 
   alias Electric.Postgres.LogicalReplication
@@ -19,7 +18,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Update,
     Delete,
     Truncate,
-    Type
+    Type,
+    Message
   }
 
   alias Electric.Replication.Changes
@@ -87,6 +87,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
 
     with {:ok, conn} <- Client.connect(conn_opts),
+         {:ok, _} <- Client.create_slot(conn, slot),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
       Logger.info("Starting replication from #{origin}")
@@ -115,17 +116,30 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, [], state}
   end
 
-  defp process_message(%Begin{} = msg, state) do
-    tx = %Transaction{changes: [], commit_timestamp: msg.commit_timestamp}
+  defp process_message(%Message{} = msg, state) do
+    Logger.info("Got a message: #{inspect(msg)}")
+
+    {:noreply, [], state}
+  end
+
+  defp process_message(%Begin{} = msg, %State{} = state) do
+    tx = %Transaction{
+      changes: [],
+      commit_timestamp: msg.commit_timestamp,
+      origin: state.origin,
+      origin_type: :postgresql,
+      publication: state.publication
+    }
 
     {:noreply, [], %{state | transaction: {msg.final_lsn, tx}}}
   end
 
   defp process_message(%Origin{} = msg, state) do
-    # If we got the "origin" message, it means that the Postgres sending the data has got it from Electric already
-    # so we just drop the transaction altogether
+    # If we got the "origin" message, it means that the Postgres sending back the transaction we sent from Electric
+    # We ignored those previously, when Vaxine was the source of truth, but now we need to fan out those processed messages
+    # to all the Satellites as their write has been "accepted"
     Logger.debug("origin: #{inspect(msg.name)}")
-    {:noreply, [], %{state | drop_current_transaction?: true}}
+    {:noreply, [], state}
   end
 
   defp process_message(%Type{}, state), do: {:noreply, [], state}
@@ -147,7 +161,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     # stream.
     # The Relation messages are used and then dropped by the
     # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
-    # this producer. 
+    # this producer.
     relation =
       Changes.Relation
       |> struct(Map.from_struct(msg))
@@ -255,10 +269,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(
          %Commit{lsn: commit_lsn},
-         %State{transaction: {current_txn_lsn, _}, drop_current_transaction?: true} = state
+         %State{transaction: {current_txn_lsn, txn}, drop_current_transaction?: true} = state
        )
        when commit_lsn == current_txn_lsn do
-    Logger.debug("ignoring transaction with lsn #{inspect(commit_lsn)}")
+    Logger.debug(
+      "ignoring transaction with lsn #{inspect(commit_lsn)} and contents: #{inspect(txn)}"
+    )
+
     {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
   end
 
@@ -267,7 +284,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
        )
        when commit_lsn == current_txn_lsn do
-    event = build_message(Map.update!(txn, :changes, &Enum.reverse/1), end_lsn, state)
+    event =
+      txn
+      |> Electric.Postgres.ShadowTableTransformation.enrich_tx_from_shadow_ops()
+      |> build_message(end_lsn, state)
 
     queue = :queue.in(event, queue)
     state = %{state | queue: queue, transaction: nil, drop_current_transaction?: false}
@@ -315,12 +335,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   # TODO: Typecast to meaningful Elixir types here later
-  @spec data_tuple_to_map([Relation.Column.t()], tuple()) :: term()
+  @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
   defp data_tuple_to_map(_columns, nil), do: %{}
 
   defp data_tuple_to_map(columns, tuple_data) do
     columns
-    |> Enum.zip(Tuple.to_list(tuple_data))
+    |> Enum.zip(tuple_data)
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
@@ -330,10 +350,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     %Transaction{
       transaction
-      | origin: origin,
-        origin_type: :postgresql,
-        publication: state.publication,
-        lsn: end_lsn,
+      | lsn: end_lsn,
         # Make sure not to pass state.field into ack function, as this
         # will create a copy of the whole state in memory when sending a message
         ack_fn: fn -> ack(conn, origin, end_lsn) end

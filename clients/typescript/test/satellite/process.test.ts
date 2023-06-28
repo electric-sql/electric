@@ -1083,7 +1083,7 @@ test('get transactions from opLogEntries', async (t) => {
         },
         {
           relation: relations.parent,
-          type: DataChangeType.INSERT,
+          type: DataChangeType.UPDATE,
           record: { id: 1 },
           oldRecord: { id: 1 },
           tags: [],

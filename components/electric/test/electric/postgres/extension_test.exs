@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.ExtensionTest do
-  use ExUnit.Case, async: false
+  use Electric.Extension.Case, async: false
 
   alias Electric.Postgres.{Schema, Schema.Proto}
 
@@ -38,37 +38,9 @@ defmodule Electric.Postgres.ExtensionTest do
     ]
   end
 
-  alias Ecto.Adapter.Schema
   alias Electric.Postgres.{Extension, Schema}
 
-  setup do
-    pg_config = Electric.Postgres.TestConnection.config()
-
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
-
-    {:ok, conn: conn}
-  end
-
-  defmodule RollbackError do
-    # use a special error to abort the transaction so we can be sure that some other problem isn't
-    # happening in the tx and being swallowed
-    defexception [:message]
-  end
-
-  def tx(fun, cxt) do
-    assert_raise RollbackError, fn ->
-      :epgsql.with_transaction(
-        cxt.conn,
-        fn tx ->
-          fun.(tx)
-          raise RollbackError, message: "rollback"
-        end,
-        reraise: true
-      )
-    end
-  end
-
-  def migrate(conn, _cxt, migration_module) do
+  def migrate_module(conn, _cxt, migration_module) do
     {:ok, _} = Extension.migrate(conn, migration_module)
 
     versions = Enum.map(migration_module.migrations(), & &1.version())
@@ -118,12 +90,12 @@ defmodule Electric.Postgres.ExtensionTest do
   test "uses migration table to track applied migrations", cxt do
     tx(
       fn conn ->
-        {:ok, rows} = migrate(conn, cxt, MigrationsV1)
-        # FIXME: we no longer need the electric.migrations table 
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV1)
+        # FIXME: we no longer need the electric.migrations table
         assert rows == [["migrations"], ["schema_migrations"], ["things"]]
-        {:ok, rows} = migrate(conn, cxt, MigrationsV2)
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV2)
         assert rows == [["migrations"], ["other_things"], ["schema_migrations"], ["things"]]
-        {:ok, rows} = migrate(conn, cxt, MigrationsV3)
+        {:ok, rows} = migrate_module(conn, cxt, MigrationsV3)
         assert rows == [["migrations"], ["schema_migrations"], ["things"]]
       end,
       cxt
@@ -134,95 +106,77 @@ defmodule Electric.Postgres.ExtensionTest do
     tx(&migrate/1, cxt)
   end
 
-  def migrate(conn) do
-    assert {:ok, [2023_03_28_11_39_27, 2023_04_24_15_44_25]} = Extension.migrate(conn)
+  test_tx "we can retrieve and set the current schema json", fn conn ->
+    assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
+    schema = Schema.new()
+    version = "20230405171534_1"
+
+    schema =
+      schema_update(
+        schema,
+        Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
+      )
+
+    assert :ok =
+             Extension.save_schema(conn, version, schema, [
+               "CREATE TABLE first (id uuid PRIMARY KEY);"
+             ])
+
+    assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
+
+    schema =
+      schema_update(
+        schema,
+        Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
+      )
+
+    version = "20230405171534_2"
+
+    assert :ok =
+             Extension.save_schema(conn, version, schema, [
+               "ALTER TABLE first ADD value text;"
+             ])
+
+    assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
   end
 
-  test "we can retrieve and set the current schema json", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "we can retrieve the schema for a given version", fn conn ->
+    assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
+    schema = Schema.new()
+    version = "20230405171534_1"
 
-        assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
-        schema = Schema.new()
-        version = "20230405171534_1"
+    schema =
+      schema_update(
+        schema,
+        Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
+      )
 
-        schema =
-          schema_update(
-            schema,
-            Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
-          )
+    assert :ok =
+             Extension.save_schema(conn, version, schema, [
+               "CREATE TABLE first (id uuid PRIMARY KEY);"
+             ])
 
-        assert :ok =
-                 Extension.save_schema(conn, version, schema, [
-                   "CREATE TABLE first (id uuid PRIMARY KEY);"
-                 ])
+    assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
+    assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
 
-        assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
+    schema =
+      schema_update(
+        schema,
+        Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
+      )
 
-        schema =
-          schema_update(
-            schema,
-            Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
-          )
+    version = "20230405171534_2"
 
-        version = "20230405171534_2"
+    assert :ok =
+             Extension.save_schema(conn, version, schema, [
+               "ALTER TABLE first ADD value text;"
+             ])
 
-        assert :ok =
-                 Extension.save_schema(conn, version, schema, [
-                   "ALTER TABLE first ADD value text;"
-                 ])
-
-        assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
-      end,
-      cxt
-    )
+    assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
+    assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
   end
 
-  test "we can retrieve the schema for a given version", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
-
-        assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
-        schema = Schema.new()
-        version = "20230405171534_1"
-
-        schema =
-          schema_update(
-            schema,
-            Electric.Postgres.parse!("CREATE TABLE first (id uuid PRIMARY KEY);")
-          )
-
-        assert :ok =
-                 Extension.save_schema(conn, version, schema, [
-                   "CREATE TABLE first (id uuid PRIMARY KEY);"
-                 ])
-
-        assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
-        assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
-
-        schema =
-          schema_update(
-            schema,
-            Electric.Postgres.parse!("ALTER TABLE first ADD value text;")
-          )
-
-        version = "20230405171534_2"
-
-        assert :ok =
-                 Extension.save_schema(conn, version, schema, [
-                   "ALTER TABLE first ADD value text;"
-                 ])
-
-        assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
-        assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
-      end,
-      cxt
-    )
-  end
-
-  test "we can retrieve the sql of applied migrations", cxt do
+  test_tx "we can retrieve the sql of applied migrations", fn conn ->
     migrations = [
       {"0001",
        [
@@ -235,286 +189,257 @@ defmodule Electric.Postgres.ExtensionTest do
       {"0004", ["CREATE TABLE e (id uuid PRIMARY KEY, value text NOT NULL);"]}
     ]
 
-    tx(
-      fn conn ->
-        migrate(conn)
-
-        _schema =
-          Enum.reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
-            schema =
-              Enum.reduce(stmts, schema, fn stmt, schema ->
-                schema_update(
-                  schema,
-                  stmt
-                )
-              end)
-
-            assert :ok = Extension.save_schema(conn, version, schema, stmts)
-            schema
+    _schema =
+      Enum.reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
+        schema =
+          Enum.reduce(stmts, schema, fn stmt, schema ->
+            schema_update(
+              schema,
+              stmt
+            )
           end)
 
-        assert {:ok, versions} = Extension.migration_history(conn)
+        assert :ok = Extension.save_schema(conn, version, schema, stmts)
+        schema
+      end)
 
-        assert migrations == Enum.map(versions, fn {v, _, s} -> {v, s} end)
+    assert {:ok, versions} = Extension.migration_history(conn)
 
-        assert {:ok, versions} = Extension.migration_history(conn, "0002")
+    assert migrations == Enum.map(versions, fn {v, _, s} -> {v, s} end)
 
-        versions = Enum.map(versions, fn {v, _, s} -> {v, s} end)
+    assert {:ok, versions} = Extension.migration_history(conn, "0002")
 
-        assert versions == Enum.slice(migrations, 2..-1)
-      end,
-      cxt
-    )
+    versions = Enum.map(versions, fn {v, _, s} -> {v, s} end)
+
+    assert versions == Enum.slice(migrations, 2..-1)
   end
 
-  test "migration capture", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
+  test_tx "logical replication ddl is not captured", fn conn ->
+    sql1 = "CREATE PUBLICATION all_tables FOR ALL TABLES;"
 
-        sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
-        sql3 = "ALTER TABLE buttercup ADD COLUMN petal text;"
-        sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text;"
+    sql2 =
+      "CREATE SUBSCRIPTION \"postgres_1\" CONNECTION 'host=electric_1 port=5433 dbname=test connect_timeout=5000' PUBLICATION \"all_tables\" WITH (connect = false)"
 
-        for sql <- [sql1, sql2, sql3, sql4] do
-          {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-        end
+    sql3 = "ALTER SUBSCRIPTION \"postgres_1\" ENABLE"
+    # sql4 = "ALTER SUBSCRIPTION \"postgres_1\" REFRESH PUBLICATION WITH (copy_data = false);"
 
-        assert {:ok, [row1, row2, row3, row4]} = Extension.ddl_history(conn)
+    for sql <- [sql1, sql2, sql3] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
 
-        assert {1, txid, timestamp, ^sql1} = row1
-        assert {2, ^txid, ^timestamp, ^sql2} = row2
-        assert {3, ^txid, ^timestamp, ^sql3} = row3
-        assert {4, ^txid, ^timestamp, ^sql4} = row4
-      end,
-      cxt
-    )
-  end
-
-  test "logical replication ddl is not captured", cxt do
-    tx(
-      fn conn ->
-        migrate(conn)
-
-        sql1 = "CREATE PUBLICATION all_tables FOR ALL TABLES;"
-
-        sql2 =
-          "CREATE SUBSCRIPTION \"postgres_1\" CONNECTION 'host=electric_1 port=5433 dbname=test connect_timeout=5000' PUBLICATION \"all_tables\" WITH (connect = false)"
-
-        sql3 = "ALTER SUBSCRIPTION \"postgres_1\" ENABLE"
-        # sql4 = "ALTER SUBSCRIPTION \"postgres_1\" REFRESH PUBLICATION WITH (copy_data = false);"
-
-        for sql <- [sql1, sql2, sql3] do
-          {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-        end
-
-        assert {:ok, []} = Extension.ddl_history(conn)
-      end,
-      cxt
-    )
+    assert {:ok, []} = Extension.ddl_history(conn)
   end
 
   describe "electrification" do
     alias Electric.Postgres.SQLGenerator
 
-    test "can generate the ddl to create any index", cxt do
-      tx(
-        fn conn ->
-          migrate(conn)
+    test_tx "can generate the ddl to create any index", fn conn ->
+      assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
 
-          assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
+      namespace = "something"
+      assert {:ok, [], []} = :epgsql.squery(conn, "CREATE SCHEMA #{namespace}")
 
-          namespace = "something"
-          assert {:ok, [], []} = :epgsql.squery(conn, "CREATE SCHEMA #{namespace}")
-
-          SQLGenerator.sql_stream([:create_table, :create_index],
-            schema: agent,
-            create_table: [
-              namespace: namespace,
-              # limit the types used to avoid differences around casting
-              # and representation that cause test failures but aren't problems
-              # with the extension code.
-              # To support other types, the sql_generator code would have to
-              # capture all of pg's rules around casting etc
-              types: [
-                {:int, "int4"},
-                {:int, "int2"},
-                {:int, "int8"}
-              ],
-              temporary_tables: false,
-              timezones: false,
-              serial: false,
-              trace: true
-            ],
-            create_index: [
-              named: :always,
-              only_supported: true,
-              except: [:concurrently]
-            ]
-          )
-          |> Stream.take(40)
-          |> Enum.each(fn sql ->
-            assert {:ok, [], []} = :epgsql.squery(conn, sql)
-          end)
-
-          schema = SQLGenerator.SchemaAgent.schema(agent)
-
-          for table <- schema.tables, index <- table.indexes do
-            {:ok, ddl} = Extension.create_index_ddl(conn, table.name, index.name)
-
-            new_schema = Map.update!(Schema.new(), :tables, &[%{table | indexes: []} | &1])
-
-            ast = Electric.Postgres.parse!(ddl)
-            assert new_schema = schema_update(new_schema, ast)
-            assert {:ok, new_table} = Schema.fetch_table(new_schema, table.name)
-            %{} = new_index = Enum.find(new_table.indexes, &(&1.name == index.name))
-            assert new_index == index
-          end
-        end,
-        cxt
+      SQLGenerator.sql_stream([:create_table, :create_index],
+        schema: agent,
+        create_table: [
+          namespace: namespace,
+          # limit the types used to avoid differences around casting
+          # and representation that cause test failures but aren't problems
+          # with the extension code.
+          # To support other types, the sql_generator code would have to
+          # capture all of pg's rules around casting etc
+          types: [
+            {:int, "int4"},
+            {:int, "int2"},
+            {:int, "int8"}
+          ],
+          temporary_tables: false,
+          timezones: false,
+          serial: false,
+          trace: true
+        ],
+        create_index: [
+          named: :always,
+          only_supported: true,
+          except: [:concurrently]
+        ]
       )
+      |> Stream.take(40)
+      |> Enum.each(fn sql ->
+        assert {:ok, [], []} = :epgsql.squery(conn, sql)
+      end)
+
+      schema = SQLGenerator.SchemaAgent.schema(agent)
+
+      for table <- schema.tables, index <- table.indexes do
+        {:ok, ddl} = Extension.create_index_ddl(conn, table.name, index.name)
+
+        new_schema = Map.update!(Schema.new(), :tables, &[%{table | indexes: []} | &1])
+
+        ast = Electric.Postgres.parse!(ddl)
+        assert new_schema = schema_update(new_schema, ast)
+        assert {:ok, new_table} = Schema.fetch_table(new_schema, table.name)
+        %{} = new_index = Enum.find(new_table.indexes, &(&1.name == index.name))
+        assert new_index == index
+      end
     end
 
-    test "can generate the ddl to create any table", cxt do
-      tx(
-        fn conn ->
-          migrate(conn)
+    test_tx "can generate the ddl to create any table", fn conn ->
+      assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
 
-          assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
+      namespace = "something"
+      assert {:ok, [], []} = :epgsql.squery(conn, "CREATE SCHEMA #{namespace}")
 
-          namespace = "something"
-          assert {:ok, [], []} = :epgsql.squery(conn, "CREATE SCHEMA #{namespace}")
-
-          SQLGenerator.sql_stream([:create_table],
-            schema: agent,
-            create_table: [
-              namespace: namespace,
-              # limit the types used to avoid differences around casting
-              # and representation that cause test failures but aren't problems
-              # with the extension code.
-              # To support other types, the sql_generator code would have to
-              # capture all of pg's rules around casting etc
-              types: [
-                {:int, "int4"},
-                {:int, "int2"},
-                {:int, "int8"}
-              ],
-              temporary_tables: false,
-              timezones: false,
-              serial: false,
-              trace: true
-            ]
-          )
-          |> Stream.take(40)
-          |> Enum.each(fn sql ->
-            assert {:ok, [], []} = :epgsql.squery(conn, sql)
-          end)
-
-          schema = SQLGenerator.SchemaAgent.schema(agent)
-
-          for table <- schema.tables do
-            {:ok, ddl} = Extension.create_table_ddl(conn, table.name)
-
-            ast = Electric.Postgres.parse!(ddl)
-            assert new_schema = schema_update(ast)
-            assert {:ok, new_table} = Schema.fetch_table(new_schema, table.name)
-            assert new_table == table
-          end
-        end,
-        cxt
+      SQLGenerator.sql_stream([:create_table],
+        schema: agent,
+        create_table: [
+          namespace: namespace,
+          # limit the types used to avoid differences around casting
+          # and representation that cause test failures but aren't problems
+          # with the extension code.
+          # To support other types, the sql_generator code would have to
+          # capture all of pg's rules around casting etc
+          types: [
+            {:int, "int4"},
+            {:int, "int2"},
+            {:int, "int8"}
+          ],
+          temporary_tables: false,
+          timezones: false,
+          serial: false,
+          trace: true
+        ]
       )
+      |> Stream.take(40)
+      |> Enum.each(fn sql ->
+        assert {:ok, [], []} = :epgsql.squery(conn, sql)
+      end)
+
+      schema = SQLGenerator.SchemaAgent.schema(agent)
+
+      for table <- schema.tables do
+        {:ok, ddl} = Extension.create_table_ddl(conn, table.name)
+
+        ast = Electric.Postgres.parse!(ddl)
+        assert new_schema = schema_update(ast)
+        assert {:ok, new_table} = Schema.fetch_table(new_schema, table.name)
+        assert new_table == table
+      end
     end
 
-    test "generated ddl includes defaults and constraints", cxt do
-      tx(
-        fn conn ->
-          migrate(conn)
-
-          create_parent_table = """
-          CREATE TABLE public.parent (
-            id uuid PRIMARY KEY NOT NULL
-          )
-          """
-
-          assert {:ok, [], []} = :epgsql.squery(conn, create_parent_table)
-
-          create_table = """
-          CREATE TABLE public.something (
-            id uuid PRIMARY KEY NOT NULL,
-            val1 text NOT NULL DEFAULT 'valid',
-            val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            val3 int8 CONSTRAINT val3_check CHECK (val3 > 10),
-            parent_id uuid REFERENCES public.parent (id) ON DELETE CASCADE
-          )
-          """
-
-          assert {:ok, [], []} = :epgsql.squery(conn, create_table)
-
-          {:ok, ddl} =
-            Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
-
-          assert ddl == """
-                 CREATE TABLE something (
-                     id uuid NOT NULL,
-                     val1 text NOT NULL DEFAULT 'valid'::text,
-                     val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                     val3 bigint,
-                     parent_id uuid,
-                     CONSTRAINT something_pkey PRIMARY KEY (id),
-                     CONSTRAINT something_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE,
-                     CONSTRAINT val3_check CHECK (val3 > 10)
-                 );
-
-
-                 """
-        end,
-        cxt
+    test_tx "generated ddl includes defaults and constraints", fn conn ->
+      create_parent_table = """
+      CREATE TABLE public.parent (
+        id uuid PRIMARY KEY NOT NULL
       )
+      """
+
+      assert {:ok, [], []} = :epgsql.squery(conn, create_parent_table)
+
+      create_table = """
+      CREATE TABLE public.something (
+        id uuid PRIMARY KEY NOT NULL,
+        val1 text NOT NULL DEFAULT 'valid',
+        val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        val3 int8 CONSTRAINT val3_check CHECK (val3 > 10),
+        parent_id uuid REFERENCES public.parent (id) ON DELETE CASCADE
+      )
+      """
+
+      assert {:ok, [], []} = :epgsql.squery(conn, create_table)
+
+      {:ok, ddl} =
+        Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
+
+      assert ddl == """
+             CREATE TABLE something (
+                 id uuid NOT NULL,
+                 val1 text NOT NULL DEFAULT 'valid'::text,
+                 val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 val3 bigint,
+                 parent_id uuid,
+                 CONSTRAINT something_pkey PRIMARY KEY (id),
+                 CONSTRAINT something_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE,
+                 CONSTRAINT val3_check CHECK (val3 > 10)
+             );
+
+
+             """
     end
 
-    test "generated ddl includes indexes", cxt do
-      tx(
-        fn conn ->
-          migrate(conn)
-
-          create_table = """
-          CREATE TABLE public.something (
-            id uuid PRIMARY KEY NOT NULL,
-            val1 text NOT NULL DEFAULT 'valid',
-            val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            val3 int8 CONSTRAINT val3_check CHECK (val3 > 10)
-          )
-          """
-
-          assert {:ok, [], []} = :epgsql.squery(conn, create_table)
-
-          create_index1 = """
-          CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something (val1)
-          """
-
-          assert {:ok, [], []} = :epgsql.squery(conn, create_index1)
-
-          {:ok, ddl} =
-            Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
-
-          assert ddl == """
-                 CREATE TABLE something (
-                     id uuid NOT NULL,
-                     val1 text NOT NULL DEFAULT 'valid'::text,
-                     val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                     val3 bigint,
-                     CONSTRAINT something_pkey PRIMARY KEY (id),
-                     CONSTRAINT val3_check CHECK (val3 > 10)
-                 );
-
-
-                 CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something USING btree (val1);
-
-                 """
-        end,
-        cxt
+    test_tx "generated ddl includes indexes", fn conn ->
+      create_table = """
+      CREATE TABLE public.something (
+        id uuid PRIMARY KEY NOT NULL,
+        val1 text NOT NULL DEFAULT 'valid',
+        val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        val3 int8 CONSTRAINT val3_check CHECK (val3 > 10)
       )
+      """
+
+      assert {:ok, [], []} = :epgsql.squery(conn, create_table)
+
+      create_index1 = """
+      CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something (val1)
+      """
+
+      assert {:ok, [], []} = :epgsql.squery(conn, create_index1)
+
+      {:ok, ddl} =
+        Extension.create_table_ddl(conn, %Proto.RangeVar{schema: "public", name: "something"})
+
+      assert ddl == """
+             CREATE TABLE something (
+                 id uuid NOT NULL,
+                 val1 text NOT NULL DEFAULT 'valid'::text,
+                 val2 timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 val3 bigint,
+                 CONSTRAINT something_pkey PRIMARY KEY (id),
+                 CONSTRAINT val3_check CHECK (val3 > 10)
+             );
+
+
+             CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something USING btree (val1);
+
+             """
+    end
+
+    test_tx "table electrification creates shadow tables", fn conn ->
+      sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql3 = "CALL electric.electrify('buttercup')"
+
+      for sql <- [sql1, sql2, sql3] do
+        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      end
+
+      assert {:ok, _, [{"1"}]} =
+               :epgsql.squery(
+                 conn,
+                 "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__buttercup' AND nspname = 'electric'"
+               )
+
+      assert {:ok, _, []} =
+               :epgsql.squery(
+                 conn,
+                 "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__daisy' AND nspname = 'electric'"
+               )
+    end
+
+    test_tx "electrified?/2", fn conn ->
+      sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+      sql3 = "CALL electric.electrify('buttercup')"
+
+      for sql <- [sql1, sql2, sql3] do
+        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      end
+
+      assert Extension.electrified?(conn, "buttercup")
+      assert Extension.electrified?(conn, "public", "buttercup")
+
+      refute Extension.electrified?(conn, "daisy")
+      refute Extension.electrified?(conn, "public", "daisy")
     end
   end
 end

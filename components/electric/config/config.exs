@@ -18,8 +18,7 @@ config :logger, :console,
     :pg_producer,
     :pg_slot,
     :sq_client,
-    :vx_consumer,
-    :vx_producer,
+    :component,
     :instance_id,
     :regional_id,
     :client_id,
@@ -28,12 +27,14 @@ config :logger, :console,
 
 config :logger,
   handle_otp_reports: true,
-  handle_sasl_reports: true,
+  handle_sasl_reports: false,
   level: :debug
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
+
+config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
 
 config :electric, Electric.StatusPlug, port: 5050
 

@@ -5,19 +5,19 @@ defmodule Electric.Replication.OffsetStorageTest do
   alias Electric.Postgres.Lsn
 
   setup do
-    {:ok, slot: Ecto.UUID.generate()}
+    {:ok, slot: Electric.Utils.uuid4()}
   end
 
   test "put_relation/3 upserts the relation for a slot and Lsn combination", %{slot: slot} do
     lsn = Lsn.from_integer(1)
 
-    assert is_nil(OffsetStorage.get_vx_offset(slot, lsn))
+    assert is_nil(OffsetStorage.get_pg_position(slot, lsn))
 
-    assert :ok = OffsetStorage.put_pg_relation(slot, lsn, 1)
-    assert 1 = OffsetStorage.get_vx_offset(slot, lsn)
+    assert :ok = OffsetStorage.save_pg_position(slot, lsn, 1)
+    assert 1 = OffsetStorage.get_pg_position(slot, lsn)
 
-    assert :ok = OffsetStorage.put_pg_relation(slot, lsn, 2)
-    assert 2 = OffsetStorage.get_vx_offset(slot, lsn)
+    assert :ok = OffsetStorage.save_pg_position(slot, lsn, 2)
+    assert 2 = OffsetStorage.get_pg_position(slot, lsn)
   end
 
   test "get_largest_known_lsn_smaller_than/3 finds the largest acceptable LSN in the table", %{
@@ -27,7 +27,7 @@ defmodule Electric.Replication.OffsetStorageTest do
     0..100//3
     |> Enum.each(fn x ->
       lsn = Lsn.from_integer(x)
-      OffsetStorage.put_pg_relation(slot, lsn, x)
+      OffsetStorage.save_pg_position(slot, lsn, x)
     end)
 
     # Searching for 61, get 60

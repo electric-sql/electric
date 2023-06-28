@@ -1,5 +1,5 @@
 defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Mock
 
   alias Electric.Replication.Postgres.LogicalReplicationProducer
@@ -14,7 +14,11 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
 
   setup_with_mocks([
     {Client, [:passthrough],
-     [connect: fn _ -> {:ok, :conn} end, start_replication: fn :conn, _, _, _ -> :ok end]},
+     [
+       connect: fn _ -> {:ok, :conn} end,
+       start_replication: fn :conn, _, _, _ -> :ok end,
+       create_slot: fn :conn, name -> {:ok, name} end
+     ]},
     {Connectors, [:passthrough],
      [
        get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
@@ -28,11 +32,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     {_, events} =
       begin()
       |> relation("entities", id: :uuid, data: :varchar)
-      |> insert("entities", {"test", "value"})
+      |> insert("entities", ["test", "value"])
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
+      |> process_messages(
+        initialize_producer(),
+        &LogicalReplicationProducer.handle_info/2
+      )
 
     assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
+
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
 
@@ -40,12 +48,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     {_, events} =
       begin()
       |> relation("entities", id: :uuid, data: :varchar)
-      |> insert("entities", {"test1", "value"})
-      |> insert("entities", {"test2", "value"})
-      |> insert("entities", {"test3", "value"})
-      |> insert("entities", {"test4", "value"})
+      |> insert("entities", ["test1", "value"])
+      |> insert("entities", ["test2", "value"])
+      |> insert("entities", ["test3", "value"])
+      |> insert("entities", ["test4", "value"])
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
+      |> process_messages(
+        initialize_producer(),
+        &LogicalReplicationProducer.handle_info/2
+      )
 
     assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
     assert length(transaction.changes) == 4
@@ -62,13 +73,16 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     {_, events} =
       begin()
       |> relation("entities", id: :uuid, data: :varchar)
-      |> insert("entities", {"test", "1"})
-      |> update("entities", {"test", "1"}, {"test", "2"})
-      |> update("entities", {"test", "2"}, {"test", "3"})
-      |> update("entities", {"test", "3"}, {"test", "4"})
-      |> update("entities", {"test", "4"}, {"test", "5"})
+      |> insert("entities", ["test", "1"])
+      |> update("entities", ["test", "1"], ["test", "2"])
+      |> update("entities", ["test", "2"], ["test", "3"])
+      |> update("entities", ["test", "3"], ["test", "4"])
+      |> update("entities", ["test", "4"], ["test", "5"])
       |> commit_and_get_messages()
-      |> process_messages(initialize_producer(), &LogicalReplicationProducer.handle_info/2)
+      |> process_messages(
+        initialize_producer(),
+        &LogicalReplicationProducer.handle_info/2
+      )
 
     assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
     assert length(transaction.changes) == 5
@@ -142,7 +156,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     })
   end
 
-  defp update(state, relation, old_record, data) when is_tuple(old_record) do
+  defp update(state, relation, old_record, data) when is_list(old_record) do
     add_action(state, %Messages.Update{
       relation_id: Map.fetch!(state.relations, relation),
       old_tuple_data: old_record,
@@ -152,7 +166,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
 
   defp commit_and_get_messages(%{lsn: lsn, actions: actions}) do
     timestamp = DateTime.utc_now()
-    begin = %Messages.Begin{xid: lsn.segment, final_lsn: lsn, commit_timestamp: timestamp}
+
+    begin = %Messages.Begin{
+      xid: lsn.segment,
+      final_lsn: lsn,
+      commit_timestamp: timestamp
+    }
 
     commit = %Messages.Commit{
       commit_timestamp: timestamp,

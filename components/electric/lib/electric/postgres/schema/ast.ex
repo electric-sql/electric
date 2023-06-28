@@ -279,6 +279,18 @@ defmodule Electric.Postgres.Schema.AST do
     %Proto.Expression{expr: {:const, %Proto.Expression.Const{value: map(aconst.val, opts)}}}
   end
 
+  def map(%Pg.Node{node: {:a_array_expr, %PgQuery.A_ArrayExpr{elements: []}}}, _) do
+    %Proto.Expression{
+      expr:
+        {:const,
+         %Proto.Expression.Const{value: %Proto.Expression.Value{type: :STRING, value: "[]"}}}
+    }
+  end
+
+  def map(%Pg.Node{node: {:a_array_expr, %PgQuery.A_ArrayExpr{elements: elements}}}, _) do
+    raise "AST Parsing doesn't currently know how to SQLite-serialize non-empty arrays. Got elements: #{inspect(elements)}"
+  end
+
   def map(%Pg.Node{node: {:type_cast, cast}}, opts) do
     %Proto.Expression{
       expr:
@@ -485,6 +497,13 @@ defmodule Electric.Postgres.Schema.AST do
 
   defp map_col_type_name([%{node: {:string, %{sval: "pg_catalog"}}}, node]) do
     map_col_type_name([node])
+  end
+
+  defp map_col_type_name([
+         %{node: {:string, %{sval: namespace}}},
+         %{node: {:string, %{sval: name}}}
+       ]) do
+    namespace <> "." <> name
   end
 
   defp map_col_type_name([%{node: {:string, %{sval: name}}}]) do

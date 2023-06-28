@@ -21,8 +21,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
-
-  alias Electric.Replication.DownstreamProducer
+  alias Electric.Postgres.ShadowTableTransformation
 
   import Electric.Postgres.Extension, only: [is_extension_relation: 1]
 
@@ -35,11 +34,12 @@ defmodule Electric.Replication.Postgres.SlotServer do
               publication: nil,
               timer: nil,
               socket_process_ref: nil,
-              producer: nil,
               producer_name: nil,
               producer_pid: nil,
               sent_relations: %{},
-              current_vx_offset: nil,
+              current_source_position: nil,
+              preprocess_relation_list_fn: nil,
+              preprocess_change_fn: nil,
               opts: []
   end
 
@@ -51,11 +51,29 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @type slot_name :: String.t()
   @type slot_reg :: Electric.reg_name()
 
+  @type column :: %{name: String.t()}
+  @type relations_map :: %{
+          optional(Changes.relation()) => %{
+            primary_keys: [String.t(), ...],
+            columns: [column()],
+            oid: non_neg_integer()
+          }
+        }
+  @type preprocess_change_fn ::
+          (Changes.change(), relations_map(), {DateTime.t(), String.t()} -> [Changes.change()])
+  @type preprocess_relation_list_fn :: ([Changes.relation()] -> [Changes.relation()])
+
+  @type opts ::
+          {:conn_config, Connectors.config()}
+          | {:producer, Electric.reg_name()}
+          | {:preprocess_change_fn, preprocess_change_fn()}
+          | {:preprocess_relation_list_fn, preprocess_relation_list_fn()}
+
   # Public interface
 
-  @spec start_link(Connectors.config(), Electric.reg_name()) :: GenServer.on_start()
-  def start_link(conn_config, producer) do
-    GenStage.start_link(__MODULE__, [conn_config, producer])
+  @spec start_link([opts(), ...]) :: GenServer.on_start()
+  def start_link(opts) do
+    GenStage.start_link(__MODULE__, opts)
   end
 
   @spec get_name(String.t()) :: Electric.reg_name()
@@ -72,7 +90,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:n, :l, {__MODULE__, name}}
   end
 
-  defp producer_info() do
+  defp subscription_opts() do
     [min_demand: 10, max_demand: 50]
   end
 
@@ -117,18 +135,22 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Server callbacks
 
   @impl true
-  def init([conn_config, {:via, :gproc, producer}]) do
+  def init(opts) do
+    conn_config = Keyword.fetch!(opts, :conn_config)
+    {:via, :gproc, producer} = Keyword.fetch!(opts, :producer)
+
     origin = Connectors.origin(conn_config)
     replication_opts = Connectors.get_replication_opts(conn_config)
-    downstream_opts = Connectors.get_downstream_opts(conn_config)
     slot = replication_opts.subscription
 
-    :gproc.nb_wait(producer)
     :gproc.reg(name(origin))
     :gproc.reg(name({:slot_name, slot}))
 
     Logger.metadata(origin: origin, pg_slot: slot)
-    Logger.debug("slot server started")
+
+    Logger.debug(
+      "slot server started, registered as #{inspect(name(origin))} and #{inspect(name({:slot_name, slot}))}"
+    )
 
     {:consumer,
      %State{
@@ -136,8 +158,24 @@ defmodule Electric.Replication.Postgres.SlotServer do
        slot_name: slot,
        origin: origin,
        producer_name: producer,
-       producer: downstream_opts.producer,
-       opts: Map.get(replication_opts, :opts, [])
+       opts: Map.get(replication_opts, :opts, []),
+       # Under the current implementation, this function is always going to be
+       # `ShadowTableTransformation.split_change_into_main_and_shadow/3`,
+       # but I'm using the "plain" behaviour of SlotServer for working with Postgres, so it's
+       # "dependency-injected" here so that I can easily disable it
+       preprocess_change_fn:
+         Keyword.get(
+           opts,
+           :preprocess_change_fn,
+           &ShadowTableTransformation.split_change_into_main_and_shadow/3
+         ),
+       # Comment for `preprocess_change_fn` also relevant here
+       preprocess_relation_list_fn:
+         Keyword.get(
+           opts,
+           :preprocess_relation_list_fn,
+           &ShadowTableTransformation.add_shadow_relations/1
+         )
      }}
   end
 
@@ -154,12 +192,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @impl true
   def handle_call(:connected?, _, state) do
     {:reply, false, [], state}
-  end
-
-  def handle_call(:downstream_connected?, _from, state) do
-    res = DownstreamProducer.connected?(state.producer, state.producer_pid)
-    Logger.debug("Requested downstream connection #{res}")
-    {:reply, res, [], state}
   end
 
   @impl true
@@ -184,8 +216,22 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Metrics.pg_slot_replication_event(state.origin, %{start: 1})
 
-    # FIXME: handle_continue should be supported on gen_stage
-    send(self(), {:start_from_lsn, start_lsn})
+    :gproc.await(state.producer_name, 1_000)
+
+    # TODO: We're currently not using this position in a the `SatelliteCollectorProducer`, but we should
+    position = get_pg_position(state.slot_name, start_lsn)
+    Logger.debug("Got position #{inspect(position)} for start_lsn #{inspect(start_lsn)}")
+
+    GenStage.async_subscribe(
+      self(),
+      [
+        to: {:via, :gproc, state.producer_name},
+        cancel: :temporary,
+        starting_from: position
+      ] ++ subscription_opts()
+    )
+
+    send(self(), :send_keepalive)
 
     {:reply, :ok, [],
      %{state | publication: publication, send_fn: send_fn, timer: timer, socket_process_ref: ref}}
@@ -205,25 +251,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_info({:start_from_lsn, start_lsn}, state) do
-    send(self(), :send_keepalive)
-
-    vx_offset = get_vx_offset(state.slot_name, start_lsn)
-
-    Logger.debug("Got vx offset #{inspect(vx_offset)} for start_lsn #{inspect(start_lsn)}")
-
-    DownstreamProducer.start_replication(
-      state.producer,
-      state.producer_pid,
-      vx_offset
-    )
-
-    {:noreply, [], %{state | current_lsn: start_lsn}}
-  end
-
-  @impl true
   def handle_info(:send_keepalive, state) when replication_started?(state) do
-    Logger.debug("#{__MODULE__}: <KeepAlive>")
+    # Logger.debug("#{__MODULE__}: <KeepAlive>")
 
     state.current_lsn
     |> Messaging.replication_keepalive()
@@ -239,12 +268,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_info({:gproc, _, :registered, {_stage, pid, _}}, state) do
     Logger.debug("request subscription")
 
-    :ok =
-      GenStage.async_subscribe(self(), [
-        {:to, pid},
-        {:cancel, :temporary}
-        | producer_info()
-      ])
+    GenStage.async_subscribe(
+      self(),
+      [
+        to: pid,
+        cancel: :temporary
+      ] ++ subscription_opts()
+    )
 
     {:noreply, [], %State{state | producer_pid: pid}}
   end
@@ -253,7 +283,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_events(events, _from, %State{origin: origin} = state)
       when replication_started?(state) do
     state =
-      Enum.reduce(events, state, fn {transaction, vx_offset}, state ->
+      Enum.reduce(events, state, fn {transaction, position}, state ->
         transaction = filter_extension_relations(transaction)
 
         case transaction do
@@ -273,15 +303,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
               state
               | current_lsn: new_lsn,
                 sent_relations: relations,
-                current_vx_offset: vx_offset
+                current_source_position: position
             }
         end
       end)
 
-    OffsetStorage.put_pg_relation(
+    OffsetStorage.save_pg_position(
       state.slot_name,
       state.current_lsn,
-      state.current_vx_offset
+      state.current_source_position
     )
 
     {:noreply, [], state}
@@ -327,7 +357,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   defp send_all(reversed_messages, send_fn, origin) when is_function(send_fn, 1) do
-    {{first_lsn, _}, len} = list_last_and_length(reversed_messages)
+    {{first_lsn, _}, len} = Electric.Utils.list_last_and_length(reversed_messages)
     {last_lsn, _} = List.first(reversed_messages)
 
     Metrics.pg_slot_replication_event(origin, %{sent_total: len})
@@ -341,33 +371,37 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.each(send_fn)
   end
 
-  defp get_vx_offset(slot_name, start_lsn) do
-    case OffsetStorage.get_vx_offset(slot_name, start_lsn) do
+  defp get_pg_position(slot_name, start_lsn) do
+    case OffsetStorage.get_pg_position(slot_name, start_lsn) do
       nil ->
         case OffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
-          {lsn, vx_offset} ->
+          {lsn, position} ->
             Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to #{inspect(lsn)}")
-            vx_offset
+            position
 
           nil ->
             Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to 0")
             nil
         end
 
-      vx_offset ->
-        vx_offset
+      position ->
+        position
     end
   end
 
-  defp convert_to_wal(%Changes.Transaction{commit_timestamp: ts, changes: changes}, state) do
+  defp convert_to_wal(
+         %Changes.Transaction{commit_timestamp: ts, changes: changes, origin: origin},
+         %State{} = state
+       ) do
     first_lsn = Lsn.increment(state.current_lsn)
 
-    # always fetch the table info from the schema registry, don't rely on 
+    # always fetch the table info from the schema registry, don't rely on
     # our cache, which is just to determine which relations to send
     # this keeps the column lists up to date in the case of migrations
     relations =
       changes
       |> Enum.map(& &1.relation)
+      |> state.preprocess_relation_list_fn.()
       |> Enum.uniq()
       |> Enum.map(&SchemaRegistry.fetch_table_info!/1)
       |> Enum.map(&Map.put(&1, :columns, SchemaRegistry.fetch_table_columns!(&1.oid)))
@@ -384,6 +418,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     # Final LSN as specified by `BEGIN` message should be after all LSNs of actual changes but before the LSN of the commit
     {messages, final_lsn} =
       changes
+      |> Enum.flat_map(&preprocess_changes(state, &1, relations, {ts, origin}))
       |> Enum.map(&changes_to_wal(&1, relations))
       |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
 
@@ -415,6 +450,12 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     {begin ++ relation_messages ++ messages ++ commit, relations, commit_lsn}
   end
+
+  defp preprocess_changes(%State{preprocess_change_fn: nil}, change, _, _), do: [change]
+
+  defp preprocess_changes(%State{preprocess_change_fn: fun}, change, relations, tag)
+       when is_function(fun, 3),
+       do: fun.(change, relations, tag)
 
   defp changes_to_wal(%Changes.NewRecord{record: data, relation: table}, relations) do
     %ReplicationMessages.Insert{
@@ -481,19 +522,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
+  # TODO: Should probably have backfilling of columns with defaults/nulls
   defp record_to_tuple(record, columns) do
-    columns
-    |> Enum.map(&Map.fetch!(record, &1.name))
-    |> List.to_tuple()
+    Enum.map(columns, &Map.fetch!(record, &1.name))
   end
-
-  # Get last element from the list and the list's length in one pass
-  # If list is empty, default is returned
-  @spec list_last_and_length(list(), any(), non_neg_integer()) :: {any(), non_neg_integer()}
-  defp list_last_and_length(list, default \\ nil, length_acc \\ 0)
-  defp list_last_and_length([], default, 0), do: {default, 0}
-  defp list_last_and_length([elem | []], _, length), do: {elem, length + 1}
-
-  defp list_last_and_length([_ | list], default, length),
-    do: list_last_and_length(list, default, length + 1)
 end

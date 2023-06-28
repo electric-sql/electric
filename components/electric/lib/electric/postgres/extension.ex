@@ -20,6 +20,8 @@ defmodule Electric.Postgres.Extension do
   @version_relation "migration_versions"
   @ddl_relation "ddl_commands"
   @schema_relation "schema"
+  @electrified_table_relation "electrified"
+  @electrified_index_relation "electrified_idx"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -27,27 +29,41 @@ defmodule Electric.Postgres.Extension do
   @version_table electric.(@version_relation)
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
+  @electrified_tracking_table electric.(@electrified_table_relation)
+  @electrified_index_table electric.(@electrified_index_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @partial_migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
   @schema_version_query ~s(SELECT "schema", "version" FROM #{@schema_table} WHERE "version" = $1 LIMIT 1)
-  # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem 
+  # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem
   # that will go away once we stop replicating all tables by default)
   @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema", "migration_ddl") VALUES ($1, $2, $3) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
-  @event_triggers %{ddl_command_end: "#{@schema}_event_trigger_ddl_end"}
+  @event_triggers %{
+    ddl_command_end: "#{@schema}_event_trigger_ddl_end",
+    sql_drop: "#{@schema}_event_trigger_sql_drop"
+  }
+
+  @publication_name "electric_publication"
+  @slot_name "electric_replication_out"
+  @subscription_name "electric_replication_in"
 
   def schema, do: @schema
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
+  def electrified_tracking_table, do: @electrified_tracking_table
+  def electrified_index_table, do: @electrified_index_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
   def event_triggers, do: @event_triggers
+  def publication_name, do: @publication_name
+  def slot_name, do: @slot_name
+  def subscription_name, do: @subscription_name
 
   defguard is_migration_relation(relation)
            when elem(relation, 0) == @schema and
@@ -127,6 +143,29 @@ defmodule Electric.Postgres.Extension do
     end)
   end
 
+  @electrifed_table_query "SELECT id, schema_name, table_name, oid FROM #{@electrified_tracking_table} ORDER BY id ASC"
+  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
+
+  def electrified_tables(conn) do
+    with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_table_query, []) do
+      {:ok, rows}
+    end
+  end
+
+  @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
+
+  @spec electrified?(conn(), String.t(), String.t()) :: boolean()
+  def electrified?(conn, schema \\ "public", table) do
+    {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
+    count == 1
+  end
+
+  def electrified_indexes(conn) do
+    with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
+      {:ok, rows}
+    end
+  end
+
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do
     name = to_string(table_name)
 
@@ -153,7 +192,9 @@ defmodule Electric.Postgres.Extension do
 
     [
       Migrations.Migration_20230328113927,
-      Migrations.Migration_20230424154425_DDLX
+      Migrations.Migration_20230424154425_DDLX,
+      Migrations.Migration_20230512000000_conflict_resolution_triggers,
+      Migrations.Migration_20230605141256_ElectrifyFunction
     ]
   end
 
@@ -307,4 +348,68 @@ defmodule Electric.Postgres.Extension do
       {:ok, rows}
     end
   end
+
+  def add_table_to_publication_sql(table, columns \\ nil) do
+    column_list =
+      case columns do
+        nil -> ""
+        [] -> ""
+        [_ | _] = c -> IO.iodata_to_binary([" (", Enum.intersperse(c, ", "), ")"])
+      end
+
+    ~s|ALTER PUBLICATION "#{@publication_name}" ADD TABLE #{table}#{column_list}|
+  end
+
+  @doc """
+  Returns a relation that is the shadow table of the passed-in relation.
+  """
+  def shadow_of({schema, table}), do: {@schema, "shadow__#{schema}__#{table}"}
+
+  @doc """
+  Returns true if a given relation is a shadow table under current naming convention.
+  """
+  defguard is_shadow_relation(relation)
+           when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
+                  byte_size(elem(relation, 1)) >= 8 and
+                  binary_part(elem(relation, 1), 0, 8) == "shadow__"
+
+  @doc """
+  Returns true if a given relation is a tombstone table under current naming convention.
+  """
+  defguard is_tombstone_relation(relation)
+           when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
+                  byte_size(elem(relation, 1)) >= 11 and
+                  binary_part(elem(relation, 1), 0, 11) == "tombstone__"
+
+  @doc """
+  Returns primary keys list for a given shadow record.
+
+  Utilizes implicit knowledge of the shadow table structure: its "implementation
+  detail" keys start with an underscore, and all its non-pk columns are "duplicated",
+  with one column having same name as the main table, and the other having the name
+  `__reordered_<original_column_name>`. We can thus remove all non-pk columns if
+  they have a paired reordered column.
+
+  The reason to use this function as opposed to querying `SchemaCache` is when we need
+  this information before the transaction got propagated to `MigrationsConsumer`. This
+  function's main place of use is in `PostgresReplicationProducer`, which will always
+  be ahead of `MigrationsConsumer`, and thus may need to access that information
+  before it's written to cache.
+  """
+  def infer_shadow_primary_keys(record) when is_map(record) do
+    infer_shadow_primary_keys(Map.keys(record))
+  end
+
+  @known_shadow_columns ~w|_tags _last_modified _is_a_delete_operation _tag _observed_tags _modified_columns_bit_mask _resolved _currently_reordering|
+  def infer_shadow_primary_keys(all_keys) when is_list(all_keys),
+    do: Enum.reject(all_keys, &known_shadow_column?/1)
+
+  defp known_shadow_column?("_tag_" <> _), do: true
+  defp known_shadow_column?("__reordered_" <> _), do: true
+
+  for known_key <- @known_shadow_columns do
+    defp known_shadow_column?(unquote(known_key)), do: true
+  end
+
+  defp known_shadow_column?(_), do: false
 end

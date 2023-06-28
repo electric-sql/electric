@@ -197,15 +197,17 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp perform_migration({version, stmts}, state) do
     {:ok, old_version, schema} = load_schema(state)
 
-    Logger.info("Applying migration #{old_version} -> #{version}")
+    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
 
     oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
 
     schema =
-      Enum.reduce(stmts, schema, fn stmt, schema ->
+      stmts
+      |> Enum.reduce(schema, fn stmt, schema ->
         Logger.info("Applying migration #{version}: #{inspect(stmt)}")
         Schema.update(schema, stmt, oid_loader: oid_loader)
       end)
+      |> Schema.add_shadow_tables()
 
     save_schema(state, version, schema, stmts)
   end

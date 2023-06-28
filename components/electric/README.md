@@ -40,7 +40,6 @@ This repo contains the core backend services that proovide ElectricSQL's cloud s
 See also:
 
 - [electric-sql/typescript-client](https://github.com/electric-sql/typescript-client) Typescript client library for local-first application development
-- [electric-sql/vaxine](https://github.com/electric-sql/vaxine) geo-distributed rich-CRDT database based on AntidoteDB
 - [electric-sql/cli](https://github.com/electric-sql/cli) command line interface (CLI) tool to manage config and migrations
 
 ## Pre-reqs
@@ -93,31 +92,23 @@ make stop_dev_env
 
 The Electric application is configured using environment variables. Everything that doesn't have a default is required to run.
 
-| Variable                      | Default                     | Description                                                                                                                                                   |
-| ----------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VAXINE_HOST`                 |                             | Host of Vaxine instance to connect to                                                                                                                         |
-| `VAXINE_API_PORT`             | `8087`                      | Port for the regular DB API on Vaxine instance                                                                                                                |
-| `VAXINE_REPLICATION_PORT`     | `8088`                      | Port for the replication API on Vaxine instance                                                                                                               |
-| `VAXINE_CONNECTION_TIMEOUT`   | `5000`                      | (ms) Timeout waiting while connecting to a Vaxine instance                                                                                                    |
-|                               |                             |                                                                                                                                                               |
-| `ELECTRIC_HOST`               |                             | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS`           |
-| `CONNECTORS`                  | `""`                        | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster                                                     |
-|                               |                             |                                                                                                                                                               |
-| `POSTGRES_REPLICATION_PORT`   | `5433`                      | Port for connections from PG instances as replication followers                                                                                               |
-| `STATUS_PORT`                 | `5050`                      | Port to expose health and status API endpoint                                                                                                                 |
-| `WEBSOCKET_PORT`              | `5133`                      | Port to expose the `/ws` path for the replication over the websocket                                                                                          |
-|                               |                             |                                                                                                                                                               |
-| `OFFSET_STORAGE_FILE`         | `./offset_storage_data.dat` | Path to the file storing the mapping between connected instances and offsets in Vaxine WAL. Should be persisted between Electric restarts.                    |
-|                               |                             |                                                                                                                                                               |
-| `MIGRATIONS_DIR`              |                             | Directory to read the migration SQL files from (see below)                                                                                                    |
-| `MIGRATIONS_FILE_NAME_SUFFIX` | `/postgres.sql`             | Suffix that is appended to the migration name when looking for the migration file                                                                             |
-|                               |                             |                                                                                                                                                               |
-| `SATELLITE_AUTH_SIGNING_KEY`  | `""`                        | Authentication token signing/validation secret key. See below.                                                                                                |
-| `SATELLITE_AUTH_SIGNING_ISS`  | `""`                        | Cluster ID which acts as the issuer for the authentication JWT. See below.                                                                                    |
-|                               |                             |                                                                                                                                                               |
-| `GLOBAL_CLUSTER_ID`           |                             | Identifier of the cluster within the Electric cloud. When running locally, you can use any string                                                             |
-| `ELECTRIC_INSTANCE_ID`        |                             | Unique identifier of this Electric instance when running in the cluster. When running locally, you can use any string                                         |
-| `ELECTRIC_REGIONAL_ID`        |                             | Shared identifier for multiple Electric instance that connect to the same Vaxine DC when running in the cluster. When running locally, you can use any string |
+| Variable                     | Default                     | Description                                                                                                                                                               |
+| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ELECTRIC_HOST`              |                             | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from postgres instances listed in the `CONNECTORS`                       |
+| `CONNECTORS`                 | `""`                        | Semicolon-separated list of Postgres connection strings for PG instances that will be part of the cluster                                                                 |
+|                              |                             |                                                                                                                                                                           |
+| `POSTGRES_REPLICATION_PORT`  | `5433`                      | Port for connections from PG instances as replication followers                                                                                                           |
+| `STATUS_PORT`                | `5050`                      | Port to expose health and status API endpoint                                                                                                                             |
+| `WEBSOCKET_PORT`             | `5133`                      | Port to expose the `/ws` path for the replication over the websocket                                                                                                      |
+|                              |                             |                                                                                                                                                                           |
+| `OFFSET_STORAGE_FILE`        | `./offset_storage_data.dat` | Path to the file storing the mapping between connected Postgres, Satellite instances, and an internal event log. Should be persisted between Electric restarts.           |
+|                              |                             |                                                                                                                                                                           |
+| `SATELLITE_AUTH_SIGNING_KEY` | `""`                        | Authentication token signing/validation secret key. See below.                                                                                                            |
+| `SATELLITE_AUTH_SIGNING_ISS` | `""`                        | Cluster ID which acts as the issuer for the authentication JWT. See below.                                                                                                |
+|                              |                             |                                                                                                                                                                           |
+| `GLOBAL_CLUSTER_ID`          |                             | Identifier of the cluster within the Electric cloud. When running locally, you can use any string                                                                         |
+| `ELECTRIC_INSTANCE_ID`       |                             | Unique identifier of this Electric instance when running in the cluster. When running locally, you can use any string                                                     |
+| `ELECTRIC_REGIONAL_ID`       |                             | Shared identifier for multiple Electric instance that connect to the same DC when running in the cluster. When running locally, you can use any string. Currently unused. |
 
 **Authentication**
 
@@ -152,28 +143,20 @@ For them to work, you must run the electric server configured with the same
 
 ## Migrations
 
-When running locally, you can apply migrations directly using `make apply_migration`. First make sure you've [built your migrations](https://electric-sql.com/docs/usage/migrations) in your application folder, then set the `MIGRATIONS_DIR` environment variable to the path to the migrations folder:
+Migrations are semi-automatically managed by the Postgres source. Once Postgres has been initialized by Electric (i.e. Electric had connected to it at least once), you will have two functions available in your SQL:
 
-```sh
-export MIGRATIONS_DIR='../path/to/migrations'
-```
+1. `SELECT electric.migration_version(migration_version);`, where `migration_version` should be a monotonically growing value of your choice
+2. `CALL electric.electrify(table_name);`, where `table_name` is a string containing a schema-qualified name of the table you want electrified.
 
-Now (re)run the electric service (with the env var set):
+When you want to do a migration (i.e. create a table), you need to run the `electric.migration_version` at the beginning of the transaction, and `electric.electrify` for every new table. Electrified tables and changes to them
+will reach the clients and be created there as well. For example:
 
-```sh
-make shell
-```
-
-You can now apply named migrations using:
-
-```sh
-make apply_migration name=$MIGRATION_NAME
-```
-
-Where `MIGRATION_NAME` is the name of a migration folder created using [`electric migrations new`](https://electric-sql.com/docs/usage/migrations#2-schema-evolution), for example:
-
-```sh
-make apply_migration name=1666288253_create_items
+```sql
+BEGIN;
+SELECT electric.migration_version('1_version');
+CREATE TABLE public.mtable1 (id uuid PRIMARY KEY);
+CALL electric.electrify('public.mtable1');
+COMMIT;
 ```
 
 ## OSX
@@ -194,8 +177,7 @@ And then run with the right env vars, e.g.:
 
 ```sh
 docker run -it -p "5433:5433" -p "5133:5133" \
-    -e "VAXINE_HOST=host.docker.internal"
-    -e "ELECTRIC_HOST=host.docker.internal"
+    -e "ELECTRIC_HOST=host.docker.internal" \
     -e "CONNECTORS=pg1=postgresql://electric:password@host.docker.internal:54321/electric;pg2=postgresql://electric:password@host.docker.internal:54322/electric" \
     docker.io/library/electric:local-build
 ```

@@ -10,19 +10,10 @@ defmodule Electric.Replication.Connectors do
   @type replication_config_opt() ::
           {:slot, binary()} | {:electric_connection, electric_connection_opts()}
   @type replication_config() :: [replication_config_opt(), ...]
-  @type downstream_config_producer_opt() ::
-          {:vaxine_hostname, binary()}
-          | {:vaxine_port, pos_integer()}
-          | {:vaxine_connection_timeout, pos_integer()}
-  @type downstream_producer_opts() :: [downstream_config_producer_opt()]
-  @type downstream_config_opt() ::
-          {:producer, module()} | {:producer_opts, downstream_producer_opts()}
-  @type downstream_config() :: [downstream_config_opt(), ...]
 
   @type config_opt() ::
           {:connection, connection_config()}
           | {:replication, replication_config()}
-          | {:downstream, downstream_config()}
           | {:origin, origin()}
 
   @type config() :: [config_opt(), ...]
@@ -31,7 +22,6 @@ defmodule Electric.Replication.Connectors do
           publication: String.t(),
           slot: String.t(),
           subscription: String.t(),
-          publication_tables: :all | [binary] | binary,
           electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()},
           opts: Keyword.t()
         }
@@ -44,10 +34,8 @@ defmodule Electric.Replication.Connectors do
           replication: charlist(),
           ssl: boolean()
         }
-  @type downstream_opts() :: %{
-          producer: module(),
-          producer_opts: downstream_producer_opts()
-        }
+
+  alias Electric.Postgres.Extension
 
   def start_link(extra_args) do
     DynamicSupervisor.start_link(__MODULE__, extra_args, name: __MODULE__)
@@ -95,9 +83,9 @@ defmodule Electric.Replication.Connectors do
     config
     |> Keyword.fetch!(:replication)
     |> Map.new()
-    |> Map.put_new(:slot, "electric_replication")
-    |> Map.put_new(:publication_tables, :all)
-    |> Map.put_new(:subscription, to_string(origin))
+    |> Map.put(:slot, Extension.slot_name())
+    |> Map.put(:publication, Extension.publication_name())
+    |> Map.put(:subscription, to_string(origin))
   end
 
   @spec get_connection_opts(config()) :: connection_opts()
@@ -108,13 +96,6 @@ defmodule Electric.Replication.Connectors do
     |> Keyword.fetch!(:connection)
     |> new_map_with_charlists()
     |> set_replication(replication?)
-  end
-
-  @spec get_downstream_opts(config()) :: downstream_opts()
-  def get_downstream_opts(config) do
-    config
-    |> Keyword.fetch!(:downstream)
-    |> Map.new()
   end
 
   defp new_map_with_charlists(list) do

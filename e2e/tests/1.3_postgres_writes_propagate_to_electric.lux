@@ -1,0 +1,26 @@
+[doc PG writes to the electrified tables propagate to Electric]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[shell pg_1]
+    !BEGIN;
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'sentinel value');
+    !INSERT INTO owned_entries (id, electric_user_id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'test', 'bad sentinel value');
+    !COMMIT;
+    ?$psql
+
+[shell electric]
+    # We shouldn't see a value from an un-electrified table
+    -bad sentinel value
+    # But we should see a transaction with one change
+    ??component=CachedWal.EtsBacked [debug] Saving transaction with changes [%Electric.Replication.Changes.NewRecord{
+    ?+"content" => "sentinel value"
+    ?+"content_b" => nil
+    ?"id" => "00000000-0000-0000-0000-000000000000"
+    # We also see that the `tags` field has been correctly-ish filled (i.e. not empty and has correct origin)
+    ?relation: \{"public", "entries"\}, tags: \["postgres_1@\d+"\]\}\]
+
+[cleanup]
+    [invoke teardown]

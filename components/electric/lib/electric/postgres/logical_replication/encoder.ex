@@ -3,6 +3,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
+    Message,
     Commit,
     Origin,
     Relation,
@@ -26,7 +27,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
       iex> encode(%#{Begin}{commit_timestamp: ~U[2019-07-18 17:02:35.726322Z], final_lsn: %#{Lsn}{segment: 2, offset: 2817828992}, xid: 619})
       <<66, 0, 0, 0, 2, 167, 244, 168, 128, 0, 2, 48, 246, 88, 88, 213, 242, 0, 0, 2, 107>>
 
-      iex> encode(%#{Insert}{relation_id: 16396, tuple_data: {"06ac9e9a-f31c-4ef4-a57f-c4776b139201", "ok"}})
+      iex> encode(%#{Insert}{relation_id: 16396, tuple_data: ["06ac9e9a-f31c-4ef4-a57f-c4776b139201", "ok"]})
       <<73, 0, 0, 64, 12, 78, 0, 2, 116, 0, 0, 0, 36, 48, 54, 97, 99, 57, 101, 57, 97, 45, 102, 51, 49, 99, 45, 52, 101, 102, 52, 45, 97, 53, 55, 102, 45, 99, 52, 55, 55, 54, 98, 49, 51, 57, 50, 48, 49, 116, 0, 0, 0, 2, 111, 107>>
 
       iex> encode(%#{Commit}{commit_timestamp: ~U[2022-06-09 09:45:11.642218Z], end_lsn: %#{Lsn}{segment: 0, offset: 24337048}, flags: [], lsn: %#{Lsn}{segment: 0, offset: 24337000}})
@@ -46,16 +47,16 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
 
       iex> encode(%#{Update}{
       ...>   changed_key_tuple_data: nil,
-      ...>   old_tuple_data: {"c0d731ca-0e72-4950-9499-8db83badb051", "ok"},
+      ...>   old_tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "ok"],
       ...>   relation_id: 16396,
-      ...>   tuple_data: {"c0d731ca-0e72-4950-9499-8db83badb051", "yes"}
+      ...>   tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"]
       ...> })
       <<85, 0, 0, 64, 12, 79, 0, 2, 116, 0, 0, 0, 36, 99, 48, 100, 55, 51, 49, 99, 97, 45, 48, 101, 55, 50, 45, 52, 57, 53, 48, 45, 57, 52, 57, 57, 45, 56, 100, 98, 56, 51, 98, 97, 100, 98, 48, 53, 49, 116, 0, 0, 0, 2, 111, 107, 78, 0, 2, 116, 0, 0, 0, 36, 99, 48, 100, 55, 51, 49, 99, 97, 45, 48, 101, 55, 50, 45, 52, 57, 53, 48, 45, 57, 52, 57, 57, 45, 56, 100, 98, 56, 51, 98, 97, 100, 98, 48, 53, 49, 116, 0, 0, 0, 3, 121, 101, 115>>
 
       iex> encode(%#{Delete}{
       ...>   relation_id: 16396,
       ...>   changed_key_tuple_data: nil,
-      ...>   old_tuple_data: {"c0d731ca-0e72-4950-9499-8db83badb051", "yes"}
+      ...>   old_tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"]
       ...> })
       <<68, 0, 0, 64, 12, 79, 0, 2, 116, 0, 0, 0, 36, 99, 48, 100, 55, 51, 49, 99, 97, 45, 48, 101, 55, 50, 45, 52, 57, 53, 48, 45, 57, 52, 57, 57, 45, 56, 100, 98, 56, 51, 98, 97, 100, 98, 48, 53, 49, 116, 0, 0, 0, 3, 121, 101, 115>>
   """
@@ -66,6 +67,13 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     timestamp = timestamp_to_pgtimestamp(commit_timestamp)
 
     <<"B", lsn::binary-8, timestamp::integer-64, xid::integer-32>>
+  end
+
+  def encode(%Message{content: content} = data) when byte_size(content) <= 0x7FFFFFFF do
+    flag = if data.transactional?, do: 1, else: 0
+
+    <<"M", flag::8, encode_lsn(data.lsn)::binary-8, data.prefix::binary, 0,
+      byte_size(data.content)::32, data.content::binary>>
   end
 
   def encode(%Commit{} = data) do
@@ -112,13 +120,13 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
   end
 
   def encode(%Update{changed_key_tuple_data: changed_data, relation_id: id, tuple_data: new_data})
-      when is_tuple(changed_data) do
+      when is_list(changed_data) do
     <<"U", id::integer-32, "K", encode_tuple_data(changed_data)::binary, "N",
       encode_tuple_data(new_data)::binary>>
   end
 
   def encode(%Update{old_tuple_data: old_data, relation_id: id, tuple_data: new_data})
-      when is_tuple(old_data) do
+      when is_list(old_data) do
     <<"U", id::integer-32, "O", encode_tuple_data(old_data)::binary, "N",
       encode_tuple_data(new_data)::binary>>
   end
@@ -127,11 +135,11 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     <<"U", id::integer-32, "N", encode_tuple_data(new_data)::binary>>
   end
 
-  def encode(%Delete{relation_id: id, old_tuple_data: data}) when is_tuple(data) do
+  def encode(%Delete{relation_id: id, old_tuple_data: data}) when is_list(data) do
     <<"D", id::integer-32, "O", encode_tuple_data(data)::binary>>
   end
 
-  def encode(%Delete{relation_id: id, changed_key_tuple_data: data}) when is_tuple(data) do
+  def encode(%Delete{relation_id: id, changed_key_tuple_data: data}) when is_list(data) do
     <<"D", id::integer-32, "K", encode_tuple_data(data)::binary>>
   end
 
@@ -171,9 +179,8 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
 
   defp encode_tuple_data(tuple) do
     tuple
-    |> Tuple.to_list()
     |> Enum.map_join(&encode_tuple_element/1)
-    |> then(&<<tuple_size(tuple)::integer-16, &1::binary>>)
+    |> then(&<<length(tuple)::integer-16, &1::binary>>)
   end
 
   defp encode_tuple_element(nil), do: "n"

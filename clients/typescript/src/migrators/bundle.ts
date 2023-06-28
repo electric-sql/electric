@@ -56,19 +56,19 @@ export class BundleMigrator implements Migrator {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
     const tableExists = `
-      SELECT count(name) as numTables FROM sqlite_master
+      SELECT 1 FROM sqlite_master
         WHERE type = 'table'
           AND name = ?
     `
-    const [{ numTables }] = await this.adapter.query({
+    const tables = await this.adapter.query({
       sql: tableExists,
       args: [this.tableName],
     })
-    if (numTables == 0) {
+    if (tables.length === 0) {
       return []
     }
 
-    // The migrations table exists, so let's query the name and hash of
+    // The migrations table exists, so let's query the version of
     // the previously applied migrations.
     const existingRecords = `
       SELECT version FROM ${this.tableName}
@@ -112,5 +112,32 @@ export class BundleMigrator implements Migrator {
       sql: applied,
       args: [version, Date.now()],
     })
+  }
+
+  /**
+   * Applies the provided migration only if it has not yet been applied.
+   * @param migration The migration to apply.
+   * @returns A promise that resolves to a boolean
+   *          that indicates if the migration was applied.
+   */
+  async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
+    const versionExists = `
+      SELECT 1 FROM ${this.tableName}
+        WHERE version = ?
+    `
+    const rows = await this.adapter.query({
+      sql: versionExists,
+      args: [migration.version],
+    })
+
+    const shouldApply = rows.length === 0
+
+    if (shouldApply) {
+      // This is a new migration because its version number
+      // is not in our migrations table.
+      await this.apply(migration)
+    }
+
+    return shouldApply
   }
 }

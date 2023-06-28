@@ -1,3 +1,6 @@
+[global dprompt=\w+!?@\w+:(\S+)[\#\$]]
+[global eprompt=iex\(ws_client@.*\)\d+>\s]
+
 [global _global_log_string_counter=0]
 [macro log string]
     [my old=$LUX_SHELLNAME]
@@ -44,24 +47,6 @@
     ?$prompt
 [endmacro]
 
-[macro wait_name name]
-    [loop iter 1..10]
-          @accepting connections
-          !docker exec -it -e PGPASSWORD=password single_dc_${name}_1 pg_isready -U electric
-          ?SH-PROMPT:
-          [sleep 1]
-    [endloop]
-    ?SH-PROMPT:
-[endmacro]
-
-[macro wait_logs name match_spec]
-    [loop iter 1..10]
-          @${match_spec}
-          !docker logs single_dc_${name}_1
-          [sleep 1]
-    [endloop]
-[endmacro]
-
 [macro wait_port host port]
     [loop iter 1..10]
           @==0==
@@ -79,12 +64,14 @@
         [sleep 1]
     [endloop]
     !\pset null '<NULL>'
+    !\pset pager off
 [endmacro]
 
 [macro start_elixir_test id]
     !make start_elixir_test_${id}
-    [invoke ok2 $dprompt]
-    !make run_elixir
+    ?$eprompt
+    !Logger.configure(level: :debug)
+    !Application.put_env(:elixir, :ansi_enabled, false)
     ?$eprompt
 [endmacro]
 
@@ -94,6 +81,7 @@
               --table-size=${table_size} \
               --tables=${tables} \
               --threads=1 \
+              --auto-inc=false \
               --pgsql-host=${host} \
               --pgsql-port=5432 \
               --pgsql-user=postgres \
@@ -118,3 +106,19 @@
               oltp_write_only run
     [invoke ok2 $dprompt]
 [endmacro]
+
+[macro electrify_table pg_id table_name]
+    [shell $pg_id]
+        [invoke electrify_table_tx $table_name]
+
+[endmacro]
+
+[macro electrify_table_tx table_name]
+    !BEGIN;
+    ?electric=\*#
+    !CALL electric.electrify('$table_name');
+    ?electric=\*#
+    !COMMIT;
+    ?electric=#
+[endmacro]
+

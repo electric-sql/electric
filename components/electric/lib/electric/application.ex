@@ -7,23 +7,21 @@ defmodule Electric.Application do
   use Application
 
   def start(_type, _args) do
-    :ok = Logger.add_translator({Electric.Utils, :translate})
-
     auth_provider = Electric.Satellite.Auth.provider()
 
     children = [
       Electric.Telemetry,
+      Electric.Postgres.OidDatabase,
       Electric.Postgres.SchemaRegistry,
       Electric.Replication.OffsetStorage,
       {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
-      Electric.VaxRepo,
-      Electric.PostgresServer.child_spec(port: postgres_server_port()),
       Electric.Satellite.ClientManager,
+      Electric.Replication.Connectors,
       Electric.Satellite.WsServer.child_spec(
         port: sqlite_server_port(),
         auth_provider: auth_provider
       ),
-      Electric.Replication.Connectors
+      Electric.PostgresServer.child_spec(port: postgres_server_port())
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

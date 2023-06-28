@@ -64,11 +64,11 @@ export const set_subscribers = (db: Electric) => {
 }
 
 export const get_tables = async (electric: Electric) => {
-  return electric.db.raw({sql: `SELECT name FROM sqlite_master WHERE type='table';`})
+  return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
 
 export const get_columns = async (electric: Electric, table: string) => {
-  return electric.db.raw({sql: `SELECT * FROM pragma_table_info(?);`, args: [table]})
+  return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
 }
 
 export const get_items = async (electric: Electric) => {
@@ -81,6 +81,10 @@ export const get_item_ids = async (electric: Electric) => {
       id: true
     }
   })
+}
+
+export const get_item_columns = async (electric: Electric, table: string, column: string) => {
+  return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
 }
 
 export const insert_item = async (electric: Electric, keys: [string]) => {
@@ -96,17 +100,17 @@ export const insert_item = async (electric: Electric, keys: [string]) => {
   })
 }
 
-export const insert_extended_item = async (electric: Electric, keys: [string]) => {
-  for (const k of keys) {
-    await electric.db.raw({
-      sql: `INSERT INTO items(id, content, another) VALUES (?, ?, ?) RETURNING *;`,
-      args: [
-        uuidv4(),
-        k,
-        `${k} another`
-      ]
-    })
-  }
+export const insert_extended_item = async (electric: Electric, values: { string: string }) => {
+  const fixedColumns = { 'id': uuidv4 }
+  const columns = Object.keys(fixedColumns).concat(Object.keys(values))
+  const columnNames = columns.join(", ")
+  const placeHolders = Array(columns.length).fill("?")
+  const args = Object.values(fixedColumns).map(f => f()).concat(Object.values(values))
+
+  await electric.db.raw({
+    sql: `INSERT INTO items (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
+    args: args,
+  })
 }
 
 export const delete_item = async (electric: Electric, keys: [string]) => {

@@ -117,7 +117,7 @@ defmodule Electric.Postgres.Schema do
       Enum.map(table.columns, fn col ->
         %{
           name: col.name,
-          type: col_type(col.type.name),
+          type: col_type(col.type),
           type_modifier: List.first(col.type.size, -1),
           part_of_identity?: nil
         }
@@ -126,19 +126,13 @@ defmodule Electric.Postgres.Schema do
     {:ok, table_info, columns}
   end
 
-  defp col_type(t) when t in ["serial", "serial4"] do
-    :int4
-  end
+  defp col_type(%{name: name, array: [_]}), do: {:array, col_type(name)}
+  defp col_type(%{name: name}), do: col_type(name)
 
-  defp col_type("serial8") do
-    :int8
-  end
-
-  defp col_type("serial2") do
-    :int2
-  end
-
-  defp col_type(t), do: String.to_atom(t)
+  defp col_type("serial2"), do: :int2
+  defp col_type(t) when t in ["serial", "serial4"], do: :int4
+  defp col_type("serial8"), do: :int8
+  defp col_type(t) when is_binary(t), do: String.to_atom(t)
 
   def struct_order(list) do
     Enum.sort(list)
@@ -289,4 +283,98 @@ defmodule Electric.Postgres.Schema do
   defp blank(nil), do: nil
   defp blank(""), do: nil
   defp blank(s) when is_binary(s), do: s
+
+  @doc """
+  Enrich the schema with shadow tables for each table.
+
+  We don't check if the shadow tables actually exist, so only electrified
+  tables (or other tables that are expected to have shadows) should be included
+  in the schema passed to this function
+  """
+  def add_shadow_tables(%Proto.Schema{tables: tables} = schema) do
+    shadow_tables =
+      tables
+      |> Enum.reject(&is_shadow_table?/1)
+      |> Enum.map(&build_shadow_table/1)
+
+    %{schema | tables: tables ++ shadow_tables}
+  end
+
+  @schema Electric.Postgres.Extension.schema()
+  defp is_shadow_table?(%Proto.Table{
+         name: %Proto.RangeVar{schema: @schema, name: "shadow__" <> _}
+       }),
+       do: true
+
+  defp is_shadow_table?(%Proto.Table{}), do: false
+
+  @electric_tag_type %Proto.Column.Type{
+    name: "electric.tag",
+    size: [],
+    array: []
+  }
+
+  # These are missing their DEFAULT constraints, but I don't think it matters
+  #   _tags electric.tag[] DEFAULT array[]::electric.tag[],
+  #   _last_modified bigint,
+  #   _is_a_delete_operation boolean DEFAULT false,
+  #   _tag electric.tag,
+  #   _observed_tags electric.tag[],
+  #   _modified_columns_bit_mask boolean[],
+  #   _resolved boolean,
+  #   _currently_reordering boolean
+  @shadow_columns [
+    %Proto.Column{name: "_tags", type: %Proto.Column.Type{name: "electric.tag", array: [-1]}},
+    %Proto.Column{name: "_last_modified", type: %Proto.Column.Type{name: "int8"}},
+    %Proto.Column{name: "_is_a_delete_operation", type: %Proto.Column.Type{name: "bool"}},
+    %Proto.Column{name: "_tag", type: %Proto.Column.Type{name: "electric.tag"}},
+    %Proto.Column{
+      name: "_observed_tags",
+      type: %Proto.Column.Type{name: "electric.tag", array: [-1]}
+    },
+    %Proto.Column{
+      name: "_modified_columns_bit_mask",
+      type: %Proto.Column.Type{name: "bool", array: [-1]}
+    },
+    %Proto.Column{name: "_resolved", type: %Proto.Column.Type{name: "bool"}},
+    %Proto.Column{name: "_currently_reordering", type: %Proto.Column.Type{name: "bool"}}
+  ]
+
+  defp build_shadow_table(%Proto.Table{} = main) do
+    # The columns based on the main table lack any defaults/constraints on shadow tables
+    stripped_columns = Enum.map(main.columns, &Map.put(&1, :constraints, []))
+    {:ok, pk_column_names} = primary_keys(main)
+
+    {pks, non_pks} = Enum.split_with(stripped_columns, &(&1.name in pk_column_names))
+
+    timestamps =
+      non_pks
+      |> Enum.map(&Map.put(&1, :type, @electric_tag_type))
+      |> Enum.map(&Map.update!(&1, :name, fn n -> String.slice("_tag_#{n}", 0..63) end))
+
+    reordered =
+      Enum.map(
+        non_pks,
+        &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
+      )
+
+    %Proto.Table{
+      # `MigrationConsumer` code currently has logic that for any incoming relation, we're the OID already in the `SchemaRegistry`.
+      # Hence, we just need any oid that's not going to collide. `oid` type is uint4, with max being 4,294,967,295.
+      # Let's add 2,000,000,000 to original table oid and hope for the best.
+      # OID generation is done on PG side by an increasing counter [1] and not a random value,
+      # and that counter functionally starts at 16384 [2]. I think that starting our "fake" oid generation near the end,
+      # with it only being required to not conflict within one table (`pg_class`) seems fine for now.
+      #
+      # TODO: Add more robust checks to definitely not collide in our own SchemaRegistry or alternatives.
+      oid: 2_000_000_000 + main.oid,
+      name: %Proto.RangeVar{
+        schema: @schema,
+        name: "shadow__#{main.name.schema}__#{main.name.name}"
+      },
+      columns: pks ++ @shadow_columns ++ timestamps ++ reordered,
+      constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),
+      indexes: []
+    }
+  end
 end

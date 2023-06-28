@@ -8,4 +8,8 @@ export class MockMigrator implements Migrator {
   async apply(_: StmtMigration): Promise<void> {
     return
   }
+
+  async applyIfNotAlready(_: StmtMigration): Promise<boolean> {
+    return true
+  }
 }
