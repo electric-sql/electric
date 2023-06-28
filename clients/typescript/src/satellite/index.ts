@@ -61,6 +61,7 @@ export interface Satellite {
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<void | SatelliteError>
+  unsubscribe(shapeUuid: string): Promise<void | SatelliteError>
 }
 
 export interface Client {

@@ -19,6 +19,10 @@ import {
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  SubscriptionData,
+  DataChange,
+  RelationsCache,
+  DataChangeType,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 import { randomValue } from '../util/random'
@@ -29,7 +33,8 @@ import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
-import { bytesToNumber } from '../util/common'
+import { bytesToNumber, uuid } from '../util/common'
+import { generateTag } from './oplog'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27
@@ -106,11 +111,65 @@ export class MockRegistry extends BaseRegistry {
 }
 
 export class MockSatelliteClient extends EventEmitter implements Client {
+  relations: RelationsCache
+  constructor() {
+    super()
+
+    this.relations = {}
+  }
+
+  setRelations(relations: RelationsCache) {
+    this.relations = relations
+  }
+
   subscribe(
-    _shapes: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
+    shapes: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
   ): Promise<SubscribeResponse> {
+    const subscriptionId = randomValue()
+
+    const tablename = shapes[0]?.definition.selects[0]?.tablename
+    if (tablename == 'parent' || tablename == 'child') {
+      const shapeReqToUuid = {
+        [shapes[0].requestId]: uuid(),
+      }
+
+      const parentRecord = {
+        id: 1,
+        value: 'incoming',
+        other: 1,
+      }
+
+      const childRecord = {
+        id: 1,
+        parent: 1,
+      }
+
+      const dataChange: DataChange = {
+        relation: this.relations[tablename],
+        type: DataChangeType.INSERT,
+        record: tablename == 'parent' ? parentRecord : childRecord,
+        tags: [generateTag('remote', new Date())],
+      }
+
+      const subsciptionData: SubscriptionData = {
+        subscriptionId,
+        data: { changes: [dataChange] },
+        shapeReqToUuid,
+      }
+
+      setTimeout(() => {
+        this.emit('subscription_delivered', subsciptionData)
+      }, 1)
+    }
+
+    if (tablename == 'another') {
+      setTimeout(() => {
+        this.emit('subscription_error')
+      }, 1)
+    }
+
     return Promise.resolve({
-      subscriptionId: randomValue(),
+      subscriptionId,
     })
   }
   subscribeToSubscriptionEvents(

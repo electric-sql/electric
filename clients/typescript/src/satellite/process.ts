@@ -35,6 +35,10 @@ import {
   MigrationTable,
   SatelliteErrorCode,
   ClientShapeDefinition,
+  SubscriptionData,
+  ShapeRequest,
+  ShapeDefinition,
+  RelationColumn,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -49,6 +53,7 @@ import {
   newShadowEntry,
   OplogEntry,
   OPTYPES,
+  primaryKeyToStr,
   remoteOperationsToTableChanges,
   ShadowEntry,
   ShadowEntryChanges,
@@ -65,7 +70,7 @@ import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
 import {
-  PersistentSubscriptionsManager,
+  InMemorySubscriptionsManager,
   SubscriptionsManager,
 } from '../util/subscriptions'
 
@@ -138,9 +143,11 @@ export class SatelliteProcess implements Satellite {
 
     this.relations = {}
 
-    const loadFn = () => this._getMeta('subscriptions')
-    const saveFn = (value: string) => this._setMeta('subscriptions', value)
-    this.subscriptions = new PersistentSubscriptionsManager(loadFn, saveFn)
+    // TODO: load from database
+    this.subscriptions = new InMemorySubscriptionsManager()
+    this.subscriptions.subscribeToUnsubscribeEvent(
+      this._garbageCollectShapeHanlder.bind(this)
+    )
   }
 
   async start(
@@ -220,7 +227,20 @@ export class SatelliteProcess implements Satellite {
     this._authState = authState
   }
 
-  // TODO: subscribe to subscription events, handle them and update shape manager
+  async _garbageCollectShapeHanlder(shapeDef: ShapeDefinition): Promise<void> {
+    shapeDef.definition.selects.map(async (select) => {
+      const tablename = select.tablename
+      // does not delete shadow rows but we can do that
+      await this.adapter.runInTransaction(
+        ...this._disableTriggers([tablename]),
+        {
+          sql: `DELETE FROM ${tablename}`,
+        },
+        ...this._enableTriggers([tablename])
+      )
+    })
+  }
+
   setClientListeners(): void {
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
@@ -232,6 +252,11 @@ export class SatelliteProcess implements Satellite {
     })
     this.client.subscribeToOutboundEvent('started', () =>
       this._throttledSnapshot()
+    )
+
+    this.client.subscribeToSubscriptionEvents(
+      this._handleSubscriptionData.bind(this),
+      this._handleSubscriptionError.bind(this)
     )
   }
 
@@ -253,11 +278,92 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
-  // TODO: update subscription manager and call client
   async subscribe(
-    _shapeDefinitions: ClientShapeDefinition[]
+    shapeDefinitions: ClientShapeDefinition[]
   ): Promise<void | SatelliteError> {
-    return Promise.reject()
+    const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
+      requestId: uuid(),
+      definition,
+    }))
+
+    const { subscriptionId } = await this.client.subscribe(shapeReqs)
+    this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
+  }
+
+  async unsubscribe(_subscriptionId: string): Promise<void | SatelliteError> {
+    throw new SatelliteError(
+      SatelliteErrorCode.INTERNAL,
+      'unsubscribe shape not supported'
+    )
+    // return this.subscriptions.unsubscribe(subscriptionId)
+  }
+
+  _handleSubscriptionData(subsData: SubscriptionData) {
+    this.subscriptions.subscriptionDelivered(subsData)
+    if (subsData.data) {
+      this._applySubscriptionData(subsData.data.changes)
+    }
+  }
+
+  // only works if there is no previous subscription for table
+  // TODO: throw errors properly or define conflcit behaviour
+  async _applySubscriptionData(changes: DataChange[]) {
+    const stmts: Statement[] = []
+    for (const op of changes) {
+      const { relation, record, tags } = op
+
+      const qualifiedTablename = new QualifiedTablename('main', relation.table)
+      const tablenameStr = qualifiedTablename.toString()
+
+      const columnNames = Object.keys(record!)
+      const columnValues = Object.values(record!) as (string | number)[]
+
+      const insertStmt = `INSERT INTO ${tablenameStr} (${columnNames.join(
+        ', '
+      )}) VALUES (${columnValues.map((_) => '?').join(', ')})`
+      const insertArgs = [...columnValues]
+
+      const primaryKeyCols = relation.columns.reduce(
+        (prev: { [k in string]: string | number }, curr: RelationColumn) => {
+          if (curr.primaryKey && record) {
+            prev[curr.name] = record![curr.name] as string | number
+          }
+          return prev
+        },
+        {}
+      )
+
+      const upsertShadowStmt = `
+        INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES (?,?,?,?)`
+      const upsertShadowArgs = [
+        relation.schema,
+        relation.table,
+        primaryKeyToStr(primaryKeyCols),
+        encodeTags(tags),
+      ]
+
+      stmts.push(...this._disableTriggers([tablenameStr]))
+      stmts.push({ sql: insertStmt, args: insertArgs })
+      stmts.push({ sql: upsertShadowStmt, args: upsertShadowArgs })
+      stmts.push(...this._enableTriggers([tablenameStr]))
+    }
+
+    // persist subscriptions state
+    stmts.push(
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
+
+    await this.adapter.runInTransaction(...stmts)
+  }
+
+  async _handleSubscriptionError(_satelliteError: SatelliteError) {
+    // this is obviously too conservative
+    this.subscriptions.unsubscribeAll()
+
+    // persist subscriptions state
+    await this.adapter.run(
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
   }
 
   async _connectivityStateChange(
@@ -989,13 +1095,17 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _setMeta(key: string, value: SqlValue): Promise<void> {
+  _setMetaStatement(key: string, value: SqlValue): Statement {
     const meta = this.opts.metaTable.toString()
 
     const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
     const args = [value, key]
+    return { sql, args }
+  }
 
-    await this.adapter.run({ sql, args })
+  async _setMeta(key: string, value: SqlValue): Promise<void> {
+    const stmt = this._setMetaStatement(key, value)
+    await this.adapter.run(stmt)
   }
 
   async _getMeta(key: string): Promise<string> {
