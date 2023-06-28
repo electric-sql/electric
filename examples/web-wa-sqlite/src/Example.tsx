@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import './Example.css'
 
-import { dbSchema, Electric } from './generated/models'
+import { dbSchema, config, Electric } from './generated/client'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
-
-import config from '../.electric/@config'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 

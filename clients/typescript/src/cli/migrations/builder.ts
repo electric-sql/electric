@@ -29,54 +29,27 @@ import {
  * Loads the migrations from the provided `migrationsFolder`,
  * and updates the specified configuration file `configFile` accordingly.
  * @param migrationsFolder Folder containing the migrations.
- * @param configFile Configuration file of an electric application.
+ * @param migrationsFile File containing the built migrations of an electric application.
+ *                       Built migrations contain the DDL statements and the triggers.
  */
 export async function buildMigrations(
   migrationsFolder: string,
-  configFile: string
+  migrationsFile: string
 ) {
   try {
-    const configObj = (await import(configFile)).default // dynamically import the configuration file
-    const configSchema = z.object({}).passthrough()
-
-    const config = configSchema.parse(configObj)
     const migrations = await loadMigrations(migrationsFolder)
-    config['migrations'] = migrations // add the migrations to the config
     // Update the configuration file
     await fs.writeFile(
-      configFile,
-      `export default ${JSON.stringify(config, null, 2)}`
+      migrationsFile,
+      `export default ${JSON.stringify(migrations, null, 2)}`
     )
-    await writeJsConfigFile(configFile)
   } catch (e) {
     if (e instanceof z.ZodError)
       throw new Error(
-        'The specified configuration file is malformed:\n' + e.message
+        'Could not build migrations:\n' + e.message
       )
     else throw e
   }
-}
-
-/**
- * Makes a .js version that re-exports the contents of the config .mjs file
- * such that programs can import the config using `import config from `path/to/.electric/@config`
- * with .mjs that is not possible because you would have to provide the full path to the `.mjs` file:
- * `import config from `path/to/.electric/@config/index.mjs`
- *
- * Note: The config file has an `mjs` extension because it provides a default import
- *       but when the CLI wants to import it NodeJS complains that it must configured
- *       to allow modules:
- *         Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
- */
-async function writeJsConfigFile(configFile: string) {
-  await fs.writeFile(
-    path.format({
-      ...path.parse(configFile),
-      base: '',
-      ext: '.js',
-    }),
-    `export { default } from './index.mjs'`
-  )
 }
 
 /**
