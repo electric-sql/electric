@@ -31,4 +31,9 @@ export const writeSingleFileImportStatements: WriteStatements = (
     `{ TableSchema, DbSchema, Relation, ElectricClient, HKT }`,
     'electric-sql/client/model'
   )
+
+  writeImport(
+    `migrations`,
+    './migrations'
+  )
 }

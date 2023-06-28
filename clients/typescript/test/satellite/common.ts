@@ -56,9 +56,8 @@ export const relations = {
   },
 }
 
-import config from '../support/.electric/@config/index'
+import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
-const { migrations } = config
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {

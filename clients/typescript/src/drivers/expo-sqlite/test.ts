@@ -22,7 +22,6 @@ type RetVal<
   N extends Notifier,
   D extends Database = Database
 > = Promise<[D, N, ElectricClient<S>]>
-const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export async function initTestable<
   S extends DbSchema<any>,
@@ -56,7 +55,7 @@ export async function initTestable<
   dbName: DbName,
   dbDescription: S,
   useWebSQLDatabase = false,
-  config: ElectricConfig = testConfig,
+  config: ElectricConfig = {},
   opts?: ElectrifyOptions
 ): RetVal<S, N> {
   const db = useWebSQLDatabase

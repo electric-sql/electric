@@ -14,7 +14,7 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
-const config: ElectricConfig = { migrations: [] }
+const config: ElectricConfig = { }
 const authConfig: AuthConfig = { token: 'test-token ' }
 const args = [
   dbName,

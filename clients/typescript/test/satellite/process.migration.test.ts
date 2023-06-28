@@ -232,7 +232,7 @@ test.serial('apply migration containing only DDL', async (t: any) => {
     changes: [createTable, addColumn],
     lsn: new Uint8Array(),
     // starts at 3, because the app already defines 2 migrations
-    // (see test/support/.electric/@config/index.js)
+    // (see test/support/migrations/migrations.js)
     // which are loaded when Satellite is started
     migrationVersion: '3',
   }

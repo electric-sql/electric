@@ -8,6 +8,7 @@ import { UpsertInput } from '../input/upsertInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { HKT } from '../util/hkt'
 import groupBy from 'lodash.groupby'
+import { Migration } from '../../migrators'
 
 export type Arity = 'one' | 'many'
 
@@ -116,7 +117,7 @@ export class DbSchema<T extends TableSchemas> {
     Record<FieldName, Array<Relation>>
   >
 
-  constructor(public tables: T) {
+  constructor(public tables: T, public migrations: Migration[]) {
     this.extendedTables = this.extend(tables)
     this.incomingRelationsIndex = this.indexIncomingRelations()
   }

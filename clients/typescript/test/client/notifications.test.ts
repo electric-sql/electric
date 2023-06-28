@@ -3,11 +3,7 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import { dbSchema } from './generated'
 
-const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
-}
+const config = {}
 
 const conn = new Database(':memory:')
 

@@ -17,13 +17,12 @@ import { Database } from './index'
 import { enablePromiseRuntime, MockDatabase } from './mock'
 import { MockSocketFactory } from '../../sockets/mock'
 import { ElectricClient } from '../../client/model/client'
+import { ElectricConfig } from '../../config'
 import { DbSchema } from '../../client/model'
 
 type RetVal<S extends DbSchema<any>, N extends Notifier> = Promise<
   [Database, N, ElectricClient<S>]
 >
-
-const testConfig = { app: 'app', env: 'default', migrations: [] }
 
 export const initTestable = async <
   S extends DbSchema<any>,
@@ -32,7 +31,7 @@ export const initTestable = async <
   dbName: DbName,
   dbDescription: S,
   promisesEnabled = false,
-  config = testConfig,
+  config: ElectricConfig = {},
   opts?: ElectrifyOptions
 ): RetVal<S, N> => {
   let db = new MockDatabase(dbName)

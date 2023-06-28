@@ -15,9 +15,7 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   dbSchema,
-  {
-    migrations: [],
-  },
+  {},
   { token: 'test-token' }
 )
 

@@ -43,7 +43,7 @@ export const electrify = async <DB extends DbSchema<any>>(
 
   const configWithDefaults = hydrateConfig(config)
   const migrator =
-    opts?.migrator || new BundleMigrator(adapter, config.migrations)
+    opts?.migrator || new BundleMigrator(adapter, dbDescription.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const registry = opts?.registry || globalRegistry
 

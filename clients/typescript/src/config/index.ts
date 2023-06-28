@@ -1,7 +1,4 @@
-import { Migration } from '../migrators/index'
-
 export interface ElectricConfig {
-  migrations: Migration[]
   replication?: {
     host: string
     port: number
@@ -18,7 +15,6 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   const replication = { ...config.replication, host, port, ssl }
 
   return {
-    migrations: config.migrations ?? [],
     replication: config.replication ?? replication,
     debug: config.debug ?? false,
   }

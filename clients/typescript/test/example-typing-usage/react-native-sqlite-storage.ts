@@ -8,11 +8,7 @@ import { dbSchema } from '../client/generated'
 const promisesEnabled = true
 SQLite.enablePromise(promisesEnabled)
 
-const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
-}
+const config = {}
 
 const authConfig = {
   token: 'test-token',

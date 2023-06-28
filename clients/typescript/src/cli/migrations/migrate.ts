@@ -107,12 +107,6 @@ export async function generate(
     console.log('Building migrations...')
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
-
-    // In the generated client:
-    // import the migrations and
-    // export them in a config object
-    const clientFile = path.join(outFolder, 'index.ts')
-    fs.appendFile(clientFile, "import migrations from './migrations'\nexport const config = {\n  migrations: migrations\n}")
   } catch (e) {
     console.error(
       'generate command failed: ' + JSON.stringify(e)
