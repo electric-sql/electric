@@ -11,7 +11,6 @@ test: deps pull test_only
 
 pull:
 	docker compose -f services_templates.yaml pull \
-		sysbench \
 		postgresql
 
 stop:
