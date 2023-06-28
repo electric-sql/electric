@@ -44,22 +44,30 @@ defmodule Electric.Replication.OffsetStorage do
     end
   end
 
-  @doc "Store PG <> Vaxine relation mapping"
-  def put_pg_relation(slot, lsn, vx_offset) do
+  @doc """
+  Store a mapping of the LSN being sent to a Postgres slot and
+  actual position in a log that feeds the Postgres.
+  """
+  def save_pg_position(slot, lsn, offset) do
     Logger.info(
-      "Saving offset #{inspect(vx_offset)} for lsn #{inspect(lsn)} and slot #{inspect(slot)}"
+      "Saving offset #{inspect(offset)} for lsn #{inspect(lsn)} and slot #{inspect(slot)}"
     )
 
-    :ok = :dets.insert(@table, {{slot, lsn}, vx_offset})
+    :ok = :dets.insert(@table, {{slot, lsn}, offset})
     :dets.sync(@table)
   end
 
-  @doc "Get Vaxine offset based on PG slot and lsn"
-  @spec get_vx_offset(String.t(), PGLsn) :: nil | term()
-  def get_vx_offset(slot, lsn) do
+  @doc """
+  Get position of the previously-connected PostgreSQL slot.
+
+  Maps postgres-sent "continue" LSN to a previously stored position in a log
+  that feeds the Postgres. The position is saved by the `save_pg_position/3`
+  """
+  @spec get_pg_position(String.t(), PGLsn) :: nil | term()
+  def get_pg_position(slot, lsn) do
     case :dets.lookup(@table, {slot, lsn}) do
       [] -> nil
-      [{{_slot, _lsn}, vx_offset}] -> vx_offset
+      [{{_slot, _lsn}, offset}] -> offset
     end
   end
 

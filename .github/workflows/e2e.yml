@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload lux logs
         uses: actions/upload-artifact@v3
-        if: ${{ always() }}
+        if: ${{ failure() }}
         with:
           name: lux_logs
           path: e2e/lux_logs/run_*
