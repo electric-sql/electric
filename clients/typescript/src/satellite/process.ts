@@ -397,7 +397,6 @@ export class SatelliteProcess implements Satellite {
     }
     const authState = this._authState
 
-    // TODO: add subscriptions to startReplication
     return this.client
       .connect()
       .then(() => this.client.authenticate(authState))
