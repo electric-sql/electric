@@ -39,5 +39,4 @@ test('write migration to configuration file', async (t) => {
   // Delete the temporary config file
   // we created for this test
   await fs.unlink(testMigrationsFile)
-  //await fs.unlink('./test/cli/support/migrations-tmp.js')
 })
