@@ -154,7 +154,7 @@ test.serial('connect subscription error', async (t) => {
   try {
     await client.startReplication()
     t.fail()
-  } catch (e) {
+  } catch (e: any) {
     t.is(e.code, SatelliteErrorCode.BEHIND_WINDOW)
   }
 })

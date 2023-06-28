@@ -1235,7 +1235,7 @@ test('throw other replication errors', async (t) => {
     const conn = await satellite.start(authState)
     await conn.connectionPromise
     t.fail('start should throw')
-  } catch (e) {
+  } catch (e: any) {
     t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
   }
 })
