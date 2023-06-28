@@ -58,9 +58,8 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
   function checkFlag(flag: string): keyof GeneratorArgs {
     const supportedFlags = ['--service', '--out']
     if (supportedFlags.includes(flag))
-      return flag.substring(
-        2
-      ) as keyof GeneratorArgs // substring removes the double dash --
+      return flag.substring(2) as keyof GeneratorArgs
+    // substring removes the double dash --
     else {
       console.error(`Unsupported flag '${flag}' passed to generate command.`)
       process.exit(9)
