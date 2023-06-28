@@ -8,22 +8,22 @@
 //
 // Server is expected to be one of the Electric instances, while Client is a
 // client application that talks to Electric via Satellite library, or any other
-// enitty that implements this protocol.
+// entity that implements this protocol.
 //
 // Producer and Consumer are the corresponding roles Client and Server play in
 // replication process. Consumer requests replication from the Producer, and
-// periodically answer Ping requests form the Prodicer to acknowledge
+// periodically answer Ping requests form the Producer to acknowledge
 // successful replication. Consumer may also send such Ping requests, if the
 // bidirectional replication is enabled. If one of the parties is not involved
 // in the replication lsn field may be left empty.
 syntax = "proto3";
 
 // NOTE: Part after Electric.Satellite is used as a version of the protocol
-// itseld where the format vMAJOR.MINOR is treated in the following way:
+// itself where the format vMAJOR.MINOR is treated in the following way:
 // MAJOR version when incompatible API changes are introduced
 // MINOR version when functionality or bugfix in a backwards compatible manner
 // are introduced.
-package Electric.Satellite.v1_3;
+package Electric.Satellite.v1_4;
 
 // Ping request. Can be send by any party
 message SatPingReq{
@@ -100,7 +100,7 @@ message SatInStartReplicationReq {
     enum Option {
         NONE = 0;
         // Flag that indicates to Producer, to start replication from the latest
-        // position that have been acknowledged by this Consumer. In such a case
+        // position that has been acknowledged by this Consumer. In such a case
         // provided lsn will be ignored
         LAST_ACKNOWLEDGED = 1;
         // In sync mode consumer of the stream is expected to send SatPingResp
@@ -119,19 +119,54 @@ message SatInStartReplicationReq {
     // Amount of message after which SatPingResp message is expected to be
     // delivered when SYNC_MODE is used
     int32 sync_batch_size = 3;
+
+    // the subscriptions identifiers the client wants to resume subscription    
+    repeated string subscription_ids = 4;
+
+    // Note:
+    // - a client might resume replication only for a subset of previous subscriptions 
+    // in case the application cancelled some subscriptions while disconnected from the
+    // server. The server is responsible to keep/gc the remaining subscriptions.
+    // - the server must ensure that if the client skips a portion of the replication
+    // stream, the client is not able to read data it no longer has access to.
 }
 
-// (Producer) Acknowledgement that replication have been started
+// (Producer) The result of the start replication requests
 message SatInStartReplicationResp {
-}
+    // returned in case replication fails to start
+    optional ReplicationError err = 1;
 
+    // Error returned by the Producer when replication fails to start
+    message ReplicationError {
+        // error code enum
+        enum Code {
+            // Required to satisfy linter
+            CODE_UNSPECIFIED = 0;
+
+            // requested LSN is behind the current replication window
+            BEHIND_WINDOW = 1;
+
+            // e.g. jumping ahead of the subscriptions cursor
+            INVALID_POSITION = 2;
+
+            // requested subscription not found
+            SUBSCRIPTION_NOT_FOUND = 3;
+        }
+
+        // error code
+        Code code = 1;
+
+        // a human-readable description of the error
+        string message = 2;
+    }
+}
 
 // (Consumer) Request to stop replication
 message SatInStopReplicationReq {
 
 }
 
-// (Producer) Acknowledgement that repliation have been stopped
+// (Producer) Acknowledgement that replication has been stopped
 message SatInStopReplicationResp {
 
 }
@@ -270,7 +305,7 @@ message SatOpRow {
 }
 
 // A migration message, originating in Postgres, captured via event triggers,
-// propated to electric, converted from postgres to the equivalent sqlite
+// propagated to electric, converted from postgres to the equivalent sqlite
 // statement and inserted into the replication stream
 //
 // Each migration message includes the sql strings to execute on the satellite
@@ -325,4 +360,115 @@ message SatOpMigrate {
     // The resulting table definition after applying these migrations
     // (a DDL statement can only affect one table at a time).
     optional Table table = 3;
+}
+
+// (Consumer) Request for new subscriptions
+message SatSubsReq {
+    // Shape requests
+    repeated SatShapeReq shape_requests = 2;
+}
+
+// (Producer) Acknowledgment that subscription was accepted
+message SatSubsResp {
+    // Identifier of the request for further reference
+    string subscription_id = 1;
+}
+
+// (Consumer) Request to cancel subscriptions
+message SatUnsubsReq {
+    // Identifiers of the subscription
+    repeated string subscription_ids = 1;
+}
+
+// (Producer) Acknowledgment that the subscriptions were cancelled
+message SatUnsubsResp {    
+}
+
+// Shape request
+message SatShapeReq {
+    // Identifier of the request
+    string request_id = 1;
+
+    // The shape definition
+    SatShapeDef shape_definition = 2;
+}
+
+// Top-level structure of a shape definition
+message SatShapeDef {
+    // Select structure
+    message Select {
+        // table name for this select
+        string tablename = 1;
+    }
+
+    // Selects for the Shape definition
+    repeated Select selects = 1;
+}
+
+// Error message returned by the Producer when it encounters
+// an error handling a subscription
+message SatSubsError {
+    // error code enum
+    enum Code {
+        // Required code
+        CODE_UNSPECIFIED = 0;
+
+        // Error requesting shape
+        SHAPE_REQUEST_ERROR = 1;
+    }
+
+    // error code
+    Code code = 1;
+
+    // A human-readable description of the error
+    string message = 2;
+
+    // Subscription identifier this error refers to
+    string subscription_id = 3;
+
+    // Details of the shape request error
+    repeated ShapeReqError shape_request_error = 4;
+
+    // Shape request error
+    message ShapeReqError {
+        // error code enum
+        enum Code {
+            // Required code
+            CODE_UNSPECIFIED = 0;
+
+            // Table not found error
+            TABLE_NOT_FOUND = 1;
+        }
+
+        // error code
+        Code code = 1;
+
+        // a human-readable description of the error
+        string message = 2;
+
+        // the shape request identifier that this error refers to
+        string request_id = 3;
+    }
+}
+
+// Begin delimiter for the incoming subscription data
+message SatSubsDataBegin {
+    // Identifier of the subscription
+    string subscription_id = 1;
+}
+
+// End delimiter for the incoming subscription data
+message SatSubsDataEnd {
+}
+
+// Begin delimiter for the initial shape data
+message SatShapeDataBegin {
+    // Identifier of the request
+    string request_id = 1;
+    // The UUID of the shape on the Producer
+    string uuid = 2;
+}
+
+// End delimiter for the initial shape data
+message SatShapeDataEnd {
 }
