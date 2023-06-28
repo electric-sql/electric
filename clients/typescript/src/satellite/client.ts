@@ -20,7 +20,6 @@ import {
   SatAuthHeaderPair,
   SatSubsResp,
   SatSubsReq,
-  SatShapeReq,
   SatSubsError,
   SatSubsDataBegin,
   SatSubsDataEnd,
@@ -35,6 +34,7 @@ import {
   getProtocolVersion,
   getFullTypeName,
   startReplicationErrorToSatelliteError,
+  shapeRequestToSatShapeReq,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -61,8 +61,6 @@ import {
   ShapeRequest,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
-  DataChange,
-  SubscriptionData,
 } from '../util/types'
 import {
   base64,
@@ -89,6 +87,7 @@ type SatSubscMsg =
   | SatSubsDataEnd
   | SatShapeDataBegin
   | SatShapeDataEnd
+  | SatSubsError
 
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
@@ -153,7 +152,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: true,
         },
         SatSubsError: {
-          handle: (error: SatSubsError) => this.handleSubscriptionError(error),
+          handle: (msg: SatSubsError) => this.handleSubscriptionData(msg),
           isRpc: false,
         },
         SatSubsDataBegin: {
@@ -429,16 +428,22 @@ export class SatelliteClient extends EventEmitter implements Client {
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.on('subscription_delivered', successCallback)
-    this.on('subscription_error', errorCallback)
+    this.subscriptionsDataCache.on('subscription_delivered', successCallback)
+    this.subscriptionsDataCache.on('subscription_error', errorCallback)
   }
 
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.removeListener('subscription_delivered', successCallback)
-    this.removeListener('subscription_error', errorCallback)
+    this.subscriptionsDataCache.removeListener(
+      'subscription_delivered',
+      successCallback
+    )
+    this.subscriptionsDataCache.removeListener(
+      'subscription_error',
+      errorCallback
+    )
   }
 
   subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
@@ -452,33 +457,13 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     const request = SatSubsReq.fromPartial({
-      shapeRequests: this.shapeRequestToSatShapeReq(shapes),
+      shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 
     this.subscriptionsDataCache.subscriptionRequest(
       shapes.map((s) => s.requestId)
     )
     return this.rpc<SubscribeResponse>(request)
-  }
-
-  private shapeRequestToSatShapeReq(
-    shapeRequests: ShapeRequest[]
-  ): SatShapeReq[] {
-    const shapeReqs: SatShapeReq[] = new Array()
-    for (const sr of shapeRequests) {
-      const requestId = sr.requestId
-      const selects = sr.definition.selects.map((s) => ({
-        tablename: s.tablename,
-      }))
-      const shapeDefinition = { selects }
-
-      const req = SatShapeReq.fromPartial({
-        requestId,
-        shapeDefinition,
-      })
-      shapeReqs.push(req)
-    }
-    return shapeReqs
   }
 
   private sendMissingRelations(
@@ -586,7 +571,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
         this.emit('error', startReplicationErrorToSatelliteError(resp.err))
-        // TODO: make sure we GC on subscription errors
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
       }
@@ -729,7 +713,9 @@ export class SatelliteClient extends EventEmitter implements Client {
       try {
         this.subscriptionsDataCache.transaction(message.ops)
       } catch (e) {
-        this.emit('subscription_error', e)
+        Log.info(
+          `Error applying transaction message for subs ${JSON.stringify(e)}`
+        )
       }
     }
   }
@@ -767,24 +753,20 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleSubscriptionData(msg: SatSubscMsg): void {
     try {
       switch (msg.$type) {
+        case SatSubsError.$type:
+          // TODO: map SatSubsError to SatelliteError
+          this.subscriptionsDataCache.subscriptionError(
+            SatelliteErrorCode.SUBSCRIPTION_ERROR,
+            msg.message
+          )
+          break
         case SatSubsDataBegin.$type:
           this.subscriptionsDataCache.subscriptionDataBegin(msg)
           break
         case SatSubsDataEnd.$type:
-          const subs = this.subscriptionsDataCache.subscriptionDataEnd()
-          this.subscriptionsDataCache.reset()
-
-          const subscriptionData: SubscriptionData = {
-            subscriptionId: subs.subscriptionId,
-            data: {
-              changes: subs.transaction.map(
-                this.proccessShapeDataOperations.bind(this)
-              ),
-            },
-            shapeReqToUuid: subs.shapeReqToUuid,
-          }
-
-          this.emit('subscription_delivered', subscriptionData)
+          this.subscriptionsDataCache.subscriptionDataEnd(
+            this.inbound.relations
+          )
           break
         case SatShapeDataBegin.$type:
           this.subscriptionsDataCache.shapeDataBegin(msg)
@@ -794,12 +776,8 @@ export class SatelliteClient extends EventEmitter implements Client {
           break
       }
     } catch (e) {
-      this.emit('subscription_error', e)
+      Log.info(`Error while applying subscription message ${JSON.stringify(e)}`)
     }
-  }
-
-  private handleSubscriptionError(error: SatSubsError) {
-    this.emit('subscription_error', error)
   }
 
   // TODO: properly handle socket errors; update connectivity state
@@ -815,35 +793,6 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.emit('rpc_response', response)
       }
     }
-  }
-
-  private proccessShapeDataOperations(op: SatTransOp): DataChange {
-    if (!op.insert) {
-      this.subscriptionsDataCache.reset()
-      throw new SatelliteError(
-        SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
-        'invalid shape data operation'
-      )
-    }
-
-    const replication = this.inbound
-    const rid = op.insert.relationId
-    const rel = replication.relations.get(rid)
-    if (!rel) {
-      throw new SatelliteError(
-        SatelliteErrorCode.PROTOCOL_VIOLATION,
-        `missing relation ${op.insert.relationId} for incoming operation`
-      )
-    }
-
-    const change = {
-      relation: rel,
-      type: DataChangeType.INSERT,
-      record: deserializeRow(op.insert.rowData!, rel),
-      tags: op.insert.tags,
-    }
-
-    return change
   }
 
   private processOpLogMessage(opLogMessage: SatOpLog) {

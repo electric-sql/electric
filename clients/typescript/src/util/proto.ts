@@ -1,6 +1,6 @@
 import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
-import { SatelliteError, SatelliteErrorCode } from './types'
+import { SatelliteError, SatelliteErrorCode, ShapeRequest } from './types'
 
 // FIXME
 // type GetName<T extends { $type: string }> =
@@ -135,4 +135,24 @@ export function startReplicationErrorToSatelliteError(
         `unexpected mapping for error: ${error.message}`
       )
   }
+}
+
+export function shapeRequestToSatShapeReq(
+  shapeRequests: ShapeRequest[]
+): Pb.SatShapeReq[] {
+  const shapeReqs: Pb.SatShapeReq[] = new Array()
+  for (const sr of shapeRequests) {
+    const requestId = sr.requestId
+    const selects = sr.definition.selects.map((s) => ({
+      tablename: s.tablename,
+    }))
+    const shapeDefinition = { selects }
+
+    const req = Pb.SatShapeReq.fromPartial({
+      requestId,
+      shapeDefinition,
+    })
+    shapeReqs.push(req)
+  }
+  return shapeReqs
 }

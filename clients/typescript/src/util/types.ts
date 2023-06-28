@@ -51,6 +51,7 @@ export enum SatelliteErrorCode {
   BEHIND_WINDOW,
   INVALID_POSITION,
   SUBSCRIPTION_NOT_FOUND,
+  SUBSCRIPTION_ERROR,
 }
 
 export type AuthResponse = {

@@ -146,7 +146,7 @@ export class SatelliteProcess implements Satellite {
     // TODO: load from database
     this.subscriptions = new InMemorySubscriptionsManager()
     this.subscriptions.subscribeToUnsubscribeEvent(
-      this._garbageCollectShapeHanlder.bind(this)
+      this._garbageCollectShapeHandler.bind(this)
     )
   }
 
@@ -227,7 +227,7 @@ export class SatelliteProcess implements Satellite {
     this._authState = authState
   }
 
-  async _garbageCollectShapeHanlder(shapeDef: ShapeDefinition): Promise<void> {
+  async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
     shapeDef.definition.selects.map(async (select) => {
       const tablename = select.tablename
       // does not delete shadow rows but we can do that
@@ -360,10 +360,9 @@ export class SatelliteProcess implements Satellite {
     // this is obviously too conservative
     this.subscriptions.unsubscribeAll()
 
-    // persist subscriptions state
-    await this.adapter.run(
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
-    )
+    this._lsn = undefined
+    await this._setMeta('lsn', null)
+    await this._setMeta('subscriptions', this.subscriptions.serialize())
   }
 
   async _connectivityStateChange(
@@ -408,11 +407,7 @@ export class SatelliteProcess implements Satellite {
           error.code == SatelliteErrorCode.BEHIND_WINDOW &&
           opts?.clearOnBehindWindow
         ) {
-          // can't resume at position
-          // 1. TODO: gc subscriptions
-          // 2. start from empty state
-          this._lsn = undefined
-          return this._setMeta('lsn', null).then(() =>
+          return this._handleSubscriptionError(error).then(() =>
             this._connectAndStartReplication()
           )
         }
