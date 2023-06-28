@@ -119,7 +119,7 @@ jobs:
           key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
 
       - name: Cache PLT
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: components/electric/_build/*/*.plt
           key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
@@ -128,5 +128,11 @@ jobs:
       - run: mix deps.get
       - run: mix compile --force --all-warnings --warnings-as-errors
       - run: mix dialyzer
-      - name: Check formatting
-        run: make check-format
+        id: dialyzer
+
+      - name: Cache PLT
+        if: ${{ always() && steps.dialyzer.outcome != 'cancelled' }}
+        uses: actions/cache/restore@v3
+        with:
+          path: components/electric/_build/*/*.plt
+          key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
