@@ -1,5 +1,6 @@
 defmodule Electric.Satellite.Auth.InsecureTest do
-  use ExUnitProperties, async: true
+  use ExUnit.Case, async: true
+  use ExUnitProperties
 
   import Electric.Satellite.Auth.Insecure, only: [validate_token: 2]
   alias Electric.Satellite.Auth

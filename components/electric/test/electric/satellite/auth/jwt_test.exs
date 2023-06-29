@@ -1,5 +1,6 @@
 defmodule Electric.Satellite.Auth.JWTTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   import Electric.Satellite.Auth.JWT, only: [build_config!: 1, validate_token: 2]
   alias Electric.Satellite.Auth
@@ -158,20 +159,8 @@ defmodule Electric.Satellite.Auth.JWTTest do
                validate_token(token, config([]))
     end
 
-    test "rejects malformed token" do
-      # NOTE(alco): this list of strings should be replaced with a fuzzer that can generate random strings.
-      malformed_tokens = [
-        "",
-        ".",
-        "..",
-        "0.1.2",
-        "1.2",
-        "foobarbaz",
-        "........",
-        "!yJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e30."
-      ]
-
-      for token <- malformed_tokens do
+    property "rejects malformed tokens" do
+      check all(token <- StreamData.string(:printable)) do
         assert {:error, %Auth.TokenError{message: "Invalid token"}} ==
                  validate_token(token, config([]))
       end
