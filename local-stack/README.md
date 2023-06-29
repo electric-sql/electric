@@ -75,5 +75,5 @@ The command above supports 2 optional arguments:
 
 If you get the error message : `couldn't start replication: Error: server replied with error code: 5` while attempting to connect to Electric, it indicates there is a mismatch between the protocol versions the typescript client and the electric server are using. Electric restricts connections from any client that does not use the same major protocol version. To troubleshoot this issue, you can verify the protocol files used by the client and server in these locations:
 
-- `[typescript-client]/proto/satellite.proto`
-- `[electric]/deps/satellite_proto/proto/satellite.proto`
+- [typescript-client](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/_generated/protocol/satellite.ts)
+- [electric](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/satellite/protobuf_package.ex)
