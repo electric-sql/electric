@@ -13,7 +13,7 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *  - `--out <path>`
  *     Optional argument to specify where to write the generated client.
  *     If this argument is not provided the generated client is written
- *     to `./src/generated/models`.
+ *     to `./src/generated/client`.
  * @param args Arguments passed to the generate command.
  */
 export async function handleGenerate(...args: string[]) {
