@@ -54,7 +54,7 @@ defmodule Electric.Postgres.CachedWal.Producer do
           {:ok, 0}
 
         {:ok, lsn} ->
-          CachedWal.Api.get_wal_position_from_lsn(state.cached_wal_module, lsn)
+          {:ok, lsn}
 
         :error ->
           {:ok, 0}

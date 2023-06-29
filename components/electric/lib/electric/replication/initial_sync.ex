@@ -30,14 +30,14 @@ defmodule Electric.Replication.InitialSync do
 
     migration_transactions = migration_transactions(connector_opts, timestamp)
 
-    cached_lsn = CachedWal.Api.get_current_lsn(cached_wal_module)
+    current_position = CachedWal.Api.get_current_position(cached_wal_module)
 
     data_transaction =
-      if cached_lsn do
-        initial_data_transaction(connector_opts, cached_lsn, timestamp)
+      if current_position do
+        initial_data_transaction(connector_opts, current_position, timestamp)
       end
 
-    current_lsn = cached_lsn || Lsn.from_integer(0)
+    current_lsn = current_position || 0
     txs_with_lsn = Enum.map(migration_transactions ++ List.wrap(data_transaction), &with_lsn/1)
 
     {current_lsn, txs_with_lsn}
@@ -45,7 +45,7 @@ defmodule Electric.Replication.InitialSync do
 
   defp migration_transactions(connector_opts, commit_timestamp) do
     {:ok, migrations} = Extension.SchemaCache.migration_history(nil)
-    lsn = Lsn.from_integer(0)
+    lsn = 0
 
     for {version, _schema, stmts} <- migrations do
       records =

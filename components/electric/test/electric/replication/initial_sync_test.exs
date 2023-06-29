@@ -58,7 +58,7 @@ defmodule Electric.Replication.InitialSyncTest do
       # Verify that the cached LSN is not going to catch up since we don't have any electrified tables.
       assert :error == conn |> fetch_current_lsn() |> wait_for_cached_lsn_to_catch_up()
 
-      assert {Lsn.from_integer(0), []} == InitialSync.transactions(pg_connector_opts)
+      assert {0, []} == InitialSync.transactions(pg_connector_opts)
     end
 
     test "returns the current lsn, electrified table migrations, and a single transaction containing all electrified data",
@@ -100,7 +100,7 @@ defmodule Electric.Replication.InitialSyncTest do
       latest_lsn = fetch_current_lsn(conn)
 
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
-      zero_lsn = Lsn.from_integer(0)
+      zero_lsn = 0
 
       assert {^current_lsn,
               [
@@ -178,7 +178,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
       current_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
-      zero_lsn = Lsn.from_integer(0)
+      zero_lsn = 0
 
       assert {^current_lsn,
               [
@@ -284,7 +284,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
   defp fetch_current_lsn(conn) do
     {:ok, _, [{lsn_str}]} = :epgsql.squery(conn, "SELECT pg_current_wal_lsn()")
-    Lsn.from_string(lsn_str)
+    Lsn.from_string(lsn_str) |> Lsn.to_integer()
   end
 
   defp electrify_table(conn, name) do
@@ -332,9 +332,9 @@ defmodule Electric.Replication.InitialSyncTest do
   defp wait_for_cached_lsn_to_catch_up(_current_lsn, 0), do: :error
 
   defp wait_for_cached_lsn_to_catch_up(current_lsn, num_attempts) do
-    cached_lsn = CachedWal.Api.get_current_lsn(@cached_wal_module)
+    cached_lsn = CachedWal.Api.get_current_position(@cached_wal_module)
 
-    if cached_lsn && Lsn.compare(cached_lsn, current_lsn) == :eq do
+    if cached_lsn && cached_lsn == current_lsn do
       :ok
     else
       Process.sleep(@sleep_timeout)

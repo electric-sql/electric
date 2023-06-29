@@ -2,6 +2,9 @@
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
+# We don't actually need either Electric or PG here, but Satellite shows an error in the logs and that breaks the test
+[invoke setup]
+
 [global migrations=
     """
     [

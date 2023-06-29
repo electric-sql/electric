@@ -45,12 +45,10 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def get_current_lsn do
-    with {:ok, table} <- ETS.Set.wrap_existing(@ets_table_name) do
-      case ETS.Set.last(table) do
-        {:ok, wal_pos} -> position_to_lsn(wal_pos)
-        {:error, :empty_table} -> nil
-      end
+  def get_current_position do
+    case :ets.last(@ets_table_name) do
+      :"$end_of_table" -> nil
+      position -> position
     end
   end
 
@@ -193,7 +191,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   defp lsn_to_position(lsn), do: Lsn.to_integer(lsn)
-  defp position_to_lsn(wal_pos), do: Lsn.from_integer(wal_pos)
 
   @spec trim_cache(state()) :: state()
   defp trim_cache(%{current_cache_count: current, max_cache_count: max} = state)

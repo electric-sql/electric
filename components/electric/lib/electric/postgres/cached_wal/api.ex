@@ -13,7 +13,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @typedoc "Wal segment, where segment is just an abstraction term within Electric"
   @type segment :: Electric.Replication.Changes.Transaction.t()
 
-  @callback get_current_lsn() :: lsn | nil
+  @callback get_current_position() :: lsn | nil
   @callback get_wal_position_from_lsn(lsn()) :: {:ok, wal_pos()} | {:error, term()}
   @callback next_segment(wal_pos()) ::
               {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
@@ -31,9 +31,9 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   Returns nil if the cached WAL hasn't processed any non-empty transactions yet.
   """
-  @spec get_current_lsn(module()) :: lsn | nil
-  def get_current_lsn(module) do
-    module.get_current_lsn()
+  @spec get_current_position(module()) :: lsn | nil
+  def get_current_position(module) do
+    module.get_current_position()
   end
 
   @doc """
