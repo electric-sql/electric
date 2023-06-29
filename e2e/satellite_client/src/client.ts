@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
-import jwt from 'jsonwebtoken'
+import { authToken } from 'electric-sql/auth'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
@@ -8,26 +8,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { dbSchema, Electric } from './generated/models'
 
 setLogLevel('DEBUG')
-
-function auth_token() {
-  const mockIss =
-    process.env.SATELLITE_AUTH_SIGNING_ISS || 'dev.electric-sql.com'
-  const mockKey =
-    process.env.SATELLITE_AUTH_SIGNING_KEY ||
-    'integration-tests-signing-key-example'
-
-  const iat = Math.floor(Date.now() / 1000) - 1000
-
-  return jwt.sign(
-    { user_id: 'test-user', type: 'access', iat },
-    mockKey,
-    {
-      issuer: mockIss,
-      algorithm: 'HS256',
-      expiresIn: '2h',
-    }
-  )
-}
 
 export const open_db = async (
   name: string,
@@ -40,7 +20,7 @@ export const open_db = async (
     url: `electric://${host}:${port}`,
     debug: true,
     auth: {
-      token: auth_token()
+      token: authToken(process.env.SATELLITE_AUTH_SIGNING_ISS, process.env.SATELLITE_AUTH_SIGNING_KEY)
     }
   }
   console.log(`config: ${JSON.stringify(config)}`)

@@ -95,6 +95,9 @@
       ],
       "migrators/builder": [
         "./dist/migrators/builder.d.ts"
+      ],
+      "auth": [
+        "./dist/auth/index.d.ts"
       ]
     }
   },
@@ -129,6 +132,7 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.1",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "cross-fetch": "^3.1.5",
@@ -136,6 +140,7 @@
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
+    "jsonwebtoken": "^9.0.0",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
     "lodash.isequal": "^4.5.0",
