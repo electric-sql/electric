@@ -9,7 +9,7 @@ defmodule Electric.Satellite.Auth.InsecureTest do
 
   describe "validate_token()" do
     property "rejects malformed tokens" do
-      check all token <- StreamData.string(:printable) do
+      check all(token <- StreamData.string(:printable)) do
         assert {:error, %Auth.TokenError{message: "Invalid token"}} ==
                  validate_token(token, config([]))
       end
