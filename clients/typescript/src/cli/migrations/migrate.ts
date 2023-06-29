@@ -1,11 +1,12 @@
 import path from 'path'
 import * as fs from 'fs/promises'
-import * as fs2 from 'fs'
+import { createWriteStream } from 'fs'
 import http from 'http'
 import decompress from 'decompress'
 import Database from 'better-sqlite3'
 import { buildMigrations, getMigrationNames } from './builder'
 import { exec, StdioOptions } from 'child_process'
+import { dedent } from 'ts-dedent'
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
@@ -126,20 +127,21 @@ async function createPrismaSchema(folder: string, { out }: GeneratorOptions) {
     'node_modules/prisma-generator-electric/dist/bin.js'
   )
   const output = path.resolve(out)
-  const schema = `generator client {
-  provider = "prisma-client-js"
-}
+  const schema = dedent`
+    generator client {
+      provider = "prisma-client-js"
+    }
 
-generator electric {
-  provider      = "${provider}"
-  output        = "${output}"
-  relationModel = "false"
-}
+    generator electric {
+      provider      = "${provider}"
+      output        = "${output}"
+      relationModel = "false"
+    }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("PRISMA_DB_URL")
-}`
+    datasource db {
+      provider = "postgresql"
+      url      = env("PRISMA_DB_URL")
+    }`
   await fs.writeFile(prismaSchemaFile, schema)
   return prismaSchemaFile
 }
@@ -286,7 +288,7 @@ async function fetchMigrations(
   const options = new URL(endpoint)
   const zipFile = path.join(tmpFolder, 'migrations.zip')
   await new Promise((resolve, reject) => {
-    const migrationsZipFile = fs2.createWriteStream(zipFile)
+    const migrationsZipFile = createWriteStream(zipFile)
     const req = http.get(options, (response) => {
       response.pipe(migrationsZipFile)
     })

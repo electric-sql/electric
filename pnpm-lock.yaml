@@ -89,6 +89,9 @@ importers:
       squel:
         specifier: ^5.13.0
         version: 5.13.0
+      ts-dedent:
+        specifier: ^2.2.0
+        version: 2.2.0
       uuid:
         specifier: ^9.0.0
         version: 9.0.0
@@ -218,7 +221,7 @@ importers:
         version: 4.9.5
       wa-sqlite:
         specifier: git+https://github.com/rhashimoto/wa-sqlite#breaking-changes
-        version: github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1
+        version: github.com/rhashimoto/wa-sqlite/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -303,7 +306,7 @@ importers:
         version: 18.2.0(react@18.2.0)
       wa-sqlite:
         specifier: rhashimoto/wa-sqlite#breaking-changes
-        version: github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1
+        version: github.com/rhashimoto/wa-sqlite/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970
       zod:
         specifier: ^3.20.2
         version: 3.21.4
@@ -12446,6 +12449,11 @@ packages:
     resolution: {integrity: sha512-/y956gpUo9ZNCb99YjxG7OaslxZWHfCHAUUfshwqOXmxUIvqLjVO581BT+gM59+QV9tFe6/CGG53tsA1Y7RSdg==}
     dev: true
 
+  /ts-dedent@2.2.0:
+    resolution: {integrity: sha512-q5W7tVM71e2xjHZTlgfTDoPF/SmqKG5hddq9SzR49CH2hayqRKJtQ4mtRlSxKaJlR/+9rEM+mnBHf7I2/BQcpQ==}
+    engines: {node: '>=6.10'}
+    dev: false
+
   /ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
     dev: true
@@ -13499,7 +13507,7 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/f8c816fcbb16ada623545ae556fe6073e4713cb1:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/f8c816fcbb16ada623545ae556fe6073e4713cb1}
+  github.com/rhashimoto/wa-sqlite/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970}
     name: wa-sqlite
     version: 0.9.3
