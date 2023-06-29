@@ -1,13 +1,13 @@
-version: '3.8'
+version: "3.8"
 
 x-preshared-auth-variables: &preshared-auth-variables
   SATELLITE_AUTH_JWT_ALG: HS256
   SATELLITE_AUTH_JWT_KEY: local-development-key-minimum-32-symbols
 configs:
   postgres_config:
-    file: './compose/postgres/postgres.conf'
+    file: "./compose/postgres/postgres.conf"
   postgres_init_sql:
-    file: './compose/postgres/init.sql'
+    file: "./compose/postgres/init.sql"
 
 volumes:
   pg_data:
@@ -16,7 +16,7 @@ volumes:
 services:
   postgres_1:
     extends:
-      file: './compose/docker-compose-templates.yaml'
+      file: "./compose/docker-compose-templates.yaml"
       service: postgres_template
     ports:
       - 5432:5432
@@ -25,7 +25,7 @@ services:
 
   electric_1:
     extends:
-      file: './compose/docker-compose-templates.yaml'
+      file: "./compose/docker-compose-templates.yaml"
       service: electric_template
     environment:
       <<: *preshared-auth-variables

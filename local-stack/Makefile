@@ -2,7 +2,7 @@ start:
 	docker compose up
 
 start_without_electric:
-	docker compose up postgres_1 local_api
+	docker compose up postgres_1
 
 start_electric:
 	docker compose up electric_1
@@ -13,5 +13,4 @@ stop:
 clean:
 	docker volume rm -f local-stack_electric_data
 	docker volume rm -f local-stack_pg_data
-	docker volume rm -f local-stack_migrations_volume
 

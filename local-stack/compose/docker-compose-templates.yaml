@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 services:
   postgres_template:
     image: "${POSTGRESQL_IMAGE:-electricsql/postgres:latest}"
@@ -15,7 +15,7 @@ services:
       - source: postgres_init_sql
         target: /docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -24,6 +24,4 @@ services:
     init: true
     environment:
       GLOBAL_CLUSTER_ID: "local-development"
-      MIGRATIONS_DIR: "/var/lib/migrations"
       OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
-      MIGRATIONS_FILE_NAME_SUFFIX: ".sql"
