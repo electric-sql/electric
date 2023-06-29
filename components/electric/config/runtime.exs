@@ -14,7 +14,7 @@ auth_provider =
     auth_config =
       Auth.JWT.build_config!(
         alg: "HS256",
-        key: Base.decode64!("AgT/MeUiP3SKzw5gC6BZKXk4t1ulnUvZy2d/O73R0sQ="),
+        key: "test-signing-key-at-least-32-bytes-long",
         iss: "electric-sql-test-issuer"
       )
 
