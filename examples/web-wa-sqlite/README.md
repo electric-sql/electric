@@ -70,14 +70,12 @@ pnpm build
 cd ../examples/web-wa-sqlite
 ```
 
-Now, initialize the app and fetch the migration we created above for the `items` table:
+Now, generate an Electric client for the app:
 ```sh
-npx electric init items-example
-npx electric migrate
+npx electric-sql generate
 ```
 
-The migrate command fetches the migrations from the backend and generates an Electric client
-in `src/generated/models/index.ts`.
+The `generate` command fetches the migrations from the backend and generates an Electric client in `src/generated/client/index.ts`.
 
 Now, let's build and run the app:
 ```sh

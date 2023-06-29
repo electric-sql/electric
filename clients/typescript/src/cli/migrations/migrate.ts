@@ -105,8 +105,8 @@ export async function generate(opts: GeneratorOptions) {
     console.log('Building migrations...')
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
-  } catch (e) {
-    console.error('generate command failed: ' + JSON.stringify(e))
+  } catch (e: any) {
+    console.error('generate command failed: ' + JSON.stringify(e.message))
   } finally {
     // Delete our temporary directory
     await fs.rm(tmpFolder, { recursive: true })
