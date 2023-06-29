@@ -52,7 +52,7 @@ const ExampleComponent = () => {
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany({}) // delete all items
+    await db.items.deleteMany() // delete all items
   }
 
   // After the migration, comment out this code and uncomment code block below

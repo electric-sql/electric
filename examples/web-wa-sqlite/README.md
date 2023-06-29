@@ -61,6 +61,11 @@ electric=# CREATE TABLE IF NOT EXISTS "items" (
 );
 ```
 
+Now, Electrify the table in order for it to be exposed to client applications:
+```
+electric=# CALL electric.electrify('items');
+```
+
 Then, build the typescript client and the generator:
 ```sh
 cd clients/typescript
@@ -107,7 +112,7 @@ export const Example = () => {
   
   useEffect(() => {
     const init = async () => {
-      const conn = await ElectricDatabase.init('electric.db', '/')
+      const conn = await ElectricDatabase.init('electric.db', '')
       const db = await electrify(conn, dbSchema, config)
       setElectric(db)
     }
@@ -142,7 +147,7 @@ const ExampleComponent = () => {
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany({}) // delete all items
+    await db.items.deleteMany() // delete all items
   }
   
   return (
@@ -178,7 +183,7 @@ ALTER TABLE
 ```
 
 This database migration will automatically be picked up by Electric and will be streamed to the application
-which will apply migration on its local SQLite database.
+which will apply the migration on its local SQLite database.
 Since we only support additive migrations, the application continues to work.
 
 Then, remains to update the code of our application to do something with the new column.
