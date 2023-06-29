@@ -2,7 +2,7 @@
 
 ## Running a local stack
 
-Electric services are packaged as docker containers. They can be run locally using the `docker-compose.yaml` file in this directory:
+Electric services are packaged as Docker containers. They can be run locally using the `docker-compose.yaml` file in this directory:
 
 ```bash
 # Use environment variables from `.envrc` file
@@ -13,68 +13,54 @@ docker compose up -d
 
 > You can use a different image for the Electric server by customising `ELECTRIC_IMAGE`.
 
-The local console is required to emulate interaction with the ElectricSQL Cloud when using the CLI tooling. You might encounter errors if any of the specified ports are already taken on your machine - just edit the port binds and keep the new values in mind.
+You might encounter errors if any of the specified ports are already taken on your machine - just edit the port binds and keep the new values in mind.
 
 ## Developing against the local stack
 
-### CLI tool
+### Setting up Postgres
 
-Ensure that you have the CLI tool ([0.5.0](https://github.com/electric-sql/cli/tree/v0.5.0)) installed. If you haven't installed it yet, follow the [instructions](https://electric-sql.com/docs/usage/install) to install it. The CLI is preconfigured to point to the console running in ElectricSQL Cloud. You can set the `ELECTRIC_CONSOLE_URL` environment variable to point to the local console:
-
-```bash
-# This variable is also exported in `.envrc`
-export ELECTRIC_CONSOLE_URL=http://127.0.0.1:4000
-```
-
-CLI usage against the local console is limited (i.e. no account or app management), but all the commands with migration generation & sync will work. One exception is that when running `electric init <app>`, you should run `electric init <app> --no-verify` as the app name is ignored when running only a single instance locally.
-
-### Typescript client
-
-Use a typescript client version that is compatible with Electric. The `electric-sql` dependency ([0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3)) used in the provided [examples](https://github.com/electric-sql/examples) is compatible with the Electric image ([0.1.3](https://github.com/electric-sql/electric/tree/0.1.3)) that is deployed in the ElectricSQL Cloud and is preconfigured in  `.envrc`. Check the [troubleshooting](Compatible protocol version) section If you want to experiment with different versions of the server or the client.
-
-### Configure your application
-
-In the root of your application, use the CLI to configure your application to run against the local stack:
-
-> You can run the following commands for an existing application or one of the examples.
-
-```bash
-electric config add_env local
-electric config update_env --set-as-default \
-                           --replication-disable-ssl \
-                           --replication-host 127.0.0.1 \
-                           --replication-port 5133 \
-                           --console-disable-ssl \
-                           --console-host 127.0.0.1 \
-                           --console-port 4000 \
-                           local
-```
-
-### Apply migrations locally
-
-You can apply migrations to the Postgres instance running on your local stack using the CLI.
-
-Build your migrations:
-
-```bash
-electric build
-```
-
-Sync them with local stack:
-
-```bash
-# export ELECTRIC_CONSOLE_URL=http://127.0.0.1:4000
-electric sync --local
-```
-
-### Connect to the Postgres instance
-
-You can write data directly to the Postgres instance and have it replicated to clients over logical replication:
+You can set up your Postgres instance by connecting to it and creating the necessary tables.
+To connect to the Postgres instance run the following command: 
 
 ```bash
 docker compose exec -it -e PGPASSWORD=password postgres_1 \
        psql -h 127.0.0.1 -U postgres -d electric
 ```
+
+Now, in the Postgres shell you can create a table:
+```
+electric=# CREATE TABLE "items" (
+  "value" TEXT NOT NULL,
+  CONSTRAINT "items_pkey" PRIMARY KEY ("value")
+);
+```
+
+By default, this table won't be exposed to applications connecting to your Electric backend.
+To expose the table, you need to electrify it:
+
+```
+electric=# CALL electric.electrify('items');
+```
+
+Now, you can write data to this table and it will automatically be replicated to all connected clients.
+
+### Typescript client
+
+Use a typescript client version that is compatible with Electric. The `electric-sql` dependency ([0.4.3](https://github.com/electric-sql/typescript-client/tree/0.4.3)) used in the provided [examples](https://github.com/electric-sql/examples) is compatible with the Electric image ([0.1.3](https://github.com/electric-sql/electric/tree/0.1.3)) that is deployed in the ElectricSQL Cloud and is preconfigured in  `.envrc`. Check the [troubleshooting](Compatible protocol version) section if you want to experiment with different versions of the server or the client.
+
+### Configure your application
+
+To work with your Electric backend, you can generate an Electric client for your application:
+
+```bash
+npx electric-sql generate [--source <url>] [--out <path>]
+```
+
+The command above supports 2 optional arguments:
+- `--source <url>` to specify the url to the Electric endpoint.
+  If not provided it uses the default url `http://localhost:5050`
+- `--out <path>` to customise where the generated client is written.
+  If not provided the default path is `./src/generated/models`
 
 ### Troubleshooting
 

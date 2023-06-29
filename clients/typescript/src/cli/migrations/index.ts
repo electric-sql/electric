@@ -1,0 +1,1 @@
+export { handleGenerate } from './handler'

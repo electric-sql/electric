@@ -3,17 +3,14 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import { dbSchema } from './generated'
 
+const conn = new Database(':memory:')
 const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
+  auth: {
+    token: 'test-token',
+  },
 }
 
-const conn = new Database(':memory:')
-
-const { notifier, adapter, db } = await electrify(conn, dbSchema, config, {
-  token: 'test-token',
-})
+const { notifier, adapter, db } = await electrify(conn, dbSchema, config)
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0

@@ -9,23 +9,13 @@ const promisesEnabled = true
 SQLite.enablePromise(promisesEnabled)
 
 const config = {
-  app: 'app',
-  env: 'env',
-  migrations: [],
-}
-
-const authConfig = {
-  token: 'test-token',
+  auth: {
+    token: 'test-token',
+  },
 }
 
 const original = await SQLite.openDatabase({ name: 'example.db' })
-const { db } = await electrify(
-  original,
-  dbSchema,
-  promisesEnabled,
-  config,
-  authConfig
-)
+const { db } = await electrify(original, dbSchema, promisesEnabled, config)
 
 await db.Items.findMany({
   select: {

@@ -1,6 +1,6 @@
 import test from 'ava'
 import { makeMigration, parseMetadata } from '../../src/migrators/builder'
-import { loadMigrations } from '../../src/cli'
+import { loadMigrations } from '../../src/cli/migrations/builder'
 import {
   SatOpMigrate,
   SatOpMigrate_Table,
@@ -123,16 +123,11 @@ test('read migration meta data', async (t) => {
 test('load migration from meta data', async (t) => {
   const db = new Database(':memory:')
   const migration = makeMigration(parseMetadata(migrationMetaData))
-  const electric = await electrify(
-    db,
-    new DbSchema({}),
-    {
-      app: 'migration-loader-test',
-      env: 'env',
-      migrations: [migration],
+  const electric = await electrify(db, new DbSchema({}, [migration]), {
+    auth: {
+      token: 'test-token',
     },
-    { token: 'test-token' }
-  )
+  })
 
   // Check that the DB is initialized with the stars table
   const tables = await electric.db.raw({

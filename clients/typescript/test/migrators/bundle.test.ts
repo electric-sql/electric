@@ -9,8 +9,7 @@ import { makeStmtMigration } from '../../src/migrators'
 
 import { randomValue } from '../../src/util/random'
 
-import config from '../support/.electric/@config/index'
-const { migrations } = config
+import migrations from '../support/migrations/migrations.js'
 
 test.beforeEach((t) => {
   const dbName = `bundle-migrator-${randomValue()}.db`

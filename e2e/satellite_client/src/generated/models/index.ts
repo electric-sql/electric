@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { TableSchema, DbSchema, ElectricClient, HKT } from 'electric-sql/client/model';
+import migrations from './migrations';
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -794,5 +795,5 @@ export const tableSchemas = {
   >,
 }
 
-export const dbSchema = new DbSchema(tableSchemas)
+export const dbSchema = new DbSchema(tableSchemas, migrations)
 export type Electric = ElectricClient<typeof dbSchema>

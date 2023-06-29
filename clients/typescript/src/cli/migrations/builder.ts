@@ -1,7 +1,12 @@
 import * as z from 'zod'
 import path from 'path'
 import * as fs from 'fs/promises'
-import { Migration, parseMetadata, MetaData, makeMigration } from '../migrators'
+import {
+  Migration,
+  parseMetadata,
+  MetaData,
+  makeMigration,
+} from '../../migrators'
 
 /*
  * This file defines functions to build migrations
@@ -24,49 +29,41 @@ import { Migration, parseMetadata, MetaData, makeMigration } from '../migrators'
  * Loads the migrations from the provided `migrationsFolder`,
  * and updates the specified configuration file `configFile` accordingly.
  * @param migrationsFolder Folder containing the migrations.
- * @param configFile Configuration file of an electric application.
+ * @param migrationsFile File containing the built migrations of an electric application.
+ *                       Built migrations contain the DDL statements and the triggers.
  */
 export async function buildMigrations(
   migrationsFolder: string,
-  configFile: string
+  migrationsFile: string
 ) {
   try {
-    const configObj = (await import(configFile)).default // dynamically import the configuration file
-    const configSchema = z.object({}).passthrough()
-
-    const config = configSchema.parse(configObj)
     const migrations = await loadMigrations(migrationsFolder)
-    config['migrations'] = migrations // add the migrations to the config
     // Update the configuration file
     await fs.writeFile(
-      configFile,
-      `export default ${JSON.stringify(config, null, 2)}`
+      migrationsFile,
+      `export default ${JSON.stringify(migrations, null, 2)}`
     )
-    await writeJsConfigFile(configFile)
   } catch (e) {
     if (e instanceof z.ZodError)
-      throw new Error(
-        'The specified configuration file is malformed:\n' + e.message
-      )
+      throw new Error('Could not build migrations:\n' + e.message)
     else throw e
   }
 }
 
 /**
- * Makes a .js version that re-exports the contents of the config .mjs file
- * such that programs can import the config using `import config from `path/to/.electric/@config`
- * with .mjs that is not possible because you would have to provide the full path to the `.mjs` file:
- * `import config from `path/to/.electric/@config/index.mjs`
+ * Reads the provided `migrationsFolder` and returns an array
+ * of all the migrations that are present in that folder.
+ * Each of those migrations are in their respective folder.
+ * @param migrationsFolder
  */
-async function writeJsConfigFile(configFile: string) {
-  await fs.writeFile(
-    path.format({
-      ...path.parse(configFile),
-      base: '',
-      ext: '.js',
-    }),
-    `export { default } from './index.mjs'`
-  )
+export async function getMigrationNames(
+  migrationsFolder: string
+): Promise<string[]> {
+  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
+  const dirs = contents.filter((dirent) => dirent.isDirectory())
+  // the directory names encode the order of the migrations
+  // therefore we sort them by name to get them in chronological order
+  return dirs.map((dir) => dir.name).sort()
 }
 
 /**
@@ -77,11 +74,7 @@ async function writeJsConfigFile(configFile: string) {
 export async function loadMigrations(
   migrationsFolder: string
 ): Promise<Migration[]> {
-  const contents = await fs.readdir(migrationsFolder, { withFileTypes: true })
-  const dirs = contents.filter((dirent) => dirent.isDirectory())
-  // the directory names encode the order of the migrations
-  // therefore we sort them by name to get them in chronological order
-  const dirNames = dirs.map((dir) => dir.name).sort()
+  const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
   )

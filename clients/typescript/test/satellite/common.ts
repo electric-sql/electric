@@ -7,11 +7,7 @@ import { MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { SatelliteProcess } from '../../src/satellite'
 import { initTableInfo } from '../support/satellite-helpers'
-import {
-  SatelliteConfig,
-  satelliteDefaults,
-  SatelliteOpts,
-} from '../../src/satellite/config'
+import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 
 export const relations = {
   child: {
@@ -57,20 +53,14 @@ export const relations = {
   },
 }
 
-import config from '../support/.electric/@config/index'
+import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
-const { migrations } = config
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 40,
   pollingInterval: 200,
 })
-
-const satelliteConfig: SatelliteConfig = {
-  app: 'test',
-  env: 'default',
-}
 
 type Opts = SatelliteOpts & {
   minSnapshotWindow: number
@@ -94,7 +84,6 @@ export const makeContext = async (
     migrator,
     notifier,
     client,
-    satelliteConfig,
     options
   )
 
