@@ -145,8 +145,11 @@ defmodule Electric.Satellite.Protocol do
           {:error, %SatErrorResp{}} = error ->
             error
 
-          {:error, :expired} ->
-            Logger.warn("authorization failed for client: #{client_id}, expired token")
+          {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
+            Logger.warn("client authorization failed",
+              metadata: [client_id: client_id, error: message]
+            )
+
             {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
 
           {:error, :already_registered} ->

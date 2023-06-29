@@ -2,7 +2,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
   use ExUnit.Case, async: true
 
   alias Mix.Tasks.Electric.Gen.Token, as: Task
-  alias Electric.Satellite.{Auth, Auth.JWT}
+  alias Electric.Satellite.Auth
 
   import ExUnit.CaptureIO
 
@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
 
     for {user_id, token_info} <- tokens do
       assert %{"token" => token, "expiry" => expiry} = token_info
-      assert {:ok, %Auth{user_id: ^user_id}} = JWT.validate_token(token)
+      assert {:ok, %Auth{user_id: ^user_id}} = Auth.JWT.validate_token(token)
       assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
       assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, 1)
     end
@@ -27,7 +27,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
     users =
       for line <- lines do
         assert [user_id, token, expiry] = String.split(line, ",")
-        assert {:ok, %Auth{user_id: ^user_id}} = JWT.validate_token(token)
+        assert {:ok, %Auth{user_id: ^user_id}} = Auth.JWT.validate_token(token)
         assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
         assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, 1)
         user_id

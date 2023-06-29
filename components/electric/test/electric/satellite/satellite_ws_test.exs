@@ -14,6 +14,8 @@ defmodule Electric.Satellite.WsServerTest do
 
   alias Electric.Postgres.SchemaRegistry
 
+  alias Electric.Satellite.Auth
+
   require Logger
 
   use ExUnit.Case, async: false
@@ -38,16 +40,11 @@ defmodule Electric.Satellite.WsServerTest do
 
     port = 55133
 
-    auth_provider =
-      {Electric.Satellite.Auth.JWT,
-       issuer: "electric-sql.com",
-       secret_key: Base.decode64!("BdvUDsCk5QbwkxI0fpEFmM/LNtFvwPZeMfHxvcOoS7s=")}
-
     _sup_pid =
       Electric.Satellite.WsServer.start_link(
         name: :ws_test,
         port: port,
-        auth_provider: auth_provider
+        auth_provider: Auth.provider()
       )
 
     server_id = Electric.regional_id()
@@ -57,7 +54,7 @@ defmodule Electric.Satellite.WsServerTest do
       :cowboy.stop_listener(:ws_test)
     end)
 
-    {:ok, auth_provider: auth_provider, port: port, server_id: server_id}
+    {:ok, port: port, server_id: server_id}
   end
 
   setup_with_mocks([
@@ -81,14 +78,13 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   # make sure server is cleaning up connections
-  setup(cxt) do
+  setup _cxt do
     on_exit(fn -> clean_connections() end)
 
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
     client_id = "device-id-0000"
     headers = build_headers(PB.get_long_proto_vsn())
-
-    {:ok, token} = Electric.Satellite.Auth.generate_token(user_id, cxt.auth_provider)
+    token = Auth.JWT.create_token(user_id)
 
     {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
   end
@@ -222,9 +218,7 @@ defmodule Electric.Satellite.WsServerTest do
       end)
 
       past = System.os_time(:second) - 24 * 3600
-
-      assert {:ok, expired_token} =
-               Electric.Satellite.Auth.generate_token(cxt.user_id, cxt.auth_provider, expiry: past)
+      expired_token = Auth.JWT.create_token(cxt.user_id, expiry: past)
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
@@ -248,11 +242,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     test "cluster/app id mismatch is detected", cxt do
-      {_module, config} = cxt.auth_provider
-      key = Keyword.fetch!(config, :secret_key)
-
-      assert {:ok, invalid_token} =
-               Electric.Satellite.Auth.JWT.Token.create(cxt.user_id, key, "some-other-cluster-id")
+      invalid_token = Auth.JWT.create_token(cxt.user_id, issuer: "some-other-cluster-id")
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{

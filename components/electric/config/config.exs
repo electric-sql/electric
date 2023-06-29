@@ -22,7 +22,8 @@ config :logger, :console,
     :instance_id,
     :regional_id,
     :client_id,
-    :user_id
+    :user_id,
+    :metadata
   ]
 
 config :logger,
@@ -37,8 +38,6 @@ config :electric, Electric.Replication.Postgres,
 config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
 
 config :electric, Electric.StatusPlug, port: 5050
-
-config :electric, Electric.Satellite.Auth, provider: {Electric.Satellite.Auth.Insecure, []}
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
