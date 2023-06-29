@@ -2,19 +2,16 @@ import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 import { SatelliteError, SatelliteErrorCode, ShapeRequest } from './types'
 
-// FIXME
-// type GetName<T extends { $type: string }> =
-// T['$type'] extends `Electric.Satellite.v1_3.${infer K}` ? K : never
-
-//  FIXME
-//  type MappingTuples = {
-//  [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]
-//  }
+type GetName<T extends { $type: string }> =
+  T['$type'] extends `Electric.Satellite.v1_4.${infer K}` ? K : never
+type MappingTuples = {
+  [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k>]
+}
 
 // NOTE: This mapping should be kept in sync with Electric message mapping.
 // Take into account that this mapping is dependent on the protobuf
 // protocol version.
-const msgtypetuples: any = {
+const msgtypetuples: MappingTuples = {
   SatErrorResp: [0, Pb.SatErrorResp],
   SatAuthReq: [1, Pb.SatAuthReq],
   SatAuthResp: [2, Pb.SatAuthResp],
@@ -41,12 +38,7 @@ const msgtypemapping = Object.fromEntries(
 )
 
 const codemapping = Object.fromEntries(
-  // FIXME
-  // Object.entries(msgtypetuples).map((e) => [e[1][0], getFullTypeName(e[0])])
-  Object.entries(msgtypetuples).map((e) => [
-    (e as any)[1][0],
-    getFullTypeName(e[0]),
-  ])
+  Object.entries(msgtypetuples).map((e) => [e[1][0], getFullTypeName(e[0])])
 )
 
 export type SatPbMsg =
@@ -70,21 +62,15 @@ export type SatPbMsg =
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
 
-export type SatPbMsgObj<Type extends string = string> = {
-  $type: Type
-  encode(message: SatPbMsg, writer: _m0.Writer): _m0.Writer
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatPbMsg
-  // FIXME
-  // fromPartial<I extends Pb.Exact<Pb.DeepPartial<SatPbMsg>, I>>(
-  //  object: I
-  // ): SatPbMsg
-  fromPartial<SatPbMsg>(): SatPbMsg
+export type SatPbMsgObj<Msg extends SatPbMsg, Part = Pb.DeepPartial<Msg>> = {
+  $type: Msg['$type']
+  encode(message: Msg, writer: _m0.Writer): _m0.Writer
+  decode(input: _m0.Reader | Uint8Array, length?: number): Msg
+  fromPartial<I extends Pb.Exact<Part, I>>(object: I): Msg
 }
 
 export function getMsgType(msg: SatPbMsg): number {
-  // FIXME
-  // const mapping = msgtypemapping[msg.$type]
-  const mapping = msgtypemapping[msg.$type] as any
+  const mapping = msgtypemapping[msg.$type]
   if (mapping) {
     return mapping[0]
   }
@@ -95,16 +81,18 @@ export function getTypeFromCode(code: number): string {
   return codemapping[code] ?? ''
 }
 
-export function getTypeFromString(string_type: string): number {
-  // FIXME
-  // return (msgtypemapping)[string_type]![0] ?? ''
-  return (msgtypemapping as any)[string_type]![0] ?? ''
+export function getTypeFromString(string_type: string): number | undefined {
+  return msgtypemapping[string_type]?.[0]
 }
 
-export function getObjFromString(string_type: string) {
-  // FIXME
-  // return msgtypemapping[string_type]?.[1]
-  return (msgtypemapping as any)[string_type]?.[1]
+export function getObjFromString<K extends SatPbMsg['$type']>(
+  string_type: K
+): SatPbMsgObj<Extract<SatPbMsg, { $type: K }>>
+export function getObjFromString(
+  string_type: string
+): MappingTuples[keyof MappingTuples][1] | undefined
+export function getObjFromString(string_type: string): any {
+  return msgtypemapping[string_type]?.[1]
 }
 
 export function getSizeBuf(msg_type: SatPbMsg) {

@@ -901,5 +901,5 @@ function decode(data: Buffer): SatPbMsg {
   const code = data.readUInt8()
   const type = getTypeFromCode(code)
   const obj = getObjFromString(type)
-  return obj.decode(data.subarray(1))
+  return obj!.decode(data.subarray(1))
 }
