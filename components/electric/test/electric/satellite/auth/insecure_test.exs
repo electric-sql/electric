@@ -1,5 +1,5 @@
 defmodule Electric.Satellite.Auth.InsecureTest do
-  use ExUnit.Case, async: true
+  use ExUnitProperties, async: true
 
   import Electric.Satellite.Auth.Insecure, only: [validate_token: 2]
   alias Electric.Satellite.Auth
@@ -8,20 +8,8 @@ defmodule Electric.Satellite.Auth.InsecureTest do
   @signing_key 'abcdefghijklmnopqrstuvwxyz012345' |> Enum.shuffle() |> List.to_string()
 
   describe "validate_token()" do
-    test "rejects malformed tokens" do
-      # NOTE(alco): this list of strings should be replaced with a fuzzer that can generate random strings.
-      malformed_tokens = [
-        "",
-        ".",
-        "..",
-        "0.1.2",
-        "1.2",
-        "foobarbaz",
-        "........",
-        "eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.e20."
-      ]
-
-      for token <- malformed_tokens do
+    property "rejects malformed tokens" do
+      check all token <- StreamData.string(:printable) do
         assert {:error, %Auth.TokenError{message: "Invalid token"}} ==
                  validate_token(token, config([]))
       end
