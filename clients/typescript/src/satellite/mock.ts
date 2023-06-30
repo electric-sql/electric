@@ -15,14 +15,13 @@ import {
   Relation,
   SatelliteErrorCode,
   ClientShapeDefinition,
-  ShapeRequestOrDefinition,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   SubscriptionData,
-  DataChange,
   RelationsCache,
-  DataChangeType,
+  ShapeRequest,
+  InitialDataChange,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 import { randomValue } from '../util/random'
@@ -35,6 +34,7 @@ import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
+import { SUBSCRIPTION_DELIVERED, SUBSCRIPTION_ERROR } from './shapes/types'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27
@@ -62,13 +62,11 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
-  subscribe(
-    _shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<void | SatelliteError> {
+  subscribe(_shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
     return Promise.resolve()
   }
 
-  unsubscribe(_shapeUuid: string): Promise<void | SatelliteError> {
+  unsubscribe(_shapeUuid: string): Promise<void> {
     throw new Error('Method not implemented.')
   }
 
@@ -111,20 +109,23 @@ export class MockRegistry extends BaseRegistry {
 }
 
 export class MockSatelliteClient extends EventEmitter implements Client {
-  relations: RelationsCache
-  constructor() {
-    super()
+  replicating = false
+  closed = true
+  inboundAck: Uint8Array = DEFAULT_LOG_POS
 
-    this.relations = {}
-  }
+  outboundSent: Uint8Array = DEFAULT_LOG_POS
+  outboundAck: Uint8Array = DEFAULT_LOG_POS
 
-  setRelations(relations: RelationsCache) {
+  // to clear any pending timeouts
+  timeouts: NodeJS.Timeout[] = []
+
+  relations: RelationsCache = {}
+
+  setRelations(relations: RelationsCache): void {
     this.relations = relations
   }
 
-  subscribe(
-    shapes: Required<Omit<ShapeRequestOrDefinition, 'uuid'>>[]
-  ): Promise<SubscribeResponse> {
+  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
     const subscriptionId = randomValue()
 
     const tablename = shapes[0]?.definition.selects[0]?.tablename
@@ -144,27 +145,26 @@ export class MockSatelliteClient extends EventEmitter implements Client {
         parent: 1,
       }
 
-      const dataChange: DataChange = {
+      const dataChange: InitialDataChange = {
         relation: this.relations[tablename],
-        type: DataChangeType.INSERT,
         record: tablename == 'parent' ? parentRecord : childRecord,
         tags: [generateTag('remote', new Date())],
       }
 
       const subsciptionData: SubscriptionData = {
         subscriptionId,
-        data: { changes: [dataChange] },
+        data: [dataChange],
         shapeReqToUuid,
       }
 
       setTimeout(() => {
-        this.emit('subscription_delivered', subsciptionData)
+        this.emit(SUBSCRIPTION_DELIVERED, subsciptionData)
       }, 1)
     }
 
     if (tablename == 'another') {
       setTimeout(() => {
-        this.emit('subscription_error')
+        this.emit(SUBSCRIPTION_ERROR)
       }, 1)
     }
 
@@ -172,29 +172,22 @@ export class MockSatelliteClient extends EventEmitter implements Client {
       subscriptionId,
     })
   }
+
   subscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.on('subscription_delivered', successCallback)
-    this.on('subscription_error', errorCallback)
+    this.on(SUBSCRIPTION_DELIVERED, successCallback)
+    this.on(SUBSCRIPTION_ERROR, errorCallback)
   }
+
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.removeListener('subscription_delivered', successCallback)
-    this.removeListener('subscription_error', errorCallback)
+    this.removeListener(SUBSCRIPTION_DELIVERED, successCallback)
+    this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
-  replicating = false
-  closed = true
-  inboundAck: Uint8Array = DEFAULT_LOG_POS
-
-  outboundSent: Uint8Array = DEFAULT_LOG_POS
-  outboundAck: Uint8Array = DEFAULT_LOG_POS
-
-  // to clear any pending timeouts
-  timeouts: NodeJS.Timeout[] = []
 
   isClosed(): boolean {
     return this.closed
@@ -220,7 +213,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(lsn: LSN): Promise<void | SatelliteError> {
+  startReplication(lsn: LSN): Promise<void> {
     this.replicating = true
     this.inboundAck = lsn
 

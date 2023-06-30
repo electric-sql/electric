@@ -76,6 +76,7 @@ import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
 import { SubscriptionsDataCache } from '../util/subscriptions'
+import { SUBSCRIPTION_DELIVERED, SUBSCRIPTION_ERROR } from './shapes/types'
 
 type IncomingHandler = {
   handle: (msg: any) => void | AuthResponse | SubscribeResponse
@@ -294,15 +295,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  // TODO: need to make sure that on re-connection we do not possibly
-  // re-send operations that have been accepted by the server but
-  // not acked by the client (because of a crash). Capture this with
-  // tests.
-  startReplication(
-    lsn?: LSN,
-    subscriptionIds?: string[]
-  ): Promise<void | SatelliteError> {
-    if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
+  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void> {
+    if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_ALREADY_STARTED,
@@ -329,7 +323,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   stopReplication(): Promise<void> {
-    if (this.inbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_NOT_STARTED,
@@ -373,7 +367,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
-    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.outbound.isReplicating !== ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
         'enqueuing a transaction while outbound replication has not started'
@@ -389,7 +383,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private pushTransactions() {
-    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.outbound.isReplicating !== ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
         'sending a transaction while outbound replication has not started'
@@ -428,8 +422,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.subscriptionsDataCache.on('subscription_delivered', successCallback)
-    this.subscriptionsDataCache.on('subscription_error', errorCallback)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, successCallback)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, errorCallback)
   }
 
   unsubscribeToSubscriptionEvents(
@@ -437,17 +431,17 @@ export class SatelliteClient extends EventEmitter implements Client {
     errorCallback: SubscriptionErrorCallback
   ): void {
     this.subscriptionsDataCache.removeListener(
-      'subscription_delivered',
+      SUBSCRIPTION_DELIVERED,
       successCallback
     )
     this.subscriptionsDataCache.removeListener(
-      'subscription_error',
+      SUBSCRIPTION_ERROR,
       errorCallback
     )
   }
 
   subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
-    if (this.inbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_NOT_STARTED,
@@ -566,7 +560,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { serverId, error }
   }
 
-  private handleStartResp(resp: SatInStartReplicationResp) {
+  private handleStartResp(resp: SatInStartReplicationResp): void {
     if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
@@ -679,7 +673,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleRelation(message: SatRelation) {
-    if (this.inbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       this.emit(
         'error',
         new SatelliteError(
@@ -795,7 +789,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  private processOpLogMessage(opLogMessage: SatOpLog) {
+  private processOpLogMessage(opLogMessage: SatOpLog): void {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {

@@ -1,6 +1,5 @@
 import {
-  DataChange,
-  DataChangeType,
+  InitialDataChange,
   Relation,
   SatelliteError,
   SatelliteErrorCode,
@@ -18,19 +17,19 @@ import {
 } from '../_generated/protocol/satellite'
 import EventEmitter from 'events'
 import { deserializeRow } from '../satellite/client'
+import {
+  SUBSCRIPTION_DELIVERED,
+  SUBSCRIPTION_ERROR,
+} from '../satellite/shapes/types'
 
-type SubcriptionShapeDefinitions = {
-  [k: string]: ShapeDefinition[]
-}
+type SubcriptionShapeDefinitions = Record<string, ShapeDefinition[]>
 
-type SubcriptionShapeRequests = {
-  [k: string]: ShapeRequest[]
-}
+type SubcriptionShapeRequests = Record<string, ShapeRequest[]>
 
 type SubscriptionDataInternal = {
   subscriptionId: string
   transaction: SatTransOp[]
-  shapeReqToUuid: { [req: string]: string }
+  shapeReqToUuid: Record<string, string>
 }
 
 export type GarbageCollectShapeHandler = (
@@ -49,9 +48,6 @@ export interface SubscriptionsManager {
   unsubscribeAll(): void
 
   serialize(): string
-
-  subscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler): void
-  unsubscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler): void
 }
 
 export class InMemorySubscriptionsManager
@@ -61,22 +57,17 @@ export class InMemorySubscriptionsManager
   private inFlight: SubcriptionShapeRequests
   private subToShapes: SubcriptionShapeDefinitions
 
-  constructor() {
+  private gcHandler?: GarbageCollectShapeHandler
+
+  constructor(gcHandler?: GarbageCollectShapeHandler) {
     super()
 
     this.inFlight = {}
     this.subToShapes = {}
+    this.gcHandler = gcHandler
   }
 
-  subscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler) {
-    this.on('unsubscribe', callback)
-  }
-
-  unsubscribeToUnsubscribeEvent(callback: GarbageCollectShapeHandler) {
-    this.removeListener('unsubscribe', callback)
-  }
-
-  subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]) {
+  subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]): void {
     if (this.inFlight[subId] || this.subToShapes[subId]) {
       throw new SatelliteError(
         SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
@@ -87,7 +78,7 @@ export class InMemorySubscriptionsManager
     this.inFlight[subId] = shapeRequests
   }
 
-  subscriptionDelivered(data: SubscriptionData) {
+  subscriptionDelivered(data: SubscriptionData): void {
     const { subscriptionId, shapeReqToUuid } = data
     if (!this.inFlight[subscriptionId]) {
       // unknown, or already unsubscribed. delivery is noop
@@ -99,12 +90,10 @@ export class InMemorySubscriptionsManager
     for (const shapeReq of inflight) {
       const shapeRequestOrResolved = shapeReq as ShapeRequestOrDefinition
 
-      if (shapeReqToUuid[shapeReq.requestId]) {
-        if (!this.subToShapes[subscriptionId]) {
-          this.subToShapes[subscriptionId] = []
-        }
-
-        // would like to understand how to do this properly
+      if (
+        (this.subToShapes[subscriptionId] =
+          this.subToShapes[subscriptionId] ?? [])
+      ) {
         shapeRequestOrResolved.uuid = shapeReqToUuid[shapeReq.requestId]
         delete shapeRequestOrResolved.requestId
         this.subToShapes[subscriptionId].push(
@@ -118,13 +107,18 @@ export class InMemorySubscriptionsManager
     return this.subToShapes[subId]
   }
 
-  unsubscribe(subId: string) {
+  async unsubscribe(subId: string): Promise<void> {
     const subscription = this.shapesForActiveSubscription(subId)
     if (subscription) {
-      subscription.forEach((s: ShapeDefinition) => this.emit('unsubscribe', s))
+      for (const shape of subscription) {
+        if (this.gcHandler) {
+          this.gcHandler(shape)
+        }
+
+        delete this.inFlight[subId]
+        delete this.subToShapes[subId]
+      }
     }
-    delete this.inFlight[subId]
-    delete this.subToShapes[subId]
   }
 
   unsubscribeAll(): void {
@@ -133,24 +127,10 @@ export class InMemorySubscriptionsManager
     }
   }
 
-  // don't save inflight subscriptions
   serialize(): string {
     return JSON.stringify(this.subToShapes)
   }
-
-  setState(
-    inFlight: SubcriptionShapeRequests,
-    subToShapes: SubcriptionShapeDefinitions
-  ) {
-    this.inFlight = inFlight
-    this.subToShapes = subToShapes
-  }
 }
-
-// server sends tags, but no timestamp. Is this correct?
-// initial connect sends pending oplog, clears it (wait for server ack) and then can start making subscriptions.
-// ensure database is up-with-schema before receiving shape, otherwise need to send relation alongside and handle that.
-// client would process migrations if they are sent before subscription begin
 
 export class SubscriptionsDataCache extends EventEmitter {
   requestedSubscription?: string
@@ -170,7 +150,6 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   subscriptionRequest(shapeRequestIds: string[]) {
     if (this.remainingShapes.size != 0) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription request but a subscription is already being delivered`
@@ -181,7 +160,6 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   subscriptionResponse({ subscriptionId }: SatSubsResp) {
     if (this.remainingShapes.size == 0) {
-      this.reset()
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received subscribe response but no subscription has been requested`
@@ -235,24 +213,19 @@ export class SubscriptionsDataCache extends EventEmitter {
         `Received SatSubDataEnd but not all shapes have been delivered`
       )
     }
-    const res = this.inDelivery
 
+    const delivered = this.inDelivery
     const subscriptionData: SubscriptionData = {
-      subscriptionId: res.subscriptionId,
-      data: {
-        changes: res.transaction.map((t) =>
-          this.proccessShapeDataOperations(t, relations)
-        ),
-      },
-      shapeReqToUuid: res.shapeReqToUuid,
+      subscriptionId: delivered.subscriptionId,
+      data: delivered.transaction.map((t) =>
+        this.proccessShapeDataOperations(t, relations)
+      ),
+      shapeReqToUuid: delivered.shapeReqToUuid,
     }
 
-    this.requestedSubscription = undefined
-    this.remainingShapes = new Set()
-    this.inDelivery = undefined
-
-    this.emit('subscription_delivered', subscriptionData)
-    return res
+    this.reset()
+    this.emit(SUBSCRIPTION_DELIVERED, subscriptionData)
+    return delivered
   }
 
   shapeDataBegin(shape: SatShapeDataBegin) {
@@ -325,32 +298,6 @@ export class SubscriptionsDataCache extends EventEmitter {
           `Received begin, commit, update or delete message, but these messages are not valid in subscriptions`
         )
       }
-      // leaving this code here until merge in case we want to add txn delimiters
-      // if (op.begin && this.inDelivery.transaction.length != 0) {
-      //  this.subscriptionError(
-      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-      //     `Received begin, but some operation has been delivered already`
-      //   )
-      // }
-
-      // if (!op.begin && this.inDelivery.transaction.length == 0) {
-      //
-      //   this.subscriptionError(
-      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-      //     `Received some operation before receiving begin`
-      //   )
-      // }
-
-      // if (
-      //   this.inDelivery.transaction.length > 0 &&
-      //   this.inDelivery.transaction.at(-1)!.commit
-      // ) {
-      //
-      //   this.subscriptionError(
-      //     SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-      //     `Received some message after commit`
-      //   )
-      // }
 
       this.inDelivery.transaction.push(op)
     }
@@ -359,7 +306,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   subscriptionError(code: SatelliteErrorCode, msg: string): never {
     this.reset()
     const error = new SatelliteError(code, msg)
-    this.emit('subscription_error', error)
+    this.emit(SUBSCRIPTION_ERROR, error)
 
     throw error
   }
@@ -374,7 +321,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   private proccessShapeDataOperations(
     op: SatTransOp,
     relations: Map<number, Relation>
-  ): DataChange {
+  ): InitialDataChange {
     if (!op.insert) {
       this.subscriptionError(
         SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
@@ -382,22 +329,29 @@ export class SubscriptionsDataCache extends EventEmitter {
       )
     }
 
-    const rid = op.insert.relationId
-    const rel = relations.get(rid)
-    if (!rel) {
+    const { relationId, rowData, tags } = op.insert
+
+    const relation = relations.get(relationId)
+    if (!relation) {
       this.subscriptionError(
         SatelliteErrorCode.PROTOCOL_VIOLATION,
-        `missing relation ${op.insert.relationId} for incoming operation`
+        `missing relation ${relationId} for incoming operation`
       )
     }
 
-    const change = {
-      relation: rel,
-      type: DataChangeType.INSERT,
-      record: deserializeRow(op.insert.rowData!, rel),
-      tags: op.insert.tags,
+    const record = deserializeRow(rowData, relation)
+
+    if (!record) {
+      this.subscriptionError(
+        SatelliteErrorCode.PROTOCOL_VIOLATION,
+        'INSERT operations has no data'
+      )
     }
 
-    return change
+    return {
+      relation,
+      record,
+      tags,
+    }
   }
 }

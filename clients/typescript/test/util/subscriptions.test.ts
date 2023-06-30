@@ -1,7 +1,10 @@
 import test from 'ava'
 
 import { InMemorySubscriptionsManager } from '../../src/util/subscriptions'
-import { SubscriptionData } from '../../src/util'
+import { InitialDataChange, SubscriptionData } from '../../src/util'
+import { SatOpInsert } from '../../src/_generated/protocol/satellite'
+import { serializeRow } from '../../src/satellite/client'
+import { relations } from '../satellite/common'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager
@@ -20,6 +23,7 @@ test('some tests', (t) => {
   const subscriptionId = 'sub'
   const requestId = 'shaxx_1'
   const uuid = 'shape_1'
+  const tablename = 'parent'
   const shapeReqToUuid = {
     [requestId]: uuid,
   }
@@ -28,7 +32,7 @@ test('some tests', (t) => {
   const definition = {
     selects: [
       {
-        tablename: 'table',
+        tablename,
       },
     ],
   }
@@ -43,9 +47,21 @@ test('some tests', (t) => {
     definition,
   }
 
+  const parentRecord = {
+    id: 1,
+    value: 'incoming',
+    other: 1,
+  }
+
+  const dataChange: InitialDataChange = {
+    relation: relations[tablename],
+    record: parentRecord,
+    tags: [],
+  }
+
   const subscriptionData: SubscriptionData = {
     subscriptionId,
-    data: { changes: [] },
+    data: [dataChange],
     shapeReqToUuid,
   }
 

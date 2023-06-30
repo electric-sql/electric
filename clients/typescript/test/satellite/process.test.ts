@@ -1319,11 +1319,11 @@ test('a successful second shape request', async (t) => {
   await satellite.subscribe([shapeDef1])
   await satellite.subscribe([shapeDef2])
 
-  const p = new Promise<void>((res) => {
+  return new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       (data) => {
         // only test after second subscription delivery
-        if (data.data.changes[0].relation.table == tablename) {
+        if (data.data[0].relation.table == tablename) {
           setTimeout(async () => {
             try {
               const row = await adapter.query({
@@ -1341,16 +1341,14 @@ test('a successful second shape request', async (t) => {
               t.is(Object.keys(subsObj).length, 2)
               res()
             } catch (e) {
-              t.fail()
-              res()
+              rej(e)
             }
           }, 10)
         }
       },
       () => undefined
     )
-  })
-  await p
+  })  
 })
 
 test('a second shape request error runs garbage collection', async (t) => {

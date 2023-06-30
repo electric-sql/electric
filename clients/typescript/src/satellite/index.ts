@@ -58,10 +58,8 @@ export interface Satellite {
     opts?: SatelliteReplicationOptions
   ): Promise<ConnectionWrapper>
   stop(): Promise<void>
-  subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<void | SatelliteError>
-  unsubscribe(shapeUuid: string): Promise<void | SatelliteError>
+  subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void>
+  unsubscribe(shapeUuid: string): Promise<void>
 }
 
 export interface Client {
@@ -71,10 +69,7 @@ export interface Client {
   close(): Promise<void | SatelliteError>
   authenticate(authState: AuthState): Promise<AuthResponse | SatelliteError>
   isClosed(): boolean
-  startReplication(
-    lsn?: LSN,
-    subscriptionIds?: string[]
-  ): Promise<void | SatelliteError>
+  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void>
   stopReplication(): Promise<void | SatelliteError>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(

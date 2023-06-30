@@ -28,7 +28,6 @@ import {
   RelationsCache,
   SatelliteError,
   SchemaChange,
-  SqlValue,
   Statement,
   Transaction,
   Row,
@@ -39,6 +38,8 @@ import {
   ShapeRequest,
   ShapeDefinition,
   RelationColumn,
+  InitialDataChange,
+  SqlValue,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -144,8 +145,7 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
 
     // TODO: load from database
-    this.subscriptions = new InMemorySubscriptionsManager()
-    this.subscriptions.subscribeToUnsubscribeEvent(
+    this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
   }
@@ -228,6 +228,8 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
+    // TODO: accum all statements and run single txn to prevent issues with FK checks
+
     shapeDef.definition.selects.map(async (select) => {
       const tablename = select.tablename
       // does not delete shadow rows but we can do that
@@ -278,9 +280,7 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
-  async subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<void | SatelliteError> {
+  async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
       requestId: uuid(),
       definition,
@@ -290,7 +290,7 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
   }
 
-  async unsubscribe(_subscriptionId: string): Promise<void | SatelliteError> {
+  async unsubscribe(_subscriptionId: string): Promise<void> {
     throw new SatelliteError(
       SatelliteErrorCode.INTERNAL,
       'unsubscribe shape not supported'
@@ -298,16 +298,20 @@ export class SatelliteProcess implements Satellite {
     // return this.subscriptions.unsubscribe(subscriptionId)
   }
 
-  _handleSubscriptionData(subsData: SubscriptionData) {
+  async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
     this.subscriptions.subscriptionDelivered(subsData)
     if (subsData.data) {
-      this._applySubscriptionData(subsData.data.changes)
+      await this._applySubscriptionData(subsData.data)
     }
   }
 
+  // TODO: improve docs
   // only works if there is no previous subscription for table
-  // TODO: throw errors properly or define conflcit behaviour
-  async _applySubscriptionData(changes: DataChange[]) {
+
+  // Applies initial data for a shape subscription. Current implementation
+  // assumes there are no conflicts INSERTing new rows and only expects
+  // shapes with entire tables.
+  async _applySubscriptionData(changes: InitialDataChange[]) {
     const stmts: Statement[] = []
     for (const op of changes) {
       const { relation, record, tags } = op
@@ -316,7 +320,7 @@ export class SatelliteProcess implements Satellite {
       const tablenameStr = qualifiedTablename.toString()
 
       const columnNames = Object.keys(record!)
-      const columnValues = Object.values(record!) as (string | number)[]
+      const columnValues = Object.values(record!) as SqlValue[]
 
       const insertStmt = `INSERT INTO ${tablenameStr} (${columnNames.join(
         ', '
@@ -356,13 +360,18 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.runInTransaction(...stmts)
   }
 
-  async _handleSubscriptionError(_satelliteError: SatelliteError) {
-    // this is obviously too conservative
+  async _handleSubscriptionError(
+    _satelliteError: SatelliteError
+  ): Promise<void> {
+    // this is obviously too conservative and note
+    // that it does not update meta transactionally
     this.subscriptions.unsubscribeAll()
 
     this._lsn = undefined
-    await this._setMeta('lsn', null)
-    await this._setMeta('subscriptions', this.subscriptions.serialize())
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
   }
 
   async _connectivityStateChange(
@@ -411,7 +420,7 @@ export class SatelliteProcess implements Satellite {
           )
         }
 
-        if (error.code && throwErrors.find((te) => te == error.code)) {
+        if (throwErrors.includes(error.code)) {
           throw error
         }
         Log.warn(`couldn't start replication: ${error}`)

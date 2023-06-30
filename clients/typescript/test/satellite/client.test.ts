@@ -785,15 +785,14 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     [subsResp, beginSub, beginShape, wrongSatOpLog4],
     [subsResp, beginSub, beginShape, validSatOpLog, endShape, validSatOpLog],
   ]
-  const globalPromise = new Promise<void>(async (globalRes) => {
+  return new Promise<void>(async (globalRes) => {
     while (testCases.length > 0) {
       const next = testCases.shift()!
       server.nextResponses(next)
 
-      const promise = new Promise<void>((testCaseRes) => {
+      const promise = new Promise<void>((res, rej) => {
         const success = () => {
-          t.fail()
-          globalRes()
+          rej('invalid subscription messages sequence')
         }
 
         const error = () => {
@@ -802,7 +801,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
             globalRes()
           }
           client.unsubscribeToSubscriptionEvents(success, error)
-          testCaseRes()
+          res()
         }
 
         client.subscribeToSubscriptionEvents(success, error)
@@ -811,7 +810,6 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
       await promise
     }
   })
-  await globalPromise
 })
 
 test.serial('subscription correct protocol sequence with data', async (t) => {
@@ -822,9 +820,19 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   server.nextResponses([startResp])
   await client.startReplication()
 
-  // need to resolve relation
+  const rel: Relation = {
+    id: 0,
+    schema: 'schema',
+    table: 'table',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      { name: 'name1', type: 'TEXT' },
+      { name: 'name2', type: 'TEXT' },
+    ],
+  }
+
   const clientAsAny = client as any
-  clientAsAny['inbound']['relations'].set(0, {})
+  clientAsAny['inbound']['relations'].set(0, rel)
 
   const requestId1 = 'THE_REQUEST_ID_1'
   const requestId2 = 'THE_REQUEST_ID_2'
@@ -860,22 +868,24 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const endShape = Proto.SatShapeDataEnd.fromPartial({})
   const endSub = Proto.SatSubsDataEnd.fromPartial({})
 
-  const promise = new Promise<void>((res) => {
+  const promise = new Promise<void>((res, rej) => {
     const success = () => {
       t.pass()
       res()
     }
 
     const error = (e: any) => {
-      t.fail(e)
-      res()
+      rej(e.message)
     }
     client.subscribeToSubscriptionEvents(success, error)
   })
 
-  const insert = Proto.SatOpInsert.fromPartial({})
+  const insertOp = Proto.SatOpInsert.fromPartial({
+    relationId: 0,
+    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel),
+  })
 
-  const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert })
+  const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert: insertOp })
 
   const satOpLog1 = Proto.SatOpLog.fromPartial({
     ops: [satTransOpInsert],
