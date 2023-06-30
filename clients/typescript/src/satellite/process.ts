@@ -229,9 +229,7 @@ export class SatelliteProcess implements Satellite {
 
   async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
     // TODO: accum all statements and run single txn to prevent issues with FK checks
-
-    shapeDef.definition.selects.map(async (select) => {
-      const tablename = select.tablename
+    for (const { tablename } of shapeDef.definition.selects) {
       // does not delete shadow rows but we can do that
       await this.adapter.runInTransaction(
         ...this._disableTriggers([tablename]),
@@ -240,7 +238,7 @@ export class SatelliteProcess implements Satellite {
         },
         ...this._enableTriggers([tablename])
       )
-    })
+    }
   }
 
   setClientListeners(): void {
@@ -305,12 +303,9 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // TODO: improve docs
-  // only works if there is no previous subscription for table
-
   // Applies initial data for a shape subscription. Current implementation
   // assumes there are no conflicts INSERTing new rows and only expects
-  // shapes with entire tables.
+  // subscriptions for entire tables.
   async _applySubscriptionData(changes: InitialDataChange[]) {
     const stmts: Statement[] = []
     for (const op of changes) {
