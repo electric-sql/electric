@@ -14,14 +14,7 @@ import {
   Transaction,
   Relation,
   SatelliteErrorCode,
-  ClientShapeDefinition,
-  SubscribeResponse,
-  SubscriptionDeliveredCallback,
-  SubscriptionErrorCallback,
-  SubscriptionData,
   RelationsCache,
-  ShapeRequest,
-  InitialDataChange,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 import { randomValue } from '../util/random'
@@ -34,7 +27,17 @@ import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
-import { SUBSCRIPTION_DELIVERED, SUBSCRIPTION_ERROR } from './shapes/types'
+import {
+  ClientShapeDefinition,
+  InitialDataChange,
+  SUBSCRIPTION_DELIVERED,
+  SUBSCRIPTION_ERROR,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionData,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27

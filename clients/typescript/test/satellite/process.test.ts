@@ -38,7 +38,6 @@ import {
   SqlValue,
   DataTransaction,
   SatelliteErrorCode,
-  ClientShapeDefinition,
   RelationsCache,
 } from '../../src/util/types'
 import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
@@ -46,6 +45,7 @@ import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
+import { ClientShapeDefinition } from '../../src/satellite/shapes/types'
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]

@@ -13,12 +13,14 @@ import {
   DataTransaction,
   Transaction,
   Relation,
-  ClientShapeDefinition,
-  SubscriptionDeliveredCallback,
-  SubscribeResponse,
-  ShapeRequest,
-  SubscriptionErrorCallback,
 } from '../util/types'
+import {
+  ClientShapeDefinition,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'

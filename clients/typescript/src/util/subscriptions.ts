@@ -1,13 +1,4 @@
-import {
-  InitialDataChange,
-  Relation,
-  SatelliteError,
-  SatelliteErrorCode,
-  ShapeDefinition,
-  ShapeRequest,
-  ShapeRequestOrDefinition,
-  SubscriptionData,
-} from './types'
+import { Relation, SatelliteError, SatelliteErrorCode } from './types'
 
 import {
   SatSubsDataBegin,
@@ -18,8 +9,13 @@ import {
 import EventEmitter from 'events'
 import { deserializeRow } from '../satellite/client'
 import {
+  InitialDataChange,
   SUBSCRIPTION_DELIVERED,
   SUBSCRIPTION_ERROR,
+  ShapeDefinition,
+  ShapeRequest,
+  ShapeRequestOrDefinition,
+  SubscriptionData,
 } from '../satellite/shapes/types'
 
 type SubcriptionShapeDefinitions = Record<string, ShapeDefinition[]>

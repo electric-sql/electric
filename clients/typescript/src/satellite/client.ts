@@ -57,10 +57,6 @@ import {
   SchemaChange,
   OutgoingReplication,
   Transaction,
-  SubscribeResponse,
-  ShapeRequest,
-  SubscriptionDeliveredCallback,
-  SubscriptionErrorCallback,
 } from '../util/types'
 import {
   base64,
@@ -76,7 +72,14 @@ import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
 import { SubscriptionsDataCache } from '../util/subscriptions'
-import { SUBSCRIPTION_DELIVERED, SUBSCRIPTION_ERROR } from './shapes/types'
+import {
+  SUBSCRIPTION_DELIVERED,
+  SUBSCRIPTION_ERROR,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
 
 type IncomingHandler = {
   handle: (msg: any) => void | AuthResponse | SubscribeResponse

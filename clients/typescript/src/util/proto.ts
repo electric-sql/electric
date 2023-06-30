@@ -1,6 +1,7 @@
 import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
-import { SatelliteError, SatelliteErrorCode, ShapeRequest } from './types'
+import { SatelliteError, SatelliteErrorCode } from './types'
+import { ShapeRequest } from '../satellite/shapes/types'
 
 type GetName<T extends { $type: string }> =
   T['$type'] extends `Electric.Satellite.v1_4.${infer K}` ? K : never

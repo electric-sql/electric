@@ -33,12 +33,7 @@ import {
   Row,
   MigrationTable,
   SatelliteErrorCode,
-  ClientShapeDefinition,
-  SubscriptionData,
-  ShapeRequest,
-  ShapeDefinition,
   RelationColumn,
-  InitialDataChange,
   SqlValue,
 } from '../util/types'
 import { SatelliteOpts } from './config'
@@ -74,6 +69,13 @@ import {
   InMemorySubscriptionsManager,
   SubscriptionsManager,
 } from '../util/subscriptions'
+import {
+  ClientShapeDefinition,
+  InitialDataChange,
+  ShapeDefinition,
+  ShapeRequest,
+  SubscriptionData,
+} from './shapes/types'
 
 type ChangeAccumulator = {
   [key: string]: Change
