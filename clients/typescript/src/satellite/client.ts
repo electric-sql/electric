@@ -83,13 +83,6 @@ type IncomingHandler = {
   isRpc: boolean
 }
 
-type SatSubscMsg =
-  | SatSubsDataBegin
-  | SatSubsDataEnd
-  | SatShapeDataBegin
-  | SatShapeDataEnd
-  | SatSubsError
-
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
   private dbName: string
@@ -153,23 +146,24 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: true,
         },
         SatSubsError: {
-          handle: (msg: SatSubsError) => this.handleSubscriptionData(msg),
+          handle: (msg: SatSubsError) => this.handleSubscriptionError(msg),
           isRpc: false,
         },
         SatSubsDataBegin: {
-          handle: (msg: SatSubscMsg) => this.handleSubscriptionData(msg),
+          handle: (msg: SatSubsDataBegin) =>
+            this.handleSubscriptionDataBegin(msg),
           isRpc: false,
         },
         SatSubsDataEnd: {
-          handle: (msg: SatSubscMsg) => this.handleSubscriptionData(msg),
+          handle: (msg: SatSubsDataEnd) => this.handleSubscriptionDataEnd(msg),
           isRpc: false,
         },
         SatShapeDataBegin: {
-          handle: (msg: SatSubscMsg) => this.handleSubscriptionData(msg),
+          handle: (msg: SatShapeDataBegin) => this.handleShapeDataBegin(msg),
           isRpc: false,
         },
         SatShapeDataEnd: {
-          handle: (msg: SatSubscMsg) => this.handleSubscriptionData(msg),
+          handle: (msg: SatShapeDataEnd) => this.handleShapeDataEnd(msg),
           isRpc: false,
         },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
@@ -744,34 +738,28 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { subscriptionId: msg.subscriptionId }
   }
 
-  private handleSubscriptionData(msg: SatSubscMsg): void {
-    try {
-      switch (msg.$type) {
-        case SatSubsError.$type:
-          // TODO: map SatSubsError to SatelliteError
-          this.subscriptionsDataCache.subscriptionError(
-            SatelliteErrorCode.SUBSCRIPTION_ERROR,
-            msg.message
-          )
-          break
-        case SatSubsDataBegin.$type:
-          this.subscriptionsDataCache.subscriptionDataBegin(msg)
-          break
-        case SatSubsDataEnd.$type:
-          this.subscriptionsDataCache.subscriptionDataEnd(
-            this.inbound.relations
-          )
-          break
-        case SatShapeDataBegin.$type:
-          this.subscriptionsDataCache.shapeDataBegin(msg)
-          break
-        case SatShapeDataEnd.$type:
-          this.subscriptionsDataCache.shapeDataEnd()
-          break
-      }
-    } catch (e) {
-      Log.info(`Error while applying subscription message ${JSON.stringify(e)}`)
-    }
+  private handleSubscriptionError(msg: SatSubsError): void {
+    // TODO: map SatSubsError to SatelliteError
+    this.subscriptionsDataCache.subscriptionError(
+      SatelliteErrorCode.SUBSCRIPTION_ERROR,
+      msg.message
+    )
+  }
+
+  private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {
+    this.subscriptionsDataCache.subscriptionDataBegin(msg)
+  }
+
+  private handleSubscriptionDataEnd(_msg: SatSubsDataEnd): void {
+    this.subscriptionsDataCache.subscriptionDataEnd(this.inbound.relations)
+  }
+
+  private handleShapeDataBegin(msg: SatShapeDataBegin): void {
+    this.subscriptionsDataCache.shapeDataBegin(msg)
+  }
+
+  private handleShapeDataEnd(_msg: SatShapeDataEnd): void {
+    this.subscriptionsDataCache.shapeDataEnd()
   }
 
   // TODO: properly handle socket errors; update connectivity state
@@ -782,9 +770,13 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.emit('error', messageOrError)
     } else {
       const handler = this.handlerForMessageType[messageOrError.$type]
-      const response = handler.handle(messageOrError)
-      if (handler.isRpc) {
-        this.emit('rpc_response', response)
+      try {
+        const response = handler.handle(messageOrError)
+        if (handler.isRpc) {
+          this.emit('rpc_response', response)
+        }
+      } catch (error) {
+        Log.warn(`uncaught errors while processing incoming message: ${error}`)
       }
     }
   }
