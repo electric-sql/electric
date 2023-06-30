@@ -65,10 +65,7 @@ import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
-import {
-  InMemorySubscriptionsManager,
-  SubscriptionsManager,
-} from '../util/subscriptions'
+import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
   InitialDataChange,
@@ -76,6 +73,7 @@ import {
   ShapeRequest,
   SubscriptionData,
 } from './shapes/types'
+import { SubscriptionsManager } from './shapes'
 
 type ChangeAccumulator = {
   [key: string]: Change

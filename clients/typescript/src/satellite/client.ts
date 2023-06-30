@@ -71,7 +71,6 @@ import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
-import { SubscriptionsDataCache } from '../util/subscriptions'
 import {
   SUBSCRIPTION_DELIVERED,
   SUBSCRIPTION_ERROR,
@@ -80,6 +79,7 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
 } from './shapes/types'
+import { SubscriptionsDataCache } from './shapes/cache'
 
 type IncomingHandler = {
   handle: (msg: any) => void | AuthResponse | SubscribeResponse

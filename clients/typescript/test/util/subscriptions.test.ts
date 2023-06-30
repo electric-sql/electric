@@ -1,10 +1,11 @@
 import test from 'ava'
 
-import { InMemorySubscriptionsManager } from '../../src/util/subscriptions'
-import { InitialDataChange, SubscriptionData } from '../../src/util'
-import { SatOpInsert } from '../../src/_generated/protocol/satellite'
-import { serializeRow } from '../../src/satellite/client'
 import { relations } from '../satellite/common'
+import { InMemorySubscriptionsManager } from '../../src/satellite/shapes/manager'
+import {
+  InitialDataChange,
+  SubscriptionData,
+} from '../../src/satellite/shapes/types'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager

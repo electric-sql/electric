@@ -1262,7 +1262,7 @@ test('apply shape data and persist subscription', async (t) => {
   satellite!.relations = relations
   await satellite.subscribe([shapeDef])
 
-  const p = new Promise<void>((res) => {
+  const p = new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       () => {
         // wait for process to apply shape data
@@ -1283,8 +1283,7 @@ test('apply shape data and persist subscription', async (t) => {
             t.is(Object.keys(subsObj).length, 1)
             res()
           } catch (e) {
-            t.fail()
-            res()
+            rej(e)
           }
         }, 10)
       },
@@ -1348,7 +1347,7 @@ test('a successful second shape request', async (t) => {
       },
       () => undefined
     )
-  })  
+  })
 })
 
 test('a second shape request error runs garbage collection', async (t) => {
@@ -1376,7 +1375,7 @@ test('a second shape request error runs garbage collection', async (t) => {
   await satellite.subscribe([shapeDef1])
   await satellite.subscribe([shapeDef2])
 
-  const p = new Promise<void>((res) => {
+  const p = new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       () => undefined,
       () => {
@@ -1397,8 +1396,7 @@ test('a second shape request error runs garbage collection', async (t) => {
             t.deepEqual(subsObj, {})
             res()
           } catch (e) {
-            t.fail()
-            res()
+            rej(e)
           }
         }, 10)
       }
