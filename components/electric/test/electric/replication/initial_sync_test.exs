@@ -98,17 +98,15 @@ defmodule Electric.Replication.InitialSyncTest do
         ])
 
       latest_lsn = fetch_current_lsn(conn)
-
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
-      zero_lsn = 0
 
       assert {^current_lsn,
               [
                 {%Transaction{
                    changes: [migration],
                    origin: "initial-sync-test",
-                   lsn: ^zero_lsn
-                 }, ^zero_lsn},
+                   lsn: 0
+                 }, 0},
                 {%Transaction{
                    changes: data_changes,
                    origin: "initial-sync-test",
@@ -178,20 +176,19 @@ defmodule Electric.Replication.InitialSyncTest do
 
       current_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
-      zero_lsn = 0
 
       assert {^current_lsn,
               [
                 {%Transaction{
                    changes: [migration1],
                    origin: "initial-sync-test",
-                   lsn: ^zero_lsn
-                 }, ^zero_lsn},
+                   lsn: 0
+                 }, 0},
                 {%Transaction{
                    changes: [migration2],
                    origin: "initial-sync-test",
-                   lsn: ^zero_lsn
-                 }, ^zero_lsn},
+                   lsn: 0
+                 }, 0},
                 {%Transaction{
                    changes: data_changes,
                    origin: "initial-sync-test",
