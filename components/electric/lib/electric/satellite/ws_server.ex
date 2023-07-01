@@ -173,8 +173,8 @@ defmodule Electric.Satellite.WsServer do
   def websocket_info(:perform_initial_sync_and_subscribe, %State{} = state) do
     {lsn, transactions} = Electric.Replication.InitialSync.transactions(state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(transactions, state)
-    out_rep = Protocol.initiate_subscription(state.client_id, lsn, state.out_rep)
-    {binary_frames(msgs), %State{state | out_rep: out_rep}}
+    state = Protocol.initiate_subscription(state, lsn)
+    {binary_frames(msgs), state}
   end
 
   def websocket_info(msg, state) do

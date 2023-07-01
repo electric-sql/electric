@@ -39,29 +39,12 @@ defmodule Electric.Postgres.CachedWal.Producer do
   def handle_subscribe(:consumer, options, _, state) do
     Logger.debug("Got a subscription request with options #{inspect(options)}")
 
-    # TODO: The default value here shouldn't be present: that means the connecting client is empty and thus
-    #       requires a complete sync, which shouldn't be handled just from the cached WAL section.
-    #       But right now we don't have that functionality, so we start from the beginning of the cached log.
-    starting_wal_position =
-      case Keyword.fetch(options, :start_subscription) do
-        {:ok, :start_from_latest} ->
-          raise "This producer doesn't currently support subscription starting from the tip of the stream"
+    case Keyword.fetch(options, :start_subscription) do
+      {:ok, :start_from_latest} ->
+        raise "This producer doesn't currently support subscription starting from the tip of the stream"
 
-        # TODO: Since we're always calling "next" against the ETS, the segment with initial position is never sent,
-        #       so we need a value "before the first" - which is a 0. I'm not sure I like this assumption, maybe it's better to
-        #       encode that into a special function on the `CachedWal.Api` to avoid assumptions outside of those modules.
-        {:ok, :start_from_first} ->
-          {:ok, 0}
-
-        {:ok, lsn} ->
-          {:ok, lsn}
-
-        :error ->
-          {:ok, 0}
-      end
-
-    with {:ok, starting_wal_position} <- starting_wal_position do
-      {:automatic, %{state | current_position: starting_wal_position}}
+      {:ok, wal_pos} ->
+        {:automatic, %{state | current_position: wal_pos}}
     end
   end
 
