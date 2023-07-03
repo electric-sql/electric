@@ -47,7 +47,7 @@ await fs.writeFile(
 )
 
 // Run `pnpm install` in the project directory to install the dependencies
-const proc = spawn('pnpm install', [], { stdio: 'inherit', shell: true })
+const proc = spawn('pnpm install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
 
 proc.on('close', (code) => {
   if (code === 0) {
