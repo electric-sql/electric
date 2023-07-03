@@ -1,0 +1,37 @@
+{
+  "name": "electric-sql-web-example",
+  "version": "0.1.0",
+  "main": "builder.js",
+  "author": "Valter Balegas",
+  "license": "Apache-2.0",
+  "scripts": {
+    "backend:start": "cd ../../components/electric && make docker-build && cd ../../local-stack && source .envrc && ELECTRIC_IMAGE=electric:local-build && docker compose up -d",
+    "backend:migrate": "docker exec -e PGPASSWORD=password local-stack-postgres_1-1 bash -c \"printf '%s\\n' 'CREATE TABLE items (value TEXT PRIMARY KEY NOT NULL);' \\\"CALL electric.electrify('items');\\\" | psql -h 127.0.0.1 -U postgres -d electric\"",
+    "prebuild": "npx electric-sql generate",
+    "build": "node builder.js",
+    "build-prod": "NODE_ENV=production pnpm build",
+    "start": "SERVE=true pnpm build"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "@prisma/client": "4.8.1",
+    "electric-sql": "workspace:*",
+    "fs-extra": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#breaking-changes",
+    "zod": "^3.20.2"
+  },
+  "devDependencies": {
+    "@types/node": "^16.9.1",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "esbuild": "^0.12.26",
+    "esbuild-plugin-inline-image": "^0.0.8",
+    "prisma": "4.8.1",
+    "typescript": "^4.4.3",
+    "prisma-generator-electric": "workspace:*"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "create-electric-app",
+  "version": "0.1.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "type": "module",
+  "platform": "node",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "create-electric-app": "dist/index.js"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsc && tsmodule build"
+  },
+  "devDependencies": {
+    "@types/node": "^18.8.4",
+    "@tsmodule/tsmodule": "42"
+  }
+}
