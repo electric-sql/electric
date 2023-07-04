@@ -938,7 +938,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMessage<T extends SatPbMsg>(request: T) {
-    Log.info(`Sending message ${JSON.stringify(request)}`)
+    Log.debug(`Sending message ${JSON.stringify(request)}`)
     if (!this.socket) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
