@@ -35,6 +35,7 @@ import {
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
+  subscriptionErrorToSatelliteError,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -742,11 +743,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscriptionError(msg: SatSubsError): void {
-    // TODO: map SatSubsError to SatelliteError
-    this.subscriptionsDataCache.subscriptionError(
-      SatelliteErrorCode.SUBSCRIPTION_ERROR,
-      msg.message
-    )
+    this.subscriptionsDataCache.subscriptionError(msg)
   }
 
   private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {

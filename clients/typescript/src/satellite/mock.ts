@@ -24,7 +24,7 @@ import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS } from '../util'
+import { DEFAULT_LOG_POS, subscriptionErrorToSatelliteError } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
 import {
@@ -38,6 +38,12 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
 } from './shapes/types'
+import {
+  SatSubsError,
+  SatSubsError_Code,
+  SatSubsError_ShapeReqError,
+  SatSubsError_ShapeReqError_Code,
+} from '../_generated/protocol/satellite'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27
@@ -167,7 +173,20 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
     if (tablename == 'another') {
       setTimeout(() => {
-        this.emit(SUBSCRIPTION_ERROR)
+        const satSubsError: SatSubsError = SatSubsError.fromPartial({
+          code: SatSubsError_Code.SHAPE_REQUEST_ERROR,
+          message: 'there were shape errors',
+          subscriptionId,
+          shapeRequestError: [
+            SatSubsError_ShapeReqError.fromPartial({
+              code: SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND,
+              message: 'table another does not exist',
+            }),
+          ],
+        })
+
+        const satError = subscriptionErrorToSatelliteError(satSubsError)
+        this.emit(SUBSCRIPTION_ERROR, satError)
       }, 1)
     }
 

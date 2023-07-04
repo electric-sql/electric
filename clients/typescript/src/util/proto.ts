@@ -9,6 +9,41 @@ type MappingTuples = {
   [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k>]
 }
 
+const startReplicationErrorToSatError: Record<
+  Pb.SatInStartReplicationResp_ReplicationError_Code,
+  SatelliteErrorCode
+> = {
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.CODE_UNSPECIFIED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.UNRECOGNIZED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.BEHIND_WINDOW]:
+    SatelliteErrorCode.BEHIND_WINDOW,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.INVALID_POSITION]:
+    SatelliteErrorCode.INVALID_POSITION,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.SUBSCRIPTION_NOT_FOUND]:
+    SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+}
+
+const subsErroToSatError: Record<Pb.SatSubsError_Code, SatelliteErrorCode> = {
+  [Pb.SatSubsError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsError_Code.SHAPE_REQUEST_ERROR]:
+    SatelliteErrorCode.SHAPE_REQUEST_ERROR,
+}
+
+const shapeReqErroToSatError: Record<
+  Pb.SatSubsError_ShapeReqError_Code,
+  SatelliteErrorCode
+> = {
+  [Pb.SatSubsError_ShapeReqError_Code.CODE_UNSPECIFIED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsError_ShapeReqError_Code.UNRECOGNIZED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND]:
+    SatelliteErrorCode.TABLE_NOT_FOUND,
+}
+
 // NOTE: This mapping should be kept in sync with Electric message mapping.
 // Take into account that this mapping is dependent on the protobuf
 // protocol version.
@@ -114,16 +149,33 @@ export function getFullTypeName(message: string): string {
 
 export function startReplicationErrorToSatelliteError(
   error: Pb.SatInStartReplicationResp_ReplicationError
-) {
-  switch (error.code) {
-    case Pb.SatInStartReplicationResp_ReplicationError_Code.BEHIND_WINDOW:
-      return new SatelliteError(SatelliteErrorCode.BEHIND_WINDOW, error.message)
-    default:
-      return new SatelliteError(
-        SatelliteErrorCode.INTERNAL,
-        `unexpected mapping for error: ${error.message}`
-      )
+): SatelliteError {
+  return new SatelliteError(
+    startReplicationErrorToSatError[error.code],
+    error.message
+  )
+}
+
+export function subscriptionErrorToSatelliteError({
+  shapeRequestError,
+  code,
+  message,
+}: Pb.SatSubsError): SatelliteError {
+  if (shapeRequestError.length > 0) {
+    const shapeErrorMsgs = shapeRequestError
+      .map(shapeReqErrorToSatelliteError)
+      .map((e) => e.message)
+      .join('; ')
+    const composed = `subscription error message: ${message}; shape error messages: ${shapeErrorMsgs}`
+    return new SatelliteError(subsErroToSatError[code], composed)
   }
+  return new SatelliteError(subsErroToSatError[code], message)
+}
+
+export function shapeReqErrorToSatelliteError(
+  error: Pb.SatSubsError_ShapeReqError
+): SatelliteError {
+  return new SatelliteError(shapeReqErroToSatError[error.code], error.message)
 }
 
 export function shapeRequestToSatShapeReq(

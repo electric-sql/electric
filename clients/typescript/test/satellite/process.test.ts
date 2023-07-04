@@ -1375,10 +1375,10 @@ test('a second shape request error runs garbage collection', async (t) => {
   await satellite.subscribe([shapeDef1])
   await satellite.subscribe([shapeDef2])
 
-  const p = new Promise<void>((res, rej) => {
+  return new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       () => undefined,
-      () => {
+      (expected) => {
         setTimeout(async () => {
           try {
             const row = await adapter.query({
@@ -1394,6 +1394,7 @@ test('a second shape request error runs garbage collection', async (t) => {
             const subsMeta = await satellite._getMeta('subscriptions')
             const subsObj = JSON.parse(subsMeta)
             t.deepEqual(subsObj, {})
+            t.true(expected.message.search('table another does not exist') >= 0)
             res()
           } catch (e) {
             rej(e)
@@ -1402,7 +1403,6 @@ test('a second shape request error runs garbage collection', async (t) => {
       }
     )
   })
-  await p
 })
 
 // TODO: implement reconnect protocol
