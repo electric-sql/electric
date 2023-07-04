@@ -53,15 +53,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def get_wal_position_from_lsn(lsn) do
-    if :ets.member(@ets_table_name, lsn_to_position(lsn)) do
-      {:ok, lsn_to_position(lsn)}
-    else
-      {:error, :lsn_too_old}
-    end
-  end
-
-  @impl Api
   def next_segment(wal_pos) do
     case :ets.next(@ets_table_name, wal_pos) do
       :"$end_of_table" -> :latest

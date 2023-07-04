@@ -14,7 +14,6 @@ defmodule Electric.Postgres.CachedWal.Api do
   @type segment :: Electric.Replication.Changes.Transaction.t()
 
   @callback get_current_position() :: lsn | nil
-  @callback get_wal_position_from_lsn(lsn()) :: {:ok, wal_pos()} | {:error, term()}
   @callback next_segment(wal_pos()) ::
               {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
   @callback request_notification(wal_pos()) :: {:ok, await_ref()} | {:error, term()}
@@ -34,19 +33,6 @@ defmodule Electric.Postgres.CachedWal.Api do
   @spec get_current_position(module()) :: lsn | nil
   def get_current_position(module) do
     module.get_current_position()
-  end
-
-  @doc """
-  Convert a "public" LSN position to an opaque pointer for the cached WAL.
-
-  Opaque pointer can be used with this API to request further segments.
-  There could be a case where lsn is already too old (i.e. out of the cached window),
-  in which case an error will be returned, and the client is expected to query source
-  database directly to catch up.
-  """
-  @spec get_wal_position_from_lsn(module(), lsn()) :: {:ok, wal_pos()} | {:error, :lsn_too_old}
-  def get_wal_position_from_lsn(module \\ @default_adapter, lsn) do
-    module.get_wal_position_from_lsn(lsn)
   end
 
   @doc """
