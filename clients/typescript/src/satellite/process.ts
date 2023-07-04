@@ -369,13 +369,21 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
-    await this.subscriptions.unsubscribeAll()
+    const ids = await this.subscriptions.unsubscribeAll()
 
     this._lsn = undefined
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
+
+    try {
+      await this.client.unsubscribe(ids)
+    } catch (e) {
+      throw new Error(
+        `unable to unsubscribe from server. ids: ${ids.join(', ')}`
+      )
+    }
   }
 
   async _connectivityStateChange(
@@ -612,6 +620,10 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key before
   // merging, for local and remote operations.
+
+  // TODO: in case the subscriptions between the client and server become
+  // out of sync, the server might send operations that do not belong to
+  // any existing subscription. We need a way to detect and prevent that.
   async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
     const merged = this._mergeEntries(

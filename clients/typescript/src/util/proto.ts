@@ -67,6 +67,8 @@ const msgtypetuples: MappingTuples = {
   SatSubsDataEnd: [16, Pb.SatSubsDataEnd],
   SatShapeDataBegin: [17, Pb.SatShapeDataBegin],
   SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
+  SatUnsubsReq: [19, Pb.SatUnsubsReq],
+  SatUnsubsResp: [20, Pb.SatUnsubsResp],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -97,6 +99,8 @@ export type SatPbMsg =
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
+  | Pb.SatUnsubsReq
+  | Pb.SatUnsubsResp
 
 export type SatPbMsgObj<Msg extends SatPbMsg, Part = Pb.DeepPartial<Msg>> = {
   $type: Msg['$type']

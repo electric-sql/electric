@@ -10,6 +10,8 @@ export type SubscribeResponse = {
   subscriptionId: string
 }
 
+export type UnsubscribeResponse = Record<string, never>
+
 export type ClientShapeDefinition = {
   selects: ShapeSelect[]
 }

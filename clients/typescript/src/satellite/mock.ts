@@ -37,12 +37,14 @@ import {
   SubscriptionData,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  UnsubscribeResponse,
 } from './shapes/types'
 import {
   SatSubsError,
   SatSubsError_Code,
   SatSubsError_ShapeReqError,
   SatSubsError_ShapeReqError_Code,
+  SatUnsubsResp,
 } from '../_generated/protocol/satellite'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
@@ -193,6 +195,10 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     return Promise.resolve({
       subscriptionId,
     })
+  }
+
+  unsubscribe(_subIds: string[]): Promise<UnsubscribeResponse> {
+    return Promise.resolve({})
   }
 
   subscribeToSubscriptionEvents(

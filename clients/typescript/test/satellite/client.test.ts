@@ -913,3 +913,19 @@ function decode(data: Buffer): SatPbMsg {
   const obj = getObjFromString(type)
   return obj!.decode(data.subarray(1))
 }
+
+test.serial('unsubscribe successfull', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  server.nextResponses([startResp])
+  await client.startReplication()
+
+  const subscriptionId = 'THE_ID'
+
+  const unsubResp = Proto.SatUnsubsResp.fromPartial({})
+  server.nextResponses([unsubResp])
+  const resp = await client.unsubscribe([subscriptionId])
+  t.deepEqual(resp, {})
+})

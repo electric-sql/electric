@@ -86,10 +86,12 @@ export class InMemorySubscriptionsManager
     }
   }
 
-  async unsubscribeAll(): Promise<void> {
-    for (const subId in this.subToShapes) {
+  async unsubscribeAll(): Promise<string[]> {
+    const ids = Object.keys(this.subToShapes)
+    for (const subId of ids) {
       await this.unsubscribe(subId)
     }
+    return ids
   }
 
   serialize(): string {

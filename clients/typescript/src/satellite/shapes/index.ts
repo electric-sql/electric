@@ -34,9 +34,11 @@ export interface SubscriptionsManager {
 
   /**
    * Deletes all subscriptions from the manager. Useful to
-   * reset the state of the manager
+   * reset the state of the manager.
+   * Returns the subscription identifiers of all subscriptions
+   * that were deleted.
    */
-  unsubscribeAll(): Promise<void>
+  unsubscribeAll(): Promise<string[]>
 
   /**
    * Converts the state of the manager to a string format that

@@ -25,6 +25,8 @@ import {
   SatSubsDataEnd,
   SatShapeDataBegin,
   SatShapeDataEnd,
+  SatUnsubsReq,
+  SatUnsubsResp,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -35,7 +37,6 @@ import {
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
-  subscriptionErrorToSatelliteError,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -79,11 +80,14 @@ import {
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  UnsubscribeResponse,
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
 
 type IncomingHandler = {
-  handle: (msg: any) => void | AuthResponse | SubscribeResponse
+  handle: (
+    msg: any
+  ) => void | AuthResponse | SubscribeResponse | UnsubscribeResponse
   isRpc: boolean
 }
 
@@ -169,6 +173,10 @@ export class SatelliteClient extends EventEmitter implements Client {
         SatShapeDataEnd: {
           handle: (msg: SatShapeDataEnd) => this.handleShapeDataEnd(msg),
           isRpc: false,
+        },
+        SatUnsubsResp: {
+          handle: (_msg: SatUnsubsResp) => ({}),
+          isRpc: true,
         },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
@@ -456,6 +464,23 @@ export class SatelliteClient extends EventEmitter implements Client {
       shapes.map((s) => s.requestId)
     )
     return this.rpc<SubscribeResponse>(request)
+  }
+
+  unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.REPLICATION_NOT_STARTED,
+          `replication not active`
+        )
+      )
+    }
+
+    const request = SatUnsubsReq.fromPartial({
+      subscriptionIds: subIds,
+    })
+
+    return this.rpc(request)
   }
 
   private sendMissingRelations(
