@@ -46,9 +46,8 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def get_current_position do
-    case :ets.last(@ets_table_name) do
-      :"$end_of_table" -> nil
-      position -> position
+    with :"$end_of_table" <- :ets.last(@ets_table_name) do
+      nil
     end
   end
 
