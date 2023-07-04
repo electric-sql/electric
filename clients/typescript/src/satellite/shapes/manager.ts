@@ -14,7 +14,7 @@ type SubcriptionShapeDefinitions = Record<string, ShapeDefinition[]>
 type SubcriptionShapeRequests = Record<string, ShapeRequest[]>
 
 export type GarbageCollectShapeHandler = (
-  shapeDef: ShapeDefinition
+  shapeDefs: ShapeDefinition[]
 ) => Promise<void>
 
 export class InMemorySubscriptionsManager
@@ -77,20 +77,18 @@ export class InMemorySubscriptionsManager
   async unsubscribe(subId: string): Promise<void> {
     const subscription = this.shapesForActiveSubscription(subId)
     if (subscription) {
-      for (const shape of subscription) {
-        if (this.gcHandler) {
-          this.gcHandler(shape)
-        }
-
-        delete this.inFlight[subId]
-        delete this.subToShapes[subId]
+      if (this.gcHandler) {
+        await this.gcHandler(subscription)
       }
+
+      delete this.inFlight[subId]
+      delete this.subToShapes[subId]
     }
   }
 
-  unsubscribeAll(): void {
+  async unsubscribeAll(): Promise<void> {
     for (const subId in this.subToShapes) {
-      this.unsubscribe(subId)
+      await this.unsubscribe(subId)
     }
   }
 

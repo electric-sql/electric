@@ -227,18 +227,25 @@ export class SatelliteProcess implements Satellite {
     this._authState = authState
   }
 
-  async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
-    // TODO: accum all statements and run single txn to prevent issues with FK checks
-    for (const { tablename } of shapeDef.definition.selects) {
-      // does not delete shadow rows but we can do that
-      await this.adapter.runInTransaction(
-        ...this._disableTriggers([tablename]),
-        {
-          sql: `DELETE FROM ${tablename}`,
-        },
-        ...this._enableTriggers([tablename])
-      )
+  async _garbageCollectShapeHandler(
+    shapeDefs: ShapeDefinition[]
+  ): Promise<void> {
+    const stmts: Statement[] = []
+    // reverts to off on commit/abort
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    for (const shapeDef of shapeDefs) {
+      for (const { tablename } of shapeDef.definition.selects) {
+        stmts.push(
+          ...this._disableTriggers([tablename]),
+          {
+            sql: `DELETE FROM ${tablename}`,
+          },
+          ...this._enableTriggers([tablename])
+        )
+        // does not delete shadow rows but we can do that
+      }
     }
+    await this.adapter.runInTransaction(...stmts)
   }
 
   setClientListeners(): void {
@@ -360,7 +367,7 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
-    this.subscriptions.unsubscribeAll()
+    await this.subscriptions.unsubscribeAll()
 
     this._lsn = undefined
     await this.adapter.runInTransaction(
