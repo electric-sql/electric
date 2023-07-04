@@ -1,4 +1,5 @@
 import path from 'path'
+import * as z from 'zod'
 import * as fs from 'fs/promises'
 import { createWriteStream } from 'fs'
 import http from 'http'
@@ -13,6 +14,7 @@ const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 export const defaultOptions = {
   service: process.env.ELECTRIC_URL ?? 'http://localhost:5050',
   out: path.join(appRoot, 'src/generated/client'),
+  watch: false,
 }
 
 export type GeneratorOptions = typeof defaultOptions
@@ -34,6 +36,119 @@ type DataSourceDescription = {
   }
 }
 
+export async function generate(opts: GeneratorOptions) {
+  if (opts.watch) {
+    watchMigrations(opts)
+  } else {
+    await _generate(opts)
+  }
+}
+
+/**
+ * Periodically polls Electric's migration endpoint
+ * to check for new migrations. Invokes `_generate`
+ * when there are new migrations.
+ */
+async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
+  const pollingInterval = 1000 // ms
+  const pollMigrations = async () => {
+    // Create a unique temporary folder in which to save
+    // intermediate files without risking collisions
+    const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
+
+    try {
+      // Read migrations.js file to check latest migration version
+      const latestMigration = await getLatestMigration(opts)
+
+      let migrationEndpoint = opts.service + '/api/migrations?dialect=sqlite'
+      if (latestMigration !== undefined) {
+        // Only fetch new migrations
+        migrationEndpoint = migrationEndpoint + `&version=${latestMigration}`
+      }
+
+      const migrationsPath = path.join(tmpFolder, 'migrations')
+      await fs.mkdir(migrationsPath)
+      const migrationsFolder = path.resolve(migrationsPath)
+
+      // Fetch new migrations from Electric endpoint and write them into `tmpFolder`
+      await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
+
+      // Check if we got new migrations
+      const newMigrations = await getMigrationNames(migrationsFolder)
+      const gotNewMigrations = newMigrations.length > 0
+
+      if (gotNewMigrations) {
+        console.info('Discovered new migrations: ' + newMigrations.join(', '))
+        await _generate(opts)
+      }
+    } catch (e) {
+      console.error(JSON.stringify(e))
+    } finally {
+      // Delete our temporary directory
+      await fs.rm(tmpFolder, { recursive: true })
+      setTimeout(pollMigrations, pollingInterval)
+    }
+  }
+
+  // We use `setTimeout` instead of `setInterval`
+  // because `setInterval` does not wait for the
+  // async function to finish. Since fetching and
+  // building the migrations may take a few seconds
+  // we want to avoid parallel invocations of `pollMigrations`
+  // which could happen if the time `pollMigrations`
+  // takes is longer than the timeout configured in `setInterval`.
+  setTimeout(pollMigrations, pollingInterval)
+}
+
+/**
+ * Reads the migrations file that is bundled with the app
+ * and returns the version of the latest migration.
+ * Returns false if the migrations file does not exist.
+ */
+async function getLatestMigration(
+  opts: Omit<GeneratorOptions, 'watch'>
+): Promise<string | undefined> {
+  const migrationsFile = migrationsFilePath(opts)
+
+  // Read the migrations file contents and parse it
+  // need to strip the `export default` before parsing.
+  // can't use dynamic import because it needs to be a .mjs file
+  // as node won't allow dynamically importing a .js file
+  // when using `"type": "module"` in package.json
+  let migrations: any = undefined
+  let migrationsFileContent = ''
+  try {
+    migrationsFileContent = await fs.readFile(migrationsFile, 'utf8')
+  } catch (e) {
+    // Migrations file does not exist
+    return undefined
+  }
+
+  const migrationsSchema = z
+    .object({
+      statements: z.string().array(),
+      version: z.string(),
+    })
+    .array()
+
+  try {
+    const prefix = 'export default '
+    const migrationsStr = migrationsFileContent.substring(prefix.length)
+    migrations = JSON.parse(migrationsStr)
+
+    const parsedMigrations = migrationsSchema.parse(migrations)
+    if (parsedMigrations.length === 0) return undefined
+    else {
+      const lastMigration = parsedMigrations[parsedMigrations.length - 1]
+      return lastMigration.version
+    }
+  } catch (e) {
+    throw new Error(
+      'Could not read migrations because they have an unexpected format.'
+    )
+  }
+}
+
 /**
  * This function migrates the application.
  * To this end, it fetches the migrations from Electric,
@@ -42,13 +157,13 @@ type DataSourceDescription = {
  * runs the generator to generate the updated Electric client,
  * and runs `buildMigrations` from `cli/migrator.ts`
  * to build the triggers and write the migrations and their triggers
- * to the config filee in `.electric/@config/index.mjs`
+ * to the config file in `.electric/@config/index.mjs`
  *
  * @param prismaSchema Path to the Prisma schema (relative path from the root folder of the app or absolute path).
  * @param migrationsFolder Absolute path to the migrations folder.
  * @param configFolder Absolute path to the configuration folder.
  */
-export async function generate(opts: GeneratorOptions) {
+async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
   const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
@@ -59,8 +174,7 @@ export async function generate(opts: GeneratorOptions) {
     const migrationEndpoint = opts.service + '/api/migrations?dialect=sqlite'
 
     const migrationsFolder = path.resolve(migrationsPath)
-    const outFolder = path.resolve(opts.out)
-    const migrationsFile = path.join(outFolder, 'migrations.js')
+    const migrationsFile = migrationsFilePath(opts)
 
     // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
     await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
@@ -118,7 +232,10 @@ export async function generate(opts: GeneratorOptions) {
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
-async function createPrismaSchema(folder: string, { out }: GeneratorOptions) {
+async function createPrismaSchema(
+  folder: string,
+  { out }: Omit<GeneratorOptions, 'watch'>
+) {
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
@@ -280,6 +397,10 @@ async function applyMigrations(migrations: string[], db: Database.Database) {
   migrations.forEach((migration) => db.exec(migration))
 }
 
+/**
+ * Fetches the migrations from the provided endpoint,
+ * unzips them and writes them to the `writeTo` location.
+ */
 async function fetchMigrations(
   endpoint: string,
   writeTo: string,
@@ -299,4 +420,9 @@ async function fetchMigrations(
 
   // Unzip the migrations
   await decompress(zipFile, writeTo)
+}
+
+function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
+  const outFolder = path.resolve(opts.out)
+  return path.join(outFolder, 'migrations.js')
 }

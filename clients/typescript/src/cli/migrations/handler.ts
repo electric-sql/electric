@@ -35,17 +35,26 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
       flag = checkFlag(arg)
     else {
       // the value for the flag
-      genArgs[flag] = arg
-      flag = undefined
+      if (flag === 'watch') {
+        console.error(`--watch flag does not accept arguments`)
+        process.exit(9)
+      } else {
+        genArgs[flag] = arg
+        flag = undefined
+      }
     }
   }
 
   if (flag) {
-    // a flag was provided but without argument
-    console.error(
-      `Missing argument for flag --${flag} passed to generate command.`
-    )
-    process.exit(9)
+    if (flag === 'watch') {
+      genArgs[flag] = true
+    } else {
+      // a flag that expects an argument was provided but the argument is missing
+      console.error(
+        `Missing argument for flag --${flag} passed to generate command.`
+      )
+      process.exit(9)
+    }
   }
 
   // prepend protocol if not provided in service url
@@ -54,15 +63,15 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
   }
 
   return genArgs
+}
 
-  function checkFlag(flag: string): keyof GeneratorArgs {
-    const supportedFlags = ['--service', '--out']
-    if (supportedFlags.includes(flag))
-      return flag.substring(2) as keyof GeneratorArgs
-    // substring removes the double dash --
-    else {
-      console.error(`Unsupported flag '${flag}' passed to generate command.`)
-      process.exit(9)
-    }
+function checkFlag(flag: string): keyof GeneratorArgs {
+  const supportedFlags = ['--service', '--out', '--watch']
+  if (supportedFlags.includes(flag))
+    return flag.substring(2) as keyof GeneratorArgs
+  // substring removes the double dash --
+  else {
+    console.error(`Unsupported flag '${flag}' passed to generate command.`)
+    process.exit(9)
   }
 }
