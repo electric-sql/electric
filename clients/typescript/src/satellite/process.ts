@@ -361,7 +361,16 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    await this.adapter.runInTransaction(...stmts)
+    try {
+      await this.adapter.runInTransaction(...stmts)
+    } catch (e) {
+      this._handleSubscriptionError(
+        new SatelliteError(
+          SatelliteErrorCode.INTERNAL,
+          `Error applying subscription data: ${JSON.stringify(e)}`
+        )
+      )
+    }
   }
 
   async _handleSubscriptionError(
@@ -377,13 +386,7 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    try {
-      await this.client.unsubscribe(ids)
-    } catch (e) {
-      throw new Error(
-        `unable to unsubscribe from server. ids: ${ids.join(', ')}`
-      )
-    }
+    await this.client.unsubscribe(ids)
   }
 
   async _connectivityStateChange(

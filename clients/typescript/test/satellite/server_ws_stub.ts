@@ -16,7 +16,6 @@ import {
   SatSubsDataEnd,
   SatSubsError,
   SatSubsResp,
-  SatUnsubsReq,
   SatUnsubsResp,
 } from '../../src/_generated/protocol/satellite'
 
