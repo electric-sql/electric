@@ -62,6 +62,8 @@ defmodule Electric.MixProject do
       {:telemetry_metrics_prometheus, "~> 1.1.0"},
       {:joken, "~> 2.6"},
       {:ets, "~> 0.9.0"},
+      {:libgraph, "~> 0.16.0"},
+      {:pathex, "~> 2.5.2"},
       {:stream_data, "~> 0.5", only: [:dev, :test]},
       {:exqlite, "~> 0.13.5", only: [:dev, :test]},
       {:tzdata, "~> 1.1", only: [:dev, :test]},
