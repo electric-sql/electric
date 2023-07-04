@@ -13,6 +13,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @typedoc "Wal segment, where segment is just an abstraction term within Electric"
   @type segment :: Electric.Replication.Changes.Transaction.t()
 
+  @callback lsn_in_cached_window?(wal_pos) :: boolean
   @callback get_current_position() :: wal_pos | nil
   @callback next_segment(wal_pos()) ::
               {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
@@ -24,6 +25,17 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @default_adapter Application.compile_env!(:electric, [__MODULE__, :adapter])
   def default_module(), do: @default_adapter
+
+  @doc """
+  Check if the given LSN falls into the caching window maintained by the cached WAL implementation.
+
+  This checks needs to be done for every client. If their LSN is outside of the caching window, we won't be able to
+  guarantee data consistency via the replication stream alone.
+  """
+  @spec lsn_in_cached_window?(module(), wal_pos) :: boolean
+  def lsn_in_cached_window?(module \\ @default_adapter, lsn) do
+    module.lsn_in_cached_window?(lsn)
+  end
 
   @doc """
   Get the latest LSN that the cached WAL has seen.

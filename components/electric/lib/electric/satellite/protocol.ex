@@ -8,7 +8,7 @@ defmodule Electric.Satellite.Protocol do
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
   alias Electric.Replication.Connectors
-  alias Electric.Postgres.CachedWal.Producer
+  alias Electric.Postgres.CachedWal
   alias Electric.Utils
   alias SatSubsResp.SatSubsError
 
@@ -282,6 +282,10 @@ defmodule Electric.Satellite.Protocol do
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{} = state
       ) do
+    Logger.debug(
+      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
+    )
+
     case validate_lsn(client_lsn, opts) do
       {:ok, :start_from_first} ->
         # This particular client is connecting for the first time, so it needs to perform
@@ -289,22 +293,21 @@ defmodule Electric.Satellite.Protocol do
         #
         # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
         # client first, followed by the initial migrations and data.
-        send(self(), :perform_initial_sync_and_subscribe)
+        send(self(), {:perform_initial_sync_and_subscribe, msg})
+        {[%SatInStartReplicationResp{}], state}
+
+      {:ok, :start_from_latest} ->
+        state = subscribe_client_to_replication_stream(state, msg, :start_from_latest)
         {[%SatInStartReplicationResp{}], state}
 
       {:ok, lsn} ->
-        state =
-          state
-          |> maybe_setup_batch_counter(msg)
-          |> initiate_subscription(lsn)
-
-        Logger.debug(
-          "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
-        )
-
-        Metrics.satellite_replication_event(%{started: 1})
-
-        {[%SatInStartReplicationResp{}], state}
+        if CachedWal.Api.lsn_in_cached_window?(lsn) do
+          state = subscribe_client_to_replication_stream(state, msg, lsn)
+          {[%SatInStartReplicationResp{}], state}
+        else
+          error = %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW}
+          {[%SatInStartReplicationResp{err: error}], state}
+        end
 
       {:error, reason} ->
         Logger.warn("Bad start replication options: #{inspect(reason)}")
@@ -591,6 +594,16 @@ defmodule Electric.Satellite.Protocol do
     {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
+  @spec subscribe_client_to_replication_stream(State.t(), %SatInStartReplicationReq{}, any()) ::
+          State.t()
+  def subscribe_client_to_replication_stream(state, msg, lsn) do
+    Metrics.satellite_replication_event(%{started: 1})
+
+    state
+    |> maybe_setup_batch_counter(msg)
+    |> initiate_subscription(lsn)
+  end
+
   defp maybe_setup_batch_counter(
          %State{out_rep: out_rep} = state,
          %SatInStartReplicationReq{options: opts} = msg
@@ -605,9 +618,8 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec initiate_subscription(State.t(), any()) :: State.t()
-  def initiate_subscription(%State{out_rep: out_rep} = state, lsn) do
-    {:via, :gproc, producer} = Producer.name(state.client_id)
+  defp initiate_subscription(%State{out_rep: out_rep} = state, lsn) do
+    {:via, :gproc, producer} = CachedWal.Producer.name(state.client_id)
     {sub_pid, _} = :gproc.await(producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
 
@@ -688,7 +700,7 @@ defmodule Electric.Satellite.Protocol do
         {:ok, :start_from_latest}
 
       {false, false} ->
-        case Electric.Postgres.CachedWal.Api.parse_wal_position(client_lsn) do
+        case CachedWal.Api.parse_wal_position(client_lsn) do
           {:ok, value} -> {:ok, value}
           :error -> {:error, {:lsn_invalid, client_lsn}}
         end

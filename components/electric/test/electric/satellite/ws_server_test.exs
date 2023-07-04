@@ -1,9 +1,14 @@
 defmodule Electric.Satellite.WsServerTest do
+  use ExUnit.Case, async: false
+
+  use Electric.Satellite.Protobuf
+
+  import ElectricTest.SetupHelpers
+
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
 
   alias Electric.Test.SatelliteWsClient, as: MockClient
-  use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes
 
@@ -17,9 +22,6 @@ defmodule Electric.Satellite.WsServerTest do
   alias Electric.Satellite.Auth
 
   require Logger
-
-  use ExUnit.Case, async: false
-  import ElectricTest.SetupHelpers
 
   @default_wait 5_000
 
@@ -85,7 +87,12 @@ defmodule Electric.Satellite.WsServerTest do
          )
        end
      ]},
-    {Electric.Postgres.CachedWal.Api, [:passthrough], [get_current_position: fn -> 0 end]}
+    {
+      Electric.Postgres.CachedWal.Api,
+      [:passthrough],
+      get_current_position: fn -> 0 end,
+      lsn_in_cached_window?: fn num when is_integer(num) -> num > 1 end
+    }
   ]) do
     {:ok, %{}}
   end
@@ -632,6 +639,15 @@ defmodule Electric.Satellite.WsServerTest do
 
         assert_receive {^conn, %SatInStopReplicationReq{}}
         assert_receive {^conn, %SatInStartReplicationReq{}}
+      end)
+    end
+
+    test "results in an error response when the client is outside of the cached WAL window",
+         cxt do
+      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "1"})
+        assert_receive {^conn, %SatInStartReplicationResp{err: error}}, @default_wait
+        assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
       end)
     end
   end
