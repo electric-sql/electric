@@ -49,6 +49,43 @@ defmodule Electric.Utils do
     do: list_last_and_length(list, default, length + 1)
 
   @doc """
+  Check if the list has any duplicates.
+
+  ## Examples
+
+      iex> has_duplicates?([:a, :b])
+      false
+
+      iex> has_duplicates?([:a, :a])
+      true
+  """
+  def has_duplicates?(list, acc \\ MapSet.new())
+  def has_duplicates?([], _), do: false
+
+  def has_duplicates?([head | tail], acc),
+    do: MapSet.member?(acc, head) || has_duplicates?(tail, MapSet.put(acc, head))
+
+  @doc """
+  Check if the list has any duplicates using a mapping function.
+
+  ## Examples
+
+      iex> has_duplicates_by?(["a", "aa"], &String.length/1)
+      false
+
+      iex> has_duplicates_by?(["a", "b"], &String.length/1)
+      true
+  """
+  def has_duplicates_by?(list, fun, acc \\ MapSet.new())
+  def has_duplicates_by?([], _, _), do: false
+
+  def has_duplicates_by?([head | tail], fun, acc) do
+    head = fun.(head)
+
+    MapSet.member?(acc, head) || has_duplicates_by?(tail, fun, MapSet.put(acc, head))
+  end
+
+  @doc """
   Generate a random UUID v4.
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L174
