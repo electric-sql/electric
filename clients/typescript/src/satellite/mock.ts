@@ -13,8 +13,11 @@ import {
   DataTransaction,
   Transaction,
   Relation,
+  SatelliteErrorCode,
+  RelationsCache,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
+import { randomValue } from '../util/random'
 
 import { Client, ConnectionWrapper, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
@@ -22,6 +25,22 @@ import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
 import { DEFAULT_LOG_POS } from '../util'
+import { bytesToNumber, uuid } from '../util/common'
+import { generateTag } from './oplog'
+import {
+  ClientShapeDefinition,
+  InitialDataChange,
+  SUBSCRIPTION_DELIVERED,
+  SUBSCRIPTION_ERROR,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionData,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
+
+export const MOCK_BEHIND_WINDOW_LSN = 42
+export const MOCK_INVALID_POSITION_LSN = 27
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -45,6 +64,13 @@ export class MockSatelliteProcess implements Satellite {
     this.notifier = notifier
     this.socketFactory = socketFactory
     this.opts = opts
+  }
+  subscribe(_shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
+    return Promise.resolve()
+  }
+
+  unsubscribe(_shapeUuid: string): Promise<void> {
+    throw new Error('Method not implemented.')
   }
 
   async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
@@ -96,6 +122,76 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
 
+  relations: RelationsCache = {}
+
+  setRelations(relations: RelationsCache): void {
+    this.relations = relations
+  }
+
+  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
+    const subscriptionId = randomValue()
+
+    const tablename = shapes[0]?.definition.selects[0]?.tablename
+    if (tablename == 'parent' || tablename == 'child') {
+      const shapeReqToUuid = {
+        [shapes[0].requestId]: uuid(),
+      }
+
+      const parentRecord = {
+        id: 1,
+        value: 'incoming',
+        other: 1,
+      }
+
+      const childRecord = {
+        id: 1,
+        parent: 1,
+      }
+
+      const dataChange: InitialDataChange = {
+        relation: this.relations[tablename],
+        record: tablename == 'parent' ? parentRecord : childRecord,
+        tags: [generateTag('remote', new Date())],
+      }
+
+      const subsciptionData: SubscriptionData = {
+        subscriptionId,
+        data: [dataChange],
+        shapeReqToUuid,
+      }
+
+      setTimeout(() => {
+        this.emit(SUBSCRIPTION_DELIVERED, subsciptionData)
+      }, 1)
+    }
+
+    if (tablename == 'another') {
+      setTimeout(() => {
+        this.emit(SUBSCRIPTION_ERROR)
+      }, 1)
+    }
+
+    return Promise.resolve({
+      subscriptionId,
+    })
+  }
+
+  subscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void {
+    this.on(SUBSCRIPTION_DELIVERED, successCallback)
+    this.on(SUBSCRIPTION_ERROR, errorCallback)
+  }
+
+  unsubscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void {
+    this.removeListener(SUBSCRIPTION_DELIVERED, successCallback)
+    this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
+  }
+
   isClosed(): boolean {
     return this.closed
   }
@@ -120,15 +216,30 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(
-    lsn: LSN,
-    _resume?: boolean | undefined
-  ): Promise<void | SatelliteError> {
+  startReplication(lsn: LSN): Promise<void> {
     this.replicating = true
     this.inboundAck = lsn
 
     const t = setTimeout(() => this.emit('outbound_started'), 100)
     this.timeouts.push(t)
+
+    if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.BEHIND_WINDOW,
+          'MOCK BEHIND_WINDOW_LSN ERROR'
+        )
+      )
+    }
+
+    if (lsn && bytesToNumber(lsn) == MOCK_INVALID_POSITION_LSN) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.INVALID_POSITION,
+          'MOCK INVALID_POSITION ERROR'
+        )
+      )
+    }
 
     return Promise.resolve()
   }

@@ -51,6 +51,19 @@ export const relations = {
       },
     ],
   },
+  another: {
+    id: 2,
+    schema: 'public',
+    table: 'another',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'INTEGER',
+        primaryKey: true,
+      },
+    ],
+  },
 }
 
 import migrations from '../support/migrations/migrations.js'

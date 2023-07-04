@@ -14,7 +14,7 @@ export const data = {
         //`-- Somewhere to track migrations\n`,
         `CREATE TABLE IF NOT EXISTS ${migrationsTable} (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  version TEXT NOT NULL UNIQUE,\n  applied_at TEXT NOT NULL\n);`,
         //`-- Initialisation of the metadata table\n`,
-        `INSERT INTO ${metaTable} (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', ''), ('clientId', '');`,
+        `INSERT INTO ${metaTable} (key, value) VALUES ('compensations', 0), ('lastAckdRowId','0'), ('lastSentRowId', '0'), ('lsn', ''), ('clientId', ''), ('subscriptions', '');`,
         //`-- These are toggles for turning the triggers on and off\n`,
         `DROP TABLE IF EXISTS ${triggersTable};`,
         `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY, flag INTEGER);`,

@@ -14,6 +14,13 @@ import {
   Transaction,
   Relation,
 } from '../util/types'
+import {
+  ClientShapeDefinition,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
@@ -37,6 +44,8 @@ export type ConnectionWrapper = {
   connectionPromise: Promise<void | Error>
 }
 
+export type SatelliteReplicationOptions = { clearOnBehindWindow: boolean }
+
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {
@@ -46,8 +55,13 @@ export interface Satellite {
   migrator: Migrator
   notifier: Notifier
 
-  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
+  start(
+    authConfig: AuthConfig,
+    opts?: SatelliteReplicationOptions
+  ): Promise<ConnectionWrapper>
   stop(): Promise<void>
+  subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void>
+  unsubscribe(shapeUuid: string): Promise<void>
 }
 
 export interface Client {
@@ -57,7 +71,7 @@ export interface Client {
   close(): Promise<void | SatelliteError>
   authenticate(authState: AuthState): Promise<AuthResponse | SatelliteError>
   isClosed(): boolean
-  startReplication(lsn?: LSN): Promise<void | SatelliteError>
+  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void>
   stopReplication(): Promise<void | SatelliteError>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
@@ -70,4 +84,18 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
+
+  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse>
+
+  // TODO: there is currently no way of unsubscribing from the server
+  // unsubscribe(subscriptionId: string): Promise<void>
+
+  subscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void
+  unsubscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void
 }

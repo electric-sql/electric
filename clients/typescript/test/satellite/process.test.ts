@@ -1,7 +1,11 @@
 import test from 'ava'
 
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { MockSatelliteClient } from '../../src/satellite/mock'
+import {
+  MOCK_BEHIND_WINDOW_LSN,
+  MOCK_INVALID_POSITION_LSN,
+  MockSatelliteClient,
+} from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 import { AuthState } from '../../src/auth/index'
@@ -33,12 +37,15 @@ import {
   Relation,
   SqlValue,
   DataTransaction,
+  SatelliteErrorCode,
+  RelationsCache,
 } from '../../src/util/types'
 import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
 import { Satellite } from '../../src/satellite'
-import { DEFAULT_LOG_POS, numberToBytes } from '../../src/util/common'
+import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
+import { ClientShapeDefinition } from '../../src/satellite/shapes/types'
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]
@@ -47,6 +54,7 @@ interface TestNotifier extends EventNotifier {
 interface TestSatellite extends Satellite {
   _lastSentRowId: number
   _authState: AuthState
+  relations: RelationsCache
 
   _setAuthState(authState: AuthState): Promise<void>
   _performSnapshot(): Promise<Date>
@@ -104,6 +112,7 @@ test('load metadata', async (t) => {
     lastSentRowId: '0',
     lsn: '',
     clientId: '',
+    subscriptions: '',
   })
 })
 
@@ -1195,5 +1204,211 @@ test('garbage collection is triggered when transaction from the same origin is r
   t.deepEqual(new_oplog, [])
 })
 
-// Document if we support CASCADE https://www.sqlite.org/foreignkeys.html
-// Document that we do not maintian the order of execution of incoming operations and therefore we defer foreign key checks to the outermost commit
+// stub client and make satellite throw the error with option off/succeed with option on
+test('clear database on BEHIND_WINDOW', async (t) => {
+  const { satellite } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
+  await satellite._setMeta('lsn', base64lsn)
+  try {
+    const conn = await satellite.start(authState, { clearOnBehindWindow: true })
+    await conn.connectionPromise
+    const lsnAfter = await satellite._getMeta('lsn')
+    t.not(lsnAfter, base64lsn)
+  } catch (e) {
+    t.fail('start should not throw')
+  }
+
+  // TODO: test clear subscriptions
+})
+
+test('throw other replication errors', async (t) => {
+  const { satellite } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
+  await satellite._setMeta('lsn', base64lsn)
+  try {
+    const conn = await satellite.start(authState)
+    await conn.connectionPromise
+    t.fail('start should throw')
+  } catch (e: any) {
+    t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
+  }
+})
+
+test('apply shape data and persist subscription', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const namespace = 'main'
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename(namespace, tablename).toString()
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef])
+
+  const p = new Promise<void>((res, rej) => {
+    client.subscribeToSubscriptionEvents(
+      () => {
+        // wait for process to apply shape data
+        setTimeout(async () => {
+          try {
+            const row = await adapter.query({
+              sql: `SELECT id FROM ${qualified}`,
+            })
+            t.is(row.length, 1)
+
+            const shadowRows = await adapter.query({
+              sql: `SELECT tags FROM _electric_shadow`,
+            })
+            t.is(shadowRows.length, 1)
+
+            const subsMeta = await satellite._getMeta('subscriptions')
+            const subsObj = JSON.parse(subsMeta)
+            t.is(Object.keys(subsObj).length, 1)
+            res()
+          } catch (e) {
+            rej(e)
+          }
+        }, 10)
+      },
+      () => undefined
+    )
+  })
+  await p
+})
+
+test('a successful second shape request', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const tablename = 'child'
+  const qualified = new QualifiedTablename('main', tablename).toString()
+
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
+  }
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: tablename }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef1])
+  await satellite.subscribe([shapeDef2])
+
+  return new Promise<void>((res, rej) => {
+    client.subscribeToSubscriptionEvents(
+      (data) => {
+        // only test after second subscription delivery
+        if (data.data[0].relation.table == tablename) {
+          setTimeout(async () => {
+            try {
+              const row = await adapter.query({
+                sql: `SELECT id FROM ${qualified}`,
+              })
+              t.is(row.length, 1)
+
+              const shadowRows = await adapter.query({
+                sql: `SELECT tags FROM _electric_shadow`,
+              })
+              t.is(shadowRows.length, 2)
+
+              const subsMeta = await satellite._getMeta('subscriptions')
+              const subsObj = JSON.parse(subsMeta)
+              t.is(Object.keys(subsObj).length, 2)
+              res()
+            } catch (e) {
+              rej(e)
+            }
+          }, 10)
+        }
+      },
+      () => undefined
+    )
+  })
+})
+
+test('a second shape request error runs garbage collection', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename('main', tablename).toString()
+
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
+  }
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'another' }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef1])
+  await satellite.subscribe([shapeDef2])
+
+  const p = new Promise<void>((res, rej) => {
+    client.subscribeToSubscriptionEvents(
+      () => undefined,
+      () => {
+        setTimeout(async () => {
+          try {
+            const row = await adapter.query({
+              sql: `SELECT id FROM ${qualified}`,
+            })
+            t.is(row.length, 0)
+
+            const shadowRows = await adapter.query({
+              sql: `SELECT tags FROM _electric_shadow`,
+            })
+            t.is(shadowRows.length, 1)
+
+            const subsMeta = await satellite._getMeta('subscriptions')
+            const subsObj = JSON.parse(subsMeta)
+            t.deepEqual(subsObj, {})
+            res()
+          } catch (e) {
+            rej(e)
+          }
+        }, 10)
+      }
+    )
+  })
+  await p
+})
+
+// TODO: implement reconnect protocol
+
+// test('resume out of window clears subscriptions and clears oplog after ack', async (t) => {})
+
+// test('not possible to subscribe while oplog is not pushed', async (t) => {})
+
+// test('process restart loads previous subscriptions', async (t) => {})

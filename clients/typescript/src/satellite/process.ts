@@ -9,7 +9,12 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, Satellite } from './index'
+import {
+  Client,
+  ConnectionWrapper,
+  Satellite,
+  SatelliteReplicationOptions,
+} from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -23,11 +28,13 @@ import {
   RelationsCache,
   SatelliteError,
   SchemaChange,
-  SqlValue,
   Statement,
   Transaction,
   Row,
   MigrationTable,
+  SatelliteErrorCode,
+  RelationColumn,
+  SqlValue,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
@@ -42,6 +49,7 @@ import {
   newShadowEntry,
   OplogEntry,
   OPTYPES,
+  primaryKeyToStr,
   remoteOperationsToTableChanges,
   ShadowEntry,
   ShadowEntryChanges,
@@ -57,10 +65,24 @@ import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
 
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
+import { InMemorySubscriptionsManager } from './shapes/manager'
+import {
+  ClientShapeDefinition,
+  InitialDataChange,
+  ShapeDefinition,
+  ShapeRequest,
+  SubscriptionData,
+} from './shapes/types'
+import { SubscriptionsManager } from './shapes'
 
 type ChangeAccumulator = {
   [key: string]: Change
 }
+
+const throwErrors = [
+  SatelliteErrorCode.INVALID_POSITION,
+  SatelliteErrorCode.BEHIND_WINDOW,
+]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -85,6 +107,8 @@ export class SatelliteProcess implements Satellite {
   _lsn?: LSN
 
   relations: RelationsCache
+
+  subscriptions: SubscriptionsManager
 
   constructor(
     dbName: DbName,
@@ -119,9 +143,17 @@ export class SatelliteProcess implements Satellite {
     )
 
     this.relations = {}
+
+    // TODO: load from database
+    this.subscriptions = new InMemorySubscriptionsManager(
+      this._garbageCollectShapeHandler.bind(this)
+    )
   }
 
-  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+  async start(
+    authConfig: AuthConfig,
+    opts?: SatelliteReplicationOptions
+  ): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -187,12 +219,26 @@ export class SatelliteProcess implements Satellite {
       Log.info(`no lsn retrieved from store`)
     }
 
-    const connectionPromise = this._connectAndStartReplication()
+    const connectionPromise = this._connectAndStartReplication(opts)
     return { connectionPromise }
   }
 
   async _setAuthState(authState: AuthState): Promise<void | Error> {
     this._authState = authState
+  }
+
+  async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
+    // TODO: accum all statements and run single txn to prevent issues with FK checks
+    for (const { tablename } of shapeDef.definition.selects) {
+      // does not delete shadow rows but we can do that
+      await this.adapter.runInTransaction(
+        ...this._disableTriggers([tablename]),
+        {
+          sql: `DELETE FROM ${tablename}`,
+        },
+        ...this._enableTriggers([tablename])
+      )
+    }
   }
 
   setClientListeners(): void {
@@ -206,6 +252,11 @@ export class SatelliteProcess implements Satellite {
     })
     this.client.subscribeToOutboundEvent('started', () =>
       this._throttledSnapshot()
+    )
+
+    this.client.subscribeToSubscriptionEvents(
+      this._handleSubscriptionData.bind(this),
+      this._handleSubscriptionError.bind(this)
     )
   }
 
@@ -225,6 +276,97 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this.client.close()
+  }
+
+  async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
+    const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
+      requestId: uuid(),
+      definition,
+    }))
+
+    const { subscriptionId } = await this.client.subscribe(shapeReqs)
+    this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
+  }
+
+  async unsubscribe(_subscriptionId: string): Promise<void> {
+    throw new SatelliteError(
+      SatelliteErrorCode.INTERNAL,
+      'unsubscribe shape not supported'
+    )
+    // return this.subscriptions.unsubscribe(subscriptionId)
+  }
+
+  async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
+    this.subscriptions.subscriptionDelivered(subsData)
+    if (subsData.data) {
+      await this._applySubscriptionData(subsData.data)
+    }
+  }
+
+  // Applies initial data for a shape subscription. Current implementation
+  // assumes there are no conflicts INSERTing new rows and only expects
+  // subscriptions for entire tables.
+  async _applySubscriptionData(changes: InitialDataChange[]) {
+    const stmts: Statement[] = []
+    for (const op of changes) {
+      const { relation, record, tags } = op
+
+      const qualifiedTablename = new QualifiedTablename('main', relation.table)
+      const tablenameStr = qualifiedTablename.toString()
+
+      const columnNames = Object.keys(record!)
+      const columnValues = Object.values(record!) as SqlValue[]
+
+      const insertStmt = `INSERT INTO ${tablenameStr} (${columnNames.join(
+        ', '
+      )}) VALUES (${columnValues.map((_) => '?').join(', ')})`
+      const insertArgs = [...columnValues]
+
+      const primaryKeyCols = relation.columns.reduce(
+        (prev: { [k in string]: string | number }, curr: RelationColumn) => {
+          if (curr.primaryKey && record) {
+            prev[curr.name] = record![curr.name] as string | number
+          }
+          return prev
+        },
+        {}
+      )
+
+      const upsertShadowStmt = `
+        INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES (?,?,?,?)`
+      const upsertShadowArgs = [
+        relation.schema,
+        relation.table,
+        primaryKeyToStr(primaryKeyCols),
+        encodeTags(tags),
+      ]
+
+      stmts.push(...this._disableTriggers([tablenameStr]))
+      stmts.push({ sql: insertStmt, args: insertArgs })
+      stmts.push({ sql: upsertShadowStmt, args: upsertShadowArgs })
+      stmts.push(...this._enableTriggers([tablenameStr]))
+    }
+
+    // persist subscriptions state
+    stmts.push(
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
+
+    await this.adapter.runInTransaction(...stmts)
+  }
+
+  async _handleSubscriptionError(
+    _satelliteError: SatelliteError
+  ): Promise<void> {
+    // this is obviously too conservative and note
+    // that it does not update meta transactionally
+    this.subscriptions.unsubscribeAll()
+
+    this._lsn = undefined
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
   }
 
   async _connectivityStateChange(
@@ -249,7 +391,9 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(): Promise<void | SatelliteError> {
+  async _connectAndStartReplication(
+    opts?: SatelliteReplicationOptions
+  ): Promise<void | SatelliteError> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
@@ -261,7 +405,19 @@ export class SatelliteProcess implements Satellite {
       .connect()
       .then(() => this.client.authenticate(authState))
       .then(() => this.client.startReplication(this._lsn))
-      .catch((error) => {
+      .catch(async (error) => {
+        if (
+          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          opts?.clearOnBehindWindow
+        ) {
+          return this._handleSubscriptionError(error).then(() =>
+            this._connectAndStartReplication()
+          )
+        }
+
+        if (throwErrors.includes(error.code)) {
+          throw error
+        }
         Log.warn(`couldn't start replication: ${error}`)
       })
   }
@@ -937,13 +1093,17 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _setMeta(key: string, value: SqlValue): Promise<void> {
+  _setMetaStatement(key: string, value: SqlValue): Statement {
     const meta = this.opts.metaTable.toString()
 
     const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
     const args = [value, key]
+    return { sql, args }
+  }
 
-    await this.adapter.run({ sql, args })
+  async _setMeta(key: string, value: SqlValue): Promise<void> {
+    const stmt = this._setMetaStatement(key, value)
+    await this.adapter.run(stmt)
   }
 
   async _getMeta(key: string): Promise<string> {

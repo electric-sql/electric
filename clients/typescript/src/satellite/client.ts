@@ -18,6 +18,13 @@ import {
   SatRelationColumn,
   SatAuthHeader,
   SatAuthHeaderPair,
+  SatSubsResp,
+  SatSubsReq,
+  SatSubsError,
+  SatSubsDataBegin,
+  SatSubsDataEnd,
+  SatShapeDataBegin,
+  SatShapeDataEnd,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -26,6 +33,8 @@ import {
   SatPbMsg,
   getProtocolVersion,
   getFullTypeName,
+  startReplicationErrorToSatelliteError,
+  shapeRequestToSatShapeReq,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -62,8 +71,20 @@ import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
+import {
+  SUBSCRIPTION_DELIVERED,
+  SUBSCRIPTION_ERROR,
+  ShapeRequest,
+  SubscribeResponse,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
+} from './shapes/types'
+import { SubscriptionsDataCache } from './shapes/cache'
 
-type IncomingHandler = { handle: (msg: any) => any | void; isRpc: boolean }
+type IncomingHandler = {
+  handle: (msg: any) => void | AuthResponse | SubscribeResponse
+  isRpc: boolean
+}
 
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
@@ -77,6 +98,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private inbound: Replication
   private outbound: OutgoingReplication
 
+  private subscriptionsDataCache: SubscriptionsDataCache
+
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
 
@@ -88,7 +111,8 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: true,
         },
         SatInStartReplicationResp: {
-          handle: () => this.handleStartResp(),
+          handle: (resp: SatInStartReplicationResp) =>
+            this.handleStartResp(resp),
           isRpc: true,
         },
         SatInStartReplicationReq: {
@@ -120,6 +144,31 @@ export class SatelliteClient extends EventEmitter implements Client {
           handle: (error: SatErrorResp) => this.handleError(error),
           isRpc: false,
         },
+        SatSubsResp: {
+          handle: (sub: SatSubsResp) => this.handleSubscription(sub),
+          isRpc: true,
+        },
+        SatSubsError: {
+          handle: (msg: SatSubsError) => this.handleSubscriptionError(msg),
+          isRpc: false,
+        },
+        SatSubsDataBegin: {
+          handle: (msg: SatSubsDataBegin) =>
+            this.handleSubscriptionDataBegin(msg),
+          isRpc: false,
+        },
+        SatSubsDataEnd: {
+          handle: (msg: SatSubsDataEnd) => this.handleSubscriptionDataEnd(msg),
+          isRpc: false,
+        },
+        SatShapeDataBegin: {
+          handle: (msg: SatShapeDataBegin) => this.handleShapeDataBegin(msg),
+          isRpc: false,
+        },
+        SatShapeDataEnd: {
+          handle: (msg: SatShapeDataEnd) => this.handleShapeDataEnd(msg),
+          isRpc: false,
+        },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
@@ -149,6 +198,8 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication()
     this.outbound = this.resetReplication()
+
+    this.subscriptionsDataCache = new SubscriptionsDataCache()
   }
 
   private resetReplication(
@@ -241,8 +292,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  startReplication(lsn?: LSN): Promise<void> {
-    if (this.inbound.isReplicating != ReplicationStatus.STOPPED) {
+  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void> {
+    if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_ALREADY_STARTED,
@@ -258,6 +309,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       Log.info(`no previous LSN, start replication with option FIRST_LSN`)
       request = SatInStartReplicationReq.fromPartial({
         options: [SatInStartReplicationReq_Option.FIRST_LSN],
+        subscriptionIds,
       })
     } else {
       Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
@@ -268,7 +320,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   stopReplication(): Promise<void> {
-    if (this.inbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_NOT_STARTED,
@@ -312,7 +364,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
-    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.outbound.isReplicating !== ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
         'enqueuing a transaction while outbound replication has not started'
@@ -328,7 +380,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private pushTransactions() {
-    if (this.outbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.outbound.isReplicating !== ReplicationStatus.ACTIVE) {
       throw new SatelliteError(
         SatelliteErrorCode.REPLICATION_NOT_STARTED,
         'sending a transaction while outbound replication has not started'
@@ -361,6 +413,48 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   unsubscribeToOutboundEvent(_event: 'started', callback: () => void) {
     this.removeListener('outbound_started', callback)
+  }
+
+  subscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void {
+    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, successCallback)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, errorCallback)
+  }
+
+  unsubscribeToSubscriptionEvents(
+    successCallback: SubscriptionDeliveredCallback,
+    errorCallback: SubscriptionErrorCallback
+  ): void {
+    this.subscriptionsDataCache.removeListener(
+      SUBSCRIPTION_DELIVERED,
+      successCallback
+    )
+    this.subscriptionsDataCache.removeListener(
+      SUBSCRIPTION_ERROR,
+      errorCallback
+    )
+  }
+
+  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.REPLICATION_NOT_STARTED,
+          `replication not active`
+        )
+      )
+    }
+
+    const request = SatSubsReq.fromPartial({
+      shapeRequests: shapeRequestToSatShapeReq(shapes),
+    })
+
+    this.subscriptionsDataCache.subscriptionRequest(
+      shapes.map((s) => s.requestId)
+    )
+    return this.rpc<SubscribeResponse>(request)
   }
 
   private sendMissingRelations(
@@ -463,9 +557,14 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { serverId, error }
   }
 
-  private handleStartResp() {
+  private handleStartResp(resp: SatInStartReplicationResp): void {
     if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
-      this.inbound.isReplicating = ReplicationStatus.ACTIVE
+      if (resp.err) {
+        this.inbound.isReplicating = ReplicationStatus.STOPPED
+        this.emit('error', startReplicationErrorToSatelliteError(resp.err))
+      } else {
+        this.inbound.isReplicating = ReplicationStatus.ACTIVE
+      }
     } else {
       this.emit(
         'error',
@@ -571,7 +670,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleRelation(message: SatRelation) {
-    if (this.inbound.isReplicating != ReplicationStatus.ACTIVE) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       this.emit(
         'error',
         new SatelliteError(
@@ -599,7 +698,17 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleTransaction(message: SatOpLog) {
-    this.processOpLogMessage(message, this.inbound)
+    if (!this.subscriptionsDataCache.isDelivering()) {
+      this.processOpLogMessage(message)
+    } else {
+      try {
+        this.subscriptionsDataCache.transaction(message.ops)
+      } catch (e) {
+        Log.info(
+          `Error applying transaction message for subs ${JSON.stringify(e)}`
+        )
+      }
+    }
   }
 
   private handlePingReq() {
@@ -627,6 +736,35 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
   }
 
+  private handleSubscription(msg: SatSubsResp): SubscribeResponse {
+    this.subscriptionsDataCache.subscriptionResponse(msg)
+    return { subscriptionId: msg.subscriptionId }
+  }
+
+  private handleSubscriptionError(msg: SatSubsError): void {
+    // TODO: map SatSubsError to SatelliteError
+    this.subscriptionsDataCache.subscriptionError(
+      SatelliteErrorCode.SUBSCRIPTION_ERROR,
+      msg.message
+    )
+  }
+
+  private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {
+    this.subscriptionsDataCache.subscriptionDataBegin(msg)
+  }
+
+  private handleSubscriptionDataEnd(_msg: SatSubsDataEnd): void {
+    this.subscriptionsDataCache.subscriptionDataEnd(this.inbound.relations)
+  }
+
+  private handleShapeDataBegin(msg: SatShapeDataBegin): void {
+    this.subscriptionsDataCache.shapeDataBegin(msg)
+  }
+
+  private handleShapeDataEnd(_msg: SatShapeDataEnd): void {
+    this.subscriptionsDataCache.shapeDataEnd()
+  }
+
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
     const messageOrError = toMessage(data)
@@ -635,17 +773,19 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.emit('error', messageOrError)
     } else {
       const handler = this.handlerForMessageType[messageOrError.$type]
-      const response = handler.handle(messageOrError)
-      if (handler.isRpc) {
-        this.emit('rpc_response', response)
+      try {
+        const response = handler.handle(messageOrError)
+        if (handler.isRpc) {
+          this.emit('rpc_response', response)
+        }
+      } catch (error) {
+        Log.warn(`uncaught errors while processing incoming message: ${error}`)
       }
     }
   }
 
-  private processOpLogMessage(
-    opLogMessage: SatOpLog,
-    replication: Replication
-  ) {
+  private processOpLogMessage(opLogMessage: SatOpLog): void {
+    const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {
         const transaction = {
@@ -667,7 +807,6 @@ export class SatelliteClient extends EventEmitter implements Client {
           changes,
           origin,
         }
-        // in the future, emitting this event can be decoupled
         this.emit(
           'transaction',
           transaction,
@@ -760,7 +899,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  private sendMessage(request: SatPbMsg) {
+  private sendMessage<T extends SatPbMsg>(request: T) {
     Log.info(`Sending message ${JSON.stringify(request)}`)
     if (!this.socket) {
       throw new SatelliteError(

@@ -1,10 +1,12 @@
 import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
+import { SatelliteError, SatelliteErrorCode } from './types'
+import { ShapeRequest } from '../satellite/shapes/types'
 
 type GetName<T extends { $type: string }> =
   T['$type'] extends `Electric.Satellite.v1_4.${infer K}` ? K : never
 type MappingTuples = {
-  [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k['$type']>]
+  [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k>]
 }
 
 // NOTE: This mapping should be kept in sync with Electric message mapping.
@@ -23,6 +25,13 @@ const msgtypetuples: MappingTuples = {
   SatOpLog: [9, Pb.SatOpLog],
   SatRelation: [10, Pb.SatRelation],
   SatMigrationNotification: [11, Pb.SatMigrationNotification],
+  SatSubsReq: [12, Pb.SatSubsReq],
+  SatSubsResp: [13, Pb.SatSubsResp],
+  SatSubsError: [14, Pb.SatSubsError],
+  SatSubsDataBegin: [15, Pb.SatSubsDataBegin],
+  SatSubsDataEnd: [16, Pb.SatSubsDataEnd],
+  SatShapeDataBegin: [17, Pb.SatShapeDataBegin],
+  SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -46,14 +55,19 @@ export type SatPbMsg =
   | Pb.SatOpLog
   | Pb.SatRelation
   | Pb.SatMigrationNotification
+  | Pb.SatSubsReq
+  | Pb.SatSubsResp
+  | Pb.SatSubsError
+  | Pb.SatSubsDataBegin
+  | Pb.SatSubsDataEnd
+  | Pb.SatShapeDataBegin
+  | Pb.SatShapeDataEnd
 
-export type SatPbMsgObj<Type extends string = string> = {
-  $type: Type
-  encode(message: SatPbMsg, writer: _m0.Writer): _m0.Writer
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatPbMsg
-  fromPartial<I extends Pb.Exact<Pb.DeepPartial<SatPbMsg>, I>>(
-    object: I
-  ): SatPbMsg
+export type SatPbMsgObj<Msg extends SatPbMsg, Part = Pb.DeepPartial<Msg>> = {
+  $type: Msg['$type']
+  encode(message: Msg, writer: _m0.Writer): _m0.Writer
+  decode(input: _m0.Reader | Uint8Array, length?: number): Msg
+  fromPartial<I extends Pb.Exact<Part, I>>(object: I): Msg
 }
 
 export function getMsgType(msg: SatPbMsg): number {
@@ -68,11 +82,17 @@ export function getTypeFromCode(code: number): string {
   return codemapping[code] ?? ''
 }
 
-export function getTypeFromString(string_type: string): number {
-  return msgtypemapping[string_type]![0] ?? ''
+export function getTypeFromString(string_type: string): number | undefined {
+  return msgtypemapping[string_type]?.[0]
 }
 
-export function getObjFromString(string_type: string) {
+export function getObjFromString<K extends SatPbMsg['$type']>(
+  string_type: K
+): SatPbMsgObj<Extract<SatPbMsg, { $type: K }>>
+export function getObjFromString(
+  string_type: string
+): MappingTuples[keyof MappingTuples][1] | undefined
+export function getObjFromString(string_type: string): any {
   return msgtypemapping[string_type]?.[1]
 }
 
@@ -90,4 +110,38 @@ export function getProtocolVersion(): string {
 
 export function getFullTypeName(message: string): string {
   return getProtocolVersion() + '.' + message
+}
+
+export function startReplicationErrorToSatelliteError(
+  error: Pb.SatInStartReplicationResp_ReplicationError
+) {
+  switch (error.code) {
+    case Pb.SatInStartReplicationResp_ReplicationError_Code.BEHIND_WINDOW:
+      return new SatelliteError(SatelliteErrorCode.BEHIND_WINDOW, error.message)
+    default:
+      return new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        `unexpected mapping for error: ${error.message}`
+      )
+  }
+}
+
+export function shapeRequestToSatShapeReq(
+  shapeRequests: ShapeRequest[]
+): Pb.SatShapeReq[] {
+  const shapeReqs: Pb.SatShapeReq[] = []
+  for (const sr of shapeRequests) {
+    const requestId = sr.requestId
+    const selects = sr.definition.selects.map((s) => ({
+      tablename: s.tablename,
+    }))
+    const shapeDefinition = { selects }
+
+    const req = Pb.SatShapeReq.fromPartial({
+      requestId,
+      shapeDefinition,
+    })
+    shapeReqs.push(req)
+  }
+  return shapeReqs
 }

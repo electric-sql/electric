@@ -390,7 +390,7 @@ export const opLogEntryToChange = (
   }
 }
 
-const primaryKeyToStr = (primaryKeyJson: {
+export const primaryKeyToStr = (primaryKeyJson: {
   [key: string]: string | number
 }): string => {
   return Object.values(primaryKeyJson).sort().join('_')
