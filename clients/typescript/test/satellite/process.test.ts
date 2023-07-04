@@ -1412,3 +1412,9 @@ test('a second shape request error runs garbage collection', async (t) => {
 // test('not possible to subscribe while oplog is not pushed', async (t) => {})
 
 // test('process restart loads previous subscriptions', async (t) => {})
+
+// test('oplog messages allowed between SatSubsRep and SatSubsDataBegin', async (t) => {})
+
+// test('FKs handled properly when applying shape', async (t) => {})
+
+// test('FKs handled properly on GC', async (t) => {})

@@ -315,6 +315,8 @@ export class SatelliteProcess implements Satellite {
   // subscriptions for entire tables.
   async _applySubscriptionData(changes: InitialDataChange[]) {
     const stmts: Statement[] = []
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+
     for (const op of changes) {
       const { relation, record, tags } = op
 
