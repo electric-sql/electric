@@ -180,7 +180,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     Map.update!(state, :notification_requests, &Map.drop(&1, fulfilled_refs))
   end
 
-  defp lsn_to_position(lsn), do: Lsn.to_integer(lsn)
+  def lsn_to_position(lsn), do: Lsn.to_integer(lsn)
 
   @spec trim_cache(state()) :: state()
   defp trim_cache(%{current_cache_count: current, max_cache_count: max} = state)

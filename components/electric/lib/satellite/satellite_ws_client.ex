@@ -71,6 +71,16 @@ defmodule Electric.Test.SatelliteWsClient do
     :proc_lib.start(__MODULE__, :loop_init, [self, opts])
   end
 
+  def with_connect(opts, fun) do
+    {:ok, pid} = connect_and_spawn(opts)
+
+    try do
+      fun.(pid)
+    after
+      :ok = disconnect(pid)
+    end
+  end
+
   def is_alive(conn \\ __MODULE__) do
     conn =
       cond do

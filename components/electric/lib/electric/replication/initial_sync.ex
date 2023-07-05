@@ -6,6 +6,8 @@ defmodule Electric.Replication.InitialSync do
   history, etc.
   """
 
+  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Replication.Shapes
   alias Electric.Postgres.{CachedWal, Extension, Lsn}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
   alias Electric.Replication.Connectors
@@ -53,6 +55,70 @@ defmodule Electric.Replication.InitialSync do
 
       build_transaction(connector_opts, records, lsn, commit_timestamp)
     end
+  end
+
+  @doc """
+  Request initial data for a subscription.
+
+  Queries fulfilling the request are ran in a transaction with `ISOLATION LEVEL REPEATABLE READ`.
+  That means that we can run multiple queries and they won't be affected by transactions committed
+  between queries. That also means that we can concretely rely on `pg_snapshot_xmin` to be at a point
+  where any `id` >= `xmin` would not have been seen. So the insertion point for the data can be defined
+  in terms of this `xmin` transaction ID: we know that we can continue streaming transactions while their
+  ids are less than `xmin`, and when we reach that "tipping point", we need to send this data before continuing.
+
+  This function is expected to send two messages to `parent` process which is the satellite websocket:
+
+  1. `{:subscription_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
+     results when they are ready. That message **has** to be sent ASAP since if we send the results
+     at the end, we might have already skipped the point where the data is relevant.
+  2. `{:subscription_data, subscription_id, observed_lsn, data}` is when we've collected all the data.
+     The `observed_lsn` here is a cheat-code to sidestep an issue where there were no transactions.
+     It's required, because if we haven't received any transactions while querying, we don't have
+     any transactions to trigger sending this data in `Electric.Satellite.WsServer`, so we're using
+     this LSN point only for equality checking if we haven't moved at all.
+  """
+  def query_subscription_data({subscription_id, requests},
+        reply_to: {ref, parent},
+        connection: opts
+      ) do
+    Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
+      origin = Connectors.origin(opts)
+      {:ok, _, schema} = SchemaCache.load(origin)
+
+      :epgsql.with_transaction(
+        conn,
+        fn conn ->
+          {:ok, _, [{xmin, end_of_tx_lsn}]} =
+            :epgsql.squery(
+              conn,
+              "SELECT pg_snapshot_xmin(pg_current_snapshot()), pg_current_wal_lsn();"
+            )
+
+          send(parent, {:subscription_insertion_point, ref, String.to_integer(xmin)})
+
+          wal_pos =
+            end_of_tx_lsn
+            |> Lsn.from_string()
+            |> CachedWal.EtsBacked.lsn_to_position()
+
+          Enum.reduce_while(requests, [], fn request, results ->
+            case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin) do
+              {:ok, data} -> {:cont, [{request.id, data} | results]}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
+          end)
+          |> case do
+            {:error, reason} ->
+              send(parent, {:subscription_init_failed, subscription_id, reason})
+
+            results ->
+              send(parent, {:subscription_data, subscription_id, wal_pos, results})
+          end
+        end,
+        begin_opts: "ISOLATION LEVEL REPEATABLE READ READ ONLY"
+      )
+    end)
   end
 
   def fetch_data_from_all_tables(conn, origin) do

@@ -67,6 +67,19 @@ defmodule Electric.Satellite.Serialization do
     end
   end
 
+  def serialize_shape_data_as_tx(changes, known_relations) do
+    state = %{
+      ops: [],
+      new_relations: [],
+      known_relations: known_relations
+    }
+
+    # The changes cannot be migration relations, so our "state" is limited
+    state = Enum.reduce(changes, state, &serialize_change/2)
+
+    {[%SatOpLog{ops: state.ops}], state.new_relations, state.known_relations}
+  end
+
   defp serialize_change(record, state) when is_migration_relation(record.relation) do
     %{
       origin: origin,
