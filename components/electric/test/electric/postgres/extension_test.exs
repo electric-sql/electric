@@ -91,12 +91,11 @@ defmodule Electric.Postgres.ExtensionTest do
     tx(
       fn conn ->
         {:ok, rows} = migrate_module(conn, cxt, MigrationsV1)
-        # FIXME: we no longer need the electric.migrations table
-        assert rows == [["migrations"], ["schema_migrations"], ["things"]]
+        assert rows == [["schema_migrations"], ["things"]]
         {:ok, rows} = migrate_module(conn, cxt, MigrationsV2)
-        assert rows == [["migrations"], ["other_things"], ["schema_migrations"], ["things"]]
+        assert rows == [["other_things"], ["schema_migrations"], ["things"]]
         {:ok, rows} = migrate_module(conn, cxt, MigrationsV3)
-        assert rows == [["migrations"], ["schema_migrations"], ["things"]]
+        assert rows == [["schema_migrations"], ["things"]]
       end,
       cxt
     )
