@@ -87,7 +87,8 @@ defmodule Electric.Postgres.TestConnection do
   end
 
   def setup_replicated_db(context) do
-    origin = Map.get(context, :origin, "tmp-test-subscription")
+    context = Map.put_new(context, :origin, "tmp-test-subscription")
+    origin = Map.fetch!(context, :origin)
 
     # SchemaRegistry is a global store, so it needs to be reset when a new test database is created.
     SchemaRegistry.clear_replicated_tables(Extension.publication_name())
@@ -197,6 +198,33 @@ defmodule Electric.Postgres.TestConnection do
       flunk("Migration statements didn't show up in the cached WAL")
 
     []
+  end
+
+  def execute_sql(%{conn: conn, with_sql: sql}) do
+    case :epgsql.squery(conn, sql) do
+      {:ok, _, _} ->
+        :ok
+
+      {:ok, _} ->
+        :ok
+
+      results ->
+        case Enum.filter(results, &match?({:error, _}, &1)) do
+          [] ->
+            :ok
+
+          errors ->
+            raise "Encountered following errors while executing pre-test sql:\n#{inspect(errors, pretty: true)}"
+        end
+    end
+  end
+
+  def execute_sql(_), do: :ok
+
+  def load_schema(%{conn: _, origin: origin}) do
+    {:ok, _, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)
+
+    {:ok, schema: schema}
   end
 
   def childspec(config) do
