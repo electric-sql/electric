@@ -299,7 +299,10 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
-  async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
+  async subscribe(
+    shapeDefinitions: ClientShapeDefinition[],
+    onLoading?: () => void
+  ): Promise<void> {
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
       requestId: this.shapeRequestIdGenerator(),
       definition,

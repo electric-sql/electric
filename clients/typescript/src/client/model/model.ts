@@ -23,7 +23,10 @@ export interface Model<
   ScalarFieldEnum,
   GetPayload extends HKT
 > {
-  sync<T extends SyncInput<Include>>(i?: T): Promise<void>
+  sync<T extends SyncInput<Include>>(
+    i?: T,
+    onLoading?: () => void
+  ): Promise<void>
 
   /**
    * Creates a unique record in the DB.

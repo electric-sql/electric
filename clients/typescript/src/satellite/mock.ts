@@ -71,7 +71,11 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
-  subscribe(_shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
+  subscribe(
+    _shapeDefinitions: ClientShapeDefinition[],
+    onLoading?: () => void
+  ): Promise<void> {
+    onLoading?.()
     return Promise.resolve()
   }
 

@@ -162,7 +162,10 @@ export class Table<
     return includedTables
   }
 
-  async sync<T extends SyncInput<Include>>(i?: T): Promise<void> {
+  async sync<T extends SyncInput<Include>>(
+    i?: T,
+    onLoading?: () => void
+  ): Promise<void> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     // Recursively go over the included fields
     // and for each field store its table
@@ -171,7 +174,7 @@ export class Table<
     const shape = {
       tables: tableNames,
     }
-    await shapeManager.sync(shape)
+    await shapeManager.sync(shape, onLoading)
   }
 
   /*

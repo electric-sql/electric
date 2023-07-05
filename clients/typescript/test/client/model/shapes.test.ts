@@ -97,3 +97,11 @@ test.serial(
     t.assert(log.length === 0)
   }
 )
+
+test.serial('onLoading callback gets called', async (t) => {
+  let gotCalled = false
+  await Post.sync({}, () => {
+    gotCalled = true
+  })
+  t.assert(gotCalled)
+})
