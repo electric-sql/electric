@@ -1506,7 +1506,7 @@ test('a second shape request error runs garbage collection', async (t) => {
             const subsMeta = await satellite._getMeta('subscriptions')
             const subsObj = JSON.parse(subsMeta)
             t.deepEqual(subsObj, {})
-            t.true(expected.message.search('table another does not exist') >= 0)
+            t.true(expected.message.search("table 'another'") >= 0)
             res()
           } catch (e) {
             rej(e)

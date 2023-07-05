@@ -306,13 +306,14 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {
     setTimeout(() => {
       const satSubsError: SatSubsDataError = SatSubsDataError.fromPartial({
-        code: SatSubsDataError_Code.SHAPE_REQUEST_ERROR,
+        code: SatSubsDataError_Code.SHAPE_DELIVERY_ERROR,
         message: 'there were shape errors',
         subscriptionId,
         shapeRequestError: [
           SatSubsDataError_ShapeReqError.fromPartial({
-            code: SatSubsDataError_ShapeReqError_Code.TABLE_NOT_FOUND,
-            message: 'table another does not exist',
+            code: SatSubsDataError_ShapeReqError_Code.SHAPE_SIZE_LIMIT_EXCEEDED,
+            message:
+              "Requested shape for table 'another' exceeds the maximum allowed shape size",
           }),
         ],
       })

@@ -104,6 +104,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private inbound: Replication
   private outbound: OutgoingReplication
 
+  // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
   private socketHandler?: (any: any) => void
@@ -458,7 +459,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     const request = SatSubsReq.fromPartial({
-      requestId: uuid(),
+      subscriptionId: uuid(),
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 

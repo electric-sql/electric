@@ -58,6 +58,10 @@ export enum SatelliteErrorCode {
 
   // shape request errors
   TABLE_NOT_FOUND,
+
+  // shape data errors
+  SHAPE_DELIVERY_ERROR,
+  SHAPE_SIZE_LIMIT_EXCEEDED,
 }
 
 export type AuthResponse = {

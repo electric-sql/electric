@@ -29,8 +29,8 @@ const subsErroToSatError: Record<Pb.SatSubsDataError_Code, SatelliteErrorCode> =
   {
     [Pb.SatSubsDataError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
     [Pb.SatSubsDataError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
-    [Pb.SatSubsDataError_Code.SHAPE_REQUEST_ERROR]:
-      SatelliteErrorCode.SHAPE_REQUEST_ERROR,
+    [Pb.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR]:
+      SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
   }
 
 const shapeReqErroToSatError: Record<
@@ -41,8 +41,8 @@ const shapeReqErroToSatError: Record<
     SatelliteErrorCode.INTERNAL,
   [Pb.SatSubsDataError_ShapeReqError_Code.UNRECOGNIZED]:
     SatelliteErrorCode.INTERNAL,
-  [Pb.SatSubsDataError_ShapeReqError_Code.TABLE_NOT_FOUND]:
-    SatelliteErrorCode.TABLE_NOT_FOUND,
+  [Pb.SatSubsDataError_ShapeReqError_Code.SHAPE_SIZE_LIMIT_EXCEEDED]:
+    SatelliteErrorCode.SHAPE_SIZE_LIMIT_EXCEEDED,
 }
 
 // NOTE: This mapping should be kept in sync with Electric message mapping.
