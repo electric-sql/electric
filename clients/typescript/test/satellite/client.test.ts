@@ -696,8 +696,8 @@ test.serial('listen to subscription events: error', async (t) => {
   const subscriptionId = 'THE_ID'
 
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
-  const subsError = Proto.SatSubsError.fromPartial({
-    code: Proto.SatSubsError_Code.SHAPE_REQUEST_ERROR,
+  const subsError = Proto.SatSubsDataError.fromPartial({
+    code: Proto.SatSubsDataError_Code.SHAPE_REQUEST_ERROR,
     message: 'FAKE ERROR',
     subscriptionId,
   })

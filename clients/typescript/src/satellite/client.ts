@@ -20,7 +20,7 @@ import {
   SatAuthHeaderPair,
   SatSubsResp,
   SatSubsReq,
-  SatSubsError,
+  SatSubsDataError,
   SatSubsDataBegin,
   SatSubsDataEnd,
   SatShapeDataBegin,
@@ -65,6 +65,7 @@ import {
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
+  uuid,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
@@ -154,7 +155,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: true,
         },
         SatSubsError: {
-          handle: (msg: SatSubsError) => this.handleSubscriptionError(msg),
+          handle: (msg: SatSubsDataError) => this.handleSubscriptionError(msg),
           isRpc: false,
         },
         SatSubsDataBegin: {
@@ -457,6 +458,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     const request = SatSubsReq.fromPartial({
+      requestId: uuid(),
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 
@@ -767,7 +769,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { subscriptionId: msg.subscriptionId }
   }
 
-  private handleSubscriptionError(msg: SatSubsError): void {
+  private handleSubscriptionError(msg: SatSubsDataError): void {
     this.subscriptionsDataCache.subscriptionError(msg)
   }
 

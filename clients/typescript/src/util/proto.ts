@@ -25,22 +25,23 @@ const startReplicationErrorToSatError: Record<
     SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
 }
 
-const subsErroToSatError: Record<Pb.SatSubsError_Code, SatelliteErrorCode> = {
-  [Pb.SatSubsError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
-  [Pb.SatSubsError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
-  [Pb.SatSubsError_Code.SHAPE_REQUEST_ERROR]:
-    SatelliteErrorCode.SHAPE_REQUEST_ERROR,
-}
+const subsErroToSatError: Record<Pb.SatSubsDataError_Code, SatelliteErrorCode> =
+  {
+    [Pb.SatSubsDataError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
+    [Pb.SatSubsDataError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
+    [Pb.SatSubsDataError_Code.SHAPE_REQUEST_ERROR]:
+      SatelliteErrorCode.SHAPE_REQUEST_ERROR,
+  }
 
 const shapeReqErroToSatError: Record<
-  Pb.SatSubsError_ShapeReqError_Code,
+  Pb.SatSubsDataError_ShapeReqError_Code,
   SatelliteErrorCode
 > = {
-  [Pb.SatSubsError_ShapeReqError_Code.CODE_UNSPECIFIED]:
+  [Pb.SatSubsDataError_ShapeReqError_Code.CODE_UNSPECIFIED]:
     SatelliteErrorCode.INTERNAL,
-  [Pb.SatSubsError_ShapeReqError_Code.UNRECOGNIZED]:
+  [Pb.SatSubsDataError_ShapeReqError_Code.UNRECOGNIZED]:
     SatelliteErrorCode.INTERNAL,
-  [Pb.SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND]:
+  [Pb.SatSubsDataError_ShapeReqError_Code.TABLE_NOT_FOUND]:
     SatelliteErrorCode.TABLE_NOT_FOUND,
 }
 
@@ -62,7 +63,7 @@ const msgtypetuples: MappingTuples = {
   SatMigrationNotification: [11, Pb.SatMigrationNotification],
   SatSubsReq: [12, Pb.SatSubsReq],
   SatSubsResp: [13, Pb.SatSubsResp],
-  SatSubsError: [14, Pb.SatSubsError],
+  SatSubsDataError: [14, Pb.SatSubsDataError],
   SatSubsDataBegin: [15, Pb.SatSubsDataBegin],
   SatSubsDataEnd: [16, Pb.SatSubsDataEnd],
   SatShapeDataBegin: [17, Pb.SatShapeDataBegin],
@@ -94,7 +95,7 @@ export type SatPbMsg =
   | Pb.SatMigrationNotification
   | Pb.SatSubsReq
   | Pb.SatSubsResp
-  | Pb.SatSubsError
+  | Pb.SatSubsDataError
   | Pb.SatSubsDataBegin
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
@@ -164,7 +165,7 @@ export function subscriptionErrorToSatelliteError({
   shapeRequestError,
   code,
   message,
-}: Pb.SatSubsError): SatelliteError {
+}: Pb.SatSubsDataError): SatelliteError {
   if (shapeRequestError.length > 0) {
     const shapeErrorMsgs = shapeRequestError
       .map(shapeReqErrorToSatelliteError)
@@ -177,7 +178,7 @@ export function subscriptionErrorToSatelliteError({
 }
 
 export function shapeReqErrorToSatelliteError(
-  error: Pb.SatSubsError_ShapeReqError
+  error: Pb.SatSubsDataError_ShapeReqError
 ): SatelliteError {
   return new SatelliteError(shapeReqErroToSatError[error.code], error.message)
 }

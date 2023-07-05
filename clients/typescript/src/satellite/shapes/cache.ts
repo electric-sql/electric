@@ -2,7 +2,7 @@ import EventEmitter from 'events'
 import {
   SatShapeDataBegin,
   SatSubsDataBegin,
-  SatSubsError,
+  SatSubsDataError,
   SatSubsResp,
   SatTransOp,
 } from '../../_generated/protocol/satellite'
@@ -205,7 +205,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     throw error
   }
 
-  subscriptionError(msg: SatSubsError): never {
+  subscriptionError(msg: SatSubsDataError): never {
     this.reset()
     const error = subscriptionErrorToSatelliteError(msg)
     this.emit(SUBSCRIPTION_ERROR, error)

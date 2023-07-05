@@ -40,10 +40,10 @@ import {
   UnsubscribeResponse,
 } from './shapes/types'
 import {
-  SatSubsError,
-  SatSubsError_Code,
-  SatSubsError_ShapeReqError,
-  SatSubsError_ShapeReqError_Code,
+  SatSubsDataError,
+  SatSubsDataError_Code,
+  SatSubsDataError_ShapeReqError,
+  SatSubsDataError_ShapeReqError_Code,
 } from '../_generated/protocol/satellite'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
@@ -305,13 +305,13 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {
     setTimeout(() => {
-      const satSubsError: SatSubsError = SatSubsError.fromPartial({
-        code: SatSubsError_Code.SHAPE_REQUEST_ERROR,
+      const satSubsError: SatSubsDataError = SatSubsDataError.fromPartial({
+        code: SatSubsDataError_Code.SHAPE_REQUEST_ERROR,
         message: 'there were shape errors',
         subscriptionId,
         shapeRequestError: [
-          SatSubsError_ShapeReqError.fromPartial({
-            code: SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND,
+          SatSubsDataError_ShapeReqError.fromPartial({
+            code: SatSubsDataError_ShapeReqError_Code.TABLE_NOT_FOUND,
             message: 'table another does not exist',
           }),
         ],

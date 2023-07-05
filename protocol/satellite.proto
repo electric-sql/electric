@@ -364,14 +364,20 @@ message SatOpMigrate {
 
 // (Consumer) Request for new subscriptions
 message SatSubsReq {
+    // a client-generated identifier to co-relate subscription requests with responses
+    string request_id = 1;
+
     // Shape requests
     repeated SatShapeReq shape_requests = 2;
 }
 
-// (Producer) Acknowledgment that subscription was accepted
+// (Producer) Response for a subscription request
 message SatSubsResp {
-    // Identifier of the request for further reference
-    string subscription_id = 1;
+    // a client-generated identifier to co-relate subscription requests with responses
+    string requet_id = 1;
+    
+    // Identifier of the request at the server
+    string subscription_id = 2;
 }
 
 // (Consumer) Request to cancel subscriptions
@@ -406,8 +412,8 @@ message SatShapeDef {
 }
 
 // Error message returned by the Producer when it encounters
-// an error handling a subscription
-message SatSubsError {
+// an error handling subscription data
+message SatSubsDataError {
     // error code enum
     enum Code {
         // Required code
