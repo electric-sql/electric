@@ -4,7 +4,10 @@ import { electrify } from '../../../src/drivers/better-sqlite3'
 import { dbSchema } from '../generated'
 import { ZodError } from 'zod'
 import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
-import { shapeManager, ShapeManagerMock } from '../../../src/client/model/shapes'
+import {
+  shapeManager,
+  ShapeManagerMock,
+} from '../../../src/client/model/shapes'
 
 /*
  * This test file is meant to check that the DAL

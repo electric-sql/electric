@@ -56,7 +56,7 @@ export class ShapeManagerMock extends ShapeManager {
 
   override async sync(shape: Shape): Promise<void> {
     // Do not contact the server but directly store the synced tables
-    shape.tables.forEach(tbl => this.syncedTables.add(tbl))
+    shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
     // method returns and promise will resolve
     // as if the server acknowledged the subscription
   }

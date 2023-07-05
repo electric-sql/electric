@@ -10,7 +10,10 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { dbSchema, Post } from '../generated'
-import { shapeManager, ShapeManagerMock } from '../../../src/client/model/shapes'
+import {
+  shapeManager,
+  ShapeManagerMock,
+} from '../../../src/client/model/shapes'
 
 const db = new Database(':memory:')
 const electric = await electrify(db, dbSchema, {
