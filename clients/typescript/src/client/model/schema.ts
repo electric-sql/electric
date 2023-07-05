@@ -186,6 +186,12 @@ export class DbSchema<T extends TableSchemas> {
     return this.getRelations(table).find((r) => r.relationName === relation)!
   }
 
+  getRelatedTable(table: TableName, field: FieldName): TableName {
+    const relationName = this.getRelationName(table, field)
+    const relation = this.getRelation(table, relationName)
+    return relation.relatedTable
+  }
+
   // Profile.post <-> Post.profile (from: profileId, to: id)
   getRelations(table: TableName): Relation[] {
     return this.extendedTables[table].relations

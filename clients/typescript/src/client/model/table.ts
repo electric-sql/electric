@@ -1,5 +1,6 @@
 import { CreateInput, CreateManyInput } from '../input/createInput'
 import { FindInput, FindUniqueInput } from '../input/findInput'
+import { SyncInput } from '../input/syncInput'
 import {
   parseNestedCreate,
   omitCountFromSelectAndIncludeSchema,
@@ -30,6 +31,7 @@ import hasOwn from 'object.hasown'
 import * as z from 'zod'
 import { parseTableNames, Row, Statement } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
+import { shapeManager } from './shapes'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -80,6 +82,7 @@ export class Table<
   >
   private deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>
   private deleteManySchema: z.ZodType<DeleteManyInput<Where>>
+  private syncSchema: z.ZodType<SyncInput<Include>>
 
   constructor(
     public tableName: string,
@@ -109,10 +112,66 @@ export class Table<
     this.upsertSchema = tableDescription.upsertSchema
     this.deleteSchema = tableDescription.deleteSchema
     this.deleteManySchema = tableDescription.deleteManySchema
+    this.syncSchema = (tableDescription.findSchema as z.AnyZodObject).pick({
+      include: true,
+    })
   }
 
   setTables(tables: Map<TableName, AnyTable>) {
     this._tables = tables
+  }
+
+  protected getIncludedTables<T extends SyncInput<Include>>(
+    i: T
+  ): Set<AnyTable> {
+    // Recursively go over the included fields
+    // and for each field store its table
+    const include = i.include ?? {}
+    const includedFields = Object.keys(include)
+    const includedTables: Set<AnyTable> = new Set([this])
+    includedFields.forEach((field: string) => {
+      // Fetch the table that is included
+      const relatedTableName = this._dbDescription.getRelatedTable(
+        this.tableName,
+        field
+      )
+      const relatedTable = this._tables.get(relatedTableName)!
+      const extendedTable = includedTables.add(relatedTable)
+      // And follow nested includes
+      const includedObj = (include as any)[field]
+      if (
+        typeof includedObj === 'object' &&
+        !Array.isArray(includedObj) &&
+        includedObj !== null
+      ) {
+        // There is a nested include, follow it
+        const nestedTables = relatedTable.getIncludedTables(includedObj)
+        nestedTables.forEach((tbl) => extendedTable.add(tbl))
+        return extendedTable
+      } else if (typeof includedObj === 'boolean') {
+        return extendedTable
+      } else {
+        throw new Error(
+          `Unexpected value in include tree for syncShape: ${JSON.stringify(
+            includedObj
+          )}`
+        )
+      }
+    })
+
+    return includedTables
+  }
+
+  async syncShape<T extends SyncInput<Include>>(i?: T): Promise<void> {
+    const validatedInput = this.syncSchema.parse(i ?? {})
+    // Recursively go over the included fields
+    // and for each field store its table
+    const tables = Array.from(this.getIncludedTables(validatedInput)) // the tables the user wants to subscribe to
+    const tableNames = tables.map((tbl) => tbl.tableName)
+    const shape = {
+      tables: tableNames,
+    }
+    await shapeManager.sync(shape)
   }
 
   /*

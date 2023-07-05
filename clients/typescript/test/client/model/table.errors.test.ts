@@ -4,6 +4,7 @@ import { electrify } from '../../../src/drivers/better-sqlite3'
 import { dbSchema } from '../generated'
 import { ZodError } from 'zod'
 import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
+import { shapeManager, ShapeManagerMock } from '../../../src/client/model/shapes'
 
 /*
  * This test file is meant to check that the DAL
@@ -19,6 +20,14 @@ const electric = await electrify(db, dbSchema, {
 })
 //const postTable = electric.db.Post
 const userTable = electric.db.User
+
+// Use a mocked shape manager for this test
+// which does not wait for Satellite
+// to acknowledge the subscription
+Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
+
+// Sync all shapes such that we don't get warnings on every query
+await userTable.syncShape()
 
 test.beforeEach((_t) => {
   db.exec('DROP TABLE IF EXISTS Post')

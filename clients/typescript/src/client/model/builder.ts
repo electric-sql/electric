@@ -11,6 +11,8 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import flow from 'lodash.flow'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import * as z from 'zod'
+import { shapeManager } from './shapes'
+import Log from 'loglevel'
 
 const squelPostgres = squel.useFlavour('postgres')
 
@@ -127,6 +129,9 @@ export class Builder {
 
     const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
+
+    if (!shapeManager.isSynced(this._tableName))
+      Log.warn("Reading from unsynced table " + this._tableName)
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
