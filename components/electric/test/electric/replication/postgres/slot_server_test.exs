@@ -8,7 +8,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
 
-  setup_all _ do
+  setup _ do
     SchemaRegistry.put_replicated_tables("fake_publication", [
       %{
         schema: "fake",
