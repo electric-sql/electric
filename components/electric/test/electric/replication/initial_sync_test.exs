@@ -28,7 +28,7 @@ defmodule Electric.Replication.InitialSyncTest do
       assert {0, []} == InitialSync.transactions(pg_connector_opts)
     end
 
-    test "returns the current lsn, electrified table migrations, and a single transaction containing all electrified data",
+    test "returns the current lsn and electrified table migrations without any data",
          %{
            conn: conn,
            pg_connector_opts: pg_connector_opts
@@ -38,8 +38,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
       :ok = electrify_table(conn, "public.users")
 
-      [{user1_id, user1_name}, {user2_id, user2_name}] =
-        users = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
+      [{user1_id, user1_name}, {user2_id, user2_name}] = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
 
       {:ok, 1} =
         :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
@@ -64,7 +63,6 @@ defmodule Electric.Replication.InitialSyncTest do
           user1_id
         ])
 
-      latest_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
       assert {^current_lsn,
@@ -73,21 +71,10 @@ defmodule Electric.Replication.InitialSyncTest do
                    changes: [migration],
                    origin: "initial-sync-test",
                    lsn: 0
-                 }, 0},
-                {%Transaction{
-                   changes: data_changes,
-                   origin: "initial-sync-test",
-                   lsn: ^current_lsn
-                 }, ^current_lsn}
+                 }, 0}
               ]} = InitialSync.transactions(pg_connector_opts)
 
       migration_version = Map.fetch!(migration.record, "version")
-
-      expected_users =
-        for {id, name} <- users do
-          new_record("users", %{"id" => id, "name" => name})
-        end
-
       migration_relation = Extension.ddl_relation()
 
       assert %NewRecord{
@@ -98,15 +85,9 @@ defmodule Electric.Replication.InitialSyncTest do
                },
                tags: []
              } = migration
-
-      assert Enum.sort(expected_users) == Enum.sort(data_changes)
-
-      # Verify that the cached WAL is not going to catch up to the latest LSN because the latest changes were made to a
-      # non-electrified table.
-      assert :error == wait_for_cached_lsn_to_catch_up(latest_lsn)
     end
 
-    test "returns the current lsn, all electrified table migrations, and a single transaction containing all data",
+    test "returns the current lsn, all electrified table migrations, and no data",
          %{
            conn: conn,
            pg_connector_opts: pg_connector_opts
@@ -117,8 +98,7 @@ defmodule Electric.Replication.InitialSyncTest do
       :ok = electrify_table(conn, "public.users")
       :ok = electrify_table(conn, "public.documents")
 
-      [{user1_id, user1_name}, {user2_id, user2_name}] =
-        users = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
+      [{user1_id, user1_name}, {user2_id, user2_name}] = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
 
       {:ok, 1} =
         :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
@@ -132,7 +112,7 @@ defmodule Electric.Replication.InitialSyncTest do
           user2_name
         ])
 
-      [{doc_id, doc_title, _}] = documents = [{uuid4(), "Test Document", user2_id}]
+      [{doc_id, doc_title, _}] = [{uuid4(), "Test Document", user2_id}]
 
       {:ok, 1} =
         :epgsql.equery(conn, "INSERT INTO public.documents VALUES ($1, $2, $3)", [
@@ -155,27 +135,12 @@ defmodule Electric.Replication.InitialSyncTest do
                    changes: [migration2],
                    origin: "initial-sync-test",
                    lsn: 0
-                 }, 0},
-                {%Transaction{
-                   changes: data_changes,
-                   origin: "initial-sync-test",
-                   lsn: ^current_lsn
-                 }, ^current_lsn}
+                 }, 0}
               ]} = InitialSync.transactions(pg_connector_opts)
 
       migration1_version = Map.fetch!(migration1.record, "version")
       migration2_version = Map.fetch!(migration2.record, "version")
       assert migration1_version < migration2_version
-
-      expected_users =
-        for {id, name} <- users do
-          new_record("users", %{"id" => id, "name" => name})
-        end
-
-      expected_documents =
-        for {id, title, user_id} <- documents do
-          new_record("documents", %{"id" => id, "title" => title, "user_id" => user_id})
-        end
 
       migration_relation = Extension.ddl_relation()
 
@@ -197,8 +162,6 @@ defmodule Electric.Replication.InitialSyncTest do
                  tags: []
                }
              ] = [migration1, migration2]
-
-      assert Enum.sort(expected_users ++ expected_documents) == Enum.sort(data_changes)
     end
   end
 
@@ -235,14 +198,6 @@ defmodule Electric.Replication.InitialSyncTest do
       """)
 
     :ok
-  end
-
-  defp new_record(relation, map) when is_binary(relation) do
-    new_record({"public", relation}, map)
-  end
-
-  defp new_record(relation, map) do
-    %NewRecord{relation: relation, record: map, tags: []}
   end
 
   # There's a delay between inserting some data into the DB and the moment it becomes available in the cached WAL. In

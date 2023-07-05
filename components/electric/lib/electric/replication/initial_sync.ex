@@ -22,7 +22,7 @@ defmodule Electric.Replication.InitialSync do
   The LSN returned along with the list of transactions corresponds to the latest known cached LSN just prior to starting
   the data fetching.
   """
-  @spec transactions(Keyword.t(), atom) :: {Lsn.t(), [Transaction.t()]}
+  @spec transactions(Keyword.t(), atom) :: {term(), [Transaction.t()]}
   def transactions(connector_opts, cached_wal_module \\ Electric.Postgres.CachedWal.EtsBacked) do
     # It's important to store the current timestamp prior to fetching the cached LSN to ensure that we're not creating
     # a transaction "in the future" relative to the LSN.
@@ -32,13 +32,8 @@ defmodule Electric.Replication.InitialSync do
 
     current_position = CachedWal.Api.get_current_position(cached_wal_module)
 
-    data_transaction =
-      if current_position do
-        initial_data_transaction(connector_opts, current_position, timestamp)
-      end
-
     current_lsn = current_position || 0
-    txs_with_lsn = Enum.map(migration_transactions ++ List.wrap(data_transaction), &with_lsn/1)
+    txs_with_lsn = Enum.map(migration_transactions, &with_lsn/1)
 
     {current_lsn, txs_with_lsn}
   end
@@ -58,28 +53,6 @@ defmodule Electric.Replication.InitialSync do
 
       build_transaction(connector_opts, records, lsn, commit_timestamp)
     end
-  end
-
-  defp initial_data_transaction(connector_opts, lsn, commit_timestamp) do
-    origin = Connectors.origin(connector_opts)
-    conn_config = Connectors.get_connection_opts(connector_opts)
-
-    new_records =
-      Client.with_conn(conn_config, fn conn ->
-        :epgsql.with_transaction(conn, fn conn ->
-          :ok = set_repeatable_read_transaction(conn)
-          fetch_data_from_all_tables(conn, origin)
-        end)
-      end)
-
-    build_transaction(connector_opts, new_records, lsn, commit_timestamp)
-  end
-
-  defp set_repeatable_read_transaction(conn) do
-    {:ok, [], []} =
-      :epgsql.squery(conn, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-
-    :ok
   end
 
   def fetch_data_from_all_tables(conn, origin) do
