@@ -138,12 +138,12 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
 
   setRelationData(tablename: string, record: DataRecord): void {
-    let relationData: DataRecord[]
-    if ((relationData = this.relationData[tablename] ?? [])) {
-      this.relationData[tablename] = relationData
+    if (!this.relationData[tablename]) {
+      this.relationData[tablename] = []
     }
+    const data = this.relationData[tablename]
 
-    relationData.push(record)
+    data.push(record)
   }
 
   subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
@@ -154,7 +154,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
     for (const shape of shapes) {
       for (const { tablename } of shape.definition.selects) {
-        if (tablename == 'another') {
+        if (tablename === 'another') {
           this.sendErrorAfterTimeout(subscriptionId, 1)
           return Promise.resolve({
             subscriptionId,

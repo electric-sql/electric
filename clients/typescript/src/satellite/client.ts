@@ -175,7 +175,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           isRpc: false,
         },
         SatUnsubsResp: {
-          handle: (_msg: SatUnsubsResp) => ({}),
+          handle: (msg: SatUnsubsResp) => this.handleUnsubscribeResponse(msg),
           isRpc: true,
         },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
@@ -785,6 +785,12 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private handleShapeDataEnd(_msg: SatShapeDataEnd): void {
     this.subscriptionsDataCache.shapeDataEnd()
+  }
+
+  // For now, unsubscribe responses doesn't send any information back
+  // It might eventually confirm that the server processed it or was noop.
+  private handleUnsubscribeResponse(_msg: SatUnsubsResp): UnsubscribeResponse {
+    return {}
   }
 
   // TODO: properly handle socket errors; update connectivity state

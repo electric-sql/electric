@@ -71,6 +71,7 @@ import {
   InitialDataChange,
   ShapeDefinition,
   ShapeRequest,
+  ShapeSelect,
   SubscriptionData,
 } from './shapes/types'
 import { SubscriptionsManager } from './shapes'
@@ -233,8 +234,10 @@ export class SatelliteProcess implements Satellite {
     const stmts: Statement[] = []
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
-    for (const shapeDef of shapeDefs) {
-      for (const { tablename } of shapeDef.definition.selects) {
+    shapeDefs
+      .flatMap((def: ShapeDefinition) => def.definition.selects)
+      .map((select: ShapeSelect) => select.tablename)
+      .reduce((stmts: Statement[], tablename: string) => {
         stmts.push(
           ...this._disableTriggers([tablename]),
           {
@@ -242,9 +245,10 @@ export class SatelliteProcess implements Satellite {
           },
           ...this._enableTriggers([tablename])
         )
+        return stmts
         // does not delete shadow rows but we can do that
-      }
-    }
+      }, stmts)
+
     await this.adapter.runInTransaction(...stmts)
   }
 

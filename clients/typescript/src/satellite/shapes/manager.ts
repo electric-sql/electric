@@ -75,10 +75,10 @@ export class InMemorySubscriptionsManager
   }
 
   async unsubscribe(subId: string): Promise<void> {
-    const subscription = this.shapesForActiveSubscription(subId)
-    if (subscription) {
+    const shapes = this.shapesForActiveSubscription(subId)
+    if (shapes) {
       if (this.gcHandler) {
-        await this.gcHandler(subscription)
+        await this.gcHandler(shapes)
       }
 
       delete this.inFlight[subId]
