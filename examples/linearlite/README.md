@@ -58,41 +58,21 @@ cd ../..
 
 ### Apply migrations to Postgres
 
-This example uses [Prisma](https://www.prisma.io/) to manage the Postgres schema. 
-Prisma is a Node.js ORM for managing DB.
-
-There is an initial Postgres migration in `db/prisma/migrations`. 
-To apply them to the local Postgres you will need to have node >=16.20.0 and yarn installed.
-
-run:
+This example uses a SQL file in `db/migration.sql` to manage the Postgres schema. 
+You can apply it with:
 
 ```bash
-cd db
-npx prisma migrate dev
+pnpm migrate
 ```
 
-This will push all the migrations to the database.
+This will create tables in Postgres and electrify them.
 
-### Electrify Postgres
-
-log into Postgres with password `password`
-
-```
-psql -h 127.0.0.1 -U postgres -d electric 
-
-```
-then run 
-```
-CALL electric.electrify('issue');
-```
-This will tell electric to sync the table `issue`
 
 ### Run web app
 
 The app is a React application to install and run it:
 
 ```bash
-cd client
 pnpm build
 pnpm start
 ```

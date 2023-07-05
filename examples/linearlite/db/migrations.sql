@@ -9,3 +9,5 @@ CREATE TABLE "issue" (
 
     CONSTRAINT "issue_pkey" PRIMARY KEY ("id")
 );
+
+CALL electric.electrify('issue');
