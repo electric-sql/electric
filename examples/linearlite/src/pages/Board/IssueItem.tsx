@@ -11,7 +11,7 @@ import {
 import { useDispatch } from 'react-redux';
 // import { AppDispatch } from 'store';
 // import { updateIssuePriority } from 'store/actions/issueActions';
-// import { Issue } from 'types/issue';
+import { Issue } from '../../electric';
 
 interface IssueProps {
   issue: Issue;
@@ -25,9 +25,9 @@ const IssueItem = ({ issue, index }: IssueProps) => {
     </span>
   );
 
-  const dispatch = useDispatch<AppDispatch>();
+  // const dispatch = useDispatch<AppDispatch>();
   const updatePriority = (priority: string) => {
-    dispatch(updateIssuePriority(issue, priority));
+    // dispatch(updateIssuePriority(issue, priority));
   };
 
   return (

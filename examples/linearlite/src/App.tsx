@@ -38,27 +38,66 @@ const App = () => {
     </Switch>
   );
 
-    return (
-        <ElectricProvider db={electric}>
-            <BrowserRouter>
-                <>
-                    {router}
-                    <ToastContainer
-                        position="bottom-right"
-                        autoClose={5000}
-                        hideProgressBar
-                        newestOnTop
-                        closeOnClick
-                        rtl={false}
-                        transition={slideUp}
-                        pauseOnFocusLoss
-                        draggable
-                        pauseOnHover
-                    />
-                </>
-            </BrowserRouter>
-        </ElectricProvider>
-    );
+  // return (
+  //   <ElectricProvider db={electric}>
+  //     {router}
+  //     <ToastContainer
+  //       position="bottom-right"
+  //       autoClose={5000}
+  //       hideProgressBar
+  //       newestOnTop
+  //       closeOnClick
+  //       rtl={false}
+  //       transition={slideUp}
+  //       pauseOnFocusLoss
+  //       draggable
+  //       pauseOnHover
+  //     />
+  //   </ElectricProvider>
+  // );
+
+
+  return (
+      <ElectricProvider db={electric}>
+        <BrowserRouter>
+          {router}
+          <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar
+              newestOnTop
+              closeOnClick
+              rtl={false}
+              transition={slideUp}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+          />
+        </BrowserRouter>
+      </ElectricProvider>
+  );
+
+    // return (
+    //     <ElectricProvider db={electric}>
+    //         <BrowserRouter>
+    //             <>
+    //                 {router}
+    //                 <ToastContainer
+    //                     position="bottom-right"
+    //                     autoClose={5000}
+    //                     hideProgressBar
+    //                     newestOnTop
+    //                     closeOnClick
+    //                     rtl={false}
+    //                     transition={slideUp}
+    //                     pauseOnFocusLoss
+    //                     draggable
+    //                     pauseOnHover
+    //                 />
+    //             </>
+    //         </BrowserRouter>
+    //     </ElectricProvider>
+    // );
 }
 
 export default App
