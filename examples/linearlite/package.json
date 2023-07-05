@@ -6,8 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
+    "migrate": "node ./db/init.tsx",
     "build": "npm run prepare-wa-sqlite && rm -rf dist && node builder.js",
     "build-prod": "rm -rf dist && NODE_ENV=production node builder.js",
+    "prebuild": "npx electric-sql generate",
     "start": "SERVE=true node builder.js"
   },
   "engines": {
@@ -49,6 +51,7 @@
     "zod": "^3.20.2"
   },
   "devDependencies": {
+    "@databases/pg": "^5.4.1",
     "@tailwindcss/postcss7-compat": "^2.1.0",
     "@types/jest": "^26.0.15",
     "@types/node": "^16.18.16",

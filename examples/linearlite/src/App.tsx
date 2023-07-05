@@ -8,7 +8,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Home from './pages/Home';
 
 import { ElectricProvider, initElectric } from './electric'
-import { Electric} from './generated/models'
+import { Electric} from './generated/client'
 
 const slideUp = cssTransition({
   enter: 'animate__animated animate__slideInUp',

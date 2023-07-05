@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { TableSchema, DbSchema, Relation, ElectricClient, HKT } from 'electric-sql/client/model';
+import migrations from './migrations';
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -27,7 +28,7 @@ export const TransactionIsolationLevelSchema = z.enum(['ReadUncommitted','ReadCo
 /////////////////////////////////////////
 
 export const issueSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string(),
   name: z.string(),
   priority: z.string(),
   title: z.string(),
@@ -80,7 +81,7 @@ export const issueOrderByWithRelationInputSchema: z.ZodType<Prisma.issueOrderByW
 }).strict();
 
 export const issueWhereUniqueInputSchema: z.ZodType<Prisma.issueWhereUniqueInput> = z.object({
-  id: z.string().uuid().optional()
+  id: z.string().optional()
 }).strict();
 
 export const issueOrderByWithAggregationInputSchema: z.ZodType<Prisma.issueOrderByWithAggregationInput> = z.object({
@@ -108,7 +109,7 @@ export const issueScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.issueSc
 }).strict();
 
 export const issueCreateInputSchema: z.ZodType<Prisma.issueCreateInput> = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string(),
   name: z.string(),
   priority: z.string(),
   title: z.string(),
@@ -117,7 +118,7 @@ export const issueCreateInputSchema: z.ZodType<Prisma.issueCreateInput> = z.obje
 }).strict();
 
 export const issueUncheckedCreateInputSchema: z.ZodType<Prisma.issueUncheckedCreateInput> = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string(),
   name: z.string(),
   priority: z.string(),
   title: z.string(),
@@ -126,7 +127,7 @@ export const issueUncheckedCreateInputSchema: z.ZodType<Prisma.issueUncheckedCre
 }).strict();
 
 export const issueUpdateInputSchema: z.ZodType<Prisma.issueUpdateInput> = z.object({
-  id: z.union([ z.string().uuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   priority: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   title: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -135,7 +136,7 @@ export const issueUpdateInputSchema: z.ZodType<Prisma.issueUpdateInput> = z.obje
 }).strict();
 
 export const issueUncheckedUpdateInputSchema: z.ZodType<Prisma.issueUncheckedUpdateInput> = z.object({
-  id: z.union([ z.string().uuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   priority: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   title: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -144,7 +145,7 @@ export const issueUncheckedUpdateInputSchema: z.ZodType<Prisma.issueUncheckedUpd
 }).strict();
 
 export const issueCreateManyInputSchema: z.ZodType<Prisma.issueCreateManyInput> = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string(),
   name: z.string(),
   priority: z.string(),
   title: z.string(),
@@ -153,7 +154,7 @@ export const issueCreateManyInputSchema: z.ZodType<Prisma.issueCreateManyInput> 
 }).strict();
 
 export const issueUpdateManyMutationInputSchema: z.ZodType<Prisma.issueUpdateManyMutationInput> = z.object({
-  id: z.union([ z.string().uuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   priority: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   title: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -162,7 +163,7 @@ export const issueUpdateManyMutationInputSchema: z.ZodType<Prisma.issueUpdateMan
 }).strict();
 
 export const issueUncheckedUpdateManyInputSchema: z.ZodType<Prisma.issueUncheckedUpdateManyInput> = z.object({
-  id: z.union([ z.string().uuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   priority: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   title: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -172,8 +173,8 @@ export const issueUncheckedUpdateManyInputSchema: z.ZodType<Prisma.issueUnchecke
 
 export const StringFilterSchema: z.ZodType<Prisma.StringFilter> = z.object({
   equals: z.string().optional(),
-  in: z.union([ z.string().array(),z.string() ]).optional(),
-  notIn: z.union([ z.string().array(),z.string() ]).optional(),
+  in: z.string().array().optional(),
+  notIn: z.string().array().optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -214,8 +215,8 @@ export const issueMinOrderByAggregateInputSchema: z.ZodType<Prisma.issueMinOrder
 
 export const StringWithAggregatesFilterSchema: z.ZodType<Prisma.StringWithAggregatesFilter> = z.object({
   equals: z.string().optional(),
-  in: z.union([ z.string().array(),z.string() ]).optional(),
-  notIn: z.union([ z.string().array(),z.string() ]).optional(),
+  in: z.string().array().optional(),
+  notIn: z.string().array().optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -236,8 +237,8 @@ export const StringFieldUpdateOperationsInputSchema: z.ZodType<Prisma.StringFiel
 
 export const NestedStringFilterSchema: z.ZodType<Prisma.NestedStringFilter> = z.object({
   equals: z.string().optional(),
-  in: z.union([ z.string().array(),z.string() ]).optional(),
-  notIn: z.union([ z.string().array(),z.string() ]).optional(),
+  in: z.string().array().optional(),
+  notIn: z.string().array().optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -250,8 +251,8 @@ export const NestedStringFilterSchema: z.ZodType<Prisma.NestedStringFilter> = z.
 
 export const NestedStringWithAggregatesFilterSchema: z.ZodType<Prisma.NestedStringWithAggregatesFilter> = z.object({
   equals: z.string().optional(),
-  in: z.union([ z.string().array(),z.string() ]).optional(),
-  notIn: z.union([ z.string().array(),z.string() ]).optional(),
+  in: z.string().array().optional(),
+  notIn: z.string().array().optional(),
   lt: z.string().optional(),
   lte: z.string().optional(),
   gt: z.string().optional(),
@@ -267,8 +268,8 @@ export const NestedStringWithAggregatesFilterSchema: z.ZodType<Prisma.NestedStri
 
 export const NestedIntFilterSchema: z.ZodType<Prisma.NestedIntFilter> = z.object({
   equals: z.number().optional(),
-  in: z.union([ z.number().array(),z.number() ]).optional(),
-  notIn: z.union([ z.number().array(),z.number() ]).optional(),
+  in: z.number().array().optional(),
+  notIn: z.number().array().optional(),
   lt: z.number().optional(),
   lte: z.number().optional(),
   gt: z.number().optional(),
@@ -410,5 +411,5 @@ export const tableSchemas = {
   >,
 }
 
-export const dbSchema = new DbSchema(tableSchemas)
+export const dbSchema = new DbSchema(tableSchemas, migrations)
 export type Electric = ElectricClient<typeof dbSchema>
