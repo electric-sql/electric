@@ -22,12 +22,15 @@ defmodule Electric.Plug.Migrations do
     conn = fetch_query_params(conn)
 
     with {:ok, dialect} <- get_dialect(conn),
-         {:ok, migrations} <- get_migrations(conn),
+         {:ok, migrations} when migrations != [] <- get_migrations(conn),
          {:ok, body} <- migrations_zipfile(migrations, dialect) do
       conn
       |> put_resp_content_type("application/zip", nil)
       |> send_resp(200, body)
     else
+      {:ok, []} ->
+        send_resp(conn, 204, "")
+
       {:error, reason} ->
         json(conn, 403, %{error: to_string(reason)})
     end

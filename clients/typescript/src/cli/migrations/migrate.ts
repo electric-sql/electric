@@ -72,13 +72,14 @@ async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
       const migrationsFolder = path.resolve(migrationsPath)
 
       // Fetch new migrations from Electric endpoint and write them into `tmpFolder`
-      await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
-
-      // Check if we got new migrations
-      const newMigrations = await getMigrationNames(migrationsFolder)
-      const gotNewMigrations = newMigrations.length > 0
+      const gotNewMigrations = await fetchMigrations(
+        migrationEndpoint,
+        migrationsFolder,
+        tmpFolder
+      )
 
       if (gotNewMigrations) {
+        const newMigrations = await getMigrationNames(migrationsFolder)
         console.info('Discovered new migrations: ' + newMigrations.join(', '))
         await _generate(opts)
       }
@@ -87,18 +88,18 @@ async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
     } finally {
       // Delete our temporary directory
       await fs.rm(tmpFolder, { recursive: true })
+      // We use `setTimeout` instead of `setInterval`
+      // because `setInterval` does not wait for the
+      // async function to finish. Since fetching and
+      // building the migrations may take a few seconds
+      // we want to avoid parallel invocations of `pollMigrations`
+      // which could happen if the time `pollMigrations`
+      // takes is longer than the timeout configured in `setInterval`.
       setTimeout(pollMigrations, pollingInterval)
     }
   }
 
-  // We use `setTimeout` instead of `setInterval`
-  // because `setInterval` does not wait for the
-  // async function to finish. Since fetching and
-  // building the migrations may take a few seconds
-  // we want to avoid parallel invocations of `pollMigrations`
-  // which could happen if the time `pollMigrations`
-  // takes is longer than the timeout configured in `setInterval`.
-  setTimeout(pollMigrations, pollingInterval)
+  pollMigrations()
 }
 
 /**
@@ -406,21 +407,30 @@ async function fetchMigrations(
   endpoint: string,
   writeTo: string,
   tmpFolder: string
-): Promise<void> {
+): Promise<boolean> {
   const options = new URL(endpoint)
   const zipFile = path.join(tmpFolder, 'migrations.zip')
-  await new Promise((resolve, reject) => {
-    const migrationsZipFile = createWriteStream(zipFile)
+  const gotNewMigrations = await new Promise<boolean>((resolve, reject) => {
     const req = http.get(options, (response) => {
-      response.pipe(migrationsZipFile)
+      if (response.statusCode === 204) {
+        // No new migrations
+        resolve(false)
+      } else {
+        const migrationsZipFile = createWriteStream(zipFile)
+        response.pipe(migrationsZipFile)
+        migrationsZipFile.on('finish', () => resolve(true))
+      }
     })
 
-    migrationsZipFile.on('finish', resolve)
     req.on('error', reject)
   })
 
   // Unzip the migrations
-  await decompress(zipFile, writeTo)
+  if (gotNewMigrations) {
+    await decompress(zipFile, writeTo)
+  }
+
+  return gotNewMigrations
 }
 
 function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
