@@ -71,6 +71,7 @@ import {
   InitialDataChange,
   ShapeDefinition,
   ShapeRequest,
+  ShapeSelect,
   SubscriptionData,
 } from './shapes/types'
 import { SubscriptionsManager } from './shapes'
@@ -227,18 +228,28 @@ export class SatelliteProcess implements Satellite {
     this._authState = authState
   }
 
-  async _garbageCollectShapeHandler(shapeDef: ShapeDefinition): Promise<void> {
-    // TODO: accum all statements and run single txn to prevent issues with FK checks
-    for (const { tablename } of shapeDef.definition.selects) {
-      // does not delete shadow rows but we can do that
-      await this.adapter.runInTransaction(
-        ...this._disableTriggers([tablename]),
-        {
-          sql: `DELETE FROM ${tablename}`,
-        },
-        ...this._enableTriggers([tablename])
-      )
-    }
+  async _garbageCollectShapeHandler(
+    shapeDefs: ShapeDefinition[]
+  ): Promise<void> {
+    const stmts: Statement[] = []
+    // reverts to off on commit/abort
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    shapeDefs
+      .flatMap((def: ShapeDefinition) => def.definition.selects)
+      .map((select: ShapeSelect) => select.tablename)
+      .reduce((stmts: Statement[], tablename: string) => {
+        stmts.push(
+          ...this._disableTriggers([tablename]),
+          {
+            sql: `DELETE FROM ${tablename}`,
+          },
+          ...this._enableTriggers([tablename])
+        )
+        return stmts
+        // does not delete shadow rows but we can do that
+      }, stmts)
+
+    await this.adapter.runInTransaction(...stmts)
   }
 
   setClientListeners(): void {
@@ -308,6 +319,8 @@ export class SatelliteProcess implements Satellite {
   // subscriptions for entire tables.
   async _applySubscriptionData(changes: InitialDataChange[]) {
     const stmts: Statement[] = []
+    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+
     for (const op of changes) {
       const { relation, record, tags } = op
 
@@ -352,7 +365,16 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    await this.adapter.runInTransaction(...stmts)
+    try {
+      await this.adapter.runInTransaction(...stmts)
+    } catch (e) {
+      this._handleSubscriptionError(
+        new SatelliteError(
+          SatelliteErrorCode.INTERNAL,
+          `Error applying subscription data: ${JSON.stringify(e)}`
+        )
+      )
+    }
   }
 
   async _handleSubscriptionError(
@@ -360,13 +382,15 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
-    this.subscriptions.unsubscribeAll()
+    const ids = await this.subscriptions.unsubscribeAll()
 
     this._lsn = undefined
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
+
+    await this.client.unsubscribe(ids)
   }
 
   async _connectivityStateChange(
@@ -603,6 +627,10 @@ export class SatelliteProcess implements Satellite {
   // Apply a set of incoming transactions against pending local operations,
   // applying conflict resolution rules. Takes all changes per each key before
   // merging, for local and remote operations.
+
+  // TODO: in case the subscriptions between the client and server become
+  // out of sync, the server might send operations that do not belong to
+  // any existing subscription. We need a way to detect and prevent that.
   async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
     const merged = this._mergeEntries(

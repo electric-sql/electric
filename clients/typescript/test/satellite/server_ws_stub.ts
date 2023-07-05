@@ -16,6 +16,7 @@ import {
   SatSubsDataEnd,
   SatSubsError,
   SatSubsResp,
+  SatUnsubsResp,
 } from '../../src/_generated/protocol/satellite'
 
 const PORT = 30002
@@ -185,6 +186,15 @@ export class SatelliteWSServerStub {
                 Buffer.concat([
                   getSizeBuf(msg),
                   SatShapeDataEnd.encode(msg as SatShapeDataEnd).finish(),
+                ])
+              )
+            }
+
+            if (msgType == getTypeFromString(SatUnsubsResp.$type)) {
+              socket.send(
+                Buffer.concat([
+                  getSizeBuf(msg),
+                  SatUnsubsResp.encode(msg as SatUnsubsResp).finish(),
                 ])
               )
             }

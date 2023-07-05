@@ -25,6 +25,8 @@ import {
   SatSubsDataEnd,
   SatShapeDataBegin,
   SatShapeDataEnd,
+  SatUnsubsReq,
+  SatUnsubsResp,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -78,11 +80,14 @@ import {
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  UnsubscribeResponse,
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
 
 type IncomingHandler = {
-  handle: (msg: any) => void | AuthResponse | SubscribeResponse
+  handle: (
+    msg: any
+  ) => void | AuthResponse | SubscribeResponse | UnsubscribeResponse
   isRpc: boolean
 }
 
@@ -168,6 +173,10 @@ export class SatelliteClient extends EventEmitter implements Client {
         SatShapeDataEnd: {
           handle: (msg: SatShapeDataEnd) => this.handleShapeDataEnd(msg),
           isRpc: false,
+        },
+        SatUnsubsResp: {
+          handle: (msg: SatUnsubsResp) => this.handleUnsubscribeResponse(msg),
+          isRpc: true,
         },
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
@@ -457,6 +466,23 @@ export class SatelliteClient extends EventEmitter implements Client {
     return this.rpc<SubscribeResponse>(request)
   }
 
+  unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
+      return Promise.reject(
+        new SatelliteError(
+          SatelliteErrorCode.REPLICATION_NOT_STARTED,
+          `replication not active`
+        )
+      )
+    }
+
+    const request = SatUnsubsReq.fromPartial({
+      subscriptionIds: subIds,
+    })
+
+    return this.rpc(request)
+  }
+
   private sendMissingRelations(
     transaction: DataTransaction,
     replication: Replication
@@ -742,11 +768,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscriptionError(msg: SatSubsError): void {
-    // TODO: map SatSubsError to SatelliteError
-    this.subscriptionsDataCache.subscriptionError(
-      SatelliteErrorCode.SUBSCRIPTION_ERROR,
-      msg.message
-    )
+    this.subscriptionsDataCache.subscriptionError(msg)
   }
 
   private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {
@@ -763,6 +785,12 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private handleShapeDataEnd(_msg: SatShapeDataEnd): void {
     this.subscriptionsDataCache.shapeDataEnd()
+  }
+
+  // For now, unsubscribe responses doesn't send any information back
+  // It might eventually confirm that the server processed it or was noop.
+  private handleUnsubscribeResponse(_msg: SatUnsubsResp): UnsubscribeResponse {
+    return {}
   }
 
   // TODO: properly handle socket errors; update connectivity state

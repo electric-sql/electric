@@ -52,6 +52,12 @@ export enum SatelliteErrorCode {
   INVALID_POSITION,
   SUBSCRIPTION_NOT_FOUND,
   SUBSCRIPTION_ERROR,
+
+  // subscription errors
+  SHAPE_REQUEST_ERROR,
+
+  // shape request errors
+  TABLE_NOT_FOUND,
 }
 
 export type AuthResponse = {

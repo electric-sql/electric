@@ -30,13 +30,15 @@ export interface SubscriptionsManager {
    * Deletes the subscription from the manager.
    * @param subId the identifier of the subscription
    */
-  unsubscribe(subId: string): void
+  unsubscribe(subId: string): Promise<void>
 
   /**
    * Deletes all subscriptions from the manager. Useful to
-   * reset the state of the manager
+   * reset the state of the manager.
+   * Returns the subscription identifiers of all subscriptions
+   * that were deleted.
    */
-  unsubscribeAll(): void
+  unsubscribeAll(): Promise<string[]>
 
   /**
    * Converts the state of the manager to a string format that

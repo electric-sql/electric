@@ -2,10 +2,16 @@ import EventEmitter from 'events'
 import {
   SatShapeDataBegin,
   SatSubsDataBegin,
+  SatSubsError,
   SatSubsResp,
   SatTransOp,
 } from '../../_generated/protocol/satellite'
-import { Relation, SatelliteError, SatelliteErrorCode } from '../../util'
+import {
+  Relation,
+  SatelliteError,
+  SatelliteErrorCode,
+  subscriptionErrorToSatelliteError,
+} from '../../util'
 import { deserializeRow } from '../client'
 import {
   InitialDataChange,
@@ -38,7 +44,7 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   subscriptionRequest(shapeRequestIds: string[]) {
     if (this.remainingShapes.size != 0) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription request but a subscription is already being delivered`
       )
@@ -48,7 +54,7 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   subscriptionResponse({ subscriptionId }: SatSubsResp) {
     if (this.remainingShapes.size == 0) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received subscribe response but no subscription has been requested`
       )
@@ -58,21 +64,21 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
     if (!this.requestedSubscription) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubsDataBegin but no subscription is being delivered`
       )
     }
 
     if (this.requestedSubscription != subscriptionId) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `subscription identifier in SatSubsDataBegin does not match the expected`
       )
     }
 
     if (this.inDelivery) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received SatSubsDataStart for subscription ${subscriptionId} but a subscription is already being delivered`
       )
@@ -89,14 +95,14 @@ export class SubscriptionsDataCache extends EventEmitter {
     relations: Map<number, Relation>
   ): SubscriptionDataInternal {
     if (!this.inDelivery) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubDataEnd but no subscription is being delivered`
       )
     }
 
     if (this.remainingShapes.size > 0) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatSubDataEnd but not all shapes have been delivered`
       )
@@ -118,28 +124,28 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   shapeDataBegin(shape: SatShapeDataBegin) {
     if (!this.inDelivery) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin but no subscription is being delivered`
       )
     }
 
     if (this.remainingShapes.size == 0) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin but all shapes have been delivered for this subscription`
       )
     }
 
     if (this.currentShapeRequestId) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but a shape is already being delivered`
       )
     }
 
     if (this.inDelivery.shapeReqToUuid[shape.requestId]) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but shape has already been delivered`
       )
@@ -151,14 +157,14 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   shapeDataEnd() {
     if (!this.inDelivery) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataEnd but no subscription is being delivered`
       )
     }
 
     if (!this.currentShapeRequestId) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataEnd but no shape is being delivered`
       )
@@ -174,14 +180,14 @@ export class SubscriptionsDataCache extends EventEmitter {
       !this.inDelivery ||
       !this.currentShapeRequestId
     ) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatOpLog but no shape is being delivered`
       )
     }
     for (const op of ops) {
       if (op.begin || op.commit || op.update || op.delete) {
-        this.subscriptionError(
+        this.internalError(
           SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
           `Received begin, commit, update or delete message, but these messages are not valid in subscriptions`
         )
@@ -191,9 +197,17 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
   }
 
-  subscriptionError(code: SatelliteErrorCode, msg: string): never {
+  internalError(code: SatelliteErrorCode, msg: string): never {
     this.reset()
     const error = new SatelliteError(code, msg)
+    this.emit(SUBSCRIPTION_ERROR, error)
+
+    throw error
+  }
+
+  subscriptionError(msg: SatSubsError): never {
+    this.reset()
+    const error = subscriptionErrorToSatelliteError(msg)
     this.emit(SUBSCRIPTION_ERROR, error)
 
     throw error
@@ -211,7 +225,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     relations: Map<number, Relation>
   ): InitialDataChange {
     if (!op.insert) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
         'invalid shape data operation'
       )
@@ -221,7 +235,7 @@ export class SubscriptionsDataCache extends EventEmitter {
 
     const relation = relations.get(relationId)
     if (!relation) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.PROTOCOL_VIOLATION,
         `missing relation ${relationId} for incoming operation`
       )
@@ -230,7 +244,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     const record = deserializeRow(rowData, relation)
 
     if (!record) {
-      this.subscriptionError(
+      this.internalError(
         SatelliteErrorCode.PROTOCOL_VIOLATION,
         'INSERT operations has no data'
       )

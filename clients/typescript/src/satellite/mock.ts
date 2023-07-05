@@ -15,6 +15,7 @@ import {
   Relation,
   SatelliteErrorCode,
   RelationsCache,
+  Record as DataRecord,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 import { randomValue } from '../util/random'
@@ -24,7 +25,7 @@ import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS } from '../util'
+import { DEFAULT_LOG_POS, subscriptionErrorToSatelliteError } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
 import {
@@ -34,10 +35,16 @@ import {
   SUBSCRIPTION_ERROR,
   ShapeRequest,
   SubscribeResponse,
-  SubscriptionData,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  UnsubscribeResponse,
 } from './shapes/types'
+import {
+  SatSubsError,
+  SatSubsError_Code,
+  SatSubsError_ShapeReqError,
+  SatSubsError_ShapeReqError_Code,
+} from '../_generated/protocol/satellite'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27
@@ -124,56 +131,65 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   relations: RelationsCache = {}
 
+  relationData: Record<string, DataRecord[]> = {}
+
   setRelations(relations: RelationsCache): void {
     this.relations = relations
+  }
+
+  setRelationData(tablename: string, record: DataRecord): void {
+    if (!this.relationData[tablename]) {
+      this.relationData[tablename] = []
+    }
+    const data = this.relationData[tablename]
+
+    data.push(record)
   }
 
   subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
     const subscriptionId = randomValue()
 
-    const tablename = shapes[0]?.definition.selects[0]?.tablename
-    if (tablename == 'parent' || tablename == 'child') {
-      const shapeReqToUuid = {
-        [shapes[0].requestId]: uuid(),
-      }
+    const data: InitialDataChange[] = []
+    const shapeReqToUuid: Record<string, string> = {}
 
-      const parentRecord = {
-        id: 1,
-        value: 'incoming',
-        other: 1,
-      }
+    for (const shape of shapes) {
+      for (const { tablename } of shape.definition.selects) {
+        if (tablename === 'another') {
+          this.sendErrorAfterTimeout(subscriptionId, 1)
+          return Promise.resolve({
+            subscriptionId,
+          })
+        } else {
+          shapeReqToUuid[shape.requestId] = uuid()
+          const records: DataRecord[] = this.relationData[tablename]
 
-      const childRecord = {
-        id: 1,
-        parent: 1,
+          for (const record of records) {
+            const dataChange: InitialDataChange = {
+              relation: this.relations[tablename],
+              record,
+              tags: [generateTag('remote', new Date())],
+            }
+            data.push(dataChange)
+          }
+        }
       }
+    }
 
-      const dataChange: InitialDataChange = {
-        relation: this.relations[tablename],
-        record: tablename == 'parent' ? parentRecord : childRecord,
-        tags: [generateTag('remote', new Date())],
-      }
-
-      const subsciptionData: SubscriptionData = {
+    setTimeout(() => {
+      this.emit(SUBSCRIPTION_DELIVERED, {
         subscriptionId,
-        data: [dataChange],
+        data,
         shapeReqToUuid,
-      }
-
-      setTimeout(() => {
-        this.emit(SUBSCRIPTION_DELIVERED, subsciptionData)
-      }, 1)
-    }
-
-    if (tablename == 'another') {
-      setTimeout(() => {
-        this.emit(SUBSCRIPTION_ERROR)
-      }, 1)
-    }
+      })
+    }, 1)
 
     return Promise.resolve({
       subscriptionId,
     })
+  }
+
+  unsubscribe(_subIds: string[]): Promise<UnsubscribeResponse> {
+    return Promise.resolve({})
   }
 
   subscribeToSubscriptionEvents(
@@ -285,5 +301,24 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   unsubscribeToOutboundEvent(_event: 'started', callback: () => void): void {
     this.removeListener('outbound_started', callback)
+  }
+
+  sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {
+    setTimeout(() => {
+      const satSubsError: SatSubsError = SatSubsError.fromPartial({
+        code: SatSubsError_Code.SHAPE_REQUEST_ERROR,
+        message: 'there were shape errors',
+        subscriptionId,
+        shapeRequestError: [
+          SatSubsError_ShapeReqError.fromPartial({
+            code: SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND,
+            message: 'table another does not exist',
+          }),
+        ],
+      })
+
+      const satError = subscriptionErrorToSatelliteError(satSubsError)
+      this.emit(SUBSCRIPTION_ERROR, satError)
+    }, timeout)
   }
 }

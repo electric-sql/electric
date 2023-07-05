@@ -45,7 +45,10 @@ import { Satellite } from '../../src/satellite'
 import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
 import { EventNotifier } from '../../src/notifiers'
-import { ClientShapeDefinition } from '../../src/satellite/shapes/types'
+import {
+  ClientShapeDefinition,
+  SubscriptionData,
+} from '../../src/satellite/shapes/types'
 
 interface TestNotifier extends EventNotifier {
   notifications: any[]
@@ -78,6 +81,17 @@ type ContextType = {
   tableInfo: TableInfo
   timestamp: number
   authState: AuthState
+}
+
+const parentRecord = {
+  id: 1,
+  value: 'incoming',
+  other: 1,
+}
+
+const childRecord = {
+  id: 1,
+  parent: 1,
 }
 
 test.beforeEach(makeContext)
@@ -1245,15 +1259,16 @@ test('apply shape data and persist subscription', async (t) => {
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
 
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
-
   const namespace = 'main'
   const tablename = 'parent'
   const qualified = new QualifiedTablename(namespace, tablename).toString()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
     selects: [{ tablename }],
@@ -1293,19 +1308,64 @@ test('apply shape data and persist subscription', async (t) => {
   await p
 })
 
+test('a shape request failure because of FK constraint', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  const tablename = 'child'
+  const namespace = 'main'
+  const qualified = new QualifiedTablename(namespace, tablename).toString()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, childRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef1])
+
+  return new Promise<void>((res, rej) => {
+    client.subscribeToSubscriptionEvents(
+      () => {
+        setTimeout(async () => {
+          try {
+            const row = await adapter.query({
+              sql: `SELECT id FROM ${qualified}`,
+            })
+            t.is(row.length, 0)
+            res()
+          } catch (e) {
+            rej(e)
+          }
+        }, 10)
+      },
+      () => {}
+    )
+  })
+})
+
 test('a successful second shape request', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
 
+  const tablename = 'child'
+  const qualified = new QualifiedTablename('main', tablename).toString()
+
   // relations must be present at subscription delivery
   client.setRelations(relations)
+  client.setRelationData('parent', parentRecord)
+  client.setRelationData(tablename, childRecord)
 
   const conn = await satellite.start(authState)
   await conn.connectionPromise
-
-  const tablename = 'child'
-  const qualified = new QualifiedTablename('main', tablename).toString()
 
   const shapeDef1: ClientShapeDefinition = {
     selects: [{ tablename: 'parent' }],
@@ -1350,19 +1410,71 @@ test('a successful second shape request', async (t) => {
   })
 })
 
+test('a single subscribe with multiple tables with FKs', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  const qualifiedChild = new QualifiedTablename('main', 'child').toString()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData('parent', parentRecord)
+  client.setRelationData('child', childRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'child' }],
+  }
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef1, shapeDef2])
+
+  return new Promise<void>((res, rej) => {
+    client.subscribeToSubscriptionEvents(
+      (data: SubscriptionData) => {
+        // child is applied first
+        t.is(data.data[0].relation.table, 'child')
+        t.is(data.data[1].relation.table, 'parent')
+
+        setTimeout(async () => {
+          try {
+            const row = await adapter.query({
+              sql: `SELECT id FROM ${qualifiedChild}`,
+            })
+            t.is(row.length, 1)
+
+            res()
+          } catch (e) {
+            rej(e)
+          }
+        }, 10)
+      },
+      () => undefined
+    )
+  })
+})
+
 test('a second shape request error runs garbage collection', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
 
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename('main', tablename).toString()
+
   // relations must be present at subscription delivery
   client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+  client.setRelationData('another', {})
 
   const conn = await satellite.start(authState)
   await conn.connectionPromise
-
-  const tablename = 'parent'
-  const qualified = new QualifiedTablename('main', tablename).toString()
 
   const shapeDef1: ClientShapeDefinition = {
     selects: [{ tablename: 'parent' }],
@@ -1375,10 +1487,10 @@ test('a second shape request error runs garbage collection', async (t) => {
   await satellite.subscribe([shapeDef1])
   await satellite.subscribe([shapeDef2])
 
-  const p = new Promise<void>((res, rej) => {
+  return new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       () => undefined,
-      () => {
+      (expected) => {
         setTimeout(async () => {
           try {
             const row = await adapter.query({
@@ -1394,6 +1506,7 @@ test('a second shape request error runs garbage collection', async (t) => {
             const subsMeta = await satellite._getMeta('subscriptions')
             const subsObj = JSON.parse(subsMeta)
             t.deepEqual(subsObj, {})
+            t.true(expected.message.search('table another does not exist') >= 0)
             res()
           } catch (e) {
             rej(e)
@@ -1402,7 +1515,6 @@ test('a second shape request error runs garbage collection', async (t) => {
       }
     )
   })
-  await p
 })
 
 // TODO: implement reconnect protocol
@@ -1412,3 +1524,5 @@ test('a second shape request error runs garbage collection', async (t) => {
 // test('not possible to subscribe while oplog is not pushed', async (t) => {})
 
 // test('process restart loads previous subscriptions', async (t) => {})
+
+// test('oplog messages allowed between SatSubsRep and SatSubsDataBegin', async (t) => {})

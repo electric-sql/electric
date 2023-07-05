@@ -20,6 +20,7 @@ import {
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  UnsubscribeResponse,
 } from './shapes/types'
 
 export { SatelliteProcess } from './process'
@@ -86,6 +87,7 @@ export interface Client {
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
 
   subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse>
+  unsubscribe(subIds: string[]): Promise<UnsubscribeResponse>
 
   // TODO: there is currently no way of unsubscribing from the server
   // unsubscribe(subscriptionId: string): Promise<void>
