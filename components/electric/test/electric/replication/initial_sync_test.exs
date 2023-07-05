@@ -23,7 +23,7 @@ defmodule Electric.Replication.InitialSyncTest do
       pg_connector_opts: pg_connector_opts
     } do
       # Verify that the cached LSN is not going to catch up since we don't have any electrified tables.
-      assert :error == conn |> fetch_current_lsn() |> wait_for_cached_lsn_to_catch_up()
+      assert :error == conn |> fetch_current_lsn() |> wait_for_cached_lsn_to_catch_up(false)
 
       assert {0, []} == InitialSync.transactions(pg_connector_opts)
     end
@@ -203,17 +203,25 @@ defmodule Electric.Replication.InitialSyncTest do
   # There's a delay between inserting some data into the DB and the moment it becomes available in the cached WAL. In
   # order to make unit tests deterministic, we need to wait until the cached WAL implementation has seen the given
   # LSN and only then verify the stream of changes in the cached WAL.
-  defp wait_for_cached_lsn_to_catch_up(current_lsn, num_attempts \\ 5)
-  defp wait_for_cached_lsn_to_catch_up(_current_lsn, 0), do: :error
+  defp wait_for_cached_lsn_to_catch_up(current_lsn, raise? \\ true, num_attempts \\ 10)
 
-  defp wait_for_cached_lsn_to_catch_up(current_lsn, num_attempts) do
+  defp wait_for_cached_lsn_to_catch_up(_, false, 0),
+    do: :error
+
+  defp wait_for_cached_lsn_to_catch_up(current_lsn, true, 0),
+    do:
+      flunk(
+        "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position(@cached_wal_module))}"
+      )
+
+  defp wait_for_cached_lsn_to_catch_up(current_lsn, raise?, num_attempts) do
     cached_lsn = CachedWal.Api.get_current_position(@cached_wal_module)
 
     if cached_lsn && cached_lsn == current_lsn do
       :ok
     else
       Process.sleep(@sleep_timeout)
-      wait_for_cached_lsn_to_catch_up(current_lsn, num_attempts - 1)
+      wait_for_cached_lsn_to_catch_up(current_lsn, raise?, num_attempts - 1)
     end
   end
 end
