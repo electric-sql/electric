@@ -93,7 +93,7 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
 
 test.serial('Read queries no longer warn after syncing the table', async (t) => {
   t.assert(log.length === 0)
-  await Post.syncShape() // syncs only the Post table
+  await Post.sync() // syncs only the Post table
   await Post.findMany() // now we can query it
   t.assert(log.length === 0)
 })

@@ -27,7 +27,7 @@ const userTable = electric.db.User
 Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
 
 // Sync all shapes such that we don't get warnings on every query
-await userTable.syncShape()
+await userTable.sync()
 
 test.beforeEach((_t) => {
   db.exec('DROP TABLE IF EXISTS Post')

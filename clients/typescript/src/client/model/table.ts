@@ -162,7 +162,7 @@ export class Table<
     return includedTables
   }
 
-  async syncShape<T extends SyncInput<Include>>(i?: T): Promise<void> {
+  async sync<T extends SyncInput<Include>>(i?: T): Promise<void> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     // Recursively go over the included fields
     // and for each field store its table

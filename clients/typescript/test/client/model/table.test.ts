@@ -36,9 +36,9 @@ const profileTable = electric.db.Profile
 Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
 
 // Sync all shapes such that we don't get warnings on every query
-await postTable.syncShape()
-await userTable.syncShape()
-await profileTable.syncShape()
+await postTable.sync()
+await userTable.sync()
+await profileTable.sync()
 
 const post1 = {
   id: 1,

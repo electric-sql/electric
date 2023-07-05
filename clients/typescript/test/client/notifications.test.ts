@@ -17,7 +17,7 @@ const config = {
 }
 
 const { notifier, adapter, db } = await electrify(conn, dbSchema, config)
-await db.Items.syncShape() // sync the Items table
+await db.Items.sync() // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0
