@@ -334,13 +334,14 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  defp binary_frames(pb_msgs) when is_list(pb_msgs) do
-    Enum.map(pb_msgs, fn pb_msg -> binary_frame(pb_msg) end)
-  end
+  defp binary_frames(pb_msgs, acc \\ [])
+  defp binary_frames(pb_msg, _) when not is_list(pb_msg), do: [binary_frame(pb_msg)]
+  defp binary_frames([], acc), do: Enum.reverse(acc)
 
-  defp binary_frames(pb_msg) do
-    [binary_frame(pb_msg)]
-  end
+  defp binary_frames([head | tail], acc) when is_list(head),
+    do: binary_frames(tail, binary_frames(head, acc))
+
+  defp binary_frames([head | tail], acc), do: binary_frames(tail, [binary_frame(head) | acc])
 
   defp binary_frame(pb_msg) do
     Logger.debug("Responding with: #{inspect(pb_msg)}")
