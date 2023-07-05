@@ -7,7 +7,7 @@ export type { issue as Issue } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
-const discriminator = 'prod-11'
+const discriminator = 'prod-13'
 const distPath = '/'
 
 const config = {
