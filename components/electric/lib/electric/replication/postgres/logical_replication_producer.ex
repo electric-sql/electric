@@ -124,6 +124,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Begin{} = msg, %State{} = state) do
     tx = %Transaction{
+      xid: msg.xid,
       changes: [],
       commit_timestamp: msg.commit_timestamp,
       origin: state.origin,

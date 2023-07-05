@@ -20,9 +20,10 @@ defmodule Electric.Replication.Changes do
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
 
-  # Tag is of the form 'origin@timestamp' where:
-  # origin - is a unique source id (UUID for Satellite clients)
-  # timestamp - is an timestamp in UTC in milliseconds
+  @typedoc """
+  Tag has the form of `origin@timestamp`, where origin is a unique source id
+  (UUID for Satellite clients) and timestamp is millisecond-precision UTC unix timestamp
+  """
   @type tag() :: String.t()
 
   @type change() ::
@@ -32,6 +33,7 @@ defmodule Electric.Replication.Changes do
 
   defmodule Transaction do
     @type t() :: %__MODULE__{
+            xid: non_neg_integer() | nil,
             changes: [Changes.change()],
             commit_timestamp: DateTime.t(),
             origin: String.t(),
@@ -42,7 +44,16 @@ defmodule Electric.Replication.Changes do
             ack_fn: (() -> :ok | {:error, term()})
           }
 
-    defstruct [:changes, :commit_timestamp, :origin, :publication, :lsn, :ack_fn, :origin_type]
+    defstruct [
+      :xid,
+      :changes,
+      :commit_timestamp,
+      :origin,
+      :publication,
+      :lsn,
+      :ack_fn,
+      :origin_type
+    ]
   end
 
   defmodule NewRecord do
