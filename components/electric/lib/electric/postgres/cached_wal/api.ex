@@ -31,7 +31,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   Returns nil if the cached WAL hasn't processed any non-empty transactions yet.
   """
   @spec get_current_position(module()) :: wal_pos | nil
-  def get_current_position(module) do
+  def get_current_position(module \\ @default_adapter) do
     module.get_current_position()
   end
 
