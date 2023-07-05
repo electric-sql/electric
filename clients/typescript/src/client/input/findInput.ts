@@ -1,5 +1,3 @@
-//export type SelectInput<T> = { [field in keyof T]?: boolean }
-
 import {
   NarrowInclude,
   NarrowOrderBy,
