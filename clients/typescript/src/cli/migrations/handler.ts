@@ -1,3 +1,4 @@
+import * as z from 'zod'
 import { generate, defaultOptions, GeneratorOptions } from './migrate'
 
 type GeneratorArgs = Partial<GeneratorOptions>
@@ -14,6 +15,11 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     Optional argument to specify where to write the generated client.
  *     If this argument is not provided the generated client is written
  *     to `./src/generated/client`.
+ *  - `--watch [<pollingInterval>]`
+ *     Optional flag to specify that the migrations should be watched.
+ *     When new migrations are found, the client is rebuilt automatically.
+ *     You can provide an optional polling interval in milliseconds,
+ *     which is how often we should poll Electric for new migrations.
  * @param args Arguments passed to the generate command.
  */
 export async function handleGenerate(...args: string[]) {
@@ -26,7 +32,7 @@ export async function handleGenerate(...args: string[]) {
   await generate(opts)
 }
 
-function parseGenerateArgs(args: string[]): GeneratorArgs {
+export function parseGenerateArgs(args: string[]): GeneratorArgs {
   const genArgs: GeneratorArgs = {}
   let flag: keyof GeneratorArgs | undefined = undefined
   for (const arg of args) {
@@ -36,12 +42,28 @@ function parseGenerateArgs(args: string[]): GeneratorArgs {
     else {
       // the value for the flag
       if (flag === 'watch') {
-        console.error(`--watch flag does not accept arguments`)
-        process.exit(9)
+        // the --watch flag is special because
+        // it accepts an optional argument
+        // which is the polling interval in ms
+        genArgs[flag] = true
+        try {
+          genArgs.pollingInterval = z
+            .number()
+            .int()
+            .positive()
+            .parse(parseInt(arg))
+        } catch (_e) {
+          console.error(
+            `The provided argument to --watch is not a valid polling interval. Should be a time in milliseconds (i.e. a positive integer).`
+          )
+          process.exit(9)
+        }
       } else {
-        genArgs[flag] = arg
-        flag = undefined
+        genArgs[
+          flag as keyof Omit<GeneratorArgs, 'watch' | 'pollingInterval'>
+        ] = arg
       }
+      flag = undefined
     }
   }
 

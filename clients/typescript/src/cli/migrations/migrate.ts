@@ -15,6 +15,7 @@ export const defaultOptions = {
   service: process.env.ELECTRIC_URL ?? 'http://localhost:5050',
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
+  pollingInterval: 1000, // in ms
 }
 
 export type GeneratorOptions = typeof defaultOptions
@@ -50,7 +51,7 @@ export async function generate(opts: GeneratorOptions) {
  * when there are new migrations.
  */
 async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
-  const pollingInterval = 1000 // ms
+  const pollingInterval = opts.pollingInterval
   const pollMigrations = async () => {
     // Create a unique temporary folder in which to save
     // intermediate files without risking collisions
