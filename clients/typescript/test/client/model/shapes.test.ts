@@ -3,7 +3,10 @@ import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { dbSchema, Post } from '../generated'
 import { electrify } from '../../../src/drivers/better-sqlite3'
-import { shapeManager, ShapeManagerMock } from '../../../src/client/model/shapes'
+import {
+  shapeManager,
+  ShapeManagerMock,
+} from '../../../src/client/model/shapes'
 
 // Modify `loglevel` to store the logged messages
 // based on "Writing plugins" in https://github.com/pimterry/loglevel
@@ -15,7 +18,7 @@ Log.methodFactory = function (methodName, logLevel, loggerName) {
 
   return function (message) {
     log.push(message)
-    if (message !== "Reading from unsynced table Post") {
+    if (message !== 'Reading from unsynced table Post') {
       rawMethod(message)
     }
   }
@@ -51,10 +54,7 @@ test.beforeEach(init)
 test.serial('Read queries issue warning if table is not synced', async (t) => {
   t.assert(log.length === 0)
   await Post.findMany()
-  t.deepEqual(
-    log,
-    [ "Reading from unsynced table Post" ]
-  )
+  t.deepEqual(log, ['Reading from unsynced table Post'])
 })
 
 test.serial('Upsert query issues warning if table is not synced', async (t) => {
@@ -82,18 +82,18 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
   // because upsert first tries to find the record
   // and then reads the created/updated record
   // and both of those reads will raise the warning
-  t.deepEqual(
-    log,
-    [
-      "Reading from unsynced table Post",
-      "Reading from unsynced table Post"
-    ]
-  )
+  t.deepEqual(log, [
+    'Reading from unsynced table Post',
+    'Reading from unsynced table Post',
+  ])
 })
 
-test.serial('Read queries no longer warn after syncing the table', async (t) => {
-  t.assert(log.length === 0)
-  await Post.sync() // syncs only the Post table
-  await Post.findMany() // now we can query it
-  t.assert(log.length === 0)
-})
+test.serial(
+  'Read queries no longer warn after syncing the table',
+  async (t) => {
+    t.assert(log.length === 0)
+    await Post.sync() // syncs only the Post table
+    await Post.findMany() // now we can query it
+    t.assert(log.length === 0)
+  }
+)

@@ -1,6 +1,9 @@
 import test from 'ava'
 import { Builder } from '../../../src/client/model/builder'
-import { shapeManager, ShapeManagerMock } from '../../../src/client/model/shapes'
+import {
+  shapeManager,
+  ShapeManagerMock,
+} from '../../../src/client/model/shapes'
 import { ZodError } from 'zod'
 
 const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
@@ -11,7 +14,7 @@ const tbl = new Builder('Post', ['id', 'title', 'contents', 'nbr'])
 Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
 
 // Sync all shapes such that we don't get warnings on every query
-shapeManager.sync({ tables: [ 'Post' ] })
+shapeManager.sync({ tables: ['Post'] })
 
 const post1 = {
   id: 'i1',

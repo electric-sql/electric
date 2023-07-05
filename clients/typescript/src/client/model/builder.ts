@@ -131,7 +131,7 @@ export class Builder {
     const identificationFields = this.getFields(whereObject, idRequired)
 
     if (!shapeManager.isSynced(this._tableName))
-      Log.warn("Reading from unsynced table " + this._tableName)
+      Log.warn('Reading from unsynced table ' + this._tableName)
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
