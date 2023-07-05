@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
-    "migrate": "node ./db/init.tsx",
+    "migrate": "node ./db/migrate.tsx",
     "build": "npm run prepare-wa-sqlite && rm -rf dist && node builder.js",
     "build-prod": "rm -rf dist && NODE_ENV=production node builder.js",
     "prebuild": "npx electric-sql generate",
