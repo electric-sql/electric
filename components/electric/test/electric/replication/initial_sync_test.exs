@@ -4,9 +4,9 @@ defmodule Electric.Replication.InitialSyncTest do
   import Electric.Postgres.TestConnection
   import Electric.Utils, only: [uuid4: 0]
 
-  alias Electric.Postgres.{CachedWal, Extension, Lsn, SchemaRegistry}
+  alias Electric.Postgres.{CachedWal, Extension, Lsn}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
-  alias Electric.Replication.{InitialSync, PostgresConnectorMng, PostgresConnector}
+  alias Electric.Replication.InitialSync
 
   require Logger
 
@@ -15,41 +15,8 @@ defmodule Electric.Replication.InitialSyncTest do
   @sleep_timeout 50
 
   describe "transactions" do
-    setup do
-      # SchemaRegistry is a global store, so it needs to be reset when a new test database is created.
-      SchemaRegistry.clear_replicated_tables(Extension.publication_name())
-
-      # Initialize the test DB to the state which Electric can work with.
-      setup_fun = fn conn ->
-        init_sql = File.read!("dev/init.sql")
-        results = :epgsql.squery(conn, init_sql)
-        assert Enum.all?(results, fn result -> is_tuple(result) and elem(result, 0) == :ok end)
-      end
-
-      # Dropping the subscription is necessary before the test DB can be removed.
-      teardown_fun = fn conn ->
-        :epgsql.squery(
-          conn,
-          """
-          ALTER SUBSCRIPTION "#{@origin}" DISABLE;
-          ALTER SUBSCRIPTION "#{@origin}" SET (slot_name=NONE);
-          DROP SUBSCRIPTION "#{@origin}";
-          """
-        )
-      end
-
-      context = setup_test_db(setup_fun, teardown_fun)
-
-      pg_connector_opts =
-        context
-        |> pg_connector_config()
-        |> Keyword.put(:origin, @origin)
-
-      {:ok, _} = PostgresConnector.start_link(pg_connector_opts)
-      assert :ready == wait_for_postgres_initialization()
-
-      Map.put(context, :pg_connector_opts, pg_connector_opts)
-    end
+    setup ctx, do: Map.put(ctx, :origin, @origin)
+    setup :setup_replicated_db
 
     test "returns the lsn=0 and no data for an empty DB", %{
       conn: conn,
@@ -232,50 +199,6 @@ defmodule Electric.Replication.InitialSyncTest do
              ] = [migration1, migration2]
 
       assert Enum.sort(expected_users ++ expected_documents) == Enum.sort(data_changes)
-    end
-  end
-
-  ###
-  # Utility functions
-  ###
-
-  defp pg_connector_config(%{pg_config: pg_config}) do
-    [
-      producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-      connection:
-        Keyword.merge(pg_config,
-          replication: 'database',
-          ssl: false
-        ),
-      replication: [
-        publication: "all_tables",
-        slot: "all_changes",
-        electric_connection: [
-          host: "host.docker.internal",
-          port: 5433,
-          dbname: "test"
-        ]
-      ],
-      downstream: [
-        producer: Electric.Replication.Vaxine.LogProducer,
-        producer_opts: [
-          vaxine_hostname: "localhost",
-          vaxine_port: 8088,
-          vaxine_connection_timeout: 5000
-        ]
-      ]
-    ]
-  end
-
-  # Wait for the Postgres connector to start. It starts the CachedWal.Producer which this test module depends on.
-  defp wait_for_postgres_initialization do
-    status = PostgresConnectorMng.status(@origin)
-
-    if status in [:init, :subscribe] do
-      Process.sleep(@sleep_timeout)
-      wait_for_postgres_initialization()
-    else
-      status
     end
   end
 
