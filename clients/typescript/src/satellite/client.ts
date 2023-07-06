@@ -37,6 +37,7 @@ import {
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
+  subsErrorToSatelliteError,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -65,7 +66,6 @@ import {
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
-  uuid,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
@@ -448,7 +448,10 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
   }
 
-  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
+  subscribe(
+    subscriptionId: string,
+    shapes: ShapeRequest[]
+  ): Promise<SubscribeResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -459,13 +462,11 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     const request = SatSubsReq.fromPartial({
-      subscriptionId: uuid(),
+      subscriptionId,
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 
-    this.subscriptionsDataCache.subscriptionRequest(
-      shapes.map((s) => s.requestId)
-    )
+    this.subscriptionsDataCache.subscriptionRequest(request)
     return this.rpc<SubscribeResponse>(request)
   }
 
@@ -766,12 +767,18 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
-    this.subscriptionsDataCache.subscriptionResponse(msg)
-    return { subscriptionId: msg.subscriptionId }
+    let retError = undefined
+    if (msg.error) {
+      retError = subsErrorToSatelliteError(msg.error)
+      this.subscriptionsDataCache.subscriptionError()
+    } else {
+      this.subscriptionsDataCache.subscriptionResponse(msg)
+    }
+    return { subscriptionId: msg.subscriptionId, error: retError }
   }
 
   private handleSubscriptionError(msg: SatSubsDataError): void {
-    this.subscriptionsDataCache.subscriptionError(msg)
+    this.subscriptionsDataCache.subscriptionDataError(msg)
   }
 
   private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {

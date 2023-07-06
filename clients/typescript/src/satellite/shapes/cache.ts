@@ -3,6 +3,7 @@ import {
   SatShapeDataBegin,
   SatSubsDataBegin,
   SatSubsDataError,
+  SatSubsReq,
   SatSubsResp,
   SatTransOp,
 } from '../../_generated/protocol/satellite'
@@ -10,7 +11,7 @@ import {
   Relation,
   SatelliteError,
   SatelliteErrorCode,
-  subscriptionErrorToSatelliteError,
+  subsDataErrorToSatelliteError,
 } from '../../util'
 import { deserializeRow } from '../client'
 import {
@@ -42,14 +43,16 @@ export class SubscriptionsDataCache extends EventEmitter {
     return this.inDelivery != undefined
   }
 
-  subscriptionRequest(shapeRequestIds: string[]) {
+  subscriptionRequest(subsRequest: SatSubsReq) {
+    const { subscriptionId, shapeRequests } = subsRequest
     if (this.remainingShapes.size != 0) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription request but a subscription is already being delivered`
       )
     }
-    shapeRequestIds.forEach((rid) => this.remainingShapes.add(rid))
+    shapeRequests.forEach((rid) => this.remainingShapes.add(rid.requestId))
+    this.requestedSubscription = subscriptionId
   }
 
   subscriptionResponse({ subscriptionId }: SatSubsResp) {
@@ -59,7 +62,13 @@ export class SubscriptionsDataCache extends EventEmitter {
         `Received subscribe response but no subscription has been requested`
       )
     }
-    this.requestedSubscription = subscriptionId
+
+    if (subscriptionId !== this.requestedSubscription) {
+      this.internalError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `Received subscribe response but the subscription id does not match the expected`
+      )
+    }
   }
 
   subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
@@ -205,11 +214,31 @@ export class SubscriptionsDataCache extends EventEmitter {
     throw error
   }
 
-  subscriptionError(msg: SatSubsDataError): never {
-    this.reset()
-    const error = subscriptionErrorToSatelliteError(msg)
-    this.emit(SUBSCRIPTION_ERROR, error)
+  // It is safe to reset the cache state without throwing.
+  // However, if message is unexpected, we emit the error
+  subscriptionError(): void {
+    if (this.remainingShapes.size == 0 || !this.requestedSubscription) {
+      this.internalError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `received subscription error, but no subscription is being requested`
+      )
+    }
 
+    this.reset()
+  }
+
+  subscriptionDataError(msg: SatSubsDataError): never {
+    this.reset()
+    let error = subsDataErrorToSatelliteError(msg)
+
+    if (!this.inDelivery) {
+      error = new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+        `received subscription data error, but no subscription is being delivered: ${error.message}`
+      )
+    }
+
+    this.emit(SUBSCRIPTION_ERROR, error)
     throw error
   }
 

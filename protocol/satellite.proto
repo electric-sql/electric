@@ -375,58 +375,61 @@ message SatSubsReq {
 message SatSubsResp {
     // identifier of the subscription this response refers to
     string subscription_id = 1;
-}
 
-// Error message returned by the Producer when it encounters
-// an error handling subscription data
-message SatSubsError {
-    
-    // error code enum
-    enum Code {
-        // Required code
-        CODE_UNSPECIFIED = 0;
+    // the error details if the request failed
+    optional SatSubsError error = 2;
+
+    // Error message returned by the Producer when it encounters
+    // an error handling subscription request
+    message SatSubsError {
         
-        // DUPLICATE IDENTIFIER
-        SUBSCRIPTION_ID_ALREADY_EXISTS = 1;
-
-        // Error requesting shape
-        SHAPE_REQUEST_ERROR = 2;
-    }
-    
-    // the subscription identifier associated with this error
-    string subscription_id = 1;
-
-    // error code
-    Code code = 2;
-
-    // A human-readable description of the error
-    string message = 3;
-
-    // Details of the shape request error
-    repeated ShapeReqError shape_request_error = 4;
-
-    // Shape request error
-    message ShapeReqError {
         // error code enum
         enum Code {
             // Required code
             CODE_UNSPECIFIED = 0;
+            
+            // DUPLICATE IDENTIFIER
+            SUBSCRIPTION_ID_ALREADY_EXISTS = 1;
 
-            // Table does not exist in current schema version
-            TABLE_NOT_FOUND = 1;
-
-            // Requested shape does not maintain referential integirty
-            REFERENTIAL_INTEGRITY_VIOLATION = 2;
+            // Error requesting shape
+            SHAPE_REQUEST_ERROR = 2;
         }
+        
+        // the subscription identifier associated with this error
+        string subscription_id = 1;
 
         // error code
-        Code code = 1;
+        Code code = 2;
 
-        // a human-readable description of the error
-        string message = 2;
+        // A human-readable description of the error
+        string message = 3;
 
-        // the shape request identifier that this error refers to
-        string request_id = 3;
+        // Details of the shape request error
+        repeated ShapeReqError shape_request_error = 4;
+
+        // Shape request error
+        message ShapeReqError {
+            // error code enum
+            enum Code {
+                // Required code
+                CODE_UNSPECIFIED = 0;
+
+                // Table does not exist in current schema version
+                TABLE_NOT_FOUND = 1;
+
+                // Requested shape does not maintain referential integirty
+                REFERENTIAL_INTEGRITY_VIOLATION = 2;
+            }
+
+            // error code
+            Code code = 1;
+
+            // a human-readable description of the error
+            string message = 2;
+
+            // the shape request identifier that this error refers to
+            string request_id = 3;
+        }
     }
 }
 

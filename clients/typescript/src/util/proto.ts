@@ -25,15 +25,45 @@ const startReplicationErrorToSatError: Record<
     SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
 }
 
-const subsErroToSatError: Record<Pb.SatSubsDataError_Code, SatelliteErrorCode> =
-  {
-    [Pb.SatSubsDataError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
-    [Pb.SatSubsDataError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
-    [Pb.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR]:
-      SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
-  }
+const subsErrorToSatError: Record<
+  Pb.SatSubsResp_SatSubsError_Code,
+  SatelliteErrorCode
+> = {
+  [Pb.SatSubsResp_SatSubsError_Code.CODE_UNSPECIFIED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsResp_SatSubsError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsResp_SatSubsError_Code.SHAPE_REQUEST_ERROR]:
+    SatelliteErrorCode.SHAPE_REQUEST_ERROR,
+  [Pb.SatSubsResp_SatSubsError_Code.SUBSCRIPTION_ID_ALREADY_EXISTS]:
+    SatelliteErrorCode.SUBSCRIPTION_ID_ALREADY_EXISTS,
+}
 
-const shapeReqErroToSatError: Record<
+const subsErrorShapeReqErrorToSatError: Record<
+  Pb.SatSubsResp_SatSubsError_ShapeReqError_Code,
+  SatelliteErrorCode
+> = {
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.CODE_UNSPECIFIED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.UNRECOGNIZED]:
+    SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND]:
+    SatelliteErrorCode.TABLE_NOT_FOUND,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code
+    .REFERENTIAL_INTEGRITY_VIOLATION]:
+    SatelliteErrorCode.REFERENTIAL_INTEGRITY_VIOLATION,
+}
+
+const subsDataErrorToSatError: Record<
+  Pb.SatSubsDataError_Code,
+  SatelliteErrorCode
+> = {
+  [Pb.SatSubsDataError_Code.CODE_UNSPECIFIED]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsDataError_Code.UNRECOGNIZED]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR]:
+    SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
+}
+
+const subsDataErrorShapeReqToSatError: Record<
   Pb.SatSubsDataError_ShapeReqError_Code,
   SatelliteErrorCode
 > = {
@@ -161,26 +191,54 @@ export function startReplicationErrorToSatelliteError(
   )
 }
 
-export function subscriptionErrorToSatelliteError({
+export function subsErrorToSatelliteError({
+  shapeRequestError,
+  code,
+  message,
+}: Pb.SatSubsResp_SatSubsError): SatelliteError {
+  if (shapeRequestError.length > 0) {
+    const shapeErrorMsgs = shapeRequestError
+      .map(subsShapeReqErrorToSatelliteError)
+      .map((e) => e.message)
+      .join('; ')
+    const composed = `subscription error message: ${message}; shape error messages: ${shapeErrorMsgs}`
+    return new SatelliteError(subsErrorToSatError[code], composed)
+  }
+  return new SatelliteError(subsErrorToSatError[code], message)
+}
+
+export function subsShapeReqErrorToSatelliteError(
+  error: Pb.SatSubsResp_SatSubsError_ShapeReqError
+): SatelliteError {
+  return new SatelliteError(
+    subsErrorShapeReqErrorToSatError[error.code],
+    error.message
+  )
+}
+
+export function subsDataErrorToSatelliteError({
   shapeRequestError,
   code,
   message,
 }: Pb.SatSubsDataError): SatelliteError {
   if (shapeRequestError.length > 0) {
     const shapeErrorMsgs = shapeRequestError
-      .map(shapeReqErrorToSatelliteError)
+      .map(subsDataShapeErrorToSatelliteError)
       .map((e) => e.message)
       .join('; ')
-    const composed = `subscription error message: ${message}; shape error messages: ${shapeErrorMsgs}`
-    return new SatelliteError(subsErroToSatError[code], composed)
+    const composed = `subscription data error message: ${message}; shape error messages: ${shapeErrorMsgs}`
+    return new SatelliteError(subsDataErrorToSatError[code], composed)
   }
-  return new SatelliteError(subsErroToSatError[code], message)
+  return new SatelliteError(subsDataErrorToSatError[code], message)
 }
 
-export function shapeReqErrorToSatelliteError(
+export function subsDataShapeErrorToSatelliteError(
   error: Pb.SatSubsDataError_ShapeReqError
 ): SatelliteError {
-  return new SatelliteError(shapeReqErroToSatError[error.code], error.message)
+  return new SatelliteError(
+    subsDataErrorShapeReqToSatError[error.code],
+    error.message
+  )
 }
 
 export function shapeRequestToSatShapeReq(

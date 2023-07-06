@@ -45,6 +45,10 @@ export class InMemorySubscriptionsManager
     this.inFlight[subId] = shapeRequests
   }
 
+  subscriptionCancelled(subId: string): void {
+    delete this.inFlight[subId]
+  }
+
   subscriptionDelivered(data: SubscriptionData): void {
     const { subscriptionId, shapeReqToUuid } = data
     if (!this.inFlight[subscriptionId]) {

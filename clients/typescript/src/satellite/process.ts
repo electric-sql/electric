@@ -72,6 +72,7 @@ import {
   ShapeDefinition,
   ShapeRequest,
   ShapeSelect,
+  SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
 import { SubscriptionsManager } from './shapes'
@@ -110,6 +111,8 @@ export class SatelliteProcess implements Satellite {
   relations: RelationsCache
 
   subscriptions: SubscriptionsManager
+  subscriptionIdGenerator: (...args: any) => string
+  shapeRequestIdGenerator: (...args: any) => string
 
   constructor(
     dbName: DbName,
@@ -149,6 +152,9 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
+
+    this.subscriptionIdGenerator = () => uuid()
+    this.shapeRequestIdGenerator = this.subscriptionIdGenerator
   }
 
   async start(
@@ -291,12 +297,18 @@ export class SatelliteProcess implements Satellite {
 
   async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void> {
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
-      requestId: uuid(),
+      requestId: this.shapeRequestIdGenerator(),
       definition,
     }))
 
-    const { subscriptionId } = await this.client.subscribe(shapeReqs)
-    this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
+    const { subscriptionId, error }: SubscribeResponse =
+      await this.client.subscribe(this.subscriptionIdGenerator(), shapeReqs)
+    if (error) {
+      this.subscriptions.subscriptionCancelled(subscriptionId)
+      throw error
+    } else {
+      this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
+    }
   }
 
   async unsubscribe(_subscriptionId: string): Promise<void> {

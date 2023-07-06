@@ -55,9 +55,11 @@ export enum SatelliteErrorCode {
 
   // subscription errors
   SHAPE_REQUEST_ERROR,
+  SUBSCRIPTION_ID_ALREADY_EXISTS,
 
   // shape request errors
   TABLE_NOT_FOUND,
+  REFERENTIAL_INTEGRITY_VIOLATION,
 
   // shape data errors
   SHAPE_DELIVERY_ERROR,

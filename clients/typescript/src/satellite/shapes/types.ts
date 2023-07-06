@@ -8,6 +8,7 @@ export type SubscriptionErrorCallback = (error: SatelliteError) => void
 
 export type SubscribeResponse = {
   subscriptionId: string
+  error?: SatelliteError
 }
 
 export type UnsubscribeResponse = Record<string, never>
