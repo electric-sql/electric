@@ -86,6 +86,30 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Flatten a deeply nested list applying a given function to each element in the same pass.
+
+  Implementation is slightly different from `:lists.flatten/1`, in that this implementation
+  uses tail-call recursion at the cost of an extra pass to reverse the array at the end
+
+  ## Examples
+
+      iex> flatten_map([:a, [:b, [:c], [:d]], :e], & &1)
+      [:a, :b, :c, :d, :e]
+
+      iex> flatten_map([1, [2, [3], [4]], 5], & &1 * 2)
+      [2, 4, 6, 8, 10]
+  """
+
+  def flatten_map(list, fun), do: flatten_map(list, fun, []) |> Enum.reverse()
+  defp flatten_map(list, fun, acc)
+  defp flatten_map([], _, acc), do: acc
+
+  defp flatten_map([head | tail], fun, acc) when is_list(head),
+    do: flatten_map(tail, fun, flatten_map(head, fun, acc))
+
+  defp flatten_map([head | tail], fun, acc), do: flatten_map(tail, fun, [fun.(head) | acc])
+
+  @doc """
   Generate a random UUID v4.
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L174
