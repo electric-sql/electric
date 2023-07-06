@@ -155,7 +155,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           handle: (sub: SatSubsResp) => this.handleSubscription(sub),
           isRpc: true,
         },
-        SatSubsError: {
+        SatSubsDataError: {
           handle: (msg: SatSubsDataError) => this.handleSubscriptionError(msg),
           isRpc: false,
         },
