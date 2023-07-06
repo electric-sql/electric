@@ -204,8 +204,7 @@ defmodule Electric.Satellite.WsServer do
       "Received initial data for subscription #{subscription_id} while paused waiting for a different subscription"
     )
 
-    {[],
-     Pathex.force_set!(state, path(:out_rep / :subscription_data_to_send / subscription_id), data)}
+    {[], %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
   def websocket_info({:subscription_data, subscription_id, observed_pos, data}, %State{} = state) do
@@ -219,11 +218,7 @@ defmodule Electric.Satellite.WsServer do
     else
       # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
       {[],
-       Pathex.force_set!(
-         state,
-         path(:out_rep / :subscription_data_to_send / subscription_id),
-         data
-       )}
+       %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
     end
   end
 
@@ -269,7 +264,7 @@ defmodule Electric.Satellite.WsServer do
   def handle_producer_msg(from, [_ | _] = events, %State{} = state)
       when is_out_rep_paused(state) do
     GenStage.ask(from, 1)
-    {[], add_events_to_buffer(state, events)}
+    {[], %{state | out_rep: OutRep.add_events_to_buffer(state.out_rep, events)}}
   end
 
   def handle_producer_msg(_from, _events, %State{out_rep: _out_rep} = state) do
@@ -397,14 +392,6 @@ defmodule Electric.Satellite.WsServer do
     %State{state | ping_tref: tref}
   end
 
-  defp add_events_to_buffer(state, events),
-    do:
-      Pathex.over!(
-        state,
-        path(:out_rep / :outgoing_ops_buffer),
-        &Utils.add_events_to_queue(events, &1)
-      )
-
   defp send_events_and_maybe_pause(events, %State{} = state)
        when no_pending_subscriptions(state) do
     {msgs, state} = Protocol.handle_outgoing_txs(events, state)
@@ -425,9 +412,10 @@ defmodule Electric.Satellite.WsServer do
         {msgs, state} = Protocol.handle_outgoing_txs(events, state)
 
         state =
-          state
-          |> Pathex.set!(path(:out_rep / :outgoing_ops_buffer), :queue.from_list(pending))
-          |> Pathex.set!(path(:out_rep / :status), :paused)
+          state.out_rep
+          |> OutRep.add_events_to_buffer(pending)
+          |> OutRep.set_status(:paused)
+          |> then(&%{state | out_rep: &1})
 
         case Pathex.pop(state, path(:out_rep / :subscription_data_to_send / subscription_id)) do
           {:ok, {data, state}} ->
@@ -443,10 +431,11 @@ defmodule Electric.Satellite.WsServer do
     buffer = state.out_rep.outgoing_ops_buffer
 
     state =
-      state
-      |> Pathex.over!(path(:out_rep), &OutRep.remove_pause_point/1)
-      |> Pathex.set!(path(:out_rep / :outgoing_ops_buffer), :queue.new())
-      |> Pathex.set!(path(:out_rep / :status), :active)
+      state.out_rep
+      |> OutRep.remove_pause_point()
+      |> OutRep.set_event_buffer([])
+      |> OutRep.set_status(:active)
+      |> then(&%{state | out_rep: &1})
 
     {more_msgs, state} = Protocol.handle_subscription_data(id, data, state)
 
@@ -455,6 +444,6 @@ defmodule Electric.Satellite.WsServer do
       |> :queue.to_list()
       |> send_events_and_maybe_pause(state)
 
-    {binary_frames(msgs ++ more_msgs ++ even_more_msgs), state}
+    {binary_frames([msgs, more_msgs, even_more_msgs]), state}
   end
 end

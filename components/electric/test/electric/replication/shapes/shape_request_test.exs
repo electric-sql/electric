@@ -35,7 +35,7 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
   end
 
   describe "query_initial_data/3" do
-    setup [:setup_replicated_db, :create_electrified_tables, :execute_sql]
+    setup [:setup_replicated_db, :setup_electrified_tables, :setup_with_sql_execute]
     setup :load_schema
 
     @tag with_sql: """

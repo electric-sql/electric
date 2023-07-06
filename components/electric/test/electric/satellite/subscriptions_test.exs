@@ -34,8 +34,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
       {:ok, user_id: user_id, client_id: client_id, token: token, port: port}
     end
 
-    setup :create_electrified_tables
-    setup :execute_sql
+    setup :setup_electrified_tables
+    setup :setup_with_sql_execute
 
     test "The client can connect and immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->

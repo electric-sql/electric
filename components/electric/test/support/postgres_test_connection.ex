@@ -142,7 +142,7 @@ defmodule Electric.Postgres.TestConnection do
     end)
   end
 
-  def create_electrified_tables(%{conn: conn}) do
+  def setup_electrified_tables(%{conn: conn}) do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.users (
@@ -200,7 +200,7 @@ defmodule Electric.Postgres.TestConnection do
     []
   end
 
-  def execute_sql(%{conn: conn, with_sql: sql}) do
+  def setup_with_sql_execute(%{conn: conn, with_sql: sql}) do
     case :epgsql.squery(conn, sql) do
       {:ok, _, _} ->
         :ok
@@ -219,7 +219,7 @@ defmodule Electric.Postgres.TestConnection do
     end
   end
 
-  def execute_sql(_), do: :ok
+  def setup_with_sql_execute(_), do: :ok
 
   def load_schema(%{conn: _, origin: origin}) do
     {:ok, _, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)

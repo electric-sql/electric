@@ -18,10 +18,10 @@ defmodule Electric.Replication.Shapes do
   """
   @spec filter_changes_from_tx(Transaction.t(), [term()]) :: Transaction.t()
   def filter_changes_from_tx(%Transaction{changes: changes} = tx, shapes) do
-    %{tx | changes: Enum.filter(changes, &should_change_be_send?(&1, shapes))}
+    %{tx | changes: Enum.filter(changes, &change_belongs_to_any_shape?(&1, shapes))}
   end
 
-  defp should_change_be_send?(change, shapes) do
+  defp change_belongs_to_any_shape?(change, shapes) do
     is_migration_relation(change.relation) or
       Enum.any?(shapes, &ShapeRequest.change_belongs_to_shape?(&1, change))
   end

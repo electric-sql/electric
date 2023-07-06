@@ -117,6 +117,21 @@ defmodule Electric.Satellite.Protocol do
       end
     end
 
+    def set_status(%__MODULE__{} = out, status) when status in [nil, :active, :paused],
+      do: %{out | status: status}
+
+    def store_subscription_data(%__MODULE__{} = out, id, data),
+      do: %{out | subscription_data_to_send: Map.put(out.subscription_data_to_send, id, data)}
+
+    def add_events_to_buffer(%__MODULE__{} = out, events),
+      do: %{out | outgoing_ops_buffer: Utils.add_events_to_queue(events, out.outgoing_ops_buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, buffer) when is_list(buffer),
+      do: %{out | outgoing_ops_buffer: :queue.from_list(buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, {_, _} = buffer),
+      do: %{out | outgoing_ops_buffer: buffer}
+
     def subscription_pending?(_, %__MODULE__{subscription_pause_queue: {nil, _}}), do: false
     def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {{_, id}, _}}), do: true
 
