@@ -52,4 +52,9 @@ export interface SubscriptionsManager {
    * can be used to persist it
    */
   serialize(): string
+
+  /**
+   * loads the subscription manager state from a text representation
+   */
+  setState(serialized: string): void
 }

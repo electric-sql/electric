@@ -148,7 +148,6 @@ export class SatelliteProcess implements Satellite {
 
     this.relations = {}
 
-    // TODO: load from database
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
@@ -224,6 +223,11 @@ export class SatelliteProcess implements Satellite {
       this._lsn = base64.toBytes(lsnBase64)
     } else {
       Log.info(`no lsn retrieved from store`)
+    }
+
+    const subscriptionsState = await this._getMeta('subscriptions')
+    if (subscriptionsState) {
+      this.subscriptions.setState(subscriptionsState)
     }
 
     const connectionPromise = this._connectAndStartReplication(opts)

@@ -101,4 +101,10 @@ export class InMemorySubscriptionsManager
   serialize(): string {
     return JSON.stringify(this.subToShapes)
   }
+
+  // TODO: input validation
+  setState(serialized: string): void {
+    this.inFlight = {}
+    this.subToShapes = JSON.parse(serialized)
+  }
 }
