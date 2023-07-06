@@ -10,6 +10,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.CachedWal.Producer
   alias Electric.Utils
   use Electric.Satellite.Protobuf
+  alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SchemaRegistry
@@ -332,27 +333,59 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def process_message(%SatSubsReq{shape_requests: []}, state) do
-    {%SatSubsError{message: "Subscription must include at least one shape request"}, state}
+  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state)
+      when byte_size(id) > 128 do
+    {%SatSubsResp{
+       subscription_id: String.slice(id, 1..128) <> "...",
+       error: %SatSubsError{
+         message: "ID too long, "
+       }
+     }, state}
   end
 
-  def process_message(%SatSubsReq{shape_requests: requests}, %State{} = state) do
-    if Utils.has_duplicates_by?(requests, & &1.request_id) do
-      {%SatSubsError{message: "Duplicated request ids are not allowed"}, state}
-    else
-      case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
-        {:ok, requests} ->
-          query_subscription_data(requests, state)
+  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
+    {%SatSubsResp{
+       subscription_id: id,
+       error: %SatSubsError{
+         message: "Subscription must include at least one shape request"
+       }
+     }, state}
+  end
 
-        {:error, errors} ->
-          {%SatSubsError{
-             shape_request_error:
-               Enum.map(errors, fn {id, code, message} ->
-                 %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
-               end),
-             message: "Could not establish a subscription due to errors on requests"
-           }, state}
-      end
+  def process_message(
+        %SatSubsReq{subscription_id: id, shape_requests: requests},
+        %State{} = state
+      ) do
+    cond do
+      Utils.validate_uuid(id) != {:ok, id} ->
+        {%SatSubsResp{
+           subscription_id: id,
+           error: %SatSubsError{message: "Subscription ID should be a valid UUID"}
+         }, state}
+
+      Utils.has_duplicates_by?(requests, & &1.request_id) ->
+        {%SatSubsResp{
+           subscription_id: id,
+           error: %SatSubsError{message: "Duplicated request ids are not allowed"}
+         }, state}
+
+      true ->
+        case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
+          {:ok, requests} ->
+            query_subscription_data(requests, state)
+
+          {:error, errors} ->
+            {%SatSubsResp{
+               subscription_id: id,
+               error: %SatSubsError{
+                 shape_request_error:
+                   Enum.map(errors, fn {id, code, message} ->
+                     %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
+                   end),
+                 message: "Could not establish a subscription due to errors on requests"
+               }
+             }, state}
+        end
     end
   end
 
@@ -671,7 +704,10 @@ defmodule Electric.Satellite.Protocol do
         {%SatSubsResp{subscription_id: id}, state}
     after
       1_000 ->
-        {%SatSubsError{message: "Could not fetch initial data from PG"}, state}
+        {%SatSubsResp{
+           subscription_id: id,
+           error: %SatSubsError{message: "Internal error while checking data availability"}
+         }, state}
     end
   end
 

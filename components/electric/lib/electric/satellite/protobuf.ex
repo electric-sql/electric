@@ -19,11 +19,13 @@ defmodule Electric.Satellite.Protobuf do
     SatMigrationNotification,
     SatSubsReq,
     SatSubsResp,
+    SatSubsDataError,
     SatSubsDataBegin,
     SatSubsDataEnd,
-    SatSubsError,
     SatShapeDataBegin,
-    SatShapeDataEnd
+    SatShapeDataEnd,
+    SatUnsubsReq,
+    SatUnsubsResp
   }
 
   require Logger
@@ -45,11 +47,13 @@ defmodule Electric.Satellite.Protobuf do
     SatMigrationNotification => 11,
     SatSubsReq => 12,
     SatSubsResp => 13,
-    SatSubsError => 14,
+    SatSubsDataError => 14,
     SatSubsDataBegin => 15,
     SatSubsDataEnd => 16,
     SatShapeDataBegin => 17,
-    SatShapeDataEnd => 18
+    SatShapeDataEnd => 18,
+    SatUnsubsReq => 19,
+    SatUnsubsResp => 20
   }
 
   @type relation_id() :: non_neg_integer()
@@ -66,6 +70,15 @@ defmodule Electric.Satellite.Protobuf do
           | %SatOpLog{}
           | %SatRelation{}
           | %SatMigrationNotification{}
+          | %SatSubsReq{}
+          | %SatSubsResp{}
+          | %SatSubsDataError{}
+          | %SatSubsDataBegin{}
+          | %SatSubsDataEnd{}
+          | %SatShapeDataBegin{}
+          | %SatShapeDataEnd{}
+          | %SatUnsubsReq{}
+          | %SatUnsubsResp{}
 
   defmacro __using__(_opts) do
     quote do
@@ -100,11 +113,13 @@ defmodule Electric.Satellite.Protobuf do
         SatUnsubsResp,
         SatSubsDataBegin,
         SatSubsDataEnd,
-        SatSubsError,
+        SatSubsDataError,
         SatShapeDataBegin,
         SatShapeDataEnd,
         SatShapeReq,
-        SatShapeDef
+        SatShapeDef,
+        SatUnsubsReq,
+        SatUnsubsResp
       }
     end
   end

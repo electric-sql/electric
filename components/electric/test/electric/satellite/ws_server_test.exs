@@ -311,6 +311,7 @@ defmodule Electric.Satellite.WsServerTest do
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
         MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
               request_id: "fake_id",
@@ -321,7 +322,7 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         [{client_name, _client_pid}] = active_clients()
@@ -351,6 +352,7 @@ defmodule Electric.Satellite.WsServerTest do
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
         MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
               request_id: "fake_id",
@@ -361,7 +363,8 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        :ok = consume_subscription_response()
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -557,20 +560,6 @@ defmodule Electric.Satellite.WsServerTest do
     after
       @default_wait ->
         flunk("Timeout while waiting for SatInStopReplicationResp")
-    end
-  end
-
-  defp consume_subscription_response do
-    receive do
-      {_, %SatSubsDataEnd{}} ->
-        :ok
-
-      {_, %msg{}}
-      when msg in [SatSubsResp, SatSubsDataBegin, SatOpLog, SatShapeDataBegin, SatShapeDataEnd] ->
-        consume_subscription_response()
-    after
-      @default_wait ->
-        flunk("Timeout while waiting for message sequence responding to a subscription")
     end
   end
 
