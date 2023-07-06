@@ -21,6 +21,7 @@ defmodule Electric.Satellite.WsServer do
   def start_link(opts) do
     port = Keyword.fetch!(opts, :port)
     auth_provider = Keyword.fetch!(opts, :auth_provider)
+    pg_connector_opts = Keyword.fetch!(opts, :pg_connector_opts)
 
     # cowboy requires a unique name. so allow for configuration for test servers
     name = Keyword.get(opts, :name, :ws)
@@ -31,7 +32,11 @@ defmodule Electric.Satellite.WsServer do
 
     dispatch =
       :cowboy_router.compile([
-        {:_, [{"/ws", __MODULE__, [auth_provider: auth_provider]}]}
+        {:_,
+         [
+           {"/ws", __MODULE__,
+            [auth_provider: auth_provider, pg_connector_opts: pg_connector_opts]}
+         ]}
       ])
 
     :cowboy.start_clear(name, [port: port], %{
@@ -51,6 +56,7 @@ defmodule Electric.Satellite.WsServer do
     {ip, port} = :cowboy_req.peer(req)
     client = "#{:inet.ntoa(ip)}:#{port}"
     auth_provider = Keyword.fetch!(opts, :auth_provider)
+    pg_connector_opts = Keyword.fetch!(opts, :pg_connector_opts)
 
     # Add the cluster id to the logger metadata to make filtering easier in the case of global log
     # aggregation
@@ -60,7 +66,8 @@ defmodule Electric.Satellite.WsServer do
      %State{
        client: client,
        last_msg_time: :erlang.timestamp(),
-       auth_provider: auth_provider
+       auth_provider: auth_provider,
+       pg_connector_opts: pg_connector_opts
      }}
   end
 
@@ -158,6 +165,16 @@ defmodule Electric.Satellite.WsServer do
   # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}
+  end
+
+  # While processing the SatInStartReplicationReq message, Protocol has determined that a new
+  # client has connected which needs to perform the initial sync of migrations and the current database state before
+  # subscribing to the replication stream.
+  def websocket_info(:perform_initial_sync_and_subscribe, %State{} = state) do
+    {lsn, transactions} = Electric.Replication.InitialSync.transactions(state.pg_connector_opts)
+    {msgs, state} = Protocol.handle_outgoing_txs(transactions, state)
+    state = Protocol.initiate_subscription(state, lsn)
+    {binary_frames(msgs), state}
   end
 
   def websocket_info(msg, state) do

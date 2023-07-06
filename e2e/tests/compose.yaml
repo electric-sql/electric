@@ -1,5 +1,5 @@
 # Run using `docker compose -f databases.yaml up`.
-version: '3.7'
+version: "3.7"
 
 services:
   pg_1:
@@ -7,7 +7,7 @@ services:
       file: ../services_templates.yaml
       service: postgresql
     ports:
-      - "54321:5432"
+      - "54320:5432"
 
   electric_1:
     extends:

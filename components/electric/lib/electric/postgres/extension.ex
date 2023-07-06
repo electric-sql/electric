@@ -147,7 +147,7 @@ defmodule Electric.Postgres.Extension do
   @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
 
   def electrified_tables(conn) do
-    with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_table_query, []) do
+    with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
       {:ok, rows}
     end
   end
