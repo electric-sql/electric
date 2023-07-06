@@ -108,10 +108,10 @@ defmodule Electric.Satellite.Protocol do
     def add_pause_point({nil, queue}, new), do: {new, queue}
     def add_pause_point({head, queue}, new), do: {head, :queue.in(new, queue)}
 
-    def remove_pause_point(%__MODULE__{subscription_pause_queue: queue} = out),
-      do: %{out | subscription_pause_queue: remove_pause_point(queue)}
+    def remove_next_pause_point(%__MODULE__{subscription_pause_queue: queue} = out),
+      do: %{out | subscription_pause_queue: remove_next_pause_point(queue)}
 
-    def remove_pause_point({_, queue}) do
+    def remove_next_pause_point({_, queue}) do
       case :queue.out(queue) do
         {{:value, item}, queue} -> {item, queue}
         {:empty, queue} -> {nil, queue}

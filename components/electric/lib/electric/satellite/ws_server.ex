@@ -432,7 +432,7 @@ defmodule Electric.Satellite.WsServer do
 
     state =
       state.out_rep
-      |> OutRep.remove_pause_point()
+      |> OutRep.remove_next_pause_point()
       |> OutRep.set_event_buffer([])
       |> OutRep.set_status(:active)
       |> then(&%{state | out_rep: &1})
