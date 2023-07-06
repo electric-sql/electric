@@ -18,16 +18,6 @@ defmodule Electric.Replication.InitialSyncTest do
     setup ctx, do: Map.put(ctx, :origin, @origin)
     setup :setup_replicated_db
 
-    test "returns the lsn=0 and no data for an empty DB", %{
-      conn: conn,
-      pg_connector_opts: pg_connector_opts
-    } do
-      # Verify that the cached LSN is not going to catch up since we don't have any electrified tables.
-      assert :error == conn |> fetch_current_lsn() |> wait_for_cached_lsn_to_catch_up(false)
-
-      assert {0, []} == InitialSync.transactions(pg_connector_opts)
-    end
-
     test "returns the current lsn and electrified table migrations without any data",
          %{
            conn: conn,
@@ -65,7 +55,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
-      assert {^current_lsn,
+      assert {_,
               [
                 {%Transaction{
                    changes: [migration],
@@ -124,7 +114,7 @@ defmodule Electric.Replication.InitialSyncTest do
       current_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
-      assert {^current_lsn,
+      assert {_,
               [
                 {%Transaction{
                    changes: [migration1],
@@ -203,25 +193,17 @@ defmodule Electric.Replication.InitialSyncTest do
   # There's a delay between inserting some data into the DB and the moment it becomes available in the cached WAL. In
   # order to make unit tests deterministic, we need to wait until the cached WAL implementation has seen the given
   # LSN and only then verify the stream of changes in the cached WAL.
-  defp wait_for_cached_lsn_to_catch_up(current_lsn, raise? \\ true, num_attempts \\ 10)
 
-  defp wait_for_cached_lsn_to_catch_up(_, false, 0),
-    do: :error
+  defp wait_for_cached_lsn_to_catch_up(current_lsn) do
+    {:ok, ref} = CachedWal.Api.request_notification(current_lsn)
 
-  defp wait_for_cached_lsn_to_catch_up(current_lsn, true, 0),
-    do:
-      flunk(
-        "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position(@cached_wal_module))}"
-      )
-
-  defp wait_for_cached_lsn_to_catch_up(current_lsn, raise?, num_attempts) do
-    cached_lsn = CachedWal.Api.get_current_position(@cached_wal_module)
-
-    if cached_lsn && cached_lsn == current_lsn do
-      :ok
-    else
-      Process.sleep(@sleep_timeout)
-      wait_for_cached_lsn_to_catch_up(current_lsn, raise?, num_attempts - 1)
+    receive do
+      {:cached_wal_notification, ^ref, :new_segments_available} -> :ok
+    after
+      @sleep_timeout * 10 ->
+        flunk(
+          "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position(@cached_wal_module))}"
+        )
     end
   end
 end

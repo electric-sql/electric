@@ -184,7 +184,7 @@ defmodule Electric.Postgres.TestConnection do
       fn pos ->
         case Electric.Postgres.CachedWal.EtsBacked.next_segment(pos) do
           :latest ->
-            Process.sleep(200)
+            Process.sleep(100)
             {[], pos}
 
           {:ok, segment, pos} ->
@@ -193,6 +193,7 @@ defmodule Electric.Postgres.TestConnection do
       end,
       & &1
     )
+    |> Stream.reject(& &1.changes == [])
     |> Stream.take(10)
     |> Enum.find(&Enum.all?(&1.changes, fn x -> Extension.is_ddl_relation(x.relation) end)) ||
       flunk("Migration statements didn't show up in the cached WAL")
