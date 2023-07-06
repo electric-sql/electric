@@ -101,7 +101,6 @@ defmodule Electric.Utils do
   """
 
   def flatten_map(list, fun), do: flatten_map(list, fun, []) |> Enum.reverse()
-  defp flatten_map(list, fun, acc)
   defp flatten_map([], _, acc), do: acc
 
   defp flatten_map([head | tail], fun, acc) when is_list(head),
