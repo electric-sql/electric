@@ -46,6 +46,15 @@ defmodule Electric.PlugTest do
   end
 
   describe "/migrations" do
+    test_tx "returns 204 if there are no migrations", fn conn ->
+      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+
+      assert {204, _, _} =
+               conn(:get, "/api/migrations", %{"dialect" => "sqlite"})
+               |> Electric.Plug.Router.call([])
+               |> sent_resp()
+    end
+
     test_tx "returns migrations translated to given dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
@@ -176,6 +185,16 @@ defmodule Electric.PlugTest do
                  |> Electric.Plug.Router.call([])
                  |> sent_resp()
       end
+    end
+
+    test_tx "returns 204 if there are no new migrations after a given version", fn conn ->
+      assert {:ok, _schema} = apply_migrations(conn)
+      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+
+      assert {204, _, _} =
+               conn(:get, "/api/migrations", %{"dialect" => "sqlite", "version" => "0004"})
+               |> Electric.Plug.Router.call([])
+               |> sent_resp()
     end
   end
 end
