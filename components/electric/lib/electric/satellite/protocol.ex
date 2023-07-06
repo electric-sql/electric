@@ -522,7 +522,14 @@ defmodule Electric.Satellite.Protocol do
     Process.send(sub_pid, msg, [])
     ask({sub_pid, sub_ref}, @producer_demand)
 
-    out_rep = %OutRep{out_rep | pid: sub_pid, status: :active, stage_sub: sub_ref, last_seen_wal_pos: lsn}
+    out_rep = %OutRep{
+      out_rep
+      | pid: sub_pid,
+        status: :active,
+        stage_sub: sub_ref,
+        last_seen_wal_pos: lsn
+    }
+
     %State{state | out_rep: out_rep}
   end
 

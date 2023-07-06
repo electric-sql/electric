@@ -193,7 +193,7 @@ defmodule Electric.Postgres.TestConnection do
       end,
       & &1
     )
-    |> Stream.reject(& &1.changes == [])
+    |> Stream.reject(&(&1.changes == []))
     |> Stream.take(10)
     |> Enum.find(&Enum.all?(&1.changes, fn x -> Extension.is_ddl_relation(x.relation) end)) ||
       flunk("Migration statements didn't show up in the cached WAL")
