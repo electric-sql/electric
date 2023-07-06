@@ -77,6 +77,11 @@ defmodule Electric.Replication.InitialSync do
      It's required, because if we haven't received any transactions while querying, we don't have
      any transactions to trigger sending this data in `Electric.Satellite.WsServer`, so we're using
      this LSN point only for equality checking if we haven't moved at all.
+
+  If an error occurs while collecting the data, this function is expected to send the message like this:
+  ```elixir
+  {:subscription_init_failed, subscription_id, reason}
+  ```
   """
   def query_subscription_data({subscription_id, requests},
         reply_to: {ref, parent},

@@ -118,6 +118,15 @@ defmodule Electric.Satellite.Protocol do
       end
     end
 
+    def remove_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, subscription_id),
+      do: %{out | subscription_pause_queue: remove_pause_point(queue, subscription_id)}
+
+    def remove_pause_point({nil, _} = queue, _), do: queue
+    def remove_pause_point({{_, id}, _} = queue, id), do: remove_next_pause_point(queue)
+
+    def remove_pause_point({head, queue}, id),
+      do: {head, :queue.delete_with(&match?({_, ^id}, &1), queue)}
+
     def set_status(%__MODULE__{} = out, status) when status in [nil, :active, :paused],
       do: %{out | status: status}
 

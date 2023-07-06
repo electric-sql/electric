@@ -196,6 +196,7 @@ defmodule Electric.Satellite.WsServer do
     )
 
     send_subscription_data_and_unpause(subscription_id, data, state)
+    |> binary_frames()
   end
 
   def websocket_info({:subscription_data, subscription_id, _, data}, %State{} = state)
@@ -215,10 +216,40 @@ defmodule Electric.Satellite.WsServer do
     if state.out_rep.last_seen_wal_pos == observed_pos do
       # Between us requesting the data and receiving the data no transactions actually reached this stage, meaning we can safely send the data right now
       send_subscription_data_and_unpause(subscription_id, data, state)
+      |> binary_frames()
     else
       # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
       {[],
        %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
+    end
+  end
+
+  def websocket_info({:subscription_init_failed, subscription_id, reason}, state) do
+    Logger.error(
+      "Couldn't retrieve initial data for subscription #{subscription_id}, with reason #{inspect(reason)}"
+    )
+
+    error = %SatSubsDataError{
+      subscription_id: subscription_id,
+      message: "Could not retrieve initial data for subscription"
+    }
+
+    # In any case we need to remove the subscription itself since it'll
+    state
+    |> Map.update!(:subscriptions, &Map.delete(&1, subscription_id))
+    |> case do
+      state when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) ->
+        # We're paused on this, we want to send the error and unpause
+        error
+        |> send_subscription_data_error_and_unpause(state)
+        |> binary_frames()
+
+      state ->
+        # We're either paused on smth else, or replication is stopped, or replication is ongoing
+        # In any case, we just remove the "future" pause point and notify the client
+        # We remove the pause point and notify the client
+        {binary_frames(error),
+         %{state | out_rep: OutRep.remove_pause_point(state.out_rep, subscription_id)}}
     end
   end
 
@@ -258,7 +289,9 @@ defmodule Electric.Satellite.WsServer do
   def handle_producer_msg(from, [_ | _] = events, %State{} = state)
       when is_out_rep_active(state) do
     GenStage.ask(from, 1)
+
     send_events_and_maybe_pause(events, state)
+    |> binary_frames()
   end
 
   def handle_producer_msg(from, [_ | _] = events, %State{} = state)
@@ -378,6 +411,7 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
+  defp binary_frames({pb_msg, %State{} = state}), do: {binary_frames(pb_msg), state}
   defp binary_frames(pb_msg) when not is_list(pb_msg), do: [binary_frame(pb_msg)]
   defp binary_frames(msgs), do: Utils.flatten_map(msgs, &binary_frame/1)
 
@@ -394,8 +428,7 @@ defmodule Electric.Satellite.WsServer do
 
   defp send_events_and_maybe_pause(events, %State{} = state)
        when no_pending_subscriptions(state) do
-    {msgs, state} = Protocol.handle_outgoing_txs(events, state)
-    {binary_frames(msgs), state}
+    Protocol.handle_outgoing_txs(events, state)
   end
 
   defp send_events_and_maybe_pause(events, %State{out_rep: out_rep} = state) do
@@ -404,8 +437,7 @@ defmodule Electric.Satellite.WsServer do
     case Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end) do
       {events, []} ->
         # We haven't yet reached the pause point
-        {msgs, state} = Protocol.handle_outgoing_txs(events, state)
-        {binary_frames(msgs), state}
+        Protocol.handle_outgoing_txs(events, state)
 
       {events, pending} ->
         # We've reached the pause point, but we may have some messages we can send
@@ -422,7 +454,7 @@ defmodule Electric.Satellite.WsServer do
             send_subscription_data_and_unpause(msgs, subscription_id, data, state)
 
           :error ->
-            {binary_frames(msgs), state}
+            {msgs, state}
         end
     end
   end
@@ -444,6 +476,24 @@ defmodule Electric.Satellite.WsServer do
       |> :queue.to_list()
       |> send_events_and_maybe_pause(state)
 
-    {binary_frames([msgs, more_msgs, even_more_msgs]), state}
+    {[msgs, more_msgs, even_more_msgs], state}
+  end
+
+  defp send_subscription_data_error_and_unpause(error, state) do
+    buffer = state.out_rep.outgoing_ops_buffer
+
+    state =
+      state.out_rep
+      |> OutRep.remove_next_pause_point()
+      |> OutRep.set_event_buffer([])
+      |> OutRep.set_status(:active)
+      |> then(&%{state | out_rep: &1})
+
+    {rest_of_msgs, state} =
+      buffer
+      |> :queue.to_list()
+      |> send_events_and_maybe_pause(state)
+
+    {[error, rest_of_msgs], state}
   end
 end
