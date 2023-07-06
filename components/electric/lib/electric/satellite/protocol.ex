@@ -616,7 +616,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp current_shapes(%State{subscriptions: subscriptions, out_rep: out_rep}) do
     subscriptions
-    |> Enum.reject(&OutRep.subscription_pending?(&1, out_rep))
+    |> Enum.reject(fn {id, _shapes} -> OutRep.subscription_pending?(id, out_rep) end)
     |> Enum.flat_map(fn {_, shapes} -> shapes end)
   end
 
@@ -637,6 +637,10 @@ defmodule Electric.Satellite.Protocol do
 
     receive do
       {:subscription_insertion_point, ^ref, xmin} ->
+        Logger.debug(
+          "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
+        )
+
         state =
           state
           |> Pathex.force_set!(path(:subscriptions / id), requests)

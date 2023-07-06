@@ -20,6 +20,7 @@ defmodule Electric.Satellite.WsServerTest do
   require Logger
 
   use ExUnit.Case, async: false
+  import ElectricTest.SetupHelpers
 
   @default_wait 5_000
 
@@ -320,7 +321,8 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        :ok = consume_subscription_response()
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)

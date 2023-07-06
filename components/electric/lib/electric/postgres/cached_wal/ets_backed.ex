@@ -133,12 +133,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   def handle_events(events, _, state) do
     events
     |> Stream.each(& &1.ack_fn.())
-    # Rejection of empty transactions is useful to not store data & not send empty txs to consumers,
-    # however that may lead to this cache thinking that the "latest" seen LSN is less than PG had actually sent.
-    # If/when we depend on seeing some LSN to perform some effect, we may want to update a value of some kind
-    # with last seen LSN/txid regardless of whether the tx contained any changes.
-    |> Stream.reject(&Enum.empty?(&1.changes))
-    |> Stream.each(&Logger.debug("Saving transaction with changes #{inspect(&1.changes)}"))
+    # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
+    #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
+    #       so we probably want to be able to store a shallower pair than a full transaction object and handle that
+    #       appropriately in the consumers. Or something else.
+    |> Stream.each(
+      &Logger.debug(
+        "Saving transaction #{&1.xid} at #{&1.lsn} with changes #{inspect(&1.changes)}"
+      )
+    )
     |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
       {lsn_to_position(lsn), %{tx | ack_fn: nil}}
     end)

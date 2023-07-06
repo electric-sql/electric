@@ -4,6 +4,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
   use Electric.Satellite.Protobuf
   import Electric.Postgres.TestConnection
   import Electric.Utils, only: [uuid4: 0]
+  import ElectricTest.SetupHelpers
   alias Electric.Test.SatelliteWsClient, as: MockClient
   alias Electric.Postgres.CachedWal
 
@@ -34,6 +35,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     end
 
     setup :create_electrified_tables
+    setup :execute_sql
 
     test "The client can connect and immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
@@ -55,7 +57,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "The client can connect and immediately gets migrations but gets no data",
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'Garry');
+         """
+    test "The client can connect and immediately gets migrations but gets neither already inserted data, nor new inserts",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
@@ -73,6 +78,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
                           ]
                         }},
                        300
+
+        refute_receive {^conn, %SatOpLog{}}
 
         position = CachedWal.Api.get_current_position()
         {:ok, ref} = CachedWal.Api.request_notification(position)
@@ -88,38 +95,76 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
+         """
+    test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 3)
+
+        request_id = uuid4()
+
+        MockClient.send_data(conn, %SatSubsReq{
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "users"}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
+        received = receive_subscription_data(conn, sub_id)
+        assert Map.keys(received) == [request_id]
+        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id]
+
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", ["WRONG"])
+
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+            uuid4(),
+            "Garry"
+          ])
+
+        # We get the message of insertion for a table we have a subscription for
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        # But not for the one we don't have included in the subscription
+        refute_received {^conn,
+                         %SatOpLog{
+                           ops: [
+                             %{op: {:begin, _}},
+                             %{op: {:insert, %{row_data: %{values: [_, "WRONG", _]}}}},
+                             %{op: {:commit, _}}
+                           ]
+                         }}
+      end)
+    end
+
     test "The client can connect and subscribe, and that works with multiple shape requests",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-        for _ <- 1..3, do: assert_receive({^conn, %SatRelation{}})
-
-        assert_receive {^conn,
-                        %SatOpLog{
-                          ops: [
-                            _begin,
-                            %SatTransOp{op: {:migrate, _}},
-                            %SatTransOp{op: {:migrate, _}},
-                            %SatTransOp{op: {:migrate, _}},
-                            _commit
-                          ]
-                        }},
-                       300
-
-        position = CachedWal.Api.get_current_position()
-        {:ok, ref} = CachedWal.Api.request_notification(position)
+        assert_initial_replication_response(conn, 3)
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
             uuid4(),
             "John"
           ])
-
-        assert_receive {:cached_wal_notification, ^ref, :new_segments_available}, 1_000
-        refute_receive {^conn, %SatOpLog{}}
 
         request_id1 = uuid4()
         request_id2 = uuid4()
@@ -142,19 +187,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
         })
 
         assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
-        assert_receive {^conn, %SatSubsDataBegin{subscription_id: ^sub_id}}, 1000
-        assert_receive {^conn, %SatShapeDataBegin{request_id: ^request_id2}}
-        assert_receive {^conn, %SatShapeDataEnd{}}
-
-        assert_receive {^conn, %SatShapeDataBegin{request_id: ^request_id1}}
-
-        assert_receive {^conn,
-                        %SatOpLog{ops: [%SatTransOp{op: {:insert, %SatOpInsert{row_data: data}}}]}}
-
-        assert %SatOpRow{values: [_, "John"]} = data
-
-        assert_receive {^conn, %SatShapeDataEnd{}}
-        assert_receive {^conn, %SatSubsDataEnd{}}
+        received = receive_subscription_data(conn, sub_id)
+        assert Map.keys(received) -- [request_id1, request_id2] == []
+        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
+        assert [] = received[request_id2]
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", [
@@ -189,45 +225,22 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
+         INSERT INTO public.my_entries (content) VALUES ('Old');
+         """
+    test "The client can connect and subscribe, and that works with multiple subscriptions",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 3)
 
-        assert_receive {^conn, %SatInStartReplicationResp{}}
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-        for _ <- 1..3, do: assert_receive({^conn, %SatRelation{}})
-
-        assert_receive {^conn,
-                        %SatOpLog{
-                          ops: [
-                            _begin,
-                            %SatTransOp{op: {:migrate, _}},
-                            %SatTransOp{op: {:migrate, _}},
-                            %SatTransOp{op: {:migrate, _}},
-                            _commit
-                          ]
-                        }},
-                       300
-
-        position = CachedWal.Api.get_current_position()
-        {:ok, ref} = CachedWal.Api.request_notification(position)
-
-        {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
-            uuid4(),
-            "John"
-          ])
-
-        assert_receive {:cached_wal_notification, ^ref, :new_segments_available}, 1_000
-        refute_receive {^conn, %SatOpLog{}}
-
-        request_id = uuid4()
+        request_id1 = uuid4()
 
         MockClient.send_data(conn, %SatSubsReq{
           shape_requests: [
             %SatShapeReq{
-              request_id: request_id,
+              request_id: request_id1,
               shape_definition: %SatShapeDef{
                 selects: [%SatShapeDef.Select{tablename: "users"}]
               }
@@ -236,19 +249,32 @@ defmodule Electric.Satellite.SubscriptionsTest do
         })
 
         assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
-        assert_receive {^conn, %SatSubsDataBegin{subscription_id: ^sub_id}}, 1000
-        assert_receive {^conn, %SatShapeDataBegin{request_id: ^request_id}}
+        received = receive_subscription_data(conn, sub_id)
+        assert Map.keys(received) == [request_id1]
+        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
 
-        assert_receive {^conn,
-                        %SatOpLog{ops: [%SatTransOp{op: {:insert, %SatOpInsert{row_data: data}}}]}}
+        request_id2 = uuid4()
 
-        assert_receive {^conn, %SatShapeDataEnd{}}
-        assert_receive {^conn, %SatSubsDataEnd{}}
+        MockClient.send_data(conn, %SatSubsReq{
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id2,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "my_entries"}]
+              }
+            }
+          ]
+        })
 
-        assert %SatOpRow{values: [_, "John"]} = data
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id}}
+        received = receive_subscription_data(conn, sub_id)
+        assert Map.keys(received) == [request_id2]
+        assert [%SatOpInsert{row_data: %{values: [_, "Old", _]}}] = received[request_id2]
 
         {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", ["WRONG"])
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", [
+            "Correct"
+          ])
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
@@ -260,20 +286,19 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert_receive {^conn,
                         %SatOpLog{
                           ops: [
-                            %{op: {:begin, _}},
+                            _begin,
                             %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
-                            %{op: {:commit, _}}
+                            _commit
                           ]
                         }},
                        1000
 
-        # But not for the one we don't have included in the subscription
-        refute_received {^conn,
+        assert_received {^conn,
                          %SatOpLog{
                            ops: [
-                             %{op: {:begin, _}},
-                             %{op: {:insert, %{row_data: %{values: [_, "WRONG", _]}}}},
-                             %{op: {:commit, _}}
+                             _begin,
+                             %{op: {:insert, %{row_data: %{values: [_, "Correct", _]}}}},
+                             _commit
                            ]
                          }}
       end)
