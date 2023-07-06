@@ -944,7 +944,7 @@ messageTypeRegistry.set(SatErrorResp.$type, SatErrorResp);
 function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
   return {
     $type: "Electric.Satellite.v1_4.SatInStartReplicationReq",
-    lsn: new Uint8Array(0),
+    lsn: new Uint8Array(),
     options: [],
     syncBatchSize: 0,
     subscriptionIds: [],
@@ -1032,7 +1032,7 @@ export const SatInStartReplicationReq = {
 
   fromPartial<I extends Exact<DeepPartial<SatInStartReplicationReq>, I>>(object: I): SatInStartReplicationReq {
     const message = createBaseSatInStartReplicationReq();
-    message.lsn = object.lsn ?? new Uint8Array(0);
+    message.lsn = object.lsn ?? new Uint8Array();
     message.options = object.options?.map((e) => e) || [];
     message.syncBatchSize = object.syncBatchSize ?? 0;
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
@@ -1590,7 +1590,7 @@ function createBaseSatOpBegin(): SatOpBegin {
     $type: "Electric.Satellite.v1_4.SatOpBegin",
     commitTimestamp: Long.UZERO,
     transId: "",
-    lsn: new Uint8Array(0),
+    lsn: new Uint8Array(),
     origin: undefined,
     isMigration: false,
   };
@@ -1679,7 +1679,7 @@ export const SatOpBegin = {
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
     message.transId = object.transId ?? "";
-    message.lsn = object.lsn ?? new Uint8Array(0);
+    message.lsn = object.lsn ?? new Uint8Array();
     message.origin = object.origin ?? undefined;
     message.isMigration = object.isMigration ?? false;
     return message;
@@ -1693,7 +1693,7 @@ function createBaseSatOpCommit(): SatOpCommit {
     $type: "Electric.Satellite.v1_4.SatOpCommit",
     commitTimestamp: Long.UZERO,
     transId: "",
-    lsn: new Uint8Array(0),
+    lsn: new Uint8Array(),
   };
 }
 
@@ -1760,7 +1760,7 @@ export const SatOpCommit = {
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
     message.transId = object.transId ?? "";
-    message.lsn = object.lsn ?? new Uint8Array(0);
+    message.lsn = object.lsn ?? new Uint8Array();
     return message;
   },
 };
@@ -2098,7 +2098,7 @@ export const SatMigrationNotification = {
 messageTypeRegistry.set(SatMigrationNotification.$type, SatMigrationNotification);
 
 function createBaseSatOpRow(): SatOpRow {
-  return { $type: "Electric.Satellite.v1_4.SatOpRow", nullsBitmask: new Uint8Array(0), values: [] };
+  return { $type: "Electric.Satellite.v1_4.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
 }
 
 export const SatOpRow = {
@@ -2150,7 +2150,7 @@ export const SatOpRow = {
 
   fromPartial<I extends Exact<DeepPartial<SatOpRow>, I>>(object: I): SatOpRow {
     const message = createBaseSatOpRow();
-    message.nullsBitmask = object.nullsBitmask ?? new Uint8Array(0);
+    message.nullsBitmask = object.nullsBitmask ?? new Uint8Array();
     message.values = object.values?.map((e) => e) || [];
     return message;
   },
