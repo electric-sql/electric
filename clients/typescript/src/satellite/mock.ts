@@ -44,6 +44,7 @@ import {
   SatSubsDataError_ShapeReqError,
   SatSubsDataError_ShapeReqError_Code,
 } from '../_generated/protocol/satellite'
+import { Sub } from './process'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INVALID_POSITION_LSN = 27
@@ -73,10 +74,10 @@ export class MockSatelliteProcess implements Satellite {
   }
   subscribe(
     _shapeDefinitions: ClientShapeDefinition[],
-    onLoading?: () => void
-  ): Promise<void> {
-    onLoading?.()
-    return Promise.resolve()
+  ): Promise<Sub> {
+    return Promise.resolve({
+      dataReceived: Promise.resolve()
+    })
   }
 
   unsubscribe(_shapeUuid: string): Promise<void> {

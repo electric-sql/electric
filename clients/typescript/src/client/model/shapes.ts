@@ -1,4 +1,4 @@
-import { Satellite } from '../../satellite'
+import { Satellite, Sub } from '../../satellite'
 
 export type TableName = string
 
@@ -8,7 +8,7 @@ export type Shape = {
 
 interface IShapeManager {
   init(satellite: Satellite): void
-  sync(shape: Shape, onLoading?: () => void): Promise<void>
+  sync(shape: Shape): Promise<Sub>
   isSynced(table: TableName): boolean
 }
 
@@ -24,7 +24,7 @@ class ShapeManager implements IShapeManager {
     this.satellite = satellite
   }
 
-  async sync(shape: Shape, onLoading?: () => void): Promise<void> {
+  async sync(shape: Shape): Promise<Sub> {
     if (this.satellite === undefined)
       throw new Error(
         'Shape cannot be synced because the `ShapeManager` is not yet initialised.'
@@ -39,10 +39,17 @@ class ShapeManager implements IShapeManager {
       }),
     }
 
-    await this.satellite.subscribe([shapeDef], onLoading)
+    const sub = await this.satellite.subscribe([shapeDef])
 
-    // Now that the subscription is active we can store the synced tables
-    shape.tables.forEach(this.syncedTables.add)
+    const dataReceivedProm = sub.dataReceived.then(() => {
+      // When all data is received
+      // we store the fact that these tables are synced
+      shape.tables.forEach(this.syncedTables.add)
+    })
+
+    return {
+      dataReceived: dataReceivedProm
+    }
   }
 
   isSynced(table: TableName): boolean {
@@ -55,12 +62,13 @@ export class ShapeManagerMock extends ShapeManager {
     super()
   }
 
-  override async sync(shape: Shape, onLoading?: () => void): Promise<void> {
-    onLoading?.()
+  override async sync(shape: Shape): Promise<Sub> {
     // Do not contact the server but directly store the synced tables
     shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
-    // method returns and promise will resolve
-    // as if the server acknowledged the subscription
+
+    return {
+      dataReceived: Promise.resolve()
+    }
   }
 }
 

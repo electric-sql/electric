@@ -8,6 +8,7 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { QualifiedTablename } from '../../util/tablename'
 import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
+import { Sub } from '../../satellite/process'
 
 /**
  * Interface that is implemented by Electric clients.
@@ -24,9 +25,8 @@ export interface Model<
   GetPayload extends HKT
 > {
   sync<T extends SyncInput<Include>>(
-    i?: T,
-    onLoading?: () => void
-  ): Promise<void>
+    i?: T
+  ): Promise<Sub>
 
   /**
    * Creates a unique record in the DB.

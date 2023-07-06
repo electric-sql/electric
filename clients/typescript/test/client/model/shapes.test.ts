@@ -98,10 +98,8 @@ test.serial(
   }
 )
 
-test.serial('onLoading callback gets called', async (t) => {
-  let gotCalled = false
-  await Post.sync({}, () => {
-    gotCalled = true
-  })
-  t.assert(gotCalled)
+test.serial('loading and fulfilled promises get resolved', async (t) => {
+  const { dataReceived } = await Post.sync()
+  await dataReceived
+  t.pass()
 })
