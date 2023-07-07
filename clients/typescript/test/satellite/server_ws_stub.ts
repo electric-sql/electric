@@ -14,7 +14,7 @@ import {
   SatShapeDataEnd,
   SatSubsDataBegin,
   SatSubsDataEnd,
-  SatSubsError,
+  SatSubsDataError,
   SatSubsResp,
   SatUnsubsResp,
 } from '../../src/_generated/protocol/satellite'
@@ -145,11 +145,11 @@ export class SatelliteWSServerStub {
               )
             }
 
-            if (msgType == getTypeFromString(SatSubsError.$type)) {
+            if (msgType == getTypeFromString(SatSubsDataError.$type)) {
               socket.send(
                 Buffer.concat([
                   getSizeBuf(msg),
-                  SatSubsError.encode(msg as SatSubsError).finish(),
+                  SatSubsDataError.encode(msg as SatSubsDataError).finish(),
                 ])
               )
             }

@@ -18,14 +18,13 @@ import {
   Record as DataRecord,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
-import { randomValue } from '../util/random'
 
 import { Client, ConnectionWrapper, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS, subscriptionErrorToSatelliteError } from '../util'
+import { DEFAULT_LOG_POS, subsDataErrorToSatelliteError } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
 import {
@@ -40,10 +39,10 @@ import {
   UnsubscribeResponse,
 } from './shapes/types'
 import {
-  SatSubsError,
-  SatSubsError_Code,
-  SatSubsError_ShapeReqError,
-  SatSubsError_ShapeReqError_Code,
+  SatSubsDataError,
+  SatSubsDataError_Code,
+  SatSubsDataError_ShapeReqError,
+  SatSubsDataError_ShapeReqError_Code,
 } from '../_generated/protocol/satellite'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
@@ -146,14 +145,21 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     data.push(record)
   }
 
-  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
-    const subscriptionId = randomValue()
-
+  subscribe(
+    subscriptionId: string,
+    shapes: ShapeRequest[]
+  ): Promise<SubscribeResponse> {
     const data: InitialDataChange[] = []
     const shapeReqToUuid: Record<string, string> = {}
 
     for (const shape of shapes) {
       for (const { tablename } of shape.definition.selects) {
+        if (tablename === 'failure') {
+          return Promise.resolve({
+            subscriptionId,
+            error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
+          })
+        }
         if (tablename === 'another') {
           this.sendErrorAfterTimeout(subscriptionId, 1)
           return Promise.resolve({
@@ -305,19 +311,20 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {
     setTimeout(() => {
-      const satSubsError: SatSubsError = SatSubsError.fromPartial({
-        code: SatSubsError_Code.SHAPE_REQUEST_ERROR,
+      const satSubsError: SatSubsDataError = SatSubsDataError.fromPartial({
+        code: SatSubsDataError_Code.SHAPE_DELIVERY_ERROR,
         message: 'there were shape errors',
         subscriptionId,
         shapeRequestError: [
-          SatSubsError_ShapeReqError.fromPartial({
-            code: SatSubsError_ShapeReqError_Code.TABLE_NOT_FOUND,
-            message: 'table another does not exist',
+          SatSubsDataError_ShapeReqError.fromPartial({
+            code: SatSubsDataError_ShapeReqError_Code.SHAPE_SIZE_LIMIT_EXCEEDED,
+            message:
+              "Requested shape for table 'another' exceeds the maximum allowed shape size",
           }),
         ],
       })
 
-      const satError = subscriptionErrorToSatelliteError(satSubsError)
+      const satError = subsDataErrorToSatelliteError(satSubsError)
       this.emit(SUBSCRIPTION_ERROR, satError)
     }, timeout)
   }

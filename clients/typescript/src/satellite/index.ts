@@ -86,7 +86,7 @@ export interface Client {
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
 
-  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse>
+  subscribe(subId: string, shapes: ShapeRequest[]): Promise<SubscribeResponse>
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse>
 
   // TODO: there is currently no way of unsubscribing from the server

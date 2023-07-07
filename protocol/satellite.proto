@@ -364,19 +364,75 @@ message SatOpMigrate {
 
 // (Consumer) Request for new subscriptions
 message SatSubsReq {
+    // a client-generated identifier to track the subscription
+    string subscription_id = 1;
+
     // Shape requests
     repeated SatShapeReq shape_requests = 2;
 }
 
-// (Producer) Acknowledgment that subscription was accepted
+// (Producer) Response for a subscription request
 message SatSubsResp {
-    // Identifier of the request for further reference
+    // identifier of the subscription this response refers to
     string subscription_id = 1;
+
+    // the error details if the request failed
+    optional SatSubsError error = 2;
+
+    // Error message returned by the Producer when it encounters
+    // an error handling subscription request
+    message SatSubsError {
+        
+        // error code enum
+        enum Code {
+            // Required code
+            CODE_UNSPECIFIED = 0;
+            
+            // DUPLICATE IDENTIFIER
+            SUBSCRIPTION_ID_ALREADY_EXISTS = 1;
+
+            // Error requesting shape
+            SHAPE_REQUEST_ERROR = 2;
+        }
+
+        // error code
+        Code code = 2;
+
+        // A human-readable description of the error
+        string message = 3;
+
+        // Details of the shape request error
+        repeated ShapeReqError shape_request_error = 4;
+
+        // Shape request error
+        message ShapeReqError {
+            // error code enum
+            enum Code {
+                // Required code
+                CODE_UNSPECIFIED = 0;
+
+                // Table does not exist in current schema version
+                TABLE_NOT_FOUND = 1;
+
+                // Requested shape does not maintain referential integirty
+                REFERENTIAL_INTEGRITY_VIOLATION = 2;
+            }
+
+            // error code
+            Code code = 1;
+
+            // a human-readable description of the error
+            string message = 2;
+
+            // the shape request identifier that this error refers to
+            string request_id = 3;
+        }
+    }
 }
 
 // (Consumer) Request to cancel subscriptions
 message SatUnsubsReq {
-    // Identifiers of the subscription
+    // Identifiers of the subscriptions
     repeated string subscription_ids = 1;
 }
 
@@ -406,15 +462,15 @@ message SatShapeDef {
 }
 
 // Error message returned by the Producer when it encounters
-// an error handling a subscription
-message SatSubsError {
+// an error handling subscription data
+message SatSubsDataError {
     // error code enum
     enum Code {
         // Required code
         CODE_UNSPECIFIED = 0;
 
-        // Error requesting shape
-        SHAPE_REQUEST_ERROR = 1;
+        // Error delivering shape
+        SHAPE_DELIVERY_ERROR = 1;
     }
 
     // error code
@@ -436,8 +492,8 @@ message SatSubsError {
             // Required code
             CODE_UNSPECIFIED = 0;
 
-            // Table not found error
-            TABLE_NOT_FOUND = 1;
+            // Requested shape exceed the maximum allowed shape size
+            SHAPE_SIZE_LIMIT_EXCEEDED = 1;
         }
 
         // error code

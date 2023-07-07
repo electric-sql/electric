@@ -20,7 +20,7 @@ import {
   SatAuthHeaderPair,
   SatSubsResp,
   SatSubsReq,
-  SatSubsError,
+  SatSubsDataError,
   SatSubsDataBegin,
   SatSubsDataEnd,
   SatShapeDataBegin,
@@ -37,6 +37,7 @@ import {
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
+  subsErrorToSatelliteError,
 } from '../util/proto'
 import { toHexString } from '../util/hex'
 import { Socket, SocketFactory } from '../sockets/index'
@@ -103,6 +104,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private inbound: Replication
   private outbound: OutgoingReplication
 
+  // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
   private socketHandler?: (any: any) => void
@@ -153,8 +155,8 @@ export class SatelliteClient extends EventEmitter implements Client {
           handle: (sub: SatSubsResp) => this.handleSubscription(sub),
           isRpc: true,
         },
-        SatSubsError: {
-          handle: (msg: SatSubsError) => this.handleSubscriptionError(msg),
+        SatSubsDataError: {
+          handle: (msg: SatSubsDataError) => this.handleSubscriptionError(msg),
           isRpc: false,
         },
         SatSubsDataBegin: {
@@ -446,7 +448,10 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
   }
 
-  subscribe(shapes: ShapeRequest[]): Promise<SubscribeResponse> {
+  subscribe(
+    subscriptionId: string,
+    shapes: ShapeRequest[]
+  ): Promise<SubscribeResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -457,12 +462,11 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     const request = SatSubsReq.fromPartial({
+      subscriptionId,
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 
-    this.subscriptionsDataCache.subscriptionRequest(
-      shapes.map((s) => s.requestId)
-    )
+    this.subscriptionsDataCache.subscriptionRequest(request)
     return this.rpc<SubscribeResponse>(request)
   }
 
@@ -763,12 +767,18 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
-    this.subscriptionsDataCache.subscriptionResponse(msg)
-    return { subscriptionId: msg.subscriptionId }
+    if (msg.error) {
+      const error = subsErrorToSatelliteError(msg.error)
+      this.subscriptionsDataCache.subscriptionError()
+      return { subscriptionId: msg.subscriptionId, error }
+    } else {
+      this.subscriptionsDataCache.subscriptionResponse(msg)
+      return { subscriptionId: msg.subscriptionId }
+    }
   }
 
-  private handleSubscriptionError(msg: SatSubsError): void {
-    this.subscriptionsDataCache.subscriptionError(msg)
+  private handleSubscriptionError(msg: SatSubsDataError): void {
+    this.subscriptionsDataCache.subscriptionDataError(msg)
   }
 
   private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {

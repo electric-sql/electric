@@ -14,6 +14,13 @@ export interface SubscriptionsManager {
   subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]): void
 
   /**
+   * Cancel the subscription with the given subscription id
+   *
+   * @param subId the identifier of the subscription
+   */
+  subscriptionCancelled(subId: string): void
+
+  /**
    * Registers that a subsciption that was in-flight is now
    * delivered.
    * @param data the data for the subscription
@@ -45,4 +52,9 @@ export interface SubscriptionsManager {
    * can be used to persist it
    */
   serialize(): string
+
+  /**
+   * loads the subscription manager state from a text representation
+   */
+  setState(serialized: string): void
 }

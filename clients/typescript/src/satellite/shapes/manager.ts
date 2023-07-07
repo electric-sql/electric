@@ -45,6 +45,10 @@ export class InMemorySubscriptionsManager
     this.inFlight[subId] = shapeRequests
   }
 
+  subscriptionCancelled(subId: string): void {
+    delete this.inFlight[subId]
+  }
+
   subscriptionDelivered(data: SubscriptionData): void {
     const { subscriptionId, shapeReqToUuid } = data
     if (!this.inFlight[subscriptionId]) {
@@ -96,5 +100,11 @@ export class InMemorySubscriptionsManager
 
   serialize(): string {
     return JSON.stringify(this.subToShapes)
+  }
+
+  // TODO: input validation
+  setState(serialized: string): void {
+    this.inFlight = {}
+    this.subToShapes = JSON.parse(serialized)
   }
 }

@@ -674,7 +674,7 @@ test.serial('subscription succesful', async (t) => {
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
   server.nextResponses([subsResp])
 
-  const res = await client.subscribe([shapeReq])
+  const res = await client.subscribe(subscriptionId, [shapeReq])
   t.is(res.subscriptionId, subscriptionId)
 })
 
@@ -696,8 +696,8 @@ test.serial('listen to subscription events: error', async (t) => {
   const subscriptionId = 'THE_ID'
 
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
-  const subsError = Proto.SatSubsError.fromPartial({
-    code: Proto.SatSubsError_Code.SHAPE_REQUEST_ERROR,
+  const subsError = Proto.SatSubsDataError.fromPartial({
+    code: Proto.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR,
     message: 'FAKE ERROR',
     subscriptionId,
   })
@@ -707,7 +707,7 @@ test.serial('listen to subscription events: error', async (t) => {
   const error = () => t.pass()
 
   client.subscribeToSubscriptionEvents(success, error)
-  const res = await client.subscribe([shapeReq])
+  const res = await client.subscribe(subscriptionId, [shapeReq])
   t.is(res.subscriptionId, subscriptionId)
 })
 
@@ -721,7 +721,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
 
   const requestId = 'THE_REQUEST_ID'
   const subscriptionId = 'THE_SUBS_ID'
-  const uuid = 'THE_SHAPE_ID'
+  const shapeUuid = 'THE_SHAPE_ID'
   const tablename = 'THE_TABLE_ID'
 
   const shapeReq: ShapeRequest = {
@@ -732,8 +732,17 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   }
 
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const subsRespWithErr = Proto.SatSubsResp.fromPartial({
+    subscriptionId,
+    error: {
+      code: Proto.SatSubsResp_SatSubsError_Code.SHAPE_REQUEST_ERROR,
+    },
+  })
   const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
-  const beginShape = Proto.SatShapeDataBegin.fromPartial({ requestId, uuid })
+  const beginShape = Proto.SatShapeDataBegin.fromPartial({
+    requestId,
+    uuid: shapeUuid,
+  })
   const endShape = Proto.SatShapeDataEnd.fromPartial({})
   const endSub = Proto.SatSubsDataEnd.fromPartial({})
   const satOpLog = Proto.SatOpLog.fromPartial({})
@@ -784,6 +793,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     [subsResp, beginSub, beginShape, wrongSatOpLog3],
     [subsResp, beginSub, beginShape, wrongSatOpLog4],
     [subsResp, beginSub, beginShape, validSatOpLog, endShape, validSatOpLog],
+    [subsRespWithErr, beginSub],
   ]
   return new Promise<void>(async (globalRes) => {
     while (testCases.length > 0) {
@@ -805,7 +815,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
         }
 
         client.subscribeToSubscriptionEvents(success, error)
-        client.subscribe([shapeReq, shapeReq])
+        client.subscribe(subscriptionId, [shapeReq, shapeReq])
       })
       await promise
     }
@@ -902,7 +912,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
     endShape,
     endSub,
   ])
-  await client.subscribe([shapeReq1, shapeReq2])
+  await client.subscribe(subscriptionId, [shapeReq1, shapeReq2])
 
   await promise
 })

@@ -1308,7 +1308,7 @@ test('apply shape data and persist subscription', async (t) => {
   await p
 })
 
-test('a shape request failure because of FK constraint', async (t) => {
+test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
@@ -1351,7 +1351,7 @@ test('a shape request failure because of FK constraint', async (t) => {
   })
 })
 
-test('a successful second shape request', async (t) => {
+test('a second successful subscription', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
@@ -1460,7 +1460,7 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   })
 })
 
-test('a second shape request error runs garbage collection', async (t) => {
+test('a shape delivery that triggers garbage collection', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
@@ -1506,7 +1506,7 @@ test('a second shape request error runs garbage collection', async (t) => {
             const subsMeta = await satellite._getMeta('subscriptions')
             const subsObj = JSON.parse(subsMeta)
             t.deepEqual(subsObj, {})
-            t.true(expected.message.search('table another does not exist') >= 0)
+            t.true(expected.message.search("table 'another'") >= 0)
             res()
           } catch (e) {
             rej(e)
@@ -1515,6 +1515,53 @@ test('a second shape request error runs garbage collection', async (t) => {
       }
     )
   })
+})
+
+test('a subscription request failure does not clear the manager state', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  // relations must be present at subscription delivery
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename('main', tablename).toString()
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: tablename }],
+  }
+
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'failure' }],
+  }
+
+  satellite!.relations = relations
+  await satellite.subscribe([shapeDef1])
+
+  return new Promise<void>((res, rej) => {
+    return client.subscribeToSubscriptionEvents(
+      () => {
+        setTimeout(async () => {
+          try {
+            const row = await adapter.query({
+              sql: `SELECT id FROM ${qualified}`,
+            })
+            t.is(row.length, 1)
+            res()
+          } catch (e) {
+            rej(e)
+          }
+        }, 10)
+      },
+      () => undefined
+    )
+  })
+    .then(() => satellite.subscribe([shapeDef2]))
+    .catch((error) => t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND))
 })
 
 // TODO: implement reconnect protocol
