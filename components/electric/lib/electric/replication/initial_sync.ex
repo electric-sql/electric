@@ -126,45 +126,6 @@ defmodule Electric.Replication.InitialSync do
     end)
   end
 
-  def fetch_data_from_all_tables(conn, origin) do
-    {:ok, tables} = Extension.electrified_tables(conn)
-
-    Enum.flat_map(tables, fn {_id, schema_name, table_name, _oid} ->
-      relation = {schema_name, table_name}
-      {:ok, pks} = Extension.SchemaCache.primary_keys(origin, schema_name, table_name)
-
-      sql = fetch_all_rows_from_table_query(relation, pks)
-      {:ok, cols, rows} = :epgsql.squery(conn, sql)
-
-      col_names = Enum.map(cols, fn tuple -> elem(tuple, 1) end)
-      rows_to_records(rows, col_names, relation)
-    end)
-  end
-
-  def fetch_all_rows_from_table_query({schema_name, table_name}, primary_keys) do
-    # TODO(alco): Replace the * with an explicit list of columns
-    # (once https://github.com/electric-sql/electric/pull/191 is merged).
-    "SELECT * FROM #{schema_name}.#{table_name} ORDER BY #{Enum.join(primary_keys, ",")}"
-  end
-
-  defp rows_to_records(rows, col_names, relation) when is_list(rows) do
-    for row_tuple <- rows do
-      values =
-        row_tuple
-        |> Tuple.to_list()
-        |> Enum.map(fn
-          :null -> nil
-          other -> other
-        end)
-
-      row =
-        Enum.zip(col_names, values)
-        |> Map.new()
-
-      %NewRecord{relation: relation, record: row}
-    end
-  end
-
   defp build_transaction(connector_opts, changes, lsn, commit_timestamp) do
     publication = Connectors.get_replication_opts(connector_opts).publication
 
