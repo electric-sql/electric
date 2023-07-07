@@ -21,8 +21,8 @@ This is an example web application using ElectricSQL in the browser with [wa-sql
 Clone this repo and change directory into this folder:
 
 ```sh
-git clone https://github.com/electric-sql/examples
-cd examples/web
+git clone https://github.com/electric-sql/electric
+cd electric/examples/web-wa-sqlite
 ```
 
 Install the dependencies:
@@ -34,6 +34,7 @@ pnpm install
 ## Run
 
 First, setup and run the local stack:
+
 ```sh
 cd ../../components/electric
 docker build -t electric:local-build .
@@ -41,18 +42,21 @@ cd ../../local-stack
 ```
 
 Configure your environment to use the compiled image:
+
 ```sh
 vim .envrc
 export ELECTRIC_IMAGE=electric:local-build
 ```
 
 Launch the local stack:
+
 ```sh
 source .envrc
 docker-compose up
 ```
 
-Then, connect to Postgres and create the necessary tables:
+Then, in another terminal, connect to Postgres and create the necessary tables:
+
 ```sh
 docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
 electric=# CREATE TABLE IF NOT EXISTS "items" (
@@ -62,27 +66,31 @@ electric=# CREATE TABLE IF NOT EXISTS "items" (
 ```
 
 Now, Electrify the table in order for it to be exposed to client applications:
+
 ```
 electric=# CALL electric.electrify('items');
 ```
 
 Then, build the typescript client and the generator:
+
 ```sh
 cd clients/typescript
 pnpm build
 cd ../../generator
 pnpm build
-cd ../examples/web-wa-sqlite
 ```
 
 Now, generate an Electric client for the app:
+
 ```sh
+cd ../examples/web-wa-sqlite
 npx electric-sql generate
 ```
 
 The `generate` command fetches the migrations from the backend and generates an Electric client in `src/generated/client/index.ts`.
 
 Now, let's build and run the app:
+
 ```sh
 pnpm build
 pnpm start
@@ -175,6 +183,7 @@ const ExampleComponent = () => {
 ElectricSQL supports migrating the back-end while the app is running.
 Migrations are additive-only.
 For example, while running the app we may connect to the Postgres backend and add a column `other_value` to the `items` table:
+
 ```shell
 docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
 electric=# ALTER TABLE items ADD other_value TEXT;
