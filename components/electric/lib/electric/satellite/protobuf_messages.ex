@@ -7758,11 +7758,7 @@
   end,
   defmodule Electric.Satellite.V14.SatSubsResp.SatSubsError do
     @moduledoc false
-    defstruct subscription_id: "",
-              code: :CODE_UNSPECIFIED,
-              message: "",
-              shape_request_error: [],
-              __uf__: []
+    defstruct code: :CODE_UNSPECIFIED, message: "", shape_request_error: [], __uf__: []
 
     (
       (
@@ -7778,7 +7774,6 @@
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
           []
-          |> encode_subscription_id(msg)
           |> encode_code(msg)
           |> encode_message(msg)
           |> encode_shape_request_error(msg)
@@ -7789,19 +7784,6 @@
       []
 
       [
-        defp encode_subscription_id(acc, msg) do
-          try do
-            if msg.subscription_id == "" do
-              acc
-            else
-              [acc, "\n", Protox.Encode.encode_string(msg.subscription_id)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:subscription_id, "invalid field value"),
-                      __STACKTRACE__
-          end
-        end,
         defp encode_code(acc, msg) do
           try do
             if msg.code == :CODE_UNSPECIFIED do
@@ -7906,11 +7888,6 @@
               {0, _, _} ->
                 raise %Protox.IllegalTagError{}
 
-              {1, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_id: delimited], rest}
-
               {2, _, bytes} ->
                 {value, rest} =
                   Protox.Decode.parse_enum(
@@ -8000,7 +7977,6 @@
             }
       def defs() do
         %{
-          1 => {:subscription_id, {:scalar, ""}, :string},
           2 =>
             {:code, {:scalar, :CODE_UNSPECIFIED},
              {:enum, Electric.Satellite.V14.SatSubsResp.SatSubsError.Code}},
@@ -8023,8 +7999,7 @@
           message: {3, {:scalar, ""}, :string},
           shape_request_error:
             {4, :unpacked,
-             {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError.ShapeReqError}},
-          subscription_id: {1, {:scalar, ""}, :string}
+             {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError.ShapeReqError}}
         }
       end
     )
@@ -8033,15 +8008,6 @@
       @spec fields_defs() :: list(Protox.Field.t())
       def fields_defs() do
         [
-          %{
-            __struct__: Protox.Field,
-            json_name: "subscriptionId",
-            kind: {:scalar, ""},
-            label: :optional,
-            name: :subscription_id,
-            tag: 1,
-            type: :string
-          },
           %{
             __struct__: Protox.Field,
             json_name: "code",
@@ -8074,46 +8040,6 @@
 
       [
         @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
-        (
-          def field_def(:subscription_id) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "subscriptionId",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :subscription_id,
-               tag: 1,
-               type: :string
-             }}
-          end
-
-          def field_def("subscriptionId") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "subscriptionId",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :subscription_id,
-               tag: 1,
-               type: :string
-             }}
-          end
-
-          def field_def("subscription_id") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "subscriptionId",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :subscription_id,
-               tag: 1,
-               type: :string
-             }}
-          end
-        ),
         (
           def field_def(:code) do
             {:ok,
@@ -8251,9 +8177,6 @@
 
     [
       @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
-      def default(:subscription_id) do
-        {:ok, ""}
-      end,
       def default(:code) do
         {:ok, :CODE_UNSPECIFIED}
       end,
