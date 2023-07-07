@@ -13,25 +13,26 @@
 
 [invoke electrify_table pg_1 entries]
 
-[global migration_vsn=20230704150000]
-
 # Create a new table, electrify it immediately, and then insert a few rows.
 [shell pg_1]
   [local sql=
     """
-    CREATE TABLE public.items (
+    BEGIN;
+
+    CREATE TABLE items (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       content VARCHAR(64) NOT NULL
     );
     CALL electric.electrify('public.items');
+
+    INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000011', 'first item');
+    INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000012', 'second item');
+
+    COMMIT;
     """]
 
-  [invoke migrate_pg $migration_vsn $sql]
-
-  !INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000011', 'first item');
-  ?INSERT 0 1
-  !INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000012', 'second item');
-  ?INSERT 0 1
+  !$sql
+  ?COMMIT
 
 # Start a Satellite client and verify that it gets all migrations during initial sync.
 [invoke setup_client 1 "electric_1" 5133]
@@ -46,24 +47,16 @@
   ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
 
-  # Verifying the initial sync
-
-  ## The client first receives migrations corresponding to all electrified tables on the server.
-  ##
-  ## We know the order in which the migrations are streamed because
-  ##
-  ##   a) the version of the migration that created the "items" table is static.
-  ##   b) the version of the migration that created the "entries" table is the e2e test suite start time.
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"items"
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration_vsn",.*,"table":\{.*,"name":"items"
-
+  # Verifying the initial sync. The client receives migrations corresponding to all electrified tables on the server.
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"entries"
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
     \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
     \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"[0-9_]+",.*,"table":\{.*,"name":"entries"
 
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"items"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"[0-9_]+",.*,"table":\{.*,"name":"items"
 
 [cleanup]
   [invoke teardown]
