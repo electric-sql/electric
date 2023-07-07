@@ -459,8 +459,6 @@ export interface SatSubsResp {
  */
 export interface SatSubsResp_SatSubsError {
   $type: "Electric.Satellite.v1_4.SatSubsResp.SatSubsError";
-  /** the subscription identifier associated with this error */
-  subscriptionId: string;
   /** error code */
   code: SatSubsResp_SatSubsError_Code;
   /** A human-readable description of the error */
@@ -2743,22 +2741,13 @@ export const SatSubsResp = {
 messageTypeRegistry.set(SatSubsResp.$type, SatSubsResp);
 
 function createBaseSatSubsResp_SatSubsError(): SatSubsResp_SatSubsError {
-  return {
-    $type: "Electric.Satellite.v1_4.SatSubsResp.SatSubsError",
-    subscriptionId: "",
-    code: 0,
-    message: "",
-    shapeRequestError: [],
-  };
+  return { $type: "Electric.Satellite.v1_4.SatSubsResp.SatSubsError", code: 0, message: "", shapeRequestError: [] };
 }
 
 export const SatSubsResp_SatSubsError = {
   $type: "Electric.Satellite.v1_4.SatSubsResp.SatSubsError" as const,
 
   encode(message: SatSubsResp_SatSubsError, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.subscriptionId !== "") {
-      writer.uint32(10).string(message.subscriptionId);
-    }
     if (message.code !== 0) {
       writer.uint32(16).int32(message.code);
     }
@@ -2778,13 +2767,6 @@ export const SatSubsResp_SatSubsError = {
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
-        case 1:
-          if (tag !== 10) {
-            break;
-          }
-
-          message.subscriptionId = reader.string();
-          continue;
         case 2:
           if (tag !== 16) {
             break;
@@ -2821,7 +2803,6 @@ export const SatSubsResp_SatSubsError = {
 
   fromPartial<I extends Exact<DeepPartial<SatSubsResp_SatSubsError>, I>>(object: I): SatSubsResp_SatSubsError {
     const message = createBaseSatSubsResp_SatSubsError();
-    message.subscriptionId = object.subscriptionId ?? "";
     message.code = object.code ?? 0;
     message.message = object.message ?? "";
     message.shapeRequestError =

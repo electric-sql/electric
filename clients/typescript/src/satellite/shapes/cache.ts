@@ -217,7 +217,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   // It is safe to reset the cache state without throwing.
   // However, if message is unexpected, we emit the error
   subscriptionError(): void {
-    if (this.remainingShapes.size == 0 || !this.requestedSubscription) {
+    if (this.remainingShapes.size === 0 || !this.requestedSubscription) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription error, but no subscription is being requested`

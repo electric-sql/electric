@@ -394,9 +394,6 @@ message SatSubsResp {
             // Error requesting shape
             SHAPE_REQUEST_ERROR = 2;
         }
-        
-        // the subscription identifier associated with this error
-        string subscription_id = 1;
 
         // error code
         Code code = 2;

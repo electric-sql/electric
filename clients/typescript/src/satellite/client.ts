@@ -767,14 +767,14 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
-    let retError = undefined
     if (msg.error) {
-      retError = subsErrorToSatelliteError(msg.error)
+      const error = subsErrorToSatelliteError(msg.error)
       this.subscriptionsDataCache.subscriptionError()
+      return { subscriptionId: msg.subscriptionId, error }
     } else {
       this.subscriptionsDataCache.subscriptionResponse(msg)
+      return { subscriptionId: msg.subscriptionId }
     }
-    return { subscriptionId: msg.subscriptionId, error: retError }
   }
 
   private handleSubscriptionError(msg: SatSubsDataError): void {
