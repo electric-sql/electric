@@ -491,12 +491,18 @@ export class SatelliteProcess implements Satellite {
       await this.client.connect()
       await this.client.authenticate(authState)
 
+      const schemaVersion = await this.migrator.querySchemaVersion()
+
       // Fetch the subscription IDs that were fulfilled
       // such that we can resume and inform Electric
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
-      await this.client.startReplication(this._lsn, subscriptionIds)
+      await this.client.startReplication(
+        this._lsn,
+        schemaVersion,
+        subscriptionIds
+      )
     } catch (error: any) {
       if (
         error.code == SatelliteErrorCode.BEHIND_WINDOW &&
