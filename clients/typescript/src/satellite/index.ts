@@ -73,7 +73,11 @@ export interface Client {
   close(): Promise<void>
   authenticate(authState: AuthState): Promise<AuthResponse>
   isClosed(): boolean
-  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void>
+  startReplication(
+    lsn?: LSN,
+    schemaVersion?: string,
+    subscriptionIds?: string[]
+  ): Promise<void>
   stopReplication(): Promise<void>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(

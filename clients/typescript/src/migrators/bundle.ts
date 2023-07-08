@@ -52,7 +52,7 @@ export class BundleMigrator implements Migrator {
     return unapplied.length
   }
 
-  async queryApplied(): Promise<MigrationRecord[]> {
+  async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
     const tableExists = `
@@ -64,18 +64,40 @@ export class BundleMigrator implements Migrator {
       sql: tableExists,
       args: [this.tableName],
     })
-    if (tables.length === 0) {
+
+    return tables.length > 0
+  }
+
+  async queryApplied(): Promise<MigrationRecord[]> {
+    if (!(await this.migrationsTableExists())) {
       return []
     }
 
-    // The migrations table exists, so let's query the version of
-    // the previously applied migrations.
     const existingRecords = `
       SELECT version FROM ${this.tableName}
         ORDER BY id ASC
     `
     const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
+  }
+
+  // Returns the version of the most recently applied migration
+  async querySchemaVersion(): Promise<string | undefined> {
+    if (!(await this.migrationsTableExists())) {
+      return
+    }
+
+    const schemaVersion = `
+      SELECT version FROM ${this.tableName}
+        ORDER BY version DESC
+        LIMIT 1
+    `
+    const rows = await this.adapter.query({ sql: schemaVersion })
+    if (rows.length === 0) {
+      return
+    }
+
+    return (rows[0] as MigrationRecord).version
   }
 
   async validateApplied(

@@ -208,6 +208,26 @@ test.serial('replication start sends FIRST_LSN', async (t) => {
   })
 })
 
+test.serial('replication start sends schemaVersion', async(t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  return new Promise(async (resolve) => {
+    server.nextResponses([
+      (data?: Buffer) => {
+        const msgType = data!.readUInt8()
+        t.assert(msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type))
+
+        const req = decode(data!) as Proto.SatInStartReplicationReq
+        t.assert(req.schemaVersion === '20230711')
+
+        resolve()
+      },
+    ])
+    await client.startReplication(new Uint8Array(), '20230711')
+  })
+})
+
 test.serial('replication start failure', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context

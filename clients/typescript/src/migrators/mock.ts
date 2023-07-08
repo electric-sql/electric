@@ -12,4 +12,8 @@ export class MockMigrator implements Migrator {
   async applyIfNotAlready(_: StmtMigration): Promise<boolean> {
     return true
   }
+
+  async querySchemaVersion(): Promise<string | undefined> {
+    return
+  }
 }

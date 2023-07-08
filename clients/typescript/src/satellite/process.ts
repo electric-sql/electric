@@ -484,11 +484,12 @@ export class SatelliteProcess implements Satellite {
       throw new Error(`trying to connect before authentication`)
     }
     const authState = this._authState
+    const schemaVersion = await this.migrator.querySchemaVersion()
 
     return this.client
       .connect()
       .then(() => this.client.authenticate(authState))
-      .then(() => this.client.startReplication(this._lsn))
+      .then(() => this.client.startReplication(this._lsn, schemaVersion))
       .catch(async (error) => {
         if (
           error.code == SatelliteErrorCode.BEHIND_WINDOW &&
