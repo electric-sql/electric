@@ -189,7 +189,8 @@ defmodule Electric.Satellite.WsServer do
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
   def websocket_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
-    migration_transactions = InitialSync.migrations_since(nil, state.pg_connector_opts)
+    %SatInStartReplicationReq{schema_version: schema_version} = msg
+    migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
     lsn = CachedWal.Api.get_current_position()
