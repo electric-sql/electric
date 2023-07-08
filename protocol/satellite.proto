@@ -123,6 +123,9 @@ message SatInStartReplicationReq {
     // the subscriptions identifiers the client wants to resume subscription    
     repeated string subscription_ids = 4;
 
+    // The version of the most recent migration seen by the client.
+    optional string schema_version = 5;
+
     // Note:
     // - a client might resume replication only for a subset of previous subscriptions 
     // in case the application cancelled some subscriptions while disconnected from the

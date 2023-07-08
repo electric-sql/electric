@@ -1416,7 +1416,12 @@
   end,
   defmodule Electric.Satellite.V14.SatInStartReplicationReq do
     @moduledoc false
-    defstruct lsn: "", options: [], sync_batch_size: 0, subscription_ids: [], __uf__: []
+    defstruct lsn: "",
+              options: [],
+              sync_batch_size: 0,
+              subscription_ids: [],
+              schema_version: nil,
+              __uf__: []
 
     (
       (
@@ -1432,6 +1437,7 @@
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
           []
+          |> encode_schema_version(msg)
           |> encode_lsn(msg)
           |> encode_options(msg)
           |> encode_sync_batch_size(msg)
@@ -1517,6 +1523,18 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:subscription_ids, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_schema_version(acc, msg) do
+          try do
+            case msg.schema_version do
+              nil -> [acc]
+              child_field_value -> [acc, "*", Protox.Encode.encode_string(child_field_value)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:schema_version, "invalid field value"),
                       __STACKTRACE__
           end
         end
@@ -1611,6 +1629,11 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[subscription_ids: msg.subscription_ids ++ [delimited]], rest}
 
+              {5, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[schema_version: delimited], rest}
+
               {tag, wire_type, rest} ->
                 {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
 
@@ -1676,7 +1699,8 @@
           2 =>
             {:options, :packed, {:enum, Electric.Satellite.V14.SatInStartReplicationReq.Option}},
           3 => {:sync_batch_size, {:scalar, 0}, :int32},
-          4 => {:subscription_ids, :unpacked, :string}
+          4 => {:subscription_ids, :unpacked, :string},
+          5 => {:schema_version, {:oneof, :_schema_version}, :string}
         }
       end
 
@@ -1688,6 +1712,7 @@
         %{
           lsn: {1, {:scalar, ""}, :bytes},
           options: {2, :packed, {:enum, Electric.Satellite.V14.SatInStartReplicationReq.Option}},
+          schema_version: {5, {:oneof, :_schema_version}, :string},
           subscription_ids: {4, :unpacked, :string},
           sync_batch_size: {3, {:scalar, 0}, :int32}
         }
@@ -1732,6 +1757,15 @@
             label: :repeated,
             name: :subscription_ids,
             tag: 4,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "schemaVersion",
+            kind: {:oneof, :_schema_version},
+            label: :proto3_optional,
+            name: :schema_version,
+            tag: 5,
             type: :string
           }
         ]
@@ -1877,6 +1911,46 @@
              }}
           end
         ),
+        (
+          def field_def(:schema_version) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:oneof, :_schema_version},
+               label: :proto3_optional,
+               name: :schema_version,
+               tag: 5,
+               type: :string
+             }}
+          end
+
+          def field_def("schemaVersion") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:oneof, :_schema_version},
+               label: :proto3_optional,
+               name: :schema_version,
+               tag: 5,
+               type: :string
+             }}
+          end
+
+          def field_def("schema_version") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "schemaVersion",
+               kind: {:oneof, :_schema_version},
+               label: :proto3_optional,
+               name: :schema_version,
+               tag: 5,
+               type: :string
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -1926,6 +2000,9 @@
         {:ok, 0}
       end,
       def default(:subscription_ids) do
+        {:error, :no_default_value}
+      end,
+      def default(:schema_version) do
         {:error, :no_default_value}
       end,
       def default(_) do

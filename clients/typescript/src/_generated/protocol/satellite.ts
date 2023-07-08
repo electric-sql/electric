@@ -127,6 +127,8 @@ export interface SatInStartReplicationReq {
   syncBatchSize: number;
   /** the subscriptions identifiers the client wants to resume subscription */
   subscriptionIds: string[];
+  /** The version of the most recent migration seen by the client. */
+  schemaVersion?: string | undefined;
 }
 
 export enum SatInStartReplicationReq_Option {
@@ -946,6 +948,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     options: [],
     syncBatchSize: 0,
     subscriptionIds: [],
+    schemaVersion: undefined,
   };
 }
 
@@ -966,6 +969,9 @@ export const SatInStartReplicationReq = {
     }
     for (const v of message.subscriptionIds) {
       writer.uint32(34).string(v!);
+    }
+    if (message.schemaVersion !== undefined) {
+      writer.uint32(42).string(message.schemaVersion);
     }
     return writer;
   },
@@ -1015,6 +1021,13 @@ export const SatInStartReplicationReq = {
 
           message.subscriptionIds.push(reader.string());
           continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.schemaVersion = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1034,6 +1047,7 @@ export const SatInStartReplicationReq = {
     message.options = object.options?.map((e) => e) || [];
     message.syncBatchSize = object.syncBatchSize ?? 0;
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
+    message.schemaVersion = object.schemaVersion ?? undefined;
     return message;
   },
 };
