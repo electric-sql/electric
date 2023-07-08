@@ -2,14 +2,14 @@ defmodule Electric.Satellite.Protocol do
   @moduledoc """
   Protocol for communication with Satellite
   """
-  require Logger
+  use Electric.Satellite.Protobuf
   use Pathex
 
-  require Electric.Satellite.Protocol
+  import Electric.Postgres.Extension, only: [is_migration_relation: 1]
+
   alias Electric.Replication.Connectors
   alias Electric.Postgres.CachedWal.Producer
   alias Electric.Utils
-  use Electric.Satellite.Protobuf
   alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
@@ -20,6 +20,8 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
   alias Electric.Telemetry.Metrics
+
+  require Logger
 
   @type lsn() :: non_neg_integer
   @producer_timeout 5_000
@@ -75,7 +77,8 @@ defmodule Electric.Satellite.Protocol do
               last_seen_wal_pos: 0,
               subscription_pause_queue: {nil, :queue.new()},
               outgoing_ops_buffer: :queue.new(),
-              subscription_data_to_send: %{}
+              subscription_data_to_send: %{},
+              last_migration_xid_at_initial_sync: 0
 
     @typedoc """
     Insertion point for data coming from a subscription fulfillment.
@@ -93,13 +96,14 @@ defmodule Electric.Satellite.Protocol do
             relations: %{Changes.relation() => PB.relation_id()},
             # Parameters used to acknowledge received messages
             sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer(),
-            last_seen_wal_pos: 0,
+            sync_counter: nil | non_neg_integer,
+            last_seen_wal_pos: non_neg_integer,
             # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
             subscription_pause_queue:
               {subscription_insert_point() | nil, :queue.queue(subscription_insert_point())},
             outgoing_ops_buffer: :queue.queue(),
-            subscription_data_to_send: %{optional(String.t()) => term()}
+            subscription_data_to_send: %{optional(String.t()) => term()},
+            last_migration_xid_at_initial_sync: non_neg_integer
           }
 
     def add_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, new),
@@ -495,10 +499,12 @@ defmodule Electric.Satellite.Protocol do
           {[PB.sq_pb_msg()], State.t()}
   def handle_outgoing_txs(events, state, acc \\ [])
 
-  def handle_outgoing_txs([{tx, offset} = event | events], %State{} = state, acc) do
+  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, acc) do
     with %{changes: [_ | _]} = tx <- Shapes.filter_changes_from_tx(tx, current_shapes(state)),
-         true <- Changes.belongs_to_user?(tx, state.auth.user_id) do
-      {relations, transaction, out_rep} = handle_out_trans(event, state)
+         true <- Changes.belongs_to_user?(tx, state.auth.user_id),
+         stripped_tx <-
+           maybe_strip_migration_ddl(tx, state.out_rep.last_migration_xid_at_initial_sync) do
+      {relations, transaction, out_rep} = handle_out_trans({stripped_tx, offset}, state)
       acc = Enum.concat([transaction, relations, acc])
       out_rep = %{out_rep | last_seen_wal_pos: offset}
       handle_outgoing_txs(events, %State{state | out_rep: out_rep}, acc)
@@ -514,6 +520,24 @@ defmodule Electric.Satellite.Protocol do
   def handle_outgoing_txs([], state, acc) do
     {Enum.reverse(acc), state}
   end
+
+  # If the client received at least one migration during the initial sync, the value of
+  # last_migration_xid_at_initial_sync is non-zero. And due to the lag between any changes getting committed to the
+  # database and those same changes getting propagated through the cached WAL, we may be looking at the same migration
+  # here that the client already received during the initial sync. If this is the case, we strip out all DDL from this
+  # transaction and leave only data changes.
+  #
+  # TODO(alco): this could be simplified by using LSN instead of xid to filter out repeat migrations.
+  # See https://linear.app/electric-sql/issue/VAX-768.
+  defp maybe_strip_migration_ddl(
+         %Transaction{xid: xid, changes: changes} = tx,
+         last_migration_xid_at_initial_sync
+       )
+       when xid <= last_migration_xid_at_initial_sync do
+    %{tx | changes: Enum.reject(changes, &is_migration_relation(&1.relation))}
+  end
+
+  defp maybe_strip_migration_ddl(tx, _), do: tx
 
   # The offset here comes from the producer
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
@@ -693,7 +717,7 @@ defmodule Electric.Satellite.Protocol do
     opts = state.pg_connector_opts
 
     Task.start(fn ->
-      # This is `InitialData.query_subscription_data/2` by default, but can be overridden for tests.
+      # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
       fun.({id, requests}, reply_to: {ref, parent}, connection: opts)
     end)

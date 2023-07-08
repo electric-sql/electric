@@ -188,7 +188,12 @@ defmodule Electric.Satellite.WsServer do
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
     lsn = CachedWal.Api.get_current_position()
-    state = Protocol.initiate_subscription(state, lsn)
+    max_txid = Enum.max_by(migration_transactions, fn {tx, _offset} -> tx.xid end, fn -> 0 end)
+
+    state =
+      state
+      |> Protocol.initiate_subscription(lsn)
+      |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
     {binary_frames(msgs), state}
   end
