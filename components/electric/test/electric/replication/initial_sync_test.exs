@@ -14,7 +14,7 @@ defmodule Electric.Replication.InitialSyncTest do
   @cached_wal_module CachedWal.EtsBacked
   @sleep_timeout 50
 
-  describe "transactions" do
+  describe "migrations_since" do
     setup ctx, do: Map.put(ctx, :origin, @origin)
     setup :setup_replicated_db
 
@@ -55,14 +55,18 @@ defmodule Electric.Replication.InitialSyncTest do
 
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
-      assert {_,
-              [
-                {%Transaction{
-                   changes: [migration],
-                   origin: "initial-sync-test",
-                   lsn: 0
-                 }, 0}
-              ]} = InitialSync.transactions(pg_connector_opts)
+      assert [
+               {%Transaction{
+                  changes: [migration],
+                  origin: "initial-sync-test",
+                  lsn: 0,
+                  xid: xid,
+                  commit_timestamp: timestamp
+                }, 0}
+             ] = InitialSync.migrations_since(nil, pg_connector_opts)
+
+      assert is_integer(xid)
+      assert %DateTime{} = timestamp
 
       migration_version = Map.fetch!(migration.record, "version")
       migration_relation = Extension.ddl_relation()
@@ -114,19 +118,29 @@ defmodule Electric.Replication.InitialSyncTest do
       current_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
-      assert {_,
-              [
-                {%Transaction{
-                   changes: [migration1],
-                   origin: "initial-sync-test",
-                   lsn: 0
-                 }, 0},
-                {%Transaction{
-                   changes: [migration2],
-                   origin: "initial-sync-test",
-                   lsn: 0
-                 }, 0}
-              ]} = InitialSync.transactions(pg_connector_opts)
+      assert [
+               {%Transaction{
+                  changes: [migration1],
+                  origin: "initial-sync-test",
+                  lsn: 0,
+                  xid: xid1,
+                  commit_timestamp: timestamp1
+                }, 0},
+               {%Transaction{
+                  changes: [migration2],
+                  origin: "initial-sync-test",
+                  lsn: 0,
+                  xid: xid2,
+                  commit_timestamp: timestamp2
+                }, 0}
+             ] = InitialSync.migrations_since(nil, pg_connector_opts)
+
+      assert is_integer(xid1)
+      assert is_integer(xid2)
+      assert xid1 < xid2
+
+      assert %DateTime{} = timestamp1
+      assert %DateTime{} = timestamp2
 
       migration1_version = Map.fetch!(migration1.record, "version")
       migration2_version = Map.fetch!(migration2.record, "version")
