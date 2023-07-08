@@ -338,6 +338,23 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    test "no migrations are delivered as part of initial sync if PG has no electrified tables",
+         cxt do
+      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
+        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
+        # message we're testing here.
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+
+        refute_receive {^conn, _}
+      end)
+    end
+
     test "Start/stop replication", cxt do
       limit = 10
 
