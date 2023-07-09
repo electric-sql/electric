@@ -248,8 +248,6 @@ defmodule Electric.Postgres.TestConnection do
           ssl: false
         ),
       replication: [
-        publication: "all_tables",
-        slot: "all_changes",
         electric_connection: [
           host: "host.docker.internal",
           port: 5433,

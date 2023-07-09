@@ -58,8 +58,6 @@ if config_env() == :prod do
   config :electric, Electric.StatusPlug,
     port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
 
-  publication = System.get_env("POSTGRES_PUBLICATION", "all_tables")
-  slot = System.get_env("POSTGRES_SLOT", "all_changes")
   electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
 
   electric_port = System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
@@ -83,8 +81,6 @@ if config_env() == :prod do
      producer: Electric.Replication.Postgres.LogicalReplicationProducer,
      connection: postgresql_connection,
      replication: [
-       publication: publication,
-       slot: slot,
        electric_connection: [
          host: electric_host,
          port: electric_port,

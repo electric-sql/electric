@@ -81,7 +81,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, pid} =
         start_supervised(
           {MigrationConsumer,
-           {[origin: origin, replication: [publication: "all_tables"]],
+           {[origin: origin, replication: []],
             [
               producer: producer_name,
               backend: {MockSchemaLoader, parent: self(), oids: oids, pks: pks}
