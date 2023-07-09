@@ -27,7 +27,7 @@ defmodule Electric.Replication.InitialSync do
   def migrations_since(version, connector_opts) do
     {:ok, migrations} = Extension.SchemaCache.migration_history(version)
     origin = Connectors.origin(connector_opts)
-    publication = Connectors.get_replication_opts(connector_opts).publication
+    publication = Extension.publication_name()
 
     for {txid, txts, version, _schema, stmts} <- migrations do
       records =
