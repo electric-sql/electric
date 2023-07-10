@@ -450,7 +450,7 @@ export interface SatSubsResp {
   /** identifier of the subscription this response refers to */
   subscriptionId: string;
   /** the error details if the request failed */
-  error?: SatSubsResp_SatSubsError | undefined;
+  err?: SatSubsResp_SatSubsError | undefined;
 }
 
 /**
@@ -2678,7 +2678,7 @@ export const SatSubsReq = {
 messageTypeRegistry.set(SatSubsReq.$type, SatSubsReq);
 
 function createBaseSatSubsResp(): SatSubsResp {
-  return { $type: "Electric.Satellite.v1_4.SatSubsResp", subscriptionId: "", error: undefined };
+  return { $type: "Electric.Satellite.v1_4.SatSubsResp", subscriptionId: "", err: undefined };
 }
 
 export const SatSubsResp = {
@@ -2688,8 +2688,8 @@ export const SatSubsResp = {
     if (message.subscriptionId !== "") {
       writer.uint32(10).string(message.subscriptionId);
     }
-    if (message.error !== undefined) {
-      SatSubsResp_SatSubsError.encode(message.error, writer.uint32(18).fork()).ldelim();
+    if (message.err !== undefined) {
+      SatSubsResp_SatSubsError.encode(message.err, writer.uint32(18).fork()).ldelim();
     }
     return writer;
   },
@@ -2713,7 +2713,7 @@ export const SatSubsResp = {
             break;
           }
 
-          message.error = SatSubsResp_SatSubsError.decode(reader, reader.uint32());
+          message.err = SatSubsResp_SatSubsError.decode(reader, reader.uint32());
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -2731,8 +2731,8 @@ export const SatSubsResp = {
   fromPartial<I extends Exact<DeepPartial<SatSubsResp>, I>>(object: I): SatSubsResp {
     const message = createBaseSatSubsResp();
     message.subscriptionId = object.subscriptionId ?? "";
-    message.error = (object.error !== undefined && object.error !== null)
-      ? SatSubsResp_SatSubsError.fromPartial(object.error)
+    message.err = (object.err !== undefined && object.err !== null)
+      ? SatSubsResp_SatSubsError.fromPartial(object.err)
       : undefined;
     return message;
   },

@@ -346,7 +346,7 @@ defmodule Electric.Satellite.Protocol do
       when byte_size(id) > 128 do
     {%SatSubsResp{
        subscription_id: String.slice(id, 1..128) <> "...",
-       error: %SatSubsError{
+       err: %SatSubsError{
          message: "ID too long, "
        }
      }, state}
@@ -355,7 +355,7 @@ defmodule Electric.Satellite.Protocol do
   def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
     {%SatSubsResp{
        subscription_id: id,
-       error: %SatSubsError{
+       err: %SatSubsError{
          message: "Subscription must include at least one shape request"
        }
      }, state}
@@ -369,13 +369,13 @@ defmodule Electric.Satellite.Protocol do
       Utils.validate_uuid(id) != {:ok, id} ->
         {%SatSubsResp{
            subscription_id: id,
-           error: %SatSubsError{message: "Subscription ID should be a valid UUID"}
+           err: %SatSubsError{message: "Subscription ID should be a valid UUID"}
          }, state}
 
       Utils.has_duplicates_by?(requests, & &1.request_id) ->
         {%SatSubsResp{
            subscription_id: id,
-           error: %SatSubsError{message: "Duplicated request ids are not allowed"}
+           err: %SatSubsError{message: "Duplicated request ids are not allowed"}
          }, state}
 
       true ->
@@ -386,7 +386,7 @@ defmodule Electric.Satellite.Protocol do
           {:error, errors} ->
             {%SatSubsResp{
                subscription_id: id,
-               error: %SatSubsError{
+               err: %SatSubsError{
                  shape_request_error:
                    Enum.map(errors, fn {id, code, message} ->
                      %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
@@ -714,7 +714,7 @@ defmodule Electric.Satellite.Protocol do
       1_000 ->
         {%SatSubsResp{
            subscription_id: id,
-           error: %SatSubsError{message: "Internal error while checking data availability"}
+           err: %SatSubsError{message: "Internal error while checking data availability"}
          }, state}
     end
   end

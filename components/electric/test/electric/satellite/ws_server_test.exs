@@ -310,7 +310,7 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         [{client_name, _client_pid}] = active_clients()
@@ -351,7 +351,7 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         [{client_name, _client_pid}] = active_clients()
@@ -407,7 +407,7 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
         refute_receive {^conn, %SatOpLog{}}
@@ -440,7 +440,7 @@ defmodule Electric.Satellite.WsServerTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
 
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)

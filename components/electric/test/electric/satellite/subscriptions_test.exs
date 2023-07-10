@@ -119,7 +119,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id]
@@ -190,7 +190,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) -- [request_id1, request_id2] == []
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -254,7 +254,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id1]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -274,7 +274,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, err: nil}}
         received = receive_subscription_data(conn, sub_id2)
         assert Map.keys(received) == [request_id2]
         assert [%SatOpInsert{row_data: %{values: [_, "Old", _]}}] = received[request_id2]
