@@ -239,13 +239,13 @@ test.serial(
   async (t) => {
     Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
 
-    const {satellite, client} = t.context as ContextType
+    const { satellite, client } = t.context as ContextType
     await satellite.start(config.auth)
 
     client.setRelations(relations)
     client.setRelationData('Post', post)
 
-    const {Post} = t.context as ContextType
+    const { Post } = t.context as ContextType
     const { dataReceived } = await Post.sync()
     await dataReceived
 

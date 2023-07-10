@@ -1519,7 +1519,7 @@ test('a subscription request failure does not clear the manager state', async (t
 
   try {
     await satellite.subscribe([shapeDef2])
-  } catch(error: any) {
+  } catch (error: any) {
     t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND)
   }
 })
