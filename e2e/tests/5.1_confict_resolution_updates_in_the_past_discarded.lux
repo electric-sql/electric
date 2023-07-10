@@ -8,6 +8,7 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
+    [invoke elixir_client_subscribe "entries"]
     !Electric.Test.SatelliteWsClient.send_test_relation(conn)
     ?:ok
     ?$eprompt
@@ -36,7 +37,7 @@
 
 [shell user_1_ws1]
     # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp BUT with same value as before the update
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
 
 [cleanup]
     [invoke teardown]

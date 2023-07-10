@@ -10,10 +10,12 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session $user_id_1 1]
+    [invoke elixir_client_subscribe "entries"]
 
 [shell pg_1]
     !BEGIN;
     !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'sentinel value');
+    # Table `owned_entries` is not electrified and not subscribed, so we shouldn't see it
     !INSERT INTO owned_entries (id, electric_user_id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'test', 'bad sentinel value');
     !COMMIT;
     ?$psql
@@ -27,8 +29,8 @@
     ?\}
 
 [shell user_1_ws1]
-    # And recieve it there
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    # And receive it there
+    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
     ?values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
     ?\}
     ?tags: \["postgres_1@\d{13,16}"\]

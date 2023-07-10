@@ -121,6 +121,25 @@ defmodule Electric.Test.SatelliteWsClient do
     }
   end
 
+  def build_subscription_request(id \\ nil, shape_requests) do
+    shape_requests
+    |> Enum.map(fn
+      {id, tables: tables} ->
+        %SatShapeReq{
+          request_id: to_string(id),
+          shape_definition: %SatShapeDef{
+            selects: tables |> Enum.map(&%SatShapeDef.Select{tablename: &1})
+          }
+        }
+    end)
+    |> then(
+      &%SatSubsReq{
+        subscription_id: id || Electric.Utils.uuid4(),
+        shape_requests: &1
+      }
+    )
+  end
+
   def send_test_relation(conn \\ __MODULE__) do
     relation = %SatRelation{
       columns: [
