@@ -1,0 +1,53 @@
+[doc NodeJS Satellite can delete the row it just got, meaning the tags are correct]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        content VARCHAR(64) NOT NULL,
+        content_text_null VARCHAR(64),
+        content_text_null_default VARCHAR(64) DEFAULT '',
+        intvalue_null integer,
+        intvalue_null_default integer DEFAULT 10
+        );
+        CALL electric.electrify('public.items');
+        """]
+    [invoke migrate_pg 20230504114018 $sql]
+
+[shell satellite_1]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "items"]
+    # We shouldn't see this "hello from pg" until we actually do sync
+    -(hello from pg|$fail_pattern)
+
+[shell pg_1]
+    # Insert a row
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'hello from pg');
+    ?$psql
+    !\x
+    !SELECT COUNT(*) FROM public.items;
+    ??count | 1
+    ?$psql
+
+[shell satellite_1]
+    -$fail_pattern
+    [invoke node_sync_table "items"]
+    # As soon as sync it done, we expect to see the row in the database
+    !await client.get_items(db)
+    ??hello from pg
+    !await client.delete_item(db, ['hello from pg'])
+    ?$node
+
+[shell pg_1]
+    !\x
+    [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 0" 10 ${psql}]
+
+[cleanup]
+  [invoke teardown]
