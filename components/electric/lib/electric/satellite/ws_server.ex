@@ -197,7 +197,13 @@ defmodule Electric.Satellite.WsServer do
     # thus miss the migration committed just before it.
     lsn = CachedWal.Api.get_current_position()
 
-    %SatInStartReplicationReq{schema_version: schema_version} = msg
+    %SatInStartReplicationReq{options: opts, schema_version: schema_version} = msg
+
+    if :PAUSE_DURING_INITIAL_SYNC in opts do
+      Logger.debug("WsServer pausing until the next write")
+      :ok = wait_until_lsn_advances(lsn)
+    end
+
     migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
@@ -526,5 +532,18 @@ defmodule Electric.Satellite.WsServer do
       [error],
       Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
     )
+  end
+
+  # This function is only used in some e2e tests.
+  defp wait_until_lsn_advances(lsn) do
+    CachedWal.Api.request_notification(lsn)
+
+    receive do
+      {:cached_wal_notification, _, :new_segments_available} ->
+        :ok
+    after
+      5_000 ->
+        raise "Failed to observe the next lsn after #{inspect(lsn)}"
+    end
   end
 end
