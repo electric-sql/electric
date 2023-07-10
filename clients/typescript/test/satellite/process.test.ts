@@ -1275,37 +1275,27 @@ test('apply shape data and persist subscription', async (t) => {
   }
 
   satellite!.relations = relations
-  await satellite.subscribe([shapeDef])
+  const { dataReceived } = await satellite.subscribe([shapeDef])
+  await dataReceived
 
-  const p = new Promise<void>((res, rej) => {
-    client.subscribeToSubscriptionEvents(
-      () => {
-        // wait for process to apply shape data
-        setTimeout(async () => {
-          try {
-            const row = await adapter.query({
-              sql: `SELECT id FROM ${qualified}`,
-            })
-            t.is(row.length, 1)
+  // wait for process to apply shape data
+  try {
+    const row = await adapter.query({
+      sql: `SELECT id FROM ${qualified}`,
+    })
+    t.is(row.length, 1)
 
-            const shadowRows = await adapter.query({
-              sql: `SELECT tags FROM _electric_shadow`,
-            })
-            t.is(shadowRows.length, 1)
+    const shadowRows = await adapter.query({
+      sql: `SELECT tags FROM _electric_shadow`,
+    })
+    t.is(shadowRows.length, 1)
 
-            const subsMeta = await satellite._getMeta('subscriptions')
-            const subsObj = JSON.parse(subsMeta)
-            t.is(Object.keys(subsObj).length, 1)
-            res()
-          } catch (e) {
-            rej(e)
-          }
-        }, 10)
-      },
-      () => undefined
-    )
-  })
-  await p
+    const subsMeta = await satellite._getMeta('subscriptions')
+    const subsObj = JSON.parse(subsMeta)
+    t.is(Object.keys(subsObj).length, 1)
+  } catch (e) {
+    t.fail(JSON.stringify(e))
+  }
 })
 
 test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
@@ -1329,26 +1319,17 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
   }
 
   satellite!.relations = relations
-  await satellite.subscribe([shapeDef1])
+  const { dataReceived } = await satellite.subscribe([shapeDef1])
+  await dataReceived // wait for subscription to be fulfilled
 
-  return new Promise<void>((res, rej) => {
-    client.subscribeToSubscriptionEvents(
-      () => {
-        setTimeout(async () => {
-          try {
-            const row = await adapter.query({
-              sql: `SELECT id FROM ${qualified}`,
-            })
-            t.is(row.length, 0)
-            res()
-          } catch (e) {
-            rej(e)
-          }
-        }, 10)
-      },
-      () => {}
-    )
-  })
+  try {
+    const row = await adapter.query({
+      sql: `SELECT id FROM ${qualified}`,
+    })
+    t.is(row.length, 0)
+  } catch (e) {
+    t.fail(JSON.stringify(e))
+  }
 })
 
 test('a second successful subscription', async (t) => {
@@ -1376,38 +1357,26 @@ test('a second successful subscription', async (t) => {
 
   satellite!.relations = relations
   await satellite.subscribe([shapeDef1])
-  await satellite.subscribe([shapeDef2])
+  const { dataReceived } = await satellite.subscribe([shapeDef2])
+  await dataReceived
 
-  return new Promise<void>((res, rej) => {
-    client.subscribeToSubscriptionEvents(
-      (data) => {
-        // only test after second subscription delivery
-        if (data.data[0].relation.table == tablename) {
-          setTimeout(async () => {
-            try {
-              const row = await adapter.query({
-                sql: `SELECT id FROM ${qualified}`,
-              })
-              t.is(row.length, 1)
+  try {
+    const row = await adapter.query({
+      sql: `SELECT id FROM ${qualified}`,
+    })
+    t.is(row.length, 1)
 
-              const shadowRows = await adapter.query({
-                sql: `SELECT tags FROM _electric_shadow`,
-              })
-              t.is(shadowRows.length, 2)
+    const shadowRows = await adapter.query({
+      sql: `SELECT tags FROM _electric_shadow`,
+    })
+    t.is(shadowRows.length, 2)
 
-              const subsMeta = await satellite._getMeta('subscriptions')
-              const subsObj = JSON.parse(subsMeta)
-              t.is(Object.keys(subsObj).length, 2)
-              res()
-            } catch (e) {
-              rej(e)
-            }
-          }, 10)
-        }
-      },
-      () => undefined
-    )
-  })
+    const subsMeta = await satellite._getMeta('subscriptions')
+    const subsObj = JSON.parse(subsMeta)
+    t.is(Object.keys(subsObj).length, 2)
+  } catch (e) {
+    t.fail(JSON.stringify(e))
+  }
 })
 
 test('a single subscribe with multiple tables with FKs', async (t) => {
@@ -1536,28 +1505,23 @@ test('a subscription request failure does not clear the manager state', async (t
   }
 
   satellite!.relations = relations
-  await satellite.subscribe([shapeDef1])
+  const { dataReceived } = await satellite.subscribe([shapeDef1])
+  await dataReceived
 
-  return new Promise<void>((res, rej) => {
-    return client.subscribeToSubscriptionEvents(
-      () => {
-        setTimeout(async () => {
-          try {
-            const row = await adapter.query({
-              sql: `SELECT id FROM ${qualified}`,
-            })
-            t.is(row.length, 1)
-            res()
-          } catch (e) {
-            rej(e)
-          }
-        }, 10)
-      },
-      () => undefined
-    )
-  })
-    .then(() => satellite.subscribe([shapeDef2]))
-    .catch((error) => t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND))
+  try {
+    const row = await adapter.query({
+      sql: `SELECT id FROM ${qualified}`,
+    })
+    t.is(row.length, 1)
+  } catch (e) {
+    t.fail(JSON.stringify(e))
+  }
+
+  try {
+    await satellite.subscribe([shapeDef2])
+  } catch(error: any) {
+    t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND)
+  }
 })
 
 // TODO: implement reconnect protocol
