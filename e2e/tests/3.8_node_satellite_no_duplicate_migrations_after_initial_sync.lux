@@ -1,0 +1,64 @@
+[doc When NodeJS Satellite connects to Electric and receives initial migrations, the server guarantees it won't send a repeat migration afterwards]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[global migration1_vsn=20230710150000]
+[global migration2_vsn=20230710150001]
+
+[shell pg_1]
+  [local sql=
+    """
+    CREATE TABLE items (id TEXT PRIMARY KEY, content TEXT NOT NULL);
+    CALL electric.electrify('public.items');
+    """]
+  [invoke migrate_pg $migration1_vsn $sql]
+
+# Start a Satellite client and verify that it gets all migrations during initial sync.
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell satellite_1]
+  # Verifying it's a fresh client
+  ?applying migration: 0
+  ?no lsn retrieved from store
+  ?connecting and starting replication
+  ?no previous LSN, start replication with option FIRST_LSN
+
+  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+
+# Verify that the server is paused waiting for the next write in PG
+[shell electric]
+  ?WsServer pausing until the next write
+
+# Commit a new migration. The server will unpause automatically once it sees another write.
+[shell pg_1]
+  [local sql=
+    """
+    CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+    CALL electric.electrify('public.users');
+    """]
+  [invoke migrate_pg $migration2_vsn $sql]
+
+# Verify that the client receives initial migrations
+[shell satellite_1]
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"items"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration1_vsn",.*,"table":\{.*,"name":"items"
+
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"users"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration2_vsn",.*,"table":\{.*,"name":"users"
+
+# Verify that the server has filtered out the duplicate migration
+[shell electric]
+  ?Filtering transaction %Electric.Replication.Changes.Transaction\{\
+     ack_fn: nil, \
+     changes: \[\
+       %Electric.Replication.Changes.NewRecord\{record: %\{.*"query" => "CREATE TABLE users
+
+[cleanup]
+  [invoke teardown]
