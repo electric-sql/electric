@@ -575,12 +575,12 @@ defmodule Electric.Test.SatelliteWsClient do
       "0" ->
         sub_req = serialize(%SatInStartReplicationReq{options: [:FIRST_LSN]})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LSN=0")
 
       "eof" ->
         sub_req = serialize(%SatInStartReplicationReq{options: [:LAST_LSN]})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LAST_LSN")
 
       lsn ->
         sub_req =
@@ -590,7 +590,7 @@ defmodule Electric.Test.SatelliteWsClient do
           })
 
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LSN=#{inspect(lsn)}")
     end
   end
 
