@@ -734,7 +734,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
   const subsRespWithErr = Proto.SatSubsResp.fromPartial({
     subscriptionId,
-    error: {
+    err: {
       code: Proto.SatSubsResp_SatSubsError_Code.SHAPE_REQUEST_ERROR,
     },
   })
