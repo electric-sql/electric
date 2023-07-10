@@ -105,9 +105,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert_initial_replication_response(conn, 3)
 
         request_id = uuid4()
+        sub_id = uuid4()
 
         MockClient.send_data(conn, %SatSubsReq{
-          subscription_id: "00000000-0000-0000-0000-000000000000",
+          subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
               request_id: request_id,
@@ -118,7 +119,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id]
@@ -167,11 +168,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
             "John"
           ])
 
+        sub_id = uuid4()
         request_id1 = uuid4()
         request_id2 = uuid4()
 
         MockClient.send_data(conn, %SatSubsReq{
-          subscription_id: "00000000-0000-0000-0000-000000000000",
+          subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
               request_id: request_id1,
@@ -188,7 +190,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) -- [request_id1, request_id2] == []
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -237,10 +239,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
         assert_initial_replication_response(conn, 3)
 
+        sub_id = uuid4()
         request_id1 = uuid4()
 
         MockClient.send_data(conn, %SatSubsReq{
-          subscription_id: "00000000-0000-0000-0000-000000000000",
+          subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
               request_id: request_id1,
@@ -251,15 +254,16 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, error: nil}}
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id1]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
 
+        sub_id2 = uuid4()
         request_id2 = uuid4()
 
         MockClient.send_data(conn, %SatSubsReq{
-          subscription_id: "00000000-0000-0000-0000-000000000000",
+          subscription_id: sub_id2,
           shape_requests: [
             %SatShapeReq{
               request_id: request_id2,
@@ -270,8 +274,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ]
         })
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, error: nil}}
-        received = receive_subscription_data(conn, sub_id)
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, error: nil}}
+        received = receive_subscription_data(conn, sub_id2)
         assert Map.keys(received) == [request_id2]
         assert [%SatOpInsert{row_data: %{values: [_, "Old", _]}}] = received[request_id2]
 

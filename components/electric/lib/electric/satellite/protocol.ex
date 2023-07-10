@@ -381,7 +381,7 @@ defmodule Electric.Satellite.Protocol do
       true ->
         case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
           {:ok, requests} ->
-            query_subscription_data(requests, state)
+            query_subscription_data(id, requests, state)
 
           {:error, errors} ->
             {%SatSubsResp{
@@ -684,8 +684,7 @@ defmodule Electric.Satellite.Protocol do
     |> Enum.flat_map(fn {_, shapes} -> shapes end)
   end
 
-  defp query_subscription_data(requests, state) do
-    id = Utils.uuid4()
+  defp query_subscription_data(id, requests, state) do
     ref = make_ref()
     parent = self()
 
