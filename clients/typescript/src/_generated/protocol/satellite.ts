@@ -154,6 +154,8 @@ export enum SatInStartReplicationReq_Option {
    * whatever this position is. Used for tests only.
    */
   LAST_LSN = 4,
+  /** PAUSE_DURING_INITIAL_SYNC - This option is only used by some E2E tests. */
+  PAUSE_DURING_INITIAL_SYNC = 5,
   UNRECOGNIZED = -1,
 }
 

@@ -304,6 +304,15 @@
           def encode("LAST_LSN") do
             4
           end
+        ),
+        (
+          def encode(:PAUSE_DURING_INITIAL_SYNC) do
+            5
+          end
+
+          def encode("PAUSE_DURING_INITIAL_SYNC") do
+            5
+          end
         )
       ]
 
@@ -327,6 +336,9 @@
         end,
         def decode(4) do
           :LAST_LSN
+        end,
+        def decode(5) do
+          :PAUSE_DURING_INITIAL_SYNC
         end
       ]
 
@@ -336,7 +348,14 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :NONE}, {1, :LAST_ACKNOWLEDGED}, {2, :SYNC_MODE}, {3, :FIRST_LSN}, {4, :LAST_LSN}]
+        [
+          {0, :NONE},
+          {1, :LAST_ACKNOWLEDGED},
+          {2, :SYNC_MODE},
+          {3, :FIRST_LSN},
+          {4, :LAST_LSN},
+          {5, :PAUSE_DURING_INITIAL_SYNC}
+        ]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -355,6 +374,9 @@
             true
           end,
           def has_constant?(:LAST_LSN) do
+            true
+          end,
+          def has_constant?(:PAUSE_DURING_INITIAL_SYNC) do
             true
           end
         ]
