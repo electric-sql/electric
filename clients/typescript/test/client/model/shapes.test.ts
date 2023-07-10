@@ -117,7 +117,7 @@ function init() {
 
 test.beforeEach(makeContext)
 test.afterEach.always((t: ExecutionContext) => {
-  shapeManager['syncedTables'] = new Set<string>()
+  shapeManager['tablesPreviouslySubscribed'] = new Set<string>()
   return cleanAndStopSatellite(t)
 })
 

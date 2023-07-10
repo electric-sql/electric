@@ -130,7 +130,7 @@ export class Builder {
     const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
 
-    if (!shapeManager.isSynced(this._tableName))
+    if (!shapeManager.hasBeenSubscribed(this._tableName))
       Log.warn('Reading from unsynced table ' + this._tableName)
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select

@@ -9,15 +9,15 @@ export type Shape = {
 interface IShapeManager {
   init(satellite: Satellite): void
   sync(shape: Shape): Promise<Sub>
-  isSynced(table: TableName): boolean
+  hasBeenSubscribed(shape: TableName): boolean
 }
 
 export class ShapeManager implements IShapeManager {
-  protected syncedTables: Set<TableName>
+  protected tablesPreviouslySubscribed: Set<TableName>
   protected satellite?: Satellite
 
   constructor() {
-    this.syncedTables = new Set()
+    this.tablesPreviouslySubscribed = new Set()
   }
 
   init(satellite: Satellite) {
@@ -44,7 +44,7 @@ export class ShapeManager implements IShapeManager {
     const dataReceivedProm = sub.dataReceived.then(() => {
       // When all data is received
       // we store the fact that these tables are synced
-      shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
+      shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
     })
 
     return {
@@ -52,8 +52,8 @@ export class ShapeManager implements IShapeManager {
     }
   }
 
-  isSynced(table: TableName): boolean {
-    return this.syncedTables.has(table)
+  hasBeenSubscribed(table: TableName): boolean {
+    return this.tablesPreviouslySubscribed.has(table)
   }
 }
 
@@ -64,7 +64,7 @@ export class ShapeManagerMock extends ShapeManager {
 
   override async sync(shape: Shape): Promise<Sub> {
     // Do not contact the server but directly store the synced tables
-    shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
+    shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
 
     return {
       dataReceived: Promise.resolve(),
