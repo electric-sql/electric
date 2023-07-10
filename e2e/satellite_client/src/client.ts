@@ -43,6 +43,11 @@ export const set_subscribers = (db: Electric) => {
   })
 }
 
+export const syncTable = async (electric: Electric, table: 'items' | 'other_items') => {
+  const {dataReceived} = await electric.db[table].sync()
+  return await dataReceived
+}
+
 export const get_tables = async (electric: Electric) => {
   return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
