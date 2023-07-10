@@ -215,7 +215,7 @@ export class GlobalRegistry extends BaseRegistry {
       client,
       satelliteDefaults
     )
-    await satellite.start(config.auth)
+    await satellite.start(config.auth, config.replication.options)
 
     return satellite
   }

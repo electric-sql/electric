@@ -84,6 +84,7 @@ import {
   UnsubscribeResponse,
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
+import { SatelliteReplicationOptions } from '.'
 
 type IncomingHandler = {
   handle: (
@@ -306,6 +307,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
+    replicationOptions?: SatelliteReplicationOptions,
     subscriptionIds?: string[]
   ): Promise<void> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
@@ -322,8 +324,12 @@ export class SatelliteClient extends EventEmitter implements Client {
     let request
     if (!lsn || lsn.length == 0) {
       Log.info(`no previous LSN, start replication with option FIRST_LSN`)
+      const options = [SatInStartReplicationReq_Option.FIRST_LSN]
+      if (replicationOptions?.pauseDuringInitialSync) {
+        options.push(SatInStartReplicationReq_Option.PAUSE_DURING_INITIAL_SYNC)
+      }
       request = SatInStartReplicationReq.fromPartial({
-        options: [SatInStartReplicationReq_Option.FIRST_LSN],
+        options: options,
         schemaVersion,
         subscriptionIds,
       })

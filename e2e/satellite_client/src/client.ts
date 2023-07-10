@@ -13,7 +13,8 @@ export const open_db = async (
   name: string,
   host: string,
   port: number,
-  migrations: any
+  migrations: any,
+  replicationOptions?: string[]
 ): Promise<Electric> => {
   const original = new Database(name)
   const config: ElectricConfig = {
@@ -21,7 +22,8 @@ export const open_db = async (
     debug: true,
     auth: {
       token: authToken(process.env.SATELLITE_AUTH_SIGNING_ISS, process.env.SATELLITE_AUTH_SIGNING_KEY)
-    }
+    },
+    replicationOptions: replicationOptions
   }
   console.log(`config: ${JSON.stringify(config)}`)
   schema.migrations = migrations

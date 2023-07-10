@@ -1,6 +1,6 @@
 [global node=>]
 
-[macro connect_to_electric host port migrations]
+[macro connect_to_electric host port migrations options]
     !client = await import('./dist/client.js')
     ?$node
     # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
@@ -9,7 +9,8 @@
     !db = await client.open_db( process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME", \
                                 "$host", \
                                 $port, \
-                                migrations)
+                                migrations, \
+                                $options)
     ?^$node
 [endmacro]
 
@@ -17,11 +18,18 @@
     [invoke start_satellite $satellite_number]
     -$fail_pattern
     ?$node
-    [invoke connect_to_electric $electric $port $migrations]
+    [invoke connect_to_electric $electric $port $migrations "[]"]
 [endmacro]
 
 [macro setup_client satellite_number electric port]
     [invoke setup_client_with_migrations $satellite_number $electric $port "[]"]
+[endmacro]
+
+[macro setup_client_with_options satellite_number electric port options]
+    [invoke start_satellite $satellite_number]
+    -$fail_pattern
+    ?$node
+    [invoke connect_to_electric $electric $port "[]" $options]
 [endmacro]
 
 [macro node_await_get match]

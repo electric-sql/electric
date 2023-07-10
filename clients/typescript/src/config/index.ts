@@ -1,4 +1,5 @@
 import { AuthConfig } from '../auth/index'
+import { SatelliteReplicationOptions } from '../satellite'
 
 export interface ElectricConfig {
   auth: AuthConfig
@@ -16,6 +17,10 @@ export interface ElectricConfig {
    * Defaults to `false`.
    */
   debug?: boolean
+  /**
+   * ...
+   */
+  replicationOptions?: string[]
 }
 
 export type HydratedConfig = {
@@ -24,6 +29,7 @@ export type HydratedConfig = {
     host: string
     port: number
     ssl: boolean
+    options?: SatelliteReplicationOptions
   }
   debug: boolean
 }
@@ -46,6 +52,17 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
 
   const debug = config.debug ?? false
 
+  let replicationOptions: SatelliteReplicationOptions | undefined = {}
+  if (config.replicationOptions?.includes('clearOnBehindWindow')) {
+    replicationOptions.clearOnBehindWindow = true
+  }
+  if (config.replicationOptions?.includes('pauseDuringInitialSync')) {
+    replicationOptions.pauseDuringInitialSync = true
+  }
+  if (Object.keys(replicationOptions).length === 0) {
+    replicationOptions = undefined
+  }
+
   const url = config.url ?? 'electric://127.0.0.1:5133'
   const matches = url.match(/(?:electric:\/\/)(.+):([0-9]*)/)
   if (matches === null) {
@@ -58,6 +75,7 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     host,
     port: parseInt(port, 10),
     ssl: false,
+    options: replicationOptions,
   }
 
   return {

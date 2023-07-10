@@ -16,7 +16,7 @@
   [invoke migrate_pg $migration1_vsn $sql]
 
 # Start a Satellite client and verify that it gets all migrations during initial sync.
-[invoke setup_client 1 "electric_1" 5133]
+[invoke setup_client_with_options 1 "electric_1" 5133 "['pauseDuringInitialSync']"]
 
 [shell satellite_1]
   # Verifying it's a fresh client
