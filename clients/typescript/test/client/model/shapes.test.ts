@@ -9,7 +9,6 @@ import {
   ShapeManagerMock,
 } from '../../../src/client/model/shapes'
 import { SatelliteProcess } from '../../../src/satellite/process'
-import { SatelliteClient } from '../../../src/satellite/client'
 import { MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
@@ -226,7 +225,10 @@ test.serial('promise resolves when subscription starts loading', async (t) => {
   client.setRelationData('Post', post)
 
   const { Post } = t.context as ContextType
-  await Post.sync()
+  const { dataReceived } = await Post.sync()
+  // always await this promise otherwise the next test may issue a subscription
+  // while this one is not yet fulfilled and that will lead to issues
+  await dataReceived
   t.pass()
 })
 
@@ -235,13 +237,15 @@ test.serial('promise resolves when subscription starts loading', async (t) => {
 test.serial(
   'dataReceived promise resolves when subscription is fulfilled',
   async (t) => {
-    const { satellite, client } = t.context as ContextType
+    Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
+
+    const {satellite, client} = t.context as ContextType
     await satellite.start(config.auth)
 
     client.setRelations(relations)
     client.setRelationData('Post', post)
 
-    const { Post } = t.context as ContextType
+    const {Post} = t.context as ContextType
     const { dataReceived } = await Post.sync()
     await dataReceived
 
