@@ -22,9 +22,11 @@ import {
   SubscriptionErrorCallback,
   UnsubscribeResponse,
 } from './shapes/types'
+import { Sub } from './process'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
+export type { Sub } from './process'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
@@ -61,7 +63,7 @@ export interface Satellite {
     opts?: SatelliteReplicationOptions
   ): Promise<ConnectionWrapper>
   stop(): Promise<void>
-  subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<void>
+  subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<Sub>
   unsubscribe(shapeUuid: string): Promise<void>
 }
 

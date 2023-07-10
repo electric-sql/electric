@@ -9,6 +9,7 @@ import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
+import { shapeManager } from '../client/model/shapes'
 
 export { ElectricNamespace }
 
@@ -46,9 +47,8 @@ export const electrify = async <DB extends DbSchema<any>>(
   const registry = opts?.registry || globalRegistry
 
   const electric = new ElectricNamespace(adapter, notifier)
-  const namespace = ElectricClient.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library
 
-  await registry.ensureStarted(
+  const satellite = await registry.ensureStarted(
     dbName,
     adapter,
     migrator,
@@ -57,5 +57,8 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
+  // initialize the shape manager
+  shapeManager.init(satellite)
+  const namespace = ElectricClient.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library
   return namespace
 }

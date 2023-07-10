@@ -10,6 +10,10 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { dbSchema, Post } from '../generated'
+import {
+  shapeManager,
+  ShapeManagerMock,
+} from '../../../src/client/model/shapes'
 
 const db = new Database(':memory:')
 const electric = await electrify(db, dbSchema, {
@@ -28,6 +32,16 @@ const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
 const profileTable = electric.db.Profile
+
+// Use a mocked shape manager for this test
+// which does not wait for Satellite
+// to acknowledge the subscription
+Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
+
+// Sync all shapes such that we don't get warnings on every query
+await postTable.sync()
+await userTable.sync()
+await profileTable.sync()
 
 const post1 = {
   id: 1,
