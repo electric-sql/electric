@@ -189,11 +189,18 @@ defmodule Electric.Satellite.WsServer do
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
   def websocket_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
+    # Fetch the latest observed LSN from the cached WAL. We have to do it before fetching migrations.
+    #
+    # If we were to do it the other way around, we could miss a migration that is committed right after the call to
+    # migrations_since() but before the client subscribes to the replication stream. If the migration was immediately
+    # followed by another write in PG, we could have fetched the LSN of this last write with get_current_position() and
+    # thus miss the migration committed just before it.
+    lsn = CachedWal.Api.get_current_position()
+
     %SatInStartReplicationReq{schema_version: schema_version} = msg
     migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
-    lsn = CachedWal.Api.get_current_position()
     max_txid = Enum.max_by(migration_transactions, fn {tx, _offset} -> tx.xid end, fn -> 0 end)
 
     state =
