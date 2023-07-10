@@ -108,7 +108,7 @@ BEGIN
             RAISE DEBUG 'Trigger %% executed by operation %% at depth %% (tx %%)', TG_NAME, TG_OP, pg_trigger_depth(), pg_current_xact_id();
             RAISE DEBUG '  Given OLD %%', to_json(OLD);
             RAISE DEBUG '  Given NEW %%', to_json(NEW);
-            __current_tag := (CURRENT_TIMESTAMP, NULL);
+            __current_tag := (CURRENT_TIMESTAMP(3), NULL);
 
             -- USES COLUMN LIST
             INSERT INTO electric.%2$I (_last_modified, _tag, _tags, _resolved,
@@ -167,7 +167,7 @@ BEGIN
         BEGIN
             RAISE DEBUG 'Trigger %% executed by operation %% at depth %% (tx %%)', TG_NAME, TG_OP, pg_trigger_depth(), pg_current_xact_id();
             RAISE DEBUG '  Given OLD %%', to_json(OLD);
-            __current_tag := (CURRENT_TIMESTAMP, NULL);
+            __current_tag := (CURRENT_TIMESTAMP(3), NULL);
 
             -- USES COLUMN LIST
             UPDATE electric.%2$I
