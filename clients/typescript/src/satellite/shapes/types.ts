@@ -4,7 +4,10 @@ export const SUBSCRIPTION_DELIVERED = 'subscription_delivered'
 export const SUBSCRIPTION_ERROR = 'subscription_error'
 
 export type SubscriptionDeliveredCallback = (data: SubscriptionData) => void
-export type SubscriptionErrorCallback = (error: SatelliteError, subscriptionId?: string) => void
+export type SubscriptionErrorCallback = (
+  error: SatelliteError,
+  subscriptionId?: string
+) => void
 
 export type SubscribeResponse = {
   subscriptionId: string

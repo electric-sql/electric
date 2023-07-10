@@ -63,9 +63,7 @@ export interface Satellite {
     opts?: SatelliteReplicationOptions
   ): Promise<ConnectionWrapper>
   stop(): Promise<void>
-  subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<Sub>
+  subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<Sub>
   unsubscribe(shapeUuid: string): Promise<void>
 }
 

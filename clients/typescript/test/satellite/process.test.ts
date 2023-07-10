@@ -1460,7 +1460,7 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   })
 })
 
-test('a shape delivery that triggers garbage collection', async (t) => {
+test.serial('a shape delivery that triggers garbage collection', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType
   await runMigrations()
@@ -1484,37 +1484,33 @@ test('a shape delivery that triggers garbage collection', async (t) => {
   }
 
   satellite!.relations = relations
-  await satellite.subscribe([shapeDef1])
-  await satellite.subscribe([shapeDef2])
+  const { dataReceived: dataReceived1 } = await satellite.subscribe([shapeDef1])
+  await dataReceived1
+  const { dataReceived } = await satellite.subscribe([shapeDef2])
 
-  return new Promise<void>((res, rej) => {
-    client.subscribeToSubscriptionEvents(
-      () => undefined,
-      (expected) => {
-        setTimeout(async () => {
-          try {
-            const row = await adapter.query({
-              sql: `SELECT id FROM ${qualified}`,
-            })
-            t.is(row.length, 0)
+  try {
+    await dataReceived
+    t.fail()
+  } catch (expected: any) {
+    try {
+      const row = await adapter.query({
+        sql: `SELECT id FROM ${qualified}`,
+      })
+      t.is(row.length, 0)
 
-            const shadowRows = await adapter.query({
-              sql: `SELECT tags FROM _electric_shadow`,
-            })
-            t.is(shadowRows.length, 1)
+      const shadowRows = await adapter.query({
+        sql: `SELECT tags FROM _electric_shadow`,
+      })
+      t.is(shadowRows.length, 1)
 
-            const subsMeta = await satellite._getMeta('subscriptions')
-            const subsObj = JSON.parse(subsMeta)
-            t.deepEqual(subsObj, {})
-            t.true(expected.message.search("table 'another'") >= 0)
-            res()
-          } catch (e) {
-            rej(e)
-          }
-        }, 10)
-      }
-    )
-  })
+      const subsMeta = await satellite._getMeta('subscriptions')
+      const subsObj = JSON.parse(subsMeta)
+      t.deepEqual(subsObj, {})
+      t.true(expected.message.search("table 'another'") >= 0)
+    } catch (e) {
+      t.fail(JSON.stringify(e))
+    }
+  }
 })
 
 test('a subscription request failure does not clear the manager state', async (t) => {

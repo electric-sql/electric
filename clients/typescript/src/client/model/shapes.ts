@@ -12,7 +12,7 @@ interface IShapeManager {
   isSynced(table: TableName): boolean
 }
 
-class ShapeManager implements IShapeManager {
+export class ShapeManager implements IShapeManager {
   protected syncedTables: Set<TableName>
   protected satellite?: Satellite
 
@@ -44,11 +44,11 @@ class ShapeManager implements IShapeManager {
     const dataReceivedProm = sub.dataReceived.then(() => {
       // When all data is received
       // we store the fact that these tables are synced
-      shape.tables.forEach(this.syncedTables.add)
+      shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
     })
 
     return {
-      dataReceived: dataReceivedProm
+      dataReceived: dataReceivedProm,
     }
   }
 
@@ -67,7 +67,7 @@ export class ShapeManagerMock extends ShapeManager {
     shape.tables.forEach((tbl) => this.syncedTables.add(tbl))
 
     return {
-      dataReceived: Promise.resolve()
+      dataReceived: Promise.resolve(),
     }
   }
 }

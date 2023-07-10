@@ -115,7 +115,10 @@ export class SatelliteProcess implements Satellite {
   relations: RelationsCache
 
   subscriptions: SubscriptionsManager
-  subscriptionNotifiers: Record<string, [ success: () => void, failure: (error: any) => void ]>
+  subscriptionNotifiers: Record<
+    string,
+    [success: () => void, failure: (error: any) => void]
+  >
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
 
@@ -305,33 +308,42 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
-  async subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<Sub> {
+  async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<Sub> {
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
       requestId: this.shapeRequestIdGenerator(),
       definition,
     }))
 
+    const subId = this.subscriptionIdGenerator()
+    const prom = new Promise<void>((resolve, reject) => {
+      // store the resolve and reject
+      // such that we can resolve/reject
+      // the promise later when the shape
+      // is fulfilled or when an error arrives
+      // we store it before making the actual request
+      // to avoid that the answer would arrive too fast
+      // and this resolver and rejecter would not yet be stored
+      // this could especially happen in unit tests
+      this.subscriptionNotifiers[subId] = [resolve, reject]
+    })
+
     const { subscriptionId, error }: SubscribeResponse =
-      await this.client.subscribe(this.subscriptionIdGenerator(), shapeReqs)
+      await this.client.subscribe(subId, shapeReqs)
+    if (subId !== subscriptionId) {
+      throw new Error(
+        `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
+      )
+    }
     if (error) {
+      delete this.subscriptionNotifiers[subscriptionId]
       this.subscriptions.subscriptionCancelled(subscriptionId)
       throw error
     }
 
     this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
 
-    const prom = new Promise<void>((resolve, reject) => {
-      // store the resolve and reject
-      // such that we can resolve/reject
-      // the promise later when the shape
-      // is fulfilled or when an error arrives
-      this.subscriptionNotifiers[subscriptionId] = [ resolve, reject ]
-    })
-
     return {
-      dataReceived: prom
+      dataReceived: prom,
     }
   }
 
@@ -349,7 +361,7 @@ export class SatelliteProcess implements Satellite {
       await this._applySubscriptionData(subsData.data)
     }
     // Call the `onSuccess` callback for this subscription
-    const [ onSuccess, _ ] = this.subscriptionNotifiers[subsData.subscriptionId]
+    const [onSuccess, _] = this.subscriptionNotifiers[subsData.subscriptionId]
     delete this.subscriptionNotifiers[subsData.subscriptionId] // GC the notifiers for this subscription ID
     onSuccess()
   }
@@ -435,7 +447,7 @@ export class SatelliteProcess implements Satellite {
 
     // Call the `onSuccess` callback for this subscription
     if (subscriptionId) {
-      const [ _, onFailure ] = this.subscriptionNotifiers[subscriptionId]
+      const [_, onFailure] = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
       onFailure(satelliteError)
     }

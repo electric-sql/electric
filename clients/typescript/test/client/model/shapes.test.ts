@@ -1,12 +1,24 @@
 import test from 'ava'
 import Log from 'loglevel'
 import Database from 'better-sqlite3'
-import { dbSchema, Post } from '../generated'
-import { electrify } from '../../../src/drivers/better-sqlite3'
+import { dbSchema } from '../generated'
+import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import {
   shapeManager,
+  ShapeManager,
   ShapeManagerMock,
 } from '../../../src/client/model/shapes'
+import { SatelliteProcess } from '../../../src/satellite/process'
+import { SatelliteClient } from '../../../src/satellite/client'
+import { MockSatelliteClient } from '../../../src/satellite/mock'
+import { BundleMigrator } from '../../../src/migrators'
+import { MockNotifier } from '../../../src/notifiers'
+import { randomValue } from '../../../src/util'
+import { ElectricNamespace } from '../../../src/electric/namespace'
+import { ElectricClient } from '../../../src/client/model/client'
+import { cleanAndStopSatellite } from '../../satellite/common'
+import { satelliteDefaults } from '../../../src/satellite/config'
+import { ExecutionContext } from 'ava'
 
 // Modify `loglevel` to store the logged messages
 // based on "Writing plugins" in https://github.com/pimterry/loglevel
@@ -36,8 +48,63 @@ const config = {
     token: 'test-token',
   },
 }
-const electric = await electrify(db, dbSchema, config)
-const Post = electric.db.Post
+
+async function makeContext(t: ExecutionContext) {
+  const client = new MockSatelliteClient()
+  const adapter = new DatabaseAdapter(db)
+  const migrations = dbSchema.migrations
+  const migrator = new BundleMigrator(adapter, migrations)
+  const dbName = `.tmp/test-${randomValue()}.db`
+  const notifier = new MockNotifier(dbName)
+
+  const satellite = new SatelliteProcess(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    client,
+    satelliteDefaults
+  )
+
+  const ns = new ElectricNamespace(adapter, notifier)
+  shapeManager.init(satellite)
+  const electric = ElectricClient.create(dbSchema, ns)
+  const Post = electric.db.Post
+  const Items = electric.db.Items
+  const User = electric.db.User
+
+  const runMigrations = async () => {
+    await migrator.up()
+  }
+
+  t.context = {
+    dbName,
+    db,
+    satellite,
+    client,
+    runMigrations,
+    electric,
+    Post,
+    Items,
+    User,
+  }
+
+  init()
+}
+
+type TableType<T extends keyof ElectricClient<typeof dbSchema>['db']> =
+  ElectricClient<typeof dbSchema>['db'][T]
+type ContextType = {
+  dbName: string
+  db: typeof db
+  satellite: SatelliteProcess
+  client: MockSatelliteClient
+  runMigrations: () => Promise<number>
+  electric: ElectricClient<typeof dbSchema>
+  Post: TableType<'Post'>
+  Items: TableType<'Items'>
+  User: TableType<'User'>
+}
 
 // Create a Post table in the DB first
 function init() {
@@ -49,15 +116,21 @@ function init() {
   log = []
 }
 
-test.beforeEach(init)
+test.beforeEach(makeContext)
+test.afterEach.always((t: ExecutionContext) => {
+  shapeManager['syncedTables'] = new Set<string>()
+  return cleanAndStopSatellite(t)
+})
 
 test.serial('Read queries issue warning if table is not synced', async (t) => {
+  const { Post } = t.context as ContextType
   t.assert(log.length === 0)
   await Post.findMany()
   t.deepEqual(log, ['Reading from unsynced table Post'])
 })
 
 test.serial('Upsert query issues warning if table is not synced', async (t) => {
+  const { Post } = t.context as ContextType
   t.assert(log.length === 0)
 
   const newPost = {
@@ -91,6 +164,7 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
 test.serial(
   'Read queries no longer warn after syncing the table',
   async (t) => {
+    const { Post } = t.context as ContextType
     t.assert(log.length === 0)
     await Post.sync() // syncs only the Post table
     await Post.findMany() // now we can query it
@@ -98,8 +172,114 @@ test.serial(
   }
 )
 
-test.serial('loading and fulfilled promises get resolved', async (t) => {
-  const { dataReceived } = await Post.sync()
-  await dataReceived
+const relations = {
+  Post: {
+    id: 0,
+    schema: 'public',
+    table: 'Post',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'INTEGER',
+        primaryKey: true,
+      },
+      {
+        name: 'title',
+        type: 'TEXT',
+        primaryKey: false,
+      },
+      {
+        name: 'contents',
+        type: 'TEXT',
+        primaryKey: false,
+      },
+      {
+        name: 'nbr',
+        type: 'INTEGER',
+        primaryKey: false,
+      },
+      {
+        name: 'authorId',
+        type: 'INTEGER',
+        primaryKey: false,
+      },
+    ],
+  },
+}
+
+const post = {
+  id: 1,
+  title: 'foo',
+  contents: 'bar',
+  nbr: 5,
+  authorId: 1,
+}
+
+test.serial('promise resolves when subscription starts loading', async (t) => {
+  Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
+
+  const { satellite, client } = t.context as ContextType
+  await satellite.start(config.auth)
+
+  client.setRelations(relations)
+  client.setRelationData('Post', post)
+
+  const { Post } = t.context as ContextType
+  await Post.sync()
   t.pass()
+})
+
+// resolves when starts loading
+// resolves when data is fulfilled
+test.serial(
+  'dataReceived promise resolves when subscription is fulfilled',
+  async (t) => {
+    const { satellite, client } = t.context as ContextType
+    await satellite.start(config.auth)
+
+    client.setRelations(relations)
+    client.setRelationData('Post', post)
+
+    const { Post } = t.context as ContextType
+    const { dataReceived } = await Post.sync()
+    await dataReceived
+
+    // Check that the data was indeed received
+    const posts = await Post.findMany()
+    t.deepEqual(posts, [post])
+  }
+)
+
+test.serial('promise is rejected on failed subscription request', async (t) => {
+  const { satellite } = t.context as ContextType
+  await satellite.start(config.auth)
+
+  const { Items } = t.context as ContextType
+  try {
+    await Items.sync()
+    t.fail()
+  } catch (_e) {
+    t.pass()
+  }
+})
+
+test.serial('dataReceived promise is rejected on invalid shape', async (t) => {
+  const { satellite } = t.context as ContextType
+  await satellite.start(config.auth)
+
+  const { User } = t.context as ContextType
+  let loadingPromResolved = false
+
+  try {
+    const { dataReceived } = await User.sync()
+    loadingPromResolved = true
+    await dataReceived
+    t.fail()
+  } catch (_e) {
+    // fails if first promise got rejected
+    // instead of the `dataReceived` promise
+    t.assert(loadingPromResolved)
+    t.pass()
+  }
 })

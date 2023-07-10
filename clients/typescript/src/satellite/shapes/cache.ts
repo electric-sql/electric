@@ -238,10 +238,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       )
     }
 
-    this.emit(SUBSCRIPTION_ERROR, {
-      subscriptionId: msg.subscriptionId,
-      error
-    })
+    this.emit(SUBSCRIPTION_ERROR, msg.subscriptionId, error)
     throw error
   }
 

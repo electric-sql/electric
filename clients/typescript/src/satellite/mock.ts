@@ -72,11 +72,9 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
-  subscribe(
-    _shapeDefinitions: ClientShapeDefinition[],
-  ): Promise<Sub> {
+  subscribe(_shapeDefinitions: ClientShapeDefinition[]): Promise<Sub> {
     return Promise.resolve({
-      dataReceived: Promise.resolve()
+      dataReceived: Promise.resolve(),
     })
   }
 
@@ -159,16 +157,18 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
     for (const shape of shapes) {
       for (const { tablename } of shape.definition.selects) {
-        if (tablename === 'failure') {
+        if (tablename === 'failure' || tablename === 'Items') {
           return Promise.resolve({
             subscriptionId,
             error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
           })
         }
-        if (tablename === 'another') {
-          this.sendErrorAfterTimeout(subscriptionId, 1)
-          return Promise.resolve({
-            subscriptionId,
+        if (tablename === 'another' || tablename === 'User') {
+          return new Promise((resolve) => {
+            this.sendErrorAfterTimeout(subscriptionId, 1)
+            resolve({
+              subscriptionId,
+            })
           })
         } else {
           shapeReqToUuid[shape.requestId] = uuid()
@@ -186,16 +186,18 @@ export class MockSatelliteClient extends EventEmitter implements Client {
       }
     }
 
-    setTimeout(() => {
-      this.emit(SUBSCRIPTION_DELIVERED, {
-        subscriptionId,
-        data,
-        shapeReqToUuid,
-      })
-    }, 1)
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        this.emit(SUBSCRIPTION_DELIVERED, {
+          subscriptionId,
+          data,
+          shapeReqToUuid,
+        })
+      }, 1)
 
-    return Promise.resolve({
-      subscriptionId,
+      resolve({
+        subscriptionId,
+      })
     })
   }
 
@@ -330,7 +332,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
       })
 
       const satError = subsDataErrorToSatelliteError(satSubsError)
-      this.emit(SUBSCRIPTION_ERROR, satError)
+      this.emit(SUBSCRIPTION_ERROR, satError, subscriptionId)
     }, timeout)
   }
 }
