@@ -22,7 +22,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
     "_modified_columns_bit_mask"
   ]
 
-  describe "split_change_into_main_and_shadow/3" do
+  describe "split_change_into_main_and_shadow/4" do
     test "INSERT operation gets converted and split correctly" do
       assert [main_change, shadow_change] =
                ShadowTableTransformation.split_change_into_main_and_shadow(
@@ -32,7 +32,8 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                    tags: [@observed]
                  },
                  relations(),
-                 @transaction_tag
+                 @transaction_tag,
+                 nil
                )
 
       assert is_struct(main_change, Changes.NewRecord)
@@ -62,7 +63,8 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                    tags: [@observed]
                  },
                  relations(),
-                 @transaction_tag
+                 @transaction_tag,
+                 nil
                )
 
       assert is_struct(main_change, Changes.NewRecord)
@@ -91,7 +93,8 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                    tags: [@observed]
                  },
                  relations(),
-                 @transaction_tag
+                 @transaction_tag,
+                 nil
                )
 
       assert is_struct(main_change, Changes.NewRecord)
@@ -108,6 +111,39 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
                "_modified_columns_bit_mask" =>
                  ShadowTableTransformation.serialize_pg_array(["f", "f"])
+             }
+    end
+
+    test "origins in tags are set to nil correctly" do
+      assert [main_change, shadow_change] =
+               ShadowTableTransformation.split_change_into_main_and_shadow(
+                 %Changes.NewRecord{
+                   relation: @relation,
+                   record: %{"id" => "wow", "content" => "test", "content_b" => "test_b"},
+                   tags: [@observed]
+                 },
+                 relations(),
+                 @transaction_tag,
+                 "local"
+               )
+
+      assert is_struct(main_change, Changes.NewRecord)
+      assert main_change.relation == @relation
+      assert main_change.record == %{"id" => "wow", "content" => "test", "content_b" => "test_b"}
+
+      assert is_struct(shadow_change, Changes.NewRecord)
+      assert shadow_change.relation == shadow_of(@relation)
+
+      assert Map.take(shadow_change.record, @shadow_table_columns) == %{
+               "_tag" => ShadowTableTransformation.serialize_tag_to_pg(@transaction_tag),
+               "_is_a_delete_operation" => "f",
+               "_observed_tags" =>
+                 {~U[2022-01-01 00:00:00.000Z], nil}
+                 |> ShadowTableTransformation.serialize_tag_to_pg()
+                 |> List.wrap()
+                 |> ShadowTableTransformation.serialize_pg_array(),
+               "_modified_columns_bit_mask" =>
+                 ShadowTableTransformation.serialize_pg_array(["t", "t"])
              }
     end
   end

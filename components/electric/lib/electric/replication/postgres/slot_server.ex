@@ -60,7 +60,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
           }
         }
   @type preprocess_change_fn ::
-          (Changes.change(), relations_map(), {DateTime.t(), String.t()} -> [Changes.change()])
+          (Changes.change(), relations_map(), {DateTime.t(), String.t()}, String.t() ->
+             [Changes.change()])
   @type preprocess_relation_list_fn :: ([Changes.relation()] -> [Changes.relation()])
 
   @type opts ::
@@ -160,14 +161,14 @@ defmodule Electric.Replication.Postgres.SlotServer do
        producer_name: producer,
        opts: Map.get(replication_opts, :opts, []),
        # Under the current implementation, this function is always going to be
-       # `ShadowTableTransformation.split_change_into_main_and_shadow/3`,
+       # `ShadowTableTransformation.split_change_into_main_and_shadow/4`,
        # but I'm using the "plain" behaviour of SlotServer for working with Postgres, so it's
        # "dependency-injected" here so that I can easily disable it
        preprocess_change_fn:
          Keyword.get(
            opts,
            :preprocess_change_fn,
-           &ShadowTableTransformation.split_change_into_main_and_shadow/3
+           &ShadowTableTransformation.split_change_into_main_and_shadow/4
          ),
        # Comment for `preprocess_change_fn` also relevant here
        preprocess_relation_list_fn:
@@ -453,9 +454,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defp preprocess_changes(%State{preprocess_change_fn: nil}, change, _, _), do: [change]
 
-  defp preprocess_changes(%State{preprocess_change_fn: fun}, change, relations, tag)
-       when is_function(fun, 3),
-       do: fun.(change, relations, tag)
+  defp preprocess_changes(%State{preprocess_change_fn: fun} = state, change, relations, tag)
+       when is_function(fun, 4),
+       do: fun.(change, relations, tag, state.origin)
 
   defp changes_to_wal(%Changes.NewRecord{record: data, relation: table}, relations) do
     %ReplicationMessages.Insert{
