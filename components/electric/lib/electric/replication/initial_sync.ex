@@ -24,15 +24,15 @@ defmodule Electric.Replication.InitialSync do
   The LSN returned along with the list of transactions corresponds to the latest known cached LSN just prior to starting
   the data fetching.
   """
-  @spec transactions(Keyword.t(), atom) :: {term(), [Transaction.t()]}
-  def transactions(connector_opts, cached_wal_module \\ Electric.Postgres.CachedWal.EtsBacked) do
+  @spec transactions(Keyword.t()) :: {term(), [Transaction.t()]}
+  def transactions(connector_opts) do
     # It's important to store the current timestamp prior to fetching the cached LSN to ensure that we're not creating
     # a transaction "in the future" relative to the LSN.
     timestamp = DateTime.utc_now()
 
     migration_transactions = migration_transactions(connector_opts, timestamp)
 
-    current_position = CachedWal.Api.get_current_position(cached_wal_module)
+    current_position = CachedWal.Api.get_current_position()
 
     current_lsn = current_position || 0
     txs_with_lsn = Enum.map(migration_transactions, &with_lsn/1)

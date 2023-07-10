@@ -214,10 +214,16 @@ defmodule Electric.Satellite.WsServer do
     )
 
     if state.out_rep.last_seen_wal_pos == observed_pos do
+      Logger.debug(
+        "WAL position last observed by the WS process matches WAL position got by the query, so we'll send the data immediately"
+      )
+
       # Between us requesting the data and receiving the data no transactions actually reached this stage, meaning we can safely send the data right now
       send_subscription_data_and_unpause(subscription_id, data, state)
       |> binary_frames()
     else
+      Logger.debug("Saving the initial data until we reach insertion point")
+
       # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
       {[],
        %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}

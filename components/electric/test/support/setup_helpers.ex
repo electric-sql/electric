@@ -24,12 +24,15 @@ defmodule ElectricTest.SetupHelpers do
         end
       )
 
+    stmts =
+      Regex.split(~r/((?:[^;'"]*(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')[^;'"]*)+)|;/, sql, trim: true)
+
     assert {:ok, _} =
              Electric.Postgres.Extension.SchemaCache.save(
                origin,
                "20230101",
                schema,
-               sql
+               stmts
              )
 
     [origin: origin]
