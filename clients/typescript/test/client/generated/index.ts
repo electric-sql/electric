@@ -3348,5 +3348,5 @@ export const tableSchemas = {
   >,
 }
 
-export const dbSchema = new DbSchema(tableSchemas, [])
-export type Electric = ElectricClient<typeof dbSchema>
+export const schema = new DbSchema(tableSchemas, [])
+export type Electric = ElectricClient<typeof schema>

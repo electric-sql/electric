@@ -113,7 +113,7 @@ export const Example = () => {
   useEffect(() => {
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, dbSchema, config)
+      const db = await electrify(conn, schema, config)
       setElectric(db)
     }
     init()

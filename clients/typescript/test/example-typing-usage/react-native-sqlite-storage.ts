@@ -1,6 +1,6 @@
 import SQLite from 'react-native-sqlite-storage'
 import { electrify } from '../../src/drivers/react-native-sqlite-storage'
-import { dbSchema } from '../client/generated'
+import { schema } from '../client/generated'
 
 // You can use the driver with or without the promise API enabled.
 // Either way, you need to pass in a flag to the `electrify` function
@@ -15,7 +15,7 @@ const config = {
 }
 
 const original = await SQLite.openDatabase({ name: 'example.db' })
-const { db } = await electrify(original, dbSchema, promisesEnabled, config)
+const { db } = await electrify(original, schema, promisesEnabled, config)
 
 await db.Items.findMany({
   select: {

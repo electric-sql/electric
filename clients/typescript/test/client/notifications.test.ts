@@ -1,7 +1,7 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
-import { dbSchema } from './generated'
+import { schema } from './generated'
 import { shapeManager, ShapeManagerMock } from '../../src/client/model/shapes'
 
 // Use a mocked shape manager for these tests
@@ -16,7 +16,7 @@ const config = {
   },
 }
 
-const { notifier, adapter, db } = await electrify(conn, dbSchema, config)
+const { notifier, adapter, db } = await electrify(conn, schema, config)
 await db.Items.sync() // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {

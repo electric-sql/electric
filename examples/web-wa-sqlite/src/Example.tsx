@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import './Example.css'
 
-import { dbSchema, Electric } from './generated/client'
+import { schema, Electric } from './generated/client'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 
@@ -19,7 +19,7 @@ export const Example = () => {
   useEffect(() => {
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, dbSchema, config)
+      const db = await electrify(conn, schema, config)
       setElectric(db)
     }
 

@@ -1,7 +1,7 @@
 import test from 'ava'
 import Log from 'loglevel'
 import Database from 'better-sqlite3'
-import { dbSchema } from '../generated'
+import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import {
   shapeManager,
@@ -51,7 +51,7 @@ const config = {
 async function makeContext(t: ExecutionContext) {
   const client = new MockSatelliteClient()
   const adapter = new DatabaseAdapter(db)
-  const migrations = dbSchema.migrations
+  const migrations = schema.migrations
   const migrator = new BundleMigrator(adapter, migrations)
   const dbName = `.tmp/test-${randomValue()}.db`
   const notifier = new MockNotifier(dbName)
@@ -67,7 +67,7 @@ async function makeContext(t: ExecutionContext) {
 
   const ns = new ElectricNamespace(adapter, notifier)
   shapeManager.init(satellite)
-  const electric = ElectricClient.create(dbSchema, ns)
+  const electric = ElectricClient.create(schema, ns)
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User
@@ -91,15 +91,15 @@ async function makeContext(t: ExecutionContext) {
   init()
 }
 
-type TableType<T extends keyof ElectricClient<typeof dbSchema>['db']> =
-  ElectricClient<typeof dbSchema>['db'][T]
+type TableType<T extends keyof ElectricClient<typeof schema>['db']> =
+  ElectricClient<typeof schema>['db'][T]
 type ContextType = {
   dbName: string
   db: typeof db
   satellite: SatelliteProcess
   client: MockSatelliteClient
   runMigrations: () => Promise<number>
-  electric: ElectricClient<typeof dbSchema>
+  electric: ElectricClient<typeof schema>
   Post: TableType<'Post'>
   Items: TableType<'Items'>
   User: TableType<'User'>

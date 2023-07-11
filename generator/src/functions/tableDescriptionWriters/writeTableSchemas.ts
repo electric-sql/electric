@@ -72,8 +72,8 @@ export function writeTableSchemas(
     .blankLine()
 
   writer
-    .writeLine('export const dbSchema = new DbSchema(tableSchemas, migrations)')
-    .writeLine('export type Electric = ElectricClient<typeof dbSchema>')
+    .writeLine('export const schema = new DbSchema(tableSchemas, migrations)')
+    .writeLine('export type Electric = ElectricClient<typeof schema>')
 }
 
 export function writeFieldNamesArray(

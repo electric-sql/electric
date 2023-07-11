@@ -5,7 +5,7 @@ import { authToken } from 'electric-sql/auth'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
-import { dbSchema, Electric } from './generated/models'
+import { schema, Electric } from './generated/models'
 
 setLogLevel('DEBUG')
 
@@ -24,8 +24,8 @@ export const open_db = async (
     }
   }
   console.log(`config: ${JSON.stringify(config)}`)
-  dbSchema.migrations = migrations
-  return await electrify(original, dbSchema, config)
+  schema.migrations = migrations
+  return await electrify(original, schema, config)
 }
 
 export const set_subscribers = (db: Electric) => {
