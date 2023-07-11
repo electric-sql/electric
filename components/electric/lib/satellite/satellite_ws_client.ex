@@ -583,7 +583,12 @@ defmodule Electric.Test.SatelliteWsClient do
         Logger.debug("Subscribed")
 
       lsn ->
-        sub_req = serialize(%SatInStartReplicationReq{lsn: lsn, subscription_ids: Keyword.get(opts, :subscription_ids, [])})
+        sub_req =
+          serialize(%SatInStartReplicationReq{
+            lsn: lsn,
+            subscription_ids: Keyword.get(opts, :subscription_ids, [])
+          })
+
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
         Logger.debug("Subscribed")
     end
