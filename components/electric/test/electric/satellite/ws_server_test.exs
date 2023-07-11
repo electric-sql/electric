@@ -386,6 +386,50 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    test "The client cannot establish two subscriptions with the same ID", ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 1)
+
+        sub_id = "00000000-0000-0000-0000-000000000000"
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "request_id1",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "request_id1",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+
+        assert_receive {^conn,
+                        %SatSubsResp{
+                          subscription_id: ^sub_id,
+                          err: %{
+                            message:
+                              "Cannot establish multiple subscriptions with the same ID" <> _
+                          }
+                        }}
+      end)
+    end
+
     @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
     test "replication stream is paused until the data is sent to client", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
@@ -446,6 +490,39 @@ defmodule Electric.Satellite.WsServerTest do
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
 
         for _ <- 4..10, do: assert_receive({^conn, %SatOpLog{}})
+        refute_receive {^conn, %SatOpLog{}}
+      end)
+    end
+
+    @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    test "unsubscribing works even on not-yet-fulfilled subscriptions",
+         ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+        subscription_id = "00000000-0000-0000-0000-000000000000"
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: subscription_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id]})
+        assert_receive {^conn, %SatUnsubsResp{}}
+
+        DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
+        refute_receive {^conn, %SatSubsDataBegin{}}
         refute_receive {^conn, %SatOpLog{}}
       end)
     end

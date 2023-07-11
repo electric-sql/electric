@@ -311,6 +311,61 @@ defmodule Electric.Satellite.SubscriptionsTest do
                          }}
       end)
     end
+
+    test "The client can connect and subscribe, and then unsubscribe, and gets no data after unsubscribing",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 3)
+
+        request_id = uuid4()
+        sub_id = uuid4()
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "users"}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+        assert %{request_id => []} == receive_subscription_data(conn, sub_id)
+
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+            uuid4(),
+            "Garry"
+          ])
+
+        # We get the message of insertion for a table we have a subscription for
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id]})
+        assert_receive {^conn, %SatUnsubsResp{}}
+
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+            uuid4(),
+            "Garry"
+          ])
+
+        # But not for the one we don't have included in the subscription
+        refute_receive {^conn, %SatOpLog{}}
+      end)
+    end
   end
 
   defp active_clients() do

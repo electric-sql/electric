@@ -203,6 +203,7 @@ defmodule Electric.Satellite.Protocol do
 
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
+          | {:force_unpause, PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:error, PB.sq_pb_msg()}
   def process_message(msg, %State{} = state) when not auth_passed?(state) do
     case msg do
@@ -342,12 +343,23 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state)
+  def process_message(%SatSubsReq{subscription_id: id}, state)
       when byte_size(id) > 128 do
     {%SatSubsResp{
        subscription_id: String.slice(id, 1..128) <> "...",
        err: %SatSubsError{
-         message: "ID too long, "
+         message: "ID too long"
+       }
+     }, state}
+  end
+
+  def process_message(%SatSubsReq{subscription_id: id}, state)
+      when is_map_key(state.subscriptions, id) do
+    {%SatSubsResp{
+       subscription_id: id,
+       err: %SatSubsError{
+         message:
+           "Cannot establish multiple subscriptions with the same ID. If you want to change the subscription, you need to unsubscribe first."
        }
      }, state}
   end
@@ -446,6 +458,27 @@ defmodule Electric.Satellite.Protocol do
       e ->
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end
+  end
+
+  def process_message(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
+    needs_unpausing? =
+      is_out_rep_paused(state) and Enum.any?(ids, &is_pending_subscription(state, &1))
+
+    out_rep =
+      ids
+      |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, &1))
+      |> Map.update!(:subscription_data_to_send, &Map.drop(&1, ids))
+
+    state =
+      state
+      |> Map.put(:out_rep, out_rep)
+      |> Map.update!(:subscriptions, &Map.drop(&1, ids))
+
+    if needs_unpausing? do
+      {:force_unpause, %SatUnsubsResp{}, state}
+    else
+      {%SatUnsubsResp{}, state}
     end
   end
 
