@@ -24,6 +24,8 @@ defmodule ElectricTest.SetupHelpers do
         end
       )
 
+    # Split statements on a unquoted semicolon. In "real" code we receive a list of statements
+    # but here we need to split them up for ease of use in tests
     stmts =
       Regex.split(~r/((?:[^;'"]*(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')[^;'"]*)+)|;/, sql, trim: true)
 

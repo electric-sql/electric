@@ -657,6 +657,7 @@ defmodule Electric.Satellite.WsServerTest do
       {%Changes.Transaction{
          changes: List.wrap(changes),
          commit_timestamp: DateTime.utc_now(),
+         # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
          xid: lsn
        }, lsn}
     ]

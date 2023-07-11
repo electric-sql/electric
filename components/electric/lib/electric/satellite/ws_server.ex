@@ -240,7 +240,7 @@ defmodule Electric.Satellite.WsServer do
       message: "Could not retrieve initial data for subscription"
     }
 
-    # In any case we need to remove the subscription itself since it'll
+    # In any case we need to remove the subscription itself so that it doesn't register as "not pending anymore"
     state
     |> Map.update!(:subscriptions, &Map.delete(&1, subscription_id))
     |> case do
