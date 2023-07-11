@@ -1,0 +1,49 @@
+[doc PG writes stream to connected Satellite]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries ]
+
+[global user_id_1=1]
+[newshell user_1_ws1]
+    -($fail_pattern|bad sentined value)
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id_1 1]
+    [invoke elixir_client_subscribe_with_id "00000000-0000-0000-0000-000000000000" "entries"]
+
+[shell pg_1]
+    !BEGIN;
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'sentinel value');
+    # Table `owned_entries` is not electrified and not subscribed, so we shouldn't see it
+    !INSERT INTO owned_entries (id, electric_user_id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'test', 'bad sentinel value');
+    !COMMIT;
+    ?$psql
+
+[shell user_1_ws1]
+    # We expect to receive the transaction on Satellite
+    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(?:.*)lsn: "(\d+)"(?:.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    [local lsn=$1]
+    ?values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    ?\}
+    ?tags: \["postgres_1@\d{13,16}"\]
+    ?\}
+    !:proc_lib.stop(conn)
+    ?$eprompt
+
+# New row inserted while client is "offline"
+[shell pg_1]
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000001', 'sentinel value');
+    ?$psql
+
+[shell user_1_ws1]
+    [invoke client_session_continue $user_id_1 1 $lsn "00000000-0000-0000-0000-000000000000"]
+    # We expect to receive the transaction on Satellite immediately after reconnect
+    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(?:.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    ?values: \["00000000-0000-0000-0000-000000000001", "sentinel value", ""\]
+    ?\}
+    ?tags: \["postgres_1@\d{13,16}"\]
+    ?\}
+
+[cleanup]
+    [invoke teardown]

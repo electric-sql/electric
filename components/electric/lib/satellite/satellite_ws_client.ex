@@ -60,6 +60,8 @@ defmodule Electric.Test.SatelliteWsClient do
           | {:id, term()}
           # Automatically subscribe to Electric starting from lsn
           | {:sub, String.t()}
+          # Request to continue following subscriptions
+          | {:subscription_ids, [String.t()]}
           | {:auto_register, boolean()}
 
   @type conn() :: atom() | pid()
@@ -581,7 +583,7 @@ defmodule Electric.Test.SatelliteWsClient do
         Logger.debug("Subscribed")
 
       lsn ->
-        sub_req = serialize(%SatInStartReplicationReq{lsn: lsn})
+        sub_req = serialize(%SatInStartReplicationReq{lsn: lsn, subscription_ids: Keyword.get(opts, :subscription_ids, [])})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
         Logger.debug("Subscribed")
     end
