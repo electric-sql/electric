@@ -343,12 +343,23 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state)
+  def process_message(%SatSubsReq{subscription_id: id}, state)
       when byte_size(id) > 128 do
     {%SatSubsResp{
        subscription_id: String.slice(id, 1..128) <> "...",
        err: %SatSubsError{
-         message: "ID too long, "
+         message: "ID too long"
+       }
+     }, state}
+  end
+
+  def process_message(%SatSubsReq{subscription_id: id}, state)
+      when is_map_key(state.subscriptions, id) do
+    {%SatSubsResp{
+       subscription_id: id,
+       err: %SatSubsError{
+         message:
+           "Cannot establish multiple subscriptions with the same ID. If you want to change the subscription, you need to unsubscribe first."
        }
      }, state}
   end
