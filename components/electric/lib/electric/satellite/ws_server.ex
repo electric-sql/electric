@@ -194,6 +194,15 @@ defmodule Electric.Satellite.WsServer do
     {binary_frames(msgs), state}
   end
 
+  def websocket_info({:subscription_data, subscription_id, _, _}, %State{} = state)
+      when not is_map_key(state.subscriptions, subscription_id) do
+    Logger.debug(
+      "Received initial data for unknown subscription #{subscription_id}, likely it has been cancelled"
+    )
+
+    {[], state}
+  end
+
   def websocket_info({:subscription_data, subscription_id, _, data}, %State{} = state)
       when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) do
     Logger.debug(
