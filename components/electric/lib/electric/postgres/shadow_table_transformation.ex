@@ -58,14 +58,15 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   @spec split_change_into_main_and_shadow(
           change :: Changes.change(),
           relations :: relations_map(),
-          tag :: {DateTime.t(), String.t()} | String.t()
+          tag :: {DateTime.t(), String.t()} | String.t(),
+          origin :: String.t()
         ) :: [Changes.change()]
-  def split_change_into_main_and_shadow(change, relations, tag)
+  def split_change_into_main_and_shadow(change, relations, tag, origin)
 
-  def split_change_into_main_and_shadow(change, relations, {_, _} = tag),
-    do: split_change_into_main_and_shadow(change, relations, serialize_tag_to_pg(tag))
+  def split_change_into_main_and_shadow(change, relations, {_, _} = tag, origin),
+    do: split_change_into_main_and_shadow(change, relations, serialize_tag_to_pg(tag), origin)
 
-  def split_change_into_main_and_shadow(change, relations, tag) do
+  def split_change_into_main_and_shadow(change, relations, tag, origin) do
     main_table_info = relations[change.relation]
     main_record = get_record(change)
     shadow_table_info = relations[shadow_of(change.relation)]
@@ -83,7 +84,7 @@ defmodule Electric.Postgres.ShadowTableTransformation do
         "_tag" => tag,
         "_is_a_delete_operation" =>
           if(is_struct(change, Changes.DeletedRecord), do: "t", else: "f"),
-        "_observed_tags" => convert_tag_list_satellite_to_pg(change.tags),
+        "_observed_tags" => convert_tag_list_satellite_to_pg(change.tags, origin),
         "_modified_columns_bit_mask" => serialize_pg_array(modified_bitmask)
       })
 

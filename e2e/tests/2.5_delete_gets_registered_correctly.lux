@@ -1,0 +1,48 @@
+[doc Satellite-originating DELETE with correct observed tags gets accepted by PG]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table pg_1 entries]
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    ?:ok
+    ?$eprompt
+
+[shell pg_1]
+    !\pset tuples_only
+    # Given an already-inserted row
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'original value');
+    ?$psql
+
+
+[shell user_1_ws1]
+    ?%Electric.Satellite.V\d+.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
+    [my seen_tag=$1]
+    # We do an update having "seen" only the insert
+    """!
+    Electric.Test.SatelliteWsClient.entries_table_send_delete(
+        conn,
+        "1", # lsn
+        DateTime.utc_now() |> DateTime.to_unix(:millisecond),
+        %{"id" => "00000000-0000-0000-0000-000000000000", "content" => "original value", "content_b" => nil},
+        ["$seen_tag"]
+    )
+    """
+    ?:ok
+    ?$eprompt
+
+[shell electric]
+    # Wait for it to be sent to PG
+    ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
+
+[shell pg_1]
+    # We expect for the row to be deleted
+    !\x
+    [invoke wait-for "SELECT COUNT(*) FROM ENTRIES;" "count \| 0" 10 $psql]
+
+[cleanup]
+    [invoke teardown]
