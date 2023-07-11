@@ -1298,6 +1298,58 @@ test('apply shape data and persist subscription', async (t) => {
   }
 })
 
+test('applied shape data will be acted upon correctly', async (t) => {
+  const { client, satellite, adapter } = t.context as ContextType
+  const { runMigrations, authState } = t.context as ContextType
+  await runMigrations()
+
+  const namespace = 'main'
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename(namespace, tablename).toString()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+  const { dataReceived } = await satellite.subscribe([shapeDef])
+  await dataReceived
+
+  // wait for process to apply shape data
+  try {
+    const row = await adapter.query({
+      sql: `SELECT id FROM ${qualified}`,
+    })
+    t.is(row.length, 1)
+
+    const shadowRows = await adapter.query({
+      sql: `SELECT * FROM _electric_shadow`,
+    })
+    t.is(shadowRows.length, 1)
+    t.like(shadowRows[0], {
+      namespace: 'main',
+      tablename: 'parent',
+    })
+
+    await adapter.run({ sql: `DELETE FROM ${qualified} WHERE id = 1` })
+    await satellite._performSnapshot()
+
+    const oplogs = await adapter.query({
+      sql: `SELECT * FROM _electric_oplog`,
+    })
+    t.not(oplogs[0].clearTags, '[]')
+  } catch (e) {
+    t.fail(JSON.stringify(e))
+  }
+})
+
 test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
   const { client, satellite, adapter } = t.context as ContextType
   const { runMigrations, authState } = t.context as ContextType

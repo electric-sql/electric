@@ -46,7 +46,6 @@
     ?$node
 
 [shell pg_1]
-    !\x
     [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 0" 10 ${psql}]
 
 [cleanup]
