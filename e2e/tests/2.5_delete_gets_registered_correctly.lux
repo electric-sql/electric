@@ -8,6 +8,7 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
+    [invoke elixir_client_subscribe "entries"]
     !Electric.Test.SatelliteWsClient.send_test_relation(conn)
     ?:ok
     ?$eprompt
