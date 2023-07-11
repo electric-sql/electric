@@ -19,17 +19,26 @@ defmodule Electric.Satellite.WsServerTest do
   require Logger
 
   use ExUnit.Case, async: false
+  import ElectricTest.SetupHelpers
 
   @default_wait 5_000
 
   @test_publication "fake_sqlite"
-  @test_schema "fake_schema"
+  @test_schema "public"
   @test_table "sqlite_server_test"
   @test_oid 100_004
 
   import Mock
 
-  setup_all _ do
+  setup ctx do
+    ctx =
+      Map.update(
+        ctx,
+        :subscription_data_fun,
+        &mock_data_function/2,
+        fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
+      )
+
     columns = [{"id", :uuid}, {"electric_user_id", :varchar}, {"content", :varchar}]
 
     Electric.Test.SchemaRegistryHelper.initialize_registry(
@@ -45,7 +54,8 @@ defmodule Electric.Satellite.WsServerTest do
         name: :ws_test,
         port: port,
         auth_provider: Auth.provider(),
-        pg_connector_opts: []
+        pg_connector_opts: [origin: "fake_origin", replication: []],
+        subscription_data_fun: ctx.subscription_data_fun
       )
 
     server_id = Electric.regional_id()
@@ -53,6 +63,7 @@ defmodule Electric.Satellite.WsServerTest do
     on_exit(fn ->
       SchemaRegistry.clear_replicated_tables(@test_publication)
       :cowboy.stop_listener(:ws_test)
+      Process.sleep(100)
     end)
 
     {:ok, port: port, server_id: server_id}
@@ -73,7 +84,8 @@ defmodule Electric.Satellite.WsServerTest do
            strategy: :one_for_one
          )
        end
-     ]}
+     ]},
+    {Electric.Postgres.CachedWal.Api, [:passthrough], [get_current_position: fn -> 0 end]}
   ]) do
     {:ok, %{}}
   end
@@ -88,6 +100,13 @@ defmodule Electric.Satellite.WsServerTest do
     token = Auth.JWT.create_token(user_id)
 
     {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
+  end
+
+  setup _ do
+    """
+    CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))
+    """
+    |> start_schema_cache()
   end
 
   describe "resource related check" do
@@ -279,6 +298,21 @@ defmodule Electric.Satellite.WsServerTest do
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
@@ -305,6 +339,21 @@ defmodule Electric.Satellite.WsServerTest do
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
@@ -316,6 +365,7 @@ defmodule Electric.Satellite.WsServerTest do
 
         MockClient.send_data(conn, %SatInStopReplicationReq{})
         last_received_lsn = consume_till_stop(nil)
+        assert last_received_lsn
         assert last_received_lsn !== Kernel.inspect(limit)
 
         MockClient.send_data(conn, %SatInStartReplicationReq{lsn: last_received_lsn})
@@ -327,12 +377,76 @@ defmodule Electric.Satellite.WsServerTest do
             simple_transes(cxt.user_id, limit, num_lsn)
           )
 
-        Enum.map(num_lsn..limit, fn n ->
+        for n <- num_lsn..limit do
           %SatOpLog{ops: ops} = receive_trans()
-          [%SatTransOp{op: begin} | _] = ops
-          {:begin, %SatOpBegin{lsn: lsn}} = begin
+          assert [%SatTransOp{op: begin} | _] = ops
+          assert {:begin, %SatOpBegin{lsn: lsn}} = begin
           assert to_string(n) == lsn
-        end)
+        end
+      end)
+    end
+
+    @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
+    test "replication stream is paused until the data is sent to client", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+
+        DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
+        refute_receive {^conn, %SatOpLog{}}
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert_receive {^conn, %SatOpLog{ops: [_, %{op: {:insert, insert}}, _]}}
+        assert %SatOpInsert{row_data: %{values: ["fakeid", user_id, "a"]}} = insert
+        assert user_id == ctx.user_id
+      end)
+    end
+
+    @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
+         ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_initial_replication_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
+
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+
+        for _ <- 4..10, do: assert_receive({^conn, %SatOpLog{}})
+        refute_receive {^conn, %SatOpLog{}}
       end)
     end
   end
@@ -446,17 +560,19 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   # -------------------------------------------------------------------------------
+  def mock_data_function({id, requests}, [reply_to: {ref, pid}, connection: _], opts \\ []) do
+    insertion_point = Keyword.get(opts, :insertion_point, 0)
+    data_delay_ms = Keyword.get(opts, :data_delay_ms, 0)
+    send(pid, {:subscription_insertion_point, ref, insertion_point})
 
-  defp with_connect(opts, fun) do
-    assert {:ok, pid} = MockClient.connect_and_spawn(opts)
-    assert is_pid(pid)
-
-    try do
-      fun.(pid)
-    after
-      assert :ok = MockClient.disconnect(pid)
-    end
+    Process.send_after(
+      pid,
+      {:subscription_data, id, :start_from_latest, Enum.map(requests, &{&1.id, []})},
+      data_delay_ms
+    )
   end
+
+  defp with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
 
   def clean_connections() do
     MockClient.disconnect()
@@ -506,7 +622,7 @@ defmodule Electric.Satellite.WsServerTest do
         lsn
     after
       @default_wait ->
-        flunk("timeout")
+        flunk("Timeout while waiting for SatInStopReplicationResp")
     end
   end
 
@@ -520,8 +636,8 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   defp get_lsn(%SatOpLog{ops: ops}) do
-    [%SatTransOp{op: begin} | _] = ops
-    {:begin, %SatOpBegin{lsn: lsn}} = begin
+    assert [%SatTransOp{op: begin} | _] = ops
+    assert {:begin, %SatOpBegin{lsn: lsn}} = begin
     lsn
   end
 
@@ -538,8 +654,12 @@ defmodule Electric.Satellite.WsServerTest do
 
   defp build_events(changes, lsn) do
     [
-      {%Changes.Transaction{changes: List.wrap(changes), commit_timestamp: DateTime.utc_now()},
-       lsn}
+      {%Changes.Transaction{
+         changes: List.wrap(changes),
+         commit_timestamp: DateTime.utc_now(),
+         # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
+         xid: lsn
+       }, lsn}
     ]
   end
 

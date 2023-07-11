@@ -58,3 +58,8 @@
     !client.insert_other_item(db, ${keys})
     ?$node
 [endmacro]
+
+[macro node_sync_table table]
+    !await client.syncTable(db, "${table}")
+    ?$node
+[endmacro]

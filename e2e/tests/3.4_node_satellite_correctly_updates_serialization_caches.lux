@@ -31,9 +31,11 @@
 [shell satellite_1]
     ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
     [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
 [shell satellite_2]
     ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
     [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
 
 [invoke log "PG & Satellites migrated and ready"]
 

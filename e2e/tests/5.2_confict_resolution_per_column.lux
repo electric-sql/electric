@@ -8,6 +8,7 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
+    [invoke elixir_client_subscribe "entries"]
     !Electric.Test.SatelliteWsClient.send_test_relation(conn)
     ?:ok
     ?$eprompt
@@ -16,6 +17,7 @@
     -$fail_pattern
     [invoke start_elixir_test 2]
     [invoke client_session 2 1]
+    [invoke elixir_client_subscribe "entries"]
     !Electric.Test.SatelliteWsClient.send_test_relation(conn)
     ?:ok
     ?$eprompt
@@ -64,7 +66,7 @@
 
 [shell user_2_ws1]
     # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)origin: "client_2_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated on client 1", "updated on client 2"\]
+    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)origin: "client_2_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated on client 1", "updated on client 2"\]
 
 [cleanup]
     [invoke teardown]

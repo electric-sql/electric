@@ -71,6 +71,16 @@ defmodule Electric.Test.SatelliteWsClient do
     :proc_lib.start(__MODULE__, :loop_init, [self, opts])
   end
 
+  def with_connect(opts, fun) do
+    {:ok, pid} = connect_and_spawn(opts)
+
+    try do
+      fun.(pid)
+    after
+      :ok = disconnect(pid)
+    end
+  end
+
   def is_alive(conn \\ __MODULE__) do
     conn =
       cond do
@@ -109,6 +119,25 @@ defmodule Electric.Test.SatelliteWsClient do
         %{name: "content", type: :varchar}
       ]
     }
+  end
+
+  def build_subscription_request(id \\ nil, shape_requests) do
+    shape_requests
+    |> Enum.map(fn
+      {id, tables: tables} ->
+        %SatShapeReq{
+          request_id: to_string(id),
+          shape_definition: %SatShapeDef{
+            selects: tables |> Enum.map(&%SatShapeDef.Select{tablename: &1})
+          }
+        }
+    end)
+    |> then(
+      &%SatSubsReq{
+        subscription_id: id || Electric.Utils.uuid4(),
+        shape_requests: &1
+      }
+    )
   end
 
   def send_test_relation(conn \\ __MODULE__) do

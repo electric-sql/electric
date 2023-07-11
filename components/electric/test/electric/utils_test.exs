@@ -1,6 +1,7 @@
 defmodule Electric.Test.UtilsTest do
   alias Electric.Utils
   use ExUnit.Case, async: true
+  doctest Utils, import: true
 
   test "fetch_demand" do
     q = :queue.from_list([1, 2, 3, 4, 5])

@@ -3,14 +3,19 @@ defmodule Electric.Satellite.Protocol do
   Protocol for communication with Satellite
   """
   require Logger
+  use Pathex
 
+  require Electric.Satellite.Protocol
+  alias Electric.Replication.Connectors
   alias Electric.Postgres.CachedWal.Producer
   alias Electric.Utils
   use Electric.Satellite.Protobuf
+  alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
+  alias Electric.Replication.Shapes
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
@@ -66,7 +71,16 @@ defmodule Electric.Satellite.Protocol do
               stage_sub: nil,
               relations: %{},
               sync_counter: 0,
-              sync_batch_size: nil
+              sync_batch_size: nil,
+              last_seen_wal_pos: 0,
+              subscription_pause_queue: {nil, :queue.new()},
+              outgoing_ops_buffer: :queue.new(),
+              subscription_data_to_send: %{}
+
+    @typedoc """
+    Insertion point for data coming from a subscription fulfillment.
+    """
+    @type subscription_insert_point :: {xmin :: non_neg_integer(), subscription_id :: binary()}
 
     @typedoc """
     Outgoing replication PG -> Satellite
@@ -74,16 +88,70 @@ defmodule Electric.Satellite.Protocol do
     @type t() :: %__MODULE__{
             pid: pid() | nil,
             lsn: String.t(),
-            status: nil | :active,
+            status: nil | :active | :paused,
             stage_sub: GenStage.subscription_tag() | nil,
             relations: %{Changes.relation() => PB.relation_id()},
             # Parameters used to acknowledge received messages
             sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer()
+            sync_counter: nil | non_neg_integer(),
+            last_seen_wal_pos: 0,
+            # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
+            subscription_pause_queue:
+              {subscription_insert_point() | nil, :queue.queue(subscription_insert_point())},
+            outgoing_ops_buffer: :queue.queue(),
+            subscription_data_to_send: %{optional(String.t()) => term()}
           }
+
+    def add_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, new),
+      do: %{out | subscription_pause_queue: add_pause_point(queue, new)}
+
+    def add_pause_point({nil, queue}, new), do: {new, queue}
+    def add_pause_point({head, queue}, new), do: {head, :queue.in(new, queue)}
+
+    def remove_next_pause_point(%__MODULE__{subscription_pause_queue: queue} = out),
+      do: %{out | subscription_pause_queue: remove_next_pause_point(queue)}
+
+    def remove_next_pause_point({_, queue}) do
+      case :queue.out(queue) do
+        {{:value, item}, queue} -> {item, queue}
+        {:empty, queue} -> {nil, queue}
+      end
+    end
+
+    def remove_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, subscription_id),
+      do: %{out | subscription_pause_queue: remove_pause_point(queue, subscription_id)}
+
+    def remove_pause_point({nil, _} = queue, _), do: queue
+    def remove_pause_point({{_, id}, _} = queue, id), do: remove_next_pause_point(queue)
+
+    def remove_pause_point({head, queue}, id),
+      do: {head, :queue.delete_with(&match?({_, ^id}, &1), queue)}
+
+    def set_status(%__MODULE__{} = out, status) when status in [nil, :active, :paused],
+      do: %{out | status: status}
+
+    def store_subscription_data(%__MODULE__{} = out, id, data),
+      do: %{out | subscription_data_to_send: Map.put(out.subscription_data_to_send, id, data)}
+
+    def add_events_to_buffer(%__MODULE__{} = out, events),
+      do: %{out | outgoing_ops_buffer: Utils.add_events_to_queue(events, out.outgoing_ops_buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, buffer) when is_list(buffer),
+      do: %{out | outgoing_ops_buffer: :queue.from_list(buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, {_, _} = buffer),
+      do: %{out | outgoing_ops_buffer: buffer}
+
+    def subscription_pending?(_, %__MODULE__{subscription_pause_queue: {nil, _}}), do: false
+    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {{_, id}, _}}), do: true
+
+    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {_, queue}}),
+      do: :queue.any(&match?({_, ^id}, &1), queue)
   end
 
   defmodule State do
+    alias Electric.Replication.Shapes.ShapeRequest
+
     defstruct auth_passed: false,
               auth: nil,
               last_msg_time: nil,
@@ -95,7 +163,9 @@ defmodule Electric.Satellite.Protocol do
               transport: nil,
               socket: nil,
               auth_provider: nil,
-              pg_connector_opts: []
+              pg_connector_opts: [],
+              subscriptions: %{},
+              subscription_data_fun: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -109,13 +179,27 @@ defmodule Electric.Satellite.Protocol do
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
-            pg_connector_opts: Keyword.t()
+            pg_connector_opts: Keyword.t(),
+            subscriptions: map(),
+            subscription_data_fun:
+              ({id :: String.t(), [ShapeRequest.t(), ...]},
+               reply_to: {reference(), pid()},
+               connection: Keyword.t() ->
+                 none())
           }
   end
 
   defguard auth_passed?(state) when state.auth_passed == true
   defguard in_rep?(state) when state.in_rep.status == :active
-  defguard out_rep?(state) when state.out_rep.status == :active
+  defguard is_out_rep_active(state) when state.out_rep.status == :active
+  defguard is_out_rep_paused(state) when state.out_rep.status == :paused
+
+  defguard is_pending_subscription(state, subscription_id)
+           when is_tuple(elem(state.out_rep.subscription_pause_queue, 0)) and
+                  elem(elem(state.out_rep.subscription_pause_queue, 0), 1) == subscription_id
+
+  defguard no_pending_subscriptions(state)
+           when is_nil(elem(state.out_rep.subscription_pause_queue, 0))
 
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
@@ -239,7 +323,7 @@ defmodule Electric.Satellite.Protocol do
 
   # Satellite requests to stop replication
   def process_message(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
-      when out_rep?(state) do
+      when is_out_rep_active(state) do
     Logger.debug("Received stop replication request")
     Metrics.satellite_replication_event(%{stopped: 1})
     # FIXME: We do not know whether the client intend to start from last LSN, or
@@ -255,6 +339,63 @@ defmodule Electric.Satellite.Protocol do
 
     in_rep = %InRep{state.in_rep | status: :paused}
     {nil, %State{state | in_rep: in_rep}}
+  end
+
+  # Satellite requests a new subscription to a set of shapes
+  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state)
+      when byte_size(id) > 128 do
+    {%SatSubsResp{
+       subscription_id: String.slice(id, 1..128) <> "...",
+       err: %SatSubsError{
+         message: "ID too long, "
+       }
+     }, state}
+  end
+
+  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
+    {%SatSubsResp{
+       subscription_id: id,
+       err: %SatSubsError{
+         message: "Subscription must include at least one shape request"
+       }
+     }, state}
+  end
+
+  def process_message(
+        %SatSubsReq{subscription_id: id, shape_requests: requests},
+        %State{} = state
+      ) do
+    cond do
+      Utils.validate_uuid(id) != {:ok, id} ->
+        {%SatSubsResp{
+           subscription_id: id,
+           err: %SatSubsError{message: "Subscription ID should be a valid UUID"}
+         }, state}
+
+      Utils.has_duplicates_by?(requests, & &1.request_id) ->
+        {%SatSubsResp{
+           subscription_id: id,
+           err: %SatSubsError{message: "Duplicated request ids are not allowed"}
+         }, state}
+
+      true ->
+        case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
+          {:ok, requests} ->
+            query_subscription_data(id, requests, state)
+
+          {:error, errors} ->
+            {%SatSubsResp{
+               subscription_id: id,
+               err: %SatSubsError{
+                 shape_request_error:
+                   Enum.map(errors, fn {id, code, message} ->
+                     %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
+                   end),
+                 message: "Could not establish a subscription due to errors on requests"
+               }
+             }, state}
+        end
+    end
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
@@ -354,15 +495,19 @@ defmodule Electric.Satellite.Protocol do
           {[PB.sq_pb_msg()], State.t()}
   def handle_outgoing_txs(events, state, acc \\ [])
 
-  def handle_outgoing_txs([{tx, _offset} = event | events], state, acc) do
-    if Changes.belongs_to_user?(tx, state.auth.user_id) do
+  def handle_outgoing_txs([{tx, offset} = event | events], %State{} = state, acc) do
+    with %{changes: [_ | _]} = tx <- Shapes.filter_changes_from_tx(tx, current_shapes(state)),
+         true <- Changes.belongs_to_user?(tx, state.auth.user_id) do
       {relations, transaction, out_rep} = handle_out_trans(event, state)
       acc = Enum.concat([transaction, relations, acc])
+      out_rep = %{out_rep | last_seen_wal_pos: offset}
       handle_outgoing_txs(events, %State{state | out_rep: out_rep}, acc)
     else
-      Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
+      _ ->
+        Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
+        out_rep = %{state.out_rep | last_seen_wal_pos: offset}
 
-      handle_outgoing_txs(events, state, acc)
+        handle_outgoing_txs(events, %{state | out_rep: out_rep}, acc)
     end
   end
 
@@ -379,24 +524,12 @@ defmodule Electric.Satellite.Protocol do
     {serialized_log, unknown_relations, known_relations} =
       Serialization.serialize_trans(trans, offset, out_rep.relations)
 
-    serialized_relations =
-      Enum.map(
-        unknown_relations,
-        fn relation ->
-          table_info = SchemaRegistry.fetch_table_info!(relation)
-          columns = SchemaRegistry.fetch_table_columns!(relation)
+    if unknown_relations != [],
+      do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
 
-          Serialization.serialize_relation(
-            table_info,
-            columns
-          )
-        end
-      )
-
-    Logger.debug("relations: #{inspect(unknown_relations)}")
     out_rep = %OutRep{out_rep | relations: known_relations}
 
-    {serialized_relations, serialized_log, out_rep}
+    {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
   defp maybe_setup_batch_counter(
@@ -431,7 +564,14 @@ defmodule Electric.Satellite.Protocol do
     Process.send(sub_pid, msg, [])
     ask({sub_pid, sub_ref}, @producer_demand)
 
-    out_rep = %OutRep{out_rep | pid: sub_pid, status: :active, stage_sub: sub_ref}
+    out_rep = %OutRep{
+      out_rep
+      | pid: sub_pid,
+        status: :active,
+        stage_sub: sub_ref,
+        last_seen_wal_pos: lsn
+    }
+
     %State{state | out_rep: out_rep}
   end
 
@@ -445,6 +585,39 @@ defmodule Electric.Satellite.Protocol do
     GenStage.cancel({out_rep.pid, out_rep.stage_sub}, :cancel)
 
     %OutRep{out_rep | status: nil, pid: nil, stage_sub: nil}
+  end
+
+  def handle_subscription_data(id, data, state) do
+    # TODO: in a perfect world there would be potential to stream out the changes instead of
+    #       sending it all at once. It's quite hard to do with :ranch, or I haven't found a way.
+    {relations, messages, state} =
+      Enum.reduce(data, {[], [], state}, fn shape_data, {relations, messages, state} ->
+        {new_relations, new_messages, out_rep} =
+          handle_shape_request_data(shape_data, state.out_rep)
+
+        {[new_relations | relations], [new_messages | messages], %{state | out_rep: out_rep}}
+      end)
+
+    {[
+       relations,
+       %SatSubsDataBegin{subscription_id: id},
+       messages,
+       %SatSubsDataEnd{}
+     ], state}
+  end
+
+  defp handle_shape_request_data({id, changes}, out_rep) do
+    # TODO: This serializes entire shape data (i.e. entire table) as a transaction.
+    #       I don't like that we're websocket-framing this much data, this should be split up
+    #       but I'm not sure if we've implemented the collection
+    {serialized_log, unknown_relations, known_relations} =
+      Serialization.serialize_shape_data_as_tx(changes, out_rep.relations)
+
+    {
+      serialize_unknown_relations(unknown_relations),
+      [%SatShapeDataBegin{request_id: id}, serialized_log, %SatShapeDataEnd{}],
+      %{out_rep | relations: known_relations}
+    }
   end
 
   defp validate_lsn(client_lsn, opts) do
@@ -503,5 +676,61 @@ defmodule Electric.Satellite.Protocol do
       {:error, _} = e -> e
       false -> {:error, :not_compatible}
     end
+  end
+
+  defp current_shapes(%State{subscriptions: subscriptions, out_rep: out_rep}) do
+    subscriptions
+    |> Enum.reject(fn {id, _shapes} -> OutRep.subscription_pending?(id, out_rep) end)
+    |> Enum.flat_map(fn {_, shapes} -> shapes end)
+  end
+
+  defp query_subscription_data(id, requests, state) do
+    ref = make_ref()
+    parent = self()
+
+    # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
+    fun = state.subscription_data_fun
+    opts = state.pg_connector_opts
+
+    Task.start(fn ->
+      # This is `InitialData.query_subscription_data/2` by default, but can be overridden for tests.
+      # Please see documentation on that function for context on the next `receive` block.
+      fun.({id, requests}, reply_to: {ref, parent}, connection: opts)
+    end)
+
+    receive do
+      {:subscription_insertion_point, ^ref, xmin} ->
+        Logger.debug(
+          "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
+        )
+
+        state =
+          state
+          |> Pathex.force_set!(path(:subscriptions / id), requests)
+          |> Pathex.over!(path(:out_rep), &OutRep.add_pause_point(&1, {xmin, id}))
+
+        {%SatSubsResp{subscription_id: id}, state}
+    after
+      1_000 ->
+        {%SatSubsResp{
+           subscription_id: id,
+           err: %SatSubsError{message: "Internal error while checking data availability"}
+         }, state}
+    end
+  end
+
+  defp serialize_unknown_relations(unknown_relations) do
+    Enum.map(
+      unknown_relations,
+      fn relation ->
+        table_info = SchemaRegistry.fetch_table_info!(relation)
+        columns = SchemaRegistry.fetch_table_columns!(relation)
+
+        Serialization.serialize_relation(
+          table_info,
+          columns
+        )
+      end
+    )
   end
 end

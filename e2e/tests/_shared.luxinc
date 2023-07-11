@@ -53,6 +53,15 @@
     ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
 [endmacro]
 
+[macro elixir_client_subscribe tables]
+    """!
+    Electric.Test.SatelliteWsClient.send_data(conn, Electric.Test.SatelliteWsClient.build_subscription_request(request_1: [tables: ~w|$tables|]))
+    """
+    ?+$eprompt
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+[endmacro]
+
+
 [macro start_satellite name]
 [newshell satellite_${name}]
     !make start_satellite_client_${name}

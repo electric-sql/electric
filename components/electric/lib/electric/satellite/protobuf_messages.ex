@@ -8200,7 +8200,7 @@
   end,
   defmodule Electric.Satellite.V14.SatSubsResp do
     @moduledoc false
-    defstruct subscription_id: "", error: nil, __uf__: []
+    defstruct subscription_id: "", err: nil, __uf__: []
 
     (
       (
@@ -8215,7 +8215,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_error(msg) |> encode_subscription_id(msg) |> encode_unknown_fields(msg)
+          [] |> encode_err(msg) |> encode_subscription_id(msg) |> encode_unknown_fields(msg)
         end
       )
 
@@ -8235,15 +8235,15 @@
                       __STACKTRACE__
           end
         end,
-        defp encode_error(acc, msg) do
+        defp encode_err(acc, msg) do
           try do
-            case msg.error do
+            case msg.err do
               nil -> [acc]
               child_field_value -> [acc, "\x12", Protox.Encode.encode_message(child_field_value)]
             end
           rescue
             ArgumentError ->
-              reraise Protox.EncodingError.new(:error, "invalid field value"), __STACKTRACE__
+              reraise Protox.EncodingError.new(:err, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -8310,17 +8310,16 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
 
                 {[
-                   case msg.error do
-                     {:error, previous_value} ->
-                       {:error,
+                   case msg.err do
+                     {:err, previous_value} ->
+                       {:err,
                         Protox.MergeMessage.merge(
                           previous_value,
                           Electric.Satellite.V14.SatSubsResp.SatSubsError.decode!(delimited)
                         )}
 
                      _ ->
-                       {:error,
-                        Electric.Satellite.V14.SatSubsResp.SatSubsError.decode!(delimited)}
+                       {:err, Electric.Satellite.V14.SatSubsResp.SatSubsError.decode!(delimited)}
                    end
                  ], rest}
 
@@ -8387,8 +8386,7 @@
         %{
           1 => {:subscription_id, {:scalar, ""}, :string},
           2 =>
-            {:error, {:oneof, :_error},
-             {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}}
+            {:err, {:oneof, :_err}, {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}}
         }
       end
 
@@ -8398,8 +8396,7 @@
             }
       def defs_by_name() do
         %{
-          error:
-            {2, {:oneof, :_error}, {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}},
+          err: {2, {:oneof, :_err}, {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}},
           subscription_id: {1, {:scalar, ""}, :string}
         }
       end
@@ -8420,10 +8417,10 @@
           },
           %{
             __struct__: Protox.Field,
-            json_name: "error",
-            kind: {:oneof, :_error},
+            json_name: "err",
+            kind: {:oneof, :_err},
             label: :proto3_optional,
-            name: :error,
+            name: :err,
             tag: 2,
             type: {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}
           }
@@ -8473,27 +8470,27 @@
           end
         ),
         (
-          def field_def(:error) do
+          def field_def(:err) do
             {:ok,
              %{
                __struct__: Protox.Field,
-               json_name: "error",
-               kind: {:oneof, :_error},
+               json_name: "err",
+               kind: {:oneof, :_err},
                label: :proto3_optional,
-               name: :error,
+               name: :err,
                tag: 2,
                type: {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}
              }}
           end
 
-          def field_def("error") do
+          def field_def("err") do
             {:ok,
              %{
                __struct__: Protox.Field,
-               json_name: "error",
-               kind: {:oneof, :_error},
+               json_name: "err",
+               kind: {:oneof, :_err},
                label: :proto3_optional,
-               name: :error,
+               name: :err,
                tag: 2,
                type: {:message, Electric.Satellite.V14.SatSubsResp.SatSubsError}
              }}
@@ -8543,7 +8540,7 @@
       def default(:subscription_id) do
         {:ok, ""}
       end,
-      def default(:error) do
+      def default(:err) do
         {:error, :no_default_value}
       end,
       def default(_) do

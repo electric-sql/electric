@@ -99,6 +99,33 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  @doc """
+  Build a directed graph of foreign key relations of public tables for the given schema.
+
+  Graph vertices are table names, and graph edges go from the table with the
+  foreign key to the referenced table. Each edge is labeled with an array of
+  columns that comprise the foreign key.
+
+  Only tables known to Satellite are included (currently, this means only in the `public` schema).
+  """
+  @spec public_fk_graph(t()) :: Graph.t()
+  def public_fk_graph(%Proto.Schema{tables: tables}) do
+    graph =
+      tables
+      |> Enum.filter(&(&1.name.schema == "public"))
+      |> Enum.map(& &1.name.name)
+      |> then(&Graph.add_vertices(Graph.new(), &1))
+
+    Enum.reduce(tables, graph, fn %Proto.Table{constraints: constraints, name: name}, graph ->
+      constraints
+      |> Enum.filter(&match?(%{constraint: {:foreign, _}}, &1))
+      |> Enum.map(fn %{constraint: {:foreign, fk}} ->
+        {name.name, fk.pk_table.name, label: fk.fk_cols}
+      end)
+      |> then(&Graph.add_edges(graph, &1))
+    end)
+  end
+
   # TODO: remove this once we've cut out the SchemaRegistry component and are just
   # using this serialised schema information
   def registry_info(%Proto.Table{} = table) do

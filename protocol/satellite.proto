@@ -377,7 +377,7 @@ message SatSubsResp {
     string subscription_id = 1;
 
     // the error details if the request failed
-    optional SatSubsError error = 2;
+    optional SatSubsError err = 2;
 
     // Error message returned by the Producer when it encounters
     // an error handling subscription request

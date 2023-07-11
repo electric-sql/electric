@@ -1,5 +1,10 @@
 defmodule Electric.Postgres.TestConnection do
   import ExUnit.Callbacks
+  import ExUnit.Assertions
+  require Electric.Postgres.Extension
+  alias Electric.Replication.PostgresConnectorMng
+  alias Electric.Replication.PostgresConnector
+  alias Electric.Postgres.{Extension, SchemaRegistry}
 
   @conf_arg_map %{database: "dbname"}
 
@@ -81,6 +86,46 @@ defmodule Electric.Postgres.TestConnection do
     %{db: db_name, pg_config: pg_config, conn: conn}
   end
 
+  def setup_replicated_db(context) do
+    context = Map.put_new(context, :origin, "tmp-test-subscription")
+    origin = Map.fetch!(context, :origin)
+
+    # SchemaRegistry is a global store, so it needs to be reset when a new test database is created.
+    SchemaRegistry.clear_replicated_tables(Extension.publication_name())
+    on_exit(fn -> SchemaRegistry.clear_replicated_tables(Extension.publication_name()) end)
+
+    # Initialize the test DB to the state which Electric can work with.
+    setup_fun = fn conn ->
+      init_sql = File.read!("dev/init.sql")
+      results = :epgsql.squery(conn, init_sql) |> List.wrap()
+      assert Enum.all?(results, fn result -> is_tuple(result) and elem(result, 0) == :ok end)
+    end
+
+    # Dropping the subscription is necessary before the test DB can be removed.
+    teardown_fun = fn conn ->
+      :epgsql.squery(
+        conn,
+        """
+        ALTER SUBSCRIPTION "#{origin}" DISABLE;
+        ALTER SUBSCRIPTION "#{origin}" SET (slot_name=NONE);
+        DROP SUBSCRIPTION "#{origin}";
+        """
+      )
+    end
+
+    context = Map.merge(context, setup_test_db(setup_fun, teardown_fun))
+
+    pg_connector_opts =
+      context
+      |> pg_connector_config()
+      |> Keyword.put(:origin, "#{origin}")
+
+    {:ok, _} = PostgresConnector.start_link(pg_connector_opts)
+    assert :ready == wait_for_postgres_initialization(origin)
+
+    Map.put(context, :pg_connector_opts, pg_connector_opts)
+  end
+
   def config do
     [
       host: System.get_env("PG_HOST", "localhost"),
@@ -97,10 +142,132 @@ defmodule Electric.Postgres.TestConnection do
     end)
   end
 
+  def setup_electrified_tables(%{conn: conn}) do
+    {:ok, [], []} =
+      :epgsql.squery(conn, """
+      CREATE TABLE public.users (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL
+      )
+      """)
+
+    {:ok, [], []} =
+      :epgsql.squery(conn, """
+      CREATE TABLE public.documents (
+        id UUID PRIMARY KEY,
+        title TEXT NOT NULL,
+        user_id UUID REFERENCES users(id)
+      )
+      """)
+
+    {:ok, [], []} =
+      :epgsql.squery(conn, """
+      CREATE TABLE public.my_entries (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        content VARCHAR(64) NOT NULL,
+        content_b VARCHAR(64)
+      );
+
+      """)
+
+    :epgsql.squery(conn, """
+    BEGIN;
+    CALL electric.electrify('public.users');
+    CALL electric.electrify('public.documents');
+    CALL electric.electrify('public.my_entries');
+    COMMIT;
+    """)
+    |> Enum.each(&assert {:ok, _, _} = &1)
+
+    Stream.resource(
+      fn -> 0 end,
+      fn pos ->
+        case Electric.Postgres.CachedWal.EtsBacked.next_segment(pos) do
+          :latest ->
+            Process.sleep(100)
+            {[], pos}
+
+          {:ok, segment, pos} ->
+            {[segment], pos}
+        end
+      end,
+      & &1
+    )
+    |> Stream.reject(&(&1.changes == []))
+    |> Stream.take(10)
+    |> Enum.find(&Enum.all?(&1.changes, fn x -> Extension.is_ddl_relation(x.relation) end)) ||
+      flunk("Migration statements didn't show up in the cached WAL")
+
+    []
+  end
+
+  def setup_with_sql_execute(%{conn: conn, with_sql: sql}) do
+    case :epgsql.squery(conn, sql) do
+      {:ok, _, _} ->
+        :ok
+
+      {:ok, _} ->
+        :ok
+
+      results ->
+        case Enum.filter(results, &match?({:error, _}, &1)) do
+          [] ->
+            :ok
+
+          errors ->
+            raise "Encountered following errors while executing pre-test sql:\n#{inspect(errors, pretty: true)}"
+        end
+    end
+  end
+
+  def setup_with_sql_execute(_), do: :ok
+
+  def load_schema(%{conn: _, origin: origin}) do
+    {:ok, _, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)
+
+    {:ok, schema: schema}
+  end
+
   def childspec(config) do
     %{
       id: :epgsql,
       start: {:epgsql, :connect, [config]}
     }
+  end
+
+  ###
+  # Utility functions
+  ###
+
+  defp pg_connector_config(%{pg_config: pg_config}) do
+    [
+      producer: Electric.Replication.Postgres.LogicalReplicationProducer,
+      connection:
+        Keyword.merge(pg_config,
+          replication: 'database',
+          ssl: false
+        ),
+      replication: [
+        publication: "all_tables",
+        slot: "all_changes",
+        electric_connection: [
+          host: "host.docker.internal",
+          port: 5433,
+          dbname: "test"
+        ]
+      ]
+    ]
+  end
+
+  # Wait for the Postgres connector to start. It starts the CachedWal.Producer which this test module depends on.
+  defp wait_for_postgres_initialization(origin) do
+    status = PostgresConnectorMng.status(origin)
+
+    if status in [:init, :subscribe] do
+      Process.sleep(50)
+      wait_for_postgres_initialization(origin)
+    else
+      status
+    end
   end
 end

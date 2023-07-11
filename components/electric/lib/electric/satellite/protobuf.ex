@@ -16,7 +16,16 @@ defmodule Electric.Satellite.Protobuf do
     SatInStopReplicationResp,
     SatOpLog,
     SatRelation,
-    SatMigrationNotification
+    SatMigrationNotification,
+    SatSubsReq,
+    SatSubsResp,
+    SatSubsDataError,
+    SatSubsDataBegin,
+    SatSubsDataEnd,
+    SatShapeDataBegin,
+    SatShapeDataEnd,
+    SatUnsubsReq,
+    SatUnsubsResp
   }
 
   require Logger
@@ -35,7 +44,16 @@ defmodule Electric.Satellite.Protobuf do
     SatInStopReplicationResp => 8,
     SatOpLog => 9,
     SatRelation => 10,
-    SatMigrationNotification => 11
+    SatMigrationNotification => 11,
+    SatSubsReq => 12,
+    SatSubsResp => 13,
+    SatSubsDataError => 14,
+    SatSubsDataBegin => 15,
+    SatSubsDataEnd => 16,
+    SatShapeDataBegin => 17,
+    SatShapeDataEnd => 18,
+    SatUnsubsReq => 19,
+    SatUnsubsResp => 20
   }
 
   @type relation_id() :: non_neg_integer()
@@ -52,6 +70,15 @@ defmodule Electric.Satellite.Protobuf do
           | %SatOpLog{}
           | %SatRelation{}
           | %SatMigrationNotification{}
+          | %SatSubsReq{}
+          | %SatSubsResp{}
+          | %SatSubsDataError{}
+          | %SatSubsDataBegin{}
+          | %SatSubsDataEnd{}
+          | %SatShapeDataBegin{}
+          | %SatShapeDataEnd{}
+          | %SatUnsubsReq{}
+          | %SatUnsubsResp{}
 
   defmacro __using__(_opts) do
     quote do
@@ -79,7 +106,20 @@ defmodule Electric.Satellite.Protobuf do
         SatTransOp,
         SatRelation,
         SatRelationColumn,
-        SatMigrationNotification
+        SatMigrationNotification,
+        SatSubsReq,
+        SatSubsResp,
+        SatUnsubsReq,
+        SatUnsubsResp,
+        SatSubsDataBegin,
+        SatSubsDataEnd,
+        SatSubsDataError,
+        SatShapeDataBegin,
+        SatShapeDataEnd,
+        SatShapeReq,
+        SatShapeDef,
+        SatUnsubsReq,
+        SatUnsubsResp
       }
     end
   end

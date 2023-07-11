@@ -64,18 +64,6 @@
     \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
     \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"[0-9_]+",.*,"table":\{.*,"name":"entries"
 
-  ## Now the client receives a single transaction containing all electrified data (4 rows)
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","insert":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","insert":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","insert":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","insert":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","commit":\{.*\}\}
-
-  ?apply incoming changes for LSN: \d+
-
-  -Received message
 
 [cleanup]
   [invoke teardown]

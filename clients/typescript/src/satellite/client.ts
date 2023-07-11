@@ -767,8 +767,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
-    if (msg.error) {
-      const error = subsErrorToSatelliteError(msg.error)
+    if (msg.err) {
+      const error = subsErrorToSatelliteError(msg.err)
       this.subscriptionsDataCache.subscriptionError()
       return { subscriptionId: msg.subscriptionId, error }
     } else {
@@ -938,7 +938,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMessage<T extends SatPbMsg>(request: T) {
-    Log.info(`Sending message ${JSON.stringify(request)}`)
+    Log.debug(`Sending message ${JSON.stringify(request)}`)
     if (!this.socket) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,

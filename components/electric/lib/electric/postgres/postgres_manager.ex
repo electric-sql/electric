@@ -22,7 +22,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
               subscription: String.t(),
               electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
             },
-            state: :reinit | :init | :subscription | :ready | :migration
+            state: :reinit | :init | :subscribe | :ready | :migration
           }
   end
 
@@ -43,7 +43,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec status(Connectors.origin()) :: :init | :subscription | :ready | :migration
+  @spec status(Connectors.origin()) :: :init | :subscribe | :ready | :migration
   def status(origin) do
     GenServer.call(name(origin), {:status})
   end

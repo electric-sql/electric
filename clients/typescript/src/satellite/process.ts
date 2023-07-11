@@ -400,7 +400,7 @@ export class SatelliteProcess implements Satellite {
       const upsertShadowStmt = `
         INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES (?,?,?,?)`
       const upsertShadowArgs = [
-        relation.schema,
+        'main',
         relation.table,
         primaryKeyToStr(primaryKeyCols),
         encodeTags(tags),
