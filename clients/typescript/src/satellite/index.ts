@@ -9,7 +9,6 @@ import {
   AuthResponse,
   DbName,
   LSN,
-  SatelliteError,
   DataTransaction,
   Transaction,
   Relation,
@@ -70,17 +69,17 @@ export interface Satellite {
 export interface Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
-  ): Promise<void | SatelliteError>
-  close(): Promise<void | SatelliteError>
-  authenticate(authState: AuthState): Promise<AuthResponse | SatelliteError>
+  ): Promise<void>
+  close(): Promise<void>
+  authenticate(authState: AuthState): Promise<AuthResponse>
   isClosed(): boolean
   startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void>
-  stopReplication(): Promise<void | SatelliteError>
+  stopReplication(): Promise<void>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
   ): void
-  enqueueTransaction(transaction: DataTransaction): void | SatelliteError
+  enqueueTransaction(transaction: DataTransaction): void
   subscribeToAck(callback: AckCallback): void
   unsubscribeToAck(callback: AckCallback): void
   resetOutboundLogPositions(sent?: LSN, ack?: LSN): void
