@@ -414,29 +414,33 @@ defmodule Electric.Satellite.SubscriptionsTest do
           lsn
         end)
 
-        # Insert a row while client is disconnected
-        {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
-            uuid4(),
-            "Bobby"
-          ])
+      # Insert a row while client is disconnected
+      {:ok, 1} =
+        :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+          uuid4(),
+          "Bobby"
+        ])
 
-        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{lsn: last_lsn, subscription_ids: [sub_id]})
-          assert_receive {^conn, %SatInStartReplicationResp{}}
-          assert_receive {^conn, %SatInStartReplicationReq{}}
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{
+          lsn: last_lsn,
+          subscription_ids: [sub_id]
+        })
 
-          # Assert that we immediately receive the data that falls into the continued subscription
-          assert_receive {^conn,
-                          %SatOpLog{
-                            ops: [
-                              %{op: {:begin, _}},
-                              %{op: {:insert, %{row_data: %{values: [_, "Bobby"]}}}},
-                              %{op: {:commit, _}}
-                            ]
-                          }},
-                         100
-        end)
+        assert_receive {^conn, %SatInStartReplicationResp{}}
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
+        # Assert that we immediately receive the data that falls into the continued subscription
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Bobby"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       100
+      end)
     end
   end
 
