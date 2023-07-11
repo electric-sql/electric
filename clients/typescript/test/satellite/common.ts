@@ -1,5 +1,13 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { ConnectivityState, DataTransaction, LSN, Relation, RelationsCache, SqlValue, randomValue } from '../../src/util'
+import {
+  ConnectivityState,
+  DataTransaction,
+  LSN,
+  Relation,
+  RelationsCache,
+  SqlValue,
+  randomValue,
+} from '../../src/util'
 import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
@@ -85,7 +93,6 @@ type Opts = SatelliteOpts & {
 export interface TestNotifier extends EventNotifier {
   notifications: any[]
 }
-
 
 export interface TestSatellite extends Satellite {
   _lastSentRowId: number

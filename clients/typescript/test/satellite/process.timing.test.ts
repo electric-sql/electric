@@ -1,4 +1,4 @@
-import anyTest, {TestFn} from 'ava'
+import anyTest, { TestFn } from 'ava'
 import { sleepAsync } from '../../src/util/timer'
 
 import { satelliteDefaults } from '../../src/satellite/config'

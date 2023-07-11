@@ -45,7 +45,6 @@ import {
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
 
-
 const parentRecord = {
   id: 1,
   value: 'incoming',
