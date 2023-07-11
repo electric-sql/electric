@@ -108,6 +108,11 @@ defmodule Electric.Satellite.WsServer do
 
             {reply, state1} ->
               {binary_frames(reply), %State{state1 | last_msg_time: last_msg_time}}
+
+            {:force_unpause, reply, state} ->
+              %State{state | last_msg_time: last_msg_time}
+              |> then(&unpause_and_send_pending_events([reply], &1))
+              |> binary_frames()
           end
         rescue
           e ->
@@ -465,41 +470,35 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  defp send_subscription_data_and_unpause(msgs \\ [], id, data, state) do
+  defp unpause_and_send_pending_events(msgs, state) do
     buffer = state.out_rep.outgoing_ops_buffer
 
     state =
       state.out_rep
-      |> OutRep.remove_next_pause_point()
       |> OutRep.set_event_buffer([])
       |> OutRep.set_status(:active)
       |> then(&%{state | out_rep: &1})
+
+    {next_msgs, state} =
+      buffer
+      |> :queue.to_list()
+      |> send_events_and_maybe_pause(state)
+
+    {[msgs, next_msgs], state}
+  end
+
+  defp send_subscription_data_and_unpause(msgs \\ [], id, data, state) do
+    state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
 
     {more_msgs, state} = Protocol.handle_subscription_data(id, data, state)
 
-    {even_more_msgs, state} =
-      buffer
-      |> :queue.to_list()
-      |> send_events_and_maybe_pause(state)
-
-    {[msgs, more_msgs, even_more_msgs], state}
+    unpause_and_send_pending_events([msgs, more_msgs], state)
   end
 
   defp send_subscription_data_error_and_unpause(error, state) do
-    buffer = state.out_rep.outgoing_ops_buffer
-
-    state =
-      state.out_rep
-      |> OutRep.remove_next_pause_point()
-      |> OutRep.set_event_buffer([])
-      |> OutRep.set_status(:active)
-      |> then(&%{state | out_rep: &1})
-
-    {rest_of_msgs, state} =
-      buffer
-      |> :queue.to_list()
-      |> send_events_and_maybe_pause(state)
-
-    {[error, rest_of_msgs], state}
+    unpause_and_send_pending_events(
+      [error],
+      Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
+    )
   end
 end
