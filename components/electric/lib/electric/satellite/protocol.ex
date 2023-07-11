@@ -318,6 +318,8 @@ defmodule Electric.Satellite.Protocol do
             {[%SatInStartReplicationResp{}], state}
           end
         else
+          # Once the client is outside the WAL window, we are assuming the client will re-establish subscriptions, so we'll discard them
+          SubscriptionManager.delete_all_subscriptions(state.client_id)
           error = %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW}
           {[%SatInStartReplicationResp{err: error}], state}
         end
