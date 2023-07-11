@@ -243,7 +243,7 @@ export class SatelliteProcess implements Satellite {
     return { connectionPromise }
   }
 
-  async _setAuthState(authState: AuthState): Promise<void | Error> {
+  async _setAuthState(authState: AuthState): Promise<void> {
     this._authState = authState
   }
 
@@ -769,7 +769,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _getOplogShadowEntry(
-    oplog: OplogEntry | undefined
+    oplog?: OplogEntry | undefined
   ): Promise<ShadowEntry[]> {
     const shadow = this.opts.shadowTable.toString()
     let query

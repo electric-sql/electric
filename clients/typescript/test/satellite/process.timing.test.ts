@@ -1,8 +1,8 @@
-import test from 'ava'
+import anyTest, {TestFn} from 'ava'
 import { sleepAsync } from '../../src/util/timer'
 
 import { satelliteDefaults } from '../../src/satellite/config'
-import { makeContext, clean } from './common'
+import { makeContext, clean, ContextType } from './common'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -10,6 +10,7 @@ const opts = Object.assign({}, satelliteDefaults, {
   pollingInterval: 500,
 })
 
+const test = anyTest as TestFn<ContextType>
 test.beforeEach(async (t) => makeContext(t, opts))
 test.afterEach.always(clean)
 

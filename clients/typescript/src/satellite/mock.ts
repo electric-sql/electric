@@ -231,18 +231,18 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   getOutboundLogPositions(): { enqueued: Uint8Array; ack: Uint8Array } {
     return { enqueued: this.outboundSent, ack: this.outboundAck }
   }
-  connect(): Promise<void | SatelliteError> {
+  connect(): Promise<void> {
     this.closed = false
     return Promise.resolve()
   }
-  close(): Promise<void | SatelliteError> {
+  close(): Promise<void> {
     this.closed = true
     for (const t of this.timeouts) {
       clearTimeout(t)
     }
     return Promise.resolve()
   }
-  authenticate(_authState: AuthState): Promise<SatelliteError | AuthResponse> {
+  authenticate(_authState: AuthState): Promise<AuthResponse> {
     return Promise.resolve({})
   }
   startReplication(lsn: LSN): Promise<void> {
@@ -272,7 +272,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
     return Promise.resolve()
   }
-  stopReplication(): Promise<void | SatelliteError> {
+  stopReplication(): Promise<void> {
     this.replicating = false
     return Promise.resolve()
   }
@@ -283,7 +283,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     _callback: (transaction: Transaction) => Promise<void>
   ): void {}
 
-  enqueueTransaction(transaction: DataTransaction): void | SatelliteError {
+  enqueueTransaction(transaction: DataTransaction): void {
     this.outboundSent = transaction.lsn
 
     this.emit('ack_lsn', transaction.lsn, AckType.LOCAL_SEND)
