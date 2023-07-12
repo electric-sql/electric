@@ -97,7 +97,7 @@ defmodule Electric.Satellite.WsServerTest do
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
     client_id = "device-id-0000"
     headers = build_headers(PB.get_long_proto_vsn())
-    token = Auth.JWT.create_token(user_id)
+    token = Auth.Secure.create_token(user_id)
 
     {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
   end
@@ -238,7 +238,7 @@ defmodule Electric.Satellite.WsServerTest do
       end)
 
       past = System.os_time(:second) - 24 * 3600
-      expired_token = Auth.JWT.create_token(cxt.user_id, expiry: past)
+      expired_token = Auth.Secure.create_token(cxt.user_id, expiry: past)
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
@@ -262,7 +262,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     test "cluster/app id mismatch is detected", cxt do
-      invalid_token = Auth.JWT.create_token(cxt.user_id, issuer: "some-other-cluster-id")
+      invalid_token = Auth.Secure.create_token(cxt.user_id, issuer: "some-other-cluster-id")
 
       with_connect([port: cxt.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{

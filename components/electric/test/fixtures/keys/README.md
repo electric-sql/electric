@@ -1,7 +1,7 @@
 Fixture Keys
 ============
 
-This directory contains cryptographic key pairs that are used in jwt auth tests.
+This directory contains cryptographic key pairs that are used in secure auth tests.
 
 **DO NOT** use these keys anywhere else outside of Electric's test suite.
 

@@ -553,10 +553,10 @@ defmodule Electric.Test.SatelliteWsClient do
         {:ok, token}
 
       %{auth_config: config, user_id: user_id} ->
-        {:ok, Electric.Satellite.Auth.JWT.create_token(user_id, config: config)}
+        {:ok, Electric.Satellite.Auth.Secure.create_token(user_id, config: config)}
 
       %{user_id: user_id} ->
-        {:ok, Electric.Satellite.Auth.JWT.create_token(user_id)}
+        {:ok, Electric.Satellite.Auth.Secure.create_token(user_id)}
 
       invalid ->
         raise ArgumentError,
