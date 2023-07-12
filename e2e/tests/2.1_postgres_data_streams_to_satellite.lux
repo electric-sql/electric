@@ -22,7 +22,7 @@
 
 [shell electric]
     # We expect to send the transaction to Satellite
-    ?client_id=client_1_1 user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord\{record: %\{
+    ?client_id=client_1_1 user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord\{(.*)record: %\{
     ?+"content" => "sentinel value"
     ?+"content_b" => nil
     ?"id" => "00000000-0000-0000-0000-000000000000"

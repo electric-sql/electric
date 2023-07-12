@@ -162,7 +162,7 @@ defmodule Electric.Satellite.Protobuf do
         {:ok, unquote(tag), encoded}
       else
         error ->
-          Logger.warn("failed to encode: #{inspect(data)}")
+          Logger.warning("failed to encode: #{inspect(data)}")
           error
       end
     end
@@ -208,7 +208,7 @@ defmodule Electric.Satellite.Protobuf do
        }}
     rescue
       _ ->
-        Logger.warn("failed to encode: #{inspect(version)}")
+        Logger.warning("failed to encode: #{inspect(version)}")
         {:error, :bad_version}
     end
   end

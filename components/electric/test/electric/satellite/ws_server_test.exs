@@ -708,7 +708,7 @@ defmodule Electric.Satellite.WsServerTest do
     receive do
       {_, %SatOpLog{} = op_log} ->
         lsn = get_lsn(op_log)
-        # Logger.warn("consumed: #{inspect(lsn)}")
+        # Logger.warning("consumed: #{inspect(lsn)}")
         consume_till_stop(lsn)
 
       {_, %SatInStopReplicationResp{}} ->

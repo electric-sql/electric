@@ -238,7 +238,7 @@ defmodule Electric.Satellite.Protocol do
             error
 
           {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
-            Logger.warn("client authorization failed",
+            Logger.warning("client authorization failed",
               metadata: [client_id: client_id, error: message]
             )
 

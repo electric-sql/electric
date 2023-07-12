@@ -10,8 +10,8 @@ on:
       - "!components/electric/**README.md"
 
 env:
-  OTP_VERSION: "24.3"
-  ELIXIR_VERSION: "1.13"
+  OTP_VERSION: "25.3"
+  ELIXIR_VERSION: "1.15"
 
 concurrency:
   group: components-electric-${{ github.ref }}

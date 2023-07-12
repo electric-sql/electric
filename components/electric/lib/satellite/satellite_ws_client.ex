@@ -522,7 +522,7 @@ defmodule Electric.Test.SatelliteWsClient do
         end
 
       msg ->
-        Logger.warn("Unhandled: #{inspect(msg)}")
+        Logger.warning("Unhandled: #{inspect(msg)}")
     end
   end
 

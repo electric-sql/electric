@@ -349,7 +349,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   defp handle_message(tag, data, state) do
-    Logger.warn(
+    Logger.warning(
       "Received unexpected message in mode #{state.mode} (tag #{inspect(<<tag::8>>)}): #{inspect(data)}"
     )
 
