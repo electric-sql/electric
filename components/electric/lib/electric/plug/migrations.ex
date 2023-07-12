@@ -75,7 +75,7 @@ defmodule Electric.Plug.Migrations do
 
   defp migrations_zipfile(migrations, dialect) do
     file_list =
-      Enum.flat_map(migrations, fn {version, schema, stmts} ->
+      Enum.flat_map(migrations, fn {_txid, _txts, version, schema, stmts} ->
         ops = translate_stmts(version, schema, stmts, dialect)
 
         sql =

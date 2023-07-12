@@ -33,8 +33,6 @@ defmodule Electric.Postgres.Extension do
   @electrified_index_table electric.(@electrified_index_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
-  @migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
-  @partial_migration_history_query ~s(SELECT "version", "schema", "migration_ddl" FROM #{@schema_table} WHERE "version" > $1 ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
   @schema_version_query ~s(SELECT "schema", "version" FROM #{@schema_table} WHERE "version" = $1 LIMIT 1)
   # FIXME: VAX-600 insert into schema ignoring conflicts (which I think arise from inter-pg replication, a problem
@@ -49,6 +47,32 @@ defmodule Electric.Postgres.Extension do
   @publication_name "electric_publication"
   @slot_name "electric_replication_out"
   @subscription_name "electric_replication_in"
+
+  defp migration_history_query(after_version) do
+    where_clause =
+      if after_version do
+        ~s|WHERE #{@version_table}.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)|
+      else
+        # Dummy condition just to keep the $1 parameter in the query.
+        ~s|WHERE $1::text IS NULL|
+      end
+
+    ~s"""
+    SELECT
+      #{@version_table}.txid,
+      #{@version_table}.txts,
+      #{@version_table}.version,
+      #{@schema_table}.schema,
+      #{@schema_table}.migration_ddl
+    FROM
+      #{@version_table}
+    JOIN
+      #{@schema_table} USING (version)
+    #{where_clause}
+    ORDER BY
+      #{@version_table}.txid ASC
+    """
+  end
 
   def schema, do: @schema
   def ddl_table, do: @ddl_table
@@ -124,22 +148,21 @@ defmodule Electric.Postgres.Extension do
 
   def migration_history(conn, after_version \\ nil)
 
-  def migration_history(conn, nil) do
-    with {:ok, [_, _, _], rows} <- :epgsql.equery(conn, @migration_history_query, []) do
-      {:ok, load_migrations(rows)}
-    end
-  end
+  def migration_history(conn, after_version) do
+    query = migration_history_query(after_version)
+    param = after_version || :null
 
-  def migration_history(conn, after_version) when is_binary(after_version) do
-    with {:ok, [_, _, _], rows} <-
-           :epgsql.equery(conn, @partial_migration_history_query, [after_version]) do
+    with {:ok, [_, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
       {:ok, load_migrations(rows)}
     end
   end
 
   defp load_migrations(rows) do
-    Enum.map(rows, fn {version, schema_json, stmts} ->
-      {version, Proto.Schema.json_decode!(schema_json), stmts}
+    Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
+      txid = String.to_integer(txid_str)
+      txts = decode_epgsql_timestamp(txts_tuple)
+      schema = Proto.Schema.json_decode!(schema_json)
+      {txid, txts, version, schema, stmts}
     end)
   end
 
@@ -412,4 +435,14 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp known_shadow_column?(_), do: false
+
+  defp decode_epgsql_timestamp({date, {h, m, frac_sec}}) do
+    sec = trunc(frac_sec)
+    microsec = trunc((frac_sec - sec) * 1_000_000)
+    DateTime.from_naive!(NaiveDateTime.from_erl!({date, {h, m, sec}}, {microsec, 6}), "Etc/UTC")
+  end
+
+  def encode_epgsql_timestamp(%DateTime{} = dt) do
+    dt |> DateTime.to_naive() |> NaiveDateTime.to_erl()
+  end
 end

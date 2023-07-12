@@ -199,16 +199,17 @@ defmodule Electric.Postgres.ExtensionTest do
           end)
 
         assert :ok = Extension.save_schema(conn, version, schema, stmts)
+        assert :ok = save_migration_version(conn, version)
         schema
       end)
 
     assert {:ok, versions} = Extension.migration_history(conn)
 
-    assert migrations == Enum.map(versions, fn {v, _, s} -> {v, s} end)
+    assert migrations == Enum.map(versions, fn {_txid, _txts, v, _, s} -> {v, s} end)
 
     assert {:ok, versions} = Extension.migration_history(conn, "0002")
 
-    versions = Enum.map(versions, fn {v, _, s} -> {v, s} end)
+    versions = Enum.map(versions, fn {_txid, _txts, v, _, s} -> {v, s} end)
 
     assert versions == Enum.slice(migrations, 2..-1)
   end

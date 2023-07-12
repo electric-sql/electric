@@ -39,6 +39,7 @@ defmodule Electric.PlugTest do
           end)
 
         assert :ok = Extension.save_schema(conn, version, schema, stmts)
+        assert :ok = save_migration_version(conn, version)
         schema
       end)
 

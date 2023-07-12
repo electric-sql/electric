@@ -37,7 +37,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
   @impl true
   def save({versions, opts}, version, schema, stmts) do
     notify(opts, {:save, version, schema, stmts})
-    {:ok, {[{version, schema, stmts} | versions], opts}}
+
+    migration = {
+      String.to_integer(version),
+      DateTime.utc_now(),
+      version,
+      schema,
+      stmts
+    }
+
+    {:ok, {[migration | versions], opts}}
   end
 
   @impl true

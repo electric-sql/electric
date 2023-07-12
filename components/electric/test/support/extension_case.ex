@@ -61,6 +61,17 @@ defmodule Electric.Extension.Case.Helpers do
     {:ok, _, _} = :epgsql.squery(conn, "SET SEARCH_PATH = #{search_path};")
     conn
   end
+
+  def save_migration_version(conn, version) do
+    {:ok, 1} =
+      :epgsql.equery(conn, "INSERT INTO electric.migration_versions VALUES ($1, $2, $3)", [
+        String.to_integer(version),
+        Extension.encode_epgsql_timestamp(DateTime.utc_now()),
+        version
+      ])
+
+    :ok
+  end
 end
 
 defmodule Electric.Extension.Case do

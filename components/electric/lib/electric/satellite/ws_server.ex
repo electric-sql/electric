@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.WsServer do
   require Pathex
   alias Electric.Utils
+  alias Electric.Postgres.CachedWal
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.{State, InRep, OutRep}
@@ -188,9 +189,17 @@ defmodule Electric.Satellite.WsServer do
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
   def websocket_info(:perform_initial_sync_and_subscribe, %State{} = state) do
-    {lsn, transactions} = Electric.Replication.InitialSync.transactions(state.pg_connector_opts)
-    {msgs, state} = Protocol.handle_outgoing_txs(transactions, state)
-    state = Protocol.initiate_subscription(state, lsn)
+    migration_transactions = InitialSync.migrations_since(nil, state.pg_connector_opts)
+    {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
+
+    lsn = CachedWal.Api.get_current_position()
+    max_txid = Enum.max_by(migration_transactions, fn {tx, _offset} -> tx.xid end, fn -> 0 end)
+
+    state =
+      state
+      |> Protocol.initiate_subscription(lsn)
+      |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
+
     {binary_frames(msgs), state}
   end
 
