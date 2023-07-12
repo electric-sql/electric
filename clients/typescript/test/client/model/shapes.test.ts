@@ -41,7 +41,6 @@ Log.setLevel(Log.getLevel()) // Be sure to call setLevel method in order to appl
 // to acknowledge the subscription
 Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
 
-const db = new Database(':memory:')
 const config = {
   auth: {
     token: 'test-token',
@@ -49,6 +48,8 @@ const config = {
 }
 
 async function makeContext(t: ExecutionContext) {
+  const db = new Database(':memory:')
+
   const client = new MockSatelliteClient()
   const adapter = new DatabaseAdapter(db)
   const migrations = schema.migrations
@@ -71,6 +72,7 @@ async function makeContext(t: ExecutionContext) {
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User
+  const Profile = electric.db.Profile
 
   const runMigrations = async () => {
     await migrator.up()
@@ -86,16 +88,17 @@ async function makeContext(t: ExecutionContext) {
     Post,
     Items,
     User,
+    Profile,
   }
 
-  init()
+  init(t.context as ContextType)
 }
 
 type TableType<T extends keyof ElectricClient<typeof schema>['db']> =
   ElectricClient<typeof schema>['db'][T]
 type ContextType = {
   dbName: string
-  db: typeof db
+  db: any
   satellite: SatelliteProcess
   client: MockSatelliteClient
   runMigrations: () => Promise<number>
@@ -103,13 +106,19 @@ type ContextType = {
   Post: TableType<'Post'>
   Items: TableType<'Items'>
   User: TableType<'User'>
+  Profile: TableType<'Profile'>
 }
 
 // Create a Post table in the DB first
-function init() {
+function init({ db }: ContextType) {
   db.exec('DROP TABLE IF EXISTS Post')
   db.exec(
     "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int, 'authorId' int);"
+  )
+
+  db.exec('DROP TABLE IF EXISTS Profile')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int);"
   )
 
   log = []
@@ -205,6 +214,29 @@ const relations = {
       },
     ],
   },
+  Profile: {
+    id: 1,
+    schema: 'public',
+    table: 'Profile',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'INTEGER',
+        primaryKey: true,
+      },
+      {
+        name: 'bio',
+        type: 'TEXT',
+        primaryKey: false,
+      },
+      {
+        name: 'userId',
+        type: 'INTEGER',
+        primaryKey: false,
+      },
+    ],
+  },
 }
 
 const post = {
@@ -213,6 +245,12 @@ const post = {
   contents: 'bar',
   nbr: 5,
   authorId: 1,
+}
+
+const profile = {
+  id: 8,
+  bio: 'foo',
+  userId: 1,
 }
 
 test.serial('promise resolves when subscription starts loading', async (t) => {
@@ -232,16 +270,21 @@ test.serial('promise resolves when subscription starts loading', async (t) => {
   t.pass()
 })
 
-// resolves when starts loading
-// resolves when data is fulfilled
 test.serial(
   'synced promise resolves when subscription is fulfilled',
   async (t) => {
-    Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
-
     const { satellite, client } = t.context as ContextType
     await satellite.start(config.auth)
 
+    // We can request a subscription
+    client.setRelations(relations)
+    client.setRelationData('Profile', profile)
+
+    const { Profile } = t.context as ContextType
+    const { synced: profileSynced } = await Profile.sync()
+
+    // Once the subscription has been acknowledged
+    // we can request another one
     client.setRelations(relations)
     client.setRelationData('Post', post)
 
@@ -252,6 +295,8 @@ test.serial(
     // Check that the data was indeed received
     const posts = await Post.findMany()
     t.deepEqual(posts, [post])
+
+    await profileSynced
   }
 )
 
@@ -269,10 +314,9 @@ test.serial('promise is rejected on failed subscription request', async (t) => {
 })
 
 test.serial('synced promise is rejected on invalid shape', async (t) => {
-  const { satellite } = t.context as ContextType
+  const { satellite, User } = t.context as ContextType
   await satellite.start(config.auth)
 
-  const { User } = t.context as ContextType
   let loadingPromResolved = false
 
   try {
