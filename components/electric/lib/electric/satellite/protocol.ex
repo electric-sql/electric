@@ -500,21 +500,23 @@ defmodule Electric.Satellite.Protocol do
   def handle_outgoing_txs(events, state, acc \\ [])
 
   def handle_outgoing_txs([{tx, offset} | events], %State{} = state, acc) do
-    with %{changes: [_ | _]} = tx <- Shapes.filter_changes_from_tx(tx, current_shapes(state)),
-         true <- Changes.belongs_to_user?(tx, state.auth.user_id),
-         stripped_tx <-
-           maybe_strip_migration_ddl(tx, state.out_rep.last_migration_xid_at_initial_sync) do
-      {relations, transaction, out_rep} = handle_out_trans({stripped_tx, offset}, state)
-      acc = Enum.concat([transaction, relations, acc])
-      out_rep = %{out_rep | last_seen_wal_pos: offset}
-      handle_outgoing_txs(events, %State{state | out_rep: out_rep}, acc)
-    else
-      _ ->
-        Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
-        out_rep = %{state.out_rep | last_seen_wal_pos: offset}
+    filtered_tx =
+      tx
+      |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
+      |> Shapes.filter_changes_from_tx(current_shapes(state))
 
-        handle_outgoing_txs(events, %{state | out_rep: out_rep}, acc)
-    end
+    {out_rep, acc} =
+      if filtered_tx.changes != [] and Changes.belongs_to_user?(filtered_tx, state.auth.user_id) do
+        {relations, transaction, out_rep} = handle_out_trans({filtered_tx, offset}, state)
+        {out_rep, Enum.concat([transaction, relations, acc])}
+      else
+        Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
+        {state.out_rep, acc}
+      end
+
+    out_rep = %OutRep{out_rep | last_seen_wal_pos: offset}
+    state = %State{state | out_rep: out_rep}
+    handle_outgoing_txs(events, state, acc)
   end
 
   def handle_outgoing_txs([], state, acc) do
