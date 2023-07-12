@@ -230,7 +230,7 @@ defmodule Electric.Satellite.Protocol do
           Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
           Metrics.satellite_connection_event(%{authorized_connection: 1})
 
-          {%SatAuthResp{id: Electric.regional_id()},
+          {%SatAuthResp{id: Electric.instance_id()},
            %State{state | auth: auth, auth_passed: true, client_id: client_id}}
         else
           {:error, %SatErrorResp{}} = error ->

@@ -47,6 +47,11 @@ auth_provider =
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
+config :electric,
+  # Used only to send server identification upon connection,
+  # can stay default while we're not working on multi-instance setups
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "electric")
+
 if config_env() == :prod do
   config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
 
@@ -64,41 +69,33 @@ if config_env() == :prod do
   config :electric, Electric.Satellite.WsServer,
     port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
 
-  connectors =
-    System.get_env("CONNECTORS", "")
-    |> String.split(";", trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.map(&String.split(&1, "=", parts: 2))
-    |> Enum.map(fn [name, "postgres" <> _ = connection_string] ->
-      connection =
-        PostgresqlUri.parse(connection_string)
-        |> then(&Keyword.put(&1, :host, &1[:hostname]))
-        |> Keyword.delete(:hostname)
-        |> Keyword.put_new(:ssl, false)
-        |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
+  postgresql_connection =
+    System.fetch_env!("DATABASE_URL")
+    |> PostgresqlUri.parse()
+    |> then(&Keyword.put(&1, :host, &1[:hostname]))
+    |> Keyword.delete(:hostname)
+    |> Keyword.put_new(:ssl, false)
+    |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
+    |> Keyword.put(:replication, "database")
 
-      {String.to_atom(name),
-       producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-       connection: connection ++ [ssl: false, replication: "database"],
-       replication: [
-         publication: publication,
-         slot: slot,
-         electric_connection: [
-           host: electric_host,
-           port: electric_port,
-           dbname: "test",
-           connect_timeout: connection[:timeout]
-         ]
-       ]}
-    end)
+  connectors = [
+    {"postgres_1",
+     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
+     connection: postgresql_connection,
+     replication: [
+       publication: publication,
+       slot: slot,
+       electric_connection: [
+         host: electric_host,
+         port: electric_port,
+         dbname: "electric",
+         connect_timeout: postgresql_connection[:timeout]
+       ]
+     ]}
+  ]
 
   config :electric, Electric.Replication.Connectors, connectors
 
   config :electric, Electric.Replication.OffsetStorage,
     file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
-
-  config :electric,
-    global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
-    instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
-    regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
 end

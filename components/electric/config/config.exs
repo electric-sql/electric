@@ -20,7 +20,6 @@ config :logger, :console,
     :sq_client,
     :component,
     :instance_id,
-    :regional_id,
     :client_id,
     :user_id,
     :metadata
