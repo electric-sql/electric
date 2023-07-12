@@ -13,10 +13,22 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'name1', type: 'TEXT' },
       { name: 'name2', type: 'TEXT' },
       { name: 'name3', type: 'TEXT' },
+      { name: 'int1', type: 'INTEGER' },
+      { name: 'int2', type: 'INTEGER' },
+      { name: 'float1', type: 'FLOAT4' },
+      { name: 'float2', type: 'FLOAT4' },
     ],
   }
 
-  const record: Record = { name1: 'Hello', name2: 'World!', name3: null }
+  const record: Record = {
+    name1: 'Hello',
+    name2: 'World!',
+    name3: null,
+    int1: 1,
+    int2: -30,
+    float1: 1.1,
+    float2: -30.3,
+  }
   const s_row = serializeRow(record, rel)
   const d_row = deserializeRow(s_row, rel)
 
