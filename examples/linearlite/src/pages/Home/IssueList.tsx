@@ -67,13 +67,14 @@ function IssueList() {
   //   dispatch(loadIssues());
   // }, []);
 
-  var issueRows = issues.map((issue, idx) => (
-    <IssueRow
-      issue={issue}
-      onChangePriority={handleIssuePriorityChange}
-      onChangeStatus={handleIssueStatusChange}
-    />
-  ));
+    var issueRows = issues.map((issue) => (
+      <IssueRow
+        key={`issue-${issue.id}`}
+        issue={issue}
+        onChangePriority={handleIssuePriorityChange}
+        onChangeStatus={handleIssueStatusChange}
+      />
+    ));
 
   return (
     <div className="flex flex-col overflow-auto">

@@ -37,7 +37,7 @@ export default function StatusMenu({ id, button, className, onSelect }: Props) {
 
   let options = statuses.map(([Icon, id, label]) => {
     return (
-      <Menu.Item onClick={() => handleSelect(id)}>
+      <Menu.Item key={`status-${id}`} onClick={() => handleSelect(id)}>
         <Icon className="mr-3" />
         <div className="flex-1 overflow-hidden">{label}</div>
       </Menu.Item>
