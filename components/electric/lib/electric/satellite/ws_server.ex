@@ -66,7 +66,7 @@ defmodule Electric.Satellite.WsServer do
 
     # Add the cluster id to the logger metadata to make filtering easier in the case of global log
     # aggregation
-    Logger.metadata(instance_id: Electric.instance_id(), regional_id: Electric.regional_id())
+    Logger.metadata(instance_id: Electric.instance_id())
 
     {:cowboy_websocket, req,
      %State{

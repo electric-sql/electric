@@ -47,6 +47,11 @@ auth_provider =
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
+config :electric,
+  # Used only to send server identification upon connection,
+  # can stay default while we're not working on multi-instance setups
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "electric")
+
 if config_env() == :prod do
   config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
 
@@ -96,9 +101,4 @@ if config_env() == :prod do
 
   config :electric, Electric.Replication.OffsetStorage,
     file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
-
-  config :electric,
-    global_cluster_id: System.fetch_env!("GLOBAL_CLUSTER_ID"),
-    instance_id: System.fetch_env!("ELECTRIC_INSTANCE_ID"),
-    regional_id: System.fetch_env!("ELECTRIC_REGIONAL_ID")
 end

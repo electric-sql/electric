@@ -60,7 +60,7 @@ defmodule Electric.Satellite.WsServerTest do
         subscription_data_fun: ctx.subscription_data_fun
       )
 
-    server_id = Electric.regional_id()
+    server_id = Electric.instance_id()
 
     on_exit(fn ->
       SchemaRegistry.clear_replicated_tables(@test_publication)

@@ -71,14 +71,4 @@ defmodule Electric do
   def instance_id do
     Application.fetch_env!(:electric, :instance_id)
   end
-
-  @doc """
-  Identifier that's unique for every electric cluster instance.
-
-  So basically region + instance_id
-  """
-  @spec regional_id() :: binary | no_return
-  def regional_id do
-    Application.fetch_env!(:electric, :regional_id)
-  end
 end

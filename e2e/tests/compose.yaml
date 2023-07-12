@@ -17,8 +17,6 @@ services:
       ELECTRIC_HOST: electric_1
       CONNECTORS: >-
         postgres_1=postgresql://postgres:password@pg_1:5432/electric
-      ELECTRIC_INSTANCE_ID: instance-a.region-1.test.electric-db
-      ELECTRIC_REGIONAL_ID: region-1.test.electric-db
     ports:
       - "5050:5050"
       - "5133:5133"
