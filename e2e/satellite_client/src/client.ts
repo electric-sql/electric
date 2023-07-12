@@ -20,7 +20,7 @@ export const open_db = async (
     url: `electric://${host}:${port}`,
     debug: true,
     auth: {
-      token: authToken(process.env.SATELLITE_AUTH_SIGNING_ISS, process.env.SATELLITE_AUTH_SIGNING_KEY)
+      token: authToken(process.env.AUTH_SIGNING_ISS, process.env.AUTH_SIGNING_KEY)
     }
   }
   console.log(`config: ${JSON.stringify(config)}`)

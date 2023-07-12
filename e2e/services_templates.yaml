@@ -3,8 +3,8 @@ services:
     image: "${ELECTRIC_IMAGE}"
     environment:
       LOG_LEVEL: debug
-      SATELLITE_AUTH_JWT_ALG: HS256
-      SATELLITE_AUTH_JWT_KEY: integration-tests-signing-key-example
+      AUTH_JWT_ALG: HS256
+      AUTH_JWT_KEY: integration-tests-signing-key-example
       OFFSET_STORAGE_FILE: /tmp/electric-offset-storage.dat
     init: true
     privileged: true
@@ -43,8 +43,8 @@ services:
     image: "satellite_client:local"
     user: "${UID}:${GID}"
     environment:
-      SATELLITE_AUTH_JWT_ALG: HS256
-      SATELLITE_AUTH_JWT_KEY: integration-tests-signing-key-example
+      AUTH_JWT_ALG: HS256
+      AUTH_JWT_KEY: integration-tests-signing-key-example
       HOME: ${E2E_ROOT}/satellite_client
       SATELLITE_DB_PATH: /var/lib/satellite/data
       NODE_DISABLE_COLORS: 1

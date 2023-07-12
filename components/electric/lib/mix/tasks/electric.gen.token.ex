@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
   Generate an authentication token for the given user ids.
 
   This requires the application to be configured for JWT authentication with the required
-  environment variables set, i.e. `SATELLITE_AUTH_JWT_ALG` and `SATELLITE_AUTH_JWT_KEY`.
+  environment variables set, i.e. `AUTH_JWT_ALG` and `AUTH_JWT_KEY`.
 
   ## Usage
 
