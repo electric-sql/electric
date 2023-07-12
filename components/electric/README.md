@@ -138,7 +138,7 @@ $ mix electric.gen.token my_user_id
 This token can be used with the Electric server running in either `secure` or `insecure` mode. In the latter case, the
 Electric server must be configured with the same algorithm and key for the token to pass verification.
 
-See our official docs to learn about authentication in detail.
+See [our official docs](https://electric-sql.com/docs/usage/auth) to learn about authentication in detail.
 
 ## Migrations
 
