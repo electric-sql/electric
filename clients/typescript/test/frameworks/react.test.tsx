@@ -17,7 +17,7 @@ import { QualifiedTablename } from '../../src/util/tablename'
 import { useLiveQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
-import { dbSchema, Electric } from '../client/generated'
+import { schema, Electric } from '../client/generated'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -35,7 +35,7 @@ test('useLiveQuery returns query results', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(dbSchema, namespace)
+  const dal = ElectricClient.create(schema, namespace)
 
   const query = 'select i from bars'
   const liveQuery = dal.db.liveRaw({
@@ -58,7 +58,7 @@ test('useLiveQuery returns error when query errors', async (t) => {
 
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(dbSchema, namespace)
+  const dal = ElectricClient.create(schema, namespace)
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -79,7 +79,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(dbSchema, namespace)
+  const dal = ElectricClient.create(schema, namespace)
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -115,7 +115,7 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
   const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(dbSchema, namespace)
+  const dal = ElectricClient.create(schema, namespace)
 
   await notifier.attach('baz.db', 'baz')
 

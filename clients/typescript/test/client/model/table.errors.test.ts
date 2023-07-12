@@ -1,7 +1,7 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
 import { electrify } from '../../../src/drivers/better-sqlite3'
-import { dbSchema } from '../generated'
+import { schema } from '../generated'
 import { ZodError } from 'zod'
 import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
 import {
@@ -16,7 +16,7 @@ import {
  */
 
 const db = new Database(':memory:')
-const electric = await electrify(db, dbSchema, {
+const electric = await electrify(db, schema, {
   auth: {
     token: 'test-token',
   },

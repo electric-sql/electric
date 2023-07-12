@@ -9,14 +9,14 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { dbSchema, Post } from '../generated'
+import { schema, Post } from '../generated'
 import {
   shapeManager,
   ShapeManagerMock,
 } from '../../../src/client/model/shapes'
 
 const db = new Database(':memory:')
-const electric = await electrify(db, dbSchema, {
+const electric = await electrify(db, schema, {
   auth: {
     token: 'test-token',
   },
