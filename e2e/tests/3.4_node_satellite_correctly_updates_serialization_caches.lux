@@ -12,19 +12,7 @@
 [global migration_version_3=20230622101323]
 
 [shell pg_1]
-    [local sql=
-        """
-        CREATE TABLE public.items (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        content VARCHAR(64) NOT NULL,
-        content_text_null VARCHAR(64),
-        content_text_null_default VARCHAR(64) DEFAULT '',
-        intvalue_null integer,
-        intvalue_null_default integer DEFAULT 10
-        );
-        CALL electric.electrify('public.items');
-        """]
-    [invoke migrate_pg 20230504114018 $sql]
+    [invoke migrate_items_table 20230504114018]
     !\d electric.shadow__public__items
     !\d items
 
