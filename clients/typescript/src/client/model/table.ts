@@ -32,7 +32,7 @@ import * as z from 'zod'
 import { parseTableNames, Row, Statement } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { shapeManager } from './shapes'
-import { Sub } from '../../satellite'
+import { ShapeSubscription } from '../../satellite'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -163,7 +163,7 @@ export class Table<
     return includedTables
   }
 
-  sync<T extends SyncInput<Include>>(i?: T): Promise<Sub> {
+  sync<T extends SyncInput<Include>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     // Recursively go over the included fields
     // and for each field store its table
