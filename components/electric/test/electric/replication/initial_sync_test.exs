@@ -11,7 +11,6 @@ defmodule Electric.Replication.InitialSyncTest do
   require Logger
 
   @origin "initial-sync-test"
-  @cached_wal_module CachedWal.EtsBacked
   @sleep_timeout 50
 
   describe "migrations_since" do
@@ -216,7 +215,7 @@ defmodule Electric.Replication.InitialSyncTest do
     after
       @sleep_timeout * 10 ->
         flunk(
-          "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position(@cached_wal_module))}"
+          "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position())}"
         )
     end
   end

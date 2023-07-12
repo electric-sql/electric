@@ -188,7 +188,7 @@ defmodule Electric.Satellite.WsServer do
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
-  def websocket_info(:perform_initial_sync_and_subscribe, %State{} = state) do
+  def websocket_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
     migration_transactions = InitialSync.migrations_since(nil, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
@@ -197,7 +197,7 @@ defmodule Electric.Satellite.WsServer do
 
     state =
       state
-      |> Protocol.initiate_subscription(lsn)
+      |> Protocol.subscribe_client_to_replication_stream(msg, lsn)
       |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
     {binary_frames(msgs), state}

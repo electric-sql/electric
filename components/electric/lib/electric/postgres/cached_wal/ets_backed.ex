@@ -45,6 +45,14 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
+  def lsn_in_cached_window?(client_wal_pos) do
+    case :ets.first(@ets_table_name) do
+      :"$end_of_table" -> false
+      position -> position <= client_wal_pos
+    end
+  end
+
+  @impl Api
   def get_current_position do
     with :"$end_of_table" <- :ets.last(@ets_table_name) do
       nil
