@@ -15,8 +15,7 @@ services:
       service: electric
     environment:
       ELECTRIC_HOST: electric_1
-      CONNECTORS: >-
-        postgres_1=postgresql://postgres:password@pg_1:5432/electric
+      DATABASE_URL: postgresql://postgres:password@pg_1:5432/electric
     ports:
       - "5050:5050"
       - "5133:5133"
