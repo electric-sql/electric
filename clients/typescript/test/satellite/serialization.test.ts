@@ -20,10 +20,10 @@ test('serialize/deserialize row data', async (t) => {
     ],
   }
 
-  const record: Record = { 
-    name1: 'Hello', 
-    name2: 'World!', 
-    name3: null, 
+  const record: Record = {
+    name1: 'Hello',
+    name2: 'World!',
+    name3: null,
     int1: 1,
     int2: -30,
     float1: 1.1,
