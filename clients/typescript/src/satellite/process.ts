@@ -489,7 +489,9 @@ export class SatelliteProcess implements Satellite {
       .connect()
       .then(() => this.client.authenticate(authState))
       .then(() => this.migrator.querySchemaVersion())
-      .then((schemaVersion) => this.client.startReplication(this._lsn, schemaVersion))
+      .then((schemaVersion) =>
+        this.client.startReplication(this._lsn, schemaVersion)
+      )
       .catch(async (error) => {
         if (
           error.code == SatelliteErrorCode.BEHIND_WINDOW &&

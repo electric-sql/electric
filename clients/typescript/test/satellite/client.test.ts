@@ -208,7 +208,7 @@ test.serial('replication start sends FIRST_LSN', async (t) => {
   })
 })
 
-test.serial('replication start sends schemaVersion', async(t) => {
+test.serial('replication start sends schemaVersion', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
@@ -216,7 +216,9 @@ test.serial('replication start sends schemaVersion', async(t) => {
     server.nextResponses([
       (data?: Buffer) => {
         const msgType = data!.readUInt8()
-        t.assert(msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type))
+        t.assert(
+          msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
+        )
 
         const req = decode(data!) as Proto.SatInStartReplicationReq
         t.assert(req.schemaVersion === '20230711')
