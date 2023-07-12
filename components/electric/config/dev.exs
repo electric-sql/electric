@@ -17,8 +17,6 @@ config :electric, Electric.Replication.Connectors,
       ssl: false
     ],
     replication: [
-      publication: "all_tables",
-      slot: "all_changes",
       electric_connection: [
         host: "host.docker.internal",
         port: 5433,
