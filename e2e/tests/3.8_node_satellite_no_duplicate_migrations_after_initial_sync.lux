@@ -6,6 +6,7 @@
 
 [global migration1_vsn=20230710150000]
 [global migration2_vsn=20230710150001]
+[global migration3_vsn=20230710150002]
 
 [shell pg_1]
   [local sql=
@@ -59,6 +60,20 @@
      ack_fn: nil, \
      changes: \[\
        %Electric.Replication.Changes.NewRecord\{record: %\{.*"query" => "CREATE TABLE users
+
+# Make sure the server keeps streaming migrations to the client after the initial sync is done.
+[shell pg_1]
+  [local sql=
+    """
+    ALTER TABLE users ADD COLUMN foo TEXT DEFAULT 'bar';
+    """]
+  [invoke migrate_pg $migration3_vsn $sql]
+
+[shell satellite_1]
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"users"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration3_vsn",.*,"table":\{.*,"name":"users"
 
 [cleanup]
   [invoke teardown]

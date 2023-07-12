@@ -207,7 +207,10 @@ defmodule Electric.Satellite.WsServer do
     migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
 
-    max_txid = Enum.max_by(migration_transactions, fn {tx, _offset} -> tx.xid end, fn -> 0 end)
+    max_txid =
+      migration_transactions
+      |> Enum.map(fn {tx, _offset} -> tx.xid end)
+      |> Enum.max(fn -> 0 end)
 
     state =
       state
