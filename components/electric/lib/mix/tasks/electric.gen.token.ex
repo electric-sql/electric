@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Electric.Gen.Token do
     tokens =
       for user_id <- user_ids do
         token =
-          Electric.Satellite.Auth.JWT.create_token(user_id, expiry: DateTime.to_unix(expiry))
+          Electric.Satellite.Auth.Secure.create_token(user_id, expiry: DateTime.to_unix(expiry))
 
         %{token: token, user_id: user_id, expiry: expiry}
       end

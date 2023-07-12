@@ -1,6 +1,6 @@
-defmodule Electric.Satellite.Auth.JWT do
+defmodule Electric.Satellite.Auth.Secure do
   @moduledoc """
-  Implementation module of the "jwt" auth mode.
+  Implementation module of the "secure" auth mode.
 
   This mode requires auth tokens to be signed. It also checks for the presence of at least "iat" and "exp" claims. If
   you include values for "iss" and/or "aud" claims in your configuration, those will also be enforced. The "user_id"
@@ -8,7 +8,7 @@ defmodule Electric.Satellite.Auth.JWT do
 
   Auth tokens must use the same signing algorithm as the one configured in Electric.
 
-  The "jwt" auth mode is used by default.
+  The "secure" auth mode is used by default.
   """
 
   @behaviour Electric.Satellite.Auth
@@ -28,7 +28,7 @@ defmodule Electric.Satellite.Auth.JWT do
             when alg in ~w[HS256 HS384 HS512 RS256 RS384 RS512 ES256 ES384 ES512]
 
   @doc ~S"""
-  Validate configuration options and build a clean config for "jwt" auth.
+  Validate configuration options and build a clean config for "secure" auth.
 
   Raises if any of the required options are missing or the key is too weak.
 
@@ -62,7 +62,7 @@ defmodule Electric.Satellite.Auth.JWT do
           alg
 
         _ ->
-          raise ConfigError, "Missing or invalid 'alg' configuration option for JWT auth mode"
+          raise ConfigError, "Missing or invalid 'alg' configuration option for secure auth mode"
       end
 
     key =
@@ -71,7 +71,7 @@ defmodule Electric.Satellite.Auth.JWT do
         |> validate_key(alg)
         |> prepare_key(alg)
       else
-        raise ConfigError, "Missing 'key' configuration option for JWT auth mode"
+        raise ConfigError, "Missing 'key' configuration option for secure auth mode"
       end
 
     token_config =

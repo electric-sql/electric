@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Auth.Insecure do
   namespace.
 
   You must opt in to using the "insecure" mode. We do not recommend to use it outside of development or local testing.
-  As soon as you're ready to deploy Electric in any capacity, make sure to switch to the "jwt" auth mode.
+  As soon as you're ready to deploy Electric in any capacity, make sure to switch to the "secure" auth mode.
   """
 
   @behaviour Electric.Satellite.Auth

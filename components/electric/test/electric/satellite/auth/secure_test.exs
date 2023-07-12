@@ -1,8 +1,8 @@
-defmodule Electric.Satellite.Auth.JWTTest do
+defmodule Electric.Satellite.Auth.SecureTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  import Electric.Satellite.Auth.JWT, only: [build_config!: 1, validate_token: 2]
+  import Electric.Satellite.Auth.Secure, only: [build_config!: 1, validate_token: 2]
   alias Electric.Satellite.Auth
   alias Electric.Satellite.Auth.ConfigError
 
@@ -36,7 +36,7 @@ defmodule Electric.Satellite.Auth.JWTTest do
     end
 
     test "checks for missing 'alg'" do
-      message = "Missing or invalid 'alg' configuration option for JWT auth mode"
+      message = "Missing or invalid 'alg' configuration option for secure auth mode"
 
       assert_raise ConfigError, message, fn ->
         build_config!([])
@@ -44,7 +44,7 @@ defmodule Electric.Satellite.Auth.JWTTest do
     end
 
     test "checks for missing 'key'" do
-      message = "Missing 'key' configuration option for JWT auth mode"
+      message = "Missing 'key' configuration option for secure auth mode"
 
       assert_raise ConfigError, message, fn ->
         build_config!(alg: "HS256")

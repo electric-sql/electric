@@ -103,7 +103,7 @@ The Electric application is configured using environment variables. Everything t
 |                                |                             |                                                                                                                                                                                                                                                                                                                                                                                               |
 | `OFFSET_STORAGE_FILE`          | `./offset_storage_data.dat` | Path to the file storing the mapping between connected Postgres, Satellite instances, and an internal event log. Should be persisted between Electric restarts.                                                                                                                                                                                                                               |
 |                                |                             |                                                                                                                                                                                                                                                                                                                                                                                               |
-| `SATELLITE_AUTH_MODE`          | `"jwt"`                     | Authentication mode to use to authenticate Satellite clients. See below.                                                                                                                                                                                                                                                                                                                      |
+| `SATELLITE_AUTH_MODE`          | `"secure"`                  | Authentication mode to use to authenticate Satellite clients. See below.                                                                                                                                                                                                                                                                                                                      |
 | `SATELLITE_AUTH_JWT_ALG`       |                             | <p>The algorithm to use for JWT verification. Electric supports the following algorithms:</p><ul><li>`HS256`, `HS384`, `HS512`: HMAC-based cryptographic signature that relies on the SHA-2 family of hash functions.</li><li>`RS256`, `RS384`, `RS512`: RSA-based algorithms for digital signature.</li><li>`ES256`, `ES384`, `ES512`: ECC-based algorithms for digital signature.</li></ul> |
 | `SATELLITE_AUTH_JWT_KEY`       |                             | The key to use for JWT verification. Must be appropriate for the chosen signature algorithm. For `RS*` and `ES*` algorithms, the key must be in PEM format.                                                                                                                                                                                                                                   |
 | `SATELLITE_AUTH_JWT_NAMESPACE` |                             | <p>This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric.</p><p>Currently, only the `user_id` custom claim is required.</p                                                                                                                                                                                                  |
@@ -135,10 +135,10 @@ $ export SATELLITE_AUTH_JWT_KEY=00000000000000000000000000000000
 $ mix electric.gen.token my_user_id
 ```
 
-This token can be used with the Electric server running in either `insecure` or `jwt` mode. In the latter case, the Electric server must
-be configured with the same algorithm and key for the token to pass verification.
+This token can be used with the Electric server running in either `secure` or `insecure` mode. In the latter case, the
+Electric server must be configured with the same algorithm and key for the token to pass verification.
 
-See our official docs to learn about authentication in detail.
+See [our official docs](https://electric-sql.com/docs/usage/auth) to learn about authentication in detail.
 
 ## Migrations
 

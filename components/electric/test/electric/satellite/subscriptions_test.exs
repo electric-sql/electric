@@ -24,7 +24,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         pg_connector_opts: ctx.pg_connector_opts
       )
 
-      token = Electric.Satellite.Auth.JWT.create_token(user_id)
+      token = Electric.Satellite.Auth.Secure.create_token(user_id)
 
       on_exit(fn ->
         drain_pids(active_clients())

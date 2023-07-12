@@ -2,8 +2,8 @@ defmodule Electric.Satellite.Auth do
   @moduledoc """
   Behaviour module for authentication of Satellite clients.
 
-  Electric supports two auth modes: "insecure" and "jwt". Both work by validating a JWT token. See each implementation
-  module's documentation for more info.
+  Electric supports two auth modes: "secure" and "insecure". Both work by validating a JWT token. See each
+  implementation module's documentation for more info.
   """
 
   require Logger

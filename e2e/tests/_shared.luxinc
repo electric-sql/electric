@@ -34,7 +34,7 @@
 [macro client_session user_id session_id]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !auth_config = Electric.Satellite.Auth.JWT.build_config!( \
+    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
                      alg: "HS256", key: "integration-tests-signing-key-example" \
                    )
     ?$eprompt

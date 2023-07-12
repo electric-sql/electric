@@ -12,21 +12,21 @@ alias Electric.Satellite.Auth
 auth_provider =
   if config_env() == :test do
     auth_config =
-      Auth.JWT.build_config!(
+      Auth.Secure.build_config!(
         alg: "HS256",
         key: "test-signing-key-at-least-32-bytes-long",
         iss: "electric-sql-test-issuer"
       )
 
-    {Auth.JWT, auth_config}
+    {Auth.Secure, auth_config}
   else
-    case System.get_env("SATELLITE_AUTH_MODE", "jwt") do
+    case System.get_env("SATELLITE_AUTH_MODE", "secure") do
       "insecure" ->
         namespace = System.get_env("SATELLITE_AUTH_JWT_NAMESPACE")
         auth_config = Auth.Insecure.build_config(namespace: namespace)
         {Auth.Insecure, auth_config}
 
-      "jwt" ->
+      "secure" ->
         auth_config =
           [
             alg: System.get_env("SATELLITE_AUTH_JWT_ALG"),
@@ -36,9 +36,9 @@ auth_provider =
             aud: System.get_env("SATELLITE_AUTH_JWT_AUD")
           ]
           |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-          |> Auth.JWT.build_config!()
+          |> Auth.Secure.build_config!()
 
-        {Auth.JWT, auth_config}
+        {Auth.Secure, auth_config}
 
       other ->
         raise "Unsupported auth mode: #{inspect(other)}"
