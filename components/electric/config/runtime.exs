@@ -20,20 +20,20 @@ auth_provider =
 
     {Auth.Secure, auth_config}
   else
-    case System.get_env("SATELLITE_AUTH_MODE", "secure") do
+    case System.get_env("AUTH_MODE", "secure") do
       "insecure" ->
-        namespace = System.get_env("SATELLITE_AUTH_JWT_NAMESPACE")
+        namespace = System.get_env("AUTH_JWT_NAMESPACE")
         auth_config = Auth.Insecure.build_config(namespace: namespace)
         {Auth.Insecure, auth_config}
 
       "secure" ->
         auth_config =
           [
-            alg: System.get_env("SATELLITE_AUTH_JWT_ALG"),
-            key: System.get_env("SATELLITE_AUTH_JWT_KEY"),
-            namespace: System.get_env("SATELLITE_AUTH_JWT_NAMESPACE"),
-            iss: System.get_env("SATELLITE_AUTH_JWT_ISS"),
-            aud: System.get_env("SATELLITE_AUTH_JWT_AUD")
+            alg: System.get_env("AUTH_JWT_ALG"),
+            key: System.get_env("AUTH_JWT_KEY"),
+            namespace: System.get_env("AUTH_JWT_NAMESPACE"),
+            iss: System.get_env("AUTH_JWT_ISS"),
+            aud: System.get_env("AUTH_JWT_AUD")
           ]
           |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
           |> Auth.Secure.build_config!()

@@ -1,8 +1,8 @@
 version: "3.8"
 
 x-preshared-auth-variables: &preshared-auth-variables
-  SATELLITE_AUTH_JWT_ALG: HS256
-  SATELLITE_AUTH_JWT_KEY: local-development-key-minimum-32-symbols
+  AUTH_JWT_ALG: HS256
+  AUTH_JWT_KEY: local-development-key-minimum-32-symbols
 configs:
   postgres_config:
     file: "./compose/postgres/postgres.conf"
