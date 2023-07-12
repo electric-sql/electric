@@ -1,12 +1,20 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { randomValue } from '../../src/util'
+import {
+  ConnectivityState,
+  DataTransaction,
+  LSN,
+  Relation,
+  RelationsCache,
+  SqlValue,
+  randomValue,
+} from '../../src/util'
 import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
-import { MockNotifier } from '../../src/notifiers'
+import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
-import { SatelliteProcess } from '../../src/satellite'
-import { initTableInfo } from '../support/satellite-helpers'
+import { Satellite, SatelliteProcess } from '../../src/satellite'
+import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 
 export const relations = {
@@ -68,6 +76,8 @@ export const relations = {
 
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
+import { AuthState } from '../../src/auth'
+import { OplogEntry } from '../../src/satellite/oplog'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
@@ -80,8 +90,41 @@ type Opts = SatelliteOpts & {
   pollingInterval: number
 }
 
+export interface TestNotifier extends EventNotifier {
+  notifications: any[]
+}
+
+export interface TestSatellite extends Satellite {
+  _lastSentRowId: number
+  _authState?: AuthState
+  relations: RelationsCache
+
+  _setAuthState(authState: AuthState): Promise<void>
+  _performSnapshot(): Promise<Date>
+  _getEntries(): Promise<OplogEntry[]>
+  _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
+  _applyTransaction(transaction: DataTransaction): any
+  _setMeta(key: string, value: SqlValue): Promise<void>
+  _getMeta(key: string): Promise<string>
+  _ack(lsn: number, isAck: boolean): Promise<void>
+  _connectivityStateChange(status: ConnectivityState): void
+  _getLocalRelations(): Promise<{ [k: string]: Relation }>
+}
+
+export type ContextType = {
+  dbName: string
+  adapter: DatabaseAdapter
+  notifier: TestNotifier
+  satellite: SatelliteProcess
+  client: MockSatelliteClient
+  runMigrations: () => Promise<void>
+  tableInfo: TableInfo
+  timestamp: number
+  authState: AuthState
+}
+
 export const makeContext = async (
-  t: ExecutionContext,
+  t: ExecutionContext<ContextType>,
   options: Opts = opts
 ) => {
   await mkdir('.tmp', { recursive: true })
@@ -111,9 +154,7 @@ export const makeContext = async (
 
   t.context = {
     dbName,
-    db,
     adapter,
-    migrator,
     notifier,
     client,
     runMigrations,

@@ -1,14 +1,11 @@
-import test from 'ava'
+import anyTest, { TestFn } from 'ava'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INVALID_POSITION_LSN,
-  MockSatelliteClient,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
-import { AuthState } from '../../src/auth/index'
 
 import {
   OPTYPES,
@@ -27,61 +24,26 @@ import {
   generateLocalOplogEntry,
   generateRemoteOplogEntry,
   genEncodedTags,
-  TableInfo,
 } from '../support/satellite-helpers'
 import Long from 'long'
 import {
   DataChangeType,
-  ConnectivityState,
-  LSN,
-  Relation,
-  SqlValue,
   DataTransaction,
   SatelliteErrorCode,
-  RelationsCache,
 } from '../../src/util/types'
-import { makeContext, opts, relations, cleanAndStopSatellite } from './common'
-import { Satellite } from '../../src/satellite'
+import {
+  makeContext,
+  opts,
+  relations,
+  cleanAndStopSatellite,
+  ContextType,
+} from './common'
 import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
-import { EventNotifier } from '../../src/notifiers'
 import {
   ClientShapeDefinition,
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
-
-interface TestNotifier extends EventNotifier {
-  notifications: any[]
-}
-
-interface TestSatellite extends Satellite {
-  _lastSentRowId: number
-  _authState: AuthState
-  relations: RelationsCache
-
-  _setAuthState(authState: AuthState): Promise<void>
-  _performSnapshot(): Promise<Date>
-  _getEntries(): Promise<OplogEntry[]>
-  _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
-  _applyTransaction(transaction: DataTransaction): any
-  _setMeta(key: string, value: SqlValue): Promise<void>
-  _getMeta(key: string): Promise<string>
-  _ack(lsn: number, isAck: boolean): Promise<void>
-  _connectivityStateChange(status: ConnectivityState): void
-  _getLocalRelations(): Promise<{ [k: string]: Relation }>
-}
-
-type ContextType = {
-  dbName: string
-  adapter: DatabaseAdapter
-  notifier: TestNotifier
-  satellite: TestSatellite
-  client: MockSatelliteClient
-  runMigrations: () => Promise<void>
-  tableInfo: TableInfo
-  timestamp: number
-  authState: AuthState
-}
 
 const parentRecord = {
   id: 1,
@@ -94,17 +56,16 @@ const childRecord = {
   parent: 1,
 }
 
+const test = anyTest as TestFn<ContextType>
 test.beforeEach(makeContext)
 test.afterEach.always(cleanAndStopSatellite)
 
 test('setup starts a satellite process', async (t) => {
-  const { satellite } = t.context as ContextType
-
-  t.true(satellite instanceof SatelliteProcess)
+  t.true(t.context.satellite instanceof SatelliteProcess)
 })
 
 test('start creates system tables', async (t) => {
-  const { adapter, satellite, authState } = t.context as ContextType
+  const { adapter, satellite, authState } = t.context
 
   await satellite.start(authState)
 
@@ -116,7 +77,7 @@ test('start creates system tables', async (t) => {
 })
 
 test('load metadata', async (t) => {
-  const { adapter, runMigrations } = t.context as ContextType
+  const { adapter, runMigrations } = t.context
   await runMigrations()
 
   const meta = await loadSatelliteMetaTable(adapter)
@@ -131,21 +92,22 @@ test('load metadata', async (t) => {
 })
 
 test('set persistent client id', async (t) => {
-  const { satellite, authState } = t.context as ContextType
+  const { satellite, authState } = t.context
 
   await satellite.start(authState)
-  const clientId1 = satellite['_authState']['clientId']
+  const clientId1 = satellite._authState!.clientId
+  t.truthy(clientId1)
   await satellite.stop()
 
   await satellite.start(authState)
 
-  const clientId2 = satellite['_authState']['clientId']
-
+  const clientId2 = satellite._authState!.clientId
+  t.truthy(clientId2)
   t.assert(clientId1 === clientId2)
 })
 
 test('cannot UPDATE primary key', async (t) => {
-  const { adapter, runMigrations } = t.context as ContextType
+  const { adapter, runMigrations } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -158,9 +120,8 @@ test('cannot UPDATE primary key', async (t) => {
 })
 
 test('snapshot works', async (t) => {
-  const { satellite } = t.context as ContextType
-  const { adapter, notifier, runMigrations, authState } =
-    t.context as ContextType
+  const { satellite } = t.context
+  const { adapter, notifier, runMigrations, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
 
@@ -168,7 +129,7 @@ test('snapshot works', async (t) => {
 
   let snapshotTimestamp = await satellite._performSnapshot()
 
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
   let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
   var shadowRows = await adapter.query({
@@ -211,8 +172,7 @@ test('snapshot works', async (t) => {
 // })
 
 test('starting and stopping the process works', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, authState } =
-    t.context as ContextType
+  const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -241,7 +201,7 @@ test('starting and stopping the process works', async (t) => {
 })
 
 test('snapshots on potential data change', async (t) => {
-  const { adapter, notifier, runMigrations } = t.context as ContextType
+  const { adapter, notifier, runMigrations } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -257,8 +217,7 @@ test('snapshots on potential data change', async (t) => {
 // If last operation is a DELETE, concurrent INSERT shall resurrect deleted
 // values as in 'INSERT wins over DELETE and restored deleted values'
 test('snapshot of INSERT after DELETE', async (t) => {
-  const { adapter, runMigrations, satellite, authState } =
-    t.context as ContextType
+  const { adapter, runMigrations, satellite, authState } = t.context
   try {
     await runMigrations()
 
@@ -271,7 +230,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
     await satellite._setAuthState(authState)
     await satellite._performSnapshot()
     const entries = await satellite._getEntries()
-    const clientId = satellite['_authState']['clientId']
+    const clientId = satellite._authState!.clientId
 
     const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
       return generateTag(clientId, timestamp)
@@ -488,11 +447,11 @@ test('apply incoming with no local', async (t) => {
 })
 
 test('apply empty incoming', async (t) => {
-  const { runMigrations, satellite, authState } = t.context as ContextType
+  const { runMigrations, satellite, authState } = t.context
   await runMigrations()
 
   await satellite._setAuthState(authState)
-  await satellite._apply([])
+  await satellite._apply([], 'external')
 
   t.true(true)
 })
@@ -774,7 +733,7 @@ test('merge incoming with empty local', async (t) => {
 })
 
 test('advance oplog cursor', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context as ContextType
+  const { adapter, runMigrations, satellite } = t.context
   await runMigrations()
 
   // fake current propagated rowId
@@ -812,7 +771,7 @@ test('advance oplog cursor', async (t) => {
 })
 
 test('compensations: referential integrity is enforced', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context as ContextType
+  const { adapter, runMigrations, satellite } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
@@ -981,8 +940,7 @@ test('compensations: using triggers with flag 0', async (t) => {
 })
 
 test('compensations: using triggers with flag 1', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as ContextType
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
@@ -1013,12 +971,12 @@ test('compensations: using triggers with flag 1', async (t) => {
       }
     ),
   ]
-  await satellite._apply(incoming)
-  t.true(true)
+  await satellite._apply(incoming, 'remote')
+  t.pass()
 })
 
 test('get oplogEntries from transaction', async (t) => {
-  const { runMigrations, satellite } = t.context as ContextType
+  const { runMigrations, satellite } = t.context
   await runMigrations()
 
   const relations = await satellite['_getLocalRelations']()
@@ -1053,7 +1011,7 @@ test('get oplogEntries from transaction', async (t) => {
 })
 
 test('get transactions from opLogEntries', async (t) => {
-  const { runMigrations } = t.context as ContextType
+  const { runMigrations } = t.context
   await runMigrations()
 
   const opLogEntries: OplogEntry[] = [
@@ -1133,8 +1091,7 @@ test('get transactions from opLogEntries', async (t) => {
 })
 
 test('rowid acks updates meta', async (t) => {
-  const { runMigrations, satellite, client, authState } =
-    t.context as ContextType
+  const { runMigrations, satellite, client, authState } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1146,8 +1103,7 @@ test('rowid acks updates meta', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState } =
-    t.context as ContextType
+  const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1188,8 +1144,8 @@ test('handling connectivity state change stops queueing operations', async (t) =
 })
 
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
-  const { satellite } = t.context as ContextType
-  const { runMigrations, adapter, authState } = t.context as ContextType
+  const { satellite } = t.context
+  const { runMigrations, adapter, authState } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1211,7 +1167,7 @@ test('garbage collection is triggered when transaction from the same origin is r
 
   const old_oplog = await satellite._getEntries()
   let transactions = toTransactions(old_oplog, relations)
-  transactions[0].origin = satellite['_authState']['clientId']
+  transactions[0].origin = satellite._authState!.clientId
 
   await satellite._applyTransaction(transactions[0])
   const new_oplog = await satellite._getEntries()
@@ -1220,8 +1176,8 @@ test('garbage collection is triggered when transaction from the same origin is r
 
 // stub client and make satellite throw the error with option off/succeed with option on
 test('clear database on BEHIND_WINDOW', async (t) => {
-  const { satellite } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { satellite } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
@@ -1239,8 +1195,8 @@ test('clear database on BEHIND_WINDOW', async (t) => {
 })
 
 test('throw other replication errors', async (t) => {
-  const { satellite } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { satellite } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
@@ -1255,8 +1211,8 @@ test('throw other replication errors', async (t) => {
 })
 
 test('apply shape data and persist subscription', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -1299,8 +1255,8 @@ test('apply shape data and persist subscription', async (t) => {
 })
 
 test('applied shape data will be acted upon correctly', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -1351,8 +1307,8 @@ test('applied shape data will be acted upon correctly', async (t) => {
 })
 
 test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'child'
@@ -1385,8 +1341,8 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
 })
 
 test('a second successful subscription', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'child'
@@ -1432,8 +1388,8 @@ test('a second successful subscription', async (t) => {
 })
 
 test('a single subscribe with multiple tables with FKs', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const qualifiedChild = new QualifiedTablename('main', 'child').toString()
@@ -1482,8 +1438,8 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
 })
 
 test.serial('a shape delivery that triggers garbage collection', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'parent'
@@ -1535,8 +1491,8 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
 })
 
 test('a subscription request failure does not clear the manager state', async (t) => {
-  const { client, satellite, adapter } = t.context as ContextType
-  const { runMigrations, authState } = t.context as ContextType
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   // relations must be present at subscription delivery
