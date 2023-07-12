@@ -82,7 +82,7 @@ type ChangeAccumulator = {
 }
 
 export type ShapeSubscription = {
-  dataReceived: Promise<void>
+  synced: Promise<void>
 }
 
 const throwErrors = [
@@ -345,7 +345,7 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
 
     return {
-      dataReceived: prom,
+      synced: prom,
     }
   }
 

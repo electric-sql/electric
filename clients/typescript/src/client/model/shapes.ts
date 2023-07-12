@@ -41,14 +41,14 @@ export class ShapeManager implements IShapeManager {
 
     const sub = await this.satellite.subscribe([shapeDef])
 
-    const dataReceivedProm = sub.dataReceived.then(() => {
+    const dataReceivedProm = sub.synced.then(() => {
       // When all data is received
       // we store the fact that these tables are synced
       shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
     })
 
     return {
-      dataReceived: dataReceivedProm,
+      synced: dataReceivedProm,
     }
   }
 
@@ -67,7 +67,7 @@ export class ShapeManagerMock extends ShapeManager {
     shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
 
     return {
-      dataReceived: Promise.resolve(),
+      synced: Promise.resolve(),
     }
   }
 }

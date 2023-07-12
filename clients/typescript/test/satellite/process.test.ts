@@ -1275,8 +1275,8 @@ test('apply shape data and persist subscription', async (t) => {
   }
 
   satellite!.relations = relations
-  const { dataReceived } = await satellite.subscribe([shapeDef])
-  await dataReceived
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
 
   // wait for process to apply shape data
   try {
@@ -1319,8 +1319,8 @@ test('applied shape data will be acted upon correctly', async (t) => {
   }
 
   satellite!.relations = relations
-  const { dataReceived } = await satellite.subscribe([shapeDef])
-  await dataReceived
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
 
   // wait for process to apply shape data
   try {
@@ -1371,8 +1371,8 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
   }
 
   satellite!.relations = relations
-  const { dataReceived } = await satellite.subscribe([shapeDef1])
-  await dataReceived // wait for subscription to be fulfilled
+  const { synced } = await satellite.subscribe([shapeDef1])
+  await synced // wait for subscription to be fulfilled
 
   try {
     const row = await adapter.query({
@@ -1409,8 +1409,8 @@ test('a second successful subscription', async (t) => {
 
   satellite!.relations = relations
   await satellite.subscribe([shapeDef1])
-  const { dataReceived } = await satellite.subscribe([shapeDef2])
-  await dataReceived
+  const { synced } = await satellite.subscribe([shapeDef2])
+  await synced
 
   try {
     const row = await adapter.query({
@@ -1505,12 +1505,12 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
   }
 
   satellite!.relations = relations
-  const { dataReceived: dataReceived1 } = await satellite.subscribe([shapeDef1])
-  await dataReceived1
-  const { dataReceived } = await satellite.subscribe([shapeDef2])
+  const { synced: synced1 } = await satellite.subscribe([shapeDef1])
+  await synced1
+  const { synced } = await satellite.subscribe([shapeDef2])
 
   try {
-    await dataReceived
+    await synced
     t.fail()
   } catch (expected: any) {
     try {
@@ -1557,8 +1557,8 @@ test('a subscription request failure does not clear the manager state', async (t
   }
 
   satellite!.relations = relations
-  const { dataReceived } = await satellite.subscribe([shapeDef1])
-  await dataReceived
+  const { synced } = await satellite.subscribe([shapeDef1])
+  await synced
 
   try {
     const row = await adapter.query({

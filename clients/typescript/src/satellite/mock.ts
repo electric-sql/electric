@@ -76,7 +76,7 @@ export class MockSatelliteProcess implements Satellite {
     _shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription> {
     return Promise.resolve({
-      dataReceived: Promise.resolve(),
+      synced: Promise.resolve(),
     })
   }
 
