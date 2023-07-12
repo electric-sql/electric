@@ -60,17 +60,13 @@ export class InMemorySubscriptionsManager
     delete this.inFlight[subscriptionId]
     for (const shapeReq of inflight) {
       const shapeRequestOrResolved = shapeReq as ShapeRequestOrDefinition
+      shapeRequestOrResolved.uuid = shapeReqToUuid[shapeReq.requestId]
+      delete shapeRequestOrResolved.requestId
 
-      if (
-        (this.subToShapes[subscriptionId] =
-          this.subToShapes[subscriptionId] ?? [])
-      ) {
-        shapeRequestOrResolved.uuid = shapeReqToUuid[shapeReq.requestId]
-        delete shapeRequestOrResolved.requestId
-        this.subToShapes[subscriptionId].push(
-          shapeRequestOrResolved as ShapeDefinition
-        )
-      }
+      this.subToShapes[subscriptionId] = this.subToShapes[subscriptionId] ?? []
+      this.subToShapes[subscriptionId].push(
+        shapeRequestOrResolved as ShapeDefinition
+      )
     }
   }
 
