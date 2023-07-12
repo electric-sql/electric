@@ -6,7 +6,7 @@ defmodule Electric.Satellite.Auth.InsecureTest do
   alias Electric.Satellite.Auth
 
   @namespace "https://electric-sql.com/jwt/claims"
-  @signing_key 'abcdefghijklmnopqrstuvwxyz012345' |> Enum.shuffle() |> List.to_string()
+  @signing_key ~c"abcdefghijklmnopqrstuvwxyz012345" |> Enum.shuffle() |> List.to_string()
 
   describe "validate_token()" do
     property "rejects malformed tokens" do
