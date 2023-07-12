@@ -29,6 +29,9 @@ defmodule Electric.Satellite.WsServerTest do
   @test_schema "public"
   @test_table "sqlite_server_test"
   @test_oid 100_004
+  @test_create_table_stmt """
+  CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))
+  """
 
   import Mock
 
@@ -109,11 +112,8 @@ defmodule Electric.Satellite.WsServerTest do
     {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
   end
 
-  setup _ do
-    """
-    CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))
-    """
-    |> start_schema_cache()
+  setup ctx do
+    start_schema_cache(ctx[:with_sql] || "")
   end
 
   describe "resource related check" do
@@ -299,6 +299,7 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "Outgoing replication (PG -> Satellite)" do
+    @tag with_sql: @test_create_table_stmt
     test "common replication", cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
@@ -355,6 +356,7 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    @tag with_sql: @test_create_table_stmt
     test "Start/stop replication", cxt do
       limit = 10
 
@@ -410,6 +412,7 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    @tag with_sql: @test_create_table_stmt
     test "The client cannot establish two subscriptions with the same ID", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
@@ -455,6 +458,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
+    @tag with_sql: @test_create_table_stmt
     test "replication stream is paused until the data is sent to client", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
@@ -487,6 +491,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    @tag with_sql: @test_create_table_stmt
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
@@ -519,6 +524,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    @tag with_sql: @test_create_table_stmt
     test "unsubscribing works even on not-yet-fulfilled subscriptions",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
