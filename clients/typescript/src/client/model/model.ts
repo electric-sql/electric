@@ -8,7 +8,7 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { QualifiedTablename } from '../../util/tablename'
 import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
-import { Sub } from '../../satellite/process'
+import { ShapeSubscription } from '../../satellite/process'
 
 /**
  * Interface that is implemented by Electric clients.
@@ -24,7 +24,7 @@ export interface Model<
   ScalarFieldEnum,
   GetPayload extends HKT
 > {
-  sync<T extends SyncInput<Include>>(i?: T): Promise<Sub>
+  sync<T extends SyncInput<Include>>(i?: T): Promise<ShapeSubscription>
 
   /**
    * Creates a unique record in the DB.

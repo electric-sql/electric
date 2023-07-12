@@ -225,17 +225,17 @@ test.serial('promise resolves when subscription starts loading', async (t) => {
   client.setRelationData('Post', post)
 
   const { Post } = t.context as ContextType
-  const { dataReceived } = await Post.sync()
+  const { synced } = await Post.sync()
   // always await this promise otherwise the next test may issue a subscription
   // while this one is not yet fulfilled and that will lead to issues
-  await dataReceived
+  await synced
   t.pass()
 })
 
 // resolves when starts loading
 // resolves when data is fulfilled
 test.serial(
-  'dataReceived promise resolves when subscription is fulfilled',
+  'synced promise resolves when subscription is fulfilled',
   async (t) => {
     Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
 
@@ -246,8 +246,8 @@ test.serial(
     client.setRelationData('Post', post)
 
     const { Post } = t.context as ContextType
-    const { dataReceived } = await Post.sync()
-    await dataReceived
+    const { synced } = await Post.sync()
+    await synced
 
     // Check that the data was indeed received
     const posts = await Post.findMany()
@@ -268,7 +268,7 @@ test.serial('promise is rejected on failed subscription request', async (t) => {
   }
 })
 
-test.serial('dataReceived promise is rejected on invalid shape', async (t) => {
+test.serial('synced promise is rejected on invalid shape', async (t) => {
   const { satellite } = t.context as ContextType
   await satellite.start(config.auth)
 
@@ -276,13 +276,13 @@ test.serial('dataReceived promise is rejected on invalid shape', async (t) => {
   let loadingPromResolved = false
 
   try {
-    const { dataReceived } = await User.sync()
+    const { synced } = await User.sync()
     loadingPromResolved = true
-    await dataReceived
+    await synced
     t.fail()
   } catch (_e) {
     // fails if first promise got rejected
-    // instead of the `dataReceived` promise
+    // instead of the `synced` promise
     t.assert(loadingPromResolved)
     t.pass()
   }

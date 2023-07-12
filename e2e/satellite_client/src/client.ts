@@ -44,8 +44,8 @@ export const set_subscribers = (db: Electric) => {
 }
 
 export const syncTable = async (electric: Electric, table: 'items' | 'other_items') => {
-  const {dataReceived} = await electric.db[table].sync()
-  return await dataReceived
+  const { synced } = await electric.db[table].sync()
+  return await synced
 }
 
 export const get_tables = async (electric: Electric) => {

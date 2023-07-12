@@ -81,8 +81,8 @@ type ChangeAccumulator = {
   [key: string]: Change
 }
 
-export type Sub = {
-  dataReceived: Promise<void>
+export type ShapeSubscription = {
+  synced: Promise<void>
 }
 
 const throwErrors = [
@@ -308,7 +308,9 @@ export class SatelliteProcess implements Satellite {
     await this.client.close()
   }
 
-  async subscribe(shapeDefinitions: ClientShapeDefinition[]): Promise<Sub> {
+  async subscribe(
+    shapeDefinitions: ClientShapeDefinition[]
+  ): Promise<ShapeSubscription> {
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
       requestId: this.shapeRequestIdGenerator(),
       definition,
@@ -343,7 +345,7 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
 
     return {
-      dataReceived: prom,
+      synced: prom,
     }
   }
 
