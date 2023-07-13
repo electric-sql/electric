@@ -243,7 +243,7 @@ async function createPrismaSchema(
   await fs.mkdir(prismaDir)
   const provider = path.join(
     appRoot,
-    'node_modules/prisma-generator-electric/dist/bin.js'
+    'node_modules/@electric-sql/prisma-generator/dist/bin.js'
   )
   const output = path.resolve(out)
   const schema = dedent`

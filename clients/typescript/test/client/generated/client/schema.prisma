@@ -4,7 +4,7 @@ datasource db {
 }
 
 generator electric {
-  provider                 = "./node_modules/prisma-generator-electric/packages/generator/dist/bin.js"
+  provider                 = "electric-sql-prisma-generator"
   output                   = "../generated"
   relationModel            = true
   writeNullishInModelTypes = true

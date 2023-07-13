@@ -31,6 +31,6 @@
     "esbuild-plugin-inline-image": "^0.0.8",
     "prisma": "4.8.1",
     "typescript": "^4.4.3",
-    "prisma-generator-electric": "workspace:*"
+    "@electric-sql/prisma-generator": "workspace:*"
   }
 }
