@@ -53,9 +53,40 @@
     ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
 [endmacro]
 
+[macro client_session_continue user_id session_id position subscription_ids]
+    [invoke log "user ${user_id}: session ${session_id}: start"]
+    [local client_id=client_${user_id}_${session_id}]
+    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
+                     alg: "HS256", key: "integration-tests-signing-key-example" \
+                   )
+    ?$eprompt
+    """!{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn(
+                        auth: %{auth_config: auth_config, user_id: "$user_id"},
+                        id: "$client_id",
+                        debug: true,
+                        sub: "$position",
+                        subscription_ids: ~w|$subscription_ids|,
+                        auto_in_sub: true,
+                        format: :term,
+                        host: "electric_1",
+                        auto_ping: true)
+    """
+    ?+$eprompt
+    ?+sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
+[endmacro]
+
 [macro elixir_client_subscribe tables]
     """!
     Electric.Test.SatelliteWsClient.send_data(conn, Electric.Test.SatelliteWsClient.build_subscription_request(request_1: [tables: ~w|$tables|]))
+    """
+    ?+$eprompt
+    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+[endmacro]
+
+[macro elixir_client_subscribe_with_id id tables]
+    """!
+    Electric.Test.SatelliteWsClient.send_data(conn, Electric.Test.SatelliteWsClient.build_subscription_request("$id", request_1: [tables: ~w|$tables|]))
     """
     ?+$eprompt
     ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
