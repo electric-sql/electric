@@ -769,7 +769,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
     if (msg.err) {
       const error = subsErrorToSatelliteError(msg.err)
-      this.subscriptionsDataCache.subscriptionError()
+      this.subscriptionsDataCache.subscriptionError(msg.subscriptionId)
       return { subscriptionId: msg.subscriptionId, error }
     } else {
       this.subscriptionsDataCache.subscriptionResponse(msg)
@@ -778,7 +778,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleSubscriptionError(msg: SatSubsDataError): void {
-    this.subscriptionsDataCache.subscriptionDataError(msg)
+    this.subscriptionsDataCache.subscriptionDataError(msg.subscriptionId, msg)
   }
 
   private handleSubscriptionDataBegin(msg: SatSubsDataBegin): void {
