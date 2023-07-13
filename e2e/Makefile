@@ -5,7 +5,7 @@ deps: lux
 	make -C elixir_client build
 
 test_only:
-	${LUX} tests
+	${LUX} --junit tests
 
 test: deps pull test_only
 
