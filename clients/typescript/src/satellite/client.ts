@@ -318,13 +318,20 @@ export class SatelliteClient extends EventEmitter implements Client {
     let request
     if (!lsn || lsn.length == 0) {
       Log.info(`no previous LSN, start replication with option FIRST_LSN`)
+      if (subscriptionIds && subscriptionIds.length > 0) {
+        return Promise.reject(
+          new SatelliteError(
+            SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+            `Cannot start replication with subscription IDs but without previous LSN.`
+          )
+        )
+      }
       request = SatInStartReplicationReq.fromPartial({
         options: [SatInStartReplicationReq_Option.FIRST_LSN],
-        subscriptionIds,
       })
     } else {
       Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
-      request = SatInStartReplicationReq.fromPartial({ lsn })
+      request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
     }
 
     return this.rpc(request)

@@ -6,16 +6,20 @@ import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric } from './generated/models'
+import { globalRegistry } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
 
-export const open_db = async (
-  name: string,
+export const make_db = (name: string): any => {
+  return new Database(name)
+}
+
+export const electrify_db = async (
+  db: any,
   host: string,
   port: number,
   migrations: any
 ): Promise<Electric> => {
-  const original = new Database(name)
   const config: ElectricConfig = {
     url: `electric://${host}:${port}`,
     debug: true,
@@ -25,7 +29,7 @@ export const open_db = async (
   }
   console.log(`config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
-  return await electrify(original, schema, config)
+  return await electrify(db, schema, config)
 }
 
 export const set_subscribers = (db: Electric) => {
@@ -133,4 +137,8 @@ export const delete_other_item = async (electric: Electric, keys: [string]) => {
       }
     })
   }
+}
+
+export const stop = async () => {
+  await globalRegistry.stopAll()
 }

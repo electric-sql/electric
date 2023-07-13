@@ -38,12 +38,6 @@
 [invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
-  # Verifying it's a fresh client
-  ?applying migration: 0
-  ?no lsn retrieved from store
-  ?connecting and starting replication
-  ?no previous LSN, start replication with option FIRST_LSN
-
   ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
 

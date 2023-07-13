@@ -1,4 +1,9 @@
-import { ShapeDefinition, ShapeRequest, SubscriptionData } from './types'
+import {
+  ShapeDefinition,
+  ShapeRequest,
+  SubscriptionData,
+  SubscriptionId,
+} from './types'
 
 /**
  * Manages the state of satellite shape subscriptions
@@ -32,6 +37,11 @@ export interface SubscriptionsManager {
    * @param subId the identifier of the subscription
    */
   shapesForActiveSubscription(subId: string): ShapeDefinition[] | undefined
+
+  /**
+   * @returns An array of fulfilled subscriptions that are active.
+   */
+  getFulfilledSubscriptions(): SubscriptionId[]
 
   /**
    * Deletes the subscription from the manager.

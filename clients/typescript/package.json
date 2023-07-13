@@ -98,6 +98,9 @@
       ],
       "auth": [
         "./dist/auth/index.d.ts"
+      ],
+      "satellite": [
+        "./dist/satellite/index.d.ts"
       ]
     }
   },

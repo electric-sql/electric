@@ -3,14 +3,16 @@ import { DataChange, SatelliteError } from '../../util'
 export const SUBSCRIPTION_DELIVERED = 'subscription_delivered'
 export const SUBSCRIPTION_ERROR = 'subscription_error'
 
+export type SubscriptionId = string
+
 export type SubscriptionDeliveredCallback = (data: SubscriptionData) => void
 export type SubscriptionErrorCallback = (
   error: SatelliteError,
-  subscriptionId?: string
+  subscriptionId?: SubscriptionId
 ) => void
 
 export type SubscribeResponse = {
-  subscriptionId: string
+  subscriptionId: SubscriptionId
   error?: SatelliteError
 }
 
@@ -36,7 +38,7 @@ export type ShapeSelect = {
 }
 
 export type SubscriptionData = {
-  subscriptionId: string
+  subscriptionId: SubscriptionId
   data: InitialDataChange[]
   shapeReqToUuid: { [req: string]: string }
 }
