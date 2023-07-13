@@ -21,78 +21,68 @@ import {
   SubscriptionData,
 } from './types'
 
+type SubscriptionId = string
+type RequestId = string
+
 type SubscriptionDataInternal = {
-  subscriptionId: string
+  subscriptionId: SubscriptionId
   transaction: SatTransOp[]
   shapeReqToUuid: Record<string, string>
 }
 
 export class SubscriptionsDataCache extends EventEmitter {
-  requestedSubscription?: string
-  remainingShapes: Set<string>
-  currentShapeRequestId?: string
+  requestedSubscriptions: Record<SubscriptionId, Set<RequestId>>
+  remainingShapes: Set<RequestId>
+  currentShapeRequestId?: RequestId
   inDelivery?: SubscriptionDataInternal
 
   constructor() {
     super()
 
-    this.requestedSubscription = undefined
+    this.requestedSubscriptions = {}
     this.remainingShapes = new Set()
   }
+
   isDelivering(): boolean {
     return this.inDelivery != undefined
   }
 
   subscriptionRequest(subsRequest: SatSubsReq) {
     const { subscriptionId, shapeRequests } = subsRequest
-    if (this.remainingShapes.size != 0) {
-      this.internalError(
-        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `received subscription request but a subscription is already being delivered`
-      )
-    }
-    shapeRequests.forEach((rid) => this.remainingShapes.add(rid.requestId))
-    this.requestedSubscription = subscriptionId
+    const requestedShapes = new Set(
+      shapeRequests.map((shape) => shape.requestId)
+    )
+    this.requestedSubscriptions[subscriptionId] = requestedShapes
   }
 
   subscriptionResponse({ subscriptionId }: SatSubsResp) {
-    if (this.remainingShapes.size == 0) {
+    if (!this.requestedSubscriptions[subscriptionId]) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received subscribe response but no subscription has been requested`
-      )
-    }
-
-    if (subscriptionId !== this.requestedSubscription) {
-      this.internalError(
-        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received subscribe response but the subscription id does not match the expected`
+        `Received subscribe response for unknown subscription ${subscriptionId}`,
+        subscriptionId
       )
     }
   }
 
   subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
-    if (!this.requestedSubscription) {
+    if (!this.requestedSubscriptions[subscriptionId]) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatSubsDataBegin but no subscription is being delivered`
-      )
-    }
-
-    if (this.requestedSubscription != subscriptionId) {
-      this.internalError(
-        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `subscription identifier in SatSubsDataBegin does not match the expected`
+        `Received SatSubsDataBegin but for unknown subscription ${subscriptionId}`,
+        subscriptionId
       )
     }
 
     if (this.inDelivery) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `received SatSubsDataStart for subscription ${subscriptionId} but a subscription is already being delivered`
+        `received SatSubsDataStart for subscription ${subscriptionId} but a subscription (${this.inDelivery.subscriptionId}) is already being delivered`,
+        subscriptionId
       )
     }
 
+    this.remainingShapes = this.requestedSubscriptions[subscriptionId]
     this.inDelivery = {
       subscriptionId: subscriptionId,
       transaction: [],
@@ -126,7 +116,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       shapeReqToUuid: delivered.shapeReqToUuid,
     }
 
-    this.reset()
+    this.reset(subscriptionData.subscriptionId)
     this.emit(SUBSCRIPTION_DELIVERED, subscriptionData)
     return delivered
   }
@@ -206,8 +196,12 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
   }
 
-  internalError(code: SatelliteErrorCode, msg: string): never {
-    this.reset()
+  internalError(
+    code: SatelliteErrorCode,
+    msg: string,
+    subId: SubscriptionId | undefined = this.inDelivery?.subscriptionId
+  ): never {
+    this.reset(subId)
     const error = new SatelliteError(code, msg)
     this.emit(SUBSCRIPTION_ERROR, error)
 
@@ -216,19 +210,20 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   // It is safe to reset the cache state without throwing.
   // However, if message is unexpected, we emit the error
-  subscriptionError(): void {
-    if (this.remainingShapes.size === 0 || !this.requestedSubscription) {
+  subscriptionError(subId: SubscriptionId): void {
+    if (!this.requestedSubscriptions[subId]) {
       this.internalError(
-        SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `received subscription error, but no subscription is being requested`
+        SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+        `received subscription error for unknown subscription ${subId}`,
+        subId
       )
     }
 
-    this.reset()
+    this.reset(subId)
   }
 
-  subscriptionDataError(msg: SatSubsDataError): never {
-    this.reset()
+  subscriptionDataError(subId: SubscriptionId, msg: SatSubsDataError): never {
+    this.reset(subId)
     let error = subsDataErrorToSatelliteError(msg)
 
     if (!this.inDelivery) {
@@ -242,11 +237,19 @@ export class SubscriptionsDataCache extends EventEmitter {
     throw error
   }
 
-  reset() {
-    this.requestedSubscription = undefined
-    this.remainingShapes = new Set()
-    this.currentShapeRequestId = undefined
-    this.inDelivery = undefined
+  reset(subscriptionId?: string) {
+    if (subscriptionId) delete this.requestedSubscriptions[subscriptionId]
+    if (subscriptionId === this.inDelivery?.subscriptionId) {
+      // Only reset the delivery information
+      // if the reset is meant for the subscription
+      // that is currently being delivered.
+      // This ensures we do not reset delivery information
+      // if there is an error for another subscription
+      // that is not the one being delivered.
+      this.remainingShapes = new Set()
+      this.currentShapeRequestId = undefined
+      this.inDelivery = undefined
+    }
   }
 
   private proccessShapeDataOperations(

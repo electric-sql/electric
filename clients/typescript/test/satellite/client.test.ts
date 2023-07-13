@@ -795,31 +795,24 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     [subsResp, beginSub, beginShape, validSatOpLog, endShape, validSatOpLog],
     [subsRespWithErr, beginSub],
   ]
-  return new Promise<void>(async (globalRes) => {
-    while (testCases.length > 0) {
-      const next = testCases.shift()!
-      server.nextResponses(next)
-
-      const promise = new Promise<void>((res, rej) => {
-        const success = () => {
-          rej('invalid subscription messages sequence')
-        }
-
-        const error = () => {
-          if (testCases.length == 0) {
-            t.pass()
-            globalRes()
-          }
-          client.unsubscribeToSubscriptionEvents(success, error)
-          res()
-        }
-
-        client.subscribeToSubscriptionEvents(success, error)
-        client.subscribe(subscriptionId, [shapeReq, shapeReq])
-      })
-      await promise
-    }
-  })
+  t.plan(testCases.length) // Expect exactly this amount of assertions
+  for (const next of testCases) {
+    server.nextResponses(next)
+    const promise = new Promise<void>((res, rej) => {
+      const success = () => {
+        t.fail('expected the client to fail on an invalid message sequence')
+        rej()
+      }
+      const error = () => {
+        client.unsubscribeToSubscriptionEvents(success, error)
+        t.pass()
+        res()
+      }
+      client.subscribeToSubscriptionEvents(success, error)
+      client.subscribe(subscriptionId, [shapeReq, shapeReq])
+    })
+    await promise
+  }
 })
 
 test.serial('subscription correct protocol sequence with data', async (t) => {
