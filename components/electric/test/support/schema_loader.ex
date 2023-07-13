@@ -96,6 +96,13 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, migrations}
   end
 
+  @impl true
+  def known_migration_version?({versions, opts}, version) do
+    notify(opts, {:known_migration_version?, version})
+
+    version in versions
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end

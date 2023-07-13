@@ -7,7 +7,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   For the moment loads the given schema version without caching. Should at some
   point add some kind of LRU caching to limit db load when sending out a
-  migration to multiple satellite clients. 
+  migration to multiple satellite clients.
 
   Uses a configurable backend (implementing the `SchemaLoader` behaviour) to
   load and save the schema information, defaulting to one backed by postgres
@@ -90,6 +90,15 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     GenServer.call(name(origin), {:migration_history, version})
   end
 
+  def known_migration_version?(version) do
+    GenServer.call(instance(), {:known_migration_version?, version})
+  end
+
+  @impl SchemaLoader
+  def known_migration_version?(origin, version) do
+    GenServer.call(name(origin), {:known_migration_version?, version})
+  end
+
   @impl GenServer
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
@@ -102,7 +111,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       |> SchemaLoader.get(:backend)
       |> SchemaLoader.connect(conn_config)
 
-    # we now only have a single instance to 
+    # we now only have a single instance to
     case Electric.safe_reg(instance(), 0) do
       true ->
         Logger.info("Registered SchemaCache instance")
@@ -158,6 +167,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:migration_history, version}, _from, state) do
     {:reply, SchemaLoader.migration_history(state.backend, version), state}
+  end
+
+  def handle_call({:known_migration_version?, version}, _from, state) do
+    {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
   # # Version of loading primary keys using the materialised schema info

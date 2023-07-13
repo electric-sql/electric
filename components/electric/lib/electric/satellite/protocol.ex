@@ -7,14 +7,14 @@ defmodule Electric.Satellite.Protocol do
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
+  alias Electric.Postgres.{CachedWal, Extension, SchemaRegistry}
+
   alias Electric.Satellite.SubscriptionManager
   alias Electric.Replication.Connectors
-  alias Electric.Postgres.CachedWal
   alias Electric.Utils
   alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.OffsetStorage
@@ -287,15 +287,24 @@ defmodule Electric.Satellite.Protocol do
       "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
     )
 
-    case validate_lsn(client_lsn, opts) do
-      {:ok, lsn} ->
-        handle_start_replication_request(msg, lsn, state)
-
-      {:error, reason} ->
-        Logger.warning("Bad start replication options: #{inspect(reason)}")
+    with :ok <- validate_schema_version(msg.schema_version),
+         {:ok, lsn} <- validate_lsn(client_lsn, opts) do
+      handle_start_replication_request(msg, lsn, state)
+    else
+      {:error, :bad_schema_version} ->
+        Logger.warning("Unknown client schema version: #{inspect(msg.schema_version)}")
 
         {:error,
-         start_replication_error(:CODE_UNSPECIFIED, "Could not parse replication options")}
+         start_replication_error(
+           :CODE_UNSPECIFIED,
+           "Unknown schema version: #{inspect(msg.schema_version)}"
+         )}
+
+      {:error, reason} ->
+        Logger.warning("Bad start replication request: #{inspect(reason)}")
+
+        {:error,
+         start_replication_error(:CODE_UNSPECIFIED, "Could validate start replication request")}
     end
   end
 
@@ -718,6 +727,14 @@ defmodule Electric.Satellite.Protocol do
       [%SatShapeDataBegin{request_id: id}, serialized_log, %SatShapeDataEnd{}],
       %{out_rep | relations: known_relations}
     }
+  end
+
+  defp validate_schema_version(version) do
+    if is_nil(version) or Extension.SchemaCache.known_migration_version?(version) do
+      :ok
+    else
+      {:error, :bad_schema_version}
+    end
   end
 
   defp validate_lsn(client_lsn, opts) do

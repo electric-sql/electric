@@ -157,6 +157,13 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  def known_migration_version?(conn, version) when is_binary(version) do
+    case :epgsql.equery(conn, "SELECT 1 FROM #{@version_table} WHERE version = $1", [version]) do
+      {:ok, [_], [{"t"}]} -> true
+      _ -> false
+    end
+  end
+
   defp load_migrations(rows) do
     Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
       txid = String.to_integer(txid_str)
