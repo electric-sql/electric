@@ -103,8 +103,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     if (this.remainingShapes.size > 0) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatSubDataEnd but not all shapes have been delivered`,
-        this.inDelivery.subscriptionId
+        `Received SatSubDataEnd but not all shapes have been delivered`
       )
     }
 
@@ -133,24 +132,21 @@ export class SubscriptionsDataCache extends EventEmitter {
     if (this.remainingShapes.size == 0) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatShapeDataBegin but all shapes have been delivered for this subscription`,
-        this.inDelivery.subscriptionId
+        `Received SatShapeDataBegin but all shapes have been delivered for this subscription`
       )
     }
 
     if (this.currentShapeRequestId) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but a shape is already being delivered`,
-        this.inDelivery.subscriptionId
+        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but a shape is already being delivered`
       )
     }
 
     if (this.inDelivery.shapeReqToUuid[shape.requestId]) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but shape has already been delivered`,
-        this.inDelivery.subscriptionId
+        `Received SatShapeDataBegin for shape with uuid ${shape.uuid} but shape has already been delivered`
       )
     }
 
@@ -169,8 +165,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     if (!this.currentShapeRequestId) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatShapeDataEnd but no shape is being delivered`,
-        this.inDelivery.subscriptionId
+        `Received SatShapeDataEnd but no shape is being delivered`
       )
     }
 
@@ -186,16 +181,14 @@ export class SubscriptionsDataCache extends EventEmitter {
     ) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
-        `Received SatOpLog but no shape is being delivered`,
-        this.inDelivery?.subscriptionId
+        `Received SatOpLog but no shape is being delivered`
       )
     }
     for (const op of ops) {
       if (op.begin || op.commit || op.update || op.delete) {
         this.internalError(
           SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
-          `Received begin, commit, update or delete message, but these messages are not valid in subscriptions`,
-          this.inDelivery.subscriptionId
+          `Received begin, commit, update or delete message, but these messages are not valid in subscriptions`
         )
       }
 
@@ -206,7 +199,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   internalError(
     code: SatelliteErrorCode,
     msg: string,
-    subId?: SubscriptionId
+    subId: SubscriptionId | undefined = this.inDelivery?.subscriptionId
   ): never {
     this.reset(subId)
     const error = new SatelliteError(code, msg)
