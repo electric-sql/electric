@@ -457,7 +457,7 @@ export class SatelliteProcess implements Satellite {
 
   async _connectivityStateChange(
     status: ConnectivityState
-  ): Promise<void | SatelliteError> {
+  ): Promise<void> {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
@@ -479,7 +479,7 @@ export class SatelliteProcess implements Satellite {
 
   async _connectAndStartReplication(
     opts?: SatelliteReplicationOptions
-  ): Promise<void | SatelliteError> {
+  ): Promise<void> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
@@ -544,7 +544,7 @@ export class SatelliteProcess implements Satellite {
     await this._updateOplogTimestamp(timestamp)
     const oplogEntries = await this._getUpdatedEntries(timestamp)
 
-    const promises: Promise<void | SatelliteError | RunResult>[] = []
+    const promises: Promise<void | RunResult>[] = []
 
     if (oplogEntries.length !== 0) {
       promises.push(this._notifyChanges(oplogEntries))
@@ -674,7 +674,7 @@ export class SatelliteProcess implements Satellite {
 
   async _replicateSnapshotChanges(
     results: OplogEntry[]
-  ): Promise<void | SatelliteError> {
+  ): Promise<void> {
     // TODO: Don't try replicating when outbound is inactive
     if (this.client.isClosed()) {
       return
