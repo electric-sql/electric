@@ -1179,7 +1179,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  satellite._connectivityStateChange('connected')
+  satellite._connectivityStateChange('available')
 
   await sleepAsync(200)
   const lsn2 = await satellite._getMeta('lastSentRowId')
