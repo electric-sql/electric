@@ -87,8 +87,11 @@ export class BundleMigrator implements Migrator {
       return
     }
 
+    // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
+    // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
       SELECT version FROM ${this.tableName}
+        WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
     `
