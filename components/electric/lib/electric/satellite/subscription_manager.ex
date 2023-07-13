@@ -9,6 +9,8 @@ defmodule Electric.Satellite.SubscriptionManager do
   use GenServer
   require Logger
 
+  alias Electric.Replication.Shapes.ShapeRequest
+
   @ets_table :saved_subscription_ids
 
   def start_link(_) do
@@ -18,7 +20,7 @@ defmodule Electric.Satellite.SubscriptionManager do
   @doc """
   Saves the given shape requests under given subscription id for this client
   """
-  @spec save_subscription(String.t(), String.t(), [term()]) :: :ok
+  @spec save_subscription(String.t(), String.t(), [ShapeRequest.t()]) :: :ok
   def save_subscription(client_id, subscription_id, shape_requests) do
     GenServer.call(__MODULE__, {:save_subscription, {client_id, subscription_id}, shape_requests})
   end
@@ -26,7 +28,7 @@ defmodule Electric.Satellite.SubscriptionManager do
   @doc """
   Finds the shape requests associated with a given subscription id for this client
   """
-  @spec fetch_subscription(String.t(), String.t()) :: {:ok, term()} | :error
+  @spec fetch_subscription(String.t(), String.t()) :: {:ok, ShapeRequest.t()} | :error
   def fetch_subscription(client_id, subscription_id) do
     case :ets.lookup(@ets_table, {client_id, subscription_id}) do
       [] -> :error
