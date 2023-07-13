@@ -102,7 +102,6 @@ export class SatelliteProcess implements Satellite {
   _authState?: AuthState
   _authStateSubscription?: string
 
-  _lastSnapshotTimestamp?: Date
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
