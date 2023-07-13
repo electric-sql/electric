@@ -1,7 +1,7 @@
 
 .PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
 
-INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent)
+INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent --match 'electric/*' | sed -En 's|^electric/||p')
 PROTO_DIR ?= ../../protocol
 PROTO_FILE ?= $(PROTO_DIR)/satellite.proto
 
