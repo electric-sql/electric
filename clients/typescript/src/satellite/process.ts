@@ -479,7 +479,7 @@ export class SatelliteProcess implements Satellite {
 
   async _connectAndStartReplication(
     opts?: SatelliteReplicationOptions
-  ): Promise<void | SatelliteError> {
+  ): Promise<void> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
