@@ -6,6 +6,7 @@ import {
   ShapeRequest,
   ShapeRequestOrDefinition,
   SubscriptionData,
+  SubscriptionId,
 } from './types'
 import { SubscriptionsManager } from '.'
 
@@ -34,7 +35,10 @@ export class InMemorySubscriptionsManager
     this.gcHandler = gcHandler
   }
 
-  subscriptionRequested(subId: string, shapeRequests: ShapeRequest[]): void {
+  subscriptionRequested(
+    subId: SubscriptionId,
+    shapeRequests: ShapeRequest[]
+  ): void {
     if (this.inFlight[subId] || this.subToShapes[subId]) {
       throw new SatelliteError(
         SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
@@ -45,7 +49,7 @@ export class InMemorySubscriptionsManager
     this.inFlight[subId] = shapeRequests
   }
 
-  subscriptionCancelled(subId: string): void {
+  subscriptionCancelled(subId: SubscriptionId): void {
     delete this.inFlight[subId]
   }
 
@@ -70,11 +74,17 @@ export class InMemorySubscriptionsManager
     }
   }
 
-  shapesForActiveSubscription(subId: string): ShapeDefinition[] | undefined {
+  shapesForActiveSubscription(
+    subId: SubscriptionId
+  ): ShapeDefinition[] | undefined {
     return this.subToShapes[subId]
   }
 
-  async unsubscribe(subId: string): Promise<void> {
+  getFulfilledSubscriptions(): SubscriptionId[] {
+    return Object.keys(this.subToShapes)
+  }
+
+  async unsubscribe(subId: SubscriptionId): Promise<void> {
     const shapes = this.shapesForActiveSubscription(subId)
     if (shapes) {
       if (this.gcHandler) {

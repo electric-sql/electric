@@ -6,11 +6,18 @@
     # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
     # ?$node
     !migrations = $migrations
-    !db = await client.open_db( process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME", \
-                                "$host", \
-                                $port, \
-                                migrations)
+    ?$node
+    !originalDb = client.make_db(process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME")
+    ?$node
+    [invoke electrify_db "originalDb" $host $port $migrations]
     ?^$node
+[endmacro]
+
+[macro electrify_db db host port migrations]
+     !db = await client.electrify_db(originalDb, \
+                                     "$host", \
+                                     $port, \
+                                     $migrations)
 [endmacro]
 
 [macro setup_client_with_migrations satellite_number electric port migrations]

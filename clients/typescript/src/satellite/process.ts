@@ -228,8 +228,8 @@ export class SatelliteProcess implements Satellite {
 
     const lsnBase64 = await this._getMeta('lsn')
     if (lsnBase64 && lsnBase64.length > 0) {
-      Log.info(`retrieved lsn ${this._lsn}`)
       this._lsn = base64.toBytes(lsnBase64)
+      Log.info(`retrieved lsn ${this._lsn}`)
     } else {
       Log.info(`no lsn retrieved from store`)
     }
@@ -487,25 +487,32 @@ export class SatelliteProcess implements Satellite {
     }
     const authState = this._authState
 
-    return this.client
-      .connect()
-      .then(() => this.client.authenticate(authState))
-      .then(() => this.client.startReplication(this._lsn))
-      .catch(async (error) => {
-        if (
-          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-          opts?.clearOnBehindWindow
-        ) {
-          return this._handleSubscriptionError(error).then(() =>
-            this._connectAndStartReplication()
-          )
-        }
+    try {
+      await this.client.connect()
+      await this.client.authenticate(authState)
 
-        if (throwErrors.includes(error.code)) {
-          throw error
-        }
-        Log.warn(`couldn't start replication: ${error}`)
-      })
+      // Fetch the subscription IDs that were fulfilled
+      // such that we can resume and inform Electric
+      // about fulfilled subscriptions
+      const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+
+      await this.client.startReplication(this._lsn, subscriptionIds)
+    } catch (error: any) {
+      if (
+        error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+        opts?.clearOnBehindWindow
+      ) {
+        return this._handleSubscriptionError(error).then(() =>
+          this._connectAndStartReplication()
+        )
+      }
+
+      if (throwErrors.includes(error.code)) {
+        throw error
+      }
+      Log.warn(`couldn't start replication: ${error}`)
+      return Promise.resolve()
+    }
   }
 
   async _verifyTableStructure(): Promise<boolean> {

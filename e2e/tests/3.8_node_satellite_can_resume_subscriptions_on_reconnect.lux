@@ -1,4 +1,4 @@
-[doc NodeJS Satellite receives initial data when the table is synced, and continues to receive updates for that table]
+[doc NodeJS Satellite receives missing data for previously synced tables when reconnecting]
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
@@ -53,6 +53,24 @@
 [shell pg_1]
     !\x
     [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 1" 10 ${psql}]
+
+[shell satellite_1]
+    [progress stopping client]
+    !await client.stop(db)
+    ?$node
+    [progress resuming client]
+    [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
+    ?$node
+
+[shell pg_1]
+    [progress pg_1 is writing a new row]
+    # Insert another row
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000002', 'hello from pg after resume');
+    ?$psql
+
+[shell satellite_1]
+    [progress satellite_1 waiting for new row to arrive without having to resubscribe]
+    [invoke node_await_get "00000000-0000-0000-0000-000000000002"]
 
 [cleanup]
   [invoke teardown]

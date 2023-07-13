@@ -68,7 +68,6 @@ test('basic rules for setting tags', async (t) => {
   t.is(shadow.length, 0)
 
   const entries = await satellite._getEntries()
-  console.log(entries)
   t.is(entries[0].clearTags, encodeTags([]))
   t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate1]))
   t.is(entries[2].clearTags, genEncodedTags(clientId, [txDate2]))
