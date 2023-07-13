@@ -286,7 +286,7 @@ defmodule Electric.Satellite.WsServer do
     # There might be a race between DOWN message from consumer and following
     # attempt to subscribe, so it's ok to receive down messages here on some
     # occasion
-    Logger.warn("Unhandled msg ws connection: #{inspect(msg)}")
+    Logger.warning("Unhandled msg ws connection: #{inspect(msg)}")
     {[], state}
   end
 

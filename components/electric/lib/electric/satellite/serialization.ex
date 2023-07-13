@@ -99,7 +99,9 @@ defmodule Electric.Satellite.Serialization do
           # unlikely since the extension tables have constraints that prevent this
           if version && version != v,
             do:
-              raise(RuntimeError, message: "Got DDL transaction with differing migration versions")
+              raise(RuntimeError,
+                message: "Got DDL transaction with differing migration versions"
+              )
 
           {:ok, schema} = maybe_load_schema(origin, schema, v)
 

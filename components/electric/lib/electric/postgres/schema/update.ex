@@ -390,7 +390,7 @@ defmodule Electric.Postgres.Schema.Update do
   end
 
   defp do_update(stmt, schema, _opts) do
-    Logger.warn("ignoring unsupported migration: #{inspect(stmt)}")
+    Logger.warning("ignoring unsupported migration: #{inspect(stmt)}")
     {[], schema}
   end
 

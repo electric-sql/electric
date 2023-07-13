@@ -8,12 +8,12 @@ config :electric, Electric.Replication.Connectors,
   postgres_1: [
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
     connection: [
-      host: 'localhost',
+      host: ~c"localhost",
       port: 54321,
-      database: 'electric',
-      username: 'electric',
-      password: 'password',
-      replication: 'database',
+      database: ~c"electric",
+      username: ~c"electric",
+      password: ~c"password",
+      replication: ~c"database",
       ssl: false
     ],
     replication: [

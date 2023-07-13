@@ -352,7 +352,7 @@ defmodule Electric.Postgres.Dialect.SQLite do
   @spec do_map_type(binary(), boolean()) :: binary()
   def do_map_type(serial, []) when serial in ["serial", "serial4", "serial8"] do
     # FIXME: we don't support serial columns, this is a temporary workaround
-    Logger.warn(
+    Logger.warning(
       "Table has unsupported column of type `#{serial}` -- mapping to INTEGER but unhappily :("
     )
 

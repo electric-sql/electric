@@ -244,7 +244,7 @@ defmodule Electric.Postgres.TestConnection do
       producer: Electric.Replication.Postgres.LogicalReplicationProducer,
       connection:
         Keyword.merge(pg_config,
-          replication: 'database',
+          replication: ~c"database",
           ssl: false
         ),
       replication: [

@@ -41,7 +41,7 @@ defmodule Electric.Replication.Changes do
             origin_type: :postgresql | :satellite,
             publication: String.t(),
             lsn: Electric.Postgres.Lsn.t(),
-            ack_fn: (() -> :ok | {:error, term()})
+            ack_fn: (-> :ok | {:error, term()})
           }
 
     defstruct [

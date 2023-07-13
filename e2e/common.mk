@@ -8,9 +8,9 @@ DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
 DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
 
-export ELIXIR_VERSION=1.13.4
-export OTP_VERSION=24.3
-export DEBIAN_VERSION=bullseye-20210902-slim
+export ELIXIR_VERSION=1.15.2
+export OTP_VERSION=25.3.2.3
+export DEBIAN_VERSION=bullseye-20230612-slim
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)

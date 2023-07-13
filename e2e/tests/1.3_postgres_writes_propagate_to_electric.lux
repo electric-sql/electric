@@ -16,11 +16,12 @@
     -bad sentinel value
     # But we should see a transaction with one change
     ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[0-9A-E]+ with changes \[%Electric.Replication.Changes.NewRecord\{
+    ?+relation: \{"public", "entries"\}
+    # We also see that the `tags` field has been correctly-ish filled (i.e. not empty and has correct origin)
+    ?+tags: \["postgres_1@\d+"\]\}\]
     ?+"content" => "sentinel value"
     ?+"content_b" => nil
     ?"id" => "00000000-0000-0000-0000-000000000000"
-    # We also see that the `tags` field has been correctly-ish filled (i.e. not empty and has correct origin)
-    ?relation: \{"public", "entries"\}, tags: \["postgres_1@\d+"\]\}\]
 
 [cleanup]
     [invoke teardown]

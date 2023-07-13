@@ -238,7 +238,7 @@ defmodule Electric.Satellite.Protocol do
             error
 
           {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
-            Logger.warn("client authorization failed",
+            Logger.warning("client authorization failed",
               metadata: [client_id: client_id, error: message]
             )
 
@@ -325,7 +325,7 @@ defmodule Electric.Satellite.Protocol do
         end
 
       {:error, reason} ->
-        Logger.warn("Bad start replication options: #{inspect(reason)}")
+        Logger.warning("Bad start replication options: #{inspect(reason)}")
 
         {:error,
          %SatInStartReplicationResp{

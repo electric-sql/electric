@@ -102,7 +102,7 @@ defmodule Electric.Plug.Migrations do
         ]
       end)
 
-    with {:ok, {_, zip}} <- :zip.create('migrations.zip', file_list, [:memory]) do
+    with {:ok, {_, zip}} <- :zip.create(~c"migrations.zip", file_list, [:memory]) do
       {:ok, zip}
     end
   end

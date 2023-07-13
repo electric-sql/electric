@@ -21,8 +21,7 @@ defmodule Electric.MixProject do
         ws_client: [
           applications: [electric: :load, gun: :permanent],
           include_executables_for: [:unix],
-          # Cannot be set to `false` until 1.14, so we're using an empty file
-          runtime_config_path: "config/ws_client_runtime.exs"
+          runtime_config_path: false
         ]
       ],
       default_release: :electric
@@ -47,8 +46,8 @@ defmodule Electric.MixProject do
       {:postgresql_uri, "~> 0.1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:ranch, "~> 2.1", override: true},
+      {:ssl_verify_fun, "~> 1.1.7", override: true},
       {:jason, "~> 1.3.0"},
-      {:recon_ex, "~> 0.9.1"},
       {:dialyxir, "~> 1.2.0", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.14", only: :test, runtime: false},
       {:gproc, "~> 0.9.0"},

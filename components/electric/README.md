@@ -44,7 +44,7 @@ See also:
 
 ## Pre-reqs
 
-Docker and [Elixir 1.14 compiled with Erlang 24](https://thinkingelixir.com/install-elixir-using-asdf/).
+Docker and [Elixir 1.15 compiled with Erlang 25](https://thinkingelixir.com/install-elixir-using-asdf/).
 
 ## Usage
 

@@ -82,7 +82,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @impl true
   def connect(conn_config, _opts) do
-    # NOTE: use `__connection__: conn` in tests to pass an existing connection 
+    # NOTE: use `__connection__: conn` in tests to pass an existing connection
     #       to this backend
     case Keyword.fetch(conn_config, :__connection__) do
       {:ok, conn} ->
@@ -169,7 +169,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       # "ALTER SUBSCRIPTION ... REFRESH is not allowed for disabled subscriptions"
       # ignore this as it's due to race conditions with the rest of the system
       {:error, {:error, :error, "55000", :object_not_in_prerequisite_state, _, _}} ->
-        Logger.warn("Unable to refresh DISABLED subscription #{name}")
+        Logger.warning("Unable to refresh DISABLED subscription #{name}")
         :ok
 
       error ->

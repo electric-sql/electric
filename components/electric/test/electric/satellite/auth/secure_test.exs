@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
   alias Electric.Satellite.Auth.ConfigError
 
   @namespace "https://electric-sql.com/jwt/claims"
-  @signing_key 'abcdefghijklmnopqrstuvwxyz012345' |> Enum.shuffle() |> List.to_string()
+  @signing_key ~c"abcdefghijklmnopqrstuvwxyz012345" |> Enum.shuffle() |> List.to_string()
 
   describe "build_config!()" do
     test "returns a clean map when all checks pass" do
@@ -92,7 +92,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
       claims: claims
     } do
       key =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!'
+        ~c"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!"
         |> Enum.shuffle()
         |> List.to_string()
 
