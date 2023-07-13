@@ -1135,12 +1135,11 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  satellite._connectivityStateChange('connected')
+  satellite._connectivityStateChange('available')
 
-  setTimeout(async () => {
-    const lsn2 = await satellite._getMeta('lastSentRowId')
-    t.is(lsn2, '2')
-  }, 200)
+  await sleepAsync(200)
+  const lsn2 = await satellite._getMeta('lastSentRowId')
+  t.is(lsn2, '2')
 })
 
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
