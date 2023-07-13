@@ -41,9 +41,9 @@ importers:
       frame-stream:
         specifier: ^3.0.1
         version: 3.0.1
-      jsonwebtoken:
-        specifier: ^9.0.0
-        version: 9.0.0
+      jose:
+        specifier: ^4.14.4
+        version: 4.14.4
       lodash.flow:
         specifier: ^3.5.0
         version: 3.5.0
@@ -8421,6 +8421,10 @@ packages:
   /join-component@1.1.0:
     resolution: {integrity: sha512-bF7vcQxbODoGK1imE2P9GS9aw4zD0Sd+Hni68IMZLj7zRnquH7dXUmMw9hDI5S/Jzt7q+IyTXN0rSg2GI0IKhQ==}
     dev: true
+
+  /jose@4.14.4:
+    resolution: {integrity: sha512-j8GhLiKmUAh+dsFXlX1aJCbt5KMibuKb+d7j1JaOJG6s2UjX1PQlW+OKB/sD4a/5ZYF4RcmYmLSndOoU3Lt/3g==}
+    dev: false
 
   /js-string-escape@1.0.1:
     resolution: {integrity: sha512-Smw4xcfIQ5LVjAOuJCvN/zIodzA/BBSsluuoSykP+lUvScIi4U6RJLfwHet5cxFnCswUjISV8oAXaqaJDY3chg==}
