@@ -325,7 +325,7 @@ defmodule Electric.Satellite.Protocol do
         end
 
       {:error, reason} ->
-        Logger.warn("Bad start replication options: #{inspect(reason)}")
+        Logger.warning("Bad start replication options: #{inspect(reason)}")
 
         {:error,
          %SatInStartReplicationResp{
