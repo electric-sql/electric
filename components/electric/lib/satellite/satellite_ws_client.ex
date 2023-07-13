@@ -438,10 +438,6 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def loop(%State{conn: conn, stream_ref: stream_ref, history: table, num: num} = state) do
     receive do
-      {:ctrl_opts, opts} ->
-        :gun.update_flow(conn, stream_ref, opts)
-        loop(state)
-
       {:ctrl_stream, data, filter} ->
         {:ok, type, _iodata} = PB.encode(data)
         maybe_debug("send data #{type}: #{inspect(data)}", state)
