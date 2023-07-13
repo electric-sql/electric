@@ -210,8 +210,7 @@ defmodule Electric.Satellite.WsServerTest do
         server_id = cxt.server_id
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
 
-        MockClient.send_data(conn, %SatPingReq{})
-        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+        ping_server(conn)
       end)
     end
 
@@ -341,15 +340,12 @@ defmodule Electric.Satellite.WsServerTest do
     test "no migrations are delivered as part of initial sync if PG has no electrified tables",
          cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-
-        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
-        # message we're testing here.
-        MockClient.send_data(conn, %SatPingReq{})
-        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+        ping_server(conn)
 
         refute_receive {^conn, _}
       end)
@@ -363,47 +359,23 @@ defmodule Electric.Satellite.WsServerTest do
          cxt do
       # First, verify that the client receives all migrations when it doesn't provide its schema version
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {^conn, %SatInStartReplicationReq{}}
+        assert_receive_migration(conn, "2023071301", "foo")
+        assert_receive_migration(conn, "2023071302", "bar")
 
-        assert_receive {^conn, %SatRelation{table_name: "foo"}}
-
-        assert_receive {^conn,
-                        %SatOpLog{
-                          ops: [
-                            %SatTransOp{op: {:begin, _}},
-                            %SatTransOp{
-                              op: {:migrate, %{version: "2023071301", table: %{name: "foo"}}}
-                            }
-                            | _
-                          ]
-                        }}
-
-        assert_receive {^conn, %SatRelation{table_name: "bar"}}
-
-        assert_receive {^conn,
-                        %SatOpLog{
-                          ops: [
-                            %SatTransOp{op: {:begin, _}},
-                            %SatTransOp{
-                              op: {:migrate, %{version: "2023071302", table: %{name: "bar"}}}
-                            }
-                            | _
-                          ]
-                        }}
-
-        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
-        # message we're testing here.
-        MockClient.send_data(conn, %SatPingReq{})
-        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+        ping_server(conn)
 
         refute_receive {^conn, _}
       end)
 
       # Now, verify that the client receives only the second migration when it provides its schema version
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
         MockClient.send_data(conn, %SatInStartReplicationReq{
           options: [:FIRST_LSN],
           schema_version: "2023071301"
@@ -411,25 +383,9 @@ defmodule Electric.Satellite.WsServerTest do
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
-        assert_receive {^conn, %SatInStartReplicationReq{}}
+        assert_receive_migration(conn, "2023071302", "bar")
 
-        assert_receive {^conn, %SatRelation{table_name: "bar"}}
-
-        assert_receive {^conn,
-                        %SatOpLog{
-                          ops: [
-                            %SatTransOp{op: {:begin, _}},
-                            %SatTransOp{
-                              op: {:migrate, %{version: "2023071302", table: %{name: "bar"}}}
-                            }
-                            | _
-                          ]
-                        }}
-
-        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
-        # message we're testing here.
-        MockClient.send_data(conn, %SatPingReq{})
-        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+        ping_server(conn)
 
         refute_receive {^conn, _}
       end)
@@ -890,5 +846,26 @@ defmodule Electric.Satellite.WsServerTest do
 
   defp build_headers(proto_version) do
     [%SatAuthHeaderPair{key: :PROTO_VERSION, value: proto_version}]
+  end
+
+  defp assert_receive_migration(conn, version, table_name) do
+    assert_receive {^conn, %SatRelation{table_name: ^table_name}}
+
+    assert_receive {^conn,
+                    %SatOpLog{
+                      ops: [
+                        %SatTransOp{op: {:begin, _}},
+                        %SatTransOp{
+                          op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}
+                        },
+                        %SatTransOp{op: {:commit, _}}
+                      ]
+                    }}
+  end
+
+  # Send a ping to WsServer. Useful to make sure it is done with initial sync.
+  defp ping_server(conn) do
+    MockClient.send_data(conn, %SatPingReq{})
+    assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
   end
 end
