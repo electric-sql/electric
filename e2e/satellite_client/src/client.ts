@@ -29,7 +29,7 @@ export const electrify_db = async (
   }
   console.log(`config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
-  return await electrify(original, schema, config)
+  return await electrify(db, schema, config)
 }
 
 export const set_subscribers = (db: Electric) => {
