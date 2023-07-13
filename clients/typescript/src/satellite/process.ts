@@ -454,9 +454,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectivityStateChange(
-    status: ConnectivityState
-  ): Promise<void> {
+  async _connectivityStateChange(status: ConnectivityState): Promise<void> {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
@@ -671,9 +669,7 @@ export class SatelliteProcess implements Satellite {
     this.notifier.actuallyChanged(this.dbName, changes)
   }
 
-  async _replicateSnapshotChanges(
-    results: OplogEntry[]
-  ): Promise<void> {
+  async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
     // TODO: Don't try replicating when outbound is inactive
     if (this.client.isClosed()) {
       return
