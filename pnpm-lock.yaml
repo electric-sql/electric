@@ -14,9 +14,6 @@ importers:
       '@aphro/sql.js':
         specifier: ^1.7.0
         version: 1.7.0
-      '@types/jsonwebtoken':
-        specifier: ^9.0.1
-        version: 9.0.2
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -3299,6 +3296,7 @@ packages:
     resolution: {integrity: sha512-drE6uz7QBKq1fYqqoFKTDRdFCPHd5TCub75BM+D+cMx7NU9hUz7SESLfC2fSCXVFMO5Yj8sOWHuGqPgjc+fz0Q==}
     dependencies:
       '@types/node': 18.16.16
+    dev: true
 
   /@types/live-server@1.2.1:
     resolution: {integrity: sha512-Yind497JdcZT8L9FF7u73nq44KmamiDitsZJEwrAi/pgBhFHThNvtR+2Z/YGNSMjyUoDBFdvhVSQmod06yd1Ng==}
