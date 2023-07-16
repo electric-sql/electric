@@ -5,6 +5,8 @@ import { useSelector } from 'react-redux';
 //import { RootState } from 'store';
 import IssueFilterModal from './IssueFilterModal';
 import ViewOptionMenu from './ViewOptionMenu';
+import { Issue, useElectric } from "../electric";
+import { useLiveQuery } from "electric-sql/react";
 
 interface Props {
   /* Top title */
@@ -13,8 +15,15 @@ interface Props {
 }
 
 export default function ({ title, onOpenMenu }: Props) {
-  const [showFilter, setShowFilter] = useState(false);
-  const [showViewOption, setShowViewOption] = useState(false);
+  const [showFilter, setShowFilter] = useState(false)
+  const [showViewOption, setShowViewOption] = useState(false)
+
+  // de-duplicate query?
+  const { db } = useElectric()!
+  const { results } = useLiveQuery(db.issue.liveMany({}))
+
+  const issues = results !== undefined ? [...results] : []
+
   // TODO
   // const issues = useSelector((state: RootState) => state.issues);
 
@@ -25,7 +34,7 @@ export default function ({ title, onOpenMenu }: Props) {
   //   issues.inProgress.length +
   //   issues.canceled.length;
 
-  const totalIssues = 0;
+  const totalIssues = issues.length
 
   return (
     <>
@@ -70,5 +79,5 @@ export default function ({ title, onOpenMenu }: Props) {
         onDismiss={() => setShowFilter(false)}
       />
     </>
-  );
+  )
 }

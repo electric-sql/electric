@@ -41,7 +41,7 @@ const IssueItem = ({ issue, index }: IssueProps) => {
               'cursor-default flex flex-col w-full px-4 py-3 mb-2 bg-white rounded focus:outline-none',
               {
                 'shadow-modal': isDragging,
-              }
+              },
             )}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
@@ -56,14 +56,15 @@ const IssueItem = ({ issue, index }: IssueProps) => {
                 </span>
               </div>
               <div className="flex-shrink-0">
-                {issue.owner ? (
+                <Avatar name={issue.username} />
+                {/* {issue.owner ? (
                   <Avatar
                     name={issue.owner.name}
                     avatarUrl={issue.owner.avatar}
                   />
                 ) : (
-                  <Avatar />
-                )}
+                  <Avatar name={issue.username} />
+                )} */}
               </div>
             </div>
             <div className="mt-2.5 flex items-center">
@@ -75,7 +76,7 @@ const IssueItem = ({ issue, index }: IssueProps) => {
               />
             </div>
           </div>
-        );
+        )
       }}
     </Draggable>
   );

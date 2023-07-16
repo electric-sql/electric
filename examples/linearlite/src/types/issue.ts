@@ -1,9 +1,9 @@
 export const Priority = {
-  NO_PRIORITY: 'no_priority',
-  URGENT: 'urgent',
-  HIGH: 'high',
-  LOW: 'low',
-  MEDIUM: 'medium',
+  NONE: "none",
+  URGENT: "urgent",
+  HIGH: "high",
+  LOW: "low",
+  MEDIUM: "medium",
 };
 
 export const Status = {

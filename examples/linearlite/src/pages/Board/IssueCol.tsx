@@ -3,8 +3,8 @@ import React, { memo } from 'react';
 import { Droppable, DroppableProvided } from 'react-beautiful-dnd';
 import { BsThreeDots as MoreIcon } from 'react-icons/bs';
 import { GoPlus as AddIcon } from 'react-icons/go';
-// import { Issue } from 'types/issue';
-import IssueItem from './IssueItem';
+import { Issue } from '../../electric'
+import IssueItem from './IssueItem'
 
 interface Props {
   status: string;
@@ -13,11 +13,10 @@ interface Props {
 }
 
 function IssueCol({ title, status, issues }: Props) {
-  let statusIcon = <StatusIcon status={status} />;
-
+  let statusIcon = <StatusIcon status={status} />
   let issueItems = (issues || []).map((issue, idx) => (
-    <IssueItem issue={issue} index={idx} />
-  ));
+    <IssueItem key={issue.id} issue={issue} index={idx} />
+  ))
 
   return (
     <Droppable droppableId={status} key={status} type="category">

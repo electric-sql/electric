@@ -74,7 +74,7 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
                 className="flex items-center justify-center p-2 rounded cursor-pointer hover:bg-gray-100"
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
               >
-                <Avatar name="Tuan Nguyen" online={true} />
+                <Avatar name="Electric" online={true} />
                 <ExpandMore size={13} className="ml-2" />
               </div>
               <ProfileMenu
@@ -89,7 +89,7 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
           <button
             className="inline-flex items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 focus:outline-none h-7"
             onClick={() => {
-              setShowIssueModal(true);
+              setShowIssueModal(true)
             }}
           >
             <AddIcon className="mr-2.5 w-3.5 h-3.5" /> New Issue
@@ -210,7 +210,7 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
         />
       }
     </>
-  );
+  )
 }
 
 export default memo(LeftMenu);

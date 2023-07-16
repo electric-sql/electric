@@ -1,87 +1,79 @@
-import React, { useEffect } from 'react';
-import { connectMenu } from 'react-contextmenu';
-import { useDispatch, useSelector } from 'react-redux';
-// import { AppDispatch, RootState } from 'store';
-// import {
-//   loadIssues,
-//   updateIssuePriority,
-//   updateIssueStatus,
-// } from 'store/actions/issueActions';
-// import { Issue } from 'types/issue';
-import IssueContextMenu from './IssueContextMenu';
-import IssueRow from './IssueRow';
-import {useElectric} from "../../electric";
-import {useLiveQuery} from "electric-sql/react";
+import React, { useContext } from 'react'
+import { connectMenu } from 'react-contextmenu'
+import IssueContextMenu from './IssueContextMenu'
+import IssueRow from './IssueRow'
+import { Issue, useElectric } from '../../electric'
+import { IssuesContext } from '.'
+import { useLiveQuery } from 'electric-sql/react'
 
-const ConnectedMenu = connectMenu('ISSUE_CONTEXT_MENU')(IssueContextMenu);
+const ConnectedMenu = connectMenu('ISSUE_CONTEXT_MENU')(IssueContextMenu)
 
 function IssueList() {
-    const { db } = useElectric()!
-    const { results } = useLiveQuery(db.issue.liveMany({}))
+  const { filter }: IssuesContext = useContext(IssuesContext)
 
-    const issues = results !== undefined ? [...results] : []
+  const { db } = useElectric()!
 
-  // TODO
-  // const dispatch = useDispatch<AppDispatch>();
-  // const allIssues = useSelector((state: RootState) => state.issues);
+  // TODO: i think we need a way to reuse a query across components
 
-  // let issues = [
-  //   ...allIssues.backlog,
-  //   ...allIssues.todo,
-  //   ...allIssues.inProgress,
-  //   ...allIssues.done,
-  //   ...allIssues.canceled,
-  // ];
-  // // sort issues by id
-  // issues = issues.sort((a, b) => {
-  //   let aId = parseInt(a.id.split('-')[1]);
-  //   let bId = parseInt(b.id.split('-')[1]);
-  //   return aId - bId;
-  // });
+  // TODO: sync is not really working with large database. Manipulate the
+  // size of the imported dataset in db/data.tsx
 
+  // TODO: to understand if the bottleneck is the WASM sqlite, or sqlite
+  // in general, may be good to try to run queries on the data with better-sqlite
 
-    const handleIssueStatusChange = (issue: Issue, status: string) => {
-        db.issue.update({
-            data: {
-                status: status
-            },
-            where: {
-                id: issue.id
-            }
-        })
-    };
+  // TODO: would be nice to have client-provided query execution time.
+  // we could use it as part of our debug console
+  const { results } = useLiveQuery(
+    db.issue.liveMany({
+      where: {
+        title: {
+          // TODO: not working
+          contains: filter?.title ?? '',
+        },
+      },
+      orderBy: { created: 'desc' },
+    }),
+  )
 
-    const handleIssuePriorityChange = (issue: Issue, priority: string) => {
-        db.issue.update({
-            data: {
-                priority: priority
-            },
-            where: {
-                id: issue.id
-            }
-        })
-    };
+  const issues = results !== undefined ? [...results] : []
 
-  //
-  // useEffect(() => {
-  //   dispatch(loadIssues());
-  // }, []);
+  const handleIssueStatusChange = (issue: Issue, status: string) => {
+    db.issue.update({
+      data: {
+        status: status,
+      },
+      where: {
+        id: issue.id,
+      },
+    })
+  }
 
-    var issueRows = issues.map((issue) => (
-      <IssueRow
-        key={`issue-${issue.id}`}
-        issue={issue}
-        onChangePriority={handleIssuePriorityChange}
-        onChangeStatus={handleIssueStatusChange}
-      />
-    ));
+  const handleIssuePriorityChange = (issue: Issue, priority: string) => {
+    db.issue.update({
+      data: {
+        priority: priority,
+      },
+      where: {
+        id: issue.id,
+      },
+    })
+  }
+
+  var issueRows = issues.map((issue) => (
+    <IssueRow
+      key={`issue-${issue.id}`}
+      issue={issue}
+      onChangePriority={handleIssuePriorityChange}
+      onChangeStatus={handleIssueStatusChange}
+    />
+  ))
 
   return (
     <div className="flex flex-col overflow-auto">
-      { issueRows }
+      {issueRows}
       <ConnectedMenu />
     </div>
-  );
+  )
 }
 
-export default IssueList;
+export default IssueList

@@ -28,7 +28,7 @@ export default function StatusIcon({ status, className }: Props) {
   // return <img src={statusIcons[status]} className={classes} />;
   let classes = classNames('w-3.5 h-3.5 rounded', className);
 
-  let Icon = statusIcons[status];
+  const Icon = statusIcons[status.toLowerCase()]
 
   return <Icon className={classes} />;
 }

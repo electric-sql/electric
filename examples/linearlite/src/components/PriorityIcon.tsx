@@ -17,13 +17,13 @@ const ICONS = {
   [Priority.MEDIUM]: SignalMediumIcon,
   [Priority.LOW]: SignalWeakIcon,
   [Priority.URGENT]: SignalUrgentIcon,
-  [Priority.NO_PRIORITY]: SignalNoPriorityIcon,
-};
+  [Priority.NONE]: SignalNoPriorityIcon,
+}
 
 export default function PriorityIcon({ priority, className }: Props) {
-  let classes = classNames('w-3.5 h-3.5 rounded', className);
+  let classes = classNames('w-3.5 h-3.5 rounded', className)
 
-  let Icon = ICONS[priority];
+  let Icon = ICONS[priority.toLowerCase()]
 
-  return <Icon className={classes} />;
+  return <Icon className={classes} />
 }

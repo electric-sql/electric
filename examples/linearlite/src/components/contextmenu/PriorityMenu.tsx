@@ -32,12 +32,12 @@ function PriorityMenu({
     if (onSelect) onSelect(priority);
   };
   let statusOpts = [
-    [NoPriorityIcon, 'No priority', Priority.NO_PRIORITY],
+    [NoPriorityIcon, 'None', Priority.NONE],
     [UrgentPriorityIcon, 'Urgent', Priority.URGENT],
     [HighPriorityIcon, 'High', Priority.HIGH],
     [MediumPriorityIcon, 'Medium', Priority.MEDIUM],
     [LowPriorityIcon, 'Low', Priority.LOW],
-  ];
+  ]
   if (keyword !== '') {
     let normalizedKeyword = keyword.toLowerCase().trim();
     statusOpts = statusOpts.filter(

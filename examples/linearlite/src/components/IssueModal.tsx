@@ -6,66 +6,69 @@ import LabelIcon from '../assets/icons/label.svg';
 import ZoomIcon from '../assets/icons/zoom.svg';
 import Modal from '../components/Modal';
 import Toggle from '../components/Toggle';
-import React, { memo, useEffect, useRef, useState } from 'react';
-import { useDispatch } from 'react-redux';
-import Editor from 'rich-markdown-editor';
-// import { AppDispatch } from 'store';
-// import { createIssue } from 'store/actions/issueActions';
+import React, { memo, useEffect, useRef, useState } from 'react'
+import Editor from 'rich-markdown-editor'
 
 import { v4 as uuidv4 } from 'uuid'
-import { Issue, useElectric } from '../electric'
+import { useElectric } from '../electric'
 
-import { Priority, Status } from '../types/issue';
-import { showInfo, showWarning } from '../utils/notification';
-import LabelMenu from './contextmenu/LabelMenu';
-import PriorityMenu from './contextmenu/PriorityMenu';
-import StatusMenu from './contextmenu/StatusMenu';
-import PriorityIcon from './PriorityIcon';
-import StatusIcon from './StatusIcon';
+import { Priority, Status } from '../types/issue'
+import { showInfo, showWarning } from '../utils/notification'
+import LabelMenu from './contextmenu/LabelMenu'
+import PriorityMenu from './contextmenu/PriorityMenu'
+import StatusMenu from './contextmenu/StatusMenu'
+import PriorityIcon from './PriorityIcon'
+import StatusIcon from './StatusIcon'
+import { uuid } from 'electric-sql/dist/util'
 
 interface Props {
-  isOpen: boolean;
-  onDismiss?: () => void;
+  isOpen: boolean
+  onDismiss?: () => void
 }
 function getPriorityString(priority: string) {
   switch (priority) {
-    case Priority.NO_PRIORITY:
-      return 'Priority';
+    case Priority.NONE:
+      return 'Priority'
     case Priority.HIGH:
-      return 'High';
+      return 'High'
     case Priority.MEDIUM:
-      return 'Medium';
+      return 'Medium'
     case Priority.LOW:
-      return 'Low';
+      return 'Low'
     case Priority.URGENT:
-      return 'Urgent';
+      return 'Urgent'
     default:
-      return 'Priority';
+      return 'Priority'
   }
 }
 function IssueModal({ isOpen, onDismiss }: Props) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState(Priority.NO_PRIORITY);
-  const [status, setStatus] = useState(Status.BACKLOG);
+  const ref = useRef<HTMLInputElement>(null)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState(Priority.NONE)
+  const [status, setStatus] = useState(Status.BACKLOG)
   const { db } = useElectric()!
 
   const handleSubmit = () => {
     if (title === '') {
-      showWarning('Please enter a title before submiting', 'Title required');
-      return;
+      showWarning('Please enter a title before submiting', 'Title required')
+      return
     }
 
-    db.issue.create({data: {
-        title: title,
-        name: "Hello",
+    const date = new Date().toISOString()
+    db.issue.create({
+      data: {
         id: uuidv4(),
+        title: title,
+        username: 'testuser',
         priority: priority,
         status: status,
-        description: description
-      }});
-
+        description: description,
+        created: date,
+        modified: date,
+        kanbanorder: '',
+      },
+    })
 
     // TODO
     // dispatch(
@@ -80,25 +83,25 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
     // clear state
     // close modal
-    if (onDismiss) onDismiss();
-    setTitle('');
-    setDescription('');
-    setPriority(Priority.NO_PRIORITY);
-    setStatus(Status.BACKLOG);
-    showInfo('You created new issue.', 'Issue created');
-  };
+    if (onDismiss) onDismiss()
+    setTitle('')
+    setDescription('')
+    setPriority(Priority.NONE)
+    setStatus(Status.BACKLOG)
+    showInfo('You created new issue.', 'Issue created')
+  }
 
   const handleClickCloseBtn = () => {
-    if (onDismiss) onDismiss();
-  };
+    if (onDismiss) onDismiss()
+  }
 
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
-        ref.current?.focus();
-      }, 250);
+        ref.current?.focus()
+      }, 250)
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   let body = (
     <div className="flex flex-col w-full py-4 overflow-hidden">
@@ -134,7 +137,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
               </button>
             }
             onSelect={(st) => {
-              setStatus(st);
+              setStatus(st)
             }}
           />
           <input
@@ -201,13 +204,13 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         </div>
       </div>
     </div>
-  );
+  )
 
   return (
     <Modal isOpen={isOpen} center={false} size="large" onDismiss={onDismiss}>
       {body}
     </Modal>
-  );
+  )
 }
 
 export default memo(IssueModal);
