@@ -1,9 +1,22 @@
 const createPool = require('@databases/pg');
 const {sql} = require('@databases/pg');
+const fs = require("fs");
 
-const db = createPool('postgresql://postgres:password@localhost:5432/electric');
+const pg = {
+  username: "postgres",
+  password: "password",
+  dbname: "electric",
+  address: "localhost",
+  port: 5432,
+};
 
-db.query(sql.file('./db/migrations.sql')).catch(ex => {
-  console.error(ex);
-  process.exitCode = 1;
-}).then(() => db.dispose());
+const db = createPool(
+  `postgresql://${pg.username}:${pg.password}@${pg.address}:${pg.port}/${pg.dbname}`
+);
+
+db.query(sql.file("./db/migrations.sql"))
+  .catch((ex) => {
+    console.error(ex);
+    process.exitCode = 1;
+  })
+  .then(() => db.dispose());
