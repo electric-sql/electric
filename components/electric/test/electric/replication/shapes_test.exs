@@ -98,7 +98,7 @@ defmodule Electric.Replication.ShapesTest do
         }
       }
 
-      assert {:error, [{"id1", :CODE_UNSPECIFIED, "Empty shape requests are not allowed"}]} =
+      assert {:error, [{"id1", :EMPTY_SHAPE_DEFINITION, "Empty shape requests are not allowed"}]} =
                Shapes.validate_requests([request], origin)
     end
 
@@ -113,7 +113,8 @@ defmodule Electric.Replication.ShapesTest do
         }
       }
 
-      assert {:error, [{"id1", :CODE_UNSPECIFIED, "Cannot select same table twice"}]} =
+      assert {:error,
+              [{"id1", :DUPLICATE_TABLE_IN_SHAPE_DEFINITION, "Cannot select same table twice"}]} =
                Shapes.validate_requests([request], origin)
     end
 
@@ -126,7 +127,10 @@ defmodule Electric.Replication.ShapesTest do
       }
 
       assert {:error,
-              [{"id1", :CODE_UNSPECIFIED, "Some tables are missing from the shape request" <> _}]} =
+              [
+                {"id1", :REFERENTIAL_INTEGRITY_VIOLATION,
+                 "Some tables are missing from the shape request" <> _}
+              ]} =
                Shapes.validate_requests([request], origin)
     end
   end

@@ -52,6 +52,8 @@ export enum SatelliteErrorCode {
   INVALID_POSITION,
   SUBSCRIPTION_NOT_FOUND,
   SUBSCRIPTION_ERROR,
+  MALFORMED_LSN,
+  UNKNOWN_SCHEMA_VSN,
 
   // subscription errors
   SHAPE_REQUEST_ERROR,
@@ -60,6 +62,8 @@ export enum SatelliteErrorCode {
   // shape request errors
   TABLE_NOT_FOUND,
   REFERENTIAL_INTEGRITY_VIOLATION,
+  EMPTY_SHAPE_DEFINITION,
+  DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
 
   // shape data errors
   SHAPE_DELIVERY_ERROR,

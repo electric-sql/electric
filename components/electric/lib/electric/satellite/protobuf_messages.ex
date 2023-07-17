@@ -399,6 +399,24 @@
           def encode("SUBSCRIPTION_NOT_FOUND") do
             3
           end
+        ),
+        (
+          def encode(:MALFORMED_LSN) do
+            4
+          end
+
+          def encode("MALFORMED_LSN") do
+            4
+          end
+        ),
+        (
+          def encode(:UNKNOWN_SCHEMA_VSN) do
+            5
+          end
+
+          def encode("UNKNOWN_SCHEMA_VSN") do
+            5
+          end
         )
       ]
 
@@ -419,6 +437,12 @@
         end,
         def decode(3) do
           :SUBSCRIPTION_NOT_FOUND
+        end,
+        def decode(4) do
+          :MALFORMED_LSN
+        end,
+        def decode(5) do
+          :UNKNOWN_SCHEMA_VSN
         end
       ]
 
@@ -432,7 +456,9 @@
           {0, :CODE_UNSPECIFIED},
           {1, :BEHIND_WINDOW},
           {2, :INVALID_POSITION},
-          {3, :SUBSCRIPTION_NOT_FOUND}
+          {3, :SUBSCRIPTION_NOT_FOUND},
+          {4, :MALFORMED_LSN},
+          {5, :UNKNOWN_SCHEMA_VSN}
         ]
       end
 
@@ -449,6 +475,12 @@
             true
           end,
           def has_constant?(:SUBSCRIPTION_NOT_FOUND) do
+            true
+          end,
+          def has_constant?(:MALFORMED_LSN) do
+            true
+          end,
+          def has_constant?(:UNKNOWN_SCHEMA_VSN) do
             true
           end
         ]
@@ -929,6 +961,24 @@
           def encode("REFERENTIAL_INTEGRITY_VIOLATION") do
             2
           end
+        ),
+        (
+          def encode(:EMPTY_SHAPE_DEFINITION) do
+            3
+          end
+
+          def encode("EMPTY_SHAPE_DEFINITION") do
+            3
+          end
+        ),
+        (
+          def encode(:DUPLICATE_TABLE_IN_SHAPE_DEFINITION) do
+            4
+          end
+
+          def encode("DUPLICATE_TABLE_IN_SHAPE_DEFINITION") do
+            4
+          end
         )
       ]
 
@@ -946,6 +996,12 @@
         end,
         def decode(2) do
           :REFERENTIAL_INTEGRITY_VIOLATION
+        end,
+        def decode(3) do
+          :EMPTY_SHAPE_DEFINITION
+        end,
+        def decode(4) do
+          :DUPLICATE_TABLE_IN_SHAPE_DEFINITION
         end
       ]
 
@@ -955,7 +1011,13 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :CODE_UNSPECIFIED}, {1, :TABLE_NOT_FOUND}, {2, :REFERENTIAL_INTEGRITY_VIOLATION}]
+        [
+          {0, :CODE_UNSPECIFIED},
+          {1, :TABLE_NOT_FOUND},
+          {2, :REFERENTIAL_INTEGRITY_VIOLATION},
+          {3, :EMPTY_SHAPE_DEFINITION},
+          {4, :DUPLICATE_TABLE_IN_SHAPE_DEFINITION}
+        ]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -968,6 +1030,12 @@
             true
           end,
           def has_constant?(:REFERENTIAL_INTEGRITY_VIOLATION) do
+            true
+          end,
+          def has_constant?(:EMPTY_SHAPE_DEFINITION) do
+            true
+          end,
+          def has_constant?(:DUPLICATE_TABLE_IN_SHAPE_DEFINITION) do
             true
           end
         ]

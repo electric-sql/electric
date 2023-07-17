@@ -23,6 +23,10 @@ const startReplicationErrorToSatError: Record<
     SatelliteErrorCode.INVALID_POSITION,
   [Pb.SatInStartReplicationResp_ReplicationError_Code.SUBSCRIPTION_NOT_FOUND]:
     SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.MALFORMED_LSN]:
+    SatelliteErrorCode.MALFORMED_LSN,
+  [Pb.SatInStartReplicationResp_ReplicationError_Code.UNKNOWN_SCHEMA_VSN]:
+    SatelliteErrorCode.UNKNOWN_SCHEMA_VSN,
 }
 
 const subsErrorToSatError: Record<
@@ -51,6 +55,11 @@ const subsErrorShapeReqErrorToSatError: Record<
   [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code
     .REFERENTIAL_INTEGRITY_VIOLATION]:
     SatelliteErrorCode.REFERENTIAL_INTEGRITY_VIOLATION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.EMPTY_SHAPE_DEFINITION]:
+    SatelliteErrorCode.EMPTY_SHAPE_DEFINITION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code
+    .DUPLICATE_TABLE_IN_SHAPE_DEFINITION]:
+    SatelliteErrorCode.DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
 }
 
 const subsDataErrorToSatError: Record<
