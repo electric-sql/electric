@@ -88,8 +88,8 @@ message SatErrorResp {
         AUTH_FAILED = 2;
         REPLICATION_FAILED = 3;
         INVALID_REQUEST = 4;
-        PROTO_VSN_MISSMATCH = 5;
-        SCHEMA_VSN_MISSMATCH = 6;
+        PROTO_VSN_MISMATCH = 5;
+        SCHEMA_VSN_MISMATCH = 6;
     }
 
     ErrorCode error_type = 1;

@@ -741,7 +741,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.new()
 
     with :ok <-
-           require_header(headers, :PROTO_VERSION, :PROTO_VSN_MISSMATCH, &compare_proto_version/1) do
+           require_header(headers, :PROTO_VERSION, :PROTO_VSN_MISMATCH, &compare_proto_version/1) do
       :ok
     else
       {:error, status} ->

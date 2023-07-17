@@ -149,20 +149,20 @@
           end
         ),
         (
-          def encode(:PROTO_VSN_MISSMATCH) do
+          def encode(:PROTO_VSN_MISMATCH) do
             5
           end
 
-          def encode("PROTO_VSN_MISSMATCH") do
+          def encode("PROTO_VSN_MISMATCH") do
             5
           end
         ),
         (
-          def encode(:SCHEMA_VSN_MISSMATCH) do
+          def encode(:SCHEMA_VSN_MISMATCH) do
             6
           end
 
-          def encode("SCHEMA_VSN_MISSMATCH") do
+          def encode("SCHEMA_VSN_MISMATCH") do
             6
           end
         )
@@ -190,10 +190,10 @@
           :INVALID_REQUEST
         end,
         def decode(5) do
-          :PROTO_VSN_MISSMATCH
+          :PROTO_VSN_MISMATCH
         end,
         def decode(6) do
-          :SCHEMA_VSN_MISSMATCH
+          :SCHEMA_VSN_MISMATCH
         end
       ]
 
@@ -209,8 +209,8 @@
           {2, :AUTH_FAILED},
           {3, :REPLICATION_FAILED},
           {4, :INVALID_REQUEST},
-          {5, :PROTO_VSN_MISSMATCH},
-          {6, :SCHEMA_VSN_MISSMATCH}
+          {5, :PROTO_VSN_MISMATCH},
+          {6, :SCHEMA_VSN_MISMATCH}
         ]
       end
 
@@ -232,10 +232,10 @@
           def has_constant?(:INVALID_REQUEST) do
             true
           end,
-          def has_constant?(:PROTO_VSN_MISSMATCH) do
+          def has_constant?(:PROTO_VSN_MISMATCH) do
             true
           end,
-          def has_constant?(:SCHEMA_VSN_MISSMATCH) do
+          def has_constant?(:SCHEMA_VSN_MISMATCH) do
             true
           end
         ]

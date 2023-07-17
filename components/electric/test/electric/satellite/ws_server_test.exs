@@ -176,7 +176,7 @@ defmodule Electric.Satellite.WsServerTest do
             }
           )
 
-          assert_receive {^conn, %SatErrorResp{error_type: :PROTO_VSN_MISSMATCH}}, @default_wait
+          assert_receive {^conn, %SatErrorResp{error_type: :PROTO_VSN_MISMATCH}}, @default_wait
         end
       )
     end
