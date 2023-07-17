@@ -4,6 +4,7 @@ defmodule Electric.Satellite.WsServerTest do
   use Electric.Satellite.Protobuf
 
   import ElectricTest.SetupHelpers
+  import ElectricTest.SatelliteHelpers
 
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
@@ -334,20 +335,6 @@ defmodule Electric.Satellite.WsServerTest do
           {:begin, %SatOpBegin{lsn: lsn}} = begin
           assert to_string(n) == lsn
         end)
-      end)
-    end
-
-    test "no migrations are delivered as part of initial sync if PG has no electrified tables",
-         cxt do
-      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-
-        ping_server(conn)
-
-        refute_receive {^conn, _}
       end)
     end
 
@@ -846,26 +833,5 @@ defmodule Electric.Satellite.WsServerTest do
 
   defp build_headers(proto_version) do
     [%SatAuthHeaderPair{key: :PROTO_VERSION, value: proto_version}]
-  end
-
-  defp assert_receive_migration(conn, version, table_name) do
-    assert_receive {^conn, %SatRelation{table_name: ^table_name}}
-
-    assert_receive {^conn,
-                    %SatOpLog{
-                      ops: [
-                        %SatTransOp{op: {:begin, _}},
-                        %SatTransOp{
-                          op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}
-                        },
-                        %SatTransOp{op: {:commit, _}}
-                      ]
-                    }}
-  end
-
-  # Send a ping to WsServer. Useful to make sure it is done with initial sync.
-  defp ping_server(conn) do
-    MockClient.send_data(conn, %SatPingReq{})
-    assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
   end
 end
