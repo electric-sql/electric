@@ -22,7 +22,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Create Release Pull Request or Publish
         id: changesets
-        uses: ./
+        uses: changesets/action@v1
         with:
           version: pnpm changeset version && pnpm install
           # publish: pnpm changeset publish
