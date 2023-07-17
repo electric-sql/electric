@@ -8,5 +8,8 @@
     "@examples/web-wa-sqlite": "0.1.0",
     "@electric-sql/prisma-generator": "1.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "hip-bulldogs-mix",
+    "serious-fireants-drive"
+  ]
 }
