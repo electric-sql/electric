@@ -31,15 +31,6 @@
           def encode("PROTO_VERSION") do
             1
           end
-        ),
-        (
-          def encode(:SCHEMA_VERSION) do
-            2
-          end
-
-          def encode("SCHEMA_VERSION") do
-            2
-          end
         )
       ]
 
@@ -54,9 +45,6 @@
         end,
         def decode(1) do
           :PROTO_VERSION
-        end,
-        def decode(2) do
-          :SCHEMA_VERSION
         end
       ]
 
@@ -66,7 +54,7 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :UNSPECIFIED}, {1, :PROTO_VERSION}, {2, :SCHEMA_VERSION}]
+        [{0, :UNSPECIFIED}, {1, :PROTO_VERSION}]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -76,9 +64,6 @@
             true
           end,
           def has_constant?(:PROTO_VERSION) do
-            true
-          end,
-          def has_constant?(:SCHEMA_VERSION) do
             true
           end
         ]

@@ -35,12 +35,6 @@ export enum SatAuthHeader {
    * the package statement of this protobuf file, for example "Electric.Satellite.v10_13"
    */
   PROTO_VERSION = 1,
-  /**
-   * SCHEMA_VERSION - required header
-   * last schema version applied on the client. Is prepended with the hash
-   * algorithm type, for example: "sha256:71c9f..."
-   */
-  SCHEMA_VERSION = 2,
   UNRECOGNIZED = -1,
 }
 
