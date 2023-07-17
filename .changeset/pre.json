@@ -1,0 +1,12 @@
+{
+  "mode": "pre",
+  "tag": "next",
+  "initialVersions": {
+    "electric-sql": "0.4.3",
+    "@core/electric": "0.4.0",
+    "@internal/satellite-client": "1.0.0",
+    "@examples/web-wa-sqlite": "0.1.0",
+    "@electric-sql/prisma-generator": "1.0.1"
+  },
+  "changesets": []
+}
