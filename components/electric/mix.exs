@@ -92,8 +92,11 @@ defmodule Electric.MixProject do
   end
 
   defp version_from_git() do
-    case System.cmd("git", ~w[describe --abbrev=7 --tags --always --first-parent]) do
-      {untrimmed_version, 0} ->
+    case System.cmd(
+           "git",
+           ~w[describe --abbrev=7 --tags --always --first-parent --match @core/electric@*]
+         ) do
+      {"@core/electric@" <> untrimmed_version, 0} ->
         {:ok, String.trim(untrimmed_version)}
 
       {_, _error_code} ->

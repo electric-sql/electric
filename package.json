@@ -1,0 +1,8 @@
+{
+  "name": "electric-monorepo",
+  "private": true,
+  "description": "",
+  "dependencies": {
+    "@changesets/cli": "^2.26.2"
+  }
+}

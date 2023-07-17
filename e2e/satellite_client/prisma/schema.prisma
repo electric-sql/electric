@@ -8,7 +8,7 @@ generator client {
 }
 
 generator electric {
-  provider                 = "./node_modules/prisma-generator-electric/dist/bin.js"
+  provider                 = "electric-sql-prisma-generator"
   output                   = "../src/generated/models"
   relationModel            = true
   writeNullishInModelTypes = true
