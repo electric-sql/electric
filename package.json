@@ -4,5 +4,8 @@
   "description": "",
   "dependencies": {
     "@changesets/cli": "^2.26.2"
+  },
+  "scripts": {
+    "bump": "pnpm exec changeset version && pnpm install"
   }
 }
