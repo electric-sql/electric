@@ -71,8 +71,10 @@
                         host: "electric_1",
                         auto_ping: true)
     """
-    ?+$eprompt
-    ?+sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
+    ?started #PID
+    ?Auth passed
+    ?Subscribed
+    ?sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
     ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
 [endmacro]
 

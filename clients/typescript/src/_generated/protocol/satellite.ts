@@ -27,7 +27,7 @@ export const protobufPackage = "Electric.Satellite.v1_4";
  */
 
 export enum SatAuthHeader {
-  /** UNSPECIFIED - protobuff required to have this by default */
+  /** UNSPECIFIED - Required by the Protobuf spec. */
   UNSPECIFIED = 0,
   /**
    * PROTO_VERSION - required header
@@ -44,7 +44,7 @@ export enum SatAuthHeader {
   UNRECOGNIZED = -1,
 }
 
-/** Ping request. Can be send by any party */
+/** Ping request. Can be sent by any party. */
 export interface SatPingReq {
   $type: "Electric.Satellite.v1_4.SatPingReq";
 }
@@ -55,7 +55,7 @@ export interface SatPingResp {
   /**
    * If LSN is present, it conveys to producer the latest LSN position that
    * was applied on the consumer side. If there is no active replication
-   * ongoing the field should be left 0
+   * ongoing the field should be left empty.
    */
   lsn?: Uint8Array | undefined;
 }
@@ -70,7 +70,7 @@ export interface SatAuthHeaderPair {
  * (Client) Auth request
  *
  * Client request is the first request that the client should send before
- * executing any other request
+ * executing any other request.
  */
 export interface SatAuthReq {
   $type: "Electric.Satellite.v1_4.SatAuthReq";
@@ -96,7 +96,7 @@ export interface SatAuthResp {
 
 /**
  * General purpose error message, that could be sent to any request from any
- * sides. FIXME: We might want to separate that into Client/Server parts
+ * side. FIXME: We might want to separate that into Client/Server parts.
  */
 export interface SatErrorResp {
   $type: "Electric.Satellite.v1_4.SatErrorResp";
@@ -109,8 +109,8 @@ export enum SatErrorResp_ErrorCode {
   AUTH_FAILED = 2,
   REPLICATION_FAILED = 3,
   INVALID_REQUEST = 4,
-  PROTO_VSN_MISSMATCH = 5,
-  SCHEMA_VSN_MISSMATCH = 6,
+  PROTO_VSN_MISMATCH = 5,
+  SCHEMA_VSN_MISMATCH = 6,
   UNRECOGNIZED = -1,
 }
 
@@ -175,7 +175,7 @@ export interface SatInStartReplicationResp_ReplicationError {
 
 /** error code enum */
 export enum SatInStartReplicationResp_ReplicationError_Code {
-  /** CODE_UNSPECIFIED - Required to satisfy linter */
+  /** CODE_UNSPECIFIED - Required by the Protobuf spec. */
   CODE_UNSPECIFIED = 0,
   /** BEHIND_WINDOW - requested LSN is behind the current replication window */
   BEHIND_WINDOW = 1,
@@ -471,7 +471,7 @@ export interface SatSubsResp_SatSubsError {
 
 /** error code enum */
 export enum SatSubsResp_SatSubsError_Code {
-  /** CODE_UNSPECIFIED - Required code */
+  /** CODE_UNSPECIFIED - Required by the Protobuf spec. */
   CODE_UNSPECIFIED = 0,
   /** SUBSCRIPTION_ID_ALREADY_EXISTS - DUPLICATE IDENTIFIER */
   SUBSCRIPTION_ID_ALREADY_EXISTS = 1,
@@ -493,7 +493,7 @@ export interface SatSubsResp_SatSubsError_ShapeReqError {
 
 /** error code enum */
 export enum SatSubsResp_SatSubsError_ShapeReqError_Code {
-  /** CODE_UNSPECIFIED - Required code */
+  /** CODE_UNSPECIFIED - Required by the Protobuf spec. */
   CODE_UNSPECIFIED = 0,
   /** TABLE_NOT_FOUND - Table does not exist in current schema version */
   TABLE_NOT_FOUND = 1,
@@ -555,7 +555,7 @@ export interface SatSubsDataError {
 
 /** error code enum */
 export enum SatSubsDataError_Code {
-  /** CODE_UNSPECIFIED - Required code */
+  /** CODE_UNSPECIFIED - Required by the Protobuf spec. */
   CODE_UNSPECIFIED = 0,
   /** SHAPE_DELIVERY_ERROR - Error delivering shape */
   SHAPE_DELIVERY_ERROR = 1,
@@ -575,7 +575,7 @@ export interface SatSubsDataError_ShapeReqError {
 
 /** error code enum */
 export enum SatSubsDataError_ShapeReqError_Code {
-  /** CODE_UNSPECIFIED - Required code */
+  /** CODE_UNSPECIFIED - Required by the Protobuf spec. */
   CODE_UNSPECIFIED = 0,
   /** SHAPE_SIZE_LIMIT_EXCEEDED - Requested shape exceed the maximum allowed shape size */
   SHAPE_SIZE_LIMIT_EXCEEDED = 1,

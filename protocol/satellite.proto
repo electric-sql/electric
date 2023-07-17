@@ -19,13 +19,16 @@
 syntax = "proto3";
 
 // NOTE: Part after Electric.Satellite is used as a version of the protocol
-// itself where the format vMAJOR.MINOR is treated in the following way:
-// MAJOR version when incompatible API changes are introduced
-// MINOR version when functionality or bugfix in a backwards compatible manner
-// are introduced.
+// itself where the format vMAJOR_MINOR is treated in the following way:
+//
+//   - MAJOR version is incremented when breaking API changes are introduced
+//
+//   - MINOR version is incremented when new API or bugfixes are introduced
+//     in a backwards-compatible manner
+//
 package Electric.Satellite.v1_4;
 
-// Ping request. Can be send by any party
+// Ping request. Can be sent by any party.
 message SatPingReq{
 }
 
@@ -33,13 +36,14 @@ message SatPingReq{
 message SatPingResp{
     // If LSN is present, it conveys to producer the latest LSN position that
     // was applied on the consumer side. If there is no active replication
-    // ongoing the field should be left 0
+    // ongoing the field should be left empty.
     optional bytes lsn = 1;
 }
 
 enum SatAuthHeader {
-    // protobuff required to have this by default
+    // Required by the Protobuf spec.
     UNSPECIFIED = 0;
+
     // required header
     // protobuf protocol version, this version is picked from
     // the package statement of this protobuf file, for example "Electric.Satellite.v10_13"
@@ -59,9 +63,8 @@ message SatAuthHeaderPair {
 // (Client) Auth request
 //
 // Client request is the first request that the client should send before
-// executing any other request
+// executing any other request.
 message SatAuthReq {
-
     // Identity of the Satellite application. Is expected to be something like
     // UUID. Required field
     string id = 1;
@@ -80,7 +83,7 @@ message SatAuthResp {
 }
 
 // General purpose error message, that could be sent to any request from any
-// sides. FIXME: We might want to separate that into Client/Server parts
+// side. FIXME: We might want to separate that into Client/Server parts.
 message SatErrorResp {
     enum ErrorCode {
         INTERNAL = 0;
@@ -88,8 +91,8 @@ message SatErrorResp {
         AUTH_FAILED = 2;
         REPLICATION_FAILED = 3;
         INVALID_REQUEST = 4;
-        PROTO_VSN_MISSMATCH = 5;
-        SCHEMA_VSN_MISSMATCH = 6;
+        PROTO_VSN_MISMATCH = 5;
+        SCHEMA_VSN_MISMATCH = 6;
     }
 
     ErrorCode error_type = 1;
@@ -143,7 +146,7 @@ message SatInStartReplicationResp {
     message ReplicationError {
         // error code enum
         enum Code {
-            // Required to satisfy linter
+            // Required by the Protobuf spec.
             CODE_UNSPECIFIED = 0;
 
             // requested LSN is behind the current replication window
@@ -388,7 +391,7 @@ message SatSubsResp {
         
         // error code enum
         enum Code {
-            // Required code
+            // Required by the Protobuf spec.
             CODE_UNSPECIFIED = 0;
             
             // DUPLICATE IDENTIFIER
@@ -411,7 +414,7 @@ message SatSubsResp {
         message ShapeReqError {
             // error code enum
             enum Code {
-                // Required code
+                // Required by the Protobuf spec.
                 CODE_UNSPECIFIED = 0;
 
                 // Table does not exist in current schema version
@@ -469,7 +472,7 @@ message SatShapeDef {
 message SatSubsDataError {
     // error code enum
     enum Code {
-        // Required code
+        // Required by the Protobuf spec.
         CODE_UNSPECIFIED = 0;
 
         // Error delivering shape
@@ -492,7 +495,7 @@ message SatSubsDataError {
     message ShapeReqError {
         // error code enum
         enum Code {
-            // Required code
+            // Required by the Protobuf spec.
             CODE_UNSPECIFIED = 0;
 
             // Requested shape exceed the maximum allowed shape size
