@@ -1,9 +1,8 @@
 import { makeElectricContext } from 'electric-sql/react'
 
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
-import { Electric, dbSchema } from './generated/client'
+import { Electric, schema } from './generated/client'
 export type { issue as Issue } from './generated/client'
-
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
@@ -24,10 +23,10 @@ console.log(dbName)
 
 export const initElectric = async () => {
   const conn = await ElectricDatabase.init(dbName, distPath)
-  console.log("initElectric");
-  console.log(conn);
-  console.log(dbSchema);
-  console.log(config);
+  console.log('initElectric')
+  console.log(conn)
+  console.log(schema)
+  console.log(config)
 
-  return electrify(conn, dbSchema, config)
+  return electrify(conn, schema, config)
 }

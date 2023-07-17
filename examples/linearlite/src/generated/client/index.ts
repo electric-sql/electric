@@ -1505,5 +1505,5 @@ export const tableSchemas = {
   >,
 }
 
-export const dbSchema = new DbSchema(tableSchemas, migrations)
-export type Electric = ElectricClient<typeof dbSchema>
+export const schema = new DbSchema(tableSchemas, migrations)
+export type Electric = ElectricClient<typeof schema>

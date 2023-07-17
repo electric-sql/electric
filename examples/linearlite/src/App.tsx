@@ -16,12 +16,12 @@ const slideUp = cssTransition({
 });
 
 const App = () => {
-  const [ electric, setElectric ] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
     const init = async () => {
-        const client = await initElectric()
-        setElectric(client)
+      const client = await initElectric()
+      setElectric(client)
     }
 
     init()
@@ -31,12 +31,15 @@ const App = () => {
     return null
   }
 
+  // TODO: proper initial sycn
+  // NOTE: there is a db.isConnected that might be helpful
+
   var router = (
     <Switch>
       <Route path="/" exact component={Home} />
       <Route path="/board" exact component={Board} />
     </Switch>
-  );
+  )
 
   // return (
   //   <ElectricProvider db={electric}>
@@ -56,48 +59,47 @@ const App = () => {
   //   </ElectricProvider>
   // );
 
-
   return (
-      <ElectricProvider db={electric}>
-        <BrowserRouter>
-          {router}
-          <ToastContainer
-              position="bottom-right"
-              autoClose={5000}
-              hideProgressBar
-              newestOnTop
-              closeOnClick
-              rtl={false}
-              transition={slideUp}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-          />
-        </BrowserRouter>
-      </ElectricProvider>
-  );
+    <ElectricProvider db={electric}>
+      <BrowserRouter>
+        {router}
+        <ToastContainer
+          position="bottom-right"
+          autoClose={5000}
+          hideProgressBar
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          transition={slideUp}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
+      </BrowserRouter>
+    </ElectricProvider>
+  )
 
-    // return (
-    //     <ElectricProvider db={electric}>
-    //         <BrowserRouter>
-    //             <>
-    //                 {router}
-    //                 <ToastContainer
-    //                     position="bottom-right"
-    //                     autoClose={5000}
-    //                     hideProgressBar
-    //                     newestOnTop
-    //                     closeOnClick
-    //                     rtl={false}
-    //                     transition={slideUp}
-    //                     pauseOnFocusLoss
-    //                     draggable
-    //                     pauseOnHover
-    //                 />
-    //             </>
-    //         </BrowserRouter>
-    //     </ElectricProvider>
-    // );
+  // return (
+  //     <ElectricProvider db={electric}>
+  //         <BrowserRouter>
+  //             <>
+  //                 {router}
+  //                 <ToastContainer
+  //                     position="bottom-right"
+  //                     autoClose={5000}
+  //                     hideProgressBar
+  //                     newestOnTop
+  //                     closeOnClick
+  //                     rtl={false}
+  //                     transition={slideUp}
+  //                     pauseOnFocusLoss
+  //                     draggable
+  //                     pauseOnHover
+  //                 />
+  //             </>
+  //         </BrowserRouter>
+  //     </ElectricProvider>
+  // );
 }
 
 export default App
