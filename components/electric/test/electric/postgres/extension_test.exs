@@ -203,15 +203,10 @@ defmodule Electric.Postgres.ExtensionTest do
         schema
       end)
 
-    assert {:ok, versions} = Extension.migration_history(conn)
+    assert migrations == migration_history(conn)
 
-    assert migrations == Enum.map(versions, fn {_txid, _txts, v, _, s} -> {v, s} end)
-
-    assert {:ok, versions} = Extension.migration_history(conn, "0002")
-
-    versions = Enum.map(versions, fn {_txid, _txts, v, _, s} -> {v, s} end)
-
-    assert versions == Enum.slice(migrations, 2..-1)
+    [_m1, _m2, m3, m4] = migrations
+    assert [m3, m4] == migration_history(conn, "0002")
   end
 
   test_tx "logical replication ddl is not captured", fn conn ->
@@ -441,5 +436,10 @@ defmodule Electric.Postgres.ExtensionTest do
       refute Extension.electrified?(conn, "daisy")
       refute Extension.electrified?(conn, "public", "daisy")
     end
+  end
+
+  defp migration_history(conn, after_version \\ nil) do
+    assert {:ok, versions} = Extension.migration_history(conn, after_version)
+    Enum.map(versions, fn {_txid, _txts, version, _, sql} -> {version, sql} end)
   end
 end

@@ -30,6 +30,7 @@ export interface Migrator {
   up(): Promise<number>
   apply(migration: StmtMigration): Promise<void>
   applyIfNotAlready(migration: StmtMigration): Promise<boolean>
+  querySchemaVersion(): Promise<string | undefined>
 }
 
 export interface MigratorOptions {

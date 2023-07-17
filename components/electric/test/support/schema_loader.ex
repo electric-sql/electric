@@ -23,14 +23,14 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   @impl true
   def load({versions, opts}, version) do
-    case List.keyfind(versions, version, 0, nil) do
-      {^version, schema} ->
+    case List.keyfind(versions, version, 2, nil) do
+      {_txid, _txts, ^version, schema, _stmts} ->
         notify(opts, {:load, version, schema})
 
         {:ok, version, schema}
 
       nil ->
-        {:error, "schema version #{version} not found"}
+        {:error, "schema version not found: #{version}"}
     end
   end
 
@@ -90,10 +90,19 @@ defmodule Electric.Postgres.MockSchemaLoader do
           versions
 
         version when is_binary(version) ->
-          for {v, schema, stmts} <- versions, v > version, do: {v, schema, stmts}
+          for {txid, txts, v, schema, stmts} <- versions,
+              v > version,
+              do: {txid, txts, v, schema, stmts}
       end
 
     {:ok, migrations}
+  end
+
+  @impl true
+  def known_migration_version?({versions, opts}, version) do
+    notify(opts, {:known_migration_version?, version})
+
+    not is_nil(List.keyfind(versions, version, 2))
   end
 
   defp notify(%{parent: parent}, msg) when is_pid(parent) do

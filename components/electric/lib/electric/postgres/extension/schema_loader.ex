@@ -22,6 +22,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) :: {:ok, [migration()]} | {:error, term()}
+  @callback known_migration_version?(state(), version()) :: boolean
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -69,6 +70,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def migration_history({module, state}, version) do
     module.migration_history(state, version)
+  end
+
+  def known_migration_version?({module, state}, version) do
+    module.known_migration_version?(state, version)
   end
 end
 
@@ -180,5 +185,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   @impl true
   def migration_history(conn, version) do
     Extension.migration_history(conn, version)
+  end
+
+  @impl true
+  def known_migration_version?(conn, version) do
+    Extension.known_migration_version?(conn, version)
   end
 end

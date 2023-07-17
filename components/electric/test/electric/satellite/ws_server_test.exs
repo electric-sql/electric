@@ -29,6 +29,8 @@ defmodule Electric.Satellite.WsServerTest do
   @test_schema "public"
   @test_table "sqlite_server_test"
   @test_oid 100_004
+  @test_migration {"20230101",
+                   "CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))"}
 
   import Mock
 
@@ -109,11 +111,8 @@ defmodule Electric.Satellite.WsServerTest do
     {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
   end
 
-  setup _ do
-    """
-    CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))
-    """
-    |> start_schema_cache()
+  setup ctx do
+    start_schema_cache(@test_publication, ctx[:with_migrations] || [])
   end
 
   describe "resource related check" do
@@ -299,6 +298,7 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "Outgoing replication (PG -> Satellite)" do
+    @tag with_migrations: [@test_migration]
     test "common replication", cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
@@ -338,6 +338,104 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    test "no migrations are delivered as part of initial sync if PG has no electrified tables",
+         cxt do
+      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
+        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
+        # message we're testing here.
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+
+        refute_receive {^conn, _}
+      end)
+    end
+
+    @tag with_migrations: [
+           {"2023071301", "CREATE TABLE #{@test_schema}.foo (id TEXT PRIMARY KEY)"},
+           {"2023071302", "CREATE TABLE #{@test_schema}.bar (id TEXT PRIMARY KEY)"}
+         ]
+    test "only migrations that have newer version than the client's schema version are delivered",
+         cxt do
+      # First, verify that the client receives all migrations when it doesn't provide its schema version
+      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
+        assert_receive {^conn, %SatRelation{table_name: "foo"}}
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %SatTransOp{op: {:begin, _}},
+                            %SatTransOp{
+                              op: {:migrate, %{version: "2023071301", table: %{name: "foo"}}}
+                            }
+                            | _
+                          ]
+                        }}
+
+        assert_receive {^conn, %SatRelation{table_name: "bar"}}
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %SatTransOp{op: {:begin, _}},
+                            %SatTransOp{
+                              op: {:migrate, %{version: "2023071302", table: %{name: "bar"}}}
+                            }
+                            | _
+                          ]
+                        }}
+
+        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
+        # message we're testing here.
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+
+        refute_receive {^conn, _}
+      end)
+
+      # Now, verify that the client receives only the second migration when it provides its schema version
+      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{
+          options: [:FIRST_LSN],
+          schema_version: "2023071301"
+        })
+
+        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+
+        assert_receive {^conn, %SatInStartReplicationReq{}}
+
+        assert_receive {^conn, %SatRelation{table_name: "bar"}}
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %SatTransOp{op: {:begin, _}},
+                            %SatTransOp{
+                              op: {:migrate, %{version: "2023071302", table: %{name: "bar"}}}
+                            }
+                            | _
+                          ]
+                        }}
+
+        # Send another message to WsServer to make sure it has processed the 'perform_initial_sync_and_subscribe'
+        # message we're testing here.
+        MockClient.send_data(conn, %SatPingReq{})
+        assert_receive {^conn, %SatPingResp{lsn: ""}}, @default_wait
+
+        refute_receive {^conn, _}
+      end)
+    end
+
+    @tag with_migrations: [@test_migration]
     test "Start/stop replication", cxt do
       limit = 10
 
@@ -393,6 +491,7 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
+    @tag with_migrations: [@test_migration]
     test "The client cannot establish two subscriptions with the same ID", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
@@ -438,6 +537,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
+    @tag with_migrations: [@test_migration]
     test "replication stream is paused until the data is sent to client", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
@@ -470,6 +570,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    @tag with_migrations: [@test_migration]
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
@@ -502,6 +603,7 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
+    @tag with_migrations: [@test_migration]
     test "unsubscribing works even on not-yet-fulfilled subscriptions",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->

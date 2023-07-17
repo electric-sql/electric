@@ -2,7 +2,6 @@ defmodule Electric.Replication.InitialSyncTest do
   use ExUnit.Case, async: false
 
   import Electric.Postgres.TestConnection
-  import Electric.Utils, only: [uuid4: 0]
 
   alias Electric.Postgres.{CachedWal, Extension, Lsn}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
@@ -17,41 +16,19 @@ defmodule Electric.Replication.InitialSyncTest do
     setup ctx, do: Map.put(ctx, :origin, @origin)
     setup :setup_replicated_db
 
-    test "returns the current lsn and electrified table migrations without any data",
-         %{
-           conn: conn,
-           pg_connector_opts: pg_connector_opts
-         } do
+    test "returns electrified table migrations", %{
+      conn: conn,
+      pg_connector_opts: pg_connector_opts
+    } do
       :ok = create_users_table(conn)
       :ok = create_documents_table(conn)
 
+      assert [] == InitialSync.migrations_since(nil, pg_connector_opts)
+
       :ok = electrify_table(conn, "public.users")
 
-      [{user1_id, user1_name}, {user2_id, user2_name}] = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
-          user1_id,
-          user1_name
-        ])
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
-          user2_id,
-          user2_name
-        ])
-
+      # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
-
-      [{doc_id, doc_title, _}] = [{uuid4(), "Test Document", user1_id}]
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.documents VALUES ($1, $2, $3)", [
-          doc_id,
-          doc_title,
-          user1_id
-        ])
-
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
       assert [
@@ -78,42 +55,10 @@ defmodule Electric.Replication.InitialSyncTest do
                },
                tags: []
              } = migration
-    end
 
-    test "returns the current lsn, all electrified table migrations, and no data",
-         %{
-           conn: conn,
-           pg_connector_opts: pg_connector_opts
-         } do
-      :ok = create_users_table(conn)
-      :ok = create_documents_table(conn)
-
-      :ok = electrify_table(conn, "public.users")
       :ok = electrify_table(conn, "public.documents")
 
-      [{user1_id, user1_name}, {user2_id, user2_name}] = [{uuid4(), "Mark"}, {uuid4(), "Stan"}]
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
-          user1_id,
-          user1_name
-        ])
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.users VALUES ($1, $2)", [
-          user2_id,
-          user2_name
-        ])
-
-      [{doc_id, doc_title, _}] = [{uuid4(), "Test Document", user2_id}]
-
-      {:ok, 1} =
-        :epgsql.equery(conn, "INSERT INTO public.documents VALUES ($1, $2, $3)", [
-          doc_id,
-          doc_title,
-          user2_id
-        ])
-
+      # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 

@@ -51,13 +51,13 @@ defmodule Electric.Postgres.Extension do
   defp migration_history_query(after_version) do
     where_clause =
       if after_version do
-        ~s|WHERE #{@version_table}.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)|
+        "WHERE #{@version_table}.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
       else
         # Dummy condition just to keep the $1 parameter in the query.
-        ~s|WHERE $1::text IS NULL|
+        "WHERE $1::text IS NULL"
       end
 
-    ~s"""
+    """
     SELECT
       #{@version_table}.txid,
       #{@version_table}.txts,
@@ -154,6 +154,13 @@ defmodule Electric.Postgres.Extension do
 
     with {:ok, [_, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
       {:ok, load_migrations(rows)}
+    end
+  end
+
+  def known_migration_version?(conn, version) when is_binary(version) do
+    case :epgsql.equery(conn, "SELECT 1 FROM #{@version_table} WHERE version = $1", [version]) do
+      {:ok, [_], [{"t"}]} -> true
+      _ -> false
     end
   end
 

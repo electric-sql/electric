@@ -7,14 +7,14 @@ defmodule Electric.Satellite.Protocol do
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
+  alias Electric.Postgres.{CachedWal, Extension, SchemaRegistry}
+
   alias Electric.Satellite.SubscriptionManager
   alias Electric.Replication.Connectors
-  alias Electric.Postgres.CachedWal
   alias Electric.Utils
   alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.OffsetStorage
@@ -287,53 +287,24 @@ defmodule Electric.Satellite.Protocol do
       "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
     )
 
-    case validate_lsn(client_lsn, opts) do
-      {:ok, :start_from_first} ->
-        if msg.subscription_ids != [] do
-          {:error,
-           %SatInStartReplicationResp{
-             err: %SatInStartReplicationResp.ReplicationError{
-               code: :INVALID_POSITION,
-               message: "Cannot continue subscriptions while also starting from first LSN"
-             }
-           }}
-        else
-          # This particular client is connecting for the first time, so it needs to perform
-          # the initial sync before we start streaming any changes to it.
-          #
-          # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
-          # client first, followed by the initial migrations and data.
-          send(self(), {:perform_initial_sync_and_subscribe, msg})
-          {[%SatInStartReplicationResp{}], state}
-        end
-
-      {:ok, :start_from_latest} ->
-        state = subscribe_client_to_replication_stream(state, msg, :start_from_latest)
-        {[%SatInStartReplicationResp{}], state}
-
-      {:ok, lsn} ->
-        if CachedWal.Api.lsn_in_cached_window?(lsn) do
-          with {:ok, state} <- restore_subscriptions(msg.subscription_ids, state) do
-            state = subscribe_client_to_replication_stream(state, msg, lsn)
-            {[%SatInStartReplicationResp{}], state}
-          end
-        else
-          # Once the client is outside the WAL window, we are assuming the client will re-establish subscriptions, so we'll discard them
-          SubscriptionManager.delete_all_subscriptions(state.client_id)
-          error = %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW}
-          {[%SatInStartReplicationResp{err: error}], state}
-        end
-
-      {:error, reason} ->
-        Logger.warning("Bad start replication options: #{inspect(reason)}")
+    with :ok <- validate_schema_version(msg.schema_version),
+         {:ok, lsn} <- validate_lsn(client_lsn, opts) do
+      handle_start_replication_request(msg, lsn, state)
+    else
+      {:error, :bad_schema_version} ->
+        Logger.warning("Unknown client schema version: #{inspect(msg.schema_version)}")
 
         {:error,
-         %SatInStartReplicationResp{
-           err: %SatInStartReplicationResp.ReplicationError{
-             code: :CODE_UNSPECIFIED,
-             message: "Could not parse replication options"
-           }
-         }}
+         start_replication_error(
+           :CODE_UNSPECIFIED,
+           "Unknown schema version: #{inspect(msg.schema_version)}"
+         )}
+
+      {:error, reason} ->
+        Logger.warning("Bad start replication request: #{inspect(reason)}")
+
+        {:error,
+         start_replication_error(:CODE_UNSPECIFIED, "Could validate start replication request")}
     end
   end
 
@@ -530,6 +501,49 @@ defmodule Electric.Satellite.Protocol do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
   end
 
+  defp handle_start_replication_request(%{subscription_ids: []} = msg, :start_from_first, state) do
+    # This particular client is connecting for the first time, so it needs to perform
+    # the initial sync before we start streaming any changes to it.
+    #
+    # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
+    # client first, followed by the initial migrations and data.
+    send(self(), {:perform_initial_sync_and_subscribe, msg})
+    {%SatInStartReplicationResp{}, state}
+  end
+
+  defp handle_start_replication_request(_msg, :start_from_first, _state) do
+    {:error,
+     start_replication_error(
+       :INVALID_POSITION,
+       "Cannot continue subscriptions while also starting from first LSN"
+     )}
+  end
+
+  defp handle_start_replication_request(msg, :start_from_latest, state) do
+    state = subscribe_client_to_replication_stream(state, msg, :start_from_latest)
+    {%SatInStartReplicationResp{}, state}
+  end
+
+  defp handle_start_replication_request(msg, lsn, state) do
+    if CachedWal.Api.lsn_in_cached_window?(lsn) do
+      case restore_subscriptions(msg.subscription_ids, state) do
+        {:ok, state} ->
+          state = subscribe_client_to_replication_stream(state, msg, lsn)
+          {%SatInStartReplicationResp{}, state}
+
+        {:error, bad_id} ->
+          {:error,
+           start_replication_error(:SUBSCRIPTION_NOT_FOUND, "Unknown subscription: #{bad_id}")}
+      end
+    else
+      # Once the client is outside the WAL window, we are assuming the client will re-establish subscriptions, so we'll discard them
+      SubscriptionManager.delete_all_subscriptions(state.client_id)
+
+      {:error,
+       start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
+    end
+  end
+
   def send_downstream(%InRep{} = in_rep) do
     case Utils.fetch_demand_from_queue(in_rep.demand, in_rep.queue) do
       {_remaining_demand, [], _} ->
@@ -715,6 +729,14 @@ defmodule Electric.Satellite.Protocol do
     }
   end
 
+  defp validate_schema_version(version) do
+    if is_nil(version) or Extension.SchemaCache.known_migration_version?(version) do
+      :ok
+    else
+      {:error, :bad_schema_version}
+    end
+  end
+
   defp validate_lsn(client_lsn, opts) do
     case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
       {true, _} ->
@@ -835,20 +857,19 @@ defmodule Electric.Satellite.Protocol do
     Enum.reduce_while(subscription_ids, {:ok, state}, fn id, {:ok, state} ->
       case SubscriptionManager.fetch_subscription(state.client_id, id) do
         {:ok, results} ->
-          {:cont, {:ok, Map.update!(state, :subscriptions, &Map.put(&1, id, results))}}
+          state = Map.update!(state, :subscriptions, &Map.put(&1, id, results))
+          {:cont, {:ok, state}}
 
         :error ->
           id = if String.length(id) > 128, do: String.slice(id, 0..125) <> "...", else: id
-
-          {:halt,
-           {:error,
-            %SatInStartReplicationResp{
-              err: %SatInStartReplicationResp.ReplicationError{
-                code: :SUBSCRIPTION_NOT_FOUND,
-                message: "Unknown subscription: #{id}"
-              }
-            }}}
+          {:halt, {:error, id}}
       end
     end)
+  end
+
+  defp start_replication_error(code, message) do
+    %SatInStartReplicationResp{
+      err: %SatInStartReplicationResp.ReplicationError{code: code, message: message}
+    }
   end
 end

@@ -303,7 +303,11 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  startReplication(lsn?: LSN, subscriptionIds?: string[]): Promise<void> {
+  startReplication(
+    lsn?: LSN,
+    schemaVersion?: string,
+    subscriptionIds?: string[]
+  ): Promise<void> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
@@ -328,6 +332,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
       request = SatInStartReplicationReq.fromPartial({
         options: [SatInStartReplicationReq_Option.FIRST_LSN],
+        schemaVersion,
       })
     } else {
       Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
