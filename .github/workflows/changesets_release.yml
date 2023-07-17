@@ -9,9 +9,13 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   changesets:
+    name: Make a PR or publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - uses: pnpm/action-setup@v2
         with:
           version: 8
