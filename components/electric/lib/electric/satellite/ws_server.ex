@@ -197,6 +197,8 @@ defmodule Electric.Satellite.WsServer do
     # thus miss the migration committed just before it.
     lsn = CachedWal.Api.get_current_position()
 
+    _ = maybe_pause(lsn)
+
     %SatInStartReplicationReq{schema_version: schema_version} = msg
     migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
     {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
@@ -290,6 +292,13 @@ defmodule Electric.Satellite.WsServer do
         # We remove the pause point and notify the client
         {binary_frames(error),
          %{state | out_rep: OutRep.remove_pause_point(state.out_rep, subscription_id)}}
+    end
+  end
+
+  if Mix.env() == :test do
+    def websocket_info({:pause_during_initial_sync, ref, client_pid}, state) do
+      Process.put(:pause_during_initial_sync, {ref, client_pid})
+      {[], state}
     end
   end
 
@@ -529,5 +538,27 @@ defmodule Electric.Satellite.WsServer do
       [error],
       Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
     )
+  end
+
+  if Mix.env() == :test do
+    defp maybe_pause(lsn) do
+      with {client_ref, client_pid} <- Process.get(:pause_during_initial_sync) do
+        Logger.debug("WsServer pausing")
+        send(client_pid, {client_ref, :server_paused})
+
+        {:ok, request_ref} = CachedWal.Api.request_notification(lsn)
+
+        receive do
+          {:cached_wal_notification, ^request_ref, :new_segments_available} ->
+            Logger.debug("WsServer unpaused")
+            :ok
+        after
+          5_000 ->
+            raise "Failed to observe the next lsn after #{inspect(lsn)}"
+        end
+      end
+    end
+  else
+    defp maybe_pause(_), do: :ok
   end
 end
