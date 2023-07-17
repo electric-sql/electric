@@ -3,3 +3,4 @@ packages:
   - 'e2e/satellite_client'
   - 'examples/*'
   - 'generator'
+  - 'components/electric'

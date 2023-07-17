@@ -1,6 +1,7 @@
 {
-  "name": "satellite_client",
+  "name": "@internal/satellite-client",
   "version": "1.0.0",
+  "private": true,
   "main": "dist/client.js",
   "license": "MIT",
   "type": "module",

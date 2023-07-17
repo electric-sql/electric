@@ -111,7 +111,7 @@
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
     "posttest": "npm run typecheck",
-    "#prepublishOnly": "npm run test",
+    "prepublishOnly": "pnpm run build",
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet"
   },

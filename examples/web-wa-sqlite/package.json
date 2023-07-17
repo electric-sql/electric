@@ -1,6 +1,7 @@
 {
-  "name": "electric-sql-web-example",
+  "name": "@examples/web-wa-sqlite",
   "version": "0.1.0",
+  "private": true,
   "main": "builder.js",
   "author": "Valter Balegas",
   "license": "Apache-2.0",
