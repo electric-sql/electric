@@ -27,23 +27,28 @@ defmodule Electric.Replication.InitialSync do
           Transaction.t()
         ]
   def migrations_since(version, connector_opts, lsn \\ 0) do
-    {:ok, migrations} = Extension.SchemaCache.migration_history(version)
     origin = Connectors.origin(connector_opts)
     publication = Extension.publication_name()
+    {:ok, migrations} = Extension.SchemaCache.migration_history(origin, version)
 
-    for {txid, txts, version, _schema, stmts} <- migrations do
+    for migration <- migrations do
       records =
-        for sql <- stmts do
+        for sql <- migration.stmts do
           %NewRecord{
             relation: Extension.ddl_relation(),
-            record: %{"version" => version, "query" => sql, "txid" => txid, "txts" => txts}
+            record: %{
+              "version" => migration.version,
+              "query" => sql,
+              "txid" => migration.txid,
+              "txts" => migration.txts
+            }
           }
         end
 
       %Transaction{
-        xid: txid,
+        xid: migration.txid,
         changes: records,
-        commit_timestamp: txts,
+        commit_timestamp: migration.txts,
         origin: origin,
         publication: publication,
         lsn: lsn,

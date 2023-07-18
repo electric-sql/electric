@@ -3,7 +3,11 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{Schema, Schema.Proto}
+  alias Electric.Postgres.{
+    Schema,
+    Schema.Proto,
+    Extension.Migration
+  }
 
   require Logger
 
@@ -156,6 +160,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
   def migration_history(conn, after_version \\ nil)
 
   def migration_history(conn, after_version) do
@@ -176,10 +181,13 @@ defmodule Electric.Postgres.Extension do
 
   defp load_migrations(rows) do
     Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
-      txid = String.to_integer(txid_str)
-      txts = decode_epgsql_timestamp(txts_tuple)
-      schema = Proto.Schema.json_decode!(schema_json)
-      {txid, txts, version, schema, stmts}
+      %Migration{
+        version: version,
+        txid: String.to_integer(txid_str),
+        txts: decode_epgsql_timestamp(txts_tuple),
+        schema: Proto.Schema.json_decode!(schema_json),
+        stmts: stmts
+      }
     end)
   end
 

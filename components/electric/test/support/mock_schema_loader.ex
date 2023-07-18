@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.MockSchemaLoader do
   alias Electric.Postgres.{
     Extension.SchemaLoader,
+    Extension.Migration,
     Schema
   }
 
@@ -8,26 +9,40 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
   end
 
-  def schema_update(schema \\ Schema.new(), cmds) do
-    Schema.update(schema, cmds, oid_loader: &oid_loader/3)
+  def schema_update(schema \\ Schema.new(), cmds)
+
+  def schema_update(%Schema.Proto.Schema{} = schema, cmds) when is_list(cmds) do
+    schema_update(schema, cmds, &oid_loader/3)
+  end
+
+  def schema_update(cmds, oid_loader) when is_list(cmds) and is_function(oid_loader) do
+    schema_update(Schema.new(), cmds, oid_loader)
+  end
+
+  def schema_update(%Schema.Proto.Schema{} = schema, cmds, oid_loader)
+      when is_function(oid_loader, 3) do
+    Schema.update(schema, cmds, oid_loader: oid_loader)
   end
 
   @spec migrate_versions([{version :: binary(), [stmt :: binary()]}]) :: [
           {version :: binary(), Schema.t()}
         ]
-  def migrate_versions(migrations) do
+  def migrate_versions(migrations, oid_loader \\ nil) do
+    oid_loader = oid_loader || (&oid_loader/3)
+
     {versions, _schema} =
       Enum.map_reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
-        schema = Enum.reduce(stmts, schema, &schema_update(&2, &1))
-        {{version, schema}, schema}
+        schema = Enum.reduce(stmts, schema, &schema_update(&2, &1, oid_loader))
+        {mock_version(version, schema, stmts), schema}
       end)
 
     versions
   end
 
   def backend_spec(opts) do
-    versions = migrate_versions(Keyword.get(opts, :migrations, []))
     oid_loader = Keyword.get(opts, :oids, &oid_loader/3) |> make_oid_loader()
+
+    versions = migrate_versions(Keyword.get(opts, :migrations, []), oid_loader)
     parent = Keyword.get(opts, :parent, self())
     pks = Keyword.get(opts, :pks, nil)
 
@@ -49,6 +64,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
     end
   end
 
+  defp mock_version(version, schema, stmts) do
+    %Migration{
+      txid: String.to_integer(version),
+      txts: DateTime.utc_now(),
+      version: version,
+      schema: schema,
+      stmts: stmts
+    }
+  end
+
   @behaviour SchemaLoader
 
   @impl true
@@ -68,15 +93,15 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, nil, Schema.new()}
   end
 
-  def load({[{version, schema} | _versions], opts}) do
+  def load({[%{version: version, schema: schema} | _versions], opts}) do
     notify(opts, {:load, version, schema})
     {:ok, version, schema}
   end
 
   @impl true
   def load({versions, opts}, version) do
-    case List.keyfind(versions, version, 2, nil) do
-      {_txid, _txts, ^version, schema, _stmts} ->
+    case Enum.find(versions, &(&1.version == version)) do
+      %Migration{schema: schema} ->
         notify(opts, {:load, version, schema})
 
         {:ok, version, schema}
@@ -90,15 +115,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
   def save({versions, opts}, version, schema, stmts) do
     notify(opts, {:save, version, schema, stmts})
 
-    migration = {
-      String.to_integer(version),
-      DateTime.utc_now(),
-      version,
-      schema,
-      stmts
-    }
-
-    {:ok, {[migration | versions], opts}}
+    {:ok, {[mock_version(version, schema, stmts) | versions], opts}}
   end
 
   @impl true
@@ -152,18 +169,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def migration_history({versions, opts}, version) do
-    notify(opts, {:migration_history, version})
+  def migration_history({versions, opts}, after_version) do
+    notify(opts, {:migration_history, after_version})
 
     migrations =
-      case version do
+      case after_version do
         nil ->
           versions
 
-        version when is_binary(version) ->
-          for {txid, txts, v, schema, stmts} <- versions,
-              v > version,
-              do: {txid, txts, v, schema, stmts}
+        after_version when is_binary(after_version) ->
+          for %Migration{version: v} = version <- versions, v > after_version, do: version
       end
 
     {:ok, migrations}
@@ -176,9 +191,9 @@ defmodule Electric.Postgres.MockSchemaLoader do
     not is_nil(List.keyfind(versions, version, 2))
   end
 
-  @impl true
-  def electrified_tables({[{_, schema} | _versions], _opts}) do
-    {:ok, Enum.map(schema.tables, &%{schema: &1.name.schema, name: &1.name.name, oid: &1.oid})}
+  def electrified_tables({[version | _versions], _opts}) do
+    {:ok,
+     Enum.map(version.schema.tables, &%{schema: &1.name.schema, name: &1.name.name, oid: &1.oid})}
   end
 
   def electrified_tables(_state) do

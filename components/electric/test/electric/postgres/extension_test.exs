@@ -441,6 +441,6 @@ defmodule Electric.Postgres.ExtensionTest do
 
   defp migration_history(conn, after_version \\ nil) do
     assert {:ok, versions} = Extension.migration_history(conn, after_version)
-    Enum.map(versions, fn {_txid, _txts, version, _, sql} -> {version, sql} end)
+    Enum.map(versions, fn %{version: v, stmts: s} -> {v, s} end)
   end
 end
