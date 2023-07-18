@@ -18,16 +18,12 @@ defmodule Electric.Satellite.WsServerTest do
     Transaction
   }
 
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.MockSchemaLoader
-
   alias Electric.Satellite.Auth
 
   require Logger
 
   @default_wait 5_000
 
-  @test_publication "fake_sqlite"
   @test_schema "public"
   @test_table "sqlite_server_test"
   @test_oid 100_004
@@ -46,26 +42,6 @@ defmodule Electric.Satellite.WsServerTest do
         &mock_data_function/2,
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
-
-    migrations = [
-      {"001",
-       [
-         "CREATE TABLE #{@test_schema}.#{@test_table} " <>
-           "(id uuid PRIMARY KEY NOT NULL, electric_user_id varchar, content varchar)"
-       ]}
-    ]
-
-    backend =
-      MockSchemaLoader.backend_spec(
-        migrations: migrations,
-        oids: %{
-          table: %{
-            {"fake", "slot_server_test"} => 100_003
-          }
-        }
-      )
-
-    start_supervised({SchemaCache, {[origin: @test_publication], [backend: backend]}})
 
     port = 55133
 
@@ -127,7 +103,7 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   setup ctx do
-    start_schema_cache(@test_publication, ctx[:with_migrations] || [])
+    start_schema_cache(ctx[:with_migrations] || [])
   end
 
   describe "resource related check" do

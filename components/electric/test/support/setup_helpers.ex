@@ -10,64 +10,12 @@ defmodule ElectricTest.SetupHelpers do
   Starts SchemaCache process with a given origin, and
   immediately fills it from given SQL.
   """
-  def start_schema_cache(origin \\ "fake_origin", publication, sql_migrations) do
+  def start_schema_cache(origin \\ "fake_origin", migrations) do
+    backend = Electric.Postgres.MockSchemaLoader.backend_spec(migrations: migrations)
+
     start_supervised!(
-      {Electric.Postgres.Extension.SchemaCache,
-       {[origin: origin], [backend: {Electric.Postgres.MockSchemaLoader, parent: self()}]}}
+      {Electric.Postgres.Extension.SchemaCache, {[origin: origin], [backend: backend]}}
     )
-
-    schema =
-      Enum.reduce(sql_migrations, Electric.Postgres.Schema.new(), fn {_version, sql}, schema ->
-        Electric.Postgres.Schema.update(schema, sql,
-          oid_loader: fn type, pg_schema, table_name ->
-            {:ok, Enum.join(["#{type}", pg_schema, table_name], ".") |> :erlang.phash2(50_000)}
-          end
-        )
-      end)
-
-    Enum.each(schema.tables, fn table ->
-      %{name: %{schema: pg_schema, name: table_name}} = table
-
-      pks =
-        Enum.find_value(table.constraints, fn
-          %{constraint: {:primary, %{keys: pks}}} -> pks
-          _ -> nil
-        end)
-
-      Electric.Postgres.SchemaRegistry.put_replicated_tables(publication, [
-        %{
-          schema: pg_schema,
-          name: table_name,
-          oid: table.oid,
-          replica_identity: :all_columns,
-          primary_keys: pks
-        }
-      ])
-
-      columns =
-        Enum.map(table.columns, fn column ->
-          %{name: column.name, type: :varchar, type_modifier: -1, part_of_identity?: true}
-        end)
-
-      Electric.Postgres.SchemaRegistry.put_table_columns({pg_schema, table_name}, columns)
-    end)
-
-    Enum.each(sql_migrations, fn {version, sql} ->
-      # Split statements on a unquoted semicolon. In "real" code we receive a list of statements
-      # but here we need to split them up for ease of use in tests
-      stmts =
-        Regex.split(~r/((?:[^;'"]*(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')[^;'"]*)+)|;/, sql,
-          trim: true
-        )
-
-      assert {:ok, _} =
-               Electric.Postgres.Extension.SchemaCache.save(
-                 origin,
-                 version,
-                 schema,
-                 stmts
-               )
-    end)
 
     [origin: origin]
   end
