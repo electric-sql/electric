@@ -2,7 +2,8 @@ import path from 'path'
 import * as z from 'zod'
 import * as fs from 'fs/promises'
 import { createWriteStream } from 'fs'
-import http from 'http'
+import http from 'node:http'
+import https from 'node:https'
 import decompress from 'decompress'
 import Database from 'better-sqlite3'
 import { buildMigrations, getMigrationNames } from './builder'
@@ -12,7 +13,7 @@ import { dedent } from 'ts-dedent'
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
-  service: process.env.ELECTRIC_URL ?? 'http://localhost:5050',
+  service: process.env.ELECTRIC_URL ?? 'http://127.0.0.1:5050',
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
   pollingInterval: 1000, // in ms
@@ -410,8 +411,20 @@ async function fetchMigrations(
 ): Promise<boolean> {
   const options = new URL(endpoint)
   const zipFile = path.join(tmpFolder, 'migrations.zip')
+  const requestModule =
+    options.protocol == 'http:'
+      ? http
+      : options.protocol == 'https:'
+      ? https
+      : undefined
+
+  if (requestModule === undefined)
+    throw new TypeError(
+      `Protocol "${options.protocol}" not supported. Expected "http:" or "https:"`
+    )
+
   const gotNewMigrations = await new Promise<boolean>((resolve, reject) => {
-    const req = http.get(options, (response) => {
+    const req = requestModule.get(options, (response) => {
       if (response.statusCode === 204) {
         // No new migrations
         resolve(false)

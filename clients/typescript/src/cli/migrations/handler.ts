@@ -78,10 +78,11 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
       process.exit(9)
     }
   }
+  const service = genArgs.service?.trim()
 
   // prepend protocol if not provided in service url
-  if (genArgs.service && !genArgs.service.trim().startsWith('http://')) {
-    genArgs.service = 'http://' + genArgs.service
+  if (service && !/^https?:\/\//.test(service)) {
+    genArgs.service = 'http://' + service
   }
 
   return genArgs
