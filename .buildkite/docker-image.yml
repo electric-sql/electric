@@ -22,4 +22,6 @@ steps:
     if: build.tag =~ /^@core\/electric@[0-9]+\.[0-9]+\.[0-9]+/
     command:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
+      - cd ./components/electric
+      - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
       - make docker-build-ci-crossplatform
