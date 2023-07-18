@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.5.0-next.1
+
+### Patch Changes
+
+- 6026ced: Update all deps that had new backwards-compatible versions
+
 ## 0.5.0-next.0
 
 ### Minor Changes

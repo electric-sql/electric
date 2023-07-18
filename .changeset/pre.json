@@ -9,7 +9,10 @@
     "@electric-sql/prisma-generator": "1.0.1"
   },
   "changesets": [
+    "friendly-pillows-melt",
+    "gold-tomatoes-play",
     "hip-bulldogs-mix",
+    "neat-shoes-end",
     "serious-fireants-drive"
   ]
 }

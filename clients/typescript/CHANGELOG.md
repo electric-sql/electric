@@ -1,5 +1,12 @@
 # electric-sql
 
+## 0.5.0-next.1
+
+### Patch Changes
+
+- 49c4b35: Allowed `https:` protocol in service connections for CLI
+- 525c8d1: Moved CLI dependency from dev to prod dependency list
+
 ## 0.5.0-next.0
 
 ### Minor Changes
