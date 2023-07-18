@@ -438,10 +438,6 @@ defmodule Electric.Test.SatelliteWsClient do
 
   def loop(%State{conn: conn, stream_ref: stream_ref, history: table, num: num} = state) do
     receive do
-      {:ctrl_opts, opts} ->
-        :gun.update_flow(conn, stream_ref, opts)
-        loop(state)
-
       {:ctrl_stream, data, filter} ->
         {:ok, type, _iodata} = PB.encode(data)
         maybe_debug("send data #{type}: #{inspect(data)}", state)
@@ -575,12 +571,12 @@ defmodule Electric.Test.SatelliteWsClient do
       "0" ->
         sub_req = serialize(%SatInStartReplicationReq{options: [:FIRST_LSN]})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LSN=0")
 
       "eof" ->
         sub_req = serialize(%SatInStartReplicationReq{options: [:LAST_LSN]})
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LAST_LSN")
 
       lsn ->
         sub_req =
@@ -590,7 +586,7 @@ defmodule Electric.Test.SatelliteWsClient do
           })
 
         :gun.ws_send(conn, stream_ref, {:binary, sub_req})
-        Logger.debug("Subscribed")
+        Logger.debug("Subscribed at LSN=#{inspect(lsn)}")
     end
   end
 
