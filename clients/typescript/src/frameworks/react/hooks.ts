@@ -69,18 +69,39 @@ export function useLiveQuery<Res>(
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
+  let cleanedUp = false
+  const cleanUp = () => {
+    cleanedUp = true
+  }
+  const cleanly = (setterFn, ...args) => {
+    if (cleanedUp) {
+      return
+    }
+
+    return setterFn(...args)
+  }
+
   // The effect below is run only after the initial render
   // because of the empty array of dependencies
   useEffect(() => {
     // Do an initial run of the query to fetch the table names
-    runQuery()
-      .then((res) => {
+    const runInitialQuery = async () => {
+      try {
+        const res = await runQuery()
         const tablenamesKey = JSON.stringify(res.tablenames)
-        setTablenames(res.tablenames)
-        setTablenamesKey(tablenamesKey)
-        setResultData(successResult(res.result))
-      })
-      .catch((err) => setResultData(errorResult(err)))
+
+        cleanly(setTablenames, res.tablenames)
+        cleanly(setTablenamesKey, tablenamesKey)
+        cleanly(setResultData, successResult(res.result))
+      }
+      catch (err) {
+        cleanly(setResultData, errorResult(err))
+      }
+    }
+
+    runInitialQuery()
+
+    return cleanUp
   }, [])
 
   // Once we have electric, we then establish the data change
@@ -134,11 +155,21 @@ export function useLiveQuery<Res>(
       return
     }
 
-    runQuery()
-      .then((res) => setResultData(successResult(res.result)))
-      .catch((err) => {
-        setResultData(errorResult(err))
-      })
+    const runLiveQuery = async () => {
+      try {
+        const res = await runQuery()
+
+        cleanly(setResultData, successResult(res.result))
+      }
+      catch (err) {
+        cleanly(setResultData, errorResult(err))
+      }
+    }
+
+
+    runLiveQuery()
+
+    return cleanUp
   }, [electric, changeSubscriptionKey, cacheKey])
 
   return resultData
