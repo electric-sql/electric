@@ -126,28 +126,13 @@ export interface SatInStartReplicationReq {
 }
 
 export enum SatInStartReplicationReq_Option {
+  /** NONE - Required by the Protobuf spec. */
   NONE = 0,
-  /**
-   * LAST_ACKNOWLEDGED - Flag that indicates to Producer, to start replication from the latest
-   * position that has been acknowledged by this Consumer. In such a case
-   * provided lsn will be ignored
-   */
-  LAST_ACKNOWLEDGED = 1,
   /**
    * SYNC_MODE - In sync mode consumer of the stream is expected to send SatPingResp
    * message for every committed batch of SatOpLog messages
    */
   SYNC_MODE = 2,
-  /**
-   * FIRST_LSN - Asks receiver to start replication from the first transaction in the log
-   * without necessity to know about the actual internal format of the LSN
-   */
-  FIRST_LSN = 3,
-  /**
-   * LAST_LSN - Asks receiver to start replication from the last position in the log,
-   * whatever this position is. Used for tests only.
-   */
-  LAST_LSN = 4,
   UNRECOGNIZED = -1,
 }
 
