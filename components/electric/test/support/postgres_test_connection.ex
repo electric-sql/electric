@@ -4,7 +4,7 @@ defmodule Electric.Postgres.TestConnection do
   require Electric.Postgres.Extension
   alias Electric.Replication.PostgresConnectorMng
   alias Electric.Replication.PostgresConnector
-  alias Electric.Postgres.{Extension, SchemaRegistry}
+  alias Electric.Postgres.Extension
 
   @conf_arg_map %{database: "dbname"}
 
@@ -89,10 +89,6 @@ defmodule Electric.Postgres.TestConnection do
   def setup_replicated_db(context) do
     context = Map.put_new(context, :origin, "tmp-test-subscription")
     origin = Map.fetch!(context, :origin)
-
-    # SchemaRegistry is a global store, so it needs to be reset when a new test database is created.
-    SchemaRegistry.clear_replicated_tables(Extension.publication_name())
-    on_exit(fn -> SchemaRegistry.clear_replicated_tables(Extension.publication_name()) end)
 
     # Initialize the test DB to the state which Electric can work with.
     setup_fun = fn conn ->
