@@ -94,6 +94,23 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @instance Global.name()
 
+  def child_spec({conn_config, _opts} = args) do
+    child_spec(Connectors.origin(conn_config), args)
+  end
+
+  def child_spec(conn_config) when is_list(conn_config) do
+    child_spec(Connectors.origin(conn_config), conn_config)
+  end
+
+  defp child_spec(origin, args) do
+    default = %{
+      id: {__MODULE__, origin},
+      start: {__MODULE__, :start_link, [args]}
+    }
+
+    Supervisor.child_spec(default, [])
+  end
+
   def start_link({conn_config, opts}) do
     start_link(conn_config, opts)
   end
