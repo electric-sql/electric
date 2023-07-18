@@ -193,7 +193,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   def electrified_tables({[version | _versions], _opts}) do
     {:ok,
-     Enum.map(version.schema.tables, &%{schema: &1.name.schema, name: &1.name.name, oid: &1.oid})}
+     Enum.map(version.schema.tables, &%{schema: &1.name.schema, table: &1.name.name, oid: &1.oid})}
   end
 
   def electrified_tables(_state) do
