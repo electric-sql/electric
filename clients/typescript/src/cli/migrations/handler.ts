@@ -79,7 +79,7 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
     }
   }
   const service = genArgs.service?.trim()
-  
+
   // prepend protocol if not provided in service url
   if (service && !/^https?:\/\//.test(service)) {
     genArgs.service = 'http://' + service
