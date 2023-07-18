@@ -1,70 +1,3 @@
-defmodule Electric.Postgres.Extension.SchemaCache.Global do
-  @moduledoc """
-  A wrapper around multiple SchemaCache instances to allow for usage from
-  processes that have no concept of a postgres "origin".
-
-  Every SchemaCache instance calls `register/1` but only one succeeds. This
-  one instance handles calls to `SchemaCache.Global`.
-  """
-
-  alias Electric.Postgres.Extension.SchemaCache
-
-  require Logger
-
-  @name Electric.name(SchemaCache, :__global__)
-
-  def name, do: @name
-
-  def register(origin) do
-    case Electric.reg_or_locate(@name, origin) do
-      :ok ->
-        # Kept as a warning to remind us that this is wrong... ;)
-        Logger.warning("SchemaCache #{inspect(origin)} registered as the global instance")
-
-      {:error, :already_registered, {_pid, registered_origin}} ->
-        Logger.warning(
-          "Failed to register SchemaCache #{inspect(origin)} as global: #{inspect(registered_origin)} is already registered"
-        )
-    end
-  end
-
-  def primary_keys({_schema, _name} = relation) do
-    SchemaCache.primary_keys(@name, relation)
-  end
-
-  def primary_keys(schema, name) when is_binary(schema) and is_binary(name) do
-    SchemaCache.primary_keys(@name, schema, name)
-  end
-
-  def migration_history(version) do
-    SchemaCache.migration_history(@name, version)
-  end
-
-  def relation(oid) when is_integer(oid) do
-    SchemaCache.relation(@name, oid)
-  end
-
-  def relation({_schema, _name} = relation) do
-    SchemaCache.relation(@name, relation)
-  end
-
-  def relation({_schema, _name} = relation, version) when is_binary(version) do
-    SchemaCache.relation(@name, relation, version)
-  end
-
-  def relation!(relation) do
-    SchemaCache.relation!(@name, relation)
-  end
-
-  def relation!(relation, version) do
-    SchemaCache.relation!(@name, relation, version)
-  end
-
-  def electrified_tables() do
-    SchemaCache.electrified_tables(@name)
-  end
-end
-
 defmodule Electric.Postgres.Extension.SchemaCache do
   @moduledoc """
   Per-Postgres instance schema load/save functionality.
@@ -236,6 +169,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   defp call(name, msg) when is_binary(name) do
     call(name(name), msg)
+  end
+
+  defp call(pid, msg) when is_pid(pid) do
+    GenServer.call(pid, msg, :infinity)
   end
 
   defp call(name, msg) when is_tuple(name) do
