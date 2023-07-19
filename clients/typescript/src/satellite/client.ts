@@ -308,6 +308,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.socketHandler = undefined
     this.removeAllListeners()
+    this.initializing?.promise.catch(() => void 0)
     this.initializing?.reject(
       new SatelliteError(
         SatelliteErrorCode.INTERNAL,

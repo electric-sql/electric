@@ -13,6 +13,10 @@ module.exports = {
       },
     ],
     '@typescript-eslint/no-explicit-any': ['warn', { ignoreRestArgs: true }],
+    '@typescript-eslint/ban-ts-comment': [
+      'error',
+      { 'ts-ignore': 'allow-with-description' },
+    ],
     'no-constant-condition': ['error', { checkLoops: false }],
   },
   ignorePatterns: ['**/*/mock.ts'],
