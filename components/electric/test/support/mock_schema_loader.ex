@@ -31,7 +31,9 @@ defmodule Electric.Postgres.MockSchemaLoader do
     oid_loader = oid_loader || (&oid_loader/3)
 
     {versions, _schema} =
-      Enum.map_reduce(migrations, Schema.new(), fn {version, stmts}, schema ->
+      migrations
+      |> Enum.map(fn {version, stmts} -> {version, List.wrap(stmts)} end)
+      |> Enum.map_reduce(Schema.new(), fn {version, stmts}, schema ->
         schema = Enum.reduce(stmts, schema, &schema_update(&2, &1, oid_loader))
         {mock_version(version, schema, stmts), schema}
       end)
