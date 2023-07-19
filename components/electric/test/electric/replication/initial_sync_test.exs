@@ -32,14 +32,14 @@ defmodule Electric.Replication.InitialSyncTest do
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
       assert [
-               {%Transaction{
-                  changes: [migration],
-                  origin: "initial-sync-test",
-                  lsn: 0,
-                  xid: xid,
-                  commit_timestamp: timestamp
-                }, 0}
-             ] = InitialSync.migrations_since(nil, pg_connector_opts)
+               %Transaction{
+                 changes: [migration],
+                 origin: "initial-sync-test",
+                 lsn: ^current_lsn,
+                 xid: xid,
+                 commit_timestamp: timestamp
+               }
+             ] = InitialSync.migrations_since(nil, pg_connector_opts, current_lsn)
 
       assert is_integer(xid)
       assert %DateTime{} = timestamp
@@ -63,21 +63,21 @@ defmodule Electric.Replication.InitialSyncTest do
       assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
 
       assert [
-               {%Transaction{
-                  changes: [migration1],
-                  origin: "initial-sync-test",
-                  lsn: 0,
-                  xid: xid1,
-                  commit_timestamp: timestamp1
-                }, 0},
-               {%Transaction{
-                  changes: [migration2],
-                  origin: "initial-sync-test",
-                  lsn: 0,
-                  xid: xid2,
-                  commit_timestamp: timestamp2
-                }, 0}
-             ] = InitialSync.migrations_since(nil, pg_connector_opts)
+               %Transaction{
+                 changes: [migration1],
+                 origin: "initial-sync-test",
+                 lsn: ^current_lsn,
+                 xid: xid1,
+                 commit_timestamp: timestamp1
+               },
+               %Transaction{
+                 changes: [migration2],
+                 origin: "initial-sync-test",
+                 lsn: ^current_lsn,
+                 xid: xid2,
+                 commit_timestamp: timestamp2
+               }
+             ] = InitialSync.migrations_since(nil, pg_connector_opts, current_lsn)
 
       assert is_integer(xid1)
       assert is_integer(xid2)

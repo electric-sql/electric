@@ -23,8 +23,10 @@ defmodule Electric.Replication.InitialSync do
   The LSN returned along with the list of transactions corresponds to the latest known cached LSN just prior to starting
   the data fetching.
   """
-  @spec migrations_since(nil | String.t(), Keyword.t()) :: [Transaction.t()]
-  def migrations_since(version, connector_opts) do
+  @spec migrations_since(nil | String.t(), Keyword.t(), CachedWal.Api.wal_pos()) :: [
+          Transaction.t()
+        ]
+  def migrations_since(version, connector_opts, lsn \\ 0) do
     {:ok, migrations} = Extension.SchemaCache.migration_history(version)
     origin = Connectors.origin(connector_opts)
     publication = Extension.publication_name()
@@ -38,17 +40,15 @@ defmodule Electric.Replication.InitialSync do
           }
         end
 
-      transaction = %Transaction{
+      %Transaction{
         xid: txid,
         changes: records,
         commit_timestamp: txts,
         origin: origin,
         publication: publication,
-        lsn: 0,
+        lsn: lsn,
         ack_fn: fn -> :ok end
       }
-
-      {transaction, transaction.lsn}
     end
   end
 
