@@ -1,0 +1,67 @@
+[doc When NodeJS Satellite connects to Electric for the first time, it receives those migrations it does not already have]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[global migration1_vsn=20230719_01]
+[global migration2_vsn=20230719_02]
+
+# Create two migrations with electrified tables on the server.
+[shell pg_1]
+  [local sql=
+    """
+    BEGIN;
+    SELECT electric.migration_version('$migration1_vsn');
+    CREATE TABLE public.foo (id TEXT PRIMARY KEY);
+    CALL electric.electrify('public.foo');
+    COMMIT;
+    """]
+  !$sql
+  ?COMMIT
+
+  [local sql=
+    """
+    BEGIN;
+    SELECT electric.migration_version('$migration2_vsn');
+    CREATE TABLE public.bar (id TEXT PRIMARY KEY);
+    CALL electric.electrify('public.bar');
+    COMMIT;
+    """]
+  !$sql
+  ?COMMIT
+
+# Bundle the first migration on the client.
+[global client_migrations=
+    """
+    [{
+        statements: ['CREATE TABLE IF NOT EXISTS foo (id TEXT PRIMARY KEY NOT NULL);'],
+        version: '$migration1_vsn'
+    }]
+    """]
+
+[invoke setup_client_with_migrations 1 "electric_1" 5133 $client_migrations]
+
+[shell satellite_1]
+  # The client has the first migration bundled.
+	?applying migration: $migration1_vsn
+
+  # Make sure we don't receive a SatOpLog message with $migration1_vsn in it.
+  -"version":"$migration1_vsn"
+
+  # The client starts replication from scratch.
+  ?no previous LSN, start replication with option FIRST_LSN
+  # It passes its schema version to the server.
+  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\},.*?"schemaVersion":"$migration1_vsn"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+
+  # The client receives only the second migration.
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration2_vsn",.*,"table":\{.*,"name":"bar"
+
+  # Wait for the ping message to make sure we don't receive anything mentioning $migration1_vsn from the server.
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatPingReq"\}
+
+[cleanup]
+  [invoke teardown]
