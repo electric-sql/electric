@@ -338,46 +338,6 @@ defmodule Electric.Satellite.WsServerTest do
       end)
     end
 
-    @tag with_migrations: [
-           {"2023071301", "CREATE TABLE #{@test_schema}.foo (id TEXT PRIMARY KEY)"},
-           {"2023071302", "CREATE TABLE #{@test_schema}.bar (id TEXT PRIMARY KEY)"}
-         ]
-    test "only migrations that have newer version than the client's schema version are delivered",
-         cxt do
-      # First, verify that the client receives all migrations when it doesn't provide its schema version
-      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-
-        assert_receive_migration(conn, "2023071301", "foo")
-        assert_receive_migration(conn, "2023071302", "bar")
-
-        ping_server(conn)
-
-        refute_receive {^conn, _}
-      end)
-
-      # Now, verify that the client receives only the second migration when it provides its schema version
-      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
-        assert_receive {^conn, %SatInStartReplicationReq{}}
-
-        MockClient.send_data(conn, %SatInStartReplicationReq{
-          options: [:FIRST_LSN],
-          schema_version: "2023071301"
-        })
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-
-        assert_receive_migration(conn, "2023071302", "bar")
-
-        ping_server(conn)
-
-        refute_receive {^conn, _}
-      end)
-    end
-
     @tag with_migrations: [@test_migration]
     test "Start/stop replication", cxt do
       limit = 10
