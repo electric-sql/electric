@@ -112,7 +112,7 @@ export class SatelliteProcess implements Satellite {
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
   _throttledSnapshot?: {
-    cancel: () => void,
+    cancel: () => void
     (): void
   }
 
@@ -141,7 +141,7 @@ export class SatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     client: Client,
-    opts: SatelliteOpts
+    opts: SatelliteOpts,
   ) {
     this.dbName = dbName
     this.adapter = adapter
@@ -157,7 +157,7 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
 
     this.subscriptions = new InMemorySubscriptionsManager(
-      this._garbageCollectShapeHandler.bind(this)
+      this._garbageCollectShapeHandler.bind(this),
     )
     this.subscriptionNotifiers = {}
 
@@ -176,7 +176,7 @@ export class SatelliteProcess implements Satellite {
 
     const throttleOpts = {
       leading: true,
-      trailing: true
+      trailing: true,
     }
 
     return throttle(snapshot, snapshotWindow, throttleOpts)
@@ -184,7 +184,7 @@ export class SatelliteProcess implements Satellite {
 
   async start(
     authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
+    opts?: SatelliteReplicationOptions,
   ): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
@@ -202,14 +202,14 @@ export class SatelliteProcess implements Satellite {
     const subscriptions = Object.entries({
       _authStateSubscription: this._authStateSubscription,
       _connectivityChangeSubscription: this._connectivityChangeSubscription,
-      _potentialDataChangeSubscription: this._potentialDataChangeSubscription
+      _potentialDataChangeSubscription: this._potentialDataChangeSubscription,
     })
     subscriptions.forEach(([name, value]) => {
       if (value !== undefined) {
         throw new Error(
           `Starting satellite process with an existing
            \`${name}\`.
-           This means there is a subscription leak.`
+           This means there is a subscription leak.`,
         )
       }
     })
@@ -220,11 +220,15 @@ export class SatelliteProcess implements Satellite {
       this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
     // Monitor connectivity state changes.
-    const connectivityStateHandler = ({connectivityState}: ConnectivityStateChangeNotification) => {
+    const connectivityStateHandler = ({
+      connectivityState,
+    }: ConnectivityStateChangeNotification) => {
       this._connectivityStateChanged(connectivityState)
     }
     this._connectivityChangeSubscription =
-      this.notifier.subscribeToConnectivityStateChanges(connectivityStateHandler)
+      this.notifier.subscribeToConnectivityStateChanges(
+        connectivityStateHandler,
+      )
 
     // Request a snapshot whenever the data in our database potentially changes.
     this._throttledSnapshot = this._throttleSnapshot()
@@ -234,7 +238,7 @@ export class SatelliteProcess implements Satellite {
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(
       this._throttledSnapshot,
-      this.opts.pollingInterval
+      this.opts.pollingInterval,
     )
 
     // Starting now!
@@ -250,7 +254,7 @@ export class SatelliteProcess implements Satellite {
     this.setClientListeners()
     this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
-      numberToBytes(this._lastSentRowId)
+      numberToBytes(this._lastSentRowId),
     )
 
     const lsnBase64 = await this._getMeta('lsn')
@@ -275,7 +279,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _garbageCollectShapeHandler(
-    shapeDefs: ShapeDefinition[]
+    shapeDefs: ShapeDefinition[],
   ): Promise<void> {
     const stmts: Statement[] = []
     // reverts to off on commit/abort
@@ -289,7 +293,7 @@ export class SatelliteProcess implements Satellite {
           {
             sql: `DELETE FROM ${tablename}`,
           },
-          ...this._enableTriggers([tablename])
+          ...this._enableTriggers([tablename]),
         )
         return stmts
         // does not delete shadow rows but we can do that
@@ -308,12 +312,12 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
     this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot!()
+      this._throttledSnapshot!(),
     )
 
     this.client.subscribeToSubscriptionEvents(
       this._handleSubscriptionData.bind(this),
-      this._handleSubscriptionError.bind(this)
+      this._handleSubscriptionError.bind(this),
     )
   }
 
@@ -336,13 +340,17 @@ export class SatelliteProcess implements Satellite {
     }
 
     if (this._connectivityChangeSubscription !== undefined) {
-      this.notifier.unsubscribeFromConnectivityStateChanges(this._connectivityChangeSubscription)
+      this.notifier.unsubscribeFromConnectivityStateChanges(
+        this._connectivityChangeSubscription,
+      )
 
       this._connectivityChangeSubscription = undefined
     }
 
     if (this._potentialDataChangeSubscription !== undefined) {
-      this.notifier.unsubscribeFromPotentialDataChanges(this._potentialDataChangeSubscription)
+      this.notifier.unsubscribeFromPotentialDataChanges(
+        this._potentialDataChangeSubscription,
+      )
 
       this._potentialDataChangeSubscription = undefined
     }
@@ -351,7 +359,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
+    shapeDefinitions: ClientShapeDefinition[],
   ): Promise<ShapeSubscription> {
     // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
     const existingSubscription =
@@ -389,7 +397,7 @@ export class SatelliteProcess implements Satellite {
       await this.client.subscribe(subId, shapeReqs)
     if (subId !== subscriptionId) {
       throw new Error(
-        `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
+        `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`,
       )
     }
     if (error) {
@@ -408,7 +416,7 @@ export class SatelliteProcess implements Satellite {
   async unsubscribe(_subscriptionId: string): Promise<void> {
     throw new SatelliteError(
       SatelliteErrorCode.INTERNAL,
-      'unsubscribe shape not supported'
+      'unsubscribe shape not supported',
     )
     // return this.subscriptions.unsubscribe(subscriptionId)
   }
@@ -536,7 +544,7 @@ export class SatelliteProcess implements Satellite {
 
   async _handleSubscriptionError(
     satelliteError: SatelliteError,
-    subscriptionId?: string
+    subscriptionId?: string,
   ): Promise<void> {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
@@ -547,7 +555,7 @@ export class SatelliteProcess implements Satellite {
     this._lsn = undefined
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
     )
 
     await this.client.unsubscribe(ids)
@@ -581,7 +589,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectAndStartReplication(
-    opts?: SatelliteReplicationOptions
+    opts?: SatelliteReplicationOptions,
   ): Promise<void> {
     Log.info(`connecting and starting replication`)
 
@@ -612,7 +620,7 @@ export class SatelliteProcess implements Satellite {
         opts?.clearOnBehindWindow
       ) {
         return this._handleSubscriptionError(error).then(() =>
-          this._connectAndStartReplication()
+          this._connectAndStartReplication(),
         )
       }
 
@@ -670,7 +678,7 @@ export class SatelliteProcess implements Satellite {
       for (const oplogEntry of oplogEntries) {
         const [cached, shadowEntry] = await this._lookupCachedShadowEntry(
           oplogEntry,
-          shadowEntries
+          shadowEntries,
         )
 
         // Clear should not contain the tag for this timestamp, so if
@@ -680,7 +688,7 @@ export class SatelliteProcess implements Satellite {
           oplogEntry.clearTags = encodeTags(
             difference(decodeTags(shadowEntry.tags), [
               this._generateTag(timestamp),
-            ])
+            ]),
           )
         } else {
           oplogEntry.clearTags = shadowEntry.tags
@@ -713,7 +721,7 @@ export class SatelliteProcess implements Satellite {
 
       // TODO: take next N transactions instead of all
       await this._getEntries(enqueuedLogPos).then((missing) =>
-        this._replicateSnapshotChanges(missing)
+        this._replicateSnapshotChanges(missing),
       )
     }
     return timestamp
@@ -722,11 +730,11 @@ export class SatelliteProcess implements Satellite {
   _updateCachedShadowEntry(
     oplogEntry: OplogEntry,
     shadowEntry: ShadowEntry,
-    shadowEntries: Map<string, ShadowEntry>
+    shadowEntries: Map<string, ShadowEntry>,
   ) {
     const pk = getShadowPrimaryKey(oplogEntry)
     const key: string = [oplogEntry.namespace, oplogEntry.tablename, pk].join(
-      '.'
+      '.',
     )
 
     shadowEntries.set(key, shadowEntry)
@@ -734,11 +742,11 @@ export class SatelliteProcess implements Satellite {
 
   async _lookupCachedShadowEntry(
     oplogEntry: OplogEntry,
-    shadowEntries: Map<string, ShadowEntry>
+    shadowEntries: Map<string, ShadowEntry>,
   ): Promise<[boolean, ShadowEntry]> {
     const pk = getShadowPrimaryKey(oplogEntry)
     const key: string = [oplogEntry.namespace, oplogEntry.tablename, pk].join(
-      '.'
+      '.',
     )
 
     let shadowEntry: ShadowEntry
@@ -813,7 +821,7 @@ export class SatelliteProcess implements Satellite {
       this._authState!.clientId,
       local,
       incoming_origin,
-      incoming
+      incoming,
     )
 
     const stmts: Statement[] = []
@@ -863,7 +871,7 @@ export class SatelliteProcess implements Satellite {
 
   async _getUpdatedEntries(
     timestamp: Date,
-    since?: number
+    since?: number,
   ): Promise<OplogEntry[]> {
     if (since === undefined) {
       since = this._lastAckdRowId
@@ -885,7 +893,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _getOplogShadowEntry(
-    oplog?: OplogEntry | undefined
+    oplog?: OplogEntry | undefined,
   ): Promise<ShadowEntry[]> {
     const shadow = this.opts.shadowTable.toString()
     let query
@@ -983,18 +991,18 @@ export class SatelliteProcess implements Satellite {
     local_origin: string,
     local: OplogEntry[],
     incoming_origin: string,
-    incoming: OplogEntry[]
+    incoming: OplogEntry[],
   ): ShadowTableChanges {
     const localTableChanges = localOperationsToTableChanges(
       local,
       (timestamp: Date) => {
         return generateTag(local_origin, timestamp)
-      }
+      },
     )
     const incomingTableChanges = remoteOperationsToTableChanges(incoming)
 
     for (const [tablename, incomingMapping] of Object.entries(
-      incomingTableChanges
+      incomingTableChanges,
     )) {
       const localMapping = localTableChanges[tablename]
 
@@ -1003,7 +1011,7 @@ export class SatelliteProcess implements Satellite {
       }
 
       for (const [primaryKey, incomingChanges] of Object.entries(
-        incomingMapping
+        incomingMapping,
       )) {
         const localInfo = localMapping[primaryKey]
         if (localInfo === undefined) {
@@ -1016,7 +1024,7 @@ export class SatelliteProcess implements Satellite {
           localChanges.changes,
           incoming_origin,
           incomingChanges.changes,
-          incomingChanges.fullRow
+          incomingChanges.fullRow,
         )
         let optype
 
@@ -1233,7 +1241,7 @@ export class SatelliteProcess implements Satellite {
   private async notifyChangesAndGCopLog(
     oplogEntries: OplogEntry[],
     origin: string,
-    commitTimestamp: Date
+    commitTimestamp: Date,
   ) {
     await this._notifyChanges(oplogEntries)
 
@@ -1436,12 +1444,12 @@ export class SatelliteProcess implements Satellite {
 
 function _applyDeleteOperation(
   entryChanges: ShadowEntryChanges,
-  tablenameStr: string
+  tablenameStr: string,
 ): Statement {
   const pkEntries = Object.entries(entryChanges.primaryKeyCols)
   if (pkEntries.length === 0)
     throw new Error(
-      "Can't apply delete operation. None of the columns in changes are marked as PK."
+      "Can't apply delete operation. None of the columns in changes are marked as PK.",
     )
   const params = pkEntries.reduce(
     (acc, [column, value]) => {
@@ -1449,7 +1457,7 @@ function _applyDeleteOperation(
       acc.values.push(value)
       return acc
     },
-    { where: [] as string[], values: [] as SqlValue[] }
+    { where: [] as string[], values: [] as SqlValue[] },
   )
 
   return {
@@ -1460,12 +1468,12 @@ function _applyDeleteOperation(
 
 function _applyNonDeleteOperation(
   { fullRow, primaryKeyCols }: ShadowEntryChanges,
-  tablenameStr: string
+  tablenameStr: string,
 ): Statement {
   const columnNames = Object.keys(fullRow)
   const columnValues = Object.values(fullRow)
   let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
-    ', '
+    ', ',
   )}) VALUES (${columnValues.map((_) => '?').join(',')})`
 
   const updateColumnStmts = columnNames
@@ -1476,7 +1484,7 @@ function _applyNonDeleteOperation(
         acc.values.push(fullRow[c])
         return acc
       },
-      { where: [] as string[], values: [] as SqlValue[] }
+      { where: [] as string[], values: [] as SqlValue[] },
     )
 
   if (updateColumnStmts.values.length > 0) {

@@ -9,7 +9,8 @@ const useConnectivityState: () => {
   toggleConnectivityState: () => void
 } = () => {
   const electric = useContext(ElectricContext)
-  const [connectivityState, setConnectivityState] = useState<ConnectivityState>('disconnected')
+  const [connectivityState, setConnectivityState] =
+    useState<ConnectivityState>('disconnected')
 
   useEffect(() => {
     if (electric === undefined) {
@@ -24,14 +25,15 @@ const useConnectivityState: () => {
 
       // externally map states to disconnected/connected
       const nextState = ['available', 'error', 'disconnected'].find(
-        (x) => x == state
+        (x) => x == state,
       )
         ? 'disconnected'
         : 'connected'
       setConnectivityState(nextState)
     }
 
-    const subscriptionKey = notifier.subscribeToConnectivityStateChanges(handler)
+    const subscriptionKey =
+      notifier.subscribeToConnectivityStateChanges(handler)
 
     return () => {
       notifier.unsubscribeFromConnectivityStateChanges(subscriptionKey)

@@ -15,7 +15,10 @@ import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { useConnectivityState, useLiveQuery } from '../../src/frameworks/react/hooks'
+import {
+  useConnectivityState,
+  useLiveQuery,
+} from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { schema, Electric } from '../client/generated'
@@ -165,7 +168,9 @@ test('useLiveQuery never sets results if unmounted immediately', async (t) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result, unmount } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
+  const { result, unmount } = renderHook(() => useLiveQuery(liveQuery), {
+    wrapper,
+  })
   unmount()
 
   await sleepAsync(1000)
@@ -188,7 +193,9 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result, unmount } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
+  const { result, unmount } = renderHook(() => useLiveQuery(liveQuery), {
+    wrapper,
+  })
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
@@ -230,7 +237,9 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result, unmount } = renderHook(() => useLiveQuery(slowLiveQuery), { wrapper })
+  const { result, unmount } = renderHook(() => useLiveQuery(slowLiveQuery), {
+    wrapper,
+  })
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
@@ -263,7 +272,9 @@ test('useConnectivityState defaults to disconnected', async (t) => {
 
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
-  await waitFor(() => assert(result.current.connectivityState === 'disconnected'))
+  await waitFor(() =>
+    assert(result.current.connectivityState === 'disconnected'),
+  )
   t.is(result.current.connectivityState, 'disconnected')
 })
 
@@ -297,7 +308,9 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result, unmount } = renderHook(() => useConnectivityState(), { wrapper })
+  const { result, unmount } = renderHook(() => useConnectivityState(), {
+    wrapper,
+  })
   unmount()
 
   notifier.connectivityStateChanged('test.db', 'connected')

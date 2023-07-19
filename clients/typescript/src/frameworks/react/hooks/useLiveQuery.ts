@@ -45,7 +45,7 @@ function errorResult<T>(error: any): ResultData<T> {
  * @param runQuery - A live query.
  */
 function useLiveQuery<Res>(
-  runQuery: () => Promise<LiveResult<Res>>
+  runQuery: () => Promise<LiveResult<Res>>,
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
@@ -79,8 +79,7 @@ function useLiveQuery<Res>(
         cleanly(setTablenames, res.tablenames)
         cleanly(setTablenamesKey, tablenamesKey)
         cleanly(setResultData, successResult(res.result))
-      }
-      catch (err) {
+      } catch (err) {
         cleanly(setResultData, errorResult(err))
       }
     }
@@ -146,12 +145,10 @@ function useLiveQuery<Res>(
         const res = await runQuery()
 
         cleanly(setResultData, successResult(res.result))
-      }
-      catch (err) {
+      } catch (err) {
         cleanly(setResultData, errorResult(err))
       }
     }
-
 
     runLiveQuery()
 
