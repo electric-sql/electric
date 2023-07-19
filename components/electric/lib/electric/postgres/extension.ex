@@ -31,6 +31,7 @@ defmodule Electric.Postgres.Extension do
   @schema_table electric.("schema")
   @electrified_tracking_table electric.(@electrified_table_relation)
   @electrified_index_table electric.(@electrified_index_relation)
+  @utilities_table electric.("utilities")
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -80,6 +81,7 @@ defmodule Electric.Postgres.Extension do
   def version_table, do: @version_table
   def electrified_tracking_table, do: @electrified_tracking_table
   def electrified_index_table, do: @electrified_index_table
+  def utilities_table, do: @utilities_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -224,7 +226,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230328113927,
       Migrations.Migration_20230424154425_DDLX,
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
-      Migrations.Migration_20230605141256_ElectrifyFunction
+      Migrations.Migration_20230605141256_ElectrifyFunction,
+      Migrations.Migration_20230715000000_UtilitiesTable
     ]
   end
 
@@ -264,6 +267,9 @@ defmodule Electric.Postgres.Extension do
                           "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
                     end
 
+                    :ok
+
+                  {:ok, _} ->
                     :ok
 
                   {:ok, _cols, _rows} ->

@@ -305,6 +305,9 @@ defmodule Electric.Satellite.WsServerTest do
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
         MockClient.send_data(conn, %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
@@ -318,10 +321,9 @@ defmodule Electric.Satellite.WsServerTest do
         })
 
         assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
-
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -346,6 +348,8 @@ defmodule Electric.Satellite.WsServerTest do
         MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
 
         MockClient.send_data(conn, %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -360,10 +364,9 @@ defmodule Electric.Satellite.WsServerTest do
         })
 
         assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
-
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -665,7 +668,7 @@ defmodule Electric.Satellite.WsServerTest do
 
     Process.send_after(
       pid,
-      {:subscription_data, id, :start_from_latest, Enum.map(requests, &{&1.id, []})},
+      {:subscription_data, id, Enum.map(requests, &{&1.id, []})},
       data_delay_ms
     )
   end

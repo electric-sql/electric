@@ -1,0 +1,27 @@
+defmodule Electric.Postgres.Extension.Migrations.Migration_20230715000000_UtilitiesTable do
+  alias Electric.Postgres.Extension
+
+  @behaviour Extension.Migration
+
+  @impl true
+  def version, do: 20_230_715_000_000
+
+  @impl true
+  def up(_) do
+    [
+      """
+      CREATE TABLE #{Extension.utilities_table()} (
+        id VARCHAR(64) PRIMARY KEY,
+        content jsonb NULL
+      )
+      """,
+      """
+      INSERT INTO #{Extension.utilities_table()} (id, content) VALUES ('magic write', '{}')
+      """,
+      Extension.add_table_to_publication_sql(Extension.utilities_table())
+    ]
+  end
+
+  @impl true
+  def down(_), do: []
+end

@@ -7,7 +7,7 @@ defmodule Electric.Replication.InitialSync do
   """
 
   alias Electric.Replication.Shapes
-  alias Electric.Postgres.{CachedWal, Extension, Lsn}
+  alias Electric.Postgres.{CachedWal, Extension}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
@@ -67,11 +67,20 @@ defmodule Electric.Replication.InitialSync do
   1. `{:subscription_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
      results when they are ready. That message **has** to be sent ASAP since if we send the results
      at the end, we might have already skipped the point where the data is relevant.
-  2. `{:subscription_data, subscription_id, observed_lsn, data}` is when we've collected all the data.
-     The `observed_lsn` here is a cheat-code to sidestep an issue where there were no transactions.
-     It's required, because if we haven't received any transactions while querying, we don't have
-     any transactions to trigger sending this data in `Electric.Satellite.WsServer`, so we're using
-     this LSN point only for equality checking if we haven't moved at all.
+  2. `{:subscription_data, subscription_id, data}` is when we've collected all the data.
+
+  One more this this function is expected to do is to perform any write to Postgres into a table that is a part
+  of our publication (i.e. the Electric will see it) and the table should probably part of the `electric` schema.
+
+  Since the insertion point for this data is first observed transaction with xid >= xmin, if we receive this data
+  and no writes come in after (e.g. when no writes are going on in PG), for example if there are no new writes
+  coming, then it's essentially impossible to know whether we are still waiting for any transactions from PG or
+  we should send the data immediately. LSNs are unstable, transaction ids can be skipped in cases of transaction
+  rollbacks. The only reliable way to have an insertion point is to observe the transaction with xid >= xmin, then
+  we can insert the data right before that. We ensure we do observe it by doing a magic no-op write to a special
+  table under a special key. Since we are doing this write after starting the REPEATABLE READ transaction, xid for
+  the write will definitely be >= xmin, so even in absence of "real" writes to electrified tables, we'll at least
+  observe this magic write.
 
   If an error occurs while collecting the data, this function is expected to send the message like this:
   ```elixir
@@ -89,18 +98,19 @@ defmodule Electric.Replication.InitialSync do
       :epgsql.with_transaction(
         conn,
         fn conn ->
-          {:ok, _, [{xmin, end_of_tx_lsn}]} =
+          # Do the magic write described in the function docs. It's important that this is
+          # 1. after the transaction had started, and
+          # 2. in a separate transaction (thus on a different connection), and
+          # 3. before the potentially big read queries to ensure this arrives ASAP on any data size
+          Task.start(fn -> perform_magic_write(opts) end)
+
+          {:ok, _, [{xmin}]} =
             :epgsql.squery(
               conn,
-              "SELECT pg_snapshot_xmin(pg_current_snapshot()), pg_current_wal_lsn();"
+              "SELECT pg_snapshot_xmin(pg_current_snapshot());"
             )
 
           send(parent, {:subscription_insertion_point, ref, String.to_integer(xmin)})
-
-          wal_pos =
-            end_of_tx_lsn
-            |> Lsn.from_string()
-            |> CachedWal.EtsBacked.lsn_to_position()
 
           Enum.reduce_while(requests, [], fn request, results ->
             case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin) do
@@ -113,11 +123,22 @@ defmodule Electric.Replication.InitialSync do
               send(parent, {:subscription_init_failed, subscription_id, reason})
 
             results ->
-              send(parent, {:subscription_data, subscription_id, wal_pos, results})
+              send(parent, {:subscription_data, subscription_id, results})
           end
         end,
         begin_opts: "ISOLATION LEVEL REPEATABLE READ READ ONLY"
       )
+    end)
+  end
+
+  defp perform_magic_write(opts) do
+    Connectors.get_connection_opts(opts, replication: false)
+    |> Client.with_conn(fn conn ->
+      {:ok, 1} =
+        :epgsql.squery(
+          conn,
+          "UPDATE #{Extension.utilities_table()} SET content = '{}' WHERE id = 'magic write'"
+        )
     end)
   end
 end
