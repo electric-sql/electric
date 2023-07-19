@@ -111,7 +111,10 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
-  _throttledSnapshot?: () => void
+  _throttledSnapshot?: {
+    cancel: () => void,
+    (): void
+  }
 
   _lastAckdRowId: number
   _lastSentRowId: number
@@ -196,16 +199,16 @@ export class SatelliteProcess implements Satellite {
         : await this._getClientId()
     await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
-    const subscriptionKeys = [
-      '_authStateSubscription',
-      '_connectivityChangeSubscription',
-      '_potentialDataChangeSubscription'
-    ]
-    subscriptionKeys.forEach((key) => {
-      if (this[key] !== undefined) {
+    const subscriptions = Object.entries({
+      _authStateSubscription: this._authStateSubscription,
+      _connectivityChangeSubscription: this._connectivityChangeSubscription,
+      _potentialDataChangeSubscription: this._potentialDataChangeSubscription
+    })
+    subscriptions.forEach(([name, value]) => {
+      if (value !== undefined) {
         throw new Error(
           `Starting satellite process with an existing
-           \`${key}\`.
+           \`${name}\`.
            This means there is a subscription leak.`
         )
       }
@@ -305,7 +308,7 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
     this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot()
+      this._throttledSnapshot!()
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -326,25 +329,23 @@ export class SatelliteProcess implements Satellite {
       this._pollingInterval = undefined
     }
 
-    console.log('stopping subscriptions')
-    const subscriptions = Object.entries({
-      _authStateSubscription: 'unsubscribeFromAuthStateChanges',
-      _connectivityChangeSubscription: 'unsubscribeFromConnectivityStateChanges',
-      _potentialDataChangeSubscription: 'unsubscribeFromPotentialDataChanges',
-    })
-    subscriptions.forEach(([subscriptionKey, unsubscribeMethod]) => {
-      console.log('subscriptionKey', subscriptionKey)
-      console.log('unsubscribeMethod', unsubscribeMethod)
+    if (this._authStateSubscription !== undefined) {
+      this.notifier.unsubscribeFromAuthStateChanges(this._authStateSubscription)
 
-      if (this[subscriptionKey] === undefined) {
-        return
-      }
+      this._authStateSubscription = undefined
+    }
 
-      const unsubscribe = this.notifier[unsubscribeMethod].bind(this.notifier)
-      unsubscribe(this[subscriptionKey])
+    if (this._connectivityChangeSubscription !== undefined) {
+      this.notifier.unsubscribeFromConnectivityStateChanges(this._connectivityChangeSubscription)
 
-      this[subscriptionKey] = undefined
-    })
+      this._connectivityChangeSubscription = undefined
+    }
+
+    if (this._potentialDataChangeSubscription !== undefined) {
+      this.notifier.unsubscribeFromPotentialDataChanges(this._potentialDataChangeSubscription)
+
+      this._potentialDataChangeSubscription = undefined
+    }
 
     await this.client.close()
   }

@@ -2,7 +2,8 @@ import { useContext, useEffect, useState } from 'react'
 
 import { ChangeNotification } from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
-import { ConnectivityState } from '../../../util/types'
+import { AnyFunction } from '../../../util/types'
+
 import { ElectricContext } from '../provider'
 import useRandom from './useRandom'
 
@@ -58,7 +59,7 @@ function useLiveQuery<Res>(
   const cleanUp = () => {
     cleanedUp = true
   }
-  const cleanly = (setterFn, ...args) => {
+  const cleanly = (setterFn: AnyFunction, ...args: any[]) => {
     if (cleanedUp) {
       return
     }
