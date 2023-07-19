@@ -202,7 +202,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       conn_config: conn_config,
       opts: opts,
       current: nil,
-      electrified_tables: []
+      electrified_tables: [],
+      refresh_task: nil
     }
 
     # continue to immediately refresh the electrified_tables cache
@@ -332,25 +333,34 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   # a db lookup so the refresh subscription query can be running at the same 
   # time the call comes in for the table list from the pg replication tcp 
   # connection.
-  def handle_call({:refresh_subscription, name}, from, state) do
+  def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
     # make sure that the table list is synced ready for the 
     # request from the tcp server
     state = cache_table_list(state)
 
-    Task.async(fn ->
-      result = SchemaLoader.refresh_subscription(state.backend, name)
-      GenServer.reply(from, result)
-      :ok
-    end)
+    task =
+      Task.async(fn ->
+        result = SchemaLoader.refresh_subscription(state.backend, name)
+        GenServer.reply(from, result)
+        :ok
+      end)
 
-    {:noreply, state}
+    {:noreply, %{state | refresh_task: task}}
+  end
+
+  def handle_call({:refresh_subscription, name}, _from, %{refresh_task: %Task{}} = state) do
+    Logger.warning(
+      "Refresh subscription already running, ingnoring duplicate refresh of subscription #{name}"
+    )
+
+    {:reply, :ok, state}
   end
 
   @impl GenServer
   # task process done
-  def handle_info({ref, result}, state) when is_reference(ref) do
+  def handle_info({ref, result}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
     Logger.debug("task_complete: #{inspect(result)}")
-    {:noreply, state}
+    {:noreply, %{state | refresh_task: nil}}
   end
 
   # Task process exited
