@@ -225,4 +225,31 @@ defmodule Electric.Replication.Postgres.Client do
 
     :epgsql.standby_status_update(conn, decimal_lsn, decimal_lsn)
   end
+
+  @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
+
+  @pg_class_query """
+  SELECT c.oid
+  FROM pg_class c
+    INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE
+      n.nspname = $1
+      AND c.relname = $2
+      AND c.relkind = ANY($3::char[])
+  LIMIT 1;
+  """
+
+  @doc """
+  Retrieve the db assigned oid of the given table, index, view or trigger.
+  """
+  @spec relation_oid(connection(), :table | :index | :view | :trigger, String.t(), String.t()) ::
+          {:ok, integer()} | {:error, term()}
+  def relation_oid(conn, rel_type, schema, table) do
+    with {:ok, relkind} <- Map.fetch(@relkind, rel_type),
+         {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
+      {:ok, String.to_integer(oid)}
+    else
+      _ -> {:error, :relation_missing}
+    end
+  end
 end
