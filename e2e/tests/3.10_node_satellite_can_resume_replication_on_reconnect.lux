@@ -1,0 +1,47 @@
+[doc NodeJS Satellite can resume its replication stream subscription after reconnecting even when not subscribed to any shapes]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[global migration1_vsn=20230719_01]
+[global migration2_vsn=20230719_02]
+
+# Create two migrations with electrified tables on the server.
+[shell pg_1]
+  [invoke migrate_pg $migration1_vsn "CREATE TABLE public.foo (id TEXT PRIMARY KEY);CALL electric.electrify('public.foo');"]
+  [invoke migrate_pg $migration2_vsn "CREATE TABLE public.bar (id TEXT PRIMARY KEY);CALL electric.electrify('public.bar');"]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell satellite_1]
+  # The client starts replication from scratch.
+  ?no previous LSN, start replication with option FIRST_LSN
+  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+
+  # The client receives both migrations during initial sync.
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*"lsn":\{"type":"Buffer","data":\[[\d,]+\].*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration1_vsn",.*,"table":\{.*,"name":"foo"
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*"lsn":\{"type":"Buffer","data":\[[\d,]+\].*\}\},\
+    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration2_vsn",.*,"table":\{.*,"name":"bar"
+
+  [progress stopping client]
+  !await client.stop(db)
+  ?$node
+
+  # Verify that the client retrieves previously stored LSN when it reestablishes the replication connection.
+  [progress resuming client]
+  [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
+  ?$node
+
+  -no previous LSN
+
+  ?starting replication with lsn:
+  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{"0":\d+,.*?\}
+  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+
+[cleanup]
+  [invoke teardown]
