@@ -111,7 +111,7 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
-  _throttledSnapshot: () => void
+  _throttledSnapshot?: () => void
 
   _lastAckdRowId: number
   _lastSentRowId: number
@@ -151,19 +151,6 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = 0
     this._lastSentRowId = 0
 
-    // Create a throttled function that performs a snapshot at most every
-    // `minSnapshotWindow` ms. This function runs immediately when you
-    // first call it and then every `minSnapshotWindow` ms as long as
-    // you keep calling it within the window. If you don't call it within
-    // the window, it will then run immediately the next time you call it.
-    const snapshot = this._performSnapshot.bind(this)
-    const throttleOpts = { leading: true, trailing: true }
-    this._throttledSnapshot = throttle(
-      snapshot,
-      opts.minSnapshotWindow,
-      throttleOpts
-    )
-
     this.relations = {}
 
     this.subscriptions = new InMemorySubscriptionsManager(
@@ -173,6 +160,23 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+  }
+
+  // Create a throttled function that performs a snapshot at most every
+  // `minSnapshotWindow` ms. This function runs immediately when you
+  // first call it and then every `minSnapshotWindow` ms as long as
+  // you keep calling it within the window. If you don't call it within
+  // the window, it will then run immediately the next time you call it.
+  _throttleSnapshot = () => {
+    const snapshot = this._performSnapshot.bind(this)
+    const snapshotWindow = this.opts.minSnapshotWindow
+
+    const throttleOpts = {
+      leading: true,
+      trailing: true
+    }
+
+    return throttle(snapshot, snapshotWindow, throttleOpts)
   }
 
   async start(
@@ -192,28 +196,37 @@ export class SatelliteProcess implements Satellite {
         : await this._getClientId()
     await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
-    if (this._authStateSubscription === undefined) {
-      const handler = this._updateAuthState.bind(this)
-      this._authStateSubscription =
-        this.notifier.subscribeToAuthStateChanges(handler)
-    }
+    const subscriptionKeys = [
+      '_authStateSubscription',
+      '_connectivityChangeSubscription',
+      '_potentialDataChangeSubscription'
+    ]
+    subscriptionKeys.forEach((key) => {
+      if (this[key] !== undefined) {
+        throw new Error(
+          `Starting satellite process with an existing
+           \`${key}\`.
+           This means there is a subscription leak.`
+        )
+      }
+    })
 
-    // XXX establish replication connection,
-    // validate auth state, etc here.
+    // Monitor auth state changes.
+    const authStateHandler = this._updateAuthState.bind(this)
+    this._authStateSubscription =
+      this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
-    // Request a snapshot whenever the data in our database potentially changes.
-    this._potentialDataChangeSubscription =
-      this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
-
-    const connectivityChangeCallback = (
-      notification: ConnectivityStateChangeNotification
-    ) => {
-      this._connectivityStateChanged(notification.connectivityState)
+    // Monitor connectivity state changes.
+    const connectivityStateHandler = ({connectivityState}: ConnectivityStateChangeNotification) => {
+      this._connectivityStateChanged(connectivityState)
     }
     this._connectivityChangeSubscription =
-      this.notifier.subscribeToConnectivityStateChanges(
-        connectivityChangeCallback
-      )
+      this.notifier.subscribeToConnectivityStateChanges(connectivityStateHandler)
+
+    // Request a snapshot whenever the data in our database potentially changes.
+    this._throttledSnapshot = this._throttleSnapshot()
+    this._potentialDataChangeSubscription =
+      this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(
@@ -303,18 +316,35 @@ export class SatelliteProcess implements Satellite {
 
   // Unsubscribe from data changes and stop polling
   async stop(): Promise<void> {
-    Log.info('stop polling')
+    // Stop snapshotting and polling for changes.
+    if (this._throttledSnapshot !== undefined) {
+      this._throttledSnapshot.cancel()
+    }
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
+
       this._pollingInterval = undefined
     }
 
-    if (this._potentialDataChangeSubscription !== undefined) {
-      this.notifier.unsubscribeFromPotentialDataChanges(
-        this._potentialDataChangeSubscription
-      )
-      this._potentialDataChangeSubscription = undefined
-    }
+    console.log('stopping subscriptions')
+    const subscriptions = Object.entries({
+      _authStateSubscription: 'unsubscribeFromAuthStateChanges',
+      _connectivityChangeSubscription: 'unsubscribeFromConnectivityStateChanges',
+      _potentialDataChangeSubscription: 'unsubscribeFromPotentialDataChanges',
+    })
+    subscriptions.forEach(([subscriptionKey, unsubscribeMethod]) => {
+      console.log('subscriptionKey', subscriptionKey)
+      console.log('unsubscribeMethod', unsubscribeMethod)
+
+      if (this[subscriptionKey] === undefined) {
+        return
+      }
+
+      const unsubscribe = this.notifier[unsubscribeMethod].bind(this.notifier)
+      unsubscribe(this[subscriptionKey])
+
+      this[subscriptionKey] = undefined
+    })
 
     await this.client.close()
   }
