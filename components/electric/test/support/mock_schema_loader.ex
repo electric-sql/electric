@@ -191,7 +191,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
   def known_migration_version?({versions, opts}, version) do
     notify(opts, {:known_migration_version?, version})
 
-    not is_nil(List.keyfind(versions, version, 2))
+    Enum.any?(versions, &(&1.version == version))
   end
 
   @impl true
