@@ -38,7 +38,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
         {mock_version(version, schema, stmts), schema}
       end)
 
-    versions
+    # we need versions in reverse order, with the latest migration first
+    Enum.reverse(versions)
   end
 
   def backend_spec(opts) do
