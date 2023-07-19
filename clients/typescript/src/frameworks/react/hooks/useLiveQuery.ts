@@ -45,7 +45,7 @@ function errorResult<T>(error: any): ResultData<T> {
  * @param runQuery - A live query.
  */
 function useLiveQuery<Res>(
-  runQuery: () => Promise<LiveResult<Res>>,
+  runQuery: () => Promise<LiveResult<Res>>
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
 

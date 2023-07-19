@@ -273,7 +273,7 @@ test('useConnectivityState defaults to disconnected', async (t) => {
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
   await waitFor(() =>
-    assert(result.current.connectivityState === 'disconnected'),
+    assert(result.current.connectivityState === 'disconnected')
   )
   t.is(result.current.connectivityState, 'disconnected')
 })

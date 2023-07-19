@@ -25,7 +25,7 @@ const useConnectivityState: () => {
 
       // externally map states to disconnected/connected
       const nextState = ['available', 'error', 'disconnected'].find(
-        (x) => x == state,
+        (x) => x == state
       )
         ? 'disconnected'
         : 'connected'
