@@ -183,7 +183,7 @@ test.serial('replication start success', async (t) => {
   t.pass()
 })
 
-test.serial('replication start sends FIRST_LSN', async (t) => {
+test.serial('replication start sends empty', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
@@ -195,10 +195,7 @@ test.serial('replication start sends FIRST_LSN', async (t) => {
           msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
         ) {
           const req = decode(data!) as Proto.SatInStartReplicationReq
-          t.deepEqual(
-            req.options[0],
-            Proto.SatInStartReplicationReq_Option.FIRST_LSN
-          )
+          t.deepEqual( req.lsn, new Uint8Array())
           t.pass()
           resolve()
         }

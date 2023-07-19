@@ -39,7 +39,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
     test "The client can connect and immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}
 
@@ -63,7 +63,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and immediately gets migrations but gets neither already inserted data, nor new inserts",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}
 
@@ -101,7 +101,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 3)
 
         request_id = uuid4()
@@ -159,7 +159,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and that works with multiple shape requests",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 3)
 
         {:ok, 1} =
@@ -236,7 +236,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and that works with multiple subscriptions",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 3)
 
         sub_id = uuid4()
@@ -315,7 +315,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and then unsubscribe, and gets no data after unsubscribing",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 3)
 
         request_id = uuid4()
@@ -373,7 +373,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       last_lsn =
         MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+          MockClient.send_data(conn, %SatInStartReplicationReq{})
           assert_initial_replication_response(conn, 3)
 
           request_id = uuid4()

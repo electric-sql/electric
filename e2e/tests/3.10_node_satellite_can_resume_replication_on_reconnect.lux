@@ -16,7 +16,7 @@
 
 [shell satellite_1]
   # The client starts replication from scratch.
-  ?no previous LSN, start replication with option FIRST_LSN
+  ?no previous LSN, start replication from scratch
   ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
 

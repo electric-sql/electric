@@ -42,7 +42,7 @@
                         auth: %{auth_config: auth_config, user_id: "$user_id"},
                         id: "$client_id",
                         debug: true,
-                        sub: "0",
+                        sub: "",
                         auto_in_sub: true,
                         format: :term,
                         host: "electric_1",

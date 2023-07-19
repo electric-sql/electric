@@ -40,7 +40,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     with_connect(ctx.conn_opts, fn conn ->
       assert_receive {^conn, %SatInStartReplicationReq{}}
 
-      MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+      MockClient.send_data(conn, %SatInStartReplicationReq{})
       assert_receive {^conn, %SatInStartReplicationResp{}}
 
       ping_server(conn)
@@ -61,7 +61,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
       assert_receive {^conn, %SatInStartReplicationReq{}}
 
-      MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+      MockClient.send_data(conn, %SatInStartReplicationReq{})
       assert_receive {^conn, %SatInStartReplicationResp{}}
 
       assert_receive {^ref, :server_paused}
@@ -94,7 +94,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     with_connect(ctx.conn_opts, fn conn ->
       assert_receive {^conn, %SatInStartReplicationReq{}}
 
-      MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+      MockClient.send_data(conn, %SatInStartReplicationReq{})
       assert_receive {^conn, %SatInStartReplicationResp{}}
 
       assert_receive_migration(conn, vsn1, "foo")
@@ -108,7 +108,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     with_connect(ctx.conn_opts, fn conn ->
       assert_receive {^conn, %SatInStartReplicationReq{}}
 
-      req = %SatInStartReplicationReq{options: [:FIRST_LSN], schema_version: vsn1}
+      req = %SatInStartReplicationReq{schema_version: vsn1}
       MockClient.send_data(conn, req)
       assert_receive {^conn, %SatInStartReplicationResp{}}
 

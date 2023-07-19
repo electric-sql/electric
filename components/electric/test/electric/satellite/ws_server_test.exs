@@ -33,6 +33,8 @@ defmodule Electric.Satellite.WsServerTest do
   @test_migration {"20230101",
                    "CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))"}
 
+  @current_wal_pos 1
+
   import Mock
 
   setup ctx do
@@ -93,8 +95,8 @@ defmodule Electric.Satellite.WsServerTest do
     {
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
-      get_current_position: fn -> 0 end,
-      lsn_in_cached_window?: fn num when is_integer(num) -> num > 1 end
+      get_current_position: fn -> @current_wal_pos end,
+      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end
     }
   ]) do
     {:ok, %{}}
@@ -301,9 +303,8 @@ defmodule Electric.Satellite.WsServerTest do
     @tag with_migrations: [@test_migration]
     test "common replication", cxt do
       with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
+        assert_initial_replication_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -345,7 +346,9 @@ defmodule Electric.Satellite.WsServerTest do
       limit = 10
 
       with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
+        # Skip initial sync
+        lsn = to_string(@current_wal_pos + 1)
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
 
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
         [{client_name, _client_pid}] = active_clients()
@@ -400,7 +403,7 @@ defmodule Electric.Satellite.WsServerTest do
     @tag with_migrations: [@test_migration]
     test "The client cannot establish two subscriptions with the same ID", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 1)
 
         sub_id = "00000000-0000-0000-0000-000000000000"
@@ -446,7 +449,7 @@ defmodule Electric.Satellite.WsServerTest do
     @tag with_migrations: [@test_migration]
     test "replication stream is paused until the data is sent to client", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
@@ -480,8 +483,9 @@ defmodule Electric.Satellite.WsServerTest do
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
-        assert_initial_replication_response(conn, 1)
+        # Skip initial sync
+        lsn = to_string(@current_wal_pos + 1)
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -513,8 +517,9 @@ defmodule Electric.Satellite.WsServerTest do
     test "unsubscribing works even on not-yet-fulfilled subscriptions",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
-        assert_initial_replication_response(conn, 1)
+        # Skip initial sync
+        lsn = to_string(@current_wal_pos + 1)
+        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -550,7 +555,7 @@ defmodule Electric.Satellite.WsServerTest do
       with_mock Electric.DummyConsumer, [:passthrough],
         notify: fn _, ws_pid, events -> send(self, {:dummy_consumer, ws_pid, events}) end do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
+          MockClient.send_data(conn, %SatInStartReplicationReq{})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
           assert_receive {^conn, %SatInStartReplicationReq{lsn: ""}}, @default_wait
@@ -625,7 +630,7 @@ defmodule Electric.Satellite.WsServerTest do
         with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
           lsn = "some_long_internal_lsn"
 
-          MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
+          MockClient.send_data(conn, %SatInStartReplicationReq{})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
           assert_receive {^conn, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
         end)
@@ -634,7 +639,7 @@ defmodule Electric.Satellite.WsServerTest do
 
     test "stop subscription when consumer is not available, and restart when it's back", cxt do
       with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{options: [:LAST_LSN]})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
         assert_receive {^conn, %SatInStartReplicationReq{}}, @default_wait
