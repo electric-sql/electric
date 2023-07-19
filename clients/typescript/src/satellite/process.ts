@@ -101,7 +101,6 @@ const throwErrors = [
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
 
-
 export class SatelliteProcess implements Satellite {
   dbName: DbName
   adapter: DatabaseAdapter
