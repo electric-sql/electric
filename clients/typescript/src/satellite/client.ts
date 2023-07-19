@@ -223,14 +223,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   private resetReplication(
     enqueued?: LSN,
     ack?: LSN,
-    isReplicating?: ReplicationStatus,
-    replicationStartingPromise?: Promise<void>
+    isReplicating?: ReplicationStatus
   ): OutgoingReplication {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
-      replicationStartingPromise:
-        replicationStartingPromise ?? Promise.resolve(),
       relations: new Map(),
       ack_lsn: ack,
       enqueued_lsn: enqueued,
@@ -370,12 +367,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.initializing?.reject(e)
         throw e
       })
-    this.inbound = this.resetReplication(
-      lsn,
-      lsn,
-      ReplicationStatus.STARTING,
-      promise
-    )
+    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
 
     return promise
   }
