@@ -9,27 +9,8 @@
 
 # Create two migrations with electrified tables on the server.
 [shell pg_1]
-  [local sql=
-    """
-    BEGIN;
-    SELECT electric.migration_version('$migration1_vsn');
-    CREATE TABLE public.foo (id TEXT PRIMARY KEY);
-    CALL electric.electrify('public.foo');
-    COMMIT;
-    """]
-  !$sql
-  ?COMMIT
-
-  [local sql=
-    """
-    BEGIN;
-    SELECT electric.migration_version('$migration2_vsn');
-    CREATE TABLE public.bar (id TEXT PRIMARY KEY);
-    CALL electric.electrify('public.bar');
-    COMMIT;
-    """]
-  !$sql
-  ?COMMIT
+  [invoke migrate_pg $migration1_vsn "CREATE TABLE public.foo (id TEXT PRIMARY KEY);CALL electric.electrify('public.foo');"]
+  [invoke migrate_pg $migration2_vsn "CREATE TABLE public.bar (id TEXT PRIMARY KEY);CALL electric.electrify('public.bar');"]
 
 # Bundle the first migration on the client.
 [global client_migrations=
@@ -43,11 +24,11 @@
 [invoke setup_client_with_migrations 1 "electric_1" 5133 $client_migrations]
 
 [shell satellite_1]
-  # The client has the first migration bundled.
-	?applying migration: $migration1_vsn
-
   # Make sure we don't receive a SatOpLog message with $migration1_vsn in it.
   -"version":"$migration1_vsn"
+
+  # The client has the first migration bundled.
+	?applying migration: $migration1_vsn
 
   # The client starts replication from scratch.
   ?no previous LSN, start replication with option FIRST_LSN
