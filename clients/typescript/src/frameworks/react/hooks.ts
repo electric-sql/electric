@@ -180,17 +180,15 @@ export const useConnectivityState: () => {
   toggleConnectivityState: () => void
 } = () => {
   const electric = useContext(ElectricContext)
-
-  const [connectivityState, setConnectivityState] =
-    useState<ConnectivityState>('disconnected')
-  //const [electric, setElectric] = useState<ElectricNamespace>()
+  const [connectivityState, setConnectivityState] = useState<ConnectivityState>('disconnected')
 
   useEffect(() => {
     if (electric === undefined) {
       return
     }
 
-    setConnectivityState(electric.isConnected ? 'connected' : 'disconnected')
+    const { isConnected, notifier } = electric
+    setConnectivityState(isConnected ? 'connected' : 'disconnected')
 
     const handler = (notification: ConnectivityStateChangeNotification) => {
       const state = notification.connectivityState
@@ -204,7 +202,11 @@ export const useConnectivityState: () => {
       setConnectivityState(nextState)
     }
 
-    electric.notifier.subscribeToConnectivityStateChange(handler)
+    const subscriptionKey = notifier.subscribeToConnectivityStateChange(handler)
+
+    return () => {
+      notifier.unsubscribeFromConnectivityStateChange(subscriptionKey)
+    }
   }, [electric])
 
   const toggleConnectivityState = () => {

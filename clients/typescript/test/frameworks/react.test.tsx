@@ -15,7 +15,7 @@ import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
 
-import { useLiveQuery } from '../../src/frameworks/react/hooks'
+import { useConnectivityState, useLiveQuery } from '../../src/frameworks/react/hooks'
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { schema, Electric } from '../client/generated'
@@ -248,6 +248,62 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
 
   await sleepAsync(1000)
   t.assert(result.current.updatedAt === updatedAt)
+})
+
+test('useConnectivityState defaults to disconnected', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+  const notifier = new MockNotifier('test.db')
+  const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = ElectricClient.create(schema, namespace)
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result } = renderHook(() => useConnectivityState(), { wrapper })
+
+  await waitFor(() => assert(result.current.connectivityState === 'disconnected'))
+  t.is(result.current.connectivityState, 'disconnected')
+})
+
+test('useConnectivityState handles connectivity events', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+  const notifier = new MockNotifier('test.db')
+  const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = ElectricClient.create(schema, namespace)
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result } = renderHook(() => useConnectivityState(), { wrapper })
+
+  notifier.connectivityStateChange('test.db', 'connected')
+
+  await waitFor(() => assert(result.current.connectivityState === 'connected'))
+  t.is(result.current.connectivityState, 'connected')
+})
+
+test('useConnectivityState ignores connectivity events after unmounting', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+  const notifier = new MockNotifier('test.db')
+  const namespace = new ElectricNamespace(adapter, notifier)
+  const dal = ElectricClient.create(schema, namespace)
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result, unmount } = renderHook(() => useConnectivityState(), { wrapper })
+  unmount()
+
+  notifier.connectivityStateChange('test.db', 'connected')
+
+  await sleepAsync(1000)
+  t.assert(result.current.connectivityState === 'disconnected')
 })
 
 const mockLiveQueryError = async () => {
