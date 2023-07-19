@@ -91,10 +91,16 @@ export type ShapeSubscription = {
   synced: Promise<void>
 }
 
+type ThrottleFunction = {
+  cancel: () => void
+  (): void
+}
+
 const throwErrors = [
   SatelliteErrorCode.INVALID_POSITION,
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
+
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -111,10 +117,7 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
-  _throttledSnapshot?: {
-    cancel: () => void
-    (): void
-  }
+  _throttledSnapshot?: ThrottleFunction
 
   _lastAckdRowId: number
   _lastSentRowId: number
@@ -170,7 +173,7 @@ export class SatelliteProcess implements Satellite {
   // first call it and then every `minSnapshotWindow` ms as long as
   // you keep calling it within the window. If you don't call it within
   // the window, it will then run immediately the next time you call it.
-  _throttleSnapshot = () => {
+  _throttleSnapshot: () => ThrottleFunction = () => {
     const snapshot = this._performSnapshot.bind(this)
     const snapshotWindow = this.opts.minSnapshotWindow
 
