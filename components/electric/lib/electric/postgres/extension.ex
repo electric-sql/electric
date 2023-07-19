@@ -56,7 +56,7 @@ defmodule Electric.Postgres.Extension do
   defp migration_history_query(after_version) do
     where_clause =
       if after_version do
-        "WHERE #{@version_table}.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
+        "WHERE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
       else
         # Dummy condition just to keep the $1 parameter in the query.
         "WHERE $1::text IS NULL"
@@ -64,18 +64,18 @@ defmodule Electric.Postgres.Extension do
 
     """
     SELECT
-      #{@version_table}.txid,
-      #{@version_table}.txts,
-      #{@version_table}.version,
-      #{@schema_table}.schema,
-      #{@schema_table}.migration_ddl
+      v.txid,
+      v.txts,
+      v.version,
+      s.schema,
+      s.migration_ddl
     FROM
-      #{@version_table}
+      #{@version_table} v
     JOIN
-      #{@schema_table} USING (version)
+      #{@schema_table} s USING (version)
     #{where_clause}
     ORDER BY
-      #{@version_table}.txid ASC
+      v.txid ASC
     """
   end
 
