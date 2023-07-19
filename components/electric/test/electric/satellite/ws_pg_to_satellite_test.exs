@@ -44,7 +44,6 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       assert_receive {^conn, %SatInStartReplicationResp{}}
 
       ping_server(conn)
-
       refute_receive {^conn, _}
     end)
   end
@@ -73,12 +72,48 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       assert_receive_migration(conn, vsn2, "bar")
 
       ping_server(conn)
-
       refute_receive {^conn, _}
 
       # Make sure the server keeps streaming migrations to the client after the initial sync is done.
       :ok = migrate(ctx.db, vsn3, "ALTER TABLE foo ADD COLUMN bar TEXT DEFAULT 'quux'")
       assert_receive_migration(conn, vsn3, "foo")
+
+      ping_server(conn)
+      refute_receive {^conn, _}
+    end)
+  end
+
+  test "only migrations that have newer version than the client's schema version are delivered",
+       ctx do
+    vsn1 = "2023071901"
+    vsn2 = "2023071902"
+    :ok = migrate(ctx.db, vsn1, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY)")
+    :ok = migrate(ctx.db, vsn2, "public.bar", "CREATE TABLE public.bar (id TEXT PRIMARY KEY)")
+
+    # First, verify that the client receives all migrations when it doesn't provide its schema version
+    with_connect(ctx.conn_opts, fn conn ->
+      assert_receive {^conn, %SatInStartReplicationReq{}}
+
+      MockClient.send_data(conn, %SatInStartReplicationReq{options: [:FIRST_LSN]})
+      assert_receive {^conn, %SatInStartReplicationResp{}}
+
+      assert_receive_migration(conn, vsn1, "foo")
+      assert_receive_migration(conn, vsn2, "bar")
+
+      ping_server(conn)
+      refute_receive {^conn, _}
+    end)
+
+    # Now, verify that the client receives only the second migration when it provides its schema version
+    with_connect(ctx.conn_opts, fn conn ->
+      assert_receive {^conn, %SatInStartReplicationReq{}}
+
+      req = %SatInStartReplicationReq{options: [:FIRST_LSN], schema_version: vsn1}
+      MockClient.send_data(conn, req)
+      assert_receive {^conn, %SatInStartReplicationResp{}}
+
+      assert_receive_migration(conn, vsn2, "bar")
+
       ping_server(conn)
       refute_receive {^conn, _}
     end)

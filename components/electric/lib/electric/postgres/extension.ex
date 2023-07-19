@@ -159,7 +159,7 @@ defmodule Electric.Postgres.Extension do
 
   def known_migration_version?(conn, version) when is_binary(version) do
     case :epgsql.equery(conn, "SELECT 1 FROM #{@version_table} WHERE version = $1", [version]) do
-      {:ok, [_], [{"t"}]} -> true
+      {:ok, [_], [{1}]} -> true
       _ -> false
     end
   end
