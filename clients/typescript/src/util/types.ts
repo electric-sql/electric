@@ -123,6 +123,7 @@ export type Record = { [key: string]: string | number | undefined | null }
 export type Replication = {
   authenticated: boolean
   isReplicating: ReplicationStatus
+  replicationStartingPromise: Promise<void>
   relations: Map<number, Relation>
   ack_lsn?: LSN
   enqueued_lsn?: LSN

@@ -34,7 +34,7 @@ export abstract class BaseRegistry implements Registry {
     this.stoppingPromises = {}
   }
 
-  startProcess(
+  abstract startProcess(
     _dbName: DbName,
     _adapter: DatabaseAdapter,
     _migrator: Migrator,
@@ -42,9 +42,7 @@ export abstract class BaseRegistry implements Registry {
     _socketFactory: SocketFactory,
     _config: InternalElectricConfig,
     _opts?: SatelliteOverrides
-  ): Promise<Satellite> {
-    throw `Subclasses must implement startProcess`
-  }
+  ): Promise<Satellite>
 
   async ensureStarted(
     dbName: DbName,
