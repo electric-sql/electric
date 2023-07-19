@@ -9,7 +9,7 @@ defmodule Electric.Postgres.Extension.Migration do
 
   @type t :: %__MODULE__{
           version: binary(),
-          schema: Schema.t(),
+          schema: Electric.Postgres.Schema.t(),
           stmts: [binary()],
           txid: integer(),
           txts: DateTime.t()
