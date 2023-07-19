@@ -27,7 +27,7 @@ export const electrify_db = async (
       token: await authToken(process.env.AUTH_SIGNING_ISS, process.env.AUTH_SIGNING_KEY)
     }
   }
-  console.log(`config: ${JSON.stringify(config)}`)
+  console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
   return await electrify(db, schema, config)
 }

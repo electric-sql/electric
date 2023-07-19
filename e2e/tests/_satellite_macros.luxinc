@@ -10,7 +10,7 @@
     !originalDb = client.make_db(process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME")
     ?$node
     [invoke electrify_db "originalDb" $host $port $migrations]
-    ?^$node
+    ??(in electrify_db) config:
 [endmacro]
 
 [macro electrify_db db host port migrations]
