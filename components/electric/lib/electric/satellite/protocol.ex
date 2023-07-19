@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Protocol do
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
-  alias Electric.Postgres.{CachedWal, Extension}
+  alias Electric.Postgres.CachedWal
 
   alias Electric.Satellite.SubscriptionManager
   alias Electric.Replication.Connectors
