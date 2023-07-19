@@ -59,10 +59,13 @@ export function uuid() {
 }
 
 export function emptyPromise<T = void>() {
-  let resolve: ((value: T | PromiseLike<T>) => void);
+  let resolve: (value: T | PromiseLike<T>) => void
   let reject: (reason?: any) => void
-  const promise = new Promise<T>((res, rej) => {resolve = res; reject = rej})
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
 
   // @ts-ignore TS complains that resolve/reject are used here before assignment, but promise constructor will run synchronously
-  return {promise, resolve, reject}
+  return { promise, resolve, reject }
 }
