@@ -31,10 +31,10 @@ const useConnectivityState: () => {
       setConnectivityState(nextState)
     }
 
-    const subscriptionKey = notifier.subscribeToConnectivityStateChange(handler)
+    const subscriptionKey = notifier.subscribeToConnectivityStateChanges(handler)
 
     return () => {
-      notifier.unsubscribeFromConnectivityStateChange(subscriptionKey)
+      notifier.unsubscribeFromConnectivityStateChanges(subscriptionKey)
     }
   }, [electric])
 
@@ -46,7 +46,7 @@ const useConnectivityState: () => {
     const nextState: ConnectivityState =
       connectivityState == 'connected' ? 'disconnected' : 'available'
     const dbName = electric.notifier.dbName
-    electric.notifier.connectivityStateChange(dbName, nextState)
+    electric.notifier.connectivityStateChanged(dbName, nextState)
     setConnectivityState(nextState)
   }
 

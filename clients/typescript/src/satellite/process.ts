@@ -208,10 +208,10 @@ export class SatelliteProcess implements Satellite {
     const connectivityChangeCallback = (
       notification: ConnectivityStateChangeNotification
     ) => {
-      this._connectivityStateChange(notification.connectivityState)
+      this._connectivityStateChanged(notification.connectivityState)
     }
     this._connectivityChangeSubscription =
-      this.notifier.subscribeToConnectivityStateChange(
+      this.notifier.subscribeToConnectivityStateChanges(
         connectivityChangeCallback
       )
 
@@ -529,7 +529,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectivityStateChange(status: ConnectivityState): Promise<void> {
+  async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {

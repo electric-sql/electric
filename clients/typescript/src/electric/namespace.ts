@@ -15,7 +15,7 @@ export class ElectricNamespace {
 
     // we need to set isConnected before the first event is emitted,
     // otherwise application might be out of sync with satellite state.
-    this.notifier.subscribeToConnectivityStateChange((notification) => {
+    this.notifier.subscribeToConnectivityStateChanges((notification) => {
       this.isConnected = notification.connectivityState == 'connected'
     })
   }

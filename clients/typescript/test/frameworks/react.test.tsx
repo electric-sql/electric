@@ -280,7 +280,7 @@ test('useConnectivityState handles connectivity events', async (t) => {
 
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
-  notifier.connectivityStateChange('test.db', 'connected')
+  notifier.connectivityStateChanged('test.db', 'connected')
 
   await waitFor(() => assert(result.current.connectivityState === 'connected'))
   t.is(result.current.connectivityState, 'connected')
@@ -300,7 +300,7 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
   const { result, unmount } = renderHook(() => useConnectivityState(), { wrapper })
   unmount()
 
-  notifier.connectivityStateChange('test.db', 'connected')
+  notifier.connectivityStateChanged('test.db', 'connected')
 
   await sleepAsync(1000)
   t.assert(result.current.connectivityState === 'disconnected')

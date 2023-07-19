@@ -112,10 +112,10 @@ export interface Notifier {
   // 'connected': connection to Electric established
   // 'disconnected': Electric is unreachable, or network is unavailable
   // 'error': disconnected with an error (TODO: add error info)
-  connectivityStateChange(dbName: string, state: ConnectivityState): void
+  connectivityStateChanged(dbName: string, state: ConnectivityState): void
 
-  subscribeToConnectivityStateChange(
+  subscribeToConnectivityStateChanges(
     callback: ConnectivityStateChangeCallback
   ): string
-  unsubscribeFromConnectivityStateChange(key: string): void
+  unsubscribeFromConnectivityStateChanges(key: string): void
 }
