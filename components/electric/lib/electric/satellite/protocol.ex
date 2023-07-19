@@ -506,7 +506,7 @@ defmodule Electric.Satellite.Protocol do
     # the initial sync before we start streaming any changes to it.
     #
     # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
-    # client first, followed by the initial migrations and data.
+    # client first, followed by the initial migrations.
     send(self(), {:perform_initial_sync_and_subscribe, msg})
     {%SatInStartReplicationResp{}, state}
   end

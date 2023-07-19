@@ -17,12 +17,17 @@ defmodule ElectricTest.SatelliteHelpers do
     assert_receive {^conn,
                     %SatOpLog{
                       ops: [
-                        %SatTransOp{op: {:begin, _}},
+                        %SatTransOp{
+                          op: {:begin, %SatOpBegin{is_migration: true, lsn: lsn_str}}
+                        },
                         %SatTransOp{
                           op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}
                         },
                         %SatTransOp{op: {:commit, _}}
                       ]
                     }}
+
+    assert {lsn, ""} = Integer.parse(lsn_str)
+    assert lsn > 0
   end
 end

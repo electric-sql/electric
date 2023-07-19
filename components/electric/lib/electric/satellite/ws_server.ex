@@ -200,13 +200,14 @@ defmodule Electric.Satellite.WsServer do
     _ = maybe_pause(lsn)
 
     %SatInStartReplicationReq{schema_version: schema_version} = msg
-    migration_transactions = InitialSync.migrations_since(schema_version, state.pg_connector_opts)
-    {msgs, state} = Protocol.handle_outgoing_txs(migration_transactions, state)
+    migrations = InitialSync.migrations_since(schema_version, state.pg_connector_opts, lsn)
 
-    max_txid =
-      migration_transactions
-      |> Enum.map(fn {tx, _offset} -> tx.xid end)
-      |> Enum.max(fn -> 0 end)
+    {msgs, state} =
+      migrations
+      |> Enum.map(&{&1, &1.lsn})
+      |> Protocol.handle_outgoing_txs(state)
+
+    max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
     state =
       state
