@@ -655,8 +655,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
       const replication = {
         ...this.outbound,
-        ack_lsn: message.lsn,
-        enqueued_lsn: message.lsn,
+        ack_lsn: DEFAULT_LOG_POS,
+        enqueued_lsn: DEFAULT_LOG_POS,
       }
 
       this.outbound = this.resetReplication(
