@@ -102,7 +102,7 @@ defmodule Electric.Replication.InitialSync do
           # 1. after the transaction had started, and
           # 2. in a separate transaction (thus on a different connection), and
           # 3. before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(opts) end)
+          Task.start(fn -> perform_magic_write(opts, subscription_id) end)
 
           {:ok, _, [{xmin}]} =
             :epgsql.squery(
@@ -131,14 +131,10 @@ defmodule Electric.Replication.InitialSync do
     end)
   end
 
-  defp perform_magic_write(opts) do
+  defp perform_magic_write(opts, subscription_id) do
     Connectors.get_connection_opts(opts, replication: false)
-    |> Client.with_conn(fn conn ->
-      {:ok, 1} =
-        :epgsql.squery(
-          conn,
-          "UPDATE #{Extension.utilities_table()} SET content = '{}' WHERE id = 'magic write'"
-        )
-    end)
+    |> Client.with_conn(
+      &Extension.update_transaction_marker(&1, "subscription:" <> subscription_id)
+    )
   end
 end

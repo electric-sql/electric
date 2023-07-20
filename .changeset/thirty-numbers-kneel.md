@@ -2,4 +2,4 @@
 "@core/electric": patch
 ---
 
-Fixed an issue where sometimes subscription data is not sent in abscense of other writes to PG
+Fixed an issue where sometimes subscription data would not be sent in absence of other writes to PG

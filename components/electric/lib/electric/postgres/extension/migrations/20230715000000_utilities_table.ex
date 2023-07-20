@@ -10,15 +10,15 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230715000000_Utilit
   def up(_) do
     [
       """
-      CREATE TABLE #{Extension.utilities_table()} (
+      CREATE TABLE #{Extension.transaction_marker_table()} (
         id VARCHAR(64) PRIMARY KEY,
         content jsonb NULL
       )
       """,
       """
-      INSERT INTO #{Extension.utilities_table()} (id, content) VALUES ('magic write', '{}')
+      INSERT INTO #{Extension.transaction_marker_table()} (id, content) VALUES ('magic write', '{}')
       """,
-      Extension.add_table_to_publication_sql(Extension.utilities_table())
+      Extension.add_table_to_publication_sql(Extension.transaction_marker_table())
     ]
   end
 

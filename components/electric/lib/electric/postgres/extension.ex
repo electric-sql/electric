@@ -31,7 +31,7 @@ defmodule Electric.Postgres.Extension do
   @schema_table electric.("schema")
   @electrified_tracking_table electric.(@electrified_table_relation)
   @electrified_index_table electric.(@electrified_index_relation)
-  @utilities_table electric.("utilities")
+  @transaction_marker_table electric.("transaction_marker")
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -75,13 +75,21 @@ defmodule Electric.Postgres.Extension do
     """
   end
 
+  def transaction_marker_update_equery do
+    """
+    UPDATE #{transaction_marker_table()}
+    SET content = jsonb_build_object('xid', pg_current_xact_id(), 'caused_by', $1::text)
+    WHERE id = 'magic write'
+    """
+  end
+
   def schema, do: @schema
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
   def electrified_tracking_table, do: @electrified_tracking_table
   def electrified_index_table, do: @electrified_index_table
-  def utilities_table, do: @utilities_table
+  def transaction_marker_table, do: @transaction_marker_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -457,5 +465,24 @@ defmodule Electric.Postgres.Extension do
 
   def encode_epgsql_timestamp(%DateTime{} = dt) do
     dt |> DateTime.to_naive() |> NaiveDateTime.to_erl()
+  end
+
+  @doc """
+  Perform a mostly no-op update to a transaction marker query to make sure
+  there is at least one write to Postgres after this point.
+
+  Second argument, `caused_by`, is any string which will be written in this
+  write, which may be useful for debugging.
+
+  This uses an extended query syntax, and thus cannot be used in a `replication: true`
+  connection.
+  """
+  def update_transaction_marker(conn, caused_by) when is_binary(caused_by) do
+    {:ok, 1} =
+      :epgsql.equery(
+        conn,
+        transaction_marker_update_equery(),
+        [caused_by]
+      )
   end
 end
