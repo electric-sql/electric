@@ -1,4 +1,5 @@
 import {
+  ClientShapeDefinition,
   ShapeDefinition,
   ShapeRequest,
   SubscriptionData,
@@ -42,6 +43,14 @@ export interface SubscriptionsManager {
    * @returns An array of fulfilled subscriptions that are active.
    */
   getFulfilledSubscriptions(): SubscriptionId[]
+
+  /**
+   * Check if a subscription with exactly the same shape requests has already been issued
+   * @param shapes Shapes for a potential request
+   */
+  getDuplicatingSubscription(
+    shapes: ClientShapeDefinition[]
+  ): null | { inFlight: string } | { fulfilled: string }
 
   /**
    * Deletes the subscription from the manager.

@@ -61,7 +61,13 @@ import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
-import { base64, bytesToNumber, numberToBytes, uuid } from '../util/common'
+import {
+  base64,
+  bytesToNumber,
+  emptyPromise,
+  numberToBytes,
+  uuid,
+} from '../util/common'
 
 import Log from 'loglevel'
 import { generateOplogTriggers } from '../migrators/triggers'
@@ -114,10 +120,7 @@ export class SatelliteProcess implements Satellite {
   relations: RelationsCache
 
   subscriptions: SubscriptionsManager
-  subscriptionNotifiers: Record<
-    string,
-    [success: () => void, failure: (error: any) => void]
-  >
+  subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
 
@@ -310,23 +313,37 @@ export class SatelliteProcess implements Satellite {
   async subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription> {
+    // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
+    const existingSubscription =
+      this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
+    if (existingSubscription !== null && 'inFlight' in existingSubscription) {
+      return {
+        synced:
+          this.subscriptionNotifiers[existingSubscription.inFlight].promise,
+      }
+    } else if (
+      existingSubscription !== null &&
+      'fulfilled' in existingSubscription
+    ) {
+      return { synced: Promise.resolve() }
+    }
+
+    // If no exact match found, we try to establish the subscription
     const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
       requestId: this.shapeRequestIdGenerator(),
       definition,
     }))
 
     const subId = this.subscriptionIdGenerator()
-    const prom = new Promise<void>((resolve, reject) => {
-      // store the resolve and reject
-      // such that we can resolve/reject
-      // the promise later when the shape
-      // is fulfilled or when an error arrives
-      // we store it before making the actual request
-      // to avoid that the answer would arrive too fast
-      // and this resolver and rejecter would not yet be stored
-      // this could especially happen in unit tests
-      this.subscriptionNotifiers[subId] = [resolve, reject]
-    })
+    // store the resolve and reject
+    // such that we can resolve/reject
+    // the promise later when the shape
+    // is fulfilled or when an error arrives
+    // we store it before making the actual request
+    // to avoid that the answer would arrive too fast
+    // and this resolver and rejecter would not yet be stored
+    // this could especially happen in unit tests
+    this.subscriptionNotifiers[subId] = emptyPromise()
 
     const { subscriptionId, error }: SubscribeResponse =
       await this.client.subscribe(subId, shapeReqs)
@@ -344,7 +361,7 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
 
     return {
-      synced: prom,
+      synced: this.subscriptionNotifiers[subId].promise,
     }
   }
 
@@ -362,7 +379,8 @@ export class SatelliteProcess implements Satellite {
       await this._applySubscriptionData(subsData.data, subsData.lsn)
     }
     // Call the `onSuccess` callback for this subscription
-    const [onSuccess, _] = this.subscriptionNotifiers[subsData.subscriptionId]
+    const { resolve: onSuccess } =
+      this.subscriptionNotifiers[subsData.subscriptionId]
     delete this.subscriptionNotifiers[subsData.subscriptionId] // GC the notifiers for this subscription ID
     onSuccess()
   }
@@ -452,7 +470,7 @@ export class SatelliteProcess implements Satellite {
 
     // Call the `onSuccess` callback for this subscription
     if (subscriptionId) {
-      const [_, onFailure] = this.subscriptionNotifiers[subscriptionId]
+      const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
       onFailure(satelliteError)
     }
