@@ -113,7 +113,8 @@
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",
     "lint": "eslint src --fix",
-    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet"
+    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
+    "format": "prettier --write --loglevel warn ."
   },
   "ava": {
     "timeout": "10m",

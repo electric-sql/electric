@@ -288,7 +288,7 @@ defmodule Electric.Satellite.Protocol do
     )
 
     with :ok <- validate_schema_version(msg.schema_version),
-         {:ok, lsn} <- validate_lsn(client_lsn, opts) do
+         {:ok, lsn} <- validate_lsn(client_lsn) do
       handle_start_replication_request(msg, lsn, state)
     else
       {:error, :bad_schema_version} ->
@@ -510,7 +510,7 @@ defmodule Electric.Satellite.Protocol do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
   end
 
-  defp handle_start_replication_request(%{subscription_ids: []} = msg, :start_from_first, state) do
+  defp handle_start_replication_request(%{subscription_ids: []} = msg, :initial_sync, state) do
     # This particular client is connecting for the first time, so it needs to perform
     # the initial sync before we start streaming any changes to it.
     #
@@ -520,17 +520,12 @@ defmodule Electric.Satellite.Protocol do
     {%SatInStartReplicationResp{}, state}
   end
 
-  defp handle_start_replication_request(_msg, :start_from_first, _state) do
+  defp handle_start_replication_request(_msg, :initial_sync, _state) do
     {:error,
      start_replication_error(
        :INVALID_POSITION,
-       "Cannot continue subscriptions while also starting from first LSN"
+       "Cannot resume subscriptions for a first-time client"
      )}
-  end
-
-  defp handle_start_replication_request(msg, :start_from_latest, state) do
-    state = subscribe_client_to_replication_stream(state, msg, :start_from_latest)
-    {%SatInStartReplicationResp{}, state}
   end
 
   defp handle_start_replication_request(msg, lsn, state) do
@@ -746,19 +741,12 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp validate_lsn(client_lsn, opts) do
-    case {Enum.member?(opts, :FIRST_LSN), Enum.member?(opts, :LAST_LSN)} do
-      {true, _} ->
-        {:ok, :start_from_first}
+  defp validate_lsn(""), do: {:ok, :initial_sync}
 
-      {_, true} ->
-        {:ok, :start_from_latest}
-
-      {false, false} ->
-        case CachedWal.Api.parse_wal_position(client_lsn) do
-          {:ok, value} -> {:ok, value}
-          :error -> {:error, {:malformed_lsn, client_lsn}}
-        end
+  defp validate_lsn(client_lsn) do
+    case CachedWal.Api.parse_wal_position(client_lsn) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, {:malformed_lsn, client_lsn}}
     end
   end
 

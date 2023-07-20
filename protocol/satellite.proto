@@ -96,20 +96,13 @@ message SatErrorResp {
 // (Consumer) Starts replication stream from producer to consumer
 message SatInStartReplicationReq {
     enum Option {
+        reserved 1, 3, 4;
+
+        // Required by the Protobuf spec.
         NONE = 0;
-        // Flag that indicates to Producer, to start replication from the latest
-        // position that has been acknowledged by this Consumer. In such a case
-        // provided lsn will be ignored
-        LAST_ACKNOWLEDGED = 1;
         // In sync mode consumer of the stream is expected to send SatPingResp
         // message for every committed batch of SatOpLog messages
         SYNC_MODE = 2;
-        // Asks receiver to start replication from the first transaction in the log
-        // without necessity to know about the actual internal format of the LSN
-        FIRST_LSN = 3;
-        // Asks receiver to start replication from the last position in the log,
-        // whatever this position is. Used for tests only.
-        LAST_LSN = 4;
     }
     // LSN position of the log on the producer side
     bytes lsn = 1;

@@ -398,7 +398,7 @@ defmodule Electric.Satellite.WsServer do
         sync_counter: 0
     }
 
-    {Enum.map(msgs, fn x -> binary_frame(x) end), %State{state | in_rep: in_rep}}
+    {binary_frames(msgs), %State{state | in_rep: in_rep}}
   end
 
   # Gen consumer cancels subscription, may only happen for subscribed consumer

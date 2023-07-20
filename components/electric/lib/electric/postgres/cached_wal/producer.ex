@@ -38,14 +38,8 @@ defmodule Electric.Postgres.CachedWal.Producer do
   @impl GenStage
   def handle_subscribe(:consumer, options, _, state) do
     Logger.debug("Got a subscription request with options #{inspect(options)}")
-
-    case Keyword.fetch(options, :start_subscription) do
-      {:ok, :start_from_latest} ->
-        raise "This producer doesn't currently support subscription starting from the tip of the stream"
-
-      {:ok, wal_pos} ->
-        {:automatic, %{state | current_position: wal_pos}}
-    end
+    wal_pos = Keyword.fetch!(options, :start_subscription)
+    {:automatic, %{state | current_position: wal_pos}}
   end
 
   @impl GenStage

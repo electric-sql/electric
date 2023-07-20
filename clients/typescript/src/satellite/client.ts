@@ -6,7 +6,6 @@ import {
   SatErrorResp,
   SatErrorResp_ErrorCode,
   SatInStartReplicationReq,
-  SatInStartReplicationReq_Option,
   SatInStartReplicationResp,
   SatInStopReplicationReq,
   SatInStopReplicationResp,
@@ -341,7 +340,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     // Perform validations and prepare the request
     let request
     if (!lsn || lsn.length == 0) {
-      Log.info(`no previous LSN, start replication with option FIRST_LSN`)
+      Log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
         return Promise.reject(
           new SatelliteError(
@@ -350,10 +349,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           )
         )
       }
-      request = SatInStartReplicationReq.fromPartial({
-        options: [SatInStartReplicationReq_Option.FIRST_LSN],
-        schemaVersion,
-      })
+      request = SatInStartReplicationReq.fromPartial({ schemaVersion })
     } else {
       Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
       request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
@@ -657,22 +653,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleStartReq(message: SatInStartReplicationReq) {
     Log.info(`received replication request ${JSON.stringify(message)}`)
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
-      const replication = { ...this.outbound }
-      if (
-        !message.options.find(
-          (o) => o == SatInStartReplicationReq_Option.LAST_ACKNOWLEDGED
-        )
-      ) {
-        replication.ack_lsn = message.lsn
-        replication.enqueued_lsn = message.lsn
-      }
-      if (
-        !message.options.find(
-          (o) => o == SatInStartReplicationReq_Option.FIRST_LSN
-        )
-      ) {
-        replication.ack_lsn = DEFAULT_LOG_POS
-        replication.enqueued_lsn = DEFAULT_LOG_POS
+      const replication = {
+        ...this.outbound,
+        ack_lsn: DEFAULT_LOG_POS,
+        enqueued_lsn: DEFAULT_LOG_POS,
       }
 
       this.outbound = this.resetReplication(

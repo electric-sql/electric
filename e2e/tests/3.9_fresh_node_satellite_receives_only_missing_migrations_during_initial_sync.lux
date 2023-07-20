@@ -31,7 +31,7 @@
 	?applying migration: $migration1_vsn
 
   # The client starts replication from scratch.
-  ?no previous LSN, start replication with option FIRST_LSN
+  ?no previous LSN, start replication from scratch
   # It passes its schema version to the server.
   ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\},.*?"schemaVersion":"$migration1_vsn"
   ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}

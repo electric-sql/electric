@@ -255,39 +255,12 @@
           end
         ),
         (
-          def encode(:LAST_ACKNOWLEDGED) do
-            1
-          end
-
-          def encode("LAST_ACKNOWLEDGED") do
-            1
-          end
-        ),
-        (
           def encode(:SYNC_MODE) do
             2
           end
 
           def encode("SYNC_MODE") do
             2
-          end
-        ),
-        (
-          def encode(:FIRST_LSN) do
-            3
-          end
-
-          def encode("FIRST_LSN") do
-            3
-          end
-        ),
-        (
-          def encode(:LAST_LSN) do
-            4
-          end
-
-          def encode("LAST_LSN") do
-            4
           end
         )
       ]
@@ -301,17 +274,8 @@
         def decode(0) do
           :NONE
         end,
-        def decode(1) do
-          :LAST_ACKNOWLEDGED
-        end,
         def decode(2) do
           :SYNC_MODE
-        end,
-        def decode(3) do
-          :FIRST_LSN
-        end,
-        def decode(4) do
-          :LAST_LSN
         end
       ]
 
@@ -321,7 +285,7 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :NONE}, {1, :LAST_ACKNOWLEDGED}, {2, :SYNC_MODE}, {3, :FIRST_LSN}, {4, :LAST_LSN}]
+        [{0, :NONE}, {2, :SYNC_MODE}]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -330,16 +294,7 @@
           def has_constant?(:NONE) do
             true
           end,
-          def has_constant?(:LAST_ACKNOWLEDGED) do
-            true
-          end,
           def has_constant?(:SYNC_MODE) do
-            true
-          end,
-          def has_constant?(:FIRST_LSN) do
-            true
-          end,
-          def has_constant?(:LAST_LSN) do
             true
           end
         ]
