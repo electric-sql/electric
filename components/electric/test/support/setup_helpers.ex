@@ -119,7 +119,7 @@ defmodule ElectricTest.SetupHelpers do
         {:messages, messages} = :erlang.process_info(self(), :messages)
 
         flunk(
-          "Timed out waiting for #{inspect(%SatSubsDataBegin{subscription_id: subscription_id})}.\n\nCurrent messages:#{inspect(messages, pretty: true)}"
+          "Timed out waiting for #{inspect(%SatSubsDataBegin{subscription_id: subscription_id})} after #{first_message_timeout} ms.\n\nCurrent messages: #{inspect(messages, pretty: true)}"
         )
     end
   end

@@ -217,7 +217,7 @@ defmodule Electric.Satellite.WsServer do
     {binary_frames(msgs), state}
   end
 
-  def websocket_info({:subscription_data, subscription_id, _, _}, %State{} = state)
+  def websocket_info({:subscription_data, subscription_id, _}, %State{} = state)
       when not is_map_key(state.subscriptions, subscription_id) do
     Logger.debug(
       "Received initial data for unknown subscription #{subscription_id}, likely it has been cancelled"
@@ -226,7 +226,7 @@ defmodule Electric.Satellite.WsServer do
     {[], state}
   end
 
-  def websocket_info({:subscription_data, subscription_id, _, data}, %State{} = state)
+  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state)
       when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) do
     Logger.debug(
       "Received initial data for subscription #{subscription_id} while paused waiting for it"
@@ -236,7 +236,7 @@ defmodule Electric.Satellite.WsServer do
     |> binary_frames()
   end
 
-  def websocket_info({:subscription_data, subscription_id, _, data}, %State{} = state)
+  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state)
       when is_out_rep_paused(state) do
     Logger.debug(
       "Received initial data for subscription #{subscription_id} while paused waiting for a different subscription"
@@ -245,26 +245,11 @@ defmodule Electric.Satellite.WsServer do
     {[], %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
-  def websocket_info({:subscription_data, subscription_id, observed_pos, data}, %State{} = state) do
-    Logger.debug(
-      "Received initial data for subscription #{subscription_id} while stream ongoing. Stream position is #{state.out_rep.last_seen_wal_pos}, observed subscription position is #{observed_pos}"
-    )
+  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state) do
+    Logger.debug("Saving the initial data until we reach insertion point")
 
-    if state.out_rep.last_seen_wal_pos == observed_pos do
-      Logger.debug(
-        "WAL position last observed by the WS process matches WAL position got by the query, so we'll send the data immediately"
-      )
-
-      # Between us requesting the data and receiving the data no transactions actually reached this stage, meaning we can safely send the data right now
-      send_subscription_data_and_unpause(subscription_id, data, state)
-      |> binary_frames()
-    else
-      Logger.debug("Saving the initial data until we reach insertion point")
-
-      # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
-      {[],
-       %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
-    end
+    # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
+    {[], %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
   def websocket_info({:subscription_init_failed, subscription_id, reason}, state) do
