@@ -4,7 +4,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230715000000_Utilit
   @behaviour Extension.Migration
 
   @impl true
-  def version, do: 20_230_715_000_000
+  def version, do: 2023_07_15_00_00_00
 
   @impl true
   def up(_) do

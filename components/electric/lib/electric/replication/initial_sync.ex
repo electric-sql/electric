@@ -69,8 +69,8 @@ defmodule Electric.Replication.InitialSync do
      at the end, we might have already skipped the point where the data is relevant.
   2. `{:subscription_data, subscription_id, data}` is when we've collected all the data.
 
-  One more this this function is expected to do is to perform any write to Postgres into a table that is a part
-  of our publication (i.e. the Electric will see it) and the table should probably part of the `electric` schema.
+  One more thing this function is expected to do is to record any write to Postgres in a table that is a part
+  of our publication (i.e. the Electric will see it) and the table should probably be part of the `electric` schema.
 
   Since the insertion point for this data is first observed transaction with xid >= xmin, if we receive this data
   and no writes come in after (e.g. when no writes are going on in PG), for example if there are no new writes
