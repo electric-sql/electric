@@ -254,7 +254,7 @@ export class SatelliteProcess implements Satellite {
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => select.tablename)
+      .map((select: ShapeSelect) => 'main.' + select.tablename) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
         stmts.push(
           ...this._disableTriggers([tablename]),
@@ -424,7 +424,7 @@ export class SatelliteProcess implements Satellite {
       this._handleSubscriptionError(
         new SatelliteError(
           SatelliteErrorCode.INTERNAL,
-          `Error applying subscription data: ${JSON.stringify(e)}`
+          `Error applying subscription data: ${(e as any).message}`
         )
       )
     }
@@ -437,6 +437,8 @@ export class SatelliteProcess implements Satellite {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
     const ids = await this.subscriptions.unsubscribeAll()
+
+    Log.error('Encountered a subscription error: ' + satelliteError.message)
 
     this._lsn = undefined
     await this.adapter.runInTransaction(

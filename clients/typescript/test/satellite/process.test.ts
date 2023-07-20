@@ -1531,6 +1531,23 @@ test('a subscription request failure does not clear the manager state', async (t
   }
 })
 
+test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await satellite.start(authState)
+  await runMigrations()
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  const ts = await satellite._performSnapshot()
+  await satellite._garbageCollectOplog(ts)
+  t.is((await satellite._getEntries(0)).length, 0)
+
+  satellite._garbageCollectShapeHandler([
+    { uuid: '', definition: { selects: [{ tablename: 'parent' }] } },
+  ])
+
+  await satellite._performSnapshot()
+  t.deepEqual(await satellite._getEntries(0), [])
+})
+
 // TODO: implement reconnect protocol
 
 // test('resume out of window clears subscriptions and clears oplog after ack', async (t) => {})
