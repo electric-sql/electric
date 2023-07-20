@@ -653,7 +653,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleStartReq(message: SatInStartReplicationReq) {
     Log.info(`received replication request ${JSON.stringify(message)}`)
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
-      const replication = { ...this.outbound, ack_lsn: message.lsn, enqueued_lsn: message.lsn}
+      const replication = {
+        ...this.outbound,
+        ack_lsn: message.lsn,
+        enqueued_lsn: message.lsn,
+      }
 
       this.outbound = this.resetReplication(
         replication.enqueued_lsn,

@@ -195,7 +195,7 @@ test.serial('replication start sends empty', async (t) => {
           msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
         ) {
           const req = decode(data!) as Proto.SatInStartReplicationReq
-          t.deepEqual( req.lsn, new Uint8Array())
+          t.deepEqual(req.lsn, new Uint8Array())
           t.pass()
           resolve()
         }
