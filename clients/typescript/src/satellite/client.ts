@@ -66,6 +66,7 @@ import {
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
+  emptyPromise,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
@@ -100,6 +101,12 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socket?: Socket
 
   private notifier: Notifier
+
+  private initializing?: {
+    promise: Promise<void>
+    resolve: () => void
+    reject: (e?: unknown) => void
+  }
 
   private inbound: Replication
   private outbound: OutgoingReplication
@@ -217,7 +224,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     enqueued?: LSN,
     ack?: LSN,
     isReplicating?: ReplicationStatus
-  ) {
+  ): OutgoingReplication {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
@@ -231,6 +238,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void> {
+    this.initializing = emptyPromise()
+
     const connectPromise = new Promise<void>((resolve, reject) => {
       // TODO: ensure any previous socket is closed, or reject
       if (this.socket) {
@@ -274,7 +283,12 @@ export class SatelliteClient extends EventEmitter implements Client {
       retryPolicy.retry = retryHandler
     }
 
-    return backOff(() => connectPromise, retryPolicy)
+    return backOff(() => connectPromise, retryPolicy).catch((e) => {
+      // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.initializing!.reject(e)
+      throw e
+    })
   }
 
   close(): Promise<void> {
@@ -291,6 +305,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.socketHandler = undefined
     this.removeAllListeners()
+    this.initializing?.promise.catch(() => void 0)
+    this.initializing?.reject(
+      new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'Socket is closed by the client while initializing'
+      )
+    )
+    this.initializing = undefined
     if (this.socket != undefined) {
       this.socket!.closeAndRemoveListeners()
       this.socket = undefined
@@ -317,8 +339,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       )
     }
 
-    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
-
+    // Perform validations and prepare the request
     let request
     if (!lsn || lsn.length == 0) {
       Log.info(`no previous LSN, start replication with option FIRST_LSN`)
@@ -339,7 +360,16 @@ export class SatelliteClient extends EventEmitter implements Client {
       request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
     }
 
-    return this.rpc(request)
+    // Then set the replication state
+    const promise = this.rpc<void>(request)
+      .then(() => this.initializing?.resolve())
+      .catch((e) => {
+        this.initializing?.reject(e)
+        throw e
+      })
+    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
+
+    return promise
   }
 
   stopReplication(): Promise<void> {
@@ -369,7 +399,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       token: token,
       headers: headers,
     })
-    return this.rpc<AuthResponse>(request)
+    return this.rpc<AuthResponse>(request).catch((e) => {
+      this.initializing?.reject(e)
+      throw e
+    })
   }
 
   subscribeToTransactions(
@@ -460,10 +493,14 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
   }
 
-  subscribe(
+  async subscribe(
     subscriptionId: string,
     shapes: ShapeRequest[]
   ): Promise<SubscribeResponse> {
+    if (this.initializing) {
+      await this.initializing.promise
+    }
+
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
