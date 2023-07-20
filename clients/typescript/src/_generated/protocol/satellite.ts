@@ -177,6 +177,13 @@ export enum SatInStartReplicationResp_ReplicationError_Code {
   INVALID_POSITION = 2,
   /** SUBSCRIPTION_NOT_FOUND - requested subscription not found */
   SUBSCRIPTION_NOT_FOUND = 3,
+  /** MALFORMED_LSN - the replication request has malformed LSN */
+  MALFORMED_LSN = 4,
+  /**
+   * UNKNOWN_SCHEMA_VSN - consumer requested replication at schema version that is
+   * not known to the producer
+   */
+  UNKNOWN_SCHEMA_VSN = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -493,6 +500,10 @@ export enum SatSubsResp_SatSubsError_ShapeReqError_Code {
   TABLE_NOT_FOUND = 1,
   /** REFERENTIAL_INTEGRITY_VIOLATION - Requested shape does not maintain referential integirty */
   REFERENTIAL_INTEGRITY_VIOLATION = 2,
+  /** EMPTY_SHAPE_DEFINITION - The shape request contains an empty shape definition */
+  EMPTY_SHAPE_DEFINITION = 3,
+  /** DUPLICATE_TABLE_IN_SHAPE_DEFINITION - Attempt to request the same table more than once in one shape */
+  DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4,
   UNRECOGNIZED = -1,
 }
 

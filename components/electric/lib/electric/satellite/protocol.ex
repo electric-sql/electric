@@ -296,15 +296,24 @@ defmodule Electric.Satellite.Protocol do
 
         {:error,
          start_replication_error(
-           :CODE_UNSPECIFIED,
+           :UNKNOWN_SCHEMA_VSN,
            "Unknown schema version: #{inspect(msg.schema_version)}"
          )}
+
+      {:error, {:malformed_lsn, client_lsn}} ->
+        Logger.warning("Client has supplied invalid LSN in the request: #{inspect(client_lsn)}")
+
+        {:error,
+         start_replication_error(:MALFORMED_LSN, "Could not validate start replication request")}
 
       {:error, reason} ->
         Logger.warning("Bad start replication request: #{inspect(reason)}")
 
         {:error,
-         start_replication_error(:CODE_UNSPECIFIED, "Could validate start replication request")}
+         start_replication_error(
+           :CODE_UNSPECIFIED,
+           "Could not validate start replication request"
+         )}
     end
   end
 
@@ -748,7 +757,7 @@ defmodule Electric.Satellite.Protocol do
       {false, false} ->
         case CachedWal.Api.parse_wal_position(client_lsn) do
           {:ok, value} -> {:ok, value}
-          :error -> {:error, {:lsn_invalid, client_lsn}}
+          :error -> {:error, {:malformed_lsn, client_lsn}}
         end
     end
   end

@@ -70,7 +70,7 @@ defmodule Electric.Replication.Shapes do
   end
 
   defp request_cannot_be_empty(%SatShapeDef{selects: []}),
-    do: {:CODE_UNSPECIFIED, "Empty shape requests are not allowed"}
+    do: {:EMPTY_SHAPE_DEFINITION, "Empty shape requests are not allowed"}
 
   defp request_cannot_be_empty(_), do: :ok
 
@@ -96,7 +96,7 @@ defmodule Electric.Replication.Shapes do
 
   defp tables_should_not_duplicate(%SatShapeDef{selects: selects}) do
     if Utils.has_duplicates_by?(selects, & &1.tablename) do
-      {:CODE_UNSPECIFIED, "Cannot select same table twice"}
+      {:DUPLICATE_TABLE_IN_SHAPE_DEFINITION, "Cannot select same table twice"}
     else
       :ok
     end
@@ -110,7 +110,7 @@ defmodule Electric.Replication.Shapes do
         :ok
 
       missing_reachable ->
-        {:CODE_UNSPECIFIED,
+        {:REFERENTIAL_INTEGRITY_VIOLATION,
          "Some tables are missing from the shape request, but are referenced by FKs on the requested tables: #{Enum.join(missing_reachable, ",")}"}
     end
   end

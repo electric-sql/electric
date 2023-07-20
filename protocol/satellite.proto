@@ -152,6 +152,13 @@ message SatInStartReplicationResp {
 
             // requested subscription not found
             SUBSCRIPTION_NOT_FOUND = 3;
+
+            // the replication request has malformed LSN
+            MALFORMED_LSN = 4;
+
+            // consumer requested replication at schema version that is
+            // not known to the producer
+            UNKNOWN_SCHEMA_VSN = 5;
         }
 
         // error code
@@ -417,6 +424,12 @@ message SatSubsResp {
 
                 // Requested shape does not maintain referential integirty
                 REFERENTIAL_INTEGRITY_VIOLATION = 2;
+
+                // The shape request contains an empty shape definition 
+                EMPTY_SHAPE_DEFINITION = 3;
+
+                // Attempt to request the same table more than once in one shape
+                DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4;
             }
 
             // error code
