@@ -83,6 +83,9 @@ importers:
       object.hasown:
         specifier: ^1.1.2
         version: 1.1.2
+      ohash:
+        specifier: ^1.1.2
+        version: 1.1.2
       protobufjs:
         specifier: ^7.1.1
         version: 7.2.3
@@ -10331,6 +10334,10 @@ packages:
       define-properties: 1.2.0
       es-abstract: 1.21.2
     dev: true
+
+  /ohash@1.1.2:
+    resolution: {integrity: sha512-9CIOSq5945rI045GFtcO3uudyOkYVY1nyfFxVQp+9BRgslr8jPNiSSrsFGg/BNTUFOLqx0P5tng6G32brIPw0w==}
+    dev: false
 
   /on-finished@2.3.0:
     resolution: {integrity: sha512-ikqdkGAAyf/X/gPhXGvfgAytDZtDbr+bkNUJ0N9h5MI/dmdgCs3l6hoHrcUv41sRKew3jIwrp4qQDXiK99Utww==}

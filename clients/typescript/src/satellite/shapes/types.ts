@@ -23,16 +23,15 @@ export type ClientShapeDefinition = {
   selects: ShapeSelect[]
 }
 
-export type ShapeRequestOrDefinition = {
-  uuid?: string
-  requestId?: string
+export type ShapeRequest = {
+  requestId: string
   definition: ClientShapeDefinition
 }
-
-export type ShapeRequest = Required<Omit<ShapeRequestOrDefinition, 'uuid'>>
-export type ShapeDefinition = Required<
-  Omit<ShapeRequestOrDefinition, 'requestId'>
->
+export type ShapeDefinition = {
+  uuid: string
+  definition: ClientShapeDefinition
+}
+export type ShapeRequestOrDefinition = ShapeRequest | ShapeDefinition
 
 export type ShapeSelect = {
   tablename: string

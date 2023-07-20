@@ -2,6 +2,7 @@ import { SatelliteError, SatelliteErrorCode } from '../../util/types'
 
 import EventEmitter from 'events'
 import {
+  ClientShapeDefinition,
   ShapeDefinition,
   ShapeRequest,
   ShapeRequestOrDefinition,
@@ -9,6 +10,7 @@ import {
   SubscriptionId,
 } from './types'
 import { SubscriptionsManager } from '.'
+import { hash } from 'ohash'
 
 type SubcriptionShapeDefinitions = Record<string, ShapeDefinition[]>
 
@@ -22,16 +24,14 @@ export class InMemorySubscriptionsManager
   extends EventEmitter
   implements SubscriptionsManager
 {
-  private inFlight: SubcriptionShapeRequests
-  private subToShapes: SubcriptionShapeDefinitions
+  private inFlight: SubcriptionShapeRequests = {}
+  private fulfilledSubscriptions: SubcriptionShapeDefinitions = {}
+  private readonly shapeRequestHashmap: Map<string, SubscriptionId> = new Map()
 
-  private gcHandler?: GarbageCollectShapeHandler
+  private readonly gcHandler?: GarbageCollectShapeHandler
 
   constructor(gcHandler?: GarbageCollectShapeHandler) {
     super()
-
-    this.inFlight = {}
-    this.subToShapes = {}
     this.gcHandler = gcHandler
   }
 
@@ -39,18 +39,29 @@ export class InMemorySubscriptionsManager
     subId: SubscriptionId,
     shapeRequests: ShapeRequest[]
   ): void {
-    if (this.inFlight[subId] || this.subToShapes[subId]) {
+    if (this.inFlight[subId] || this.fulfilledSubscriptions[subId]) {
       throw new SatelliteError(
         SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
         `a subscription with id ${subId} already exists`
       )
     }
 
+    const requestHash = computeRequestsHash(shapeRequests)
+
+    if (this.shapeRequestHashmap.has(requestHash)) {
+      throw new SatelliteError(
+        SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
+        `Subscription with exactly the same shape requests exists. Calling code should use "getDuplicatingSubscription" to avoid establishing same subscription twice`
+      )
+    }
+
     this.inFlight[subId] = shapeRequests
+    this.shapeRequestHashmap.set(requestHash, subId)
   }
 
   subscriptionCancelled(subId: SubscriptionId): void {
     delete this.inFlight[subId]
+    this.removeSubscriptionFromHash(subId)
   }
 
   subscriptionDelivered(data: SubscriptionData): void {
@@ -63,25 +74,37 @@ export class InMemorySubscriptionsManager
     const inflight = this.inFlight[subscriptionId]
     delete this.inFlight[subscriptionId]
     for (const shapeReq of inflight) {
-      const shapeRequestOrResolved = shapeReq as ShapeRequestOrDefinition
-      shapeRequestOrResolved.uuid = shapeReqToUuid[shapeReq.requestId]
-      delete shapeRequestOrResolved.requestId
+      const resolvedRequest: ShapeDefinition = {
+        uuid: shapeReqToUuid[shapeReq.requestId],
+        definition: shapeReq.definition,
+      }
 
-      this.subToShapes[subscriptionId] = this.subToShapes[subscriptionId] ?? []
-      this.subToShapes[subscriptionId].push(
-        shapeRequestOrResolved as ShapeDefinition
-      )
+      this.fulfilledSubscriptions[subscriptionId] =
+        this.fulfilledSubscriptions[subscriptionId] ?? []
+      this.fulfilledSubscriptions[subscriptionId].push(resolvedRequest)
     }
   }
 
   shapesForActiveSubscription(
     subId: SubscriptionId
   ): ShapeDefinition[] | undefined {
-    return this.subToShapes[subId]
+    return this.fulfilledSubscriptions[subId]
   }
 
   getFulfilledSubscriptions(): SubscriptionId[] {
-    return Object.keys(this.subToShapes)
+    return Object.keys(this.fulfilledSubscriptions)
+  }
+
+  getDuplicatingSubscription(
+    shapes: ClientShapeDefinition[]
+  ): null | { inFlight: string } | { fulfilled: string } {
+    const subId = this.shapeRequestHashmap.get(computeClientDefsHash(shapes))
+    if (subId) {
+      if (this.inFlight[subId]) return { inFlight: subId }
+      else return { fulfilled: subId }
+    } else {
+      return null
+    }
   }
 
   async unsubscribe(subId: SubscriptionId): Promise<void> {
@@ -92,12 +115,13 @@ export class InMemorySubscriptionsManager
       }
 
       delete this.inFlight[subId]
-      delete this.subToShapes[subId]
+      delete this.fulfilledSubscriptions[subId]
+      this.removeSubscriptionFromHash(subId)
     }
   }
 
   async unsubscribeAll(): Promise<string[]> {
-    const ids = Object.keys(this.subToShapes)
+    const ids = Object.keys(this.fulfilledSubscriptions)
     for (const subId of ids) {
       await this.unsubscribe(subId)
     }
@@ -105,12 +129,35 @@ export class InMemorySubscriptionsManager
   }
 
   serialize(): string {
-    return JSON.stringify(this.subToShapes)
+    return JSON.stringify(this.fulfilledSubscriptions)
   }
 
   // TODO: input validation
   setState(serialized: string): void {
     this.inFlight = {}
-    this.subToShapes = JSON.parse(serialized)
+    this.fulfilledSubscriptions = JSON.parse(serialized)
+
+    this.shapeRequestHashmap.clear()
+    for (const [key, value] of Object.entries(this.fulfilledSubscriptions)) {
+      this.shapeRequestHashmap.set(computeRequestsHash(value), key)
+    }
   }
+
+  private removeSubscriptionFromHash(subId: SubscriptionId): void {
+    // Rare enough that we can spare inefficiency of not having a reverse map
+    for (const [hash, subscription] of this.shapeRequestHashmap) {
+      if (subscription === subId) {
+        this.shapeRequestHashmap.delete(hash)
+        break
+      }
+    }
+  }
+}
+
+function computeRequestsHash(requests: ShapeRequestOrDefinition[]): string {
+  return computeClientDefsHash(requests.map((x) => x.definition))
+}
+
+function computeClientDefsHash(requests: ClientShapeDefinition[]): string {
+  return hash(requests)
 }
