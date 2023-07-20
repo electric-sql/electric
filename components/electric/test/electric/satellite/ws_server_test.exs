@@ -471,7 +471,7 @@ defmodule Electric.Satellite.WsServerTest do
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
         refute_receive {^conn, %SatOpLog{}}
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
         assert_receive {^conn, %SatOpLog{ops: [_, %{op: {:insert, insert}}, _]}}
         assert %SatOpInsert{row_data: %{values: ["fakeid", user_id, "a"]}} = insert
         assert user_id == ctx.user_id
@@ -505,7 +505,8 @@ defmodule Electric.Satellite.WsServerTest do
         assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
 
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        # Expected LSN is the one BEFORE the insertion point
+        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "3")
 
         for _ <- 4..10, do: assert_receive({^conn, %SatOpLog{}})
         refute_receive {^conn, %SatOpLog{}}

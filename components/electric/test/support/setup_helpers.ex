@@ -106,12 +106,19 @@ defmodule ElectricTest.SetupHelpers do
   Waits for the `SatSubsDataBegin` message, then for each shape data, then for the end message,
   and verifies their order. Returns a map, where the shape request ids are keys, and the `SatOpInsert` operations are values.
   """
-  @spec receive_subscription_data(term(), String.t(), non_neg_integer()) :: %{
-          optional(String.t()) => [%SatOpInsert{}]
-        }
-  def receive_subscription_data(conn, subscription_id, first_message_timeout \\ 1000) do
+  @spec receive_subscription_data(term(), String.t(), [
+          {:timeout, non_neg_integer()} | {:expecting_lsn, String.t()}
+        ]) :: %{optional(String.t()) => [%SatOpInsert{}]}
+  def receive_subscription_data(conn, subscription_id, opts \\ []) do
+    first_message_timeout = Keyword.get(opts, :timeout, 1000)
+
     receive do
-      {^conn, %SatSubsDataBegin{subscription_id: ^subscription_id}} ->
+      {^conn, %SatSubsDataBegin{subscription_id: ^subscription_id, lsn: received_lsn}} ->
+        case Keyword.fetch(opts, :expecting_lsn) do
+          {:ok, expected_lsn} -> assert expected_lsn == received_lsn
+          _ -> nil
+        end
+
         receive_rest_of_subscription_data(conn, [])
         |> assert_subscription_data_format(%{})
     after

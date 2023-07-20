@@ -359,7 +359,7 @@ export class SatelliteProcess implements Satellite {
   async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
     this.subscriptions.subscriptionDelivered(subsData)
     if (subsData.data) {
-      await this._applySubscriptionData(subsData.data)
+      await this._applySubscriptionData(subsData.data, subsData.lsn)
     }
     // Call the `onSuccess` callback for this subscription
     const [onSuccess, _] = this.subscriptionNotifiers[subsData.subscriptionId]
@@ -370,7 +370,7 @@ export class SatelliteProcess implements Satellite {
   // Applies initial data for a shape subscription. Current implementation
   // assumes there are no conflicts INSERTing new rows and only expects
   // subscriptions for entire tables.
-  async _applySubscriptionData(changes: InitialDataChange[]) {
+  async _applySubscriptionData(changes: InitialDataChange[], lsn: LSN) {
     const stmts: Statement[] = []
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
@@ -413,9 +413,11 @@ export class SatelliteProcess implements Satellite {
       stmts.push(...this._enableTriggers([tablenameStr]))
     }
 
-    // persist subscriptions state
     stmts.push(
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+      // persist subscriptions state
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
+      // persist LSN
+      this.updateLsnStmt(lsn)
     )
 
     try {
@@ -991,12 +993,7 @@ export class SatelliteProcess implements Satellite {
     // switches off on transaction commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     // update lsn.
-    this._lsn = lsn
-    const lsn_base64 = base64.fromBytes(lsn)
-    stmts.push({
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
-      args: [lsn_base64, 'lsn'],
-    })
+    stmts.push(this.updateLsnStmt(lsn))
 
     const processDML = async (changes: DataChange[]) => {
       const tx = {
@@ -1009,7 +1006,7 @@ export class SatelliteProcess implements Satellite {
       // This only needs to be done once, even if there are several DML chunks
       // because all those chunks are part of the same transaction.
       if (firstDMLChunk) {
-        Log.info(`apply incoming changes for LSN: ${lsn}`)
+        Log.info(`apply incoming changes for LSN: ${base64.fromBytes(lsn)}`)
         // assign timestamp to pending operations before apply
         await this._performSnapshot()
         firstDMLChunk = false
@@ -1301,6 +1298,21 @@ export class SatelliteProcess implements Satellite {
       WHERE timestamp = ?;
     `
     await this.adapter.run({ sql: stmt, args: [isoString] })
+  }
+
+  /**
+   * Update `this._lsn` to the new value and generate a statement to persist this change
+   *
+   * @param lsn new LSN value
+   * @returns statement to be executed to save the new LSN value in the database
+   */
+  private updateLsnStmt(lsn: LSN): Statement {
+    this._lsn = lsn
+    const lsn_base64 = base64.fromBytes(lsn)
+    return {
+      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
+      args: [lsn_base64, 'lsn'],
+    }
   }
 }
 

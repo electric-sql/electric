@@ -518,6 +518,8 @@ message SatSubsDataError {
 message SatSubsDataBegin {
     // Identifier of the subscription
     string subscription_id = 1;
+    // LSN at which this data is being sent. May be a duplicate of a transaction that was sent immediately before.
+    bytes lsn = 2;
 }
 
 // End delimiter for the incoming subscription data

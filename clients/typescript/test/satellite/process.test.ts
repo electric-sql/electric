@@ -1248,6 +1248,9 @@ test('apply shape data and persist subscription', async (t) => {
     const subsMeta = await satellite._getMeta('subscriptions')
     const subsObj = JSON.parse(subsMeta)
     t.is(Object.keys(subsObj).length, 1)
+
+    // Check that we save the LSN sent by the mock
+    t.deepEqual(satellite._lsn, base64.toBytes('MTIz'))
   } catch (e) {
     t.fail(JSON.stringify(e))
   }

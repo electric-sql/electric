@@ -700,7 +700,7 @@ defmodule Electric.Satellite.Protocol do
     %OutRep{out_rep | status: nil, pid: nil, stage_sub: nil}
   end
 
-  def handle_subscription_data(id, data, state) do
+  def handle_subscription_data(id, data, %State{} = state) do
     # TODO: in a perfect world there would be potential to stream out the changes instead of
     #       sending it all at once. It's quite hard to do with :ranch, or I haven't found a way.
     {relations, messages, state} =
@@ -711,9 +711,20 @@ defmodule Electric.Satellite.Protocol do
         {[new_relations | relations], [new_messages | messages], %{state | out_rep: out_rep}}
       end)
 
+    # We use the `last_seen_wal_pos` here since if we're in this function, we're sending the data
+    # at this point in the stream, and `last_seen_wal_pos` definitely contains the last LSN seen by
+    # the client prior to this point.
+    #
+    # The reason it's here at all is because for fresh clients who prefetched migrations this is
+    # the first replication message they see. If they don't get any data afterwards, then they have
+    # no LSN to supply on reconnection, leading to issues/hacks.
     {[
        relations,
-       %SatSubsDataBegin{subscription_id: id},
+       %SatSubsDataBegin{
+         subscription_id: id,
+         lsn:
+           Electric.Postgres.CachedWal.Api.serialize_wal_position(state.out_rep.last_seen_wal_pos)
+       },
        messages,
        %SatSubsDataEnd{}
      ], state}

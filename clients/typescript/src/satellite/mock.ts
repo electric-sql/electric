@@ -24,7 +24,7 @@ import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
 import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS, subsDataErrorToSatelliteError } from '../util'
+import { DEFAULT_LOG_POS, subsDataErrorToSatelliteError, base64 } from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
 import {
@@ -34,6 +34,7 @@ import {
   SUBSCRIPTION_ERROR,
   ShapeRequest,
   SubscribeResponse,
+  SubscriptionData,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   UnsubscribeResponse,
@@ -192,9 +193,10 @@ export class MockSatelliteClient extends EventEmitter implements Client {
       setTimeout(() => {
         this.emit(SUBSCRIPTION_DELIVERED, {
           subscriptionId,
+          lsn: base64.toBytes('MTIz'), // base64.encode("123")
           data,
           shapeReqToUuid,
-        })
+        } as SubscriptionData)
       }, 1)
 
       resolve({

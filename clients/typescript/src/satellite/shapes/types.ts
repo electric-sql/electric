@@ -1,3 +1,4 @@
+import { SatSubsDataBegin } from '../../_generated/protocol/satellite'
 import { DataChange, SatelliteError } from '../../util'
 
 export const SUBSCRIPTION_DELIVERED = 'subscription_delivered'
@@ -39,6 +40,7 @@ export type ShapeSelect = {
 
 export type SubscriptionData = {
   subscriptionId: SubscriptionId
+  lsn: SatSubsDataBegin['lsn']
   data: InitialDataChange[]
   shapeReqToUuid: { [req: string]: string }
 }
