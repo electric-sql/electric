@@ -16598,7 +16598,7 @@
   end,
   defmodule Electric.Satellite.V14.SatSubsDataBegin do
     @moduledoc false
-    defstruct subscription_id: "", __uf__: []
+    defstruct subscription_id: "", lsn: "", __uf__: []
 
     (
       (
@@ -16613,7 +16613,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_subscription_id(msg) |> encode_unknown_fields(msg)
+          [] |> encode_subscription_id(msg) |> encode_lsn(msg) |> encode_unknown_fields(msg)
         end
       )
 
@@ -16631,6 +16631,18 @@
             ArgumentError ->
               reraise Protox.EncodingError.new(:subscription_id, "invalid field value"),
                       __STACKTRACE__
+          end
+        end,
+        defp encode_lsn(acc, msg) do
+          try do
+            if msg.lsn == "" do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_bytes(msg.lsn)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:lsn, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -16692,6 +16704,11 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[subscription_id: delimited], rest}
 
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[lsn: delimited], rest}
+
               {tag, wire_type, rest} ->
                 {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
 
@@ -16752,7 +16769,7 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:subscription_id, {:scalar, ""}, :string}}
+        %{1 => {:subscription_id, {:scalar, ""}, :string}, 2 => {:lsn, {:scalar, ""}, :bytes}}
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -16760,7 +16777,7 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{subscription_id: {1, {:scalar, ""}, :string}}
+        %{lsn: {2, {:scalar, ""}, :bytes}, subscription_id: {1, {:scalar, ""}, :string}}
       end
     )
 
@@ -16776,6 +16793,15 @@
             name: :subscription_id,
             tag: 1,
             type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "lsn",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :lsn,
+            tag: 2,
+            type: :bytes
           }
         ]
       end
@@ -16822,6 +16848,35 @@
              }}
           end
         ),
+        (
+          def field_def(:lsn) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "lsn",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :lsn,
+               tag: 2,
+               type: :bytes
+             }}
+          end
+
+          def field_def("lsn") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "lsn",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :lsn,
+               tag: 2,
+               type: :bytes
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -16862,6 +16917,9 @@
     [
       @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
       def default(:subscription_id) do
+        {:ok, ""}
+      end,
+      def default(:lsn) do
         {:ok, ""}
       end,
       def default(_) do

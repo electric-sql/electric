@@ -577,6 +577,8 @@ export interface SatSubsDataBegin {
   $type: "Electric.Satellite.v1_4.SatSubsDataBegin";
   /** Identifier of the subscription */
   subscriptionId: string;
+  /** LSN at which this data is being sent. May be a duplicate of a transaction that was sent immediately before. */
+  lsn: Uint8Array;
 }
 
 /** End delimiter for the incoming subscription data */
@@ -3315,7 +3317,7 @@ export const SatSubsDataError_ShapeReqError = {
 messageTypeRegistry.set(SatSubsDataError_ShapeReqError.$type, SatSubsDataError_ShapeReqError);
 
 function createBaseSatSubsDataBegin(): SatSubsDataBegin {
-  return { $type: "Electric.Satellite.v1_4.SatSubsDataBegin", subscriptionId: "" };
+  return { $type: "Electric.Satellite.v1_4.SatSubsDataBegin", subscriptionId: "", lsn: new Uint8Array() };
 }
 
 export const SatSubsDataBegin = {
@@ -3324,6 +3326,9 @@ export const SatSubsDataBegin = {
   encode(message: SatSubsDataBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.subscriptionId !== "") {
       writer.uint32(10).string(message.subscriptionId);
+    }
+    if (message.lsn.length !== 0) {
+      writer.uint32(18).bytes(message.lsn);
     }
     return writer;
   },
@@ -3342,6 +3347,13 @@ export const SatSubsDataBegin = {
 
           message.subscriptionId = reader.string();
           continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.lsn = reader.bytes();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3358,6 +3370,7 @@ export const SatSubsDataBegin = {
   fromPartial<I extends Exact<DeepPartial<SatSubsDataBegin>, I>>(object: I): SatSubsDataBegin {
     const message = createBaseSatSubsDataBegin();
     message.subscriptionId = object.subscriptionId ?? "";
+    message.lsn = object.lsn ?? new Uint8Array();
     return message;
   },
 };

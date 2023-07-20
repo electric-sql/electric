@@ -26,6 +26,7 @@ type RequestId = string
 
 type SubscriptionDataInternal = {
   subscriptionId: SubscriptionId
+  lsn: SatSubsDataBegin['lsn']
   transaction: SatTransOp[]
   shapeReqToUuid: Record<string, string>
 }
@@ -65,7 +66,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
   }
 
-  subscriptionDataBegin({ subscriptionId }: SatSubsDataBegin) {
+  subscriptionDataBegin({ subscriptionId, lsn }: SatSubsDataBegin) {
     if (!this.requestedSubscriptions[subscriptionId]) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -84,7 +85,8 @@ export class SubscriptionsDataCache extends EventEmitter {
 
     this.remainingShapes = this.requestedSubscriptions[subscriptionId]
     this.inDelivery = {
-      subscriptionId: subscriptionId,
+      subscriptionId,
+      lsn,
       transaction: [],
       shapeReqToUuid: {},
     }
@@ -110,6 +112,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     const delivered = this.inDelivery
     const subscriptionData: SubscriptionData = {
       subscriptionId: delivered.subscriptionId,
+      lsn: delivered.lsn,
       data: delivered.transaction.map((t) =>
         this.proccessShapeDataOperations(t, relations)
       ),
