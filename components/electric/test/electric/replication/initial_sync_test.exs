@@ -7,8 +7,6 @@ defmodule Electric.Replication.InitialSyncTest do
   alias Electric.Replication.Changes.{NewRecord, Transaction}
   alias Electric.Replication.InitialSync
 
-  require Logger
-
   @origin "initial-sync-test"
   @sleep_timeout 50
 
