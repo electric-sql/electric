@@ -146,7 +146,7 @@ BEGIN
 
         EXECUTE format('<%= publication_sql %>;', '<%= schema %>', ('shadow__' || _schema || '__' || _table)::name);
     ELSE
-        RAISE WARNING 'table %.% is already electrified', _schema, _table;
+        RAISE EXCEPTION 'table %.% is already electrified', _schema, _table;
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;
