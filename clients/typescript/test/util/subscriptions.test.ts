@@ -6,6 +6,7 @@ import {
   InitialDataChange,
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
+import { base64 } from '../../src/util'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager
@@ -62,6 +63,7 @@ test('some tests', (t) => {
 
   const subscriptionData: SubscriptionData = {
     subscriptionId,
+    lsn: base64.toBytes('MTIz'),
     data: [dataChange],
     shapeReqToUuid,
   }

@@ -577,7 +577,7 @@ export interface SatSubsDataBegin {
   $type: "Electric.Satellite.v1_4.SatSubsDataBegin";
   /** Identifier of the subscription */
   subscriptionId: string;
-  /** LSN at which this data is being sent. May be duplicated by the transaction that comes immediately after. */
+  /** LSN at which this data is being sent. May be a duplicate of a transaction that was sent immediately before. */
   lsn: Uint8Array;
 }
 
