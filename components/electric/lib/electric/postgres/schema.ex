@@ -344,19 +344,42 @@ defmodule Electric.Postgres.Schema do
   defp blank(s) when is_binary(s), do: s
 
   @doc """
+  Retrieve the given oid loader function from function opts and validate that
+  it's a 3-arity function.
+  """
+  @spec verify_oid_loader!(Keyword.t()) ::
+          (:index | :table | :trigger | :view, schema :: binary(), name :: binary() -> integer())
+  def verify_oid_loader!(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :oid_loader) do
+      {:ok, loader} when is_function(loader, 3) ->
+        loader
+
+      {:ok, _loader} ->
+        raise ArgumentError,
+          message:
+            "`:oid_loader` should be an arity-3 function (type :: :index | :table | :trigger | :view, schema :: binary(), name :: binary()) -> {:ok, integer()}"
+
+      :error ->
+        raise ArgumentError,
+          message: "missing `:oid_loader` option"
+    end
+  end
+
+  @doc """
   Enrich the schema with shadow tables for each table.
 
   We don't check if the shadow tables actually exist, so only electrified
   tables (or other tables that are expected to have shadows) should be included
   in the schema passed to this function
   """
-  def add_shadow_tables(%Proto.Schema{tables: tables} = schema) do
-    shadow_tables =
-      tables
-      |> Enum.reject(&is_shadow_table?/1)
-      |> Enum.map(&build_shadow_table/1)
+  def add_shadow_tables(%Proto.Schema{tables: tables} = schema, opts) do
+    oid_loader = verify_oid_loader!(opts)
+    normal_tables = Enum.reject(tables, &is_shadow_table?/1)
 
-    %{schema | tables: tables ++ shadow_tables}
+    shadow_tables =
+      Enum.map(normal_tables, &build_shadow_table(&1, oid_loader))
+
+    %{schema | tables: normal_tables ++ shadow_tables}
   end
 
   @schema Electric.Postgres.Extension.schema()
@@ -399,7 +422,7 @@ defmodule Electric.Postgres.Schema do
     %Proto.Column{name: "_currently_reordering", type: %Proto.Column.Type{name: "bool"}}
   ]
 
-  defp build_shadow_table(%Proto.Table{} = main) do
+  defp build_shadow_table(%Proto.Table{} = main, oid_loader) do
     # The columns based on the main table lack any defaults/constraints on shadow tables
     stripped_columns = Enum.map(main.columns, &Map.put(&1, :constraints, []))
     {:ok, pk_column_names} = primary_keys(main)
@@ -417,19 +440,15 @@ defmodule Electric.Postgres.Schema do
         &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
       )
 
+    table_name = "shadow__#{main.name.schema}__#{main.name.name}"
+
+    {:ok, oid} = oid_loader.(:table, @schema, table_name)
+
     %Proto.Table{
-      # `MigrationConsumer` code currently has logic that for any incoming relation, we're the OID already in the `SchemaRegistry`.
-      # Hence, we just need any oid that's not going to collide. `oid` type is uint4, with max being 4,294,967,295.
-      # Let's add 2,000,000,000 to original table oid and hope for the best.
-      # OID generation is done on PG side by an increasing counter [1] and not a random value,
-      # and that counter functionally starts at 16384 [2]. I think that starting our "fake" oid generation near the end,
-      # with it only being required to not conflict within one table (`pg_class`) seems fine for now.
-      #
-      # TODO: Add more robust checks to definitely not collide in our own SchemaRegistry or alternatives.
-      oid: 2_000_000_000 + main.oid,
+      oid: oid,
       name: %Proto.RangeVar{
         schema: @schema,
-        name: "shadow__#{main.name.schema}__#{main.name.name}"
+        name: table_name
       },
       columns: pks ++ @shadow_columns ++ timestamps ++ reordered,
       constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),

@@ -66,20 +66,7 @@ defmodule Electric.Postgres.Schema.Update do
   end
 
   def apply_stmt(schema, cmds, opts) when is_list(opts) do
-    oid_loader =
-      case Keyword.fetch(opts, :oid_loader) do
-        {:ok, loader} when is_function(loader, 3) ->
-          loader
-
-        {:ok, _loader} ->
-          raise ArgumentError,
-            message:
-              "`:oid_loader` should be an arity-3 function (type :: :index | :table | :trigger | :view, schema :: binary(), name :: binary()) -> {:ok, integer()}"
-
-        :error ->
-          raise ArgumentError,
-            message: "missing `:oid_loader` option"
-      end
+    oid_loader = Schema.verify_oid_loader!(opts)
 
     opts = %Opts{oid_loader: oid_loader}
     apply_stmt(schema, cmds, opts)

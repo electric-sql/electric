@@ -185,7 +185,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         Logger.info("Applying migration #{version}: #{inspect(stmt)}")
         Schema.update(schema, stmt, oid_loader: oid_loader)
       end)
-      |> Schema.add_shadow_tables()
+      |> Schema.add_shadow_tables(oid_loader: oid_loader)
 
     save_schema(state, version, schema, stmts)
   end
