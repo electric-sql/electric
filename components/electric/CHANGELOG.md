@@ -1,5 +1,15 @@
 # @core/electric
 
+## 0.5.0-next.2
+
+### Patch Changes
+
+- 089968d: Fixed the issue whereby calling electrify() on a previously electrified table caused a duplicate migration to be created and put onto the replication stream.
+- 8b8cc93: Fix a bug in schema version validation
+- e17b37e: Fix the bug where the client failed to restart the replication connection after completing the initial sync once.
+- 2e8bfdf: Fixed the client not being able to reconnect if the migrations were preloaded and the only operation was a subscription. In that case the client have never received any LSNs (because migrations didn't need to be sent), so reconnection yielded errors due to missing LSN but existing previously fulfilled subscriptions. We now send the LSN with the subscription data so even if it's the first and only received message, the client has enough information to proceed.
+- 3ca4917: Fixed an issue where sometimes subscription data would not be sent in absence of other writes to PG
+
 ## 0.5.0-next.1
 
 ### Patch Changes
