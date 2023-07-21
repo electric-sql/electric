@@ -20,6 +20,8 @@ export const Example = () => {
         }
       })
       setElectric(db)
+      // Calling `.sync()` methods is possible here, right after init:
+      // await db.db.items.sync()
     }
 
     init()
@@ -38,7 +40,12 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(db.items.liveMany({})) // select all items
+  // Or here, in a `useEffect` without dependencies to limit it running once per component render.
+  useEffect(() => void db.items.sync(), [])
+
+  // `useliveQuery` will keep this variable up to data with the SQLite database, but to get data from server into SQLite
+  // you need to call `.sync()`, as demonstrated on the line above
+  const { results } = useLiveQuery(db.items.liveMany({})) // select all 
 
   const addItem = async () => {
     await db.items.create({
