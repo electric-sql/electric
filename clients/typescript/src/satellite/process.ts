@@ -440,6 +440,15 @@ export class SatelliteProcess implements Satellite {
 
     try {
       await this.adapter.runInTransaction(...stmts)
+
+      // We're explicitly not specifying rowids in these changes for now,
+      // because nobody uses them and we don't have the machinery to to a
+      // `RETURNING` clause in the middle of `runInTransaction`.
+      const notificationChanges: Change[] = changes.map((x) => ({
+        qualifiedTablename: new QualifiedTablename('main', x.relation.table),
+        rowids: [],
+      }))
+      this.notifier.actuallyChanged(this.dbName, notificationChanges)
     } catch (e) {
       this._handleSubscriptionError(
         new SatelliteError(
