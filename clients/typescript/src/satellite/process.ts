@@ -33,7 +33,6 @@ import {
   Row,
   MigrationTable,
   SatelliteErrorCode,
-  RelationColumn,
   SqlValue,
 } from '../util/types'
 import { SatelliteOpts } from './config'
@@ -82,6 +81,7 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { SubscriptionsManager } from './shapes'
+import { prepareBatchedStatements } from '../util/statements'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -123,6 +123,14 @@ export class SatelliteProcess implements Satellite {
   subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
+
+  /*
+  To optimize inserting a lot of data when the subscription data comes, we need to do
+  less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
+  arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
+  versions after.
+  */
+  private maxSqlParameters: 999 | 32766 = 999
 
   constructor(
     dbName: DbName,
@@ -218,6 +226,7 @@ export class SatelliteProcess implements Satellite {
 
     // Need to reload primary keys after schema migration
     this.relations = await this._getLocalRelations()
+    this.checkMaxSqlParameters()
 
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
@@ -392,49 +401,84 @@ export class SatelliteProcess implements Satellite {
     const stmts: Statement[] = []
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
+    // It's much faster[1] to do less statements to insert the data instead of doing an insert statement for each row
+    // so we're going to do just that, but with a caveat: SQLite has a max number of parameters in prepared statements,
+    // so this is less of "insert all at once" and more of "insert in batches". This should be even more noticeable with
+    // WASM builds, since we'll be crossing the JS-WASM boundary less.
+    //
+    // [1]: https://medium.com/@JasonWyatt/squeezing-performance-from-sqlite-insertions-971aff98eef2
+
+    const groupedChanges = new Map<
+      string,
+      { columns: string[]; records: InitialDataChange['record'][] }
+    >()
+
+    const allArgsForShadowInsert: Record<
+      'namespace' | 'tablename' | 'primaryKey' | 'tags',
+      SqlValue
+    >[] = []
+
+    // Group all changes by table name to be able to insert them all together
     for (const op of changes) {
-      const { relation, record, tags } = op
+      const tableName = new QualifiedTablename('main', op.relation.table)
+      if (groupedChanges.has(tableName.toString())) {
+        groupedChanges.get(tableName.toString())?.records.push(op.record)
+      } else {
+        groupedChanges.set(tableName.toString(), {
+          columns: op.relation.columns.map((x) => x.name),
+          records: [op.record],
+        })
+      }
 
-      const qualifiedTablename = new QualifiedTablename('main', relation.table)
-      const tablenameStr = qualifiedTablename.toString()
+      // Since we're already iterating changes, we can also prepare data for shadow table
+      const primaryKeyCols = op.relation.columns.reduce((agg, col) => {
+        if (col.primaryKey)
+          agg[col.name] = op.record[col.name] as string | number
+        return agg
+      }, {} as Record<string, string | number>)
 
-      const columnNames = Object.keys(record!)
-      const columnValues = Object.values(record!) as SqlValue[]
-
-      const insertStmt = `INSERT INTO ${tablenameStr} (${columnNames.join(
-        ', '
-      )}) VALUES (${columnValues.map((_) => '?').join(', ')})`
-      const insertArgs = [...columnValues]
-
-      const primaryKeyCols = relation.columns.reduce(
-        (prev: { [k in string]: string | number }, curr: RelationColumn) => {
-          if (curr.primaryKey && record) {
-            prev[curr.name] = record![curr.name] as string | number
-          }
-          return prev
-        },
-        {}
-      )
-
-      const upsertShadowStmt = `
-        INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES (?,?,?,?)`
-      const upsertShadowArgs = [
-        'main',
-        relation.table,
-        primaryKeyToStr(primaryKeyCols),
-        encodeTags(tags),
-      ]
-
-      stmts.push(...this._disableTriggers([tablenameStr]))
-      stmts.push({ sql: insertStmt, args: insertArgs })
-      stmts.push({ sql: upsertShadowStmt, args: upsertShadowArgs })
-      stmts.push(...this._enableTriggers([tablenameStr]))
+      allArgsForShadowInsert.push({
+        namespace: 'main',
+        tablename: op.relation.table,
+        primaryKey: primaryKeyToStr(primaryKeyCols),
+        tags: encodeTags(op.tags),
+      })
     }
 
+    // Disable trigger for all affected tables
+    stmts.push(...this._disableTriggers([...groupedChanges.keys()]))
+
+    // For each table, do a batched insert
+    for (const [table, { columns, records }] of groupedChanges) {
+      const sqlBase = `INSERT INTO ${table} (${columns.join(', ')}) VALUES `
+
+      stmts.push(
+        ...prepareBatchedStatements(
+          sqlBase,
+          columns,
+          records as Record<string, SqlValue>[],
+          this.maxSqlParameters
+        )
+      )
+    }
+
+    // And re-enable the triggers for all of them
+    stmts.push(...this._enableTriggers([...groupedChanges.keys()]))
+
+    // Then do a batched insert for the shadow table
+    const upsertShadowStmt = `INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES `
     stmts.push(
-      // persist subscriptions state
+      ...prepareBatchedStatements(
+        upsertShadowStmt,
+        ['namespace', 'tablename', 'primaryKey', 'tags'],
+        allArgsForShadowInsert,
+        this.maxSqlParameters
+      )
+    )
+
+    // Then update subscription state and LSN
+    stmts.push(
       this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
-      // persist LSN
       this.updateLsnStmt(lsn)
     )
 
@@ -1179,11 +1223,16 @@ export class SatelliteProcess implements Satellite {
 
   _updateTriggerSettings(tablenames: string[], flag: 0 | 1): Statement[] {
     const triggers = this.opts.triggersTable.toString()
-    const stmts = tablenames.map((tablenameStr) => ({
-      sql: `UPDATE ${triggers} SET flag = ? WHERE tablename = ?`,
-      args: [flag, tablenameStr],
-    }))
-    return stmts
+    if (tablenames.length > 0)
+      return [
+        {
+          sql: `UPDATE ${triggers} SET flag = ? WHERE ${tablenames
+            .map(() => 'tablename = ?')
+            .join(' OR ')}`,
+          args: [flag, ...tablenames],
+        },
+      ]
+    else return []
   }
 
   async _ack(lsn: number, isAck: boolean): Promise<void> {
@@ -1331,6 +1380,17 @@ export class SatelliteProcess implements Satellite {
       sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
       args: [lsn_base64, 'lsn'],
     }
+  }
+
+  private async checkMaxSqlParameters() {
+    const [{ version }] = (await this.adapter.query({
+      sql: 'SELECT sqlite_version() AS version',
+    })) as [{ version: string }]
+
+    const [major, minor, _patch] = version.split('.').map((x) => parseInt(x))
+
+    if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
+    else this.maxSqlParameters = 999
   }
 }
 
