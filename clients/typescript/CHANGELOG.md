@@ -1,5 +1,15 @@
 # electric-sql
 
+## 0.5.0-next.3
+
+### Patch Changes
+
+- edfb298: Improved subscription data insertion to do batched inserts instead of one-by-one statements. Inserting a lot of data should be much faster.
+- a112a03: Fixed Satellite not handling mutliple concurrent subscription calls properly
+- 3345cf8: Bugfix: update the `wa-sqlite` driver to use the `WebSocketFactory`.
+- 80531f0: Fixed subscription being registered too late preventing deduplication
+- e165048: Fixed subscription data not triggering data changed notification and thus `liveQuery` not working as expected
+
 ## 0.5.0-next.2
 
 ### Patch Changes
