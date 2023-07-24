@@ -7,27 +7,6 @@ defmodule Electric.Replication.Postgres.Client do
   """
   require Logger
 
-  @type column :: %{
-          name: String.t(),
-          type: atom(),
-          type_modifier: integer(),
-          part_of_identity?: boolean() | nil
-        }
-  @type replicated_table :: %{
-          schema: String.t(),
-          name: String.t(),
-          oid: integer(),
-          replica_identity: :all_columns | :default | :nothing | :index,
-          columns: [column()]
-        }
-  @type replicated_tables :: [replicated_table()]
-  @type replication_info :: %{
-          tables: replicated_tables(),
-          database: String.t(),
-          publication: String.t(),
-          connection: term()
-        }
-
   @type connection :: pid
   @type publication :: String.t()
 
