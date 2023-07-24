@@ -13,7 +13,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type oid_result() :: {:ok, integer()} | {:error, term()}
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
-  @type table_id() :: %{name: name(), schema: schema(), oid: oid()}
+  @type table() :: Electric.Postgres.Replication.Table.t()
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
@@ -26,7 +26,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback migration_history(state(), version() | nil) ::
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
-  @callback electrified_tables(state()) :: {:ok, [table_id()]} | {:error, term()}
+  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 

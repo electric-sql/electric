@@ -1038,14 +1038,14 @@ defmodule Electric.Postgres.TableTest do
         ]
       }
 
-      assert {:ok, table_info} = Schema.table_info(table)
+      assert table_info = Schema.table_info(table)
 
       assert table_info == %Table{
                schema: "public",
                name: "t1",
                oid: 48888,
                primary_keys: ["c1", "c2"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{name: "c1", type: :int4, type_modifier: -1, identity?: true},
                  %Column{name: "c2", type: :int4, type_modifier: -1, identity?: true}
@@ -1072,14 +1072,14 @@ defmodule Electric.Postgres.TableTest do
                name: "rray1",
                oid: 13362,
                primary_keys: ["id"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
                  %Column{
                    name: "values",
                    type: {:array, :int4},
                    type_modifier: -1,
-                   identity?: false
+                   identity?: true
                  }
                ]
              }
@@ -1091,14 +1091,14 @@ defmodule Electric.Postgres.TableTest do
                name: "rray2",
                oid: 19056,
                primary_keys: ["id"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
                  %Column{
                    name: "values",
                    type: {:array, :int4},
                    type_modifier: -1,
-                   identity?: false
+                   identity?: true
                  }
                ]
              }

@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Schema do
   defstruct tables: [], indexes: [], triggers: [], views: []
 
   alias Electric.Postgres.Schema.Proto
+  alias Electric.Postgres.Replication
   alias PgQuery, as: Pg
 
   require Logger
@@ -12,10 +13,11 @@ defmodule Electric.Postgres.Schema do
 
   @type t() :: %Proto.Schema{}
 
-  @type mbinary() :: binary() | nil
+  @type mbinary() :: String.t() | nil
   @type schema() :: mbinary()
+  @type namespaced_name() :: {schema(), String.t()}
   @type name() ::
-          binary() | {schema(), binary()} | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
+          String.t() | namespaced_name() | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
 
   def new do
     %Proto.Schema{}
@@ -77,7 +79,7 @@ defmodule Electric.Postgres.Schema do
   def fetch_table!(schema, name) do
     case fetch_table(schema, name) do
       {:ok, table} -> table
-      :error -> raise ArgumentError, message: "Unknown table #{name}"
+      :error -> raise ArgumentError, message: "Unknown table #{inspect(name)}"
     end
   end
 
@@ -147,46 +149,62 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
+  @doc """
+  Look up a table in the schema and return replication information about it.
+  """
   @spec table_info(t(), {name(), name()}) ::
-          {:ok, Electric.Postgres.Replication.Table.t()} | {:error, term()}
+          {:ok, Replication.Table.t()} | {:error, term()}
   def table_info(schema, {sname, tname}) do
     table_info(schema, sname, tname)
   end
 
-  @spec table_info(t(), name(), name()) ::
-          {:ok, Electric.Postgres.Replication.Table.t()} | {:error, term()}
-  def table_info(schema, sname, tname) do
+  @spec table_info(t(), integer()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def table_info(schema, oid) when is_integer(oid) do
+    with {:ok, table} <- lookup_oid(schema, oid) do
+      {:ok, table_info(table)}
+    end
+  end
+
+  @spec table_info(t(), name(), name()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def table_info(schema, sname, tname) when is_binary(sname) and is_binary(tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do
-      table_info(table)
+      {:ok, table_info(table)}
     else
       :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
     end
   end
 
-  @spec table_info(%Proto.Table{}) :: {:ok, Electric.Postgres.Replication.Table.t()}
+  @spec table_info(t()) :: [Replication.Table.t()]
+  def table_info(%Proto.Schema{} = schema) do
+    for table <- schema.tables, do: table_info(table)
+  end
+
+  @spec table_info(%Proto.Table{}) :: Replication.Table.t()
   def table_info(%Proto.Table{} = table) do
     {:ok, pks} = primary_keys(table)
 
     columns =
       for col <- table.columns do
-        %Electric.Postgres.Replication.Column{
+        %Replication.Column{
           name: col.name,
           type: col_type(col.type),
           type_modifier: List.first(col.type.size, -1),
-          identity?: col.name in pks
+          # since we're using replication identity "full" all columns
+          # are identity columns in replication terms
+          identity?: true
         }
       end
 
-    table_info = %Electric.Postgres.Replication.Table{
+    table_info = %Replication.Table{
       schema: table.name.schema,
       name: table.name.name,
       oid: table.oid,
       primary_keys: pks,
-      replica_identity: :index,
+      replica_identity: :all_columns,
       columns: columns
     }
 
-    {:ok, table_info}
+    table_info
   end
 
   defp col_type(%{name: name, array: [_ | _]}), do: {:array, col_type(name)}
@@ -197,8 +215,16 @@ defmodule Electric.Postgres.Schema do
   defp col_type("serial8"), do: :int8
   defp col_type(t) when is_binary(t), do: String.to_atom(t)
 
-  def struct_order(list) do
-    Enum.sort(list)
+  def relation(schema, sname, tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      table_info(table)
+    else
+      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
+    end
+  end
+
+  def relation(schema, {sname, tname}) do
+    relation(schema, sname, tname)
   end
 
   # want table constraint order to be constistent so that we can verify the in-memory schema with
@@ -210,6 +236,10 @@ defmodule Electric.Postgres.Schema do
 
   def order(list) do
     struct_order(list)
+  end
+
+  def struct_order(list) do
+    Enum.sort(list)
   end
 
   @namedatalen 63
@@ -440,19 +470,27 @@ defmodule Electric.Postgres.Schema do
         &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
       )
 
-    table_name = "shadow__#{main.name.schema}__#{main.name.name}"
+    {schema, table_name} = shadow_table_name(main.name.schema, main.name.name)
 
     {:ok, oid} = oid_loader.(:table, @schema, table_name)
 
     %Proto.Table{
       oid: oid,
       name: %Proto.RangeVar{
-        schema: @schema,
+        schema: schema,
         name: table_name
       },
       columns: pks ++ @shadow_columns ++ timestamps ++ reordered,
       constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),
       indexes: []
     }
+  end
+
+  @doc """
+  Returns the schema and name of the shadow table for the given table.
+  """
+  @spec shadow_table_name(name(), name()) :: namespaced_name()
+  def shadow_table_name(schema, table) do
+    {@schema, "shadow__#{schema}__#{table}"}
   end
 end

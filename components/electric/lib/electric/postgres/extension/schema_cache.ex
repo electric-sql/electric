@@ -202,14 +202,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       conn_config: conn_config,
       opts: opts,
       current: nil,
-      electrified_tables: [],
       refresh_task: nil
     }
 
-    # continue to immediately refresh the electrified_tables cache
-    # so that it's ready for when pg connects to electric as a 
-    # replication consumer and asks for the list of replicated tables
-    {:ok, state, {:continue, :cache_table_list}}
+    {:ok, state}
   end
 
   @impl GenServer
@@ -234,9 +230,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_call({:save, version, schema, stmts}, _from, state) do
     {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
 
-    state = cache_table_list(%{state | backend: backend, current: {version, schema}})
-
-    {:reply, {:ok, state.origin}, state}
+    {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
   end
 
   def handle_call({:relation_oid, type, schema, name}, _from, state) do
@@ -273,17 +267,22 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
-  def handle_call(:electrified_tables, _from, %{electrified_tables: tables} = state) do
-    {:reply, {:ok, tables}, state}
+  def handle_call(:electrified_tables, _from, state) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {{:ok, Schema.table_info(schema)}, state}
+      else
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
     {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state),
-           {:table, {:ok, table}} <- {:table, Schema.lookup_oid(schema, oid)} do
-        {Schema.table_info(table), state}
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {Schema.table_info(schema, oid), state}
       else
-        {:table, :error} -> {{:error, "invalid table oid: #{inspect(oid)}"}, state}
         error -> {error, state}
       end
 
@@ -292,11 +291,9 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
     {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state),
-           {:table, {:ok, table}} <- {:table, Schema.fetch_table(schema, relation)} do
-        {Schema.table_info(table), state}
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {Schema.table_info(schema, relation), state}
       else
-        {:table, :error} -> {{:error, "invalid table #{inspect(relation)}"}, state}
         error -> {error, state}
       end
 
@@ -305,11 +302,9 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:relation, relation, version}, _from, state) do
     {result, state} =
-      with {:ok, ^version, schema} <- SchemaLoader.load(state.backend, version),
-           {:table, {:ok, table}} <- {:table, Schema.fetch_table(schema, relation)} do
-        {Schema.table_info(table), state}
+      with {:ok, ^version, schema} <- SchemaLoader.load(state.backend, version) do
+        {Schema.table_info(schema, relation), state}
       else
-        {:table, :error} -> {{:error, "invalid table #{inspect(relation)}"}, state}
         error -> {error, state}
       end
 
@@ -334,10 +329,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   # time the call comes in for the table list from the pg replication tcp 
   # connection.
   def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
-    # make sure that the table list is synced ready for the 
-    # request from the tcp server
-    state = cache_table_list(state)
-
     task =
       Task.async(fn ->
         result = SchemaLoader.refresh_subscription(state.backend, name)
@@ -372,16 +363,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_continue({:close, conn}, state) do
     :ok = :epgsql.close(conn)
     {:noreply, state}
-  end
-
-  def handle_continue(:cache_table_list, state) do
-    {:noreply, cache_table_list(state)}
-  end
-
-  defp cache_table_list(state) do
-    {:ok, tables} = SchemaLoader.electrified_tables(state.backend)
-
-    %{state | electrified_tables: tables}
   end
 
   defp current_schema(%{current: nil} = state) do

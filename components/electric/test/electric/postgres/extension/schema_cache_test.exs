@@ -184,7 +184,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                name: "a",
                oid: table_oid(conn, "public", "a"),
                primary_keys: ["aid"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{
                    name: "aid",
@@ -196,7 +196,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                    name: "avalue",
                    type: :text,
                    type_modifier: -1,
-                   identity?: false
+                   identity?: true
                  }
                ]
              }
@@ -214,7 +214,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                name: "a",
                oid: table_oid(conn, "public", "a"),
                primary_keys: ["aid"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{
                    name: "aid",
@@ -226,7 +226,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                    name: "avalue",
                    type: :text,
                    type_modifier: -1,
-                   identity?: false
+                   identity?: true
                  }
                ]
              }
@@ -258,19 +258,19 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  name: "avalue",
                  type: :text,
                  type_modifier: -1,
-                 identity?: false
+                 identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
                  type_modifier: -1,
-                 identity?: false
+                 identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
                  type_modifier: 63,
-                 identity?: false
+                 identity?: true
                }
              ]
     end
@@ -304,19 +304,19 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  name: "avalue",
                  type: :text,
                  type_modifier: -1,
-                 identity?: false
+                 identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
                  type_modifier: -1,
-                 identity?: false
+                 identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
                  type_modifier: 63,
-                 identity?: false
+                 identity?: true
                }
              ]
 
@@ -334,7 +334,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  name: "avalue",
                  type: :text,
                  type_modifier: -1,
-                 identity?: false
+                 identity?: true
                }
              ]
 
@@ -347,7 +347,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                name: "b",
                oid: table_oid(conn, "b", "b"),
                primary_keys: ["bid1", "bid2"],
-               replica_identity: :index,
+               replica_identity: :all_columns,
                columns: [
                  %Column{
                    name: "bid1",
@@ -365,7 +365,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                    name: "bvalue",
                    type: :text,
                    type_modifier: -1,
-                   identity?: false
+                   identity?: true
                  }
                ]
              }

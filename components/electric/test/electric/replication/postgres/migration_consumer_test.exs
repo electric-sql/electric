@@ -70,7 +70,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         table: %{
           {"public", "something_else"} => 1111,
           {"public", "other_thing"} => 2222,
-          {"public", "yet_another_thing"} => 3333
+          {"public", "yet_another_thing"} => 3333,
+          {"electric", "shadow__public__something_else"} => 201_111,
+          {"electric", "shadow__public__other_thing"} => 202_222,
+          {"electric", "shadow__public__yet_another_thing"} => 203_333
         }
       }
 
