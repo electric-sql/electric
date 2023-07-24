@@ -138,7 +138,7 @@ defmodule Electric.Replication.Changes do
             relation.columns,
             &%Column{
               name: &1.name,
-              identity?: :key in &1.flags,
+              part_of_identity?: :key in &1.flags,
               type: &1.type,
               type_modifier: &1.type_modifier
             }

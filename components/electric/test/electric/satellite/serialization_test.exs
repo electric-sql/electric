@@ -101,19 +101,19 @@ defmodule Electric.Satellite.SerializationTest do
             name: "id1",
             type: "uuid",
             type_modifier: nil,
-            identity?: true
+            part_of_identity?: true
           },
           %Column{
             name: "id2",
             type: "uuid",
             type_modifier: nil,
-            identity?: true
+            part_of_identity?: true
           },
           %Column{
             name: "content",
             type: "char",
             type_modifier: nil,
-            identity?: false
+            part_of_identity?: false
           }
         ]
       }

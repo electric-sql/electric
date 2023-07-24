@@ -519,7 +519,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
     Messaging.row_description(attname: :name, atttypid: :oid, "?column?": :bool)
     |> Messaging.data_rows(
-      Enum.map(columns, &{&1.name, OidDatabase.oid_for_name(&1.type), &1.identity?})
+      Enum.map(columns, &{&1.name, OidDatabase.oid_for_name(&1.type), &1.part_of_identity?})
     )
     |> Messaging.command_complete("SELECT #{length(columns)}")
     |> Messaging.ready()

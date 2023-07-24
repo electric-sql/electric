@@ -54,21 +54,21 @@ defmodule Electric.Postgres.LogicalReplication.MessagesTest do
         primary_keys: [],
         replica_identity: :default,
         columns: [
-          %Column{name: "id", identity?: true, type: :int8, type_modifier: -1},
-          %Column{name: "txid", identity?: false, type: :xid8, type_modifier: -1},
+          %Column{name: "id", part_of_identity?: true, type: :int8, type_modifier: -1},
+          %Column{name: "txid", part_of_identity?: false, type: :xid8, type_modifier: -1},
           %Column{
             name: "txts",
-            identity?: false,
+            part_of_identity?: false,
             type: :timestamptz,
             type_modifier: -1
           },
           %Column{
             name: "version",
-            identity?: false,
+            part_of_identity?: false,
             type: :varchar,
             type_modifier: 259
           },
-          %Column{name: "query", identity?: false, type: :text, type_modifier: -1}
+          %Column{name: "query", part_of_identity?: false, type: :text, type_modifier: -1}
         ]
       }
 

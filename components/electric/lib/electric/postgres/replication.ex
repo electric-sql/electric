@@ -11,7 +11,7 @@ defmodule Electric.Postgres.Replication do
       :name,
       :type,
       type_modifier: -1,
-      identity?: false
+      part_of_identity?: false
     ]
 
     @type name() :: Postgres.name()
@@ -20,7 +20,7 @@ defmodule Electric.Postgres.Replication do
             name: name(),
             type: atom(),
             type_modifier: integer(),
-            identity?: boolean() | nil
+            part_of_identity?: boolean() | nil
           }
   end
 

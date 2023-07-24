@@ -1047,8 +1047,8 @@ defmodule Electric.Postgres.TableTest do
                primary_keys: ["c1", "c2"],
                replica_identity: :all_columns,
                columns: [
-                 %Column{name: "c1", type: :int4, type_modifier: -1, identity?: true},
-                 %Column{name: "c2", type: :int4, type_modifier: -1, identity?: true}
+                 %Column{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: true},
+                 %Column{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: true}
                ]
              }
     end
@@ -1074,12 +1074,12 @@ defmodule Electric.Postgres.TableTest do
                primary_keys: ["id"],
                replica_identity: :all_columns,
                columns: [
-                 %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
+                 %Column{name: "id", type: :uuid, type_modifier: -1, part_of_identity?: true},
                  %Column{
                    name: "values",
                    type: {:array, :int4},
                    type_modifier: -1,
-                   identity?: true
+                   part_of_identity?: true
                  }
                ]
              }
@@ -1093,12 +1093,12 @@ defmodule Electric.Postgres.TableTest do
                primary_keys: ["id"],
                replica_identity: :all_columns,
                columns: [
-                 %Column{name: "id", type: :uuid, type_modifier: -1, identity?: true},
+                 %Column{name: "id", type: :uuid, type_modifier: -1, part_of_identity?: true},
                  %Column{
                    name: "values",
                    type: {:array, :int4},
                    type_modifier: -1,
-                   identity?: true
+                   part_of_identity?: true
                  }
                ]
              }

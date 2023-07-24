@@ -195,7 +195,7 @@ defmodule Electric.Postgres.Schema do
           type_modifier: List.first(col.type.size, -1),
           # since we're using replication identity "full" all columns
           # are identity columns in replication terms
-          identity?: true
+          part_of_identity?: true
         }
       end
 
