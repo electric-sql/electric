@@ -31,35 +31,6 @@ defmodule Electric.Replication.Postgres.Client do
   @type connection :: pid
   @type publication :: String.t()
 
-  @doc """
-  Connect to a postgres instance
-  """
-  @callback connect(connection_config :: :epgsql.connect_opts()) ::
-              {:ok, term()} | {:error, term()}
-
-  @doc """
-  Start replication and send logical replication messages back to pid
-  """
-  @callback start_replication(
-              conn :: term(),
-              publication :: String.t(),
-              slot :: String.t(),
-              handler :: pid()
-            ) :: :ok | {:error, term()}
-  @doc """
-  Query the Postgres instance for table names which fall under the replication
-
-  Returns a list of tuples with schema and table name
-  """
-  @callback query_replicated_tables(connection :: term(), publication :: nil | String.t()) ::
-              replicated_tables()
-
-  @doc """
-  Acknowledge that the LSN has been processed
-  """
-  @callback acknowledge_lsn(connection :: term(), lsn :: %{segment: integer(), offset: integer()}) ::
-              :ok
-
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(%{} = config) do
