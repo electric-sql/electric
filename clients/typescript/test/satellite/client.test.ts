@@ -697,6 +697,49 @@ test.serial('subscription succesful', async (t) => {
   t.is(res.subscriptionId, subscriptionId)
 })
 
+test.serial(
+  'RPC correctly handles interleaved subscribe responses',
+  async (t) => {
+    await connectAndAuth(t.context)
+    const { client, server } = t.context
+
+    const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+    server.nextResponses([startResp])
+    await client.startReplication()
+
+    const shapeReq1: ShapeRequest = {
+      requestId: 'fake1',
+      definition: {
+        selects: [{ tablename: 'fake1' }],
+      },
+    }
+
+    const shapeReq2: ShapeRequest = {
+      requestId: 'fake2',
+      definition: {
+        selects: [{ tablename: 'fake2' }],
+      },
+    }
+
+    const subscriptionId1 = 'subscription id 1'
+    const subscriptionId2 = 'subscription id 2'
+    const subsResp1 = Proto.SatSubsResp.fromPartial({
+      subscriptionId: subscriptionId1,
+    })
+    const subsResp2 = Proto.SatSubsResp.fromPartial({
+      subscriptionId: subscriptionId2,
+    })
+    server.nextResponses([subsResp1, subsResp2])
+
+    const p1 = client.subscribe(subscriptionId1, [shapeReq1])
+    const p2 = client.subscribe(subscriptionId2, [shapeReq2])
+    const [resp1, resp2] = await Promise.all([p1, p2])
+
+    t.is(resp1.subscriptionId, subscriptionId1)
+    t.is(resp2.subscriptionId, subscriptionId2)
+  }
+)
+
 test.serial('listen to subscription events: error', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context

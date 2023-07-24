@@ -511,7 +511,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
 
     this.subscriptionsDataCache.subscriptionRequest(request)
-    return this.rpc<SubscribeResponse>(request)
+    return this.rpc<SubscribeResponse, SatSubsReq>(request, 'subscriptionId')
   }
 
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
@@ -994,7 +994,10 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.socket.write(buffer)
   }
 
-  private async rpc<T>(request: SatPbMsg): Promise<T> {
+  private async rpc<T, Msg extends SatPbMsg = SatPbMsg>(
+    request: Msg,
+    distinguishOn?: keyof Msg & keyof T
+  ): Promise<T> {
     let waitingFor: NodeJS.Timeout
     return new Promise<T>((resolve, reject) => {
       waitingFor = setTimeout(() => {
@@ -1011,9 +1014,21 @@ export class SatelliteClient extends EventEmitter implements Client {
         return reject(error)
       })
 
-      this.once('rpc_response', (resp: T) => {
-        return resolve(resp)
-      })
+      if (distinguishOn) {
+        const handleRpcResp = (resp: T) => {
+          // TODO: remove this comment when RPC types are fixed
+          // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
+          if (resp[distinguishOn] === request[distinguishOn]) {
+            return resolve(resp)
+          } else {
+            // This WAS an RPC response, but not the one we were expecting, waiting more
+            this.once('rpc_response', handleRpcResp)
+          }
+        }
+        this.once('rpc_response', handleRpcResp)
+      } else {
+        this.once('rpc_response', (resp: T) => resolve(resp))
+      }
 
       this.sendMessage(request)
     }).finally(() => clearTimeout(waitingFor))
