@@ -1325,7 +1325,7 @@ export class SatelliteProcess implements Satellite {
   private async _getClientId(): Promise<Uuid> {
     const clientIdKey = 'clientId'
 
-    let clientId = (await this._getMeta(clientIdKey))
+    let clientId = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
       clientId = uuid() as Uuid
