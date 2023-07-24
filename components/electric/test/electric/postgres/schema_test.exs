@@ -14,7 +14,7 @@ defmodule Electric.Postgres.SchemaTest do
       for {table_name, expected_ast} <- table_ast do
         case expected_ast do
           :error ->
-            assert :error = Schema.fetch_table(schema, table_name)
+            assert {:error, _} = Schema.fetch_table(schema, table_name)
 
           expected_ast ->
             assert {:ok, table_ast} = Schema.fetch_table(schema, table_name)

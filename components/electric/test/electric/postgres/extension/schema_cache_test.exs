@@ -155,7 +155,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert {:ok, ^version1, schema1} = Extension.SchemaCache.load(cxt.origin, version1)
 
       assert {:ok, table_a} = Schema.fetch_table(schema1, {"public", "a"})
-      assert :error = Schema.fetch_table(schema1, {"b", "b"})
+      assert {:error, _} = Schema.fetch_table(schema1, {"b", "b"})
 
       assert table_a.oid == table_oid(conn, "public", "a")
     end

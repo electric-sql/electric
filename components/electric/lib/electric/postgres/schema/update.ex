@@ -114,10 +114,10 @@ defmodule Electric.Postgres.Schema.Update do
 
         __MODULE__.Cascade.update(action.cmds, orig_table, schema)
 
-      {:error, true} ->
+      {{:error, _}, true} ->
         {[], schema}
 
-      {:error, false} ->
+      {{:error, _}, false} ->
         raise Error, message: "attempt to alter missing table #{name}"
     end
   end
@@ -255,7 +255,7 @@ defmodule Electric.Postgres.Schema.Update do
     if !action.missing_ok do
       Enum.each(table_names, fn table ->
         case Schema.fetch_table(schema, table) do
-          :error ->
+          {:error, _} ->
             raise(Error, message: "attempting to drop non-existant table #{table}")
 
           _ ->

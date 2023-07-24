@@ -79,12 +79,17 @@ defmodule Electric.Postgres.Schema do
   def fetch_table!(schema, name) do
     case fetch_table(schema, name) do
       {:ok, table} -> table
-      :error -> raise ArgumentError, message: "Unknown table #{inspect(name)}"
+      {:error, reason} -> raise ArgumentError, message: reason
     end
   end
 
   def fetch_table(schema, name) do
-    with %_{} = table <- Enum.find(schema.tables, :error, &equal?(&1.name, name)) do
+    with %_{} = table <-
+           Enum.find(
+             schema.tables,
+             {:error, "Unknown table #{inspect(name)}"},
+             &equal?(&1.name, name)
+           ) do
       {:ok, table}
     end
   end
@@ -99,8 +104,6 @@ defmodule Electric.Postgres.Schema do
   def primary_keys(schema, sname, tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do
       primary_keys(table)
-    else
-      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
     end
   end
 
@@ -169,11 +172,12 @@ defmodule Electric.Postgres.Schema do
   def table_info(schema, sname, tname) when is_binary(sname) and is_binary(tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do
       {:ok, table_info(table)}
-    else
-      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
     end
   end
 
+  @doc """
+  Return replication information for a single table or all tables in the schema.
+  """
   @spec table_info(t()) :: [Replication.Table.t()]
   def table_info(%Proto.Schema{} = schema) do
     for table <- schema.tables, do: table_info(table)
@@ -218,8 +222,6 @@ defmodule Electric.Postgres.Schema do
   def relation(schema, sname, tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do
       table_info(table)
-    else
-      :error -> {:error, "no such table #{inspect(sname)}.#{inspect(tname)}"}
     end
   end
 
