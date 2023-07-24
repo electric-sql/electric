@@ -288,11 +288,12 @@ defmodule Electric.Satellite.Serialization do
 
   @type cached_relations() :: %{
           PB.relation_id() => %{
-            :schema => String.t(),
-            :table => String.t(),
-            :columns => [String.t()]
+            schema: String.t(),
+            table: String.t(),
+            columns: [String.t()]
           }
         }
+
   @doc """
   Deserialize from Satellite PB format to internal format
   """
@@ -300,13 +301,7 @@ defmodule Electric.Satellite.Serialization do
           String.t(),
           %SatOpLog{},
           %Transaction{} | nil,
-          %{
-            PB.relation_id() => %{
-              :schema => String.t(),
-              :table => String.t(),
-              :columns => [String.t()]
-            }
-          },
+          cached_relations(),
           (term -> any)
         ) ::
           {
