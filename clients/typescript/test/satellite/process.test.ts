@@ -1,4 +1,6 @@
 import anyTest, { TestFn } from 'ava'
+import log from 'loglevel'
+log.enableAll()
 
 import {
   MOCK_BEHIND_WINDOW_LSN,
@@ -1261,6 +1263,46 @@ test('apply shape data and persist subscription', async (t) => {
   } catch (e) {
     t.fail(JSON.stringify(e))
   }
+})
+
+test('multiple subscriptions for the same shape are deduplicated', async (t) => {
+  const { client, satellite } = t.context
+  const { runMigrations, authState } = t.context
+  await runMigrations()
+
+  const tablename = 'parent'
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+
+  // We want none of these cases to throw
+  await t.notThrowsAsync(async () => {
+    // We should dedupe subscriptions that are done at the same time
+    const [sub1, sub2] = await Promise.all([
+      satellite.subscribe([shapeDef]),
+      satellite.subscribe([shapeDef]),
+    ])
+    // That are done after first await but before the data
+    const sub3 = await satellite.subscribe([shapeDef])
+    // And that are done after previous data is resolved
+    await Promise.all([sub1.synced, sub2.synced, sub3.synced])
+    const sub4 = await satellite.subscribe([shapeDef])
+
+    await sub4.synced
+  })
+
+  // And be "merged" into one subscription
+  t.is(satellite.subscriptions.getFulfilledSubscriptions().length, 1)
 })
 
 test('applied shape data will be acted upon correctly', async (t) => {

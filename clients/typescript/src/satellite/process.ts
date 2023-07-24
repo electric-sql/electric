@@ -344,6 +344,8 @@ export class SatelliteProcess implements Satellite {
     }))
 
     const subId = this.subscriptionIdGenerator()
+    this.subscriptions.subscriptionRequested(subId, shapeReqs)
+
     // store the resolve and reject
     // such that we can resolve/reject
     // the promise later when the shape
@@ -357,17 +359,18 @@ export class SatelliteProcess implements Satellite {
     const { subscriptionId, error }: SubscribeResponse =
       await this.client.subscribe(subId, shapeReqs)
     if (subId !== subscriptionId) {
+      delete this.subscriptionNotifiers[subId]
+      this.subscriptions.subscriptionCancelled(subId)
       throw new Error(
         `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
       )
     }
+
     if (error) {
       delete this.subscriptionNotifiers[subscriptionId]
       this.subscriptions.subscriptionCancelled(subscriptionId)
       throw error
     }
-
-    this.subscriptions.subscriptionRequested(subscriptionId, shapeReqs)
 
     return {
       synced: this.subscriptionNotifiers[subId].promise,
