@@ -31,7 +31,7 @@ export function prepareBatchedStatements(
 ): Statement[] {
   const stmts: Statement[] = []
   const columnCount = columns.length
-  let insertsLeft = records.length
+  const recordCount = records.length
   let processed = 0
   const insertPattern = ' (' + '?, '.repeat(columnCount).slice(0, -2) + '),'
 
@@ -39,8 +39,8 @@ export function prepareBatchedStatements(
   // divided by columnCount, giving the amount of rows we can insert at once
   const batchMaxSize =
     (maxParameters - (maxParameters % columnCount)) / columnCount
-  while (processed < insertsLeft) {
-    const currentInsertCount = Math.min(insertsLeft - processed, batchMaxSize)
+  while (processed < recordCount) {
+    const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
     const sql = baseSql + insertPattern.repeat(currentInsertCount).slice(0, -1)
     const args = records
       .slice(processed, processed + currentInsertCount)
