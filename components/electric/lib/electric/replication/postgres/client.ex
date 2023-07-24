@@ -250,7 +250,10 @@ defmodule Electric.Replication.Postgres.Client do
       {:ok, String.to_integer(oid)}
     else
       error ->
-        Logger.warning("Unable to retrieve oid for #{inspect([rel_type, schema, table])}: #{inspect(error)}")
+        Logger.warning(
+          "Unable to retrieve oid for #{inspect([rel_type, schema, table])}: #{inspect(error)}"
+        )
+
         {:error, :relation_missing}
     end
   end

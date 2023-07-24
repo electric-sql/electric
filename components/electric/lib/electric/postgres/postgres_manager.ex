@@ -161,7 +161,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
              Client.create_subscription(conn, subscription, publication, electric_connection),
            {:ok, oids} <- Client.query_oids(conn),
            :ok <- OidDatabase.save_oids(oids) do
-        Logger.info("Migrated #{origin} to extension version #{versions |> Enum.reverse() |> List.first()}")
+        Logger.info(
+          "Migrated #{origin} to extension version #{versions |> Enum.reverse() |> List.first()}"
+        )
+
         Logger.info("Successfully initialized origin #{origin}")
 
         {:ok, state}
