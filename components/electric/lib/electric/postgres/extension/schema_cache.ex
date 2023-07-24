@@ -323,11 +323,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
   # 5. deadlock
   #
-  # so to avoid this we cache the table list and update it when the schema is changed
-  # which means that retrieving the list of electrified tables can be done without
-  # a db lookup so the refresh subscription query can be running at the same 
-  # time the call comes in for the table list from the pg replication tcp 
-  # connection.
+  # So this call to the SchemaLoader is done via a task so that this SchemaCache process
+  # is free to handle the `electrified_tables/1` call coming in from the `TcpServer`.
   def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
     task =
       Task.async(fn ->
