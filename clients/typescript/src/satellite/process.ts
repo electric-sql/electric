@@ -3,12 +3,12 @@ import throttle from 'lodash.throttle'
 type Uuid = `${string}-${string}-${string}-${string}-${string}`
 
 type MetaEntries = {
-  clientId: Uuid | '',
-  compensations: number,
-  lastAckdRowId: `${ number }`,
-  lastSentRowId: `${ number }`,
-  lsn: string | null,
-  subscriptions: string,
+  clientId: Uuid | ''
+  compensations: number
+  lastAckdRowId: `${number}`
+  lastSentRowId: `${number}`
+  lsn: string | null
+  subscriptions: string
 }
 
 import { AuthConfig, AuthState } from '../auth/index'
@@ -1280,7 +1280,10 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  _setMetaStatement<K extends keyof MetaEntries>(key: K, value: MetaEntries[K]): Statement
+  _setMetaStatement<K extends keyof MetaEntries>(
+    key: K,
+    value: MetaEntries[K]
+  ): Statement
   _setMetaStatement(key: Uuid, value: string | null): Statement
   _setMetaStatement(key: string, value: SqlValue) {
     const meta = this.opts.metaTable.toString()
@@ -1290,15 +1293,21 @@ export class SatelliteProcess implements Satellite {
     return { sql, args }
   }
 
-  async _setMeta<K extends keyof MetaEntries>(key: K, value: MetaEntries[K]): Promise<void>
+  async _setMeta<K extends keyof MetaEntries>(
+    key: K,
+    value: MetaEntries[K]
+  ): Promise<void>
   async _setMeta(key: Uuid, value: string | null): Promise<void>
-  async _setMeta(key: Parameters<this['_setMetaStatement']>[0], value: Parameters<this['_setMetaStatement']>[1]) {
+  async _setMeta(
+    key: Parameters<this['_setMetaStatement']>[0],
+    value: Parameters<this['_setMetaStatement']>[1]
+  ) {
     const stmt = this._setMetaStatement(key, value)
     await this.adapter.run(stmt)
   }
 
   async _getMeta(key: Uuid): Promise<string | null>
-  async _getMeta<K extends keyof MetaEntries>(key: K): Promise< MetaEntries[K]>
+  async _getMeta<K extends keyof MetaEntries>(key: K): Promise<MetaEntries[K]>
   async _getMeta(key: string) {
     const meta = this.opts.metaTable.toString()
 
@@ -1316,7 +1325,7 @@ export class SatelliteProcess implements Satellite {
   private async _getClientId(): Promise<Uuid> {
     const clientIdKey = 'clientId'
 
-    let clientId = await this._getMeta(clientIdKey) as Uuid | ''
+    let clientId = (await this._getMeta(clientIdKey)) as Uuid | ''
 
     if (clientId === '') {
       clientId = uuid() as Uuid
