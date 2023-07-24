@@ -249,7 +249,9 @@ defmodule Electric.Replication.Postgres.Client do
          {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
       {:ok, String.to_integer(oid)}
     else
-      _ -> {:error, :relation_missing}
+      error ->
+        Logger.warning("Unable to retrieve oid for #{inspect([rel_type, schema, table])}: #{inspect(error)}")
+        {:error, :relation_missing}
     end
   end
 end
