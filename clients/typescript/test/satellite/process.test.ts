@@ -1210,13 +1210,13 @@ test('throw other replication errors', async (t) => {
 })
 
 test('apply shape data and persist subscription', async (t) => {
-  const { client, satellite, adapter } = t.context
+  const { client, satellite, adapter, notifier } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
   const tablename = 'parent'
-  const qualified = new QualifiedTablename(namespace, tablename).toString()
+  const qualified = new QualifiedTablename(namespace, tablename)
 
   // relations must be present at subscription delivery
   client.setRelations(relations)
@@ -1233,10 +1233,17 @@ test('apply shape data and persist subscription', async (t) => {
   const { synced } = await satellite.subscribe([shapeDef])
   await synced
 
+  t.is(notifier.notifications.length, 1)
+  t.is(notifier.notifications[0].changes.length, 1)
+  t.deepEqual(notifier.notifications[0].changes[0], {
+    qualifiedTablename: qualified,
+    rowids: [],
+  })
+
   // wait for process to apply shape data
   try {
     const row = await adapter.query({
-      sql: `SELECT id FROM ${qualified}`,
+      sql: `SELECT id FROM ${qualified.toString()}`,
     })
     t.is(row.length, 1)
 
