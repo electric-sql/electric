@@ -380,7 +380,7 @@ defmodule Electric.Postgres.Schema do
   it's a 3-arity function.
   """
   @spec verify_oid_loader!(Keyword.t()) ::
-          (:index | :table | :trigger | :view, schema :: binary(), name :: binary() -> integer())
+          (:index | :table | :trigger | :view, schema :: binary(), name :: binary() -> {:ok, integer()})
   def verify_oid_loader!(opts) when is_list(opts) do
     case Keyword.fetch(opts, :oid_loader) do
       {:ok, loader} when is_function(loader, 3) ->
