@@ -4,6 +4,7 @@ defmodule Electric.Postgres.Extension do
   """
 
   alias Electric.Postgres.{
+    Replication,
     Schema,
     Schema.Proto,
     Extension.Migration
@@ -198,7 +199,7 @@ defmodule Electric.Postgres.Extension do
     with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
       {:ok,
        Enum.map(rows, fn {_id, schema, name, oid} ->
-         %{schema: schema, name: name, oid: String.to_integer(oid)}
+         %Replication.Table{schema: schema, name: name, oid: String.to_integer(oid)}
        end)}
     end
   end
