@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.5.0-next.3
+
+### Patch Changes
+
+- e4cbf80: Update Elixir to 1.15.4 to fix remote shell
+
 ## 0.5.0-next.2
 
 ### Patch Changes
