@@ -1,5 +1,16 @@
 import throttle from 'lodash.throttle'
 
+type Uuid = `${string}-${string}-${string}-${string}-${string}`
+
+type MetaEntries = {
+  clientId: Uuid | ''
+  compensations: number
+  lastAckdRowId: `${number}`
+  lastSentRowId: `${number}`
+  lsn: string | null
+  subscriptions: string
+}
+
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter, RunResult } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -1269,7 +1280,12 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  _setMetaStatement(key: string, value: SqlValue): Statement {
+  _setMetaStatement<K extends keyof MetaEntries>(
+    key: K,
+    value: MetaEntries[K]
+  ): Statement
+  _setMetaStatement(key: Uuid, value: string | null): Statement
+  _setMetaStatement(key: string, value: SqlValue) {
     const meta = this.opts.metaTable.toString()
 
     const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
@@ -1277,12 +1293,22 @@ export class SatelliteProcess implements Satellite {
     return { sql, args }
   }
 
-  async _setMeta(key: string, value: SqlValue): Promise<void> {
+  async _setMeta<K extends keyof MetaEntries>(
+    key: K,
+    value: MetaEntries[K]
+  ): Promise<void>
+  async _setMeta(key: Uuid, value: string | null): Promise<void>
+  async _setMeta(
+    key: Parameters<this['_setMetaStatement']>[0],
+    value: Parameters<this['_setMetaStatement']>[1]
+  ) {
     const stmt = this._setMetaStatement(key, value)
     await this.adapter.run(stmt)
   }
 
-  async _getMeta(key: string): Promise<string> {
+  async _getMeta(key: Uuid): Promise<string | null>
+  async _getMeta<K extends keyof MetaEntries>(key: K): Promise<MetaEntries[K]>
+  async _getMeta(key: string) {
     const meta = this.opts.metaTable.toString()
 
     const sql = `SELECT value from ${meta} WHERE key = ?`
@@ -1293,16 +1319,16 @@ export class SatelliteProcess implements Satellite {
       throw `Invalid metadata table: missing ${key}`
     }
 
-    return rows[0].value as string
+    return rows[0].value
   }
 
-  private async _getClientId(): Promise<string> {
+  private async _getClientId(): Promise<Uuid> {
     const clientIdKey = 'clientId'
 
-    let clientId: string = await this._getMeta(clientIdKey)
+    let clientId = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
-      clientId = uuid() as string
+      clientId = uuid() as Uuid
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId

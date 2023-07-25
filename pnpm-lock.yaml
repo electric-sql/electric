@@ -180,6 +180,9 @@ importers:
       '@types/react-native-uuid':
         specifier: ^2.0.0
         version: 2.0.0
+      '@types/uuid':
+        specifier: ^9.0.1
+        version: 9.0.1
       '@types/ws':
         specifier: ^8.5.3
         version: 8.5.4
