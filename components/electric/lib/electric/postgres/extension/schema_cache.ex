@@ -25,7 +25,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @behaviour SchemaLoader
 
-
   def child_spec({conn_config, _opts} = args) do
     child_spec(Connectors.origin(conn_config), args)
   end
