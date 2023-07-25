@@ -237,19 +237,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.relation_oid(state.backend, type, schema, name), state}
   end
 
-  # TODO: we shouldn't need this once vaxine is out of the read path
-  #       because this request comes from the need to serialise the
-  #       migration ddl commands through vaxine before they are distributed
-  #       to the clients.
-  def handle_call({:primary_keys, "electric", tname}, _from, state) do
-    pks =
-      case tname do
-        "ddl_commands" -> ["id"]
-      end
-
-    {:reply, {:ok, pks}, state}
-  end
-
   def handle_call({:primary_keys, sname, tname}, _from, state) do
     {result, state} =
       with {{:ok, _version, schema}, state} <- current_schema(state) do
