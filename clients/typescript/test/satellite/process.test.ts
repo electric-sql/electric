@@ -1083,7 +1083,7 @@ test('rowid acks updates meta', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState } = t.context
+  const { runMigrations, satellite, adapter, authState, client } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1093,16 +1093,12 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '1')
+  const sentLsn = await satellite._getMeta('lastSentRowId')
+  t.is(sentLsn, '1')
+  await new Promise<void>((r) => client.once('ack_lsn', () => r()))
 
-  await new Promise<void>((res) => {
-    setTimeout(async () => {
-      const lsn = await satellite._getMeta('lastAckdRowId')
-      t.is(lsn, '1')
-      res()
-    }, 100)
-  })
+  const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
+  t.is(acknowledgedLsn, '1')
 
   satellite._connectivityStateChanged('disconnected')
 
