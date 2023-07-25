@@ -297,7 +297,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     const t = setTimeout(() => {
       this.outboundAck = transaction.lsn
       this.emit('ack_lsn', transaction.lsn, AckType.REMOTE_COMMIT)
-    }, 300)
+    }, 500)
     this.timeouts.push(t)
   }
 
