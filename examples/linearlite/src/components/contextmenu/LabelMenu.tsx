@@ -27,7 +27,7 @@ export default function LabelMenu({ id, button, className, onSelect }: Props) {
   }
 
   let options = labels.map((label) => (
-    <Menu.Item onClick={() => handleSelect(label)}>
+    <Menu.Item key={id} onClick={() => handleSelect(label)}>
       {/* <input type='check' className='w-3.5 h-3.5 mr-3' /> */}
       <div
         className="w-2.5 h-2.5 rounded-full mr-3"
