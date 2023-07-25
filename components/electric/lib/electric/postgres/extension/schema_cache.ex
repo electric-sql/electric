@@ -62,11 +62,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec name(Electric.reg_name()) :: Electric.reg_name()
-  def name(ref) when is_tuple(ref) do
-    ref
-  end
-
   def instance() do
     @instance
   end
