@@ -198,7 +198,7 @@ export class EventNotifier implements Notifier {
     delete this._changeCallbacks[key]
   }
 
-  connectivityStateChange(dbName: string, status: ConnectivityState) {
+  connectivityStateChanged(dbName: string, status: ConnectivityState) {
     if (!this._hasDbName(dbName)) {
       return
     }
@@ -206,7 +206,7 @@ export class EventNotifier implements Notifier {
     this._emitConnectivityStatus(dbName, status)
   }
 
-  subscribeToConnectivityStateChange(
+  subscribeToConnectivityStateChanges(
     callback: ConnectivityStateChangeCallback
   ) {
     const key = randomValue()
@@ -226,7 +226,7 @@ export class EventNotifier implements Notifier {
     return key
   }
 
-  unsubscribeFromConnectivityStateChange(key: string): void {
+  unsubscribeFromConnectivityStateChanges(key: string): void {
     const callback = this._connectivityStatusCallbacks[key]
 
     if (callback === undefined) {

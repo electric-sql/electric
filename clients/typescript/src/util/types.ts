@@ -1,5 +1,6 @@
 import type Long from 'long'
 import {
+  SatOpMigrate_Column,
   SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
@@ -109,7 +110,10 @@ export type DataChange = {
   tags: Tag[]
 }
 
-export type MigrationTable = Omit<SatOpMigrate_Table, '$type'>
+// The properties are omitted from columns because they are not currently used.
+export type MigrationTable = Omit<SatOpMigrate_Table, '$type' | 'columns'> & {
+  columns: Omit<SatOpMigrate_Column, '$type' | 'sqliteType' | 'pgType'>[]
+}
 
 export type SchemaChange = {
   table: MigrationTable // table affected by the schema change

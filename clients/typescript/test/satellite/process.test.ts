@@ -153,26 +153,6 @@ test('snapshot works', async (t) => {
   t.deepEqual(changes, [expectedChange])
 })
 
-// XXX cut out the test below to a seperate file to avoid
-// intermittent behaviour.
-
-// test('throttled snapshot respects window', async t => {
-//   const { adapter, notifier, runMigrations, satellite } = t.context as any
-//   await runMigrations()
-
-//   await satellite._throttledSnapshot()
-//   const numNotifications = notifier.notifications.length
-
-//   await adapter.run(`INSERT INTO parent(id) VALUES ('1'),('2')`)
-//   await satellite._throttledSnapshot()
-
-//   t.is(notifier.notifications.length, numNotifications)
-
-//   await sleepAsync(opts.minSnapshotWindow)
-
-//   t.is(notifier.notifications.length, numNotifications + 1)
-// })
-
 test('starting and stopping the process works', async (t) => {
   const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
@@ -1105,7 +1085,7 @@ test('rowid acks updates meta', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState } = t.context
+  const { runMigrations, satellite, adapter, authState, client } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1115,18 +1095,14 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '1')
+  const sentLsn = await satellite._getMeta('lastSentRowId')
+  t.is(sentLsn, '1')
+  await new Promise<void>((r) => client.once('ack_lsn', () => r()))
 
-  await new Promise<void>((res) => {
-    setTimeout(async () => {
-      const lsn = await satellite._getMeta('lastAckdRowId')
-      t.is(lsn, '1')
-      res()
-    }, 100)
-  })
+  const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
+  t.is(acknowledgedLsn, '1')
 
-  satellite._connectivityStateChange('disconnected')
+  satellite._connectivityStateChanged('disconnected')
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1137,7 +1113,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  satellite._connectivityStateChange('available')
+  satellite._connectivityStateChanged('available')
 
   await sleepAsync(200)
   const lsn2 = await satellite._getMeta('lastSentRowId')

@@ -241,6 +241,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   close(): Promise<void> {
     this.closed = true
+    this.removeAllListeners()
     for (const t of this.timeouts) {
       clearTimeout(t)
     }
@@ -296,7 +297,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     const t = setTimeout(() => {
       this.outboundAck = transaction.lsn
       this.emit('ack_lsn', transaction.lsn, AckType.REMOTE_COMMIT)
-    }, 100)
+    }, 300)
     this.timeouts.push(t)
   }
 

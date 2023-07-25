@@ -20,7 +20,9 @@ test('throttled snapshot respects window', async (t) => {
   await runMigrations()
 
   await satellite._setAuthState(authState)
+
   await satellite._throttledSnapshot()
+
   const numNotifications = notifier.notifications.length
 
   const sql = `INSERT INTO parent(id) VALUES ('1'),('2')`

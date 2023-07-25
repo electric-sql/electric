@@ -1,13 +1,11 @@
 import { useContext, useEffect, useState } from 'react'
 
-import {
-  ChangeNotification,
-  ConnectivityStateChangeNotification,
-} from '../../notifiers/index'
-import { randomValue } from '../../util/random'
-import { QualifiedTablename, hasIntersection } from '../../util/tablename'
-import { ConnectivityState } from '../../util/types'
-import { ElectricContext } from './provider'
+import { ChangeNotification } from '../../../notifiers/index'
+import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
+import { AnyFunction } from '../../../util/types'
+
+import { ElectricContext } from '../provider'
+import useRandom from './useRandom'
 
 export interface ResultData<T> {
   error?: any
@@ -37,18 +35,6 @@ function errorResult<T>(error: any): ResultData<T> {
 }
 
 /**
- * Utility hook for a random value that sets the value to a random
- * string on create and provides an update function that generates
- * and assigns the value to a new random string.
- */
-export const useRandom = () => {
-  const [value, _setValue] = useState<string>(randomValue())
-  const setRandomValue = () => _setValue(randomValue())
-
-  return [value, setRandomValue] as const
-}
-
-/**
  * Main reactive query hook for React applications. It needs to be
  * used in tandem with the {@link ElectricProvider} which sets an
  * {@link ElectricClient) as the `electric` value. This provides
@@ -58,7 +44,7 @@ export const useRandom = () => {
  *
  * @param runQuery - A live query.
  */
-export function useLiveQuery<Res>(
+function useLiveQuery<Res>(
   runQuery: () => Promise<LiveResult<Res>>
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
@@ -69,18 +55,41 @@ export function useLiveQuery<Res>(
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
+  let cleanedUp = false
+  const cleanUp = () => {
+    cleanedUp = true
+  }
+  const cleanly = <F extends AnyFunction>(
+    setterFn: F,
+    ...args: Parameters<F>
+  ) => {
+    if (cleanedUp) {
+      return
+    }
+
+    return setterFn(...args)
+  }
+
   // The effect below is run only after the initial render
   // because of the empty array of dependencies
   useEffect(() => {
     // Do an initial run of the query to fetch the table names
-    runQuery()
-      .then((res) => {
+    const runInitialQuery = async () => {
+      try {
+        const res = await runQuery()
         const tablenamesKey = JSON.stringify(res.tablenames)
-        setTablenames(res.tablenames)
-        setTablenamesKey(tablenamesKey)
-        setResultData(successResult(res.result))
-      })
-      .catch((err) => setResultData(errorResult(err)))
+
+        cleanly(setTablenames, res.tablenames)
+        cleanly(setTablenamesKey, tablenamesKey)
+        cleanly(setResultData, successResult(res.result))
+      } catch (err) {
+        cleanly(setResultData, errorResult(err))
+      }
+    }
+
+    runInitialQuery()
+
+    return cleanUp
   }, [])
 
   // Once we have electric, we then establish the data change
@@ -134,59 +143,22 @@ export function useLiveQuery<Res>(
       return
     }
 
-    runQuery()
-      .then((res) => setResultData(successResult(res.result)))
-      .catch((err) => {
-        setResultData(errorResult(err))
-      })
+    const runLiveQuery = async () => {
+      try {
+        const res = await runQuery()
+
+        cleanly(setResultData, successResult(res.result))
+      } catch (err) {
+        cleanly(setResultData, errorResult(err))
+      }
+    }
+
+    runLiveQuery()
+
+    return cleanUp
   }, [electric, changeSubscriptionKey, cacheKey])
 
   return resultData
 }
 
-export const useConnectivityState: () => {
-  connectivityState: ConnectivityState
-  toggleConnectivityState: () => void
-} = () => {
-  const electric = useContext(ElectricContext)
-
-  const [connectivityState, setConnectivityState] =
-    useState<ConnectivityState>('disconnected')
-  //const [electric, setElectric] = useState<ElectricNamespace>()
-
-  useEffect(() => {
-    if (electric === undefined) {
-      return
-    }
-
-    setConnectivityState(electric.isConnected ? 'connected' : 'disconnected')
-
-    const handler = (notification: ConnectivityStateChangeNotification) => {
-      const state = notification.connectivityState
-
-      // externally map states to disconnected/connected
-      const nextState = ['available', 'error', 'disconnected'].find(
-        (x) => x == state
-      )
-        ? 'disconnected'
-        : 'connected'
-      setConnectivityState(nextState)
-    }
-
-    electric.notifier.subscribeToConnectivityStateChange(handler)
-  }, [electric])
-
-  const toggleConnectivityState = () => {
-    if (electric === undefined) {
-      return
-    }
-
-    const nextState: ConnectivityState =
-      connectivityState == 'connected' ? 'disconnected' : 'available'
-    const dbName = electric.notifier.dbName
-    electric.notifier.connectivityStateChange(dbName, nextState)
-    setConnectivityState(nextState)
-  }
-
-  return { connectivityState, setConnectivityState, toggleConnectivityState }
-}
+export default useLiveQuery

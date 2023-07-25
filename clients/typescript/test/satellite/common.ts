@@ -111,7 +111,7 @@ export interface TestSatellite extends Satellite {
   _getLocalRelations(): Promise<{ [k: string]: Relation }>
 }
 
-export type ContextType = {
+export type ContextType<Extra = {}> = {
   dbName: string
   adapter: DatabaseAdapter
   notifier: TestNotifier
@@ -121,7 +121,7 @@ export type ContextType = {
   tableInfo: TableInfo
   timestamp: number
   authState: AuthState
-}
+} & Extra
 
 export const makeContext = async (
   t: ExecutionContext<ContextType>,
@@ -165,15 +165,17 @@ export const makeContext = async (
   }
 }
 
-export const clean = async (t: ExecutionContext) => {
-  const { dbName } = t.context as any
+export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
+  const { dbName } = t.context
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
 }
 
-export const cleanAndStopSatellite = async (t: ExecutionContext) => {
+export const cleanAndStopSatellite = async (
+  t: ExecutionContext<{ dbName: string; satellite: SatelliteProcess }>
+) => {
   await clean(t)
-  const { satellite } = t.context as any
+  const { satellite } = t.context
   await satellite.stop()
 }

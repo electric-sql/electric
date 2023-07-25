@@ -1,20 +1,20 @@
 import { QualifiedTablename } from '../util/tablename'
 
 export interface SatelliteOpts {
-  // The database table where Satellite keeps its processing metadata.
+  /** The database table where Satellite keeps its processing metadata. */
   metaTable: QualifiedTablename
-  // The database table where the bundle migrator keeps its metadata.
+  /** The database table where the bundle migrator keeps its metadata. */
   migrationsTable: QualifiedTablename
-  // The database table where change operations are written to by the triggers
-  // automatically added to all tables in the user defined DDL schema.
+  /** The database table where change operations are written to by the triggers */
+  /** automatically added to all tables in the user defined DDL schema. */
   oplogTable: QualifiedTablename
-  // The database table that controls active opLog triggers.
+  /** The database table that controls active opLog triggers. */
   triggersTable: QualifiedTablename
-  // The database table that contains dependency tracking information
+  /** The database table that contains dependency tracking information */
   shadowTable: QualifiedTablename
-  // Polls the database for changes every `pollingInterval` milliseconds.
+  /** Polls the database for changes every `pollingInterval` milliseconds. */
   pollingInterval: number
-  // Throttle snapshotting to once per `minSnapshotWindow` milliseconds.
+  /** Throttle snapshotting to once per `minSnapshotWindow` milliseconds. */
   minSnapshotWindow: number
 }
 

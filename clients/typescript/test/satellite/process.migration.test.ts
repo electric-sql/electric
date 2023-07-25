@@ -1,28 +1,43 @@
-import test from 'ava'
+import testAny, { ExecutionContext, TestFn } from 'ava'
+import isequal from 'lodash.isequal'
 import Long from 'long'
-import { makeContext, cleanAndStopSatellite, relations } from './common'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { DataChangeType, Row, Statement } from '../../src/util'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../../src/_generated/protocol/satellite'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { generateTag } from '../../src/satellite/oplog'
-import isequal from 'lodash.isequal'
+import {
+  DataChange,
+  DataChangeType,
+  Row,
+  SchemaChange,
+  Statement,
+  Transaction,
+} from '../../src/util'
+import {
+  ContextType,
+  cleanAndStopSatellite,
+  makeContext,
+  relations,
+} from './common'
 
-test.beforeEach(async (t: any) => {
+type CurrentContext = ContextType<{ clientId: string; txDate: Date }>
+const test = testAny as TestFn<CurrentContext>
+
+test.beforeEach(async (t) => {
   await makeContext(t)
-  const { satellite, authState } = t.context as any
+  const { satellite, authState } = t.context
   await satellite.start(authState)
-  t.context['clientId'] = satellite['_authState']['clientId'] // store clientId in the context
+  t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
   t.context['txDate'] = txDate
-  // Mimick Electric sending our own operations back
+  // Mimic Electric sending our own operations back
   // which serves as an acknowledgement (even though there is a separate ack also)
   // and leads to GC of the oplog
   const ackTx = {
-    origin: satellite._authState.clientId,
+    origin: satellite._authState!.clientId,
     commit_timestamp: Long.fromNumber(txDate.getTime()),
     changes: [], // doesn't matter, only the origin and timestamp matter for GC of the oplog
     lsn: new Uint8Array(),
@@ -31,7 +46,7 @@ test.beforeEach(async (t: any) => {
 })
 test.afterEach.always(cleanAndStopSatellite)
 
-const populateDB = async (t: any) => {
+const populateDB = async (t: ExecutionContext<CurrentContext>) => {
   const adapter = t.context.adapter as DatabaseAdapter
 
   const stmts: Statement[] = []
@@ -47,7 +62,10 @@ const populateDB = async (t: any) => {
   await adapter.runInTransaction(...stmts)
 }
 
-async function assertDbHasTables(t: any, ...tables: string[]) {
+async function assertDbHasTables(
+  t: ExecutionContext<CurrentContext>,
+  ...tables: string[]
+) {
   const adapter = t.context.adapter as DatabaseAdapter
   const schemaRows = await adapter.query({
     sql: "SELECT tbl_name FROM sqlite_schema WHERE type = 'table'",
@@ -59,7 +77,10 @@ async function assertDbHasTables(t: any, ...tables: string[]) {
   })
 }
 
-async function getTableInfo(table: string, t: any): Promise<ColumnInfo[]> {
+async function getTableInfo(
+  table: string,
+  t: ExecutionContext<CurrentContext>
+): Promise<ColumnInfo[]> {
   const adapter = t.context.adapter as DatabaseAdapter
   return (await adapter.query({
     sql: `pragma table_info(${table});`,
@@ -75,8 +96,8 @@ type ColumnInfo = {
   pk: number
 }
 
-test.serial('setup populates DB', async (t: any) => {
-  const adapter = t.context.adapter as DatabaseAdapter
+test.serial('setup populates DB', async (t) => {
+  const adapter = t.context.adapter
 
   const sql = 'SELECT * FROM parent'
   const rows = await adapter.query({ sql })
@@ -94,7 +115,7 @@ test.serial('setup populates DB', async (t: any) => {
   ])
 })
 
-const createTable = {
+const createTable: SchemaChange = {
   table: {
     name: 'NewTable',
     columns: [{ name: 'id' }, { name: 'foo' }, { name: 'bar' }],
@@ -110,7 +131,7 @@ const createTable = {
        );',
 }
 
-const addColumn = {
+const addColumn: SchemaChange = {
   table: {
     name: 'parent',
     columns: [
@@ -178,7 +199,7 @@ const newTableRelation = {
   ],
 }
 
-async function checkMigrationIsApplied(t: any) {
+async function checkMigrationIsApplied(t: ExecutionContext<CurrentContext>) {
   await assertDbHasTables(t, 'parent', 'child', 'NewTable')
 
   const newTableInfo = await getTableInfo('NewTable', t)
@@ -217,10 +238,10 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   })
 }
 
-const eqSet = (xs: any[], ys: any[]) =>
+const eqSet = <T>(xs: T[], ys: T[]): boolean =>
   xs.length === ys.length && xs.every((x) => ys.some((y) => isequal(x, y)))
 
-test.serial('apply migration containing only DDL', async (t: any) => {
+test.serial('apply migration containing only DDL', async (t) => {
   const { satellite, adapter, txDate } = t.context
   const timestamp = txDate.getTime()
 
@@ -257,7 +278,7 @@ test.serial('apply migration containing only DDL', async (t: any) => {
 
 test.serial(
   'apply migration containing DDL and non-conflicting DML',
-  async (t: any) => {
+  async (t) => {
     /*
      Test migrations containing non-conflicting DML statements and some DDL statements
      - Process the following migration tx: <DML 1> <DDL 1> <DML 2>
@@ -436,106 +457,103 @@ test.serial(
   }
 )
 
-test.serial(
-  'apply migration containing DDL and conflicting DML',
-  async (t: any) => {
-    // Same as previous test but DML contains some conflicting operations
-    const { satellite, adapter, txDate } = t.context
+test.serial('apply migration containing DDL and conflicting DML', async (t) => {
+  // Same as previous test but DML contains some conflicting operations
+  const { satellite, adapter, txDate } = t.context
 
-    // Fetch the shadow tag for row 1 such that delete will overwrite it
-    const localEntries = await satellite._getEntries()
-    const shadowEntryForRow1 = await satellite._getOplogShadowEntry(
-      localEntries[0]
-    ) // shadow entry for insert of row with id 1
-    const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)
+  // Fetch the shadow tag for row 1 such that delete will overwrite it
+  const localEntries = await satellite._getEntries()
+  const shadowEntryForRow1 = await satellite._getOplogShadowEntry(
+    localEntries[0]
+  ) // shadow entry for insert of row with id 1
+  const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)
 
-    // Locally update row with id 1
-    await adapter.runInTransaction({
-      sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
-      args: ['still local', 5, 1],
-    })
+  // Locally update row with id 1
+  await adapter.runInTransaction({
+    sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
+    args: ['still local', 5, 1],
+  })
 
-    await satellite._performSnapshot()
+  await satellite._performSnapshot()
 
-    // Now receive a concurrent delete of that row
-    // such that it deletes the row with id 1 that was initially inserted
-    const timestamp = txDate.getTime()
-    //const txTags = [ generateTag('remote', txDate) ]
+  // Now receive a concurrent delete of that row
+  // such that it deletes the row with id 1 that was initially inserted
+  const timestamp = txDate.getTime()
+  //const txTags = [ generateTag('remote', txDate) ]
 
-    const deleteRow = {
-      id: 1,
-      value: 'local',
-      other: null,
-    }
-
-    const deleteChange = {
-      type: DataChangeType.DELETE,
-      relation: relations['parent'],
-      oldRecord: deleteRow,
-      tags: shadowTagsRow1,
-    }
-
-    // Process the incoming delete
-    const ddl = [addColumn, createTable]
-    const dml = [deleteChange]
-
-    const migrationTx = {
-      origin: 'remote',
-      commit_timestamp: Long.fromNumber(timestamp),
-      changes: [...ddl, ...dml],
-      lsn: new Uint8Array(),
-      migrationVersion: '5',
-    }
-
-    const rowsBeforeMigration = await fetchParentRows(adapter)
-    const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(
-      (r) => r.id !== deleteRow.id
-    )
-
-    // For each schema change, Electric sends a `SatRelation` message
-    // before sending a DML operation that depends on a new or modified schema.
-    // The `SatRelation` message is handled by `_updateRelations` in order
-    // to update Satellite's relations.
-    // In this case, the DML operation deletes a row in `parent` table
-    // so we receive a `SatRelation` message for that table
-    await satellite._updateRelations(addColumnRelation)
-
-    // Apply the migration transaction
-    await satellite._applyTransaction(migrationTx)
-
-    // Check that the migration was successfully applied
-    await checkMigrationIsApplied(t)
-
-    // The local update and remote delete happened concurrently
-    // Check that the update wins
-    const rowsAfterMigration = await fetchParentRows(adapter)
-    const newRowsExceptConflictingRow = rowsAfterMigration.filter(
-      (r) => r.id !== deleteRow.id
-    )
-    const conflictingRow = rowsAfterMigration.find((r) => r.id === deleteRow.id)
-
-    t.assert(
-      eqSet(
-        rowsBeforeMigrationExceptConflictingRow.map((r) => {
-          return {
-            baz: null,
-            ...r,
-          }
-        }),
-        newRowsExceptConflictingRow
-      )
-    )
-
-    t.deepEqual(conflictingRow, {
-      id: 1,
-      value: 'still local',
-      other: 5,
-      baz: null,
-    })
+  const deleteRow = {
+    id: 1,
+    value: 'local',
+    other: null,
   }
-)
 
-test.serial('apply migration and concurrent transaction', async (t: any) => {
+  const deleteChange = {
+    type: DataChangeType.DELETE,
+    relation: relations['parent'],
+    oldRecord: deleteRow,
+    tags: shadowTagsRow1,
+  }
+
+  // Process the incoming delete
+  const ddl = [addColumn, createTable]
+  const dml = [deleteChange]
+
+  const migrationTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(timestamp),
+    changes: [...ddl, ...dml],
+    lsn: new Uint8Array(),
+    migrationVersion: '5',
+  }
+
+  const rowsBeforeMigration = await fetchParentRows(adapter)
+  const rowsBeforeMigrationExceptConflictingRow = rowsBeforeMigration.filter(
+    (r) => r.id !== deleteRow.id
+  )
+
+  // For each schema change, Electric sends a `SatRelation` message
+  // before sending a DML operation that depends on a new or modified schema.
+  // The `SatRelation` message is handled by `_updateRelations` in order
+  // to update Satellite's relations.
+  // In this case, the DML operation deletes a row in `parent` table
+  // so we receive a `SatRelation` message for that table
+  await satellite._updateRelations(addColumnRelation)
+
+  // Apply the migration transaction
+  await satellite._applyTransaction(migrationTx)
+
+  // Check that the migration was successfully applied
+  await checkMigrationIsApplied(t)
+
+  // The local update and remote delete happened concurrently
+  // Check that the update wins
+  const rowsAfterMigration = await fetchParentRows(adapter)
+  const newRowsExceptConflictingRow = rowsAfterMigration.filter(
+    (r) => r.id !== deleteRow.id
+  )
+  const conflictingRow = rowsAfterMigration.find((r) => r.id === deleteRow.id)
+
+  t.assert(
+    eqSet(
+      rowsBeforeMigrationExceptConflictingRow.map((r) => {
+        return {
+          baz: null,
+          ...r,
+        }
+      }),
+      newRowsExceptConflictingRow
+    )
+  )
+
+  t.deepEqual(conflictingRow, {
+    id: 1,
+    value: 'still local',
+    other: 5,
+    baz: null,
+  })
+})
+
+test.serial('apply migration and concurrent transaction', async (t) => {
   const { satellite, adapter, txDate } = t.context
 
   const timestamp = txDate.getTime()
@@ -544,7 +562,10 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
   const txTagsRemoteA = [generateTag(remoteA, txDate)]
   const txTagsRemoteB = [generateTag(remoteB, txDate)]
 
-  const mkInsertChange = (record: any, tags: string[]) => {
+  const mkInsertChange = (
+    record: Record<string, string | number>,
+    tags: string[]
+  ): DataChange => {
     return {
       type: DataChangeType.INSERT,
       relation: relations['parent'],
@@ -572,7 +593,7 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
   const insertChangeA = mkInsertChange(insertRowA, txTagsRemoteA)
   const insertChangeB = mkInsertChange(insertRowB, txTagsRemoteB)
 
-  const txA = {
+  const txA: Transaction = {
     origin: remoteA,
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [insertChangeA],
@@ -581,7 +602,7 @@ test.serial('apply migration and concurrent transaction', async (t: any) => {
 
   const ddl = [addColumn, createTable]
 
-  const txB = {
+  const txB: Transaction = {
     origin: remoteB,
     commit_timestamp: Long.fromNumber(timestamp),
     changes: [...ddl, insertChangeB],

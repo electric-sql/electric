@@ -101,15 +101,15 @@ test('subscribe to connectivity change events is scoped by dbName', async (t) =>
 
   const notifications: ConnectivityStateChangeNotification[] = []
 
-  target.subscribeToConnectivityStateChange((x) => {
+  target.subscribeToConnectivityStateChanges((x) => {
     notifications.push(x)
   })
 
-  source.connectivityStateChange('test.db', 'connected')
+  source.connectivityStateChanged('test.db', 'connected')
 
   t.is(notifications.length, 1)
 
-  source.connectivityStateChange('non-existing-db', 'connected')
+  source.connectivityStateChanged('non-existing-db', 'connected')
 
   t.is(notifications.length, 1)
 })
@@ -120,15 +120,15 @@ test('no more connectivity events after unsubscribe', async (t) => {
 
   const notifications: ConnectivityStateChangeNotification[] = []
 
-  const key = target.subscribeToConnectivityStateChange((x) => {
+  const key = target.subscribeToConnectivityStateChanges((x) => {
     notifications.push(x)
   })
 
-  source.connectivityStateChange('test.db', 'connected')
+  source.connectivityStateChanged('test.db', 'connected')
 
-  target.unsubscribeFromConnectivityStateChange(key)
+  target.unsubscribeFromConnectivityStateChanges(key)
 
-  source.connectivityStateChange('test.db', 'connected')
+  source.connectivityStateChanged('test.db', 'connected')
 
   t.is(notifications.length, 1)
 })

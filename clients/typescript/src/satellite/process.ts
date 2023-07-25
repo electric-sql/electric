@@ -102,6 +102,11 @@ export type ShapeSubscription = {
   synced: Promise<void>
 }
 
+type ThrottleFunction = {
+  cancel: () => void
+  (): void
+}
+
 const throwErrors = [
   SatelliteErrorCode.INVALID_POSITION,
   SatelliteErrorCode.BEHIND_WINDOW,
@@ -122,7 +127,7 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
-  _throttledSnapshot: () => void
+  _throttledSnapshot: ThrottleFunction
 
   _lastAckdRowId: number
   _lastSentRowId: number
@@ -135,12 +140,31 @@ export class SatelliteProcess implements Satellite {
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
 
-  /*
-  To optimize inserting a lot of data when the subscription data comes, we need to do
-  less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
-  arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
-  versions after.
-  */
+  /**
+   * Create a throttled function that performs a snapshot at most every
+   * `minSnapshotWindow` ms. This function runs immediately when you
+   * first call it and then every `minSnapshotWindow` ms as long as
+   * you keep calling it within the window. If you don't call it within
+   * the window, it will then run immediately the next time you call it.
+   */
+  _throttleSnapshot: () => ThrottleFunction = () => {
+    const snapshot = this._performSnapshot.bind(this)
+    const snapshotWindow = this.opts.minSnapshotWindow
+
+    const throttleOpts = {
+      leading: true,
+      trailing: true,
+    }
+
+    return throttle(snapshot, snapshotWindow, throttleOpts)
+  }
+
+  /**
+   * To optimize inserting a lot of data when the subscription data comes, we need to do
+   * less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
+   * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
+   * versions after.
+   */
   private maxSqlParameters: 999 | 32766 = 999
 
   constructor(
@@ -162,24 +186,12 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = 0
     this._lastSentRowId = 0
 
-    // Create a throttled function that performs a snapshot at most every
-    // `minSnapshotWindow` ms. This function runs immediately when you
-    // first call it and then every `minSnapshotWindow` ms as long as
-    // you keep calling it within the window. If you don't call it within
-    // the window, it will then run immediately the next time you call it.
-    const snapshot = this._performSnapshot.bind(this)
-    const throttleOpts = { leading: true, trailing: true }
-    this._throttledSnapshot = throttle(
-      snapshot,
-      opts.minSnapshotWindow,
-      throttleOpts
-    )
-
     this.relations = {}
 
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
+    this._throttledSnapshot = this._throttleSnapshot()
     this.subscriptionNotifiers = {}
 
     this.subscriptionIdGenerator = () => uuid()
@@ -203,28 +215,40 @@ export class SatelliteProcess implements Satellite {
         : await this._getClientId()
     await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
-    if (this._authStateSubscription === undefined) {
-      const handler = this._updateAuthState.bind(this)
-      this._authStateSubscription =
-        this.notifier.subscribeToAuthStateChanges(handler)
-    }
+    const notifierSubscriptions = Object.entries({
+      _authStateSubscription: this._authStateSubscription,
+      _connectivityChangeSubscription: this._connectivityChangeSubscription,
+      _potentialDataChangeSubscription: this._potentialDataChangeSubscription,
+    })
+    notifierSubscriptions.forEach(([name, value]) => {
+      if (value !== undefined) {
+        throw new Error(
+          `Starting satellite process with an existing
+           \`${name}\`.
+           This means there is a notifier subscription leak.`
+        )
+      }
+    })
 
-    // XXX establish replication connection,
-    // validate auth state, etc here.
+    // Monitor auth state changes.
+    const authStateHandler = this._updateAuthState.bind(this)
+    this._authStateSubscription =
+      this.notifier.subscribeToAuthStateChanges(authStateHandler)
+
+    // Monitor connectivity state changes.
+    const connectivityStateHandler = ({
+      connectivityState,
+    }: ConnectivityStateChangeNotification) => {
+      this._connectivityStateChanged(connectivityState)
+    }
+    this._connectivityChangeSubscription =
+      this.notifier.subscribeToConnectivityStateChanges(
+        connectivityStateHandler
+      )
 
     // Request a snapshot whenever the data in our database potentially changes.
     this._potentialDataChangeSubscription =
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
-
-    const connectivityChangeCallback = (
-      notification: ConnectivityStateChangeNotification
-    ) => {
-      this._connectivityStateChange(notification.connectivityState)
-    }
-    this._connectivityChangeSubscription =
-      this.notifier.subscribeToConnectivityStateChange(
-        connectivityChangeCallback
-      )
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(
@@ -303,7 +327,7 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
     this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot()
+      this._throttledSnapshot!()
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -314,16 +338,35 @@ export class SatelliteProcess implements Satellite {
 
   // Unsubscribe from data changes and stop polling
   async stop(): Promise<void> {
-    Log.info('stop polling')
+    // Stop snapshotting and polling for changes.
+    if (this._throttledSnapshot !== undefined) {
+      this._throttledSnapshot.cancel()
+    }
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
+
       this._pollingInterval = undefined
+    }
+
+    if (this._authStateSubscription !== undefined) {
+      this.notifier.unsubscribeFromAuthStateChanges(this._authStateSubscription)
+
+      this._authStateSubscription = undefined
+    }
+
+    if (this._connectivityChangeSubscription !== undefined) {
+      this.notifier.unsubscribeFromConnectivityStateChanges(
+        this._connectivityChangeSubscription
+      )
+
+      this._connectivityChangeSubscription = undefined
     }
 
     if (this._potentialDataChangeSubscription !== undefined) {
       this.notifier.unsubscribeFromPotentialDataChanges(
         this._potentialDataChangeSubscription
       )
+
       this._potentialDataChangeSubscription = undefined
     }
 
@@ -543,7 +586,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectivityStateChange(status: ConnectivityState): Promise<void> {
+  async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
