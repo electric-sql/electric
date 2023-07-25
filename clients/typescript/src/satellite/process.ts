@@ -142,41 +142,13 @@ export class SatelliteProcess implements Satellite {
   shapeRequestIdGenerator: (...args: any) => string
 
   /**
-   * Create a throttled function that performs a snapshot at most every
-   * `minSnapshotWindow` ms. This function runs immediately when you
-   * first call it and then every `minSnapshotWindow` ms as long as
-   * you keep calling it within the window. If you don't call it within
-   * the window, it will then run immediately the next time you call it.
-   */
-  _throttleSnapshot: () => ThrottleFunction = () => {
-    const mutex = new Mutex()
-    const mutexSnapshot = async () => {
-      const release = await mutex.acquire()
-      try {
-        return await this._performSnapshot()
-      } finally {
-        release()
-      }
-    }
-
-    const snapshotWindow = this.opts.minSnapshotWindow
-
-    const throttleOpts = {
-      leading: true,
-      trailing: true,
-    }
-
-    return throttle(mutexSnapshot, snapshotWindow, throttleOpts)
-  }
-
-  /**
    * To optimize inserting a lot of data when the subscription data comes, we need to do
    * less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
    * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
    * versions after.
    */
   private maxSqlParameters: 999 | 32766 = 999
-
+  private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
   constructor(
@@ -203,11 +175,30 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
-    this._throttledSnapshot = this._throttleSnapshot()
+    this._throttledSnapshot = throttle(
+      this.mutexSnapshot.bind(this),
+      opts.minSnapshotWindow,
+      {
+        leading: true,
+        trailing: true,
+      }
+    )
     this.subscriptionNotifiers = {}
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+  }
+
+  /**
+   * Perform a snapshot while taking out a mutex to avoid concurrent calls.
+   */
+  private async mutexSnapshot() {
+    const release = await this.snapshotMutex.acquire()
+    try {
+      return await this._performSnapshot()
+    } finally {
+      release()
+    }
   }
 
   async start(
@@ -692,12 +683,14 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Perform a snapshot and notify which data actually changed.
+  // It is not safe to call this fucntion concurrently. Consider
+  // using a wrapped version
   async _performSnapshot(): Promise<Date> {
     // assert a single call at a time
     if (this.performingSnapshot) {
       throw new SatelliteError(
         SatelliteErrorCode.INTERNAL,
-        'Already performing snapshot'
+        'already performing snapshot'
       )
     } else {
       this.performingSnapshot = true
@@ -1167,7 +1160,7 @@ export class SatelliteProcess implements Satellite {
       if (firstDMLChunk) {
         Log.info(`apply incoming changes for LSN: ${base64.fromBytes(lsn)}`)
         // assign timestamp to pending operations before apply
-        await this._performSnapshot()
+        await this.mutexSnapshot()
         firstDMLChunk = false
       }
 
