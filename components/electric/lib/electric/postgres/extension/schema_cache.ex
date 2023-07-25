@@ -25,7 +25,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @behaviour SchemaLoader
 
-  @instance Global.name()
 
   def child_spec({conn_config, _opts} = args) do
     child_spec(Connectors.origin(conn_config), args)
@@ -62,10 +61,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Electric.name(__MODULE__, origin)
   end
 
-  def instance() do
-    @instance
-  end
-
+  @spec name(Connectors.origin()) :: boolean()
   def ready?(origin) do
     case Electric.lookup_pid(name(origin)) do
       pid when is_pid(pid) -> true
