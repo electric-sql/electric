@@ -1,4 +1,4 @@
-import test from 'ava'
+import testAny, { TestFn, ExecutionContext } from 'ava'
 import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { schema } from '../generated'
@@ -17,7 +17,8 @@ import { ElectricNamespace } from '../../../src/electric/namespace'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
-import { ExecutionContext } from 'ava'
+
+const test = testAny as TestFn<ContextType>
 
 // Modify `loglevel` to store the logged messages
 // based on "Writing plugins" in https://github.com/pimterry/loglevel
@@ -47,7 +48,7 @@ const config = {
   },
 }
 
-async function makeContext(t: ExecutionContext) {
+async function makeContext(t: ExecutionContext<ContextType>) {
   const db = new Database(':memory:')
 
   const client = new MockSatelliteClient()
@@ -75,7 +76,7 @@ async function makeContext(t: ExecutionContext) {
   const Profile = electric.db.Profile
 
   const runMigrations = async () => {
-    await migrator.up()
+    return await migrator.up()
   }
 
   t.context = {
@@ -91,7 +92,7 @@ async function makeContext(t: ExecutionContext) {
     Profile,
   }
 
-  init(t.context as ContextType)
+  init(t.context)
 }
 
 type TableType<T extends keyof ElectricClient<typeof schema>['db']> =
@@ -125,7 +126,7 @@ function init({ db }: ContextType) {
 }
 
 test.beforeEach(makeContext)
-test.afterEach.always((t: ExecutionContext) => {
+test.afterEach.always((t: ExecutionContext<ContextType>) => {
   shapeManager['tablesPreviouslySubscribed'] = new Set<string>()
   return cleanAndStopSatellite(t)
 })
