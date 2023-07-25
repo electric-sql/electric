@@ -683,7 +683,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Perform a snapshot and notify which data actually changed.
-  // It is not safe to call this fucntion concurrently. Consider
+  // It is not safe to call this function concurrently. Consider
   // using a wrapped version
   async _performSnapshot(): Promise<Date> {
     // assert a single call at a time

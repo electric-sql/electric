@@ -31,6 +31,7 @@ import Long from 'long'
 import {
   DataChangeType,
   DataTransaction,
+  SatelliteError,
   SatelliteErrorCode,
 } from '../../src/util/types'
 import {
@@ -158,20 +159,22 @@ test('(regression) performSnapshot cant be called concurrently', async (t) => {
   await runMigrations()
   await satellite._setAuthState(authState)
 
-  try {
-    // delay termination of _performSnapshot
-    const run = satellite.adapter.run.bind(satellite.adapter)
-    satellite.adapter.run = (stmt) =>
-      new Promise((res) => setTimeout(() => run(stmt).then(res), 100))
+  await t.throwsAsync(
+    async () => {
+      const run = satellite.adapter.run.bind(satellite.adapter)
+      satellite.adapter.run = (stmt) =>
+        new Promise((res) => setTimeout(() => run(stmt).then(res), 100))
 
-    const p1 = satellite._performSnapshot()
-    const p2 = satellite._performSnapshot()
-    await Promise.all([p1, p2])
-    t.fail()
-  } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.INTERNAL)
-    t.pass()
-  }
+      const p1 = satellite._performSnapshot()
+      const p2 = satellite._performSnapshot()
+      await Promise.all([p1, p2])
+    },
+    {
+      instanceOf: SatelliteError,
+      code: SatelliteErrorCode.INTERNAL,
+      message: 'already performing snapshot',
+    }
+  )
 })
 
 test('(regression) throttle with mutex prevents race when snapshot is slow', async (t) => {
@@ -190,9 +193,10 @@ test('(regression) throttle with mutex prevents race when snapshot is slow', asy
     setTimeout(() => satellite._throttledSnapshot()?.then(res), 50)
   })
 
-  await p1
-  await p2
-  t.pass()
+  await t.notThrowsAsync(async () => {
+    await p1
+    await p2
+  })
 })
 
 test('starting and stopping the process works', async (t) => {
