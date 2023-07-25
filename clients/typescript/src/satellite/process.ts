@@ -93,6 +93,7 @@ import {
 } from './shapes/types'
 import { SubscriptionsManager } from './shapes'
 import { prepareBatchedStatements } from '../util/statements'
+import { Mutex } from 'async-mutex'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -104,7 +105,7 @@ export type ShapeSubscription = {
 
 type ThrottleFunction = {
   cancel: () => void
-  (): void
+  (): Promise<Date> | undefined
 }
 
 const throwErrors = [
@@ -148,7 +149,16 @@ export class SatelliteProcess implements Satellite {
    * the window, it will then run immediately the next time you call it.
    */
   _throttleSnapshot: () => ThrottleFunction = () => {
-    const snapshot = this._performSnapshot.bind(this)
+    const mutex = new Mutex()
+    const mutexSnapshot = async () => {
+      const release = await mutex.acquire()
+      try {
+        return await this._performSnapshot()
+      } finally {
+        release()
+      }
+    }
+
     const snapshotWindow = this.opts.minSnapshotWindow
 
     const throttleOpts = {
@@ -156,7 +166,7 @@ export class SatelliteProcess implements Satellite {
       trailing: true,
     }
 
-    return throttle(snapshot, snapshotWindow, throttleOpts)
+    return throttle(mutexSnapshot, snapshotWindow, throttleOpts)
   }
 
   /**
@@ -166,6 +176,8 @@ export class SatelliteProcess implements Satellite {
    * versions after.
    */
   private maxSqlParameters: 999 | 32766 = 999
+
+  private performingSnapshot: boolean = false
 
   constructor(
     dbName: DbName,
@@ -681,6 +693,16 @@ export class SatelliteProcess implements Satellite {
 
   // Perform a snapshot and notify which data actually changed.
   async _performSnapshot(): Promise<Date> {
+    // assert a single call at a time
+    if (this.performingSnapshot) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'Already performing snapshot'
+      )
+    } else {
+      this.performingSnapshot = true
+    }
+
     const timestamp = new Date()
 
     await this._updateOplogTimestamp(timestamp)
@@ -742,6 +764,7 @@ export class SatelliteProcess implements Satellite {
         this._replicateSnapshotChanges(missing)
       )
     }
+    this.performingSnapshot = false
     return timestamp
   }
 

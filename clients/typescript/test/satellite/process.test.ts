@@ -153,6 +153,48 @@ test('snapshot works', async (t) => {
   t.deepEqual(changes, [expectedChange])
 })
 
+test('(regression) performSnapshot cant be called concurrently', async (t) => {
+  const { authState, adapter, satellite, notifier, runMigrations } = t.context
+  await runMigrations()
+  await satellite._setAuthState(authState)
+
+  try {
+    // delay termination of _performSnapshot
+    const run = satellite.adapter.run.bind(satellite.adapter)
+    satellite.adapter.run = (stmt) =>
+      new Promise((res) => setTimeout(() => run(stmt).then(res), 100))
+
+    const p1 = satellite._performSnapshot()
+    const p2 = satellite._performSnapshot()
+    await Promise.all([p1, p2])
+    t.fail()
+  } catch (e: any) {
+    t.is(e.code, SatelliteErrorCode.INTERNAL)
+    t.pass()
+  }
+})
+
+test('(regression) throttle with mutex prevents race when snapshot is slow', async (t) => {
+  const { authState, satellite, runMigrations } = t.context
+  await runMigrations()
+  await satellite._setAuthState(authState)
+
+  // delay termination of _performSnapshot
+  const run = satellite.adapter.run.bind(satellite.adapter)
+  satellite.adapter.run = (stmt) =>
+    new Promise((res) => setTimeout(() => run(stmt).then(res), 100))
+
+  const p1 = satellite._throttledSnapshot()
+  const p2 = new Promise<Date>((res) => {
+    // call snapshot after throttle time has expired
+    setTimeout(() => satellite._throttledSnapshot()?.then(res), 50)
+  })
+
+  await p1
+  await p2
+  t.pass()
+})
+
 test('starting and stopping the process works', async (t) => {
   const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
