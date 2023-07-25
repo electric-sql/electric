@@ -154,7 +154,7 @@ test('snapshot works', async (t) => {
 })
 
 test('(regression) performSnapshot cant be called concurrently', async (t) => {
-  const { authState, adapter, satellite, notifier, runMigrations } = t.context
+  const { authState, satellite, runMigrations } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
 
