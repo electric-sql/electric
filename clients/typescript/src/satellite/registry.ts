@@ -35,13 +35,13 @@ export abstract class BaseRegistry implements Registry {
   }
 
   abstract startProcess(
-    _dbName: DbName,
-    _adapter: DatabaseAdapter,
-    _migrator: Migrator,
-    _notifier: Notifier,
-    _socketFactory: SocketFactory,
-    _config: InternalElectricConfig,
-    _opts?: SatelliteOverrides
+    dbName: DbName,
+    adapter: DatabaseAdapter,
+    migrator: Migrator,
+    notifier: Notifier,
+    socketFactory: SocketFactory,
+    config: InternalElectricConfig,
+    opts?: SatelliteOverrides
   ): Promise<Satellite>
 
   async ensureStarted(

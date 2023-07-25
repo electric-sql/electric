@@ -21,7 +21,6 @@ test('throttled snapshot respects window', async (t) => {
 
   await satellite._setAuthState(authState)
 
-  satellite._throttledSnapshot = satellite._throttleSnapshot()
   await satellite._throttledSnapshot()
 
   const numNotifications = notifier.notifications.length

@@ -116,7 +116,7 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
   _connectivityChangeSubscription?: string
-  _throttledSnapshot?: ThrottleFunction
+  _throttledSnapshot: ThrottleFunction
 
   _lastAckdRowId: number
   _lastSentRowId: number
@@ -129,12 +129,31 @@ export class SatelliteProcess implements Satellite {
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
 
-  /*
-  To optimize inserting a lot of data when the subscription data comes, we need to do
-  less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
-  arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
-  versions after.
-  */
+  /**
+   * Create a throttled function that performs a snapshot at most every
+   * `minSnapshotWindow` ms. This function runs immediately when you
+   * first call it and then every `minSnapshotWindow` ms as long as
+   * you keep calling it within the window. If you don't call it within
+   * the window, it will then run immediately the next time you call it.
+   */
+  _throttleSnapshot: () => ThrottleFunction = () => {
+    const snapshot = this._performSnapshot.bind(this)
+    const snapshotWindow = this.opts.minSnapshotWindow
+
+    const throttleOpts = {
+      leading: true,
+      trailing: true,
+    }
+
+    return throttle(snapshot, snapshotWindow, throttleOpts)
+  }
+
+  /**
+   * To optimize inserting a lot of data when the subscription data comes, we need to do
+   * less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
+   * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
+   * versions after.
+   */
   private maxSqlParameters: 999 | 32766 = 999
 
   constructor(
@@ -161,27 +180,11 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
+    this._throttledSnapshot = this._throttleSnapshot()
     this.subscriptionNotifiers = {}
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
-  }
-
-  // Create a throttled function that performs a snapshot at most every
-  // `minSnapshotWindow` ms. This function runs immediately when you
-  // first call it and then every `minSnapshotWindow` ms as long as
-  // you keep calling it within the window. If you don't call it within
-  // the window, it will then run immediately the next time you call it.
-  _throttleSnapshot: () => ThrottleFunction = () => {
-    const snapshot = this._performSnapshot.bind(this)
-    const snapshotWindow = this.opts.minSnapshotWindow
-
-    const throttleOpts = {
-      leading: true,
-      trailing: true,
-    }
-
-    return throttle(snapshot, snapshotWindow, throttleOpts)
   }
 
   async start(
@@ -201,17 +204,17 @@ export class SatelliteProcess implements Satellite {
         : await this._getClientId()
     await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
-    const subscriptions = Object.entries({
+    const notifierSubscriptions = Object.entries({
       _authStateSubscription: this._authStateSubscription,
       _connectivityChangeSubscription: this._connectivityChangeSubscription,
       _potentialDataChangeSubscription: this._potentialDataChangeSubscription,
     })
-    subscriptions.forEach(([name, value]) => {
+    notifierSubscriptions.forEach(([name, value]) => {
       if (value !== undefined) {
         throw new Error(
           `Starting satellite process with an existing
            \`${name}\`.
-           This means there is a subscription leak.`
+           This means there is a notifier subscription leak.`
         )
       }
     })
@@ -233,7 +236,6 @@ export class SatelliteProcess implements Satellite {
       )
 
     // Request a snapshot whenever the data in our database potentially changes.
-    this._throttledSnapshot = this._throttleSnapshot()
     this._potentialDataChangeSubscription =
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 

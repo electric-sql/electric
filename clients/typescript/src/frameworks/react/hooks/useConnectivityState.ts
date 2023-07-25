@@ -4,6 +4,9 @@ import { ConnectivityStateChangeNotification } from '../../../notifiers'
 import { ConnectivityState } from '../../../util/types'
 import { ElectricContext } from '../provider'
 
+/**
+ * React Hook to observe and manage Electric's connectivity state
+ */
 const useConnectivityState: () => {
   connectivityState: ConnectivityState
   toggleConnectivityState: () => void

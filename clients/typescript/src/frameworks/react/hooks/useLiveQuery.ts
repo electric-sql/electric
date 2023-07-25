@@ -59,7 +59,10 @@ function useLiveQuery<Res>(
   const cleanUp = () => {
     cleanedUp = true
   }
-  const cleanly = (setterFn: AnyFunction, ...args: any[]) => {
+  const cleanly = <F extends AnyFunction>(
+    setterFn: F,
+    ...args: Parameters<F>
+  ) => {
     if (cleanedUp) {
       return
     }
