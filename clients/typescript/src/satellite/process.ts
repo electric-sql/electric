@@ -177,7 +177,7 @@ export class SatelliteProcess implements Satellite {
    */
   private maxSqlParameters: 999 | 32766 = 999
 
-  private performingSnapshot: boolean = false
+  private performingSnapshot = false
 
   constructor(
     dbName: DbName,
@@ -708,64 +708,72 @@ export class SatelliteProcess implements Satellite {
     await this._updateOplogTimestamp(timestamp)
     const oplogEntries = await this._getUpdatedEntries(timestamp)
 
-    const promises: Promise<void | RunResult>[] = []
-
     if (oplogEntries.length !== 0) {
-      promises.push(this._notifyChanges(oplogEntries))
-
-      const shadowEntries = new Map<string, ShadowEntry>()
-
-      for (const oplogEntry of oplogEntries) {
-        const [cached, shadowEntry] = await this._lookupCachedShadowEntry(
-          oplogEntry,
-          shadowEntries
-        )
-
-        // Clear should not contain the tag for this timestamp, so if
-        // the entry was previously in cache - it means, that we already
-        // read it within the same snapshot
-        if (cached) {
-          oplogEntry.clearTags = encodeTags(
-            difference(decodeTags(shadowEntry.tags), [
-              this._generateTag(timestamp),
-            ])
-          )
-        } else {
-          oplogEntry.clearTags = shadowEntry.tags
-        }
-
-        if (oplogEntry.optype == OPTYPES.delete) {
-          shadowEntry.tags = shadowTagsDefault
-        } else {
-          const newTag = this._generateTag(timestamp)
-          shadowEntry.tags = encodeTags([newTag])
-        }
-
-        promises.push(this._updateOplogEntryTags(oplogEntry))
-        this._updateCachedShadowEntry(oplogEntry, shadowEntry, shadowEntries)
-      }
-
-      shadowEntries.forEach((value: ShadowEntry, _key: string) => {
-        if (value.tags == shadowTagsDefault) {
-          promises.push(this.adapter.run(this._deleteShadowTagsQuery(value)))
-        } else {
-          promises.push(this._updateShadowTags(value))
-        }
-      })
+      const stmts = await this._handleShadowOperations(timestamp, oplogEntries)
+      await this.adapter.runInTransaction(...stmts)
+      this._notifyChanges(oplogEntries)
     }
-    await Promise.all(promises)
 
     if (!this.client.isClosed()) {
       const { enqueued } = this.client.getOutboundLogPositions()
       const enqueuedLogPos = bytesToNumber(enqueued)
 
-      // TODO: take next N transactions instead of all
+      // TODO: handle case where pending oplog is large
       await this._getEntries(enqueuedLogPos).then((missing) =>
         this._replicateSnapshotChanges(missing)
       )
     }
     this.performingSnapshot = false
     return timestamp
+  }
+
+  async _handleShadowOperations(
+    timestamp: Date,
+    oplogEntries: OplogEntry[]
+  ): Promise<Statement[]> {
+    const stmts: Statement[] = []
+
+    const shadowEntries = new Map<string, ShadowEntry>()
+    for (const oplogEntry of oplogEntries) {
+      // should get shadow entries at once to prevent querying in a loop
+      const [cached, shadowEntry] = await this._lookupCachedShadowEntry(
+        oplogEntry,
+        shadowEntries
+      )
+
+      // Clear should not contain the tag for this timestamp, so if
+      // the entry was previously in cache - it means, that we already
+      // read it within the same snapshot
+      if (cached) {
+        oplogEntry.clearTags = encodeTags(
+          difference(decodeTags(shadowEntry.tags), [
+            this._generateTag(timestamp),
+          ])
+        )
+      } else {
+        oplogEntry.clearTags = shadowEntry.tags
+      }
+
+      if (oplogEntry.optype == OPTYPES.delete) {
+        shadowEntry.tags = shadowTagsDefault
+      } else {
+        const newTag = this._generateTag(timestamp)
+        shadowEntry.tags = encodeTags([newTag])
+      }
+
+      stmts.push(this._updateOplogEntryTagsStatement(oplogEntry))
+      this._updateCachedShadowEntry(oplogEntry, shadowEntry, shadowEntries)
+    }
+
+    shadowEntries.forEach((value: ShadowEntry, _key: string) => {
+      if (value.tags == shadowTagsDefault) {
+        stmts.push(this._deleteShadowTagsStatement(value))
+      } else {
+        stmts.push(this._updateShadowTagsStatement(value))
+      }
+    })
+
+    return stmts
   }
 
   _updateCachedShadowEntry(
@@ -877,12 +885,12 @@ export class SatelliteProcess implements Satellite {
         switch (entryChanges.optype) {
           case OPTYPES.delete:
             stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
-            stmts.push(this._deleteShadowTagsQuery(shadowEntry))
+            stmts.push(this._deleteShadowTagsStatement(shadowEntry))
             break
 
           default:
             stmts.push(_applyNonDeleteOperation(entryChanges, tablenameStr))
-            stmts.push(this._updateShadowTagsQuery(shadowEntry))
+            stmts.push(this._updateShadowTagsStatement(shadowEntry))
         }
       }
     }
@@ -933,9 +941,7 @@ export class SatelliteProcess implements Satellite {
     return rows as unknown as OplogEntry[]
   }
 
-  async _getOplogShadowEntry(
-    oplog?: OplogEntry | undefined
-  ): Promise<ShadowEntry[]> {
+  _getOplogShadowEntryStatement(oplog?: OplogEntry | undefined): Statement {
     const shadow = this.opts.shadowTable.toString()
     let query
     let selectTags = `SELECT * FROM ${shadow}`
@@ -957,15 +963,17 @@ export class SatelliteProcess implements Satellite {
       query = { sql: selectTags }
     }
 
-    const shadowTags = await this.adapter.query(query)
-    return shadowTags as unknown as ShadowEntry[]
+    return query
   }
 
-  async _updateShadowTags(shadow: ShadowEntry): Promise<RunResult> {
-    return await this.adapter.run(this._updateShadowTagsQuery(shadow))
+  async _getOplogShadowEntry(
+    oplog?: OplogEntry | undefined
+  ): Promise<ShadowEntry[]> {
+    const stmt = this._getOplogShadowEntryStatement(oplog)
+    return (await this.adapter.query(stmt)) as unknown as ShadowEntry[]
   }
 
-  _deleteShadowTagsQuery(shadow: ShadowEntry): Statement {
+  _deleteShadowTagsStatement(shadow: ShadowEntry): Statement {
     const shadowTable = this.opts.shadowTable.toString()
     const deleteRow = `
       DELETE FROM ${shadowTable}
@@ -979,7 +987,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  _updateShadowTagsQuery(shadow: ShadowEntry): Statement {
+  _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
     const shadowTable = this.opts.shadowTable.toString()
     const updateTags = `
       INSERT or REPLACE INTO ${shadowTable} (namespace, tablename, primaryKey, tags) VALUES
@@ -996,19 +1004,19 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _updateOplogEntryTags(oplog: OplogEntry): Promise<RunResult> {
+  _updateOplogEntryTagsStatement(oplog: OplogEntry): Statement {
     const oplogTable = this.opts.oplogTable.toString()
     const updateTags = `
       UPDATE ${oplogTable} set clearTags = ?
         WHERE rowid = ?
     `
-    return await this.adapter.run({
+    return {
       sql: updateTags,
       args: [oplog.clearTags, oplog.rowid],
-    })
+    }
   }
 
-  async _updateOplogTimestamp(timestamp: Date): Promise<void> {
+  async _updateOplogTimestamp(timestamp: Date): Promise<RunResult> {
     const oplog = this.opts.oplogTable.toString()
 
     const updateTimestamps = `
@@ -1022,7 +1030,7 @@ export class SatelliteProcess implements Satellite {
     `
 
     const updateArgs = [timestamp.toISOString(), `${this._lastAckdRowId}`]
-    await this.adapter.run({ sql: updateTimestamps, args: updateArgs })
+    return this.adapter.run({ sql: updateTimestamps, args: updateArgs })
   }
 
   // Merge changes, with last-write-wins and add-wins semantics.
