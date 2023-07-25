@@ -327,9 +327,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl GenServer
-  # task process done
-  def handle_info({ref, result}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
-    Logger.debug("task_complete: #{inspect(result)}")
+  # refresh subscription Task process done
+  def handle_info({ref, :ok}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
     {:noreply, %{state | refresh_task: nil}}
   end
 
