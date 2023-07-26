@@ -2,7 +2,6 @@ import { useContext, useEffect, useState } from 'react'
 
 import { ElectricNamespace } from '../../../electric'
 import { ConnectivityStateChangeNotification as Notification } from '../../../notifiers'
-import { genUUID } from '../../../util/random'
 import { ConnectivityState } from '../../../util/types'
 import { ElectricContext } from '../provider'
 
