@@ -409,7 +409,7 @@ test.serial('acknowledge lsn', async (t) => {
   })
 })
 
-test.serial.only('send transaction', async (t) => {
+test.serial('send transaction', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
