@@ -3,11 +3,19 @@ import { AuthConfig } from '../auth/index'
 export interface ElectricConfig {
   auth: AuthConfig
   /**
-   * Optional path to the Electric sync service.
+   * Optional URL string to connect to the Electric sync service.
+   *
    * Should have the following format:
-   * `electric://<host>:<port>`
+   * `protocol://<host>:<port>[?ssl=true]`
+   *
+   * If the protocol is `https` or `wss` then `ssl`
+   * defaults to true. Otherwise it defaults to false.
+   *
+   * If port is not provided, defaults to 443 when
+   * ssl is enabled or 80 when it isn't.
+   *
    * Defaults to:
-   * `electric://127.0.0.1:5133`
+   * `http://127.0.0.1:5133`
    */
   url?: string
   /**
@@ -45,19 +53,19 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   }
 
   const debug = config.debug ?? false
+  const url = new URL(config.url ?? 'http://127.0.0.1:5133')
 
-  const url = config.url ?? 'electric://127.0.0.1:5133'
-  const matches = url.match(/(?:electric:\/\/)(.+):([0-9]*)/)
-  if (matches === null) {
-    throw new Error(
-      "Invalid Electric URL. Must be of the form: 'electric://<host>:<port>'"
-    )
-  }
-  const [_fullMatch, host, port] = matches
+  const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
+  const sslEnabled = isSecureProtocol || url.searchParams.get('ssl') === 'true'
+
+  const defaultPort = sslEnabled ? 443 : 80
+  const portInt = parseInt(url.port, 10)
+  const port = Number.isNaN(portInt) ? defaultPort : portInt
+
   const replication = {
-    host,
-    port: parseInt(port, 10),
-    ssl: false,
+    host: url.hostname,
+    port: port,
+    ssl: sslEnabled,
   }
 
   return {
