@@ -438,9 +438,8 @@ export class SatelliteClient extends EventEmitter implements Client {
       )
     }
 
-    while (this.outbound.transactions.length > 0) {
-      const next = this.outbound.transactions.splice(0)[0]
-
+    let next: DataTransaction | undefined
+    while ((next = this.outbound.transactions.shift())) {
       // TODO: divide into SatOpLog array with max size
       this.sendMissingRelations(next, this.outbound)
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)

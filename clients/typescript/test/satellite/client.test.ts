@@ -51,6 +51,7 @@ test.beforeEach((t) => {
       port: 30002,
       timeout: 10000,
       ssl: false,
+      pushPeriod: 100,
     }
   )
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
@@ -408,7 +409,7 @@ test.serial('acknowledge lsn', async (t) => {
   })
 })
 
-test.serial('send transaction', async (t) => {
+test.serial.only('send transaction', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
@@ -448,17 +449,34 @@ test.serial('send transaction', async (t) => {
       timestamp: '1970-01-01T00:00:02.000Z',
       clearTags: '["origin@1231232347"]',
     },
+    {
+      namespace: 'main',
+      tablename: 'parent',
+      optype: 'INSERT',
+      newRow: '{"id":2}',
+      oldRow: undefined,
+      primaryKey: '{"id":2}',
+      rowid: 3,
+      timestamp: '1970-01-01T00:00:03.000Z',
+      clearTags: '[]',
+    },
   ]
 
   const transaction = toTransactions(opLogEntries, relations)
+  // console.log(transaction)
 
-  return new Promise(async (res) => {
+  t.plan(10) // We expect exactly 1 + 3 messages to be sent by the client, with 3 checks per non-relation message
+
+  return new Promise(async (res, rej) => {
     server.nextResponses([startResp])
     server.nextResponses([])
+
+    let expectedCount = 4
 
     // first message is a relation
     server.nextResponses([
       (data?: Buffer) => {
+        expectedCount -= 1
         const msgType = data!.readUInt8()
         if (msgType == getTypeFromString(Proto.SatRelation.$type)) {
           const relation = decode(data!) as Proto.SatRelation
@@ -470,33 +488,56 @@ test.serial('send transaction', async (t) => {
     // second message is a transaction
     server.nextResponses([
       (data?: Buffer) => {
+        expectedCount -= 1
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(Proto.SatOpLog.$type)) {
-          const satOpLog = (decode(data!) as Proto.SatOpLog).ops
+        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
 
-          const lsn = satOpLog[0].begin?.lsn as Uint8Array
-          t.is(bytesToNumber(lsn), 1)
-          t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
-          // TODO: check values
-        }
+        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
+        const lsn = satOpLog[0].begin?.lsn as Uint8Array
+
+        t.is(bytesToNumber(lsn), 1)
+        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
       },
     ])
 
     // third message after new enqueue does not send relation
     server.nextResponses([
       (data?: Buffer) => {
+        expectedCount -= 1
         const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(Proto.SatOpLog.$type)) {
-          const satOpLog = (decode(data!) as Proto.SatOpLog).ops
+        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
 
-          const lsn = satOpLog[0].begin?.lsn as Uint8Array
-          t.is(bytesToNumber(lsn), 2)
-          t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
-          // TODO: check values
-        }
+        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
+        const lsn = satOpLog[0].begin?.lsn as Uint8Array
+
+        t.is(bytesToNumber(lsn), 2)
+        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
+      },
+    ])
+
+    // fourth message is also an insert
+    server.nextResponses([
+      (data?: Buffer) => {
+        expectedCount -= 1
+        const msgType = data!.readUInt8()
+        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
+
+        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
+        const lsn = satOpLog[0].begin?.lsn as Uint8Array
+
+        t.is(bytesToNumber(lsn), 3)
+        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(3000))
+
         res()
       },
     ])
+
+    setTimeout(() => {
+      rej()
+      t.fail(
+        `Timed out while waiting for server to get all expected requests. Missing ${expectedCount}`
+      )
+    }, 300)
 
     await client.startReplication()
 
@@ -504,6 +545,7 @@ test.serial('send transaction', async (t) => {
     setTimeout(() => {
       client.enqueueTransaction(transaction[0])
       client.enqueueTransaction(transaction[1])
+      client.enqueueTransaction(transaction[2])
     }, 100)
   })
 })
