@@ -2,4 +2,4 @@
 "electric-sql": patch
 ---
 
-client: improved `config.url` parsing and.
+Improved `config.url` parsing and SSL support.
