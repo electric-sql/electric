@@ -343,7 +343,7 @@ export class SatelliteProcess implements Satellite {
   async stop(): Promise<void> {
     // Stop snapshotting and polling for changes.
     this._throttledSnapshot.cancel()
-    
+
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
 
