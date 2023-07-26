@@ -1504,3 +1504,34 @@ test.serial(
     t.deepEqual(post3Res, post3)
   }
 )
+
+for (const fn of ['liveMany', 'liveFirst'] as const) {
+  test.serial(
+    `\`${fn}\` mentions all included tables in tablenames to watch`,
+    async (t) => {
+      await populate()
+
+      const res = await userTable[fn]({ include: { posts: true } })()
+
+      t.is(res.tablenames.length, 2)
+      t.is(res.tablenames[0].tablename, 'User')
+      t.is(res.tablenames[1].tablename, 'Post')
+    }
+  )
+}
+
+test.serial(
+  '`liveUnique` mentions all included tables in tablenames to watch',
+  async (t) => {
+    await populate()
+
+    const res = await userTable.liveUnique({
+      include: { posts: true },
+      where: { id: 1 },
+    })()
+
+    t.is(res.tablenames.length, 2)
+    t.is(res.tablenames[0].tablename, 'User')
+    t.is(res.tablenames[1].tablename, 'Post')
+  }
+)
