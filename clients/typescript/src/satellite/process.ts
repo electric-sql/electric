@@ -121,9 +121,11 @@ export class SatelliteProcess implements Satellite {
   _authState?: AuthState
   _authStateSubscription?: string
 
+  connectivityState?: ConnectivityState
+  _connectivityChangeSubscription?: string
+
   _pollingInterval?: any
   _potentialDataChangeSubscription?: string
-  _connectivityChangeSubscription?: string
   _throttledSnapshot: ThrottleFunction
 
   _lastAckdRowId: number
@@ -585,10 +587,13 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
+    this.connectivityState = status
+
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
         this.setClientListeners()
+
         return this._connectAndStartReplication()
       }
       case 'error':
