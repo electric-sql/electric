@@ -1,10 +1,11 @@
 import { useContext, useEffect, useState, useCallback } from 'react'
+import { hash } from 'ohash'
 
 import { ChangeNotification } from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
 
 import { ElectricContext } from '../provider'
-import { LiveResultContext } from '../../../client/model/table'
+import { LiveResultContext } from '../../../client/model/model'
 
 export interface ResultData<T> {
   error?: unknown
@@ -45,6 +46,7 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
   const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
+  const [currentQueryHash, setQueryHash] = useState(() => hash(runQuery.sourceQuery))
 
   // The effect below is run only after the initial render
   // because of the empty array of dependencies
@@ -70,7 +72,15 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [currentQueryHash])
+
+  // Keep track of the hash of the source query to be able to rebuild everything
+  useEffect(() => {
+    const newQueryHash = hash(runQuery.sourceQuery)
+    if (newQueryHash !== currentQueryHash) {
+      setQueryHash(newQueryHash)
+    }
+  }, [runQuery.sourceQuery])
 
   // Store the `runQuery` function as a callback
   const runLiveQuery = useCallback(async () => {
@@ -80,7 +90,7 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
     } catch (err) {
       setResultData(errorResult(err))
     }
-  }, [])
+  }, [currentQueryHash])
 
   // Once we have electric, we then establish the data change
   // notification subscription, comparing the tablenames used by the

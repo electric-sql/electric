@@ -18,7 +18,7 @@ import { _NOT_UNIQUE_, _RECORD_NOT_FOUND_ } from '../validation/errors/messages'
 import { UpsertInput } from '../input/upsertInput'
 import { SelectSubset } from '../util/types'
 import { DB } from '../execution/db'
-import { LiveResult, Model } from './model'
+import { LiveResult, LiveResultContext, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
@@ -33,10 +33,6 @@ import { parseTableNames, Row, Statement } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { shapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
-
-export interface LiveResultContext<T> {
-  (): Promise<LiveResult<T>>
-}
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -1496,6 +1492,7 @@ export class Table<
         return new LiveResult(res, tables)
       })
     })
+    result.sourceQuery = i
     return result
   }
 }
@@ -1516,5 +1513,6 @@ export function liveRaw(
     const res = await raw(adapter, sql)
     return new LiveResult(res, tablenames)
   })
+  result.sourceQuery = sql
   return result
 }
