@@ -330,7 +330,7 @@ export class SatelliteProcess implements Satellite {
       await this._ack(decoded, type == AckType.REMOTE_COMMIT)
     })
     this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot!()
+      this._throttledSnapshot()
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -342,9 +342,8 @@ export class SatelliteProcess implements Satellite {
   // Unsubscribe from data changes and stop polling
   async stop(): Promise<void> {
     // Stop snapshotting and polling for changes.
-    if (this._throttledSnapshot !== undefined) {
-      this._throttledSnapshot.cancel()
-    }
+    this._throttledSnapshot.cancel()
+    
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
 
