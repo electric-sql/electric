@@ -1,61 +1,106 @@
 import { useContext, useEffect, useState } from 'react'
 
-import { ConnectivityStateChangeNotification } from '../../../notifiers'
+import { ElectricNamespace } from '../../../electric'
+import { ConnectivityStateChangeNotification as Notification } from '../../../notifiers'
+import { genUUID } from '../../../util/random'
 import { ConnectivityState } from '../../../util/types'
 import { ElectricContext } from '../provider'
+
+type RetVal = {
+  connectivityState: ConnectivityState,
+  setConnectivityState: (state: ConnectivityState) => void,
+  toggleConnectivityState: () => void
+}
+type HookFn = () => RetVal
+
+const STATES: {
+  available: ConnectivityState,
+  connected: ConnectivityState,
+  disconnected: ConnectivityState
+} = {
+  available: 'available',
+  connected: 'connected',
+  disconnected: 'disconnected'
+}
+const VALID_STATES = Object.values(STATES)
+
+const getElectricState = (electric?: ElectricNamespace) => {
+  if (electric === undefined) {
+    return STATES.disconnected
+  }
+
+  return electric.isConnected
+    ? STATES.connected
+    : STATES.disconnected
+}
+
+const getNextState = (currentState: ConnectivityState) => (
+  currentState === STATES.connected
+  ? STATES.disconnected
+  : STATES.available
+)
+
+const getValidState = (candidateState: ConnectivityState) => (
+  VALID_STATES.includes(candidateState)
+  ? candidateState
+  : STATES.disconnected
+)
 
 /**
  * React Hook to observe and manage Electric's connectivity state
  */
-const useConnectivityState: () => {
-  connectivityState: ConnectivityState
-  toggleConnectivityState: () => void
-} = () => {
+const useConnectivityState: HookFn = () => {
   const electric = useContext(ElectricContext)
-  const [connectivityState, setConnectivityState] =
-    useState<ConnectivityState>('disconnected')
+  const initialState: ConnectivityState = getElectricState(electric)
+  const [ state, setState ] = useState<ConnectivityState>(initialState)
 
   useEffect(() => {
+    let shouldStop = false
+
     if (electric === undefined) {
       return
     }
 
-    const { isConnected, notifier } = electric
-    setConnectivityState(isConnected ? 'connected' : 'disconnected')
+    setState(getElectricState(electric))
 
-    const handler = (notification: ConnectivityStateChangeNotification) => {
-      const state = notification.connectivityState
+    const { notifier } = electric
+    const handler = ({ connectivityState }: Notification) => {
+      if (shouldStop) {
+        return
+      }
 
-      // externally map states to disconnected/connected
-      const nextState = ['available', 'error', 'disconnected'].find(
-        (x) => x == state
-      )
-        ? 'disconnected'
-        : 'connected'
-      setConnectivityState(nextState)
+      setState(getValidState(connectivityState))
     }
 
-    const subscriptionKey =
-      notifier.subscribeToConnectivityStateChanges(handler)
+    const subscriptionKey = notifier.subscribeToConnectivityStateChanges(handler)
 
     return () => {
+      shouldStop = true
+
       notifier.unsubscribeFromConnectivityStateChanges(subscriptionKey)
     }
   }, [electric])
 
-  const toggleConnectivityState = () => {
+  const toggleState = () => {
     if (electric === undefined) {
       return
     }
 
-    const nextState: ConnectivityState =
-      connectivityState == 'connected' ? 'disconnected' : 'available'
-    const dbName = electric.notifier.dbName
-    electric.notifier.connectivityStateChanged(dbName, nextState)
-    setConnectivityState(nextState)
+    const nextState = getNextState(state)
+
+    const { notifier } = electric
+    const { dbName } = notifier
+
+    notifier.connectivityStateChanged(dbName, nextState)
+
+    setState(nextState)
   }
 
-  return { connectivityState, setConnectivityState, toggleConnectivityState }
+  return {
+    connectivityState: state,
+    setConnectivityState: setState,
+    toggleConnectivityState: toggleState
+  }
 }
 
 export default useConnectivityState
