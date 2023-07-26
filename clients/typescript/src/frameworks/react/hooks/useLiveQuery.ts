@@ -1,4 +1,11 @@
-import { useContext, useEffect, useState, useCallback } from 'react'
+import {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  DependencyList,
+} from 'react'
 import { hash } from 'ohash'
 
 import { ChangeNotification } from '../../../notifiers/index'
@@ -37,16 +44,94 @@ function errorResult<T>(error: unknown): ResultData<T> {
  * notifications to matching tables. The {@link ElectricProvider}
  * can be obtained through {@link makeElectricContext}.
  *
- * @param runQuery - A live query.
+ * Live query provided can be dynamic, but it will be a hash of the provided query will be computed on every render.
+ * If you need a more optimal approach, use a two-argument version of this with explicit dependency listing
+ *
+ * @param runQuery - a live query.
+ *
+ * @example Using a simple live query. The table will depend on your application
+ * ```ts
+ * const { results } = useLiveQuery(db.items.liveMany({}))
+ * ```
  */
-function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
+function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
+
+/**
+ * Main reactive query hook for React applications. It needs to be
+ * used in tandem with the {@link ElectricProvider} which sets an
+ * {@link ElectricClient) as the `electric` value. This provides
+ * a notifier which this hook uses to subscribe to data change
+ * notifications to matching tables. The {@link ElectricProvider}
+ * can be obtained through {@link makeElectricContext}.
+ *
+ * You can think of arguments to this functions as arguments to `useMemo`.
+ * The function should return a live query, and the dependency list is passed
+ * to `useMemo` to rerun the function.
+ *
+ * @param runQueryFn - a function that returns a live query
+ * @param dependencies - a list of React depenencies that causes the function returning the live query to rerun
+ *
+ * @example Using a simple live query with a dependency. The table will depend on your application
+ * ```ts
+ * const [limit, _setLimit] = useState(10)
+ * const { results } = useLiveQuery(() => db.items.liveMany({ take: limit }), [limit])
+ * ```
+ */
+function useLiveQuery<Res>(
+  runQueryFn: () => LiveResultContext<Res>,
+  dependencies: DependencyList
+): ResultData<Res>
+function useLiveQuery<Res>(
+  runQueryOrFn: LiveResultContext<Res> | (() => LiveResultContext<Res>),
+  deps?: DependencyList
+): ResultData<Res> {
+  if (deps) {
+    return useLiveQueryWithDependencies(
+      runQueryOrFn as () => LiveResultContext<Res>,
+      deps
+    )
+  } else {
+    return useLiveQueryWithQueryHash(runQueryOrFn as LiveResultContext<Res>)
+  }
+}
+
+function useLiveQueryWithDependencies<Res>(
+  runQueryFn: () => LiveResultContext<Res>,
+  dependencies: DependencyList
+): ResultData<Res> {
+  const runQuery = useMemo(runQueryFn, dependencies)
+
+  return useLiveQueryWithQueryUpdates(runQuery, [runQuery])
+}
+
+function useLiveQueryWithQueryHash<Res>(
+  runQuery: LiveResultContext<Res>
+): ResultData<Res> {
+  const [currentQueryHash, setQueryHash] = useState(() =>
+    hash(runQuery.sourceQuery)
+  )
+
+  // Keep track of the hash of the source query to be able to rebuild everything
+  useEffect(() => {
+    const newQueryHash = hash(runQuery.sourceQuery)
+    if (newQueryHash !== currentQueryHash) {
+      setQueryHash(newQueryHash)
+    }
+  }, [runQuery.sourceQuery])
+
+  return useLiveQueryWithQueryUpdates(runQuery, [currentQueryHash])
+}
+
+function useLiveQueryWithQueryUpdates<Res>(
+  runQuery: LiveResultContext<Res>,
+  runQueryDependencies: DependencyList
+): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
   const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
   const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
-  const [currentQueryHash, setQueryHash] = useState(() => hash(runQuery.sourceQuery))
 
   // The effect below is run only after the initial render
   // because of the empty array of dependencies
@@ -72,15 +157,7 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
     return () => {
       ignore = true
     }
-  }, [currentQueryHash])
-
-  // Keep track of the hash of the source query to be able to rebuild everything
-  useEffect(() => {
-    const newQueryHash = hash(runQuery.sourceQuery)
-    if (newQueryHash !== currentQueryHash) {
-      setQueryHash(newQueryHash)
-    }
-  }, [runQuery.sourceQuery])
+  }, runQueryDependencies)
 
   // Store the `runQuery` function as a callback
   const runLiveQuery = useCallback(async () => {
@@ -90,7 +167,7 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
     } catch (err) {
       setResultData(errorResult(err))
     }
-  }, [currentQueryHash])
+  }, runQueryDependencies)
 
   // Once we have electric, we then establish the data change
   // notification subscription, comparing the tablenames used by the
