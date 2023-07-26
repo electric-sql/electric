@@ -57,6 +57,10 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
+  if (satellite.connectivityState !== undefined) {
+    electric.setIsConnected(satellite.connectivityState)
+  }
+
   // initialize the shape manager
   shapeManager.init(satellite)
   const namespace = ElectricClient.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library

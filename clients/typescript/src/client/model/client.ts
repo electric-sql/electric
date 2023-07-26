@@ -1,6 +1,4 @@
 import { ElectricNamespace } from '../../electric/namespace'
-import { DatabaseAdapter } from '../../electric/adapter'
-import { Notifier } from '../../notifiers'
 import { DbSchema, TableSchema } from './schema'
 import { liveRaw, raw, Table } from './table'
 import { Row, Statement } from '../../util'
@@ -59,10 +57,14 @@ export class ElectricClient<
 > extends ElectricNamespace {
   private constructor(
     public db: ClientTables<DB> & RawQueries,
-    adapter: DatabaseAdapter,
-    notifier: Notifier
+    electric: ElectricNamespace
   ) {
-    super(adapter, notifier)
+    super(electric.adapter, electric.notifier)
+
+    Object.defineProperty(this, 'isConnected', {
+      get: () => electric.isConnected,
+      set: (_value) => { /* noop */ }
+    })
   }
 
   // Builds the DAL namespace from a `dbDescription` object
@@ -98,6 +100,6 @@ export class ElectricClient<
       liveRaw: liveRaw.bind(null, electric.adapter),
     }
 
-    return new ElectricClient(db, electric.adapter, electric.notifier)
+    return new ElectricClient(db, electric)
   }
 }
