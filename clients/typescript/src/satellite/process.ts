@@ -1,16 +1,5 @@
 import throttle from 'lodash.throttle'
 
-type Uuid = `${string}-${string}-${string}-${string}-${string}`
-
-type MetaEntries = {
-  clientId: Uuid | ''
-  compensations: number
-  lastAckdRowId: `${number}`
-  lastSentRowId: `${number}`
-  lsn: string | null
-  subscriptions: string
-}
-
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter, RunResult } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -106,6 +95,17 @@ export type ShapeSubscription = {
 type ThrottleFunction = {
   cancel: () => void
   (): Promise<Date> | undefined
+}
+
+type Uuid = `${string}-${string}-${string}-${string}-${string}`
+
+type MetaEntries = {
+  clientId: Uuid | ''
+  compensations: number
+  lastAckdRowId: `${number}`
+  lastSentRowId: `${number}`
+  lsn: string | null
+  subscriptions: string
 }
 
 const throwErrors = [
