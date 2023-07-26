@@ -1,5 +1,5 @@
 defmodule Electric.Satellite.Serialization do
-  alias Electric.Postgres.{Extension, Replication, SchemaRegistry}
+  alias Electric.Postgres.{Extension, Replication}
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -17,7 +17,7 @@ defmodule Electric.Satellite.Serialization do
   require Logger
 
   @type relation_mapping() ::
-          %{Changes.relation() => {PB.relation_id(), [SchemaRegistry.column_name()]}}
+          %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
   @doc """
   Serialize from internal format to Satellite PB format
@@ -143,7 +143,11 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp serialize_change(record, state) do
-    %{ops: ops, new_relations: new_relations, known_relations: known_relations} = state
+    %{
+      ops: ops,
+      new_relations: new_relations,
+      known_relations: known_relations
+    } = state
 
     relation = record.relation
 
@@ -252,54 +256,43 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp load_new_relation(relation, known_relations) do
-    {%{oid: relation_id}, columns} = fetch_relation(relation)
+    %{oid: relation_id, columns: columns} = fetch_relation(relation)
     column_names = for %{name: column_name} <- columns, do: column_name
 
     {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
   end
 
   defp fetch_relation(relation) do
-    table = SchemaRegistry.fetch_table_info!(relation)
-
-    {table, SchemaRegistry.fetch_table_columns!(relation)}
+    Extension.SchemaCache.Global.relation!(relation)
   end
 
   @doc """
   Serialize internal relation representation to Satellite PB format
   """
-  # @spec serialize_relation(String.t(), String.t(), integer(), [SchemaRegistry.column()]) ::
-  #         %SatRelation{}
-  # def serialize_relation(schema, name, oid, columns) do
-  @spec serialize_relation(SchemaRegistry.replicated_table(), [SchemaRegistry.column()]) ::
-          %SatRelation{}
-  def serialize_relation(table_info, columns) do
+  @spec serialize_relation(Replication.Table.t()) :: %SatRelation{}
+  def serialize_relation(%Replication.Table{} = table) do
     %SatRelation{
-      schema_name: table_info.schema,
+      schema_name: table.schema,
       table_type: :TABLE,
-      table_name: table_info.name,
-      relation_id: table_info.oid,
-      columns: serialize_columns(columns, MapSet.new(table_info.primary_keys), [])
+      table_name: table.name,
+      relation_id: table.oid,
+      columns: serialize_table_columns(table.columns, MapSet.new(table.primary_keys))
     }
   end
 
-  defp serialize_columns([%{name: name_str, type: type_atom} | rest], pks, acc) do
-    serialize_columns(
-      rest,
-      pks,
-      [
-        %SatRelationColumn{
-          name: name_str,
-          type: :erlang.atom_to_binary(type_atom),
-          primaryKey: MapSet.member?(pks, name_str)
-        }
-        | acc
-      ]
-    )
+  defp serialize_table_columns(columns, pks) do
+    Enum.map(columns, fn %{name: name, type: type} ->
+      %SatRelationColumn{name: name, type: to_string(type), primaryKey: MapSet.member?(pks, name)}
+    end)
   end
 
-  defp serialize_columns([], _pks, acc) do
-    Enum.reverse(acc)
-  end
+  @type cached_relations() :: %{
+          PB.relation_id() => %{
+            schema: String.t(),
+            table: String.t(),
+            columns: [String.t()]
+          }
+        }
 
   @doc """
   Deserialize from Satellite PB format to internal format
@@ -308,13 +301,7 @@ defmodule Electric.Satellite.Serialization do
           String.t(),
           %SatOpLog{},
           %Transaction{} | nil,
-          %{
-            PB.relation_id() => %{
-              :schema => String.t(),
-              :table => String.t(),
-              :columns => [String.t()]
-            }
-          },
+          cached_relations(),
           (term -> any)
         ) ::
           {
@@ -357,7 +344,7 @@ defmodule Electric.Satellite.Serialization do
         {nil, [trans | complete]}
 
       %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
-        relation = fetch_relation(relations, relation_id)
+        relation = fetch_known_relation(relations, relation_id)
 
         transop =
           case op do
@@ -390,7 +377,7 @@ defmodule Electric.Satellite.Serialization do
     end)
   end
 
-  defp fetch_relation(relations, relation_id) do
+  defp fetch_known_relation(relations, relation_id) do
     Map.get(relations, relation_id)
   end
 

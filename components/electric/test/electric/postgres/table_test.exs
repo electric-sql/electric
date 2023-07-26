@@ -21,7 +21,7 @@ defmodule Electric.Postgres.TableTest do
       for {table_name, expected_ast} <- table_ast do
         case expected_ast do
           :error ->
-            assert :error = Schema.fetch_table(schema, table_name)
+            assert {:error, _} = Schema.fetch_table(schema, table_name)
 
           expected_ast ->
             assert {:ok, table_ast} = Schema.fetch_table(schema, table_name)
@@ -998,6 +998,8 @@ defmodule Electric.Postgres.TableTest do
   end
 
   describe "to_relation" do
+    alias Electric.Postgres.Replication.{Column, Table}
+
     test "correctly maps a schema table to the SchemaRegistry representation" do
       table = %Proto.Table{
         name: %Proto.RangeVar{schema: "public", name: "t1"},
@@ -1036,20 +1038,70 @@ defmodule Electric.Postgres.TableTest do
         ]
       }
 
-      assert {:ok, table_info, columns} = Schema.registry_info(table)
+      assert table_info = Schema.table_info(table)
 
-      assert table_info == %{
+      assert table_info == %Table{
                schema: "public",
                name: "t1",
                oid: 48888,
                primary_keys: ["c1", "c2"],
-               replica_identity: :all_columns
+               replica_identity: :all_columns,
+               columns: [
+                 %Column{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: true},
+                 %Column{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: true}
+               ]
+             }
+    end
+
+    test "handles array columns correctly" do
+      schema =
+        schema_update(
+          Enum.join(
+            [
+              "CREATE TABLE rray1 (id uuid PRIMARY KEY, values int4[]);",
+              "CREATE TABLE other.rray2 (id uuid PRIMARY KEY, values int4[3][4][5]);"
+            ],
+            "\n"
+          )
+        )
+
+      assert {:ok, table_info} = Schema.table_info(schema, "public", "rray1")
+
+      assert table_info == %Table{
+               schema: "public",
+               name: "rray1",
+               oid: 13362,
+               primary_keys: ["id"],
+               replica_identity: :all_columns,
+               columns: [
+                 %Column{name: "id", type: :uuid, type_modifier: -1, part_of_identity?: true},
+                 %Column{
+                   name: "values",
+                   type: {:array, :int4},
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 }
+               ]
              }
 
-      assert columns == [
-               %{name: "c1", type: :int4, type_modifier: -1, part_of_identity?: nil},
-               %{name: "c2", type: :int4, type_modifier: -1, part_of_identity?: nil}
-             ]
+      assert {:ok, table_info} = Schema.table_info(schema, {"other", "rray2"})
+
+      assert table_info == %Table{
+               schema: "other",
+               name: "rray2",
+               oid: 19056,
+               primary_keys: ["id"],
+               replica_identity: :all_columns,
+               columns: [
+                 %Column{name: "id", type: :uuid, type_modifier: -1, part_of_identity?: true},
+                 %Column{
+                   name: "values",
+                   type: {:array, :int4},
+                   type_modifier: -1,
+                   part_of_identity?: true
+                 }
+               ]
+             }
     end
   end
 end

@@ -14,7 +14,11 @@ defmodule Electric.Extension.Case.Helpers do
           fn conn ->
             migrate(conn)
 
-            unquote(fun).(conn)
+            cond do
+              is_function(unquote(fun), 1) -> unquote(fun).(conn)
+              is_function(unquote(fun), 2) -> unquote(fun).(conn, cxt)
+              true -> raise ArgumentError, message: "tx function should be arity 1 or 2"
+            end
           end,
           cxt
         )

@@ -1,5 +1,5 @@
 defmodule Electric.Replication.PostgresConnectorMng do
-  alias Electric.Postgres.{Extension, SchemaRegistry}
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
@@ -73,7 +73,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
       {:ok, state1} ->
         :ok = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
-        SchemaRegistry.mark_origin_ready(origin)
 
         {:noreply, %State{state1 | state: :subscribe}, {:continue, :subscribe}}
 
@@ -157,20 +156,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
     )
 
     Client.with_conn(conn_config, fn conn ->
-      with {:ok, _versions} <- Extension.migrate(conn),
+      with {:ok, versions} <- Extension.migrate(conn),
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
            {:ok, oids} <- Client.query_oids(conn),
-           OidDatabase.save_oids(oids),
-           tables <- Client.query_replicated_tables(conn, publication),
-           :ok <- Client.close(conn) do
-        tables
-        |> Enum.map(&Map.delete(&1, :columns))
-        |> then(&SchemaRegistry.put_replicated_tables(publication, &1))
-
-        Enum.each(tables, &SchemaRegistry.put_table_columns({&1.schema, &1.name}, &1.columns))
-
-        Logger.info("Successfully initialized origin #{origin}")
+           :ok <- OidDatabase.save_oids(oids) do
+        Logger.info(
+          "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
+        )
 
         {:ok, state}
       end

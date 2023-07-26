@@ -55,7 +55,7 @@ defmodule Electric.PostgresTest do
   end
 
   def oid_loader(conn) do
-    &Electric.Postgres.Extension.SchemaLoader.Epgsql.relation_oid(conn, &1, &2, &3)
+    &Electric.Replication.Postgres.Client.relation_oid(conn, &1, &2, &3)
   end
 
   def exec(nil, schema, _conn, _context) do

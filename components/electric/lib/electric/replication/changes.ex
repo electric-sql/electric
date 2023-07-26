@@ -10,7 +10,6 @@ defmodule Electric.Replication.Changes do
   identity is set to FULL.
   """
 
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Replication.Changes
 
   require Logger
@@ -113,7 +112,8 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule Relation do
-    alias Electric.Postgres.SchemaRegistry
+    alias Electric.Postgres.Replication.{Table, Column}
+
     defstruct [:id, :namespace, :name, :replica_identity, :columns]
 
     @type t() :: %__MODULE__{
@@ -125,24 +125,25 @@ defmodule Electric.Replication.Changes do
           }
 
     # Convert a Relation message into a table structure as used by the SchemaRegistry
-    @spec to_schema_table(t()) :: {SchemaRegistry.replicated_table(), [SchemaRegistry.column()]}
+    @spec to_schema_table(t()) :: Table.t()
     def to_schema_table(%__MODULE__{} = relation) do
-      {%{
-         name: relation.name,
-         schema: relation.namespace,
-         oid: relation.id,
-         replica_identity: relation.replica_identity,
-         primary_keys: []
-       },
-       Enum.map(
-         relation.columns,
-         &%{
-           name: &1.name,
-           part_of_identity?: :key in &1.flags,
-           type: &1.type,
-           type_modifier: &1.type_modifier
-         }
-       )}
+      %Table{
+        name: relation.name,
+        schema: relation.namespace,
+        oid: relation.id,
+        replica_identity: relation.replica_identity,
+        primary_keys: [],
+        columns:
+          Enum.map(
+            relation.columns,
+            &%Column{
+              name: &1.name,
+              part_of_identity?: :key in &1.flags,
+              type: &1.type,
+              type_modifier: &1.type_modifier
+            }
+          )
+      }
     end
   end
 end

@@ -113,9 +113,9 @@ defmodule Electric.Replication.Postgres.TcpServer do
   require Logger
 
   alias Electric.Postgres.Messaging
-  alias Electric.Postgres.SchemaRegistry
   alias Electric.Postgres.OidDatabase
   alias Electric.Replication.Postgres.SlotServer
+  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.Lsn
 
   defmodule State do
@@ -407,7 +407,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   defp initialize_connection(%State{} = state, %{"replication" => "database"} = settings) do
-    if SchemaRegistry.is_origin_ready?(settings["application_name"]) do
+    if SchemaCache.ready?(settings["application_name"]) do
       # TODO: Verify the server settings, maybe make them dynamic?
       Messaging.authentication_ok()
       |> Messaging.parameter_status("application_name", settings["application_name"])
@@ -472,9 +472,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
          ],
          _
        ) do
-    # Listing all tables in the publication, as set in the schema registry
-    with [pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
-         {:ok, tables} <- SchemaRegistry.fetch_replicated_tables(pub) do
+    with [_pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
+         {:ok, tables} <- SchemaCache.Global.electrified_tables() do
       Messaging.row_description(schemaname: :name, tablename: :name)
       |> Messaging.data_rows(Enum.map(tables, &{&1.schema, &1.name}))
       |> Messaging.command_complete("SELECT #{length(tables)}")
@@ -496,10 +495,10 @@ defmodule Electric.Replication.Postgres.TcpServer do
         capture: :all_but_first
       )
 
-    {:ok, table} = SchemaRegistry.fetch_table_info({schema, table})
+    {:ok, table} = SchemaCache.Global.relation({schema, table})
 
     Messaging.row_description(oid: :oid, relreplident: :char, relkind: :char)
-    |> Messaging.data_row({to_string(table.oid), atom_to_identity(table.replica_identity), "f"})
+    |> Messaging.data_row([to_string(table.oid), atom_to_identity(table.replica_identity), "f"])
     |> Messaging.command_complete("SELECT 1")
     |> Messaging.ready()
   end
@@ -516,7 +515,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
        ) do
     # Getting information about the columns within a table
     [target_oid] = Regex.run(~r/a\.attrelid = (\d+)/, rest, capture: :all_but_first)
-    {:ok, columns} = SchemaRegistry.fetch_table_columns(String.to_integer(target_oid))
+    {:ok, %{columns: columns}} = SchemaCache.Global.relation(String.to_integer(target_oid))
 
     Messaging.row_description(attname: :name, atttypid: :oid, "?column?": :bool)
     |> Messaging.data_rows(

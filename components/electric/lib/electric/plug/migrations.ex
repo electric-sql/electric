@@ -70,12 +70,12 @@ defmodule Electric.Plug.Migrations do
   end
 
   defp migrations_for_version(version) do
-    SchemaCache.migration_history(version)
+    SchemaCache.Global.migration_history(version)
   end
 
   defp migrations_zipfile(migrations, dialect) do
     file_list =
-      Enum.flat_map(migrations, fn {_txid, _txts, version, schema, stmts} ->
+      Enum.flat_map(migrations, fn %{version: version, schema: schema, stmts: stmts} ->
         ops = translate_stmts(version, schema, stmts, dialect)
 
         sql =

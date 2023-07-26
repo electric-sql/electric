@@ -34,6 +34,29 @@ defmodule Electric do
   end
 
   @doc """
+  A wrapper around [`:gproc.reg_or_locate/2`](https://github.com/uwiger/gproc/blob/4ca45e0a97722a418a31eb1753f4e3b953f7fb1d/doc/gproc.md#reg_or_locate2).
+
+  Try registering a unique name, or return existing registration.
+
+  This function tries to register the name `key` with the given `value`. If
+  such a registration object already exists, the pid and value of the current
+  registration is returned instead.
+  """
+  @spec reg_or_locate(key :: reg_name(), value :: any()) ::
+          :ok | {:error, :already_registered, {pid(), any()}}
+  def reg_or_locate({:via, :gproc, name}, value) do
+    this = self()
+
+    case :gproc.reg_or_locate(name, value) do
+      {^this, ^value} ->
+        :ok
+
+      {other, other_value} ->
+        {:error, :already_registered, {other, other_value}}
+    end
+  end
+
+  @doc """
   Helper function for gproc registration
   """
   @spec name(module(), term()) :: reg_name

@@ -1,8 +1,6 @@
 defmodule Electric.Postgres.Extension.ElectrifyTest do
   use Electric.Extension.Case, async: false
 
-  alias Electric.Replication.Postgres.Client
-
   def electrified(conn) do
     :epgsql.equery(
       conn,
@@ -143,9 +141,26 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     assert row[:table] == "buttercup"
   end
 
+  @tables_query """
+  SELECT DISTINCT ON (t.schemaname, t.tablename)
+    t.schemaname, t.tablename, c.oid, c.relreplident
+  FROM pg_catalog.pg_publication_tables t
+    JOIN pg_catalog.pg_namespace ns on t.schemaname = ns.nspname
+    JOIN pg_catalog.pg_class c on (c.relname = t.tablename and c.relnamespace = ns.oid)
+  WHERE t.pubname IN ($1)
+  """
+
+  def query_replicated_tables(conn, publication) do
+    {:ok, _, rows} = :epgsql.equery(conn, @tables_query, [publication])
+
+    Enum.map(rows, fn {schema, table, oid, replident} ->
+      %{schema: schema, name: table, oid: oid, replident: replident}
+    end)
+  end
+
   def published_tables(conn) do
     conn
-    |> Client.query_replicated_tables(Extension.publication_name())
+    |> query_replicated_tables(Extension.publication_name())
     |> Enum.reject(&(&1.schema == "electric"))
   end
 

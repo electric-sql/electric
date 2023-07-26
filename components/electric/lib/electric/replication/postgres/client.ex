@@ -7,60 +7,8 @@ defmodule Electric.Replication.Postgres.Client do
   """
   require Logger
 
-  alias Electric.Postgres.OidDatabase
-
-  @type column :: %{
-          name: String.t(),
-          type: atom(),
-          type_modifier: integer(),
-          part_of_identity?: boolean() | nil
-        }
-  @type replicated_table :: %{
-          schema: String.t(),
-          name: String.t(),
-          oid: integer(),
-          replica_identity: :all_columns | :default | :nothing | :index,
-          columns: [column()]
-        }
-  @type replicated_tables :: [replicated_table()]
-  @type replication_info :: %{
-          tables: replicated_tables(),
-          database: String.t(),
-          publication: String.t(),
-          connection: term()
-        }
-
   @type connection :: pid
   @type publication :: String.t()
-
-  @doc """
-  Connect to a postgres instance
-  """
-  @callback connect(connection_config :: :epgsql.connect_opts()) ::
-              {:ok, term()} | {:error, term()}
-
-  @doc """
-  Start replication and send logical replication messages back to pid
-  """
-  @callback start_replication(
-              conn :: term(),
-              publication :: String.t(),
-              slot :: String.t(),
-              handler :: pid()
-            ) :: :ok | {:error, term()}
-  @doc """
-  Query the Postgres instance for table names which fall under the replication
-
-  Returns a list of tuples with schema and table name
-  """
-  @callback query_replicated_tables(connection :: term(), publication :: nil | String.t()) ::
-              replicated_tables()
-
-  @doc """
-  Acknowledge that the LSN has been processed
-  """
-  @callback acknowledge_lsn(connection :: term(), lsn :: %{segment: integer(), offset: integer()}) ::
-              :ok
 
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
@@ -114,122 +62,9 @@ defmodule Electric.Replication.Postgres.Client do
   ORDER BY oid
   """
 
-  @tables_query """
-  SELECT DISTINCT ON (t.schemaname, t.tablename)
-    t.schemaname, t.tablename, c.oid, c.relreplident
-  FROM pg_catalog.pg_publication_tables t
-    JOIN pg_catalog.pg_namespace ns on t.schemaname = ns.nspname
-    JOIN pg_catalog.pg_class c on (c.relname = t.tablename and c.relnamespace = ns.oid)
-  WHERE t.pubname IN ('$1')
-  """
-
-  @columns_query """
-  SELECT a.attrelid, a.attname, a.atttypid, a.atttypmod, a.attnum = ANY(i.indkey)
-  FROM pg_catalog.pg_attribute a
-    LEFT JOIN pg_catalog.pg_index i ON (i.indexrelid = pg_get_replica_identity_index(a.attrelid))
-  WHERE
-    a.attnum > 0::pg_catalog.int2
-    AND NOT a.attisdropped
-    AND a.attgenerated = ''
-    AND a.attrelid = ANY('{$1}')
-    ORDER BY attrelid, a.attnum;
-  """
-
-  @primary_keys_query """
-  SELECT i.indrelid, a.attname
-  FROM   pg_index i
-  JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-  WHERE  i.indrelid = ANY('{$1}')
-  AND    i.indisprimary
-  """
-
-  @migrations_query """
-  SELECT version, hash, applied_at FROM electric.migrations ORDER BY applied_at DESC;
-  """
-
   def query_oids(conn) do
     {:ok, _, type_data} = squery(conn, @types_query)
     {:ok, type_data}
-  end
-
-  @spec query_replicated_tables(connection, publication | nil) ::
-          [Electric.Postgres.SchemaRegistry.replicated_table()]
-  def query_replicated_tables(conn, publication \\ nil)
-
-  def query_replicated_tables(conn, nil) do
-    Application.fetch_env!(:electric, __MODULE__)
-    |> Keyword.fetch!(:replication)
-    |> Keyword.fetch!(:publication)
-    |> then(&query_replicated_tables(conn, &1))
-  end
-
-  def query_replicated_tables(conn, publication) when is_binary(publication) do
-    {:ok, _, table_data} =
-      @tables_query
-      |> String.replace("$1", publication)
-      |> then(&squery(conn, &1))
-
-    tables =
-      table_data
-      |> Enum.map(&build_table_representation/1)
-      |> Map.new(&{&1.oid, &1})
-
-    {:ok, _, columns_data} =
-      @columns_query
-      |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
-      |> then(&squery(conn, &1))
-
-    {:ok, _, pks_data} =
-      @primary_keys_query
-      |> String.replace("$1", Enum.map_join(Map.keys(tables), ",", &to_string/1))
-      |> then(&squery(conn, &1))
-
-    pks = Enum.group_by(pks_data, &String.to_integer(elem(&1, 0)), &elem(&1, 1))
-
-    columns_data
-    |> Enum.group_by(&String.to_integer(elem(&1, 0)), &build_column_representation/1)
-    # We start our fake OIDs from 20000 to avoid any conflicts with reserved type oids (although unlikely anyhow)
-    |> Enum.with_index(20000)
-    |> Enum.map(fn {{table_oid, columns}, incremental_oid} ->
-      table_pks = Map.fetch!(pks, table_oid)
-
-      tables
-      |> Map.fetch!(table_oid)
-      |> Map.put(:columns, columns)
-      |> Map.put(:primary_keys, table_pks)
-      # We replace original OIDs with the fake ones since this schema is essentially shared between all PGs
-      # all of which have their own OIDs for the same tables. To avoid any unintentional usage, we replace
-      # them with new "generic" ones.
-      |> Map.put(:oid, incremental_oid)
-    end)
-  end
-
-  @spec query_table_pks(connection(), integer()) :: {:ok, [String.t()]} | no_return
-  def query_table_pks(conn, oid) do
-    primary_keys_query = """
-    SELECT i.indrelid, a.attname
-    FROM   pg_index i
-    JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-    WHERE  i.indrelid = '$1'
-    AND    i.indisprimary;
-    """
-
-    {:ok, _, pks_data} =
-      primary_keys_query
-      |> String.replace("$1", to_string(oid))
-      |> then(&squery(conn, &1))
-
-    {:ok, Enum.map(pks_data, &elem(&1, 1))}
-  end
-
-  @spec query_migration_table(connection) :: [Electric.Postgres.SchemaRegistry.migration_table()]
-  def query_migration_table(conn) do
-    {:ok, _, table_data} = :epgsql.squery(conn, @migrations_query)
-
-    Enum.map(table_data, fn {vsn, hash, applied_at} ->
-      {:ok, datetime, _} = DateTime.from_iso8601(applied_at)
-      %{vsn: vsn, hash: hash, applied_at: datetime}
-    end)
   end
 
   def start_subscription(conn, name) do
@@ -312,37 +147,6 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
-  defp build_table_representation({schema, table, oid, identity}) do
-    %{
-      schema: schema,
-      name: table,
-      oid: String.to_integer(oid),
-      replica_identity: identity_to_atom(identity),
-      columns: []
-    }
-  end
-
-  defp build_column_representation({_, name, oid, modifier, part_of_identity}) do
-    part_of_identity? =
-      case part_of_identity do
-        "t" -> true
-        "f" -> false
-        :null -> nil
-      end
-
-    %{
-      name: name,
-      type: OidDatabase.name_for_oid(String.to_integer(oid)),
-      type_modifier: String.to_integer(modifier),
-      part_of_identity?: part_of_identity?
-    }
-  end
-
-  defp identity_to_atom("f"), do: :all_columns
-  defp identity_to_atom("d"), do: :default
-  defp identity_to_atom("n"), do: :nothing
-  defp identity_to_atom("i"), do: :index
-
   @doc """
   Start consuming logical replication feed using a given `publication` and `slot`.
 
@@ -370,5 +174,37 @@ defmodule Electric.Replication.Postgres.Client do
     <<decimal_lsn::integer-64>> = <<segment::integer-32, offset::integer-32>>
 
     :epgsql.standby_status_update(conn, decimal_lsn, decimal_lsn)
+  end
+
+  @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
+
+  @pg_class_query """
+  SELECT c.oid
+  FROM pg_class c
+    INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE
+      n.nspname = $1
+      AND c.relname = $2
+      AND c.relkind = ANY($3::char[])
+  LIMIT 1;
+  """
+
+  @doc """
+  Retrieve the db assigned oid of the given table, index, view or trigger.
+  """
+  @spec relation_oid(connection(), :table | :index | :view | :trigger, String.t(), String.t()) ::
+          {:ok, integer()} | {:error, term()}
+  def relation_oid(conn, rel_type, schema, table) do
+    with {:ok, relkind} <- Map.fetch(@relkind, rel_type),
+         {:ok, _, [{oid}]} <- :epgsql.equery(conn, @pg_class_query, [schema, table, relkind]) do
+      {:ok, String.to_integer(oid)}
+    else
+      error ->
+        Logger.warning(
+          "Unable to retrieve oid for #{inspect([rel_type, schema, table])}: #{inspect(error)}"
+        )
+
+        {:error, :relation_missing}
+    end
   end
 end

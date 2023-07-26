@@ -18,15 +18,12 @@ defmodule Electric.Satellite.WsServerTest do
     Transaction
   }
 
-  alias Electric.Postgres.SchemaRegistry
-
   alias Electric.Satellite.Auth
 
   require Logger
 
   @default_wait 5_000
 
-  @test_publication "fake_sqlite"
   @test_schema "public"
   @test_table "sqlite_server_test"
   @test_oid 100_004
@@ -46,14 +43,6 @@ defmodule Electric.Satellite.WsServerTest do
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
 
-    columns = [{"id", :uuid}, {"electric_user_id", :varchar}, {"content", :varchar}]
-
-    Electric.Test.SchemaRegistryHelper.initialize_registry(
-      @test_publication,
-      {@test_schema, @test_table},
-      columns
-    )
-
     port = 55133
 
     _sup_pid =
@@ -68,7 +57,6 @@ defmodule Electric.Satellite.WsServerTest do
     server_id = Electric.instance_id()
 
     on_exit(fn ->
-      SchemaRegistry.clear_replicated_tables(@test_publication)
       :cowboy.stop_listener(:ws_test)
       Process.sleep(100)
     end)
@@ -115,7 +103,7 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   setup ctx do
-    start_schema_cache(@test_publication, ctx[:with_migrations] || [])
+    start_schema_cache(ctx[:with_migrations] || [])
   end
 
   describe "resource related check" do

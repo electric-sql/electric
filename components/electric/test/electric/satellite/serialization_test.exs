@@ -6,7 +6,7 @@ defmodule Electric.Satellite.SerializationTest do
 
   alias Electric.Replication.Changes.Transaction
 
-  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache, SchemaRegistry}
+  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
 
   test "test row serialization" do
     data = %{"not_null" => <<"4">>, "null" => nil, "not_present" => <<"some other value">>}
@@ -88,21 +88,37 @@ defmodule Electric.Satellite.SerializationTest do
   end
 
   describe "relations" do
+    alias Electric.Postgres.Replication.{Column, Table}
+
     test "correctly set the pk flag" do
-      table = %{
+      table = %Table{
         schema: "something",
         name: "rotten",
         oid: 2234,
-        primary_keys: ["id1", "id2"]
+        primary_keys: ["id1", "id2"],
+        columns: [
+          %Column{
+            name: "id1",
+            type: "uuid",
+            type_modifier: nil,
+            part_of_identity?: true
+          },
+          %Column{
+            name: "id2",
+            type: "uuid",
+            type_modifier: nil,
+            part_of_identity?: true
+          },
+          %Column{
+            name: "content",
+            type: "char",
+            type_modifier: nil,
+            part_of_identity?: false
+          }
+        ]
       }
 
-      columns = [
-        %{name: "id1", type: :uuid, type_modifier: nil, part_of_identity: true},
-        %{name: "id2", type: :uuid, type_modifier: nil, part_of_identity: true},
-        %{name: "content", type: :char, type_modifier: nil, part_of_identity: true}
-      ]
-
-      msg = Serialization.serialize_relation(table, columns)
+      msg = Serialization.serialize_relation(table)
 
       assert %SatRelation{
                schema_name: "something",
@@ -168,21 +184,6 @@ defmodule Electric.Satellite.SerializationTest do
 
     test "writes to electric ddl table are recognised as migration ops", cxt do
       version = "20220421"
-
-      SchemaRegistry.put_replicated_tables("all_tables", [
-        %{schema: "public", name: "something_else", oid: 111, primary_keys: ["id"]},
-        %{schema: "public", name: "other_thing", oid: 222, primary_keys: ["id"]},
-        %{schema: "public", name: "yet_another_thing", oid: 333, primary_keys: ["id"]}
-      ])
-
-      Enum.each(
-        [
-          {{"public", "something_else"}, [%{name: "id", type: :uuid, type_modifier: -1}]},
-          {{"public", "other_thing"}, [%{name: "id", type: :uuid, type_modifier: -1}]},
-          {{"public", "yet_another_thing"}, [%{name: "id", type: :uuid, type_modifier: -1}]}
-        ],
-        fn {t, c} -> SchemaRegistry.put_table_columns(t, c) end
-      )
 
       tx = %Transaction{
         changes: [

@@ -10,7 +10,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Connectors
-  # alias Electric.Replication.MockPostgresClient
 
   setup_with_mocks([
     {Client, [:passthrough],

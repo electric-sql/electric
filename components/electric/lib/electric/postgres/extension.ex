@@ -3,7 +3,12 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{Schema, Schema.Proto}
+  alias Electric.Postgres.{
+    Replication,
+    Schema,
+    Schema.Proto,
+    Extension.Migration
+  }
 
   require Logger
 
@@ -52,7 +57,7 @@ defmodule Electric.Postgres.Extension do
   defp migration_history_query(after_version) do
     where_clause =
       if after_version do
-        "WHERE #{@version_table}.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
+        "WHERE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
       else
         # Dummy condition just to keep the $1 parameter in the query.
         "WHERE $1::text IS NULL"
@@ -60,18 +65,18 @@ defmodule Electric.Postgres.Extension do
 
     """
     SELECT
-      #{@version_table}.txid,
-      #{@version_table}.txts,
-      #{@version_table}.version,
-      #{@schema_table}.schema,
-      #{@schema_table}.migration_ddl
+      v.txid,
+      v.txts,
+      v.version,
+      s.schema,
+      s.migration_ddl
     FROM
-      #{@version_table}
+      #{@version_table} v
     JOIN
-      #{@schema_table} USING (version)
+      #{@schema_table} s USING (version)
     #{where_clause}
     ORDER BY
-      #{@version_table}.txid ASC
+      v.txid ASC
     """
   end
 
@@ -156,6 +161,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
   def migration_history(conn, after_version \\ nil)
 
   def migration_history(conn, after_version) do
@@ -176,10 +182,13 @@ defmodule Electric.Postgres.Extension do
 
   defp load_migrations(rows) do
     Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
-      txid = String.to_integer(txid_str)
-      txts = decode_epgsql_timestamp(txts_tuple)
-      schema = Proto.Schema.json_decode!(schema_json)
-      {txid, txts, version, schema, stmts}
+      %Migration{
+        version: version,
+        txid: String.to_integer(txid_str),
+        txts: decode_epgsql_timestamp(txts_tuple),
+        schema: Proto.Schema.json_decode!(schema_json),
+        stmts: stmts
+      }
     end)
   end
 
@@ -188,7 +197,10 @@ defmodule Electric.Postgres.Extension do
 
   def electrified_tables(conn) do
     with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
-      {:ok, rows}
+      {:ok,
+       Enum.map(rows, fn {_id, schema, name, oid} ->
+         %Replication.Table{schema: schema, name: name, oid: String.to_integer(oid)}
+       end)}
     end
   end
 

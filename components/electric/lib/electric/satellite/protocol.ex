@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Protocol do
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
-  alias Electric.Postgres.{CachedWal, Extension, SchemaRegistry}
+  alias Electric.Postgres.CachedWal
 
   alias Electric.Satellite.SubscriptionManager
   alias Electric.Replication.Connectors
@@ -15,6 +15,7 @@ defmodule Electric.Satellite.Protocol do
   alias SatSubsResp.SatSubsError
 
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.OffsetStorage
@@ -745,7 +746,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp validate_schema_version(version) do
-    if is_nil(version) or Extension.SchemaCache.known_migration_version?(version) do
+    if is_nil(version) or SchemaCache.Global.known_migration_version?(version) do
       :ok
     else
       {:error, :bad_schema_version}
@@ -850,13 +851,9 @@ defmodule Electric.Satellite.Protocol do
     Enum.map(
       unknown_relations,
       fn relation ->
-        table_info = SchemaRegistry.fetch_table_info!(relation)
-        columns = SchemaRegistry.fetch_table_columns!(relation)
-
-        Serialization.serialize_relation(
-          table_info,
-          columns
-        )
+        relation
+        |> SchemaCache.Global.relation!()
+        |> Serialization.serialize_relation()
       end
     )
   end

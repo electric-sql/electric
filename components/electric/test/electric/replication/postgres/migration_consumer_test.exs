@@ -70,7 +70,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         table: %{
           {"public", "something_else"} => 1111,
           {"public", "other_thing"} => 2222,
-          {"public", "yet_another_thing"} => 3333
+          {"public", "yet_another_thing"} => 3333,
+          {"electric", "shadow__public__something_else"} => 201_111,
+          {"electric", "shadow__public__other_thing"} => 202_222,
+          {"electric", "shadow__public__yet_another_thing"} => 203_333
         }
       }
 
@@ -78,13 +81,15 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "mistakes"} => ["id"]
       }
 
+      backend = MockSchemaLoader.backend_spec(oids: oids, pks: pks)
+
       {:ok, pid} =
         start_supervised(
           {MigrationConsumer,
            {[origin: origin, replication: []],
             [
               producer: producer_name,
-              backend: {MockSchemaLoader, parent: self(), oids: oids, pks: pks}
+              backend: backend
             ]}}
         )
 
@@ -93,8 +98,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, origin: origin, producer: producer}
     end
 
-    test "migration consumer stage captures relations", cxt do
-      %{producer: producer} = cxt
+    test "migration consumer refreshes subscription after receiving a relation", cxt do
+      %{producer: producer, origin: origin} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
@@ -114,12 +119,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       GenStage.call(producer, {:emit, events})
 
       refute_receive {FakeConsumer, :events, _}, 500
-      assert_receive {MockSchemaLoader, {:primary_keys, "public", "mistakes"}}, 500
-
-      assert {:ok, info} =
-               Electric.Postgres.SchemaRegistry.fetch_table_info({"public", "mistakes"})
-
-      assert %{name: "mistakes", schema: "public", oid: 1234, primary_keys: ["id"]} = info
+      assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 500
     end
 
     test "migration consumer stage captures migration records", cxt do

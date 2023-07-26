@@ -17,7 +17,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
-  alias Electric.Postgres.SchemaRegistry
+  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
   alias Electric.Replication.OffsetStorage
@@ -404,8 +404,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
       |> Enum.map(& &1.relation)
       |> state.preprocess_relation_list_fn.()
       |> Enum.uniq()
-      |> Enum.map(&SchemaRegistry.fetch_table_info!/1)
-      |> Enum.map(&Map.put(&1, :columns, SchemaRegistry.fetch_table_columns!(&1.oid)))
+      |> Enum.map(&SchemaCache.Global.relation!/1)
 
     # detect missing relations based on name *and* on column list
     missing_relations =
@@ -414,7 +413,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
         Map.get(state.sent_relations, {r.schema, r.name}) == r
       end)
 
-    relations = relations |> Enum.into(state.sent_relations, &{{&1.schema, &1.name}, &1})
+    relations = Enum.into(relations, state.sent_relations, &{{&1.schema, &1.name}, &1})
 
     # Final LSN as specified by `BEGIN` message should be after all LSNs of actual changes but before the LSN of the commit
     {messages, final_lsn} =

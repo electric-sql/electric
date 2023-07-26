@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Schema do
   defstruct tables: [], indexes: [], triggers: [], views: []
 
   alias Electric.Postgres.Schema.Proto
+  alias Electric.Postgres.Replication
   alias PgQuery, as: Pg
 
   require Logger
@@ -11,6 +12,12 @@ defmodule Electric.Postgres.Schema do
   @search_paths [nil, "public"]
 
   @type t() :: %Proto.Schema{}
+
+  @type mbinary() :: String.t() | nil
+  @type schema() :: mbinary()
+  @type namespaced_name() :: {schema(), String.t()}
+  @type name() ::
+          String.t() | namespaced_name() | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
 
   def new do
     %Proto.Schema{}
@@ -72,16 +79,35 @@ defmodule Electric.Postgres.Schema do
   def fetch_table!(schema, name) do
     case fetch_table(schema, name) do
       {:ok, table} -> table
-      :error -> raise ArgumentError, message: "Unknown table #{name}"
+      {:error, reason} -> raise ArgumentError, message: reason
     end
   end
 
   def fetch_table(schema, name) do
-    with %_{} = table <- Enum.find(schema.tables, :error, &equal?(&1.name, name)) do
+    with %_{} = table <-
+           Enum.find(
+             schema.tables,
+             {:error, "Unknown table #{inspect(name)}"},
+             &equal?(&1.name, name)
+           ) do
       {:ok, table}
     end
   end
 
+  def lookup_oid(schema, oid) when is_integer(oid) do
+    with %_{} = table <- Enum.find(schema.tables, :error, &(&1.oid == oid)) do
+      {:ok, table}
+    end
+  end
+
+  @spec primary_keys(t(), name(), name()) :: {:ok, [name()]} | {:error, any()}
+  def primary_keys(schema, sname, tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      primary_keys(table)
+    end
+  end
+
+  @spec primary_keys(%Proto.Table{}) :: {:ok, [name()]} | {:error, any()}
   def primary_keys(%Proto.Table{} = table) do
     pk =
       Enum.find_value(table.constraints, nil, fn
@@ -126,34 +152,66 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
-  # TODO: remove this once we've cut out the SchemaRegistry component and are just
-  # using this serialised schema information
-  def registry_info(%Proto.Table{} = table) do
+  @doc """
+  Look up a table in the schema and return replication information about it.
+  """
+  @spec table_info(t(), {name(), name()}) ::
+          {:ok, Replication.Table.t()} | {:error, term()}
+  def table_info(schema, {sname, tname}) do
+    table_info(schema, sname, tname)
+  end
+
+  @spec table_info(t(), integer()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def table_info(schema, oid) when is_integer(oid) do
+    with {:ok, table} <- lookup_oid(schema, oid) do
+      {:ok, table_info(table)}
+    end
+  end
+
+  @spec table_info(t(), name(), name()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def table_info(schema, sname, tname) when is_binary(sname) and is_binary(tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      {:ok, table_info(table)}
+    end
+  end
+
+  @doc """
+  Return replication information for a single table or all tables in the schema.
+  """
+  @spec table_info(t()) :: [Replication.Table.t()]
+  def table_info(%Proto.Schema{} = schema) do
+    for table <- schema.tables, do: table_info(table)
+  end
+
+  @spec table_info(%Proto.Table{}) :: Replication.Table.t()
+  def table_info(%Proto.Table{} = table) do
     {:ok, pks} = primary_keys(table)
 
-    table_info = %{
+    columns =
+      for col <- table.columns do
+        %Replication.Column{
+          name: col.name,
+          type: col_type(col.type),
+          type_modifier: List.first(col.type.size, -1),
+          # since we're using replication identity "full" all columns
+          # are identity columns in replication terms
+          part_of_identity?: true
+        }
+      end
+
+    table_info = %Replication.Table{
       schema: table.name.schema,
       name: table.name.name,
       oid: table.oid,
       primary_keys: pks,
-      # we set all replicated tables to this mode
-      replica_identity: :all_columns
+      replica_identity: :all_columns,
+      columns: columns
     }
 
-    columns =
-      Enum.map(table.columns, fn col ->
-        %{
-          name: col.name,
-          type: col_type(col.type),
-          type_modifier: List.first(col.type.size, -1),
-          part_of_identity?: nil
-        }
-      end)
-
-    {:ok, table_info, columns}
+    table_info
   end
 
-  defp col_type(%{name: name, array: [_]}), do: {:array, col_type(name)}
+  defp col_type(%{name: name, array: [_ | _]}), do: {:array, col_type(name)}
   defp col_type(%{name: name}), do: col_type(name)
 
   defp col_type("serial2"), do: :int2
@@ -161,8 +219,14 @@ defmodule Electric.Postgres.Schema do
   defp col_type("serial8"), do: :int8
   defp col_type(t) when is_binary(t), do: String.to_atom(t)
 
-  def struct_order(list) do
-    Enum.sort(list)
+  def relation(schema, sname, tname) do
+    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
+      table_info(table)
+    end
+  end
+
+  def relation(schema, {sname, tname}) do
+    relation(schema, sname, tname)
   end
 
   # want table constraint order to be constistent so that we can verify the in-memory schema with
@@ -174,6 +238,10 @@ defmodule Electric.Postgres.Schema do
 
   def order(list) do
     struct_order(list)
+  end
+
+  def struct_order(list) do
+    Enum.sort(list)
   end
 
   @namedatalen 63
@@ -236,10 +304,6 @@ defmodule Electric.Postgres.Schema do
     binary_part(n, 0, len)
   end
 
-  @type mbinary() :: binary() | nil
-  @type schema() :: mbinary()
-  @type name() ::
-          binary() | {schema(), binary()} | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
   @spec equal?(name(), name()) :: boolean
   def equal?(n1, n2, search_paths \\ @search_paths) do
     Enum.any?(qualified_names(n1, search_paths), fn n1 ->
@@ -312,19 +376,43 @@ defmodule Electric.Postgres.Schema do
   defp blank(s) when is_binary(s), do: s
 
   @doc """
+  Retrieve the given oid loader function from function opts and validate that
+  it's a 3-arity function.
+  """
+  @spec verify_oid_loader!(Keyword.t()) ::
+          (:index | :table | :trigger | :view, schema :: binary(), name :: binary() ->
+             {:ok, integer()})
+  def verify_oid_loader!(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :oid_loader) do
+      {:ok, loader} when is_function(loader, 3) ->
+        loader
+
+      {:ok, _loader} ->
+        raise ArgumentError,
+          message:
+            "`:oid_loader` should be an arity-3 function (type :: :index | :table | :trigger | :view, schema :: binary(), name :: binary()) -> {:ok, integer()}"
+
+      :error ->
+        raise ArgumentError,
+          message: "missing `:oid_loader` option"
+    end
+  end
+
+  @doc """
   Enrich the schema with shadow tables for each table.
 
   We don't check if the shadow tables actually exist, so only electrified
   tables (or other tables that are expected to have shadows) should be included
   in the schema passed to this function
   """
-  def add_shadow_tables(%Proto.Schema{tables: tables} = schema) do
-    shadow_tables =
-      tables
-      |> Enum.reject(&is_shadow_table?/1)
-      |> Enum.map(&build_shadow_table/1)
+  def add_shadow_tables(%Proto.Schema{tables: tables} = schema, opts) do
+    oid_loader = verify_oid_loader!(opts)
+    normal_tables = Enum.reject(tables, &is_shadow_table?/1)
 
-    %{schema | tables: tables ++ shadow_tables}
+    shadow_tables =
+      Enum.map(normal_tables, &build_shadow_table(&1, oid_loader))
+
+    %{schema | tables: normal_tables ++ shadow_tables}
   end
 
   @schema Electric.Postgres.Extension.schema()
@@ -367,7 +455,7 @@ defmodule Electric.Postgres.Schema do
     %Proto.Column{name: "_currently_reordering", type: %Proto.Column.Type{name: "bool"}}
   ]
 
-  defp build_shadow_table(%Proto.Table{} = main) do
+  defp build_shadow_table(%Proto.Table{} = main, oid_loader) do
     # The columns based on the main table lack any defaults/constraints on shadow tables
     stripped_columns = Enum.map(main.columns, &Map.put(&1, :constraints, []))
     {:ok, pk_column_names} = primary_keys(main)
@@ -385,23 +473,27 @@ defmodule Electric.Postgres.Schema do
         &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
       )
 
+    {schema, table_name} = shadow_table_name(main.name.schema, main.name.name)
+
+    {:ok, oid} = oid_loader.(:table, @schema, table_name)
+
     %Proto.Table{
-      # `MigrationConsumer` code currently has logic that for any incoming relation, we're the OID already in the `SchemaRegistry`.
-      # Hence, we just need any oid that's not going to collide. `oid` type is uint4, with max being 4,294,967,295.
-      # Let's add 2,000,000,000 to original table oid and hope for the best.
-      # OID generation is done on PG side by an increasing counter [1] and not a random value,
-      # and that counter functionally starts at 16384 [2]. I think that starting our "fake" oid generation near the end,
-      # with it only being required to not conflict within one table (`pg_class`) seems fine for now.
-      #
-      # TODO: Add more robust checks to definitely not collide in our own SchemaRegistry or alternatives.
-      oid: 2_000_000_000 + main.oid,
+      oid: oid,
       name: %Proto.RangeVar{
-        schema: @schema,
-        name: "shadow__#{main.name.schema}__#{main.name.name}"
+        schema: schema,
+        name: table_name
       },
       columns: pks ++ @shadow_columns ++ timestamps ++ reordered,
       constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),
       indexes: []
     }
+  end
+
+  @doc """
+  Returns the schema and name of the shadow table for the given table.
+  """
+  @spec shadow_table_name(name(), name()) :: namespaced_name()
+  def shadow_table_name(schema, table) do
+    {@schema, "shadow__#{schema}__#{table}"}
   end
 end
