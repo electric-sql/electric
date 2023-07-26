@@ -188,9 +188,8 @@ export interface Model<
 
 export interface LiveResultContext<T> {
   (): Promise<LiveResult<T>>
-  sourceQuery: Record<string, any> | undefined
+  sourceQuery?: Record<string, any> | undefined
 }
-
 
 /**
  * A live result wrapping the `result` as well as the concerned table names.
