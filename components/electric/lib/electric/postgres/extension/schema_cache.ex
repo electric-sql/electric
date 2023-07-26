@@ -60,7 +60,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec name(Connectors.origin()) :: boolean()
+  @spec ready?(Connectors.origin()) :: boolean()
   def ready?(origin) do
     case Electric.lookup_pid(name(origin)) do
       pid when is_pid(pid) -> true
