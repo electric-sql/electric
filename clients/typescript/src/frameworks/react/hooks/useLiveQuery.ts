@@ -1,10 +1,10 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useState, useCallback } from 'react'
 
 import { ChangeNotification } from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
 
 import { ElectricContext } from '../provider'
-import useRandom from './useRandom'
+import { LiveResultContext } from '../../../client/model/table'
 
 export interface ResultData<T> {
   error?: unknown
@@ -18,11 +18,6 @@ function successResult<T>(results: T): ResultData<T> {
     results: results,
     updatedAt: new Date(),
   }
-}
-
-type LiveResult<T> = {
-  result: T
-  tablenames: QualifiedTablename[]
 }
 
 function errorResult<T>(error: unknown): ResultData<T> {
@@ -43,12 +38,9 @@ function errorResult<T>(error: unknown): ResultData<T> {
  *
  * @param runQuery - A live query.
  */
-function useLiveQuery<Res>(
-  runQuery: () => Promise<LiveResult<Res>>
-): ResultData<Res> {
+function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
-  const [cacheKey, bustCache] = useRandom()
   const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
   const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
   const [tablenamesKey, setTablenamesKey] = useState<string>()
@@ -80,13 +72,22 @@ function useLiveQuery<Res>(
     }
   }, [])
 
+  // Store the `runQuery` function as a callback
+  const runLiveQuery = useCallback(async () => {
+    try {
+      const res = await runQuery()
+      setResultData(successResult(res.result))
+    } catch (err) {
+      setResultData(errorResult(err))
+    }
+  }, [])
+
   // Once we have electric, we then establish the data change
   // notification subscription, comparing the tablenames used by the
   // query with the changed tablenames in the data change notification
   // to determine whether to re-query or not.
   //
-  // If we do need to re-query, then we call `bustCache` to set a new
-  // `cacheKey`, which is a dependency of the next useEffect below
+  // If we do need to re-query, then we use the saved function to reuse the query
   useEffect(() => {
     if (
       electric === undefined ||
@@ -96,6 +97,7 @@ function useLiveQuery<Res>(
       return
     }
 
+    let ignore = false
     const notifier = electric.notifier
     const handleChange = (notification: ChangeNotification): void => {
       // Reduces the `ChangeNotification` to an array of namespaced tablenames,
@@ -104,7 +106,7 @@ function useLiveQuery<Res>(
       const changedTablenames = notifier.alias(notification)
 
       if (hasIntersection(tablenames, changedTablenames)) {
-        bustCache()
+        if (!ignore) runLiveQuery()
       }
     }
 
@@ -115,40 +117,11 @@ function useLiveQuery<Res>(
 
     setChangeSubscriptionKey(key)
 
-    return () => notifier.unsubscribeFromDataChanges(key)
-  }, [electric, tablenamesKey, tablenames])
-
-  // Once we have the subscription established, we're ready to query the database
-  // and then setResults or setError depending on whether the query succeeds.
-  //
-  // We re-run this function whenever the query, params or cache key change --
-  // the query is proxied in the dependencies by the tablenamesKey, the params are
-  // converted to a string so they're compared by value rather than reference and
-  // the cacheKey is updated whenever a data change notification is received that
-  // may potentially change the query results.
-  useEffect(() => {
-    let ignore = false
-
-    if (electric === undefined || changeSubscriptionKey === undefined) {
-      return
-    }
-
-    const runLiveQuery = async () => {
-      try {
-        const res = await runQuery()
-
-        if (!ignore) setResultData(successResult(res.result))
-      } catch (err) {
-        if (!ignore) setResultData(errorResult(err))
-      }
-    }
-
-    runLiveQuery()
-
     return () => {
       ignore = true
+      notifier.unsubscribeFromDataChanges(key)
     }
-  }, [electric, changeSubscriptionKey, cacheKey])
+  }, [electric, tablenamesKey, tablenames, runLiveQuery])
 
   return resultData
 }
