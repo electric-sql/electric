@@ -2,13 +2,12 @@ import { useContext, useEffect, useState } from 'react'
 
 import { ChangeNotification } from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
-import { AnyFunction } from '../../../util/types'
 
 import { ElectricContext } from '../provider'
 import useRandom from './useRandom'
 
 export interface ResultData<T> {
-  error?: any
+  error?: unknown
   results?: T
   updatedAt?: Date
 }
@@ -26,7 +25,7 @@ type LiveResult<T> = {
   tablenames: QualifiedTablename[]
 }
 
-function errorResult<T>(error: any): ResultData<T> {
+function errorResult<T>(error: unknown): ResultData<T> {
   return {
     error: error,
     results: undefined,
@@ -55,41 +54,30 @@ function useLiveQuery<Res>(
   const [tablenamesKey, setTablenamesKey] = useState<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
-  let cleanedUp = false
-  const cleanUp = () => {
-    cleanedUp = true
-  }
-  const cleanly = <F extends AnyFunction>(
-    setterFn: F,
-    ...args: Parameters<F>
-  ) => {
-    if (cleanedUp) {
-      return
-    }
-
-    return setterFn(...args)
-  }
-
   // The effect below is run only after the initial render
   // because of the empty array of dependencies
   useEffect(() => {
+    let ignore = false
+
     // Do an initial run of the query to fetch the table names
     const runInitialQuery = async () => {
       try {
         const res = await runQuery()
         const tablenamesKey = JSON.stringify(res.tablenames)
 
-        cleanly(setTablenames, res.tablenames)
-        cleanly(setTablenamesKey, tablenamesKey)
-        cleanly(setResultData, successResult(res.result))
+        if (!ignore) setTablenames(res.tablenames)
+        if (!ignore) setTablenamesKey(tablenamesKey)
+        if (!ignore) setResultData(successResult(res.result))
       } catch (err) {
-        cleanly(setResultData, errorResult(err))
+        if (!ignore) setResultData(errorResult(err))
       }
     }
 
     runInitialQuery()
 
-    return cleanUp
+    return () => {
+      ignore = true
+    }
   }, [])
 
   // Once we have electric, we then establish the data change
@@ -139,6 +127,8 @@ function useLiveQuery<Res>(
   // the cacheKey is updated whenever a data change notification is received that
   // may potentially change the query results.
   useEffect(() => {
+    let ignore = false
+
     if (electric === undefined || changeSubscriptionKey === undefined) {
       return
     }
@@ -147,15 +137,17 @@ function useLiveQuery<Res>(
       try {
         const res = await runQuery()
 
-        cleanly(setResultData, successResult(res.result))
+        if (!ignore) setResultData(successResult(res.result))
       } catch (err) {
-        cleanly(setResultData, errorResult(err))
+        if (!ignore) setResultData(errorResult(err))
       }
     }
 
     runLiveQuery()
 
-    return cleanUp
+    return () => {
+      ignore = true
+    }
   }, [electric, changeSubscriptionKey, cacheKey])
 
   return resultData
