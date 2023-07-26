@@ -213,7 +213,7 @@ export class Table<
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
   ): () => Promise<LiveResult<Kind<GetPayload, T> | null>> {
-    return this.makeLiveResult(this.findUnique(i))
+    return this.makeLiveResult(this.findUnique(i), i)
   }
 
   async findFirst<
@@ -238,7 +238,7 @@ export class Table<
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): () => Promise<LiveResult<Kind<GetPayload, T> | null>> {
-    return this.makeLiveResult(this.findFirst(i))
+    return this.makeLiveResult(this.findFirst(i), i ?? {})
   }
 
   async findMany<
@@ -263,7 +263,7 @@ export class Table<
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): () => Promise<LiveResult<Array<Kind<GetPayload, T>>>> {
-    return this.makeLiveResult(this.findMany(i))
+    return this.makeLiveResult(this.findMany(i), i)
   }
 
   async update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
@@ -1479,11 +1479,18 @@ export class Table<
     )
   }
 
-  private makeLiveResult<T>(prom: Promise<T>): () => Promise<LiveResult<T>> {
+  private makeLiveResult<T>(
+    prom: Promise<T>,
+    i: SyncInput<Include>
+  ): () => Promise<LiveResult<T>> {
     return () => {
+      const tables = [...this.getIncludedTables(i)].map(
+        (x) => x._qualifiedTableName
+      )
+
       return prom.then((res) => {
-        return new LiveResult(res, [this._qualifiedTableName])
-      }) as Promise<LiveResult<T>>
+        return new LiveResult(res, tables)
+      })
     }
   }
 }
