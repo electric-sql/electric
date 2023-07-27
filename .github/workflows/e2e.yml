@@ -91,7 +91,7 @@ jobs:
           name: lux_logs
           path: e2e/lux_logs/run_*
       - name: Upload test results to Buildkite analytics
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && secrets.BUILDKITE_TEST_ANALYTICS_E2E != '' }}
         working-directory: e2e/lux_logs/latest_run
         env:
           BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
