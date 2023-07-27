@@ -30,7 +30,7 @@ jobs:
     permissions:
       packages: write
     env:
-      VAXINE_IMAGE: europe-docker.pkg.dev/vaxine/vaxine-io/vaxine:latest
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -91,10 +91,8 @@ jobs:
           name: lux_logs
           path: e2e/lux_logs/run_*
       - name: Upload test results to Buildkite analytics
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && secrets.BUILDKITE_TEST_ANALYTICS_E2E != '' }}
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && env.BUILDKITE_ANALYTICS_TOKEN != '' }}
         working-directory: e2e/lux_logs/latest_run
-        env:
-          BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
         run: |
           curl \
             -X POST \
