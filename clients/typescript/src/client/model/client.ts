@@ -4,7 +4,7 @@ import { Notifier } from '../../notifiers'
 import { DbSchema, TableSchema } from './schema'
 import { liveRaw, raw, Table } from './table'
 import { Row, Statement } from '../../util'
-import { LiveResult } from './model'
+import { LiveResult, LiveResultContext } from './model'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -46,7 +46,7 @@ interface RawQueries {
    * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
    * @param sql - A raw SQL query and its bind parameters.
    */
-  liveRaw(sql: Statement): () => Promise<LiveResult<any>>
+  liveRaw(sql: Statement): LiveResultContext<any>
 }
 
 /**

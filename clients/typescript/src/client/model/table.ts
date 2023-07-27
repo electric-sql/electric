@@ -18,7 +18,7 @@ import { _NOT_UNIQUE_, _RECORD_NOT_FOUND_ } from '../validation/errors/messages'
 import { UpsertInput } from '../input/upsertInput'
 import { SelectSubset } from '../util/types'
 import { DB } from '../execution/db'
-import { LiveResult, Model } from './model'
+import { LiveResult, LiveResultContext, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
@@ -212,8 +212,8 @@ export class Table<
 
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
-  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>> {
-    return this.makeLiveResult(this.findUnique(i), i)
+  ): LiveResultContext<Kind<GetPayload, T> | null> {
+    return this.makeLiveResult(() => this.findUnique(i), i)
   }
 
   async findFirst<
@@ -237,8 +237,8 @@ export class Table<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
-  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>> {
-    return this.makeLiveResult(this.findFirst(i), i ?? {})
+  ): LiveResultContext<Kind<GetPayload, T> | null> {
+    return this.makeLiveResult(() => this.findFirst(i), i ?? {})
   }
 
   async findMany<
@@ -262,8 +262,8 @@ export class Table<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
-  ): () => Promise<LiveResult<Array<Kind<GetPayload, T>>>> {
-    return this.makeLiveResult(this.findMany(i), i)
+  ): LiveResultContext<Kind<GetPayload, T>[]> {
+    return this.makeLiveResult(() => this.findMany(i), i)
   }
 
   async update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
@@ -1480,18 +1480,20 @@ export class Table<
   }
 
   private makeLiveResult<T>(
-    prom: Promise<T>,
+    runner: () => Promise<T>,
     i: SyncInput<Include>
-  ): () => Promise<LiveResult<T>> {
-    return () => {
-      const tables = [...this.getIncludedTables(i)].map(
-        (x) => x._qualifiedTableName
-      )
+  ): LiveResultContext<T> {
+    const tables = [...this.getIncludedTables(i)].map(
+      (x) => x._qualifiedTableName
+    )
 
-      return prom.then((res) => {
+    const result = <LiveResultContext<T>>(() => {
+      return runner().then((res) => {
         return new LiveResult(res, tables)
       })
-    }
+    })
+    result.sourceQuery = i
+    return result
   }
 }
 
@@ -1502,15 +1504,15 @@ export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
 export function liveRaw(
   adapter: DatabaseAdapter,
   sql: Statement
-): () => Promise<LiveResult<Row[]>> {
-  return () => {
-    const prom = raw(adapter, sql)
+): LiveResultContext<Row[]> {
+  const result = <LiveResultContext<Row[]>>(async () => {
     // parse the table names from the query
     // because this is a raw query so
     // we cannot trust that it queries this table
     const tablenames = parseTableNames(sql.sql)
-    return prom.then((res) => {
-      return new LiveResult(res, tablenames)
-    })
-  }
+    const res = await raw(adapter, sql)
+    return new LiveResult(res, tablenames)
+  })
+  result.sourceQuery = sql
+  return result
 }
