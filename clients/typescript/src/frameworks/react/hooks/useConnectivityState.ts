@@ -6,20 +6,20 @@ import { ConnectivityState } from '../../../util/types'
 import { ElectricContext } from '../provider'
 
 type RetVal = {
-  connectivityState: ConnectivityState,
-  setConnectivityState: (state: ConnectivityState) => void,
+  connectivityState: ConnectivityState
+  setConnectivityState: (state: ConnectivityState) => void
   toggleConnectivityState: () => void
 }
 type HookFn = () => RetVal
 
 const STATES: {
-  available: ConnectivityState,
-  connected: ConnectivityState,
+  available: ConnectivityState
+  connected: ConnectivityState
   disconnected: ConnectivityState
 } = {
   available: 'available',
   connected: 'connected',
-  disconnected: 'disconnected'
+  disconnected: 'disconnected',
 }
 const VALID_STATES = Object.values(STATES)
 
@@ -28,22 +28,14 @@ const getElectricState = (electric?: ElectricNamespace) => {
     return STATES.disconnected
   }
 
-  return electric.isConnected
-    ? STATES.connected
-    : STATES.disconnected
+  return electric.isConnected ? STATES.connected : STATES.disconnected
 }
 
-const getNextState = (currentState: ConnectivityState) => (
-  currentState === STATES.connected
-  ? STATES.disconnected
-  : STATES.available
-)
+const getNextState = (currentState: ConnectivityState) =>
+  currentState === STATES.connected ? STATES.disconnected : STATES.available
 
-const getValidState = (candidateState: ConnectivityState) => (
-  VALID_STATES.includes(candidateState)
-  ? candidateState
-  : STATES.disconnected
-)
+const getValidState = (candidateState: ConnectivityState) =>
+  VALID_STATES.includes(candidateState) ? candidateState : STATES.disconnected
 
 /**
  * React Hook to observe and manage Electric's connectivity state
@@ -51,7 +43,7 @@ const getValidState = (candidateState: ConnectivityState) => (
 const useConnectivityState: HookFn = () => {
   const electric = useContext(ElectricContext)
   const initialState: ConnectivityState = getElectricState(electric)
-  const [ state, setState ] = useState<ConnectivityState>(initialState)
+  const [state, setState] = useState<ConnectivityState>(initialState)
 
   useEffect(() => {
     let shouldStop = false
@@ -71,7 +63,8 @@ const useConnectivityState: HookFn = () => {
       setState(getValidState(connectivityState))
     }
 
-    const subscriptionKey = notifier.subscribeToConnectivityStateChanges(handler)
+    const subscriptionKey =
+      notifier.subscribeToConnectivityStateChanges(handler)
 
     return () => {
       shouldStop = true
@@ -98,7 +91,7 @@ const useConnectivityState: HookFn = () => {
   return {
     connectivityState: state,
     setConnectivityState: setState,
-    toggleConnectivityState: toggleState
+    toggleConnectivityState: toggleState,
   }
 }
 

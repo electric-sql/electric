@@ -63,7 +63,9 @@ export class ElectricClient<
 
     Object.defineProperty(this, 'isConnected', {
       get: () => electric.isConnected,
-      set: (_value) => { /* noop */ }
+      set: (_value) => {
+        /* noop */
+      },
     })
   }
 

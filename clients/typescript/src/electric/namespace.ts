@@ -2,7 +2,7 @@
 // (technically via the proxy machinery) as the `.electric` property.
 import { DatabaseAdapter } from './adapter'
 import { Notifier } from '../notifiers'
-import { ConnectivityState } from  '../util/types'
+import { ConnectivityState } from '../util/types'
 
 export class ElectricNamespace {
   adapter: DatabaseAdapter
