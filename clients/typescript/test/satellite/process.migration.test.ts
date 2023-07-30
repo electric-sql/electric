@@ -21,6 +21,7 @@ import {
   makeContext,
   relations,
 } from './common'
+import { getMatchingShadowEntries } from '../support/satellite-helpers'
 
 type CurrentContext = ContextType<{ clientId: string; txDate: Date }>
 const test = testAny as TestFn<CurrentContext>
@@ -343,7 +344,8 @@ test.serial(
     // Delete overwrites the insert for row with id 2
     // Thus, it overwrites the shadow tag for that row
     const localEntries = await satellite._getEntries()
-    const shadowEntryForRow2 = await satellite._getOplogShadowEntry(
+    const shadowEntryForRow2 = await getMatchingShadowEntries(
+      adapter,
       localEntries[1]
     ) // shadow entry for insert of row with id 2
     const shadowTagsRow2 = JSON.parse(shadowEntryForRow2[0].tags)
@@ -463,7 +465,8 @@ test.serial('apply migration containing DDL and conflicting DML', async (t) => {
 
   // Fetch the shadow tag for row 1 such that delete will overwrite it
   const localEntries = await satellite._getEntries()
-  const shadowEntryForRow1 = await satellite._getOplogShadowEntry(
+  const shadowEntryForRow1 = await getMatchingShadowEntries(
+    adapter,
     localEntries[0]
   ) // shadow entry for insert of row with id 1
   const shadowTagsRow1 = JSON.parse(shadowEntryForRow1[0].tags)

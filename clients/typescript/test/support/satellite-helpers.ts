@@ -6,8 +6,10 @@ import {
   shadowTagsDefault,
   generateTag,
   encodeTags,
+  getShadowPrimaryKey,
+  ShadowEntry,
 } from '../../src/satellite/oplog'
-import { Row } from '../../src/util/types'
+import { Row, Statement } from '../../src/util/types'
 
 export interface TableInfo {
   [key: string]: TableSchema
@@ -185,4 +187,31 @@ export const genEncodedTags = (
     }
   })
   return encodeTags(tags)
+}
+
+/**
+ * List all shadow entires, or get just one if an `oplog` parameter is provided
+ */
+export async function getMatchingShadowEntries(
+  adapter: DatabaseAdapter,
+  oplog?: OplogEntry,
+  shadowTable = 'main._electric_shadow'
+): Promise<ShadowEntry[]> {
+  let query: Statement
+  let selectTags = `SELECT * FROM ${shadowTable}`
+  if (oplog != undefined) {
+    selectTags =
+      selectTags +
+      ` WHERE
+        namespace = ? AND
+        tablename = ? AND
+        primaryKey = ?
+    `
+    const args = [oplog.namespace, oplog.tablename, getShadowPrimaryKey(oplog)]
+    query = { sql: selectTags, args: args }
+  } else {
+    query = { sql: selectTags }
+  }
+
+  return (await adapter.query(query)) as unknown as ShadowEntry[]
 }

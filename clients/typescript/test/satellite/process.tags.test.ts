@@ -11,6 +11,7 @@ import {
 import {
   generateRemoteOplogEntry,
   genEncodedTags,
+  getMatchingShadowEntries,
 } from '../support/satellite-helpers'
 import { Statement } from '../../src/util/types'
 
@@ -37,7 +38,7 @@ test('basic rules for setting tags', async (t) => {
   })
 
   const txDate1 = await satellite._performSnapshot()
-  let shadow = await satellite._getOplogShadowEntry()
+  let shadow = await getMatchingShadowEntries(adapter)
   t.is(shadow.length, 1)
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate1]))
 
@@ -46,7 +47,7 @@ test('basic rules for setting tags', async (t) => {
   })
 
   const txDate2 = await satellite._performSnapshot()
-  shadow = await satellite._getOplogShadowEntry()
+  shadow = await getMatchingShadowEntries(adapter)
   t.is(shadow.length, 1)
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate2]))
 
@@ -55,7 +56,7 @@ test('basic rules for setting tags', async (t) => {
   })
 
   const txDate3 = await satellite._performSnapshot()
-  shadow = await satellite._getOplogShadowEntry()
+  shadow = await getMatchingShadowEntries(adapter)
   t.is(shadow.length, 1)
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate3]))
 
@@ -64,7 +65,7 @@ test('basic rules for setting tags', async (t) => {
   })
 
   const txDate4 = await satellite._performSnapshot()
-  shadow = await satellite._getOplogShadowEntry()
+  shadow = await getMatchingShadowEntries(adapter)
   t.is(shadow.length, 0)
 
   const entries = await satellite._getEntries()
@@ -94,7 +95,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   const txDate1 = await satellite._performSnapshot()
 
   const localEntries1 = await satellite._getEntries()
-  const shadowEntry1 = await satellite._getOplogShadowEntry(localEntries1[0])
+  const shadowEntry1 = await getMatchingShadowEntries(adapter, localEntries1[0])
 
   // shadow tag is time of snapshot
   const tag1 = genEncodedTags(clientId, [txDate1])
@@ -114,7 +115,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   const txDate2 = await satellite._performSnapshot()
 
   const localEntries2 = await satellite._getEntries()
-  const shadowEntry2 = await satellite._getOplogShadowEntry(localEntries2[1])
+  const shadowEntry2 = await getMatchingShadowEntries(adapter, localEntries2[1])
 
   // shadowTag is empty
   t.is(0, shadowEntry2.length)
@@ -133,7 +134,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   const txDate3 = await satellite._performSnapshot()
 
   const localEntries3 = await satellite._getEntries()
-  const shadowEntry3 = await satellite._getOplogShadowEntry(localEntries3[1])
+  const shadowEntry3 = await getMatchingShadowEntries(adapter, localEntries3[1])
 
   const tag3 = genEncodedTags(clientId, [txDate3])
   // shadow tag is tag3
@@ -173,7 +174,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   // validate that garbage collection has been triggered
   t.is(2, (await satellite._getEntries()).length)
 
-  const shadow = await satellite._getOplogShadowEntry()
+  const shadow = await getMatchingShadowEntries(adapter)
   t.like(
     shadow[0],
     {
@@ -258,7 +259,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
   }
   await satellite._applyTransaction(nextTx)
 
-  const shadow = await satellite._getOplogShadowEntry()
+  const shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -368,7 +369,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
   }
   await satellite._applyTransaction(nextTx)
 
-  const shadow = await satellite._getOplogShadowEntry()
+  const shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -482,7 +483,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   }
   await satellite._applyTransaction(nextTx)
 
-  let shadow = await satellite._getOplogShadowEntry()
+  let shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -608,7 +609,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   }
   await satellite._applyTransaction(tx)
 
-  let shadow = await satellite._getOplogShadowEntry()
+  let shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -625,7 +626,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 })
 
 test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context
+  const { runMigrations, satellite, tableInfo, authState, adapter } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
@@ -671,7 +672,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   }
   await satellite._applyTransaction(insertTx)
 
-  let shadow = await satellite._getOplogShadowEntry()
+  let shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -691,7 +692,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   }
   await satellite._applyTransaction(deleteTx)
 
-  shadow = await satellite._getOplogShadowEntry()
+  shadow = await getMatchingShadowEntries(adapter)
   t.deepEqual([], shadow)
 
   let entries = await satellite._getEntries(0)

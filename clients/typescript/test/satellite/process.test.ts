@@ -26,6 +26,7 @@ import {
   generateLocalOplogEntry,
   generateRemoteOplogEntry,
   genEncodedTags,
+  getMatchingShadowEntries,
 } from '../support/satellite-helpers'
 import Long from 'long'
 import {
@@ -430,7 +431,7 @@ test('apply does not add anything to oplog', async (t) => {
   t.is(row.other, 1)
 
   const localEntries = await satellite._getEntries()
-  const shadowEntry = await satellite._getOplogShadowEntry(localEntries[0])
+  const shadowEntry = await getMatchingShadowEntries(adapter, localEntries[0])
 
   t.deepEqual(
     encodeTags([
@@ -468,7 +469,7 @@ test('apply incoming with no local', async (t) => {
 
   const sql = 'SELECT * from parent WHERE id=1'
   const rows = await adapter.query({ sql })
-  const shadowEntries = await satellite._getOplogShadowEntry()
+  const shadowEntries = await getMatchingShadowEntries(adapter)
 
   t.is(shadowEntries.length, 0)
   t.is(rows.length, 0)

@@ -1,7 +1,7 @@
 import throttle from 'lodash.throttle'
 
 import { AuthConfig, AuthState } from '../auth/index'
-import { DatabaseAdapter, RunResult } from '../electric/adapter'
+import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,
@@ -37,15 +37,12 @@ import {
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
-import { difference } from '../util/sets'
 import {
-  decodeTags,
   encodeTags,
   fromTransaction,
   generateTag,
   getShadowPrimaryKey,
   localOperationsToTableChanges,
-  newShadowEntry,
   OplogEntry,
   OPTYPES,
   primaryKeyToStr,
@@ -53,7 +50,6 @@ import {
   ShadowEntry,
   ShadowEntryChanges,
   ShadowTableChanges,
-  shadowTagsDefault,
   toTransactions,
 } from './oplog'
 import {
@@ -702,10 +698,10 @@ export class SatelliteProcess implements Satellite {
 
     /*
      * IMPORTANT!
-     * 
+     *
      * The following queries make use of a documented but rare SQLite behaviour that allows selecting bare column
      * on aggregate queries: https://sqlite.org/lang_select.html#bare_columns_in_an_aggregate_query
-     * 
+     *
      * In short, when a query has a `GROUP BY` clause with a single `min()` or `max()` present in SELECT/HAVING,
      * then the "bare" columns (i.e. those not mentioned in a `GROUP BY` clause) are definitely the ones from the
      * row that satisfied that `min`/`max` function. We make use of it here to find first/last operations in the
@@ -784,19 +780,21 @@ export class SatelliteProcess implements Satellite {
 
     // Execute the four queries above in a transaction, returning the results from the first query
     // We're dropping down to this transaction interface because `runInTransaction` doesn't allow queries
-    const oplogEntries = await this.adapter.transaction<OplogEntry[]>((tx, setResult) => {
-      tx.query(q1, (tx, res) => {
-        if (res.length > 0)
-          tx.run(q2, (tx) =>
-            tx.run(q3, (tx) =>
-              tx.run(q4, () => setResult(res as unknown as OplogEntry[]))
+    const oplogEntries = (await this.adapter.transaction<OplogEntry[]>(
+      (tx, setResult) => {
+        tx.query(q1, (tx, res) => {
+          if (res.length > 0)
+            tx.run(q2, (tx) =>
+              tx.run(q3, (tx) =>
+                tx.run(q4, () => setResult(res as unknown as OplogEntry[]))
+              )
             )
-          )
-        else {
-          setResult([])
-        }
-      })
-    }) as OplogEntry[]
+          else {
+            setResult([])
+          }
+        })
+      }
+    )) as OplogEntry[]
 
     if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
 
