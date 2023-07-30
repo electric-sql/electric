@@ -348,7 +348,7 @@ export const getShadowPrimaryKey = (
   oplogEntry: OplogEntry | OplogEntryChanges | ShadowEntryChanges
 ): ShadowKey => {
   if ('primaryKey' in oplogEntry) {
-    return primaryKeyToStr(JSON.parse(oplogEntry.primaryKey))
+    return oplogEntry.primaryKey
   } else {
     return primaryKeyToStr(oplogEntry.primaryKeyCols)
   }
