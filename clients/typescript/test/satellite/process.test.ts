@@ -1,6 +1,4 @@
 import anyTest, { TestFn } from 'ava'
-import log from 'loglevel'
-log.enableAll()
 
 import {
   MOCK_BEHIND_WINDOW_LSN,
@@ -264,7 +262,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
     const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
       return generateTag(clientId, timestamp)
     })
-    const [_, keyChanges] = merged['main.parent']['1']
+    const [_, keyChanges] = merged['main.parent']['{"id":1}']
     const resultingValue = keyChanges.changes.value.value
     t.is(resultingValue, null)
   } catch (error) {
@@ -303,7 +301,7 @@ test('take snapshot and merge local wins', async (t) => {
   const merged = satellite._mergeEntries(clientId, local, 'remote', [
     incomingEntry,
   ])
-  const item = merged['main.parent']['1']
+  const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
     namespace: 'main',
@@ -360,7 +358,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   const merged = satellite._mergeEntries(clientId, local, 'remote', [
     incomingEntry,
   ])
-  const item = merged['main.parent']['1']
+  const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
     namespace: 'main',
@@ -616,7 +614,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
   ]
 
   const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
-  const item = merged['main.parent']['1']
+  const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
     namespace: 'main',
@@ -692,7 +690,7 @@ test('concurrent updates take all changed values', async (t) => {
   ]
 
   const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
-  const item = merged['main.parent']['1']
+  const item = merged['main.parent']['{"id":1}']
 
   // The incoming entry modified the value of the `value` column to `'remote'`
   // The local entry concurrently modified the value of the `other` column to 1.
@@ -744,7 +742,7 @@ test('merge incoming with empty local', async (t) => {
 
   const local: OplogEntry[] = []
   const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
-  const item = merged['main.parent']['1']
+  const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
     namespace: 'main',

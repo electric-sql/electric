@@ -274,7 +274,9 @@ export const fromTransaction = (
       Object.fromEntries(
         relations[`${t.relation.table}`].columns
           .filter((c) => c.primaryKey)
-          .map((col) => [col.name, columnValues![col.name]])
+          .map((col) => col.name)
+          .sort()
+          .map((name) => [name, columnValues![name]])
       )
     )
 
@@ -393,7 +395,7 @@ export const opLogEntryToChange = (
 export const primaryKeyToStr = (primaryKeyJson: {
   [key: string]: string | number
 }): string => {
-  return Object.values(primaryKeyJson).sort().join('_')
+  return JSON.stringify(primaryKeyJson, Object.keys(primaryKeyJson).sort())
 }
 
 export const generateTag = (instanceId: string, timestamp: Date): Tag => {

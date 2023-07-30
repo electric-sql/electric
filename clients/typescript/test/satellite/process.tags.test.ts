@@ -264,13 +264,13 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '1',
+      primaryKey: '{"id":1}',
       tags: genEncodedTags('remote', [prevTs]),
     },
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '2',
+      primaryKey: '{"id":2}',
       tags: genEncodedTags('remote', [nextTs]),
     },
   ]
@@ -374,13 +374,13 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '1',
+      primaryKey: '{"id":1}',
       tags: genEncodedTags('remote', [prevTs]),
     },
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '2',
+      primaryKey: '{"id":2}',
       tags: genEncodedTags('remote', [nextTs]),
     },
   ]
@@ -488,7 +488,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '1',
+      primaryKey: '{"id":1}',
       tags: encodeTags([
         generateTag(clientId, new Date(txDate1)),
         generateTag('remote', new Date(prevTs)),
@@ -497,7 +497,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '2',
+      primaryKey: '{"id":2}',
       tags: encodeTags([
         generateTag(clientId, new Date(txDate1)),
         generateTag('remote', new Date(nextTs)),
@@ -614,7 +614,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '2',
+      primaryKey: '{"id":2}',
       tags: genEncodedTags('remote', [txDate1]),
     },
   ]
@@ -677,7 +677,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
     {
       namespace: 'main',
       tablename: 'parent',
-      primaryKey: '1',
+      primaryKey: '{"id":1}',
       tags: genEncodedTags('remote', [txDate1]),
     },
   ]
