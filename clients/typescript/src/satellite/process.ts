@@ -711,7 +711,7 @@ export class SatelliteProcess implements Satellite {
     // Update the timestamps on all "new" entries - they have been added but timestamp is still `NULL`
     const q1: Statement = {
       sql: `
-      UPDATE ${oplog} set timestamp = ?
+      UPDATE ${oplog} SET timestamp = ?
       WHERE rowid in (
         SELECT rowid FROM ${oplog}
             WHERE timestamp is NULL
@@ -737,7 +737,7 @@ export class SatelliteProcess implements Satellite {
             AND op.primaryKey = op.primaryKey
         WHERE op.timestamp = ?
               AND op.rowid > ?
-        GROUP BY (op.namespace, op.tablename, op.primaryKey)
+        GROUP BY op.namespace, op.tablename, op.primaryKey
       ) AS updates
       WHERE updates.op_rowid = ${oplog}.rowid
     `,
@@ -752,7 +752,7 @@ export class SatelliteProcess implements Satellite {
         FROM ${oplog} AS op
         WHERE timestamp = ?
               AND rowid > ?
-        GROUP BY (namespace, tablename, primaryKey)
+        GROUP BY namespace, tablename, primaryKey
         HAVING rowid = max(rowid) AND optype != 'DELETE'
     `,
       args: [
@@ -771,7 +771,7 @@ export class SatelliteProcess implements Satellite {
         FROM ${oplog} AS op
         WHERE timestamp = ?
               AND rowid > ?
-        GROUP BY (namespace, tablename, primaryKey)
+        GROUP BY namespace, tablename, primaryKey
         HAVING rowid = max(rowid) AND optype = 'DELETE'
       )
     `,
@@ -880,6 +880,7 @@ export class SatelliteProcess implements Satellite {
           primaryKey: getShadowPrimaryKey(entryChanges),
           tags: encodeTags(entryChanges.tags),
         }
+
         switch (entryChanges.optype) {
           case OPTYPES.delete:
             stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
