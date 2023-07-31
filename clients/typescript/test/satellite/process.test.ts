@@ -245,29 +245,26 @@ test('snapshots on potential data change', async (t) => {
 // values as in 'INSERT wins over DELETE and restored deleted values'
 test('snapshot of INSERT after DELETE', async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
-  try {
-    await runMigrations()
 
-    await adapter.run({
-      sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
-    })
-    await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
-    await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
+  await runMigrations()
 
-    await satellite._setAuthState(authState)
-    await satellite._performSnapshot()
-    const entries = await satellite._getEntries()
-    const clientId = satellite._authState!.clientId
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+  })
+  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
 
-    const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
-      return generateTag(clientId, timestamp)
-    })
-    const [_, keyChanges] = merged['main.parent']['{"id":1}']
-    const resultingValue = keyChanges.changes.value.value
-    t.is(resultingValue, null)
-  } catch (error) {
-    t.fail(error)
-  }
+  await satellite._setAuthState(authState)
+  await satellite._performSnapshot()
+  const entries = await satellite._getEntries()
+  const clientId = satellite._authState!.clientId
+
+  const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
+    return generateTag(clientId, timestamp)
+  })
+  const [_, keyChanges] = merged['main.parent']['{"id":1}']
+  const resultingValue = keyChanges.changes.value.value
+  t.is(resultingValue, null)
 })
 
 test('take snapshot and merge local wins', async (t) => {
