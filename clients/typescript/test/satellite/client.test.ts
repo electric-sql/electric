@@ -683,10 +683,6 @@ test.serial('default and null test', async (t) => {
 
   const record: any = deserializeRow(serializedRow, rel)!
 
-  console.log(`record: ${JSON.stringify(record)}`)
-
-  console.log(`insert: ${JSON.stringify(insertOp)}`)
-
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
       Proto.SatTransOp.fromPartial({ begin }),

@@ -266,7 +266,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
     const resultingValue = keyChanges.changes.value.value
     t.is(resultingValue, null)
   } catch (error) {
-    console.log(error)
+    t.fail(error)
   }
 })
 
@@ -1669,13 +1669,11 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   const row = await adapter.query({
     sql: `SELECT id FROM ${qualified}`,
   })
-  console.log(row)
   t.is(row.length, 2)
 
   const shadowRows = await adapter.query({
     sql: `SELECT * FROM _electric_shadow`,
   })
-  console.log(shadowRows)
   t.is(shadowRows.length, 2)
   t.like(shadowRows[0], {
     namespace: 'main',
@@ -1688,7 +1686,6 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   const oplogs = await adapter.query({
     sql: `SELECT * FROM _electric_oplog`,
   })
-  console.log(oplogs)
   t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
 })
 
