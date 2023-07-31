@@ -448,5 +448,5 @@ async function fetchMigrations(
 
 function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
   const outFolder = path.resolve(opts.out)
-  return path.join(outFolder, 'migrations.js')
+  return path.join(outFolder, 'migrations.ts')
 }
