@@ -3232,6 +3232,7 @@ interface ProfileGetPayload extends HKT {
 
 export const tableSchemas = {
   Items: {
+    tableName: 'Items',
     fields: ['value', 'nbr'],
     relations: [],
     modelSchema: (ItemsCreateInputSchema as any)
@@ -3259,6 +3260,7 @@ export const tableSchemas = {
     ItemsGetPayload
   >,
   User: {
+    tableName: 'User',
     fields: ['id', 'name'],
     relations: [
       new Relation('posts', '', '', 'Post', 'PostToUser', 'many'),
@@ -3289,6 +3291,7 @@ export const tableSchemas = {
     UserGetPayload
   >,
   Post: {
+    tableName: 'Post',
     fields: ['id', 'title', 'contents', 'nbr', 'authorId'],
     relations: [
       new Relation('author', 'authorId', 'id', 'User', 'PostToUser', 'one'),
@@ -3318,6 +3321,7 @@ export const tableSchemas = {
     PostGetPayload
   >,
   Profile: {
+    tableName: 'Profile',
     fields: ['id', 'bio', 'userId'],
     relations: [
       new Relation('user', 'userId', 'id', 'User', 'ProfileToUser', 'one'),

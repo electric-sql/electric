@@ -71,8 +71,9 @@ export class ElectricClient<
     electric: ElectricNamespace
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
-    const createTable = (tableName: string) => {
+    const createTable = (modelName: string, tableName: string) => {
       return new Table(
+        modelName,
         tableName,
         electric.adapter,
         electric.notifier,
@@ -82,8 +83,9 @@ export class ElectricClient<
 
     // Create all tables
     const dal = Object.fromEntries(
-      Object.keys(tables).map((tableName) => {
-        return [tableName, createTable(tableName)]
+      Object.entries(tables).map(entry => {
+        const [modelName, table] = entry
+        return [modelName, createTable(modelName, table.tableName)]
       })
     ) as ClientTables<DB>
 

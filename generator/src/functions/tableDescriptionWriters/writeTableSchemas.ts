@@ -53,8 +53,10 @@ export function writeTableSchemas(
     .inlineBlock(() => {
       dmmf.datamodel.models.forEach((model: ExtendedDMMFModel) => {
         const modelName = model.name
+        const tableName = model.dbName ?? model.name
 
         writer.write(`${modelName}: `).inlineBlock(() => {
+          writer.writeLine(`tableName: '${tableName}',`)
           writer.write('fields: ')
           writeFieldNamesArray(model, fileWriter)
 
