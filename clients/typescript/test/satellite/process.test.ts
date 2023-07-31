@@ -1621,6 +1621,77 @@ test("Garbage collecting the subscription doesn't generate oplog entries", async
   t.deepEqual(await satellite._getEntries(0), [])
 })
 
+test('snapshots: generated oplog entries have the correct tags', async (t) => {
+  const { client, satellite, adapter, tableInfo } = t.context
+  const { runMigrations, authState } = t.context
+  await runMigrations()
+
+  const namespace = 'main'
+  const tablename = 'parent'
+  const qualified = new QualifiedTablename(namespace, tablename).toString()
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
+
+  const expectedTs = new Date().getTime()
+  const incoming = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.insert,
+    expectedTs,
+    genEncodedTags('remote', [expectedTs]),
+    {
+      id: 2,
+    }
+  )
+  const incomingChange = opLogEntryToChange(incoming, relations)
+
+  await satellite._applyTransaction({
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(expectedTs),
+    changes: [incomingChange],
+    lsn: new Uint8Array(),
+  })
+
+  const row = await adapter.query({
+    sql: `SELECT id FROM ${qualified}`,
+  })
+  console.log(row)
+  t.is(row.length, 2)
+
+  const shadowRows = await adapter.query({
+    sql: `SELECT * FROM _electric_shadow`,
+  })
+  console.log(shadowRows)
+  t.is(shadowRows.length, 2)
+  t.like(shadowRows[0], {
+    namespace: 'main',
+    tablename: 'parent',
+  })
+
+  await adapter.run({ sql: `DELETE FROM ${qualified} WHERE id = 2` })
+  await satellite._performSnapshot()
+
+  const oplogs = await adapter.query({
+    sql: `SELECT * FROM _electric_oplog`,
+  })
+  console.log(oplogs)
+  t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
+})
+
 // TODO: implement reconnect protocol
 
 // test('resume out of window clears subscriptions and clears oplog after ack', async (t) => {})

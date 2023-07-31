@@ -733,8 +733,8 @@ export class SatelliteProcess implements Satellite {
         FROM ${shadow} AS shadow
         JOIN ${oplog} as op
           ON op.namespace = shadow.namespace
-            AND op.tablename = op.tablename
-            AND op.primaryKey = op.primaryKey
+            AND op.tablename = shadow.tablename
+            AND op.primaryKey = shadow.primaryKey
         WHERE op.timestamp = ?
               AND op.rowid > ?
         GROUP BY op.namespace, op.tablename, op.primaryKey
