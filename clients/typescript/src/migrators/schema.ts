@@ -9,6 +9,9 @@ export const data = {
       statements: [
         //`-- The ops log table\n`,
         `CREATE TABLE IF NOT EXISTS ${oplogTable} (\n  rowid INTEGER PRIMARY KEY AUTOINCREMENT,\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  optype TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  newRow TEXT,\n  oldRow TEXT,\n  timestamp TEXT,  clearTags TEXT DEFAULT "[]" NOT NULL\n);`,
+        // Add an index for the oplog
+        `CREATE INDEX IF NOT EXISTS ${oplogTable.namespace}._electric_table_pk_reference ON ${oplogTable.tablename} (namespace, tablename, primaryKey)`,
+        `CREATE INDEX IF NOT EXISTS ${oplogTable.namespace}._electric_timestamp ON ${oplogTable.tablename} (timestamp)`,
         //`-- Somewhere to keep our metadata\n`,
         `CREATE TABLE IF NOT EXISTS ${metaTable} (\n  key TEXT PRIMARY KEY,\n  value BLOB\n);`,
         //`-- Somewhere to track migrations\n`,

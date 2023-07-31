@@ -207,8 +207,14 @@ export function generateTriggers(tables: Tables): Statement[] {
 
 function joinColsForJSON(cols: string[], target?: 'new' | 'old') {
   if (typeof target === 'undefined') {
-    return cols.map((col) => `'${col}', ${col}`).join(', ')
+    return cols
+      .sort()
+      .map((col) => `'${col}', ${col}`)
+      .join(', ')
   } else {
-    return cols.map((col) => `'${col}', ${target}.${col}`).join(', ')
+    return cols
+      .sort()
+      .map((col) => `'${col}', ${target}.${col}`)
+      .join(', ')
   }
 }
