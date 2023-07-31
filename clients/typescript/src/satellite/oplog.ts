@@ -269,14 +269,12 @@ export const fromTransaction = (
   relations: RelationsCache
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
-    const columnValues = t.record ? t.record : t.oldRecord
-    const pk = JSON.stringify(
+    const columnValues = t.record ? t.record : t.oldRecord!
+    const pk = primaryKeyToStr(
       Object.fromEntries(
         relations[`${t.relation.table}`].columns
           .filter((c) => c.primaryKey)
-          .map((col) => col.name)
-          .sort()
-          .map((name) => [name, columnValues![name]])
+          .map((col) => [col.name, columnValues[col.name]!])
       )
     )
 
@@ -392,10 +390,28 @@ export const opLogEntryToChange = (
   }
 }
 
-export const primaryKeyToStr = (primaryKeyJson: {
+/**
+ * Convert a primary key to a string the same way our triggers do when generating oplog entries.
+ *
+ * Takes the object that contains the primary key and serializes it to JSON in a non-prettified
+ * way with column sorting.
+ *
+ * @param primaryKeyObj object representing all columns of a primary key
+ * @returns a stringified JSON with stable sorting on column names
+ */
+export const primaryKeyToStr = (primaryKeyObj: {
   [key: string]: string | number
 }): string => {
-  return JSON.stringify(primaryKeyJson, Object.keys(primaryKeyJson).sort())
+  const keys = Object.keys(primaryKeyObj).sort()
+  if (keys.length === 0) return '{}'
+
+  let json = '{'
+  for (const key of keys) {
+    json += JSON.stringify(key) + ':' + JSON.stringify(primaryKeyObj[key]) + ','
+  }
+
+  // Remove the last appended comma and close the object
+  return json.slice(0, -1) + '}'
 }
 
 export const generateTag = (instanceId: string, timestamp: Date): Tag => {
