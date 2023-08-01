@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.5.0-next.4
+
+### Patch Changes
+
+- f8cf910: Remove SchemaRegistry and use our cached knowledge of the pg schema to fulfill all requirements for knowledge of the replicated tables
+
 ## 0.5.0-next.3
 
 ### Patch Changes
