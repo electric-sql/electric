@@ -213,6 +213,9 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
       originalDataSource.url.value
     )
 
+    // Modify snake_case table names to PascalCase
+    await pascalCaseTableNames(prismaSchema)
+
     // Generate a client from the Prisma schema
     console.log('Generating Electric client...')
     await generateElectricClient(prismaSchema)
@@ -282,10 +285,56 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
   return contents.split(/\r?\n/)
 }
 
+/**
+ * Transforms the table names in the Prisma schema
+ * such that they start with a capital.
+ * If the table names are snake cased,
+ * i.e. contain no capitals,
+ * then we convert them to PascalCase.
+ * @param prismaSchema Path to the Prisma schema file.
+ */
+async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
+  const lines = await getFileLines(prismaSchema)
+  let mapAnnotations: [number, string][] = []
+  lines.forEach((ln, idx) => {
+    const model = 'model '
+    if (ln.trim().startsWith(model)) {
+      // Check if the model name needs capitalisation
+      const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
+      const [tableName] = restOfLn.match(/\w+/g) as string[]
+      const modelName = isSnakeCased(tableName)
+        ? snake2PascalCase(tableName)
+        : capitaliseFirstLetter(tableName) // always capitalise first letter
+
+      // Replace the model name on this line
+      const newLn = ln.replace(tableName, modelName)
+      lines[idx] = newLn
+
+      // remember to insert an `@@map` annotation
+      // to map the model name to the table name in the DB
+      // We don't do this here as it mutates the array
+      // we are currently looping over, hence, breaking indices
+      // Note: we build this array in reverse order
+      //       such that we don't break indices
+      //       when we will start inserting in the array later
+      mapAnnotations = [[idx + 1, `  @@map("${tableName}")`], ...mapAnnotations]
+    }
+  })
+
+  // Now insert the `@@map` annotations
+  mapAnnotations.forEach((annot) => {
+    const [idx, annotation] = annot
+    lines.splice(idx, 0, annotation)
+  })
+
+  // Write the modified Prisma schema to the file
+  await fs.writeFile(prismaSchema, lines.join('\n'))
+}
+
 async function getDataSource(
   prismaSchema: string
 ): Promise<DataSourceDescription> {
-  const lines = (await getFileLines(prismaSchema)).map((ln) => ln)
+  const lines = await getFileLines(prismaSchema)
   const dataSourceStartIdx = lines.findIndex((ln) =>
     ln.trim().startsWith('datasource ')
   )
@@ -449,4 +498,25 @@ async function fetchMigrations(
 function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
   const outFolder = path.resolve(opts.out)
   return path.join(outFolder, 'migrations.ts')
+}
+
+function capitaliseFirstLetter(word: string): string {
+  return word.charAt(0).toUpperCase() + word.substring(1)
+}
+
+/**
+ * Checks if a model name is snake cased.
+ * We assume that it is snake cased if it contains no capital letters.
+ * @param name The model name
+ */
+function isSnakeCased(name: string): boolean {
+  return name.match(/[A-Z]/) === null
+}
+
+/**
+ * Converts a snake_case model name to PascalCase.
+ * @param name The snake cased model name.
+ */
+function snake2PascalCase(name: string): string {
+  return name.split('_').map(capitaliseFirstLetter).join('')
 }
