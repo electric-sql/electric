@@ -308,20 +308,12 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
   const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
 
-  const model = 'model '
-  const getModelName = (ln: string) => {
-    const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
-    const [tableName] = restOfLn.match(/\w+/g) as string[]
-    return tableName
-  }
-  const isModelDefinition = (ln: string) => {
-    return ln.trim().startsWith(model)
-  }
+  const getModelName = (ln: string) => ln.match(/^\s*model\s+(\w+)/)?.[1]
 
   lines.forEach((ln, idx) => {
-    if (isModelDefinition(ln)) {
+    const tableName = getModelName(ln)
+    if (tableName) {
       // Check if the model name needs capitalisation
-      const tableName = getModelName(ln)
       const modelName = isSnakeCased(tableName)
         ? snake2PascalCase(tableName)
         : capitaliseFirstLetter(tableName) // always capitalise first letter
@@ -341,10 +333,10 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   // the definition of a model
   let insideModel = false
   lines = lines.flatMap((ln) => {
-    if (isModelDefinition(ln)) {
+    const modelName = getModelName(ln)
+    if (modelName) {
       insideModel = true
       // insert an `@@map` annotation if needed
-      const modelName = getModelName(ln)
       if (modelNameToDbName.has(modelName)) {
         const tableName = modelNameToDbName.get(modelName)
         return [ln, `  @@map("${tableName}")`]
