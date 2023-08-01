@@ -9,7 +9,10 @@ postgresql_connection =
   |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
   |> Keyword.put(:replication, "database")
 
-pg_server_host = System.get_env("ELECTRIC_HOST") || raise("Env variable ELECTRIC_HOST is not set")
+pg_server_host =
+  System.get_env("LOGICAL_PUBLISHER_HOST") ||
+    raise("Env variable LOGICAL_PUBLISHER_HOST is not set")
+
 pg_server_port = Application.fetch_env!(:electric, Electric.PostgresServer, :port)
 
 connectors = [

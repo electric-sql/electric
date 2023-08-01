@@ -73,6 +73,6 @@ config :electric, Electric.Satellite.WsServer,
   port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
 
 config :electric, Electric.PostgresServer,
-  port: System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
+  port: System.get_env("LOGICAL_PUBLISHER_PORT", "5433") |> String.to_integer()
 
 Code.require_file("runtime.#{config_env()}.exs", __DIR__)
