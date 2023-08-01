@@ -10,7 +10,6 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
 import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
 
-import { ElectricNamespace } from '../../src/electric/index'
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -38,8 +37,7 @@ test('useLiveQuery returns query results', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const query = 'select i from bars'
   const liveQuery = dal.db.liveRaw({
@@ -61,8 +59,7 @@ test('useLiveQuery returns error when query errors', async (t) => {
   const adapter = new DatabaseAdapter(original, false)
 
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -82,8 +79,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -118,8 +114,7 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   await notifier.attach('baz.db', 'baz')
 
@@ -156,8 +151,7 @@ test('useLiveQuery never sets results if unmounted immediately', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -181,8 +175,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -220,8 +213,7 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -263,8 +255,7 @@ test('useConnectivityState defaults to disconnected', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -282,8 +273,7 @@ test('useConnectivityState handles connectivity events', async (t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -301,8 +291,7 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const namespace = new ElectricNamespace(adapter, notifier)
-  const dal = ElectricClient.create(schema, namespace)
+  const dal = ElectricClient.create(schema, adapter, notifier)
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
