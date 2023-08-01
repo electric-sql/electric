@@ -165,7 +165,8 @@
     "uuid": "^9.0.0",
     "walkjs": "^3.2.4",
     "ws": "^8.8.1",
-    "zod": "^3.20.2"
+    "zod": "^3.20.2",
+    "better-sqlite3": "^8.4.0"
   },
   "devDependencies": {
     "@ikscodes/browser-env": "^1.0.0",
@@ -206,13 +207,12 @@
     "ts-proto": "^1.125.0",
     "typeorm": "^0.3.9",
     "typescript": "^4.9",
-    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master",
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
     "@aphro/absurd-sql": "^0.0.53",
     "@aphro/sql.js": "^1.7.0",
-    "better-sqlite3": ">= 7.4.0",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",
@@ -220,7 +220,7 @@
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
-    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes"
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master"
   },
   "peerDependenciesMeta": {
     "@aphro/absurd-sql": {
