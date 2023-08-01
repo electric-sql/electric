@@ -60,7 +60,9 @@ export function writeTableSchemas(
 
           writer.newLine().write(`relations: `)
 
-          const modelNameMappings = new Map(dmmf.datamodel.models.map(m => [m.name, m.dbName ?? m.name])) // mapping of model names to their DB name
+          const modelNameMappings = new Map(
+            dmmf.datamodel.models.map((m) => [m.name, m.dbName ?? m.name])
+          ) // mapping of model names to their DB name
           writeRelations(model, fileWriter, modelNameMappings)
           writeSchemas(model, fileWriter)
         })
