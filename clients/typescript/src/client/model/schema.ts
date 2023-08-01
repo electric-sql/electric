@@ -28,7 +28,6 @@ export type TableSchema<
   ScalarFieldEnum,
   _GetPayload extends HKT
 > = {
-  tableName: string
   fields: FieldName[]
   relations: Relation[]
   modelSchema: z.ZodType<Partial<T>>

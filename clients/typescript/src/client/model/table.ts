@@ -86,7 +86,6 @@ export class Table<
   private syncSchema: z.ZodType<SyncInput<Include>>
 
   constructor(
-    public modelName: string,
     public tableName: string,
     adapter: DatabaseAdapter,
     notifier: Notifier,
@@ -94,12 +93,12 @@ export class Table<
   ) {
     this._builder = new Builder(
       tableName,
-      this._dbDescription.getFields(modelName)
+      this._dbDescription.getFields(tableName)
     )
     this._executor = new Executor(adapter, notifier)
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
-    const tableDescription = this._dbDescription.getTableDescription(modelName)
+    const tableDescription = this._dbDescription.getTableDescription(tableName)
     this._schema = tableDescription.modelSchema
     this.createSchema = omitCountFromSelectAndIncludeSchema(
       tableDescription.createSchema
@@ -134,7 +133,7 @@ export class Table<
     includedFields.forEach((field: string) => {
       // Fetch the table that is included
       const relatedTableName = this._dbDescription.getRelatedTable(
-        this.modelName,
+        this.tableName,
         field
       )
       const relatedTable = this._tables.get(relatedTableName)!
@@ -313,7 +312,7 @@ export class Table<
     f: (rel: Relation, cont: () => void) => void,
     cont: () => void
   ) {
-    const relations = this._dbDescription.getRelations(this.modelName)
+    const relations = this._dbDescription.getRelations(this.tableName)
 
     forEach(
       (rel: Relation, cont: () => void) => {
@@ -396,7 +395,7 @@ export class Table<
          */
 
         const incomingRelations = this._dbDescription.getIncomingRelations(
-          this.modelName
+          this.tableName
         )
 
         // below `createRelatedObject` reassigns this variable with a function that wraps this one
@@ -743,7 +742,7 @@ export class Table<
         (relationField: string, cont: () => void) => {
           if (
             !this._dbDescription.hasRelationForField(
-              this.modelName,
+              this.tableName,
               relationField
             )
           ) {
@@ -753,11 +752,11 @@ export class Table<
           }
 
           const relationName = this._dbDescription.getRelationName(
-            this.modelName,
+            this.tableName,
             relationField
           )!
           const relation = this._dbDescription.getRelation(
-            this.modelName,
+            this.tableName,
             relationName
           )
 
@@ -936,7 +935,7 @@ export class Table<
     // Keep only the updated fields that are pointed at by at least one relation
     const updatedIncomingFields = updatedFields.filter((field) => {
       return (
-        this._dbDescription.getRelationsPointingAtField(this.modelName, field)
+        this._dbDescription.getRelationsPointingAtField(this.tableName, field)
           .length > 0
       )
     })
@@ -946,7 +945,7 @@ export class Table<
         // Update each relation pointing to this field
         const incomingRelations =
           this._dbDescription.getRelationsPointingAtField(
-            this.modelName,
+            this.tableName,
             toField
           )
         forEach(
@@ -1103,7 +1102,7 @@ export class Table<
   ) {
     // incoming relation, can be one-to-one or one-to-many
     const { relatedObjects } = this._dbDescription.getRelation(
-      this.modelName,
+      this.tableName,
       relationName
     )!
 
@@ -1233,7 +1232,7 @@ export class Table<
         // we need to remove all relation fields from `data.data`
         // because they don't exist on this table
         // and those related object(s) will be updated afterwards
-        const fields = this._dbDescription.getFields(this.modelName)
+        const fields = this._dbDescription.getFields(this.tableName)
         const nonRelationalData: Record<string, any> = pick(data.data, fields)
         const nonRelationalFields: string[] = Object.keys(nonRelationalData)
         const nonRelationalObject = {

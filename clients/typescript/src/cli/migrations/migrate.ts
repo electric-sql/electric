@@ -293,9 +293,7 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
  * then we convert them to PascalCase.
  * @param prismaSchema Path to the Prisma schema file.
  */
-async function pascalCaseTableNames(
-  prismaSchema: string
-): Promise<void> {
+async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
   const lines = await getFileLines(prismaSchema)
   let mapAnnotations: [number, string][] = []
   lines.forEach((ln, idx) => {
@@ -303,7 +301,7 @@ async function pascalCaseTableNames(
     if (ln.trim().startsWith(model)) {
       // Check if the model name needs capitalisation
       const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
-      const [ tableName ] = restOfLn.match(/\w+/g) as string[]
+      const [tableName] = restOfLn.match(/\w+/g) as string[]
       const modelName = isSnakeCased(tableName)
         ? snake2PascalCase(tableName)
         : capitaliseFirstLetter(tableName) // always capitalise first letter
@@ -319,12 +317,12 @@ async function pascalCaseTableNames(
       // Note: we build this array in reverse order
       //       such that we don't break indices
       //       when we will start inserting in the array later
-      mapAnnotations = [[idx+1, `  @@map("${tableName}")`], ...mapAnnotations]
+      mapAnnotations = [[idx + 1, `  @@map("${tableName}")`], ...mapAnnotations]
     }
   })
 
   // Now insert the `@@map` annotations
-  mapAnnotations.forEach(annot => {
+  mapAnnotations.forEach((annot) => {
     const [idx, annotation] = annot
     lines.splice(idx, 0, annotation)
   })

@@ -41,14 +41,14 @@ export const Example = () => {
 const ExampleComponent = () => {
   const { db } = useElectric()!
   // Or here, in a `useEffect` without dependencies to limit it running once per component render.
-  useEffect(() => void db.Items.sync(), [])
+  useEffect(() => void db.items.sync(), [])
 
   // `useliveQuery` will keep this variable up to data with the SQLite database, but to get data from server into SQLite
   // you need to call `.sync()`, as demonstrated on the line above
-  const { results } = useLiveQuery(db.Items.liveMany({})) // select all
+  const { results } = useLiveQuery(db.items.liveMany({})) // select all
 
   const addItem = async () => {
-    await db.Items.create({
+    await db.items.create({
       data: {
         value: crypto.randomUUID(),
         // uncomment the line below after migration
@@ -58,7 +58,7 @@ const ExampleComponent = () => {
   }
 
   const clearItems = async () => {
-    await db.Items.deleteMany() // delete all items
+    await db.items.deleteMany() // delete all items
   }
 
   // After the migration, comment out this code and uncomment code block below
