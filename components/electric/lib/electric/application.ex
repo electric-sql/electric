@@ -21,7 +21,7 @@ defmodule Electric.Application do
       Electric.Telemetry,
       Electric.Postgres.OidDatabase,
       Electric.Replication.OffsetStorage,
-      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
+      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: http_api_port()]},
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
@@ -47,8 +47,8 @@ defmodule Electric.Application do
     {:ok, supervisor}
   end
 
-  defp status_port,
-    do: Application.fetch_env!(:electric, Electric.Plug.Status) |> Keyword.fetch!(:port)
+  defp http_api_port,
+    do: Application.fetch_env!(:electric, :http_api_port)
 
   defp ws_server_port,
     do: Application.fetch_env!(:electric, Electric.Satellite.WsServer) |> Keyword.fetch!(:port)

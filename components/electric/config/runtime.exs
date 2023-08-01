@@ -67,8 +67,7 @@ auth_provider =
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-config :electric, Electric.Plug.Status,
-  port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
+config :electric, http_api_port: System.get_env("HTTP_API_PORT", "5050") |> String.to_integer()
 
 config :electric, Electric.Satellite.WsServer,
   port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
