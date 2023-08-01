@@ -25,12 +25,13 @@ defmodule Electric.Application do
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
+      {ThousandIsland,
+       port: postgres_server_port(), handler_module: Electric.Replication.Postgres.TcpServer},
       Electric.Satellite.WsServer.child_spec(
         port: ws_server_port(),
         auth_provider: auth_provider,
         pg_connector_opts: postgres_connector_opts
-      ),
-      Electric.PostgresServer.child_spec(port: pg_server_port())
+      )
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]

@@ -66,7 +66,9 @@ defmodule Electric.MixProject do
       {:exqlite, "~> 0.13.5", only: [:dev, :test]},
       {:tzdata, "~> 1.1", only: [:dev, :test]},
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
-      {:nimble_pool, "~> 1.0"}
+      {:nimble_pool, "~> 1.0"},
+      {:bandit, "~> 1.0-pre"},
+      {:thousand_island, "~> 1.0-pre"}
     ]
   end
 
