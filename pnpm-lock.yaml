@@ -26,6 +26,9 @@ importers:
       base-64:
         specifier: ^1.0.0
         version: 1.0.0
+      better-sqlite3:
+        specifier: ^8.4.0
+        version: 8.4.0
       cordova-sqlite-storage:
         specifier: '>= 5.0.0'
         version: 5.0.0
@@ -195,9 +198,6 @@ importers:
       ava:
         specifier: ^4.3.1
         version: 4.3.3
-      better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.4.0
       eslint:
         specifier: ^8.22.0
         version: 8.41.0
@@ -235,8 +235,8 @@ importers:
         specifier: ^4.9
         version: 4.9.5
       wa-sqlite:
-        specifier: git+https://github.com/rhashimoto/wa-sqlite#breaking-changes
-        version: github.com/rhashimoto/wa-sqlite/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970
+        specifier: git+https://github.com/rhashimoto/wa-sqlite#master
+        version: github.com/rhashimoto/wa-sqlite/122c46ea4d2f20308c0a3d62b79add048a2bef9c
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -13979,7 +13979,14 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
+  github.com/rhashimoto/wa-sqlite/122c46ea4d2f20308c0a3d62b79add048a2bef9c:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/122c46ea4d2f20308c0a3d62b79add048a2bef9c}
+    name: wa-sqlite
+    version: 0.9.4
+    dev: true
+
   github.com/rhashimoto/wa-sqlite/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970:
     resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/cf825aebbc15b2b45424f5a3e0efd7a59d8f9970}
     name: wa-sqlite
     version: 0.9.3
+    dev: false
