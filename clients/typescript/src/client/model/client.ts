@@ -3,6 +3,8 @@ import { DbSchema, TableSchema } from './schema'
 import { liveRaw, raw, Table } from './table'
 import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
+import { Notifier } from '../../notifiers'
+import { DatabaseAdapter } from '../../electric/adapter'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -57,31 +59,21 @@ export class ElectricClient<
 > extends ElectricNamespace {
   private constructor(
     public db: ClientTables<DB> & RawQueries,
-    electric: ElectricNamespace
+    adapter: DatabaseAdapter,
+    notifier: Notifier
   ) {
-    super(electric.adapter, electric.notifier)
-
-    Object.defineProperty(this, 'isConnected', {
-      get: () => electric.isConnected,
-      set: (_value) => {
-        /* noop */
-      },
-    })
+    super(adapter, notifier)
   }
 
   // Builds the DAL namespace from a `dbDescription` object
   static create<DB extends DbSchema<any>>(
     dbDescription: DB,
-    electric: ElectricNamespace
+    adapter: DatabaseAdapter,
+    notifier: Notifier
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
     const createTable = (tableName: string) => {
-      return new Table(
-        tableName,
-        electric.adapter,
-        electric.notifier,
-        dbDescription
-      )
+      return new Table(tableName, adapter, notifier, dbDescription)
     }
 
     // Create all tables
@@ -98,10 +90,10 @@ export class ElectricClient<
 
     const db: ClientTables<DB> & RawQueries = {
       ...dal,
-      raw: raw.bind(null, electric.adapter),
-      liveRaw: liveRaw.bind(null, electric.adapter),
+      raw: raw.bind(null, adapter),
+      liveRaw: liveRaw.bind(null, adapter),
     }
 
-    return new ElectricClient(db, electric)
+    return new ElectricClient(db, adapter, notifier)
   }
 }
