@@ -1,5 +1,22 @@
 # electric-sql
 
+## 0.5.0-next.4
+
+### Patch Changes
+
+- 5567869: Use PascalCased model names in generated Prisma schema and map them to the original table names.
+- dc48f1f: Fixed `liveMany`, `liveUnique`, and `liveFirst` functions not exposing the `include` tables properly, making `useLiveQuery` miss some relevant updates
+- c588bdf: Fixed not sending all the transactions if more than one was done within a throttle window
+- 4531dde: Fix unreliable behaviour in the React `useConnectivityState` hook.
+- b29693e: Modify generated migrations file to be a .ts file instead of .js file
+- 18619ef: Fixed race condition in throttled perform snapshot
+- 232f7a5: Updated snapshotting function to be more efficient when handling a large oplog
+- 10bbae9: Moved `better-sqlite3` to dependencies because CLI command uses it
+- 3cb872d: Chore: made `_getMeta` types more precise
+- 9db6891: Also fix casing in types that refer to model names
+- 7eab08e: Improved `config.url` parsing and SSL support.
+- f4184b1: Fix: ensure we do much more cleanup in `useEffect` returned functions and in `close` method of Satellite
+
 ## 0.5.0-next.3
 
 ### Patch Changes

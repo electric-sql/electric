@@ -9,12 +9,20 @@
     "@electric-sql/prisma-generator": "1.0.1"
   },
   "changesets": [
+    "big-boats-tie",
+    "bright-eels-bow",
+    "eleven-chairs-clap",
+    "fast-forks-reply",
+    "flat-rabbits-scream",
     "friendly-pillows-melt",
     "gold-tomatoes-play",
     "grumpy-buses-hammer",
     "hip-bulldogs-mix",
     "hot-lemons-heal",
+    "lemon-seals-mix",
     "loud-brooms-approve",
+    "lucky-lies-mate",
+    "moody-comics-pretend",
     "nasty-carrots-live",
     "neat-shoes-end",
     "odd-dodos-explode",
@@ -26,7 +34,12 @@
     "shiny-dots-tan",
     "shiny-pears-accept",
     "shiny-phones-destroy",
+    "smart-ads-hammer",
+    "stale-zoos-poke",
+    "stupid-carpets-clap",
     "sweet-ants-deliver",
-    "thirty-numbers-kneel"
+    "tasty-buckets-smoke",
+    "thirty-numbers-kneel",
+    "young-needles-obey"
   ]
 }
