@@ -1,8 +1,6 @@
 import Config
 
-config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
-
-config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"
+config :logger, level: :debug
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
@@ -25,4 +23,4 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
-config :logger, level: :debug
+config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"

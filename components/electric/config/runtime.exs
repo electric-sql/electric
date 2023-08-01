@@ -7,91 +7,73 @@
 
 import Config
 
-alias Electric.Satellite.Auth
+config :logger,
+  handle_otp_reports: true,
+  handle_sasl_reports: false,
+  level: System.get_env("LOG_LEVEL", "info") |> String.to_existing_atom()
 
-auth_provider =
-  if config_env() == :test do
-    auth_config =
-      Auth.Secure.build_config!(
-        alg: "HS256",
-        key: "test-signing-key-at-least-32-bytes-long",
-        iss: "electric-sql-test-issuer"
-      )
-
-    {Auth.Secure, auth_config}
-  else
-    case System.get_env("AUTH_MODE", "secure") do
-      "insecure" ->
-        namespace = System.get_env("AUTH_JWT_NAMESPACE")
-        auth_config = Auth.Insecure.build_config(namespace: namespace)
-        {Auth.Insecure, auth_config}
-
-      "secure" ->
-        auth_config =
-          [
-            alg: System.get_env("AUTH_JWT_ALG"),
-            key: System.get_env("AUTH_JWT_KEY"),
-            namespace: System.get_env("AUTH_JWT_NAMESPACE"),
-            iss: System.get_env("AUTH_JWT_ISS"),
-            aud: System.get_env("AUTH_JWT_AUD")
-          ]
-          |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-          |> Auth.Secure.build_config!()
-
-        {Auth.Secure, auth_config}
-
-      other ->
-        raise "Unsupported auth mode: #{inspect(other)}"
-    end
-  end
-
-config :electric, Electric.Satellite.Auth, provider: auth_provider
+config :logger, :console,
+  format: "$time $metadata[$level] $message\n",
+  metadata: [
+    :connection,
+    :origin,
+    :pid,
+    :pg_client,
+    :pg_producer,
+    :pg_slot,
+    :sq_client,
+    :component,
+    :instance_id,
+    :client_id,
+    :user_id,
+    :metadata
+  ]
 
 config :electric,
   # Used only to send server identification upon connection,
   # can stay default while we're not working on multi-instance setups
   instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "electric")
 
-if config_env() == :prod do
-  config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
+config :electric, Electric.Replication.Postgres,
+  pg_client: Electric.Replication.Postgres.Client,
+  producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
-  config :electric, Electric.StatusPlug,
-    port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
+alias Electric.Satellite.Auth
 
-  electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
+auth_provider =
+  case System.get_env("AUTH_MODE", "secure") do
+    "insecure" ->
+      namespace = System.get_env("AUTH_JWT_NAMESPACE")
+      auth_config = Auth.Insecure.build_config(namespace: namespace)
+      {Auth.Insecure, auth_config}
 
-  electric_port = System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
+    "secure" ->
+      auth_config =
+        [
+          alg: System.get_env("AUTH_JWT_ALG"),
+          key: System.get_env("AUTH_JWT_KEY"),
+          namespace: System.get_env("AUTH_JWT_NAMESPACE"),
+          iss: System.get_env("AUTH_JWT_ISS"),
+          aud: System.get_env("AUTH_JWT_AUD")
+        ]
+        |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
+        |> Auth.Secure.build_config!()
 
-  config :electric, Electric.PostgresServer, port: electric_port
+      {Auth.Secure, auth_config}
 
-  config :electric, Electric.Satellite.WsServer,
-    port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
+    other ->
+      raise "Unsupported auth mode: #{inspect(other)}"
+  end
 
-  postgresql_connection =
-    System.fetch_env!("DATABASE_URL")
-    |> PostgresqlUri.parse()
-    |> then(&Keyword.put(&1, :host, &1[:hostname]))
-    |> Keyword.delete(:hostname)
-    |> Keyword.put_new(:ssl, false)
-    |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
-    |> Keyword.put(:replication, "database")
+config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-  connectors = [
-    {"postgres_1",
-     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-     connection: postgresql_connection,
-     replication: [
-       electric_connection: [
-         host: electric_host,
-         port: electric_port,
-         dbname: "electric",
-         connect_timeout: postgresql_connection[:timeout]
-       ]
-     ]}
-  ]
+config :electric, Electric.Plug.Status,
+  port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
 
-  config :electric, Electric.Replication.Connectors, connectors
+config :electric, Electric.Satellite.WsServer,
+  port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
 
-  config :electric, Electric.Replication.OffsetStorage,
-    file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
-end
+config :electric, Electric.PostgresServer,
+  port: System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
+
+Code.require_file("runtime.#{config_env()}.exs", __DIR__)

@@ -6,7 +6,7 @@ ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-$
 ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
 
 FROM ${BUILDER_IMAGE} AS builder
-LABEL maintainer="dev@vaxine.io"
+LABEL maintainer="info@electric-sql.com"
 
 RUN apt-get update -y && \
     apt-get install -y build-essential git curl && \
@@ -20,12 +20,12 @@ ENV MIX_ENV=prod
 WORKDIR /app
 COPY Makefile /app/
 
-COPY mix.*  /app/
+COPY mix.* /app/
 RUN mix deps.get
-COPY config/config.exs config/prod.exs /app/config/
+COPY config/config.exs /app/config/
 RUN mix deps.compile
 
-COPY lib    /app/lib/
+COPY lib /app/lib/
 COPY config/*runtime.exs /app/config/
 
 ARG ELECTRIC_VERSION=local
