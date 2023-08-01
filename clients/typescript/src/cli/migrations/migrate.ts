@@ -305,14 +305,23 @@ async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
  * @returns The modified lines.
  */
 export function doPascalCaseTableNames(lines: string[]): string[] {
-  let mapAnnotations: [number, string][] = []
-  const replacements: Map<string, string> = new Map()
+  const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
+  const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
+
+  const model = 'model '
+  const getModelName = (ln: string) => {
+    const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
+    const [tableName] = restOfLn.match(/\w+/g) as string[]
+    return tableName
+  }
+  const isModelDefinition = (ln: string) => {
+    return ln.trim().startsWith(model)
+  }
+
   lines.forEach((ln, idx) => {
-    const model = 'model '
-    if (ln.trim().startsWith(model)) {
+    if (isModelDefinition(ln)) {
       // Check if the model name needs capitalisation
-      const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
-      const [tableName] = restOfLn.match(/\w+/g) as string[]
+      const tableName = getModelName(ln)
       const modelName = isSnakeCased(tableName)
         ? snake2PascalCase(tableName)
         : capitaliseFirstLetter(tableName) // always capitalise first letter
@@ -321,15 +330,8 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
       const newLn = ln.replace(tableName, modelName)
       lines[idx] = newLn
 
-      // remember to insert an `@@map` annotation
-      // to map the model name to the table name in the DB
-      // We don't do this here as it mutates the array
-      // we are currently looping over, hence, breaking indices
-      // Note: we build this array in reverse order
-      //       such that we don't break indices
-      //       when we will start inserting in the array later
-      mapAnnotations = [[idx + 1, `  @@map("${tableName}")`], ...mapAnnotations]
       replacements.set(tableName, modelName)
+      modelNameToDbName.set(modelName, tableName)
     }
   })
 
@@ -338,9 +340,16 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   // by the new model name when we are inside
   // the definition of a model
   let insideModel = false
-  lines = lines.map((ln) => {
-    if (ln.trim().startsWith('model ')) {
+  lines = lines.flatMap((ln) => {
+    if (isModelDefinition(ln)) {
       insideModel = true
+      // insert an `@@map` annotation if needed
+      const modelName = getModelName(ln)
+      if (modelNameToDbName.has(modelName)) {
+        const tableName = modelNameToDbName.get(modelName)
+        return [ln, `  @@map("${tableName}")`]
+      }
+
       return ln
     }
 
@@ -350,9 +359,10 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
     }
 
     if (insideModel) {
-      // the regex below matches two identifiers separated by a space
-      // (first identifier is the column name, second one is its type)
-      const reg = /(\s*\w+\s+)(\w+)/
+      // the regex below matches the beginning of a string
+      // followed by two identifiers separated by a space
+      // (first identifier is the column name, second is its type)
+      const reg = /^(\s*\w+\s+)(\w+)/
       return ln.replace(reg, (_match, columnName, typeName) => {
         const newTypeName = replacements.get(typeName) ?? typeName
         return columnName + newTypeName
@@ -360,12 +370,6 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
     }
 
     return ln
-  })
-
-  // Now insert the `@@map` annotations
-  mapAnnotations.forEach((annot) => {
-    const [idx, annotation] = annot
-    lines.splice(idx, 0, annotation)
   })
 
   return lines
