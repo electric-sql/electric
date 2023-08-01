@@ -295,7 +295,18 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
  */
 async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
   const lines = await getFileLines(prismaSchema)
+  const casedLines = doPascalCaseTableNames(lines)
+  // Write the modified Prisma schema to the file
+  await fs.writeFile(prismaSchema, casedLines.join('\n'))
+}
+
+/**
+ * @param lines Individual lines of the Prisma schema
+ * @returns The modified lines.
+ */
+export function doPascalCaseTableNames(lines: string[]): string[] {
   let mapAnnotations: [number, string][] = []
+  const replacements: Map<string, string> = new Map()
   lines.forEach((ln, idx) => {
     const model = 'model '
     if (ln.trim().startsWith(model)) {
@@ -318,7 +329,37 @@ async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
       //       such that we don't break indices
       //       when we will start inserting in the array later
       mapAnnotations = [[idx + 1, `  @@map("${tableName}")`], ...mapAnnotations]
+      replacements.set(tableName, modelName)
     }
+  })
+
+  // Go over the schema again but now
+  // replace references to the old table names
+  // by the new model name when we are inside
+  // the definition of a model
+  let insideModel = false
+  lines = lines.map((ln) => {
+    if (ln.trim().startsWith('model ')) {
+      insideModel = true
+      return ln
+    }
+
+    if (insideModel && ln.trim().startsWith('}')) {
+      insideModel = false
+      return ln
+    }
+
+    if (insideModel) {
+      // the regex below matches two identifiers separated by a space
+      // (first identifier is the column name, second one is its type)
+      const reg = /(\s*\w+\s+)(\w+)/
+      return ln.replace(reg, (_match, columnName, typeName) => {
+        const newTypeName = replacements.get(typeName) ?? typeName
+        return columnName + newTypeName
+      })
+    }
+
+    return ln
   })
 
   // Now insert the `@@map` annotations
@@ -327,8 +368,7 @@ async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
     lines.splice(idx, 0, annotation)
   })
 
-  // Write the modified Prisma schema to the file
-  await fs.writeFile(prismaSchema, lines.join('\n'))
+  return lines
 }
 
 async function getDataSource(

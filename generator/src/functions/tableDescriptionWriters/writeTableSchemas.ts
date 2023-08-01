@@ -60,7 +60,8 @@ export function writeTableSchemas(
 
           writer.newLine().write(`relations: `)
 
-          writeRelations(model, fileWriter)
+          const modelNameMappings = new Map(dmmf.datamodel.models.map(m => [m.name, m.dbName ?? m.name])) // mapping of model names to their DB name
+          writeRelations(model, fileWriter, modelNameMappings)
           writeSchemas(model, fileWriter)
         })
 
@@ -91,7 +92,8 @@ export function writeFieldNamesArray(
 
 export function writeRelations(
   model: ExtendedDMMFModel,
-  fileWriter: CreateFileOptions
+  fileWriter: CreateFileOptions,
+  modelNames2DbNames: Map<string, string>
 ) {
   const writer = fileWriter.writer
   writer.write('[').newLine()
@@ -118,7 +120,7 @@ export function writeRelations(
       field.relationFromFields!.length === 0 ? '' : field.relationFromFields![0]
     const to =
       field.relationToFields!.length === 0 ? '' : field.relationToFields![0]
-    const otherTable = field.type // the table with which we have this relation
+    const otherTable = modelNames2DbNames.get(field.type)! // the table with which we have this relation
     const arity = field.isList ? 'many' : 'one'
     writer.writeLine(
       `  new Relation("${fieldName}", "${from}", "${to}", "${otherTable}", "${relationName}", "${arity}"),`
