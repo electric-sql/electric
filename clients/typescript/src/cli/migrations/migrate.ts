@@ -295,13 +295,25 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
  */
 async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
   const lines = await getFileLines(prismaSchema)
-  let mapAnnotations: [number, string][] = []
+  const casedLines = doPascalCaseTableNames(lines)
+  // Write the modified Prisma schema to the file
+  await fs.writeFile(prismaSchema, casedLines.join('\n'))
+}
+
+/**
+ * @param lines Individual lines of the Prisma schema
+ * @returns The modified lines.
+ */
+export function doPascalCaseTableNames(lines: string[]): string[] {
+  const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
+  const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
+
+  const getModelName = (ln: string) => ln.match(/^\s*model\s+(\w+)/)?.[1]
+
   lines.forEach((ln, idx) => {
-    const model = 'model '
-    if (ln.trim().startsWith(model)) {
+    const tableName = getModelName(ln)
+    if (tableName) {
       // Check if the model name needs capitalisation
-      const restOfLn = ln.trim().substring(model.length) // the line but with the 'model ' prefix stripped
-      const [tableName] = restOfLn.match(/\w+/g) as string[]
       const modelName = isSnakeCased(tableName)
         ? snake2PascalCase(tableName)
         : capitaliseFirstLetter(tableName) // always capitalise first letter
@@ -310,25 +322,49 @@ async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
       const newLn = ln.replace(tableName, modelName)
       lines[idx] = newLn
 
-      // remember to insert an `@@map` annotation
-      // to map the model name to the table name in the DB
-      // We don't do this here as it mutates the array
-      // we are currently looping over, hence, breaking indices
-      // Note: we build this array in reverse order
-      //       such that we don't break indices
-      //       when we will start inserting in the array later
-      mapAnnotations = [[idx + 1, `  @@map("${tableName}")`], ...mapAnnotations]
+      replacements.set(tableName, modelName)
+      modelNameToDbName.set(modelName, tableName)
     }
   })
 
-  // Now insert the `@@map` annotations
-  mapAnnotations.forEach((annot) => {
-    const [idx, annotation] = annot
-    lines.splice(idx, 0, annotation)
+  // Go over the schema again but now
+  // replace references to the old table names
+  // by the new model name when we are inside
+  // the definition of a model
+  let insideModel = false
+  lines = lines.flatMap((ln) => {
+    const modelName = getModelName(ln)
+    if (modelName) {
+      insideModel = true
+      // insert an `@@map` annotation if needed
+      if (modelNameToDbName.has(modelName)) {
+        const tableName = modelNameToDbName.get(modelName)
+        return [ln, `  @@map("${tableName}")`]
+      }
+
+      return ln
+    }
+
+    if (insideModel && ln.trim().startsWith('}')) {
+      insideModel = false
+      return ln
+    }
+
+    if (insideModel) {
+      // the regex below matches the beginning of a string
+      // followed by two identifiers separated by a space
+      // (first identifier is the column name, second is its type)
+      const reg = /^(\s*\w+\s+)(\w+)/
+      return ln.replace(reg, (_match, columnName, typeName) => {
+        const newTypeName = replacements.get(typeName) ?? typeName
+        return columnName + newTypeName
+      })
+    }
+
+    return ln
   })
 
-  // Write the modified Prisma schema to the file
-  await fs.writeFile(prismaSchema, lines.join('\n'))
+  return lines
 }
 
 async function getDataSource(
