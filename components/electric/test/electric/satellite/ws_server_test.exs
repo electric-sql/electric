@@ -655,7 +655,11 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   # -------------------------------------------------------------------------------
-  def mock_data_function({id, requests}, [reply_to: {ref, pid}, connection: _], opts \\ []) do
+  def mock_data_function(
+        {id, requests, _context},
+        [reply_to: {ref, pid}, connection: _],
+        opts \\ []
+      ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)
     data_delay_ms = Keyword.get(opts, :data_delay_ms, 0)
     send(pid, {:subscription_insertion_point, ref, insertion_point})

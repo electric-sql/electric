@@ -59,5 +59,28 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
 
       assert String.starts_with?(tag, origin)
     end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'user 1');
+         INSERT INTO public.users (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'user 2');
+         INSERT INTO public.documents (id, title, electric_user_id) VALUES ('00000000-0000-0000-0000-000000000000', 'test', '00000000-0000-0000-0000-000000000000')
+         """
+    test "full table request respects `electric_user_id` ownership filtering", %{
+      origin: origin,
+      conn: conn,
+      schema: schema
+    } do
+      request = %ShapeRequest{id: "id", included_tables: [{"public", "documents"}]}
+
+      assert {:ok, [%NewRecord{}]} =
+               ShapeRequest.query_initial_data(request, conn, schema, origin, %{
+                 user_id: "00000000-0000-0000-0000-000000000000"
+               })
+
+      assert {:ok, []} =
+               ShapeRequest.query_initial_data(request, conn, schema, origin, %{
+                 user_id: "00000000-0000-0000-0000-000000000001"
+               })
+    end
   end
 end

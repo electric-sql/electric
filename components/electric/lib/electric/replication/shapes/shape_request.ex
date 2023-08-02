@@ -14,6 +14,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   > to the `satellite.proto` file.
   """
   require Logger
+  alias Electric.Replication.Changes.Ownership
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Postgres.Schema
   alias Electric.Replication.Changes
@@ -58,6 +59,8 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   - `origin` - PG origin that's used to convert PG tags to Satellite tags.
     See `Electric.Postgres.ShadowTableTransformation.convert_tag_list_pg_to_satellite/2`
     for details.
+  - `filtering_context` - additional information that needs to be taken into consideration
+    when building a query, like permissions or rows that need to be ignored
 
   ## Transaction requirements
 
@@ -67,11 +70,12 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   set (see [PG documentation](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-REPEATABLE-READ)
   for details.)
   """
-  @spec query_initial_data(t(), :epgsql.connection(), Schema.t(), String.t()) ::
+  @spec query_initial_data(t(), :epgsql.connection(), Schema.t(), String.t(), map()) ::
           {:ok, [Changes.NewRecord.t()]} | {:error, term()}
-  def query_initial_data(%__MODULE__{} = request, conn, schema, origin) do
+  # TODO: `filtering_context` is underdefined by design. It's a stand-in for a more complex solution while we need to enable basic functionality.
+  def query_initial_data(%__MODULE__{} = request, conn, schema, origin, filtering_context \\ %{}) do
     Enum.reduce_while(request.included_tables, {:ok, []}, fn table, {:ok, acc} ->
-      case query_full_table(conn, table, schema, origin) do
+      case query_full_table(conn, table, schema, origin, filtering_context) do
         {:ok, results} ->
           {:cont, {:ok, acc ++ results}}
 
@@ -86,20 +90,36 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
     end)
   end
 
-  defp query_full_table(conn, {schema_name, name} = rel, %Schema.Proto.Schema{} = schema, origin) do
+  defp query_full_table(
+         conn,
+         {schema_name, name} = rel,
+         %Schema.Proto.Schema{} = schema,
+         origin,
+         filtering_context
+       ) do
     table = Enum.find(schema.tables, &(&1.name.schema == schema_name && &1.name.name == name))
     columns = Enum.map_join(table.columns, ", ", &~s|main."#{&1.name}"|)
     {:ok, pks} = Schema.primary_keys(table)
     pk_clause = Enum.map_join(pks, " AND ", &~s|main."#{&1}" = shadow."#{&1}"|)
+
+    ownership_column = Ownership.id_column_name()
+
+    {where_clause, params} =
+      if filtering_context[:user_id] && Enum.any?(table.columns, &(&1.name == ownership_column)) do
+        {"WHERE #{ownership_column} = $1", [filtering_context[:user_id]]}
+      else
+        {"", []}
+      end
 
     query = """
     SELECT shadow."_tags", #{columns}
       FROM #{Schema.name(schema_name)}.#{Schema.name(name)} as main
       JOIN electric."shadow__#{schema_name}__#{name}" as shadow
         ON #{pk_clause}
+      #{where_clause}
     """
 
-    case :epgsql.squery(conn, query) do
+    case :epgsql.equery(conn, query, params) do
       {:ok, _, rows} ->
         {:ok, rows_to_records_with_tags(rows, Enum.map(table.columns, & &1.name), rel, origin)}
 
