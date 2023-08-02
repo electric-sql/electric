@@ -138,7 +138,7 @@
   "dependencies": {
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
-    "better-sqlite3": "^8.4.0"
+    "better-sqlite3": "^8.4.0",
     "cross-fetch": "^3.1.5",
     "decompress": "^4.2.1",
     "events": "^3.3.0",
