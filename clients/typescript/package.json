@@ -48,7 +48,7 @@
   },
   "exports": {
     "./package.json": "./package.json",
-    "./browser": "./dist/drivers/absurd-sql/index.js",
+    "./browser": "./dist/drivers/wa-sqlite/index.js",
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
     "./generic": "./dist/drivers/generic/index.js",
@@ -64,7 +64,7 @@
   "typesVersions": {
     "*": {
       "browser": [
-        "./dist/drivers/absurd-sql/index.d.ts"
+        "./dist/drivers/wa-sqlite/index.d.ts"
       ],
       "cordova": [
         "./dist/drivers/cordova-sqlite-storage/index.d.ts"
@@ -210,25 +210,17 @@
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
-    "@aphro/absurd-sql": "^0.0.53",
-    "@aphro/sql.js": "^1.7.0",
     "better-sqlite3": ">= 7.4.0",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",
-    "react-dom": "^16.8.0",
+    "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#breaking-changes"
   },
   "peerDependenciesMeta": {
-    "@aphro/absurd-sql": {
-      "optional": true
-    },
-    "@aphro/sql.js": {
-      "optional": true
-    },
     "better-sqlite3": {
       "optional": true
     },
