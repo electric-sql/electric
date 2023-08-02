@@ -29,8 +29,8 @@ services:
       service: electric_template
     environment:
       <<: *preshared-auth-variables
-      ELECTRIC_HOST: electric_1
       DATABASE_URL: postgresql://postgres:password@postgres_1:5432/electric
+      LOGICAL_PUBLISHER_HOST: electric_1
     ports:
       - 5050:5050
       - 5133:5133

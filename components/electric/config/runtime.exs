@@ -7,65 +7,65 @@
 
 import Config
 
-alias Electric.Satellite.Auth
+default_log_level = "info"
+default_instance_id = "electric"
+default_auth_mode = "secure"
+default_http_api_port = "5050"
+default_ws_server_port = "5133"
+default_pg_server_port = "5433"
+default_offset_storage_path = "./offset_storage_data.dat"
 
-auth_provider =
-  if config_env() == :test do
-    auth_config =
-      Auth.Secure.build_config!(
-        alg: "HS256",
-        key: "test-signing-key-at-least-32-bytes-long",
-        iss: "electric-sql-test-issuer"
-      )
+###
 
-    {Auth.Secure, auth_config}
-  else
-    case System.get_env("AUTH_MODE", "secure") do
-      "insecure" ->
-        namespace = System.get_env("AUTH_JWT_NAMESPACE")
-        auth_config = Auth.Insecure.build_config(namespace: namespace)
-        {Auth.Insecure, auth_config}
+config :logger,
+  handle_otp_reports: true,
+  handle_sasl_reports: false,
+  level: System.get_env("LOG_LEVEL", default_log_level) |> String.to_existing_atom()
 
-      "secure" ->
-        auth_config =
-          [
-            alg: System.get_env("AUTH_JWT_ALG"),
-            key: System.get_env("AUTH_JWT_KEY"),
-            namespace: System.get_env("AUTH_JWT_NAMESPACE"),
-            iss: System.get_env("AUTH_JWT_ISS"),
-            aud: System.get_env("AUTH_JWT_AUD")
-          ]
-          |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-          |> Auth.Secure.build_config!()
-
-        {Auth.Secure, auth_config}
-
-      other ->
-        raise "Unsupported auth mode: #{inspect(other)}"
-    end
-  end
-
-config :electric, Electric.Satellite.Auth, provider: auth_provider
+config :logger, :console,
+  format: "$time $metadata[$level] $message\n",
+  metadata: [
+    :connection,
+    :origin,
+    :pid,
+    :pg_client,
+    :pg_producer,
+    :pg_slot,
+    :sq_client,
+    :component,
+    :instance_id,
+    :client_id,
+    :user_id,
+    :metadata
+  ]
 
 config :electric,
   # Used only to send server identification upon connection,
   # can stay default while we're not working on multi-instance setups
-  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "electric")
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", default_instance_id)
 
+config :electric, Electric.Replication.Postgres,
+  pg_client: Electric.Replication.Postgres.Client,
+  producer: Electric.Replication.Postgres.LogicalReplicationProducer
+
+config :electric,
+  http_api_port: System.get_env("HTTP_API_PORT", default_http_api_port) |> String.to_integer()
+
+config :electric, Electric.Satellite.WsServer,
+  port: System.get_env("WEBSOCKET_PORT", default_ws_server_port) |> String.to_integer()
+
+pg_server_port =
+  System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
+
+config :electric, Electric.PostgresServer, port: pg_server_port
+
+# The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
+# a release, and we want a single configuration file in our release.
 if config_env() == :prod do
-  config :logger, level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info"))
+  auth_provider =
+    System.get_env("AUTH_MODE", default_auth_mode) |> Electric.Satellite.Auth.build_provider!()
 
-  config :electric, Electric.StatusPlug,
-    port: System.get_env("STATUS_PORT", "5050") |> String.to_integer()
-
-  electric_host = System.get_env("ELECTRIC_HOST") || raise "Env variable ELECTRIC_HOST is not set"
-
-  electric_port = System.get_env("POSTGRES_REPLICATION_PORT", "5433") |> String.to_integer()
-
-  config :electric, Electric.PostgresServer, port: electric_port
-
-  config :electric, Electric.Satellite.WsServer,
-    port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
+  config :electric, Electric.Satellite.Auth, provider: auth_provider
 
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
@@ -76,14 +76,18 @@ if config_env() == :prod do
     |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
     |> Keyword.put(:replication, "database")
 
+  pg_server_host =
+    System.get_env("LOGICAL_PUBLISHER_HOST") ||
+      raise("Env variable LOGICAL_PUBLISHER_HOST is not set")
+
   connectors = [
     {"postgres_1",
      producer: Electric.Replication.Postgres.LogicalReplicationProducer,
      connection: postgresql_connection,
      replication: [
        electric_connection: [
-         host: electric_host,
-         port: electric_port,
+         host: pg_server_host,
+         port: pg_server_port,
          dbname: "electric",
          connect_timeout: postgresql_connection[:timeout]
        ]
@@ -93,5 +97,7 @@ if config_env() == :prod do
   config :electric, Electric.Replication.Connectors, connectors
 
   config :electric, Electric.Replication.OffsetStorage,
-    file: System.get_env("OFFSET_STORAGE_FILE", "./offset_storage_data.dat")
+    file: System.get_env("OFFSET_STORAGE_FILE", default_offset_storage_path)
+else
+  Code.require_file("runtime.#{config_env()}.exs", __DIR__)
 end

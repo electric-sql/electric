@@ -21,16 +21,16 @@ defmodule Electric.Application do
       Electric.Telemetry,
       Electric.Postgres.OidDatabase,
       Electric.Replication.OffsetStorage,
-      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: status_port()]},
+      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: http_api_port()]},
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
       Electric.Satellite.WsServer.child_spec(
-        port: sqlite_server_port(),
+        port: ws_server_port(),
         auth_provider: auth_provider,
         pg_connector_opts: postgres_connector_opts
       ),
-      Electric.PostgresServer.child_spec(port: postgres_server_port())
+      Electric.PostgresServer.child_spec(port: pg_server_port())
     ]
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
@@ -47,16 +47,12 @@ defmodule Electric.Application do
     {:ok, supervisor}
   end
 
-  defp status_port(),
-    do: Application.fetch_env!(:electric, Electric.StatusPlug) |> Keyword.fetch!(:port)
+  defp http_api_port,
+    do: Application.fetch_env!(:electric, :http_api_port)
 
-  defp sqlite_server_port(),
-    do:
-      Application.get_env(:electric, Electric.Satellite.WsServer, [])
-      |> Keyword.get(:port, 5133)
+  defp ws_server_port,
+    do: Application.fetch_env!(:electric, Electric.Satellite.WsServer) |> Keyword.fetch!(:port)
 
-  defp postgres_server_port(),
-    do:
-      Application.get_env(:electric, Electric.PostgresServer, [])
-      |> Keyword.get(:port, 5433)
+  defp pg_server_port,
+    do: Application.fetch_env!(:electric, Electric.PostgresServer) |> Keyword.fetch!(:port)
 end

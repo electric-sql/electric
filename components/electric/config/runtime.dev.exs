@@ -1,8 +1,9 @@
 import Config
 
-config :electric, Electric.VaxRepo, hostname: "localhost", port: 8087
+config :logger, level: :debug
 
-config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"
+auth_provider = System.get_env("AUTH_MODE", "secure") |> Electric.Satellite.Auth.build_provider!()
+config :electric, Electric.Satellite.Auth, provider: auth_provider
 
 config :electric, Electric.Replication.Connectors,
   postgres_1: [
@@ -25,4 +26,4 @@ config :electric, Electric.Replication.Connectors,
     ]
   ]
 
-config :logger, level: :debug
+config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"

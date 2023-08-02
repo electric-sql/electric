@@ -24,7 +24,7 @@ export const electrify_db = async (
     url: `electric://${host}:${port}`,
     debug: true,
     auth: {
-      token: await authToken(process.env.AUTH_SIGNING_ISS, process.env.AUTH_SIGNING_KEY)
+      token: await authToken()
     }
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
