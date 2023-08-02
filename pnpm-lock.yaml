@@ -14,12 +14,6 @@ importers:
 
   clients/typescript:
     dependencies:
-      '@aphro/absurd-sql':
-        specifier: ^0.0.53
-        version: 0.0.53
-      '@aphro/sql.js':
-        specifier: ^1.7.0
-        version: 1.7.0
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -413,16 +407,6 @@ packages:
     dependencies:
       '@jridgewell/gen-mapping': 0.3.3
       '@jridgewell/trace-mapping': 0.3.18
-
-  /@aphro/absurd-sql@0.0.53:
-    resolution: {integrity: sha512-VK+ZY9TvamiUFRxPHjdMSDsHiMyObhdxVwdJD+oQxUPpJqu2zPFsacYOCKSnBoq8wzYudyB0GIE/KvOd6nYyqw==}
-    dependencies:
-      safari-14-idb-fix: 1.0.6
-    dev: false
-
-  /@aphro/sql.js@1.7.0:
-    resolution: {integrity: sha512-SDh63YPAKXKIXE1RW+YYvlQ13tHTc36QT3o17xxlAgvMN6KfQDmNCa/iSLt3XH9Rsa7JFRxSWRiKNXrI2uYOmw==}
-    dev: false
 
   /@babel/code-frame@7.10.4:
     resolution: {integrity: sha512-vG6SvB6oYEhvgisZNFRmRCUkLz11c7rp+tbNTynGqc6mS1d5ATd/sGyV6W0KZZnXRKMTzZDRgQT3Ou9jhpAfUg==}
