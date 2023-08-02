@@ -152,7 +152,7 @@ defmodule Electric.Postgres.TestConnection do
       CREATE TABLE public.documents (
         id UUID PRIMARY KEY,
         title TEXT NOT NULL,
-        user_id UUID REFERENCES users(id)
+        electric_user_id UUID REFERENCES users(id)
       )
       """)
 

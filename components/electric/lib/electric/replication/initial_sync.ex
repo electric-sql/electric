@@ -92,11 +92,11 @@ defmodule Electric.Replication.InitialSync do
   {:subscription_init_failed, subscription_id, reason}
   ```
   """
-  def query_subscription_data({subscription_id, requests},
+  def query_subscription_data({subscription_id, requests, context},
         reply_to: {ref, parent},
         connection: opts
       ) do
-    Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
+    Client.with_conn(Connectors.get_connection_opts(opts, replication: false), fn conn ->
       origin = Connectors.origin(opts)
       {:ok, _, schema} = Extension.SchemaCache.load(origin)
 
@@ -118,7 +118,7 @@ defmodule Electric.Replication.InitialSync do
           send(parent, {:subscription_insertion_point, ref, String.to_integer(xmin)})
 
           Enum.reduce_while(requests, [], fn request, results ->
-            case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin) do
+            case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin, context) do
               {:ok, data} -> {:cont, [{request.id, data} | results]}
               {:error, reason} -> {:halt, {:error, reason}}
             end

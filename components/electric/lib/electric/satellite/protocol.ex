@@ -583,9 +583,10 @@ defmodule Electric.Satellite.Protocol do
       tx
       |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
       |> Shapes.filter_changes_from_tx(current_shapes(state))
+      |> Changes.filter_changes_belonging_to_user(state.auth.user_id)
 
     {out_rep, acc} =
-      if filtered_tx.changes != [] and Changes.belongs_to_user?(filtered_tx, state.auth.user_id) do
+      if filtered_tx.changes != [] do
         {relations, transaction, out_rep} = handle_out_trans({filtered_tx, offset}, state)
         {out_rep, Enum.concat([transaction, relations, acc])}
       else
@@ -817,11 +818,12 @@ defmodule Electric.Satellite.Protocol do
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
     opts = state.pg_connector_opts
+    context = %{user_id: Pathex.get(state, path(:auth / :user_id))}
 
     Task.start(fn ->
       # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
-      fun.({id, requests}, reply_to: {ref, parent}, connection: opts)
+      fun.({id, requests, context}, reply_to: {ref, parent}, connection: opts)
     end)
 
     receive do
