@@ -7,6 +7,7 @@ import { SocketFactory } from '../sockets'
 import {
   AckCallback,
   AuthResponse,
+  ConnectivityState,
   DbName,
   LSN,
   DataTransaction,
@@ -56,6 +57,8 @@ export interface Satellite {
   adapter: DatabaseAdapter
   migrator: Migrator
   notifier: Notifier
+
+  connectivityState?: ConnectivityState
 
   start(
     authConfig: AuthConfig,

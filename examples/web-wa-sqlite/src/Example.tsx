@@ -45,7 +45,7 @@ const ExampleComponent = () => {
 
   // `useliveQuery` will keep this variable up to data with the SQLite database, but to get data from server into SQLite
   // you need to call `.sync()`, as demonstrated on the line above
-  const { results } = useLiveQuery(db.items.liveMany({})) // select all 
+  const { results } = useLiveQuery(db.items.liveMany({})) // select all
 
   const addItem = async () => {
     await db.items.create({

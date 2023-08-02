@@ -23,7 +23,7 @@ export function isInsertUpdateOrDeleteStatement(sql: string) {
  * @param maxParameters max parameters this SQLite can accept - determines batching factor
  * @returns array of statements ready to be executed by the adapter
  */
-export function prepareBatchedStatements(
+export function prepareInsertBatchedStatements(
   baseSql: string,
   columns: string[],
   records: Record<string, SqlValue>[],

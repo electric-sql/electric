@@ -94,7 +94,7 @@ export interface Model<
    */
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
-  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
+  ): LiveResultContext<Kind<GetPayload, T> | null>
 
   /**
    * Same as {@link Model#findFirst} but wraps the result in a {@link LiveResult} object.
@@ -106,7 +106,7 @@ export interface Model<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
-  ): () => Promise<LiveResult<Kind<GetPayload, T> | null>>
+  ): LiveResultContext<Kind<GetPayload, T> | null>
 
   /**
    * Same as {@link Model#findMany} but wraps the result in a {@link LiveResult} object.
@@ -118,7 +118,7 @@ export interface Model<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
-  ): () => Promise<LiveResult<Array<Kind<GetPayload, T>>>>
+  ): LiveResultContext<Array<Kind<GetPayload, T>>>
 
   /**
    * Updates a single record that is uniquely identified by the provided argument.
@@ -184,6 +184,11 @@ export interface Model<
   deleteMany<T extends DeleteManyInput<Where>>(
     i: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload>
+}
+
+export interface LiveResultContext<T> {
+  (): Promise<LiveResult<T>>
+  sourceQuery?: Record<string, any> | undefined
 }
 
 /**

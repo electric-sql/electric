@@ -46,7 +46,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const registry = opts?.registry || globalRegistry
 
-  const electric = new ElectricNamespace(adapter, notifier)
+  const electric = ElectricClient.create(dbDescription, adapter, notifier)
 
   const satellite = await registry.ensureStarted(
     dbName,
@@ -57,8 +57,11 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
+  if (satellite.connectivityState !== undefined) {
+    electric.setIsConnected(satellite.connectivityState)
+  }
+
   // initialize the shape manager
   shapeManager.init(satellite)
-  const namespace = ElectricClient.create(dbDescription, electric) // extends the electric namespace with a `dal` property for the data access library
-  return namespace
+  return electric
 }

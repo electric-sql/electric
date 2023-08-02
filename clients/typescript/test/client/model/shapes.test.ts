@@ -13,7 +13,6 @@ import { MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
 import { randomValue } from '../../../src/util'
-import { ElectricNamespace } from '../../../src/electric/namespace'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
@@ -67,9 +66,8 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     satelliteDefaults
   )
 
-  const ns = new ElectricNamespace(adapter, notifier)
   shapeManager.init(satellite)
-  const electric = ElectricClient.create(schema, ns)
+  const electric = ElectricClient.create(schema, adapter, notifier)
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User
