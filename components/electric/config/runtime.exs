@@ -48,35 +48,6 @@ config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
 
-alias Electric.Satellite.Auth
-
-auth_provider =
-  case System.get_env("AUTH_MODE", default_auth_mode) do
-    "insecure" ->
-      namespace = System.get_env("AUTH_JWT_NAMESPACE")
-      auth_config = Auth.Insecure.build_config(namespace: namespace)
-      {Auth.Insecure, auth_config}
-
-    "secure" ->
-      auth_config =
-        [
-          alg: System.get_env("AUTH_JWT_ALG"),
-          key: System.get_env("AUTH_JWT_KEY"),
-          namespace: System.get_env("AUTH_JWT_NAMESPACE"),
-          iss: System.get_env("AUTH_JWT_ISS"),
-          aud: System.get_env("AUTH_JWT_AUD")
-        ]
-        |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-        |> Auth.Secure.build_config!()
-
-      {Auth.Secure, auth_config}
-
-    other ->
-      raise "Unsupported auth mode: #{inspect(other)}"
-  end
-
-config :electric, Electric.Satellite.Auth, provider: auth_provider
-
 config :electric,
   http_api_port: System.get_env("HTTP_API_PORT", default_http_api_port) |> String.to_integer()
 
@@ -91,6 +62,11 @@ config :electric, Electric.PostgresServer, port: pg_server_port
 # The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
 # a release, and we want a single configuration file in our release.
 if config_env() == :prod do
+  auth_provider =
+    System.get_env("AUTH_MODE", default_auth_mode) |> Electric.Satellite.Auth.build_provider!()
+
+  config :electric, Electric.Satellite.Auth, provider: auth_provider
+
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
     |> PostgresqlUri.parse()

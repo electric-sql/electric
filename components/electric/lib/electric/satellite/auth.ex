@@ -6,6 +6,7 @@ defmodule Electric.Satellite.Auth do
   implementation module's documentation for more info.
   """
 
+  alias __MODULE__
   require Logger
 
   @enforce_keys [:user_id]
@@ -36,5 +37,35 @@ defmodule Electric.Satellite.Auth do
     config = Application.fetch_env!(:electric, Electric.Satellite.Auth)
     {_module, _config} = provider = Keyword.fetch!(config, :provider)
     provider
+  end
+
+  @spec build_provider!(String.t()) :: provider
+  def build_provider!("insecure") do
+    auth_config =
+      [
+        namespace: System.get_env("AUTH_JWT_NAMESPACE")
+      ]
+      |> Auth.Insecure.build_config()
+
+    {Auth.Insecure, auth_config}
+  end
+
+  def build_provider!("secure") do
+    auth_config =
+      [
+        alg: System.get_env("AUTH_JWT_ALG"),
+        key: System.get_env("AUTH_JWT_KEY"),
+        namespace: System.get_env("AUTH_JWT_NAMESPACE"),
+        iss: System.get_env("AUTH_JWT_ISS"),
+        aud: System.get_env("AUTH_JWT_AUD")
+      ]
+      |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
+      |> Auth.Secure.build_config!()
+
+    {Auth.Secure, auth_config}
+  end
+
+  def build_prodiver!(other) do
+    raise "Unsupported auth mode: #{inspect(other)}"
   end
 end
