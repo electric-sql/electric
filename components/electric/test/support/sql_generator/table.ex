@@ -182,7 +182,7 @@ defmodule Electric.Postgres.SQLGenerator.Table do
 
     bind(column_selection(use_cols), fn uniq_cols ->
       fixed_list([
-        table_primary_key(pk_cols, :table),
+        table_primary_key(pk_cols),
         table_unique(table.columns, uniq_cols)
       ])
       |> map(&Enum.reject(&1, fn e -> is_nil(e) end))
@@ -194,7 +194,7 @@ defmodule Electric.Postgres.SQLGenerator.Table do
   end
 
   # not used now we enforce a pk and do it on a column
-  defp table_primary_key(key_cols, :table) do
+  defp table_primary_key(key_cols) do
     keys = join_columns(key_cols)
 
     stmt([
@@ -202,10 +202,6 @@ defmodule Electric.Postgres.SQLGenerator.Table do
       fixed_list(keys),
       ")"
     ])
-  end
-
-  defp table_primary_key(_columns, _column) do
-    nil
   end
 
   defp table_foreign_key(_table, :none, _opts) do

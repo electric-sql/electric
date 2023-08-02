@@ -457,7 +457,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
 
   def table_reference(_type, nil, _opts) do
     bind(name(), fn table_name ->
-      bind({name(), datatype()}, fn column ->
+      bind(StreamData.tuple({name(), datatype()}), fn column ->
         table_reference_to(table_name, column)
       end)
     end)
