@@ -39,6 +39,11 @@ defmodule Electric.Satellite.Auth do
     provider
   end
 
+  @doc """
+  Build an auth provider from the given auth mode and runtime configuration options.
+
+  This is a helper function to be used in runtime config.
+  """
   @spec build_provider!(String.t()) :: provider
   def build_provider!("insecure") do
     auth_config =
