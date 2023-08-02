@@ -7,10 +7,20 @@
 
 import Config
 
+default_log_level = "info"
+default_instance_id = "electric"
+default_auth_mode = "secure"
+default_http_api_port = "5050"
+default_ws_server_port = "5133"
+default_pg_server_port = "5433"
+default_offset_storage_path = "./offset_storage_data.dat"
+
+###
+
 config :logger,
   handle_otp_reports: true,
   handle_sasl_reports: false,
-  level: System.get_env("LOG_LEVEL", "info") |> String.to_existing_atom()
+  level: System.get_env("LOG_LEVEL", default_log_level) |> String.to_existing_atom()
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
@@ -32,7 +42,7 @@ config :logger, :console,
 config :electric,
   # Used only to send server identification upon connection,
   # can stay default while we're not working on multi-instance setups
-  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", "electric")
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", default_instance_id)
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
@@ -41,7 +51,7 @@ config :electric, Electric.Replication.Postgres,
 alias Electric.Satellite.Auth
 
 auth_provider =
-  case System.get_env("AUTH_MODE", "secure") do
+  case System.get_env("AUTH_MODE", default_auth_mode) do
     "insecure" ->
       namespace = System.get_env("AUTH_JWT_NAMESPACE")
       auth_config = Auth.Insecure.build_config(namespace: namespace)
@@ -67,14 +77,16 @@ auth_provider =
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-config :electric, http_api_port: System.get_env("HTTP_API_PORT", "5050") |> String.to_integer()
+config :electric,
+  http_api_port: System.get_env("HTTP_API_PORT", default_http_api_port) |> String.to_integer()
 
 config :electric, Electric.Satellite.WsServer,
-  port: System.get_env("WEBSOCKET_PORT", "5133") |> String.to_integer()
+  port: System.get_env("WEBSOCKET_PORT", default_ws_server_port) |> String.to_integer()
 
-config :electric, Electric.PostgresServer,
-  port: System.get_env("LOGICAL_PUBLISHER_PORT", "5433") |> String.to_integer()
+pg_server_port =
+  System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
 
+config :electric, Electric.PostgresServer, port: pg_server_port
 
 # The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
 # a release, and we want a single configuration file in our release.
