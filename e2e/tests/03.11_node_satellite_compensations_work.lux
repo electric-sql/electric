@@ -1,0 +1,58 @@
+[doc NodeJS Satellite uses compensations correctly]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            content_text_null TEXT,
+            content_text_null_default TEXT DEFAULT '',
+            intvalue_null integer,
+            intvalue_null_default integer DEFAULT 10
+        );
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id TEXT REFERENCES public.items(id)
+        );
+        CALL electric.electrify('public.items');
+        CALL electric.electrify('public.other_items');
+        """]
+    [invoke migrate_pg 11111 $sql]
+
+[shell satellite_1]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "other_items"]
+    [invoke node_sync_table "other_items"]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatSubsDataEnd"\}
+    !await db.db.raw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
+    ?$node
+
+    """!await db.db.items.create({
+      data: {
+        id: "test_id_1",
+        content: ""
+      }
+    })
+    """
+    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    """!await db.db.other_items.create({
+      data: {
+        id: "other_test_id_1",
+        content: "",
+        item_id: "test_id_1"
+      }
+    })
+    """
+    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    -Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+
+[cleanup]
+  [invoke teardown]

@@ -19,7 +19,6 @@ RUN pnpm install -r --filter @internal/satellite-client^...
 RUN pnpm run -r --filter @internal/satellite-client^... build
 RUN pnpm install -r --filter @internal/satellite-client
 COPY e2e/satellite_client/src  ./e2e/satellite_client/src
-COPY e2e/satellite_client/prisma  ./e2e/satellite_client/prisma
 COPY e2e/satellite_client/tsconfig.json  ./e2e/satellite_client
 RUN pnpm run -r --filter @internal/satellite-client build
 
