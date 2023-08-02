@@ -2,7 +2,6 @@ defmodule Electric.Replication.Changes.OwnershipTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Changes.{
-    Transaction,
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
@@ -43,51 +42,39 @@ defmodule Electric.Replication.Changes.OwnershipTest do
     test "accepts a transaction that belongs to the current user" do
       user_id = Electric.Utils.uuid4()
 
-      transaction = %Transaction{
-        changes: change_list([user_id], 5)
-      }
+      changes = change_list([user_id], 5)
 
-      assert Ownership.belongs_to_user?(transaction, user_id)
+      assert changes == Enum.filter(changes, &Ownership.change_belongs_to_user?(&1, user_id))
     end
 
     test "rejects a transaction that contains any changes not owned by user" do
       user_id1 = Electric.Utils.uuid4()
       user_id2 = Electric.Utils.uuid4()
 
-      transaction = %Transaction{
-        changes: change_list([user_id1, user_id2], 5)
-      }
+      changes = change_list([user_id1, user_id2], 5)
 
-      refute Ownership.belongs_to_user?(transaction, user_id1)
+      assert [_, _, _] = Enum.filter(changes, &Ownership.change_belongs_to_user?(&1, user_id1))
     end
 
     test "accepts any rows where the electric_user_id is null or empty" do
       user_id = Electric.Utils.uuid4()
 
       for empty <- [nil, ""] do
-        transaction = %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "global_table"},
-              record: %{"value" => "something", "electric_user_id" => empty}
-            }
-          ]
+        change = %NewRecord{
+          relation: {"public", "global_table"},
+          record: %{"value" => "something", "electric_user_id" => empty}
         }
 
-        assert Ownership.belongs_to_user?(transaction, user_id)
+        assert Ownership.change_belongs_to_user?(change, user_id)
       end
     end
 
     test "accepts any tables without a electric_user_id column" do
       user_id = Electric.Utils.uuid4()
 
-      transaction = %Transaction{
-        changes: [
-          %NewRecord{relation: {"public", "global_table"}, record: %{"value" => "something"}}
-        ]
-      }
+      change = %NewRecord{relation: {"public", "global_table"}, record: %{"value" => "something"}}
 
-      assert Ownership.belongs_to_user?(transaction, user_id)
+      assert Ownership.change_belongs_to_user?(change, user_id)
     end
   end
 end

@@ -90,9 +90,9 @@ defmodule Electric.Replication.Changes do
     defstruct [:relation]
   end
 
-  @spec belongs_to_user?(Transaction.t(), binary()) :: boolean()
-  def belongs_to_user?(%Transaction{} = tx, user_id) do
-    Changes.Ownership.belongs_to_user?(tx, user_id)
+  @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()
+  def filter_changes_belonging_to_user(%Transaction{changes: changes} = tx, user_id) do
+    %{tx | changes: Enum.filter(changes, &Changes.Ownership.change_belongs_to_user?(&1, user_id))}
   end
 
   @spec generateTag(Transaction.t()) :: binary()
