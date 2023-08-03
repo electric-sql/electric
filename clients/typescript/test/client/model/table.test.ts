@@ -438,6 +438,55 @@ test.serial('findFirst query returns first result', async (t) => {
   t.deepEqual(res, post2)
 })
 
+test.serial(
+  'FindFirst query with descending order returns last result',
+  async (t) => {
+    const allRecords = await tbl.findMany({
+      where: {
+        nbr: commonNbr,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    })
+
+    t.assert(allRecords.length > 1)
+
+    const lastRecord = allRecords[allRecords.length - 1]
+    const foundRecord = await tbl.findFirst({
+      where: {
+        nbr: commonNbr,
+      },
+      orderBy: {
+        id: 'desc',
+      },
+    })
+
+    t.deepEqual(foundRecord, lastRecord)
+  }
+)
+
+test.serial('FindFirst query supports skip', async (t) => {
+  const skip = 1
+  const allRecords = await tbl.findMany({
+    orderBy: {
+      id: 'asc',
+    },
+  })
+
+  t.assert(allRecords.length > 1)
+
+  const matchingRecord = allRecords[skip]
+  const foundRecord = await tbl.findFirst({
+    orderBy: {
+      id: 'asc',
+    },
+    skip,
+  })
+
+  t.deepEqual(foundRecord, matchingRecord)
+})
+
 test.serial('findFirst query argument is optional', async (t) => {
   const res = await tbl.findFirst()
   t.deepEqual(res, post1)
@@ -572,6 +621,23 @@ test.serial(
     ])
   }
 )
+
+/*
+// Not supported yet:
+test.serial('findMany can fetch records based on fields of related records', async (t) => {
+  const postsByAlice = await tbl.findMany({
+    where: {
+      author: {
+        is: {
+          name: 'alice'
+        }
+      }
+    }
+  })
+
+  t.deepEqual(postsByAlice, [post1, post2])
+})
+*/
 
 test.serial('findMany allows results to be ordered', async (t) => {
   const res = await tbl.findMany({

@@ -165,12 +165,15 @@ class MockTransaction implements Transaction {
     errorCallback?: StatementErrorCallback
   ): void
   executeSql(
-    _sqlStatement: string,
+    sqlStatement: string,
     _args?: any[],
     callback?: StatementCallback,
     errorCallback?: StatementErrorCallback
   ): void | Promise<[Transaction, ResultSet]> {
-    const results = mockResults([{ i: 0 }])
+    let results = mockResults([{ i: 0 }])
+    if (sqlStatement.startsWith('SELECT value, nbr FROM Items')) {
+      results = mockResults([{ value: 'mockValue', nbr: 5 }])
+    }
 
     if (callback) {
       callback(this, results)

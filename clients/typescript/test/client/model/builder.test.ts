@@ -228,7 +228,22 @@ test('findUnique query with no filters throws an error', (t) => {
   ])
 })
 
-test('findMany allows results to be ordered', (t) => {
+test('findMany allows results to be ordered on one field', (t) => {
+  const query = tbl
+    .findMany({
+      // `where` argument must not be provided when using the actual API because it is added as default by the validator
+      // but since we directly use the query builder we need to provide it
+      where: {},
+      orderBy: {
+        id: 'asc',
+      },
+    })
+    .toString()
+
+  t.is(query, 'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC')
+})
+
+test('findMany allows results to be ordered on several fields', (t) => {
   const query = tbl
     .findMany({
       // `where` argument must not be provided when using the actual API because it is added as default by the validator
