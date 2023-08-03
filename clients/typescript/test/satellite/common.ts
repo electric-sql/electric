@@ -175,7 +175,7 @@ export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
 export const cleanAndStopSatellite = async (
   t: ExecutionContext<{ dbName: string; satellite: SatelliteProcess }>
 ) => {
-  await clean(t)
   const { satellite } = t.context
   await satellite.stop()
+  await clean(t)
 }
