@@ -21,6 +21,7 @@ import {
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { schema, Electric } from '../client/generated'
+import { shapeManager, ShapeManagerMock } from '../../src/client/model/shapes'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -32,6 +33,54 @@ type FC = React.FC<React.PropsWithChildren>
 
 const ctxInformation = makeElectricContext<Electric>()
 const ElectricProvider = ctxInformation.ElectricProvider
+
+// Use a mocked shape manager for this test
+// which does not wait for Satellite
+// to acknowledge the subscription
+Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
+await shapeManager.sync({ tables: ['Items'] })
+
+test('liveFirst arguments are optional', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+  const notifier = new MockNotifier('test.db')
+  const dal = ElectricClient.create(schema, adapter, notifier)
+
+  const liveQuery = dal.db.Items.liveFirst() // this one already fails because later down `result.current` contains an error...
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
+
+  await waitFor(() => assert(result.current.updatedAt !== undefined))
+
+  const items = await dal.db.Items.findFirst({}) // this one fails with the same reason.. not sure why...
+
+  t.deepEqual(result.current.results, items)
+})
+
+test('liveMany arguments are optional', async (t) => {
+  const original = new MockDatabase('test.db')
+  const adapter = new DatabaseAdapter(original, false)
+  const notifier = new MockNotifier('test.db')
+  const dal = ElectricClient.create(schema, adapter, notifier)
+
+  const liveQuery = dal.db.Items.liveMany() // this one already fails because later down `result.current` contains an error...
+
+  const wrapper: FC = ({ children }) => {
+    return <ElectricProvider db={dal}>{children}</ElectricProvider>
+  }
+
+  const { result } = renderHook(() => useLiveQuery(liveQuery), { wrapper })
+
+  await waitFor(() => assert(result.current.updatedAt !== undefined))
+
+  const items = await dal.db.Items.findMany({}) // this one fails with the same reason.. not sure why...
+
+  t.deepEqual(result.current.results, items)
+})
 
 test('useLiveQuery returns query results', async (t) => {
   const original = new MockDatabase('test.db')

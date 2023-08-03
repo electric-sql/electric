@@ -69,7 +69,7 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
  * to `useMemo` to rerun the function.
  *
  * @param runQueryFn - a function that returns a live query
- * @param dependencies - a list of React depenencies that causes the function returning the live query to rerun
+ * @param dependencies - a list of React dependencies that causes the function returning the live query to rerun
  *
  * @example Using a simple live query with a dependency. The table will depend on your application
  * ```ts

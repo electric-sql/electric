@@ -258,12 +258,12 @@ export class Table<
   liveMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
-    i: SelectSubset<
+    i?: SelectSubset<
       T,
       FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
     >
   ): LiveResultContext<Kind<GetPayload, T>[]> {
-    return this.makeLiveResult(() => this.findMany(i), i)
+    return this.makeLiveResult(() => this.findMany(i), i ?? {})
   }
 
   async update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
