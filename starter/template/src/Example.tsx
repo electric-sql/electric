@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import './Example.css'
 
-import { dbSchema, Electric } from './generated/client'
+import { schema, Electric } from './generated/client'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
+import { authToken } from 'electric-sql/auth'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
-const config = {
-  auth: {
-    token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJsb2NhbC1kZXZlbG9wbWVudCIsInR5cGUiOiJhY2Nlc3MiLCJ1c2VyX2lkIjoidGVzdC11c2VyIiwiaWF0IjoxNjg3ODc3OTQ1LCJleHAiOjE2OTc4ODE1NDV9.L5Ui2sA9o5MeYDuy67u9lBV-2FzpOWL9dKcitRvgorg',
-  }
-}
 
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
@@ -19,8 +14,14 @@ export const Example = () => {
   useEffect(() => {
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, dbSchema, config)
+      const db = await electrify(conn, schema, {
+        auth: {
+          token: await authToken('local-development', 'local-development-key-minimum-32-symbols')
+        }
+      })
       setElectric(db)
+      // Calling `.sync()` methods is possible here, right after init:
+      // await db.db.items.sync()
     }
 
     init()
@@ -39,14 +40,17 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
+  // Or here, in a `useEffect` without dependencies to limit it running once per component render.
+  useEffect(() => void db.items.sync(), [])
+  
+  // `useliveQuery` will keep this variable up to date with the SQLite database, but to get data from server into SQLite
+  // you need to call `.sync()`, as demonstrated on the line above
   const { results } = useLiveQuery(db.items.liveMany({})) // select all items
 
   const addItem = async () => {
     await db.items.create({
       data: {
         value: crypto.randomUUID(),
-        // uncomment the line below after migration
-        //other_value: crypto.randomUUID(),
       }
     })
   }
@@ -55,7 +59,6 @@ const ExampleComponent = () => {
     await db.items.deleteMany() // delete all items
   }
 
-  // After the migration, comment out this code and uncomment code block below
   return (
     <div>
       <div className='controls'>
@@ -73,23 +76,4 @@ const ExampleComponent = () => {
       ))}
     </div>
   )
-
-  // Uncomment after migration
-  //return (
-  //  <div>
-  //    <div className='controls'>
-  //      <button className='button' onClick={addItem}>
-  //        Add
-  //      </button>
-  //      <button className='button' onClick={clearItems}>
-  //        Clear
-  //      </button>
-  //    </div>
-  //    {results && results.map((item: any, index: any) => (
-  //      <p key={ index } className='item'>
-  //        <code>{ item.value } - { item.other_value }</code>
-  //      </p>
-  //    ))}
-  //  </div>
-  //)
 }

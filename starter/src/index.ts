@@ -32,6 +32,10 @@ await fs.rename(
   path.join(projectDir, 'dot_npmrc'),
   path.join(projectDir, '.npmrc')
 )
+await fs.rename(
+  path.join(projectDir, 'local-stack', 'dot_envrc'),
+  path.join(projectDir, 'local-stack', '.envrc')
+)
 
 // import package.json and deep copy it
 // otherwise we can't edit it because
@@ -46,8 +50,8 @@ await fs.writeFile(
   JSON.stringify(projectPackageJson, null, 2)
 )
 
-// Run `pnpm install` in the project directory to install the dependencies
-const proc = spawn('pnpm install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
+// Run `yarn install` in the project directory to install the dependencies
+const proc = spawn('yarn install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
 
 proc.on('close', (code) => {
   if (code === 0) {
