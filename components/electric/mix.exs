@@ -9,7 +9,6 @@ defmodule Electric.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [ignore_warnings: "dialyzer.ignore-warnings"],
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
