@@ -576,7 +576,7 @@ export class SatelliteProcess implements Satellite {
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
-
+    Log.debug(`connectivity state changed ${status}`)
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
@@ -633,14 +633,14 @@ export class SatelliteProcess implements Satellite {
         await this._handleSubscriptionError(error)
         await this.client.close()
         // after clearing subscriptions can't enter here
-        return await this._connectAndStartReplication()
+        await this._connectAndStartReplication()
+        return
       }
 
       if (throwErrors.includes(error.code)) {
         throw error
       }
       Log.warn(`couldn't start replication: ${error}`)
-      return Promise.resolve()
     }
   }
 
