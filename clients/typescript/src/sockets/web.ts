@@ -1,4 +1,5 @@
 import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketWebFactory implements SocketFactory {
   create() {
@@ -30,7 +31,12 @@ export class WebSocketWeb implements Socket {
     // event doesn't provide much
     this.socket.addEventListener('error', () => {
       while (this.errorCallbacks.length > 0) {
-        this.errorCallbacks.pop()!(new Error('failed to establish connection'))
+        this.errorCallbacks.pop()!(
+          new SatelliteError(
+            SatelliteErrorCode.CONNECTION_FAILED,
+            'failed to establish connection'
+          )
+        )
       }
     })
 

@@ -1,6 +1,7 @@
 import EventEmitter from 'events'
 import { ConnectionOptions, Data, Socket, SocketFactory } from './index'
 import { WebSocket } from 'ws'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketNodeFactory implements SocketFactory {
   create() {
@@ -43,7 +44,14 @@ export class WebSocketNode extends EventEmitter implements Socket {
   }
 
   onError(cb: (error: Error) => void): void {
-    this.on('error', () => cb(new Error('socket error')))
+    this.on('error', () =>
+      cb(
+        new SatelliteError(
+          SatelliteErrorCode.CONNECTION_FAILED,
+          'failed to establish connection'
+        )
+      )
+    )
   }
 
   onClose(cb: () => void): void {
