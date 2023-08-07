@@ -30,6 +30,11 @@ services:
     environment:
       <<: *preshared-auth-variables
       DATABASE_URL: postgresql://postgres:password@postgres_1:5432/electric
+      LOGICAL_PUBLISHER_HOST: electric_1
+      # Currently published version (electric-sql@0.5.0-next.4)
+      # still uses `ELECTRIC_HOST` variable
+      # but future versions will use `LOGICAL_PUBLISHER_HOST`
+      # TODO: Remove `ELECTRIC_HOST` when next version is published.
       ELECTRIC_HOST: electric_1
     ports:
       - 5050:5050
