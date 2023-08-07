@@ -1,7 +1,7 @@
 [![CI](https://github.com/electric-sql/electric/workflows/CI/badge.svg)](https://github.com/electric-sql/electric/actions/workflows/ci.yml)
 [![License - Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue)](main/LICENSE)
 ![Status - Alpha](https://img.shields.io/badge/status-alpha-red)
-[![Chat - Discord](https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord)](https://discord.gg/B7kHGwDcbj)
+[![Chat - Discord](https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord)](https://discord.electric-sql.com)
 
 <a href="https://electric-sql.com">
   <picture>
@@ -185,4 +185,4 @@ See the [Community Guidelines](https://github.com/electric-sql/meta) including t
 
 ## Support
 
-We have an [open community Discord](https://discord.gg/B7kHGwDcbj). If you’re interested in the project, please come and say hello and let us know if you have any questions or need any help or support getting things running.
+We have an [open community Discord](https://discord.electric-sql.com). If you’re interested in the project, please come and say hello and let us know if you have any questions or need any help or support getting things running.

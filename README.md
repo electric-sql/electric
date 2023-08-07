@@ -23,7 +23,7 @@
   <a href="https://github.com/electric-sql/electric/actions"><img src="https://github.com/electric-sql/electric/workflows/CI/badge.svg" alt="CI"></a>
   <a href="https://github.com/electric-sql/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green" alt="License - Apache 2.0"></a>
   <a href="https://electric-sql.com/docs/reference/limitations"><img src="https://img.shields.io/badge/status-alpha-orange" alt="Status - Alpha"></a>
-  <a href="https://discord.gg/B7kHGwDcbj"><img src="https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord" alt="Chat - Discord"></a>
+  <a href="https://discord.electric-sql.com"><img src="https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord" alt="Chat - Discord"></a>
   <a href="https://twitter.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow @ElectricSQL"></a>
   <a href="https://fosstodon.org/@electric" target="_blank"><img src="https://img.shields.io/mastodon/follow/109599644322136925.svg?domain=https%3A%2F%2Ffosstodon.org"></a>
 </p>
@@ -85,6 +85,6 @@ See the [Community Guidelines](https://github.com/electric-sql/electric/blob/mai
 
 # Support
 
-We have an [open community Discord](https://discord.gg/B7kHGwDcbj). Come and say hello and let us know if you have any questions or need any help getting things running.
+We have an [open community Discord](https://discord.electric-sql.com). Come and say hello and let us know if you have any questions or need any help getting things running.
 
 It's also super helpful if you leave the project a star here at the [top of the page☝️](#start-of-content)

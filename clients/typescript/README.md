@@ -146,4 +146,4 @@ See the [Community Guidelines](https://github.com/electric-sql/meta) including t
 
 ## Support
 
-We have an [open community Discord](https://discord.gg/B7kHGwDcbj). If you’re interested in the project, please come and say hello and let us know if you have any questions or need any help or support getting things running.
+We have an [open community Discord](https://discord.electric-sql.com). If you’re interested in the project, please come and say hello and let us know if you have any questions or need any help or support getting things running.
