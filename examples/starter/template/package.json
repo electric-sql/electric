@@ -10,8 +10,8 @@
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
-    "build-prod": "NODE_ENV=production pnpm build",
-    "start": "SERVE=true pnpm build"
+    "build-prod": "NODE_ENV=production npm build",
+    "start": "SERVE=true npm build"
   },
   "engines": {
     "node": ">=16.11.0"
