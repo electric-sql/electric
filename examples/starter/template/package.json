@@ -8,7 +8,7 @@
     "db:migrate": "node ./setup_backend/migrate_backend.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
-    "build": "node builder.js",
+    "build": "node copy-wasm-files.js && node builder.js",
     "build-prod": "NODE_ENV=production pnpm build",
     "start": "SERVE=true pnpm build"
   },
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@prisma/client": "4.8.1",
-    "electric-sql": "next",
+    "electric-sql": "0.5.0-next.4",
     "fs-extra": "^10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -33,6 +33,6 @@
     "esbuild-plugin-inline-image": "^0.0.8",
     "prisma": "4.8.1",
     "typescript": "^4.4.3",
-    "@electric-sql/prisma-generator": "next"
+    "@electric-sql/prisma-generator": "1.0.2-next.0"
   }
 }

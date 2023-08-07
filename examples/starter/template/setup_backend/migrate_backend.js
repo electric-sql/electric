@@ -41,6 +41,7 @@ try {
   main()
 }
 catch (err) {
+  console.error('Could not apply migration on backend. Perhaps the tables already exist?\nThe full error is logged below:')
   console.error(err)
   process.exitCode = 1
 }
