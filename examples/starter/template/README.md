@@ -17,11 +17,20 @@ npm run backend:start
 ```
 
 The above command starts some Docker containers that run a fresh Postgres DB with the Electric sync service.
+If instead you want to run Electric on top of your existing Postgres:
+
+```sh
+npm run electric:start [-- -db <pg connection url>]
+```
+If you don't provide a database url using the `-db` flag, you are expected to set the `DATABASE_URL` environment variable.
+Also, make sure that your Postgres is configured with `wal_level = 'logical'`
 
 Now, open a new tab in your terminal and migrate Postgres such that it contains the necessary tables for the app to work:
 ```sh
 npm run db:migrate
 ```
+
+Make sure to set the DATABASE_URL environment variable prior to executing the command if you are using your own Postgres database.
 
 ## Frontend
 
