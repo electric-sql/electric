@@ -19,7 +19,7 @@
   "dependencies": {
     "@databases/pg": "^5.4.1",
     "@prisma/client": "4.8.1",
-    "electric-sql": "0.5.0-next.4",
+    "electric-sql": "next",
     "fs-extra": "^10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -27,7 +27,7 @@
     "zod": "<=3.21.1"
   },
   "devDependencies": {
-    "@electric-sql/prisma-generator": "1.0.2-next.0",
+    "@electric-sql/prisma-generator": "next",
     "@types/node": "^16.9.1",
     "@types/react": "^18.0.18",
     "@types/react-dom": "^18.0.11",
