@@ -1,5 +1,9 @@
 import throttle from 'lodash.throttle'
 
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -9,45 +13,6 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import { Client, ConnectionWrapper, Satellite } from './index'
-import { QualifiedTablename } from '../util/tablename'
-import {
-  AckType,
-  Change as Chg,
-  ConnectivityState,
-  DataChange,
-  DbName,
-  isDataChange,
-  LSN,
-  Relation,
-  RelationsCache,
-  SatelliteError,
-  SchemaChange,
-  Statement,
-  Transaction,
-  Row,
-  MigrationTable,
-  SatelliteErrorCode,
-  SqlValue,
-} from '../util/types'
-import { SatelliteOpts } from './config'
-import { mergeEntries } from './merge'
-import {
-  encodeTags,
-  fromTransaction,
-  generateTag,
-  getShadowPrimaryKey,
-  OplogEntry,
-  OPTYPES,
-  primaryKeyToStr,
-  ShadowEntry,
-  ShadowEntryChanges,
-  toTransactions,
-} from './oplog'
-import {
-  SatOpMigrate_Type,
-  SatRelation_RelationType,
-} from '../_generated/protocol/satellite'
 import {
   base64,
   bytesToNumber,
@@ -55,9 +20,45 @@ import {
   numberToBytes,
   uuid,
 } from '../util/common'
+import { QualifiedTablename } from '../util/tablename'
+import {
+  AckType,
+  Change as Chg,
+  ConnectivityState,
+  DataChange,
+  DbName,
+  LSN,
+  MigrationTable,
+  Relation,
+  RelationsCache,
+  Row,
+  SatelliteError,
+  SatelliteErrorCode,
+  SchemaChange,
+  SqlValue,
+  Statement,
+  Transaction,
+  isDataChange,
+} from '../util/types'
+import { SatelliteOpts } from './config'
+import { Client, ConnectionWrapper, Satellite } from './index'
+import {
+  OPTYPES,
+  OplogEntry,
+  ShadowEntry,
+  ShadowEntryChanges,
+  encodeTags,
+  fromTransaction,
+  generateTag,
+  getShadowPrimaryKey,
+  primaryKeyToStr,
+  toTransactions,
+} from './oplog'
 
+import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
-import { generateTableTriggers } from '../migrators/triggers'
+import { prepareInsertBatchedStatements } from '../util/statements'
+import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
@@ -68,9 +69,8 @@ import {
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
-import { SubscriptionsManager } from './shapes'
-import { prepareInsertBatchedStatements } from '../util/statements'
-import { Mutex } from 'async-mutex'
+import { mergeEntries } from './merge'
+import { generateTableTriggers } from '../migrators/triggers'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -97,6 +97,7 @@ type MetaEntries = {
 }
 
 const throwErrors = [
+  SatelliteErrorCode.CONNECTION_FAILED,
   SatelliteErrorCode.INVALID_POSITION,
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
@@ -555,9 +556,9 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     // this is obviously too conservative and note
     // that it does not update meta transactionally
-    const ids = await this.subscriptions.unsubscribeAll()
+    await this.subscriptions.unsubscribeAll()
 
-    Log.error('Encountered a subscription error: ' + satelliteError.message)
+    Log.error('encountered a subscription error: ' + satelliteError.message)
 
     this._lsn = undefined
     await this.adapter.runInTransaction(
@@ -565,9 +566,7 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    await this.client.unsubscribe(ids)
-
-    // Call the `onSuccess` callback for this subscription
+    // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
       const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
@@ -617,19 +616,24 @@ export class SatelliteProcess implements Satellite {
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
+      Log.warn(
+        `${this._lsn} ${schemaVersion} ${JSON.stringify(subscriptionIds)}`
+      )
+
       await this.client.startReplication(
         this._lsn,
         schemaVersion,
-        subscriptionIds
+        subscriptionIds.length > 0 ? subscriptionIds : undefined
       )
     } catch (error: any) {
       if (
         error.code == SatelliteErrorCode.BEHIND_WINDOW &&
         this.opts?.clearOnBehindWindow
       ) {
-        return this._handleSubscriptionError(error).then(() =>
-          this._connectAndStartReplication()
-        )
+        await this._handleSubscriptionError(error)
+        await this.client.close()
+        // after clearing subscriptions can't enter here
+        return await this._connectAndStartReplication()
       }
 
       if (throwErrors.includes(error.code)) {

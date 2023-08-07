@@ -238,7 +238,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void> {
-    this.initializing = emptyPromise()
+    const initializing = emptyPromise()
+    this.initializing = initializing
 
     const connectPromise = new Promise<void>((resolve, reject) => {
       // TODO: ensure any previous socket is closed, or reject
@@ -286,7 +287,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return backOff(() => connectPromise, retryPolicy).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.initializing!.reject(e)
+      initializing.reject(e)
       throw e
     })
   }
@@ -516,7 +517,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
-    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
+    if (
+      this.inbound.isReplicating !== ReplicationStatus.ACTIVE &&
+      this.inbound.isReplicating !== ReplicationStatus.SERVER_ERROR
+    ) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_NOT_STARTED,

@@ -164,6 +164,7 @@ export enum ReplicationStatus {
   STARTING,
   STOPPING,
   ACTIVE,
+  SERVER_ERROR,
 }
 
 export enum AckType {
