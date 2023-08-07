@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react'
 
-import { Electric, schema } from './generated/client'
-import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
+import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
+
 import { authToken } from 'electric-sql/auth'
+import { genUUID } from 'electric-sql/util'
+
+import { Electric, Item, schema } from './generated/client'
 
 import './Example.css'
 
@@ -69,9 +72,9 @@ const ExampleComponent = () => {
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: crypto.randomUUID(),
+        value: genUUID(),
         // uncomment the line below after migration
-        //other_value: crypto.randomUUID(),
+        //other_value: genUUID(),
       }
     })
   }
@@ -80,19 +83,21 @@ const ExampleComponent = () => {
     await db.items.deleteMany() // delete all items
   }
 
+  const items: Item[] = results !== undefined ? results : []
+
   // After the migration, comment out this code and uncomment code block below
   return (
     <div>
-      <div className='controls'>
-        <button className='button' onClick={addItem}>
+      <div className="controls">
+        <button className="button" onClick={addItem}>
           Add
         </button>
-        <button className='button' onClick={clearItems}>
+        <button className="button" onClick={clearItems}>
           Clear
         </button>
       </div>
-      {results && results.map((item: any, index: any) => (
-        <p key={ index } className='item'>
+      {items.map((item: any, index: any) => (
+        <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>
       ))}
@@ -102,16 +107,16 @@ const ExampleComponent = () => {
   // Uncomment after migration
   //return (
   //  <div>
-  //    <div className='controls'>
-  //      <button className='button' onClick={addItem}>
+  //    <div className="controls">
+  //      <button className="button" onClick={addItem}>
   //        Add
   //      </button>
-  //      <button className='button' onClick={clearItems}>
+  //      <button className="button" onClick={clearItems}>
   //        Clear
   //      </button>
   //    </div>
-  //    {results && results.map((item: any, index: any) => (
-  //      <p key={ index } className='item'>
+  //    {items.map((item: any, index: any) => (
+  //      <p key={ index } className="item">
   //        <code>{ item.value } - { item.other_value }</code>
   //      </p>
   //    ))}

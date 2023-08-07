@@ -171,7 +171,7 @@ const ExampleComponent = () => {
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: crypto.randomUUID(),
+        value: genUUID(),
       }
     })
   }
@@ -181,18 +181,20 @@ const ExampleComponent = () => {
     await db.items.deleteMany()
   }
 
+  const items: Item[] = results !== undefined ? results : []
+
   return (
     <div>
-      <div className='controls'>
-        <button className='button' onClick={addItem}>
+      <div className="controls">
+        <button className="button" onClick={addItem}>
           Add
         </button>
-        <button className='button' onClick={clearItems}>
+        <button className="button" onClick={clearItems}>
           Clear
         </button>
       </div>
-      {results && results.map((item: any, index: any) => (
-        <p key={ index } className='item'>
+      {items.map((item: any, index: any) => (
+        <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>
       ))}
@@ -237,8 +239,8 @@ Now, let's update the app. In `Example.tsx`, modify the `addItem` function to pr
 const addItem = async () => {
   await db.items.create({
     data: {
-      value: crypto.randomUUID(),
-      other_value: crypto.randomUUID(), // <-- insert value in new row
+      value: genUUID(),
+      other_value: genUUID(), // <-- insert value in new row
     }
   })
 }
@@ -247,8 +249,8 @@ const addItem = async () => {
 Also modify the returned HTML to display the value of the new column:
 
 ```typescript jsx
-{results && results.map((item: any, index: any) => (
-  <p key={ index } className='item'>
+{items.map((item: any, index: any) => (
+  <p key={ index } className="item">
     <code>{ item.value } - { item.other_value }</code>
   </p>
 ))}
