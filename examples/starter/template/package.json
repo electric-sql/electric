@@ -1,14 +1,13 @@
 {
-  "name": "electric-sql-web-example",
+  "name": "my-electric-app",
   "version": "0.1.0",
   "main": "builder.js",
-  "author": "Valter Balegas",
-  "license": "Apache-2.0",
   "scripts": {
     "backend:start": "cd ./local-stack && source .envrc && make start && cd ..",
     "backend:stop": "cd ./local-stack && make stop && cd ..",
     "db:migrate": "node ./setup_backend/migrate_backend.js",
     "client:generate": "npx electric-sql generate",
+    "client:watch": "npx electric-sql generate --watch",
     "build": "node builder.js",
     "build-prod": "NODE_ENV=production pnpm build",
     "start": "SERVE=true pnpm build"
