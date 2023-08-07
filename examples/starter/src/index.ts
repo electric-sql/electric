@@ -50,6 +50,12 @@ await fs.writeFile(
   JSON.stringify(projectPackageJson, null, 2)
 )
 
+// Update the project's title in the index.html file
+const indexFile = path.join(projectDir, 'public', 'index.html')
+const index = await fs.readFile(indexFile, 'utf8')
+const newIndex = index.replace('ElectricSQL starter template', projectName)
+await fs.writeFile(indexFile, newIndex)
+
 // Run `yarn install` in the project directory to install the dependencies
 const proc = spawn('yarn install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
 
