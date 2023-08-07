@@ -39,6 +39,7 @@ services:
     ports:
       - 5050:5050
       - 5133:5133
+      - 5433:5433
     volumes:
       - electric_data:/app/data
     depends_on:
