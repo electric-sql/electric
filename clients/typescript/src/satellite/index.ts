@@ -47,8 +47,6 @@ export type ConnectionWrapper = {
   connectionPromise: Promise<void | Error>
 }
 
-export type SatelliteReplicationOptions = { clearOnBehindWindow: boolean }
-
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {
@@ -60,10 +58,7 @@ export interface Satellite {
 
   connectivityState?: ConnectivityState
 
-  start(
-    authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
-  ): Promise<ConnectionWrapper>
+  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
   stop(): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]

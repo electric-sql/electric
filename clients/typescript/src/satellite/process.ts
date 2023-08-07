@@ -196,10 +196,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async start(
-    authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
-  ): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -283,7 +280,7 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.setState(subscriptionsState)
     }
 
-    const connectionPromise = this._connectAndStartReplication(opts)
+    const connectionPromise = this._connectAndStartReplication()
     return { connectionPromise }
   }
 
@@ -606,9 +603,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(
-    opts?: SatelliteReplicationOptions
-  ): Promise<void> {
+  async _connectAndStartReplication(): Promise<void> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
@@ -635,7 +630,7 @@ export class SatelliteProcess implements Satellite {
     } catch (error: any) {
       if (
         error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-        opts?.clearOnBehindWindow
+        this.opts?.clearOnBehindWindow
       ) {
         return this._handleSubscriptionError(error).then(() =>
           this._connectAndStartReplication()
