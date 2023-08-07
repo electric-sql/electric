@@ -128,7 +128,7 @@
   resolved "https://registry.yarnpkg.com/@databases/validate-unicode/-/validate-unicode-1.0.0.tgz#9c7680901e82d5c572edead678ac8ad489511ec0"
   integrity sha512-dLKqxGcymeVwEb/6c44KjOnzaAafFf0Wxa8xcfEjx/qOl3rdijsKYBAtIGhtVtOlpPf/PFKfgTuFurSPn/3B/g==
 
-"@electric-sql/prisma-generator@next":
+"@electric-sql/prisma-generator@1.0.2-next.0":
   version "1.0.2-next.0"
   resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.0.2-next.0.tgz#81742725a40485578176c8005ab3d1bf64892222"
   integrity sha512-fN1T5GQVdrPWo6Y1R9gTIAOg6u8C8NcmsX7mjr4rW5u7/0IRY4J3O249PPjjQJ3LMFNADLzWM4uyfG3LDgbilQ==
@@ -245,11 +245,6 @@
   integrity sha512-/vPO1EPOs306Cvhwv7KfVfYvOJqA/S/AXjaHQiJboCZzcNDb+TIJFN9/2C9DZ//ijSKWioNyUxD792QmDJ+HKQ==
   dependencies:
     "@types/ms" "*"
-
-"@types/minimist@^1.2.2":
-  version "1.2.2"
-  resolved "https://registry.yarnpkg.com/@types/minimist/-/minimist-1.2.2.tgz#ee771e2ba4b3dc5b372935d549fd9617bf345b8c"
-  integrity sha512-jhuKLIRrhvCPLqwPcx6INqmKeiA5EWrsCOPhrlFSrbrmU4ZMPjj5Ul/oLCMDO98XRUIwVm78xICz4EPCektzeQ==
 
 "@types/ms@*":
   version "0.7.31"
@@ -599,7 +594,7 @@ detect-libc@^2.0.0:
   resolved "https://registry.yarnpkg.com/detect-libc/-/detect-libc-2.0.2.tgz#8ccf2ba9315350e1241b88d0ac3b0e1fbd99605d"
   integrity sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw==
 
-electric-sql@next:
+electric-sql@0.5.0-next.4:
   version "0.5.0-next.4"
   resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.5.0-next.4.tgz#f6524f0a05735507c819a46a3559e2acca453df8"
   integrity sha512-HzH7jq4FFz8fp3ZoPBxLuyP/ZusJbeipUe/KbGSqm+lIEgJ5pWtS8lSqeS5V6pAgtKKt+D2DTs977mdx0Kq92w==

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "main": "builder.js",
   "scripts": {
-    "backend:start": "cd ./local-stack && source .envrc && make start && cd ..",
-    "backend:stop": "cd ./local-stack && make stop && cd ..",
-    "db:migrate": "node ./setup_backend/migrate_backend.js",
+    "backend:start": "docker compose --env-file local-stack/.envrc -f local-stack/docker-compose.yaml up",
+    "backend:stop": "docker compose -f local-stack/docker-compose.yaml down --volumes",
+    "db:migrate": "node ./backend/migrate.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
@@ -16,23 +16,23 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
+    "@databases/pg": "^5.4.1",
     "@prisma/client": "4.8.1",
     "electric-sql": "0.5.0-next.4",
     "fs-extra": "^10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#master",
-    "zod": "<=3.21.1",
-    "@databases/pg": "^5.4.1"
+    "zod": "<=3.21.1"
   },
   "devDependencies": {
+    "@electric-sql/prisma-generator": "1.0.2-next.0",
     "@types/node": "^16.9.1",
     "@types/react": "^18.0.18",
     "@types/react-dom": "^18.0.11",
     "esbuild": "^0.12.26",
     "esbuild-plugin-inline-image": "^0.0.8",
     "prisma": "4.8.1",
-    "typescript": "^4.4.3",
-    "@electric-sql/prisma-generator": "1.0.2-next.0"
+    "typescript": "^4.4.3"
   }
 }
