@@ -517,10 +517,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
-    if (
-      this.inbound.isReplicating !== ReplicationStatus.ACTIVE &&
-      this.inbound.isReplicating !== ReplicationStatus.SERVER_ERROR
-    ) {
+    if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
           SatelliteErrorCode.REPLICATION_NOT_STARTED,
