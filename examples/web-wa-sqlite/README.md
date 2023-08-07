@@ -117,14 +117,32 @@ The main code to look at is in [`./src/Example.tsx`](./src/Example.tsx):
 ```tsx
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
-  
+
   useEffect(() => {
+    let isMounted = true
+
     const init = async () => {
+      const config = {
+        auth: {
+          token: await localAuthToken()
+        }
+      }
+
       const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, schema, config)
-      setElectric(db)
+      const electric = await electrify(conn, schema, config)
+
+      if (!isMounted) {
+        return
+      }
+
+      setElectric(electric)
     }
+
     init()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   if (electric === undefined) {
@@ -139,12 +157,16 @@ export const Example = () => {
 }
 ```
 
-This opens an electrified database client and passes it to the application using the React Context API. Components can then use the [`useElectric`](https://electric-sql.com/docs/usage/frameworks#useelectric-hook) and `useLiveQuery` hooks to access the database client and bind reactive queries to the component state.
+This opens an electrified database client and passes it to the application using the React Context API. Components can then use the [`useElectric`](https://electric-sql.com/docs/integrations/frontend/react#useelectric) and [`useLiveQuery`](https://electric-sql.com/docs/integrations/frontend/react#uselivequery) hooks to access the database client and bind reactive queries to the component state.
 
 ```tsx
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(db.items.liveMany({})) // read all items
+
+  // read all items
+  const { results } = useLiveQuery(
+    db.items.liveMany()
+  )
 
   const addItem = async () => {
     await db.items.create({
@@ -155,9 +177,10 @@ const ExampleComponent = () => {
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany() // delete all items
+    // delete all items
+    await db.items.deleteMany()
   }
-  
+
   return (
     <div>
       <div className='controls'>

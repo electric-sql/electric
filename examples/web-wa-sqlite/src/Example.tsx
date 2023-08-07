@@ -1,30 +1,49 @@
 import React, { useEffect, useState } from 'react'
-import './Example.css'
 
-import { schema, Electric } from './generated/client'
-import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
+import { Electric, schema } from './generated/client'
+import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { authToken } from 'electric-sql/auth'
 
+import './Example.css'
+
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
+
+const localAuthToken = (): Promise<string> => {
+  const issuer = 'local-development'
+  const signingKey = 'local-development-key-minimum-32-symbols'
+
+  return authToken(issuer, signingKey)
+}
 
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {
+    let isMounted = true
+
     const init = async () => {
-      const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, schema, {
+      const config = {
         auth: {
-          token: await authToken('local-development', 'local-development-key-minimum-32-symbols')
+          token: await localAuthToken()
         }
-      })
-      setElectric(db)
-      // Calling `.sync()` methods is possible here, right after init:
-      // await db.db.items.sync()
+      }
+
+      const conn = await ElectricDatabase.init('electric.db', '')
+      const electric = await electrify(conn, schema, config)
+
+      if (!isMounted) {
+        return
+      }
+
+      setElectric(electric)
     }
 
     init()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   if (electric === undefined) {
@@ -40,12 +59,12 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  // Or here, in a `useEffect` without dependencies to limit it running once per component render.
+
   useEffect(() => void db.items.sync(), [])
 
-  // `useliveQuery` will keep this variable up to data with the SQLite database, but to get data from server into SQLite
-  // you need to call `.sync()`, as demonstrated on the line above
-  const { results } = useLiveQuery(db.items.liveMany({})) // select all
+  const { results } = useLiveQuery(
+    db.items.liveMany()
+  )
 
   const addItem = async () => {
     await db.items.create({
