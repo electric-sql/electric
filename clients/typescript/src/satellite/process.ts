@@ -9,12 +9,7 @@ import {
   ConnectivityStateChangeNotification,
   Notifier,
 } from '../notifiers/index'
-import {
-  Client,
-  ConnectionWrapper,
-  Satellite,
-  SatelliteReplicationOptions,
-} from './index'
+import { Client, ConnectionWrapper, Satellite } from './index'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
