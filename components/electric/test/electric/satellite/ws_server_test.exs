@@ -85,6 +85,11 @@ defmodule Electric.Satellite.WsServerTest do
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
       lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end
+    },
+    {
+      Electric.Postgres.OidDatabase,
+      [:passthrough],
+      postgrex_ext_for_name: fn _ -> Postgrex.Extensions.Raw end
     }
   ]) do
     {:ok, %{}}
@@ -551,8 +556,8 @@ defmodule Electric.Satellite.WsServerTest do
           MockClient.send_data(conn, %SatInStartReplicationResp{})
 
           columns = [
-            %SatRelationColumn{name: "satellite-column-1", type: "type1"},
-            %SatRelationColumn{name: "satellite-column-2", type: "type2"}
+            %SatRelationColumn{name: "satellite-column-1", type: "text"},
+            %SatRelationColumn{name: "satellite-column-2", type: "varchar"}
           ]
 
           relation = %SatRelation{
