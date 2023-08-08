@@ -344,66 +344,65 @@ defmodule Electric.Satellite.Serialization do
         {nil, [trans | complete]}
 
       %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
-        relation = fetch_known_relation(relations, relation_id)
+        relation = Map.get(relations, relation_id)
 
-        transop =
-          case op do
-            %SatOpInsert{row_data: row_data, tags: tags} ->
-              data = row_to_map(relation.columns, row_data, false)
-              %NewRecord{relation: {relation.schema, relation.table}, record: data, tags: tags}
+        change =
+          op
+          |> op_to_change(relation.columns)
+          |> Map.put(:relation, {relation.schema, relation.table})
 
-            %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags} ->
-              old_data = row_to_map(relation.columns, old_row_data, true)
-              data = row_to_map(relation.columns, row_data, false)
-
-              %UpdatedRecord{
-                relation: {relation.schema, relation.table},
-                record: data,
-                old_record: old_data,
-                tags: tags
-              }
-
-            %SatOpDelete{old_row_data: old_row_data, tags: tags} ->
-              old_data = row_to_map(relation.columns, old_row_data, true)
-
-              %DeletedRecord{
-                relation: {relation.schema, relation.table},
-                old_record: old_data,
-                tags: tags
-              }
-          end
-
-        {%Transaction{trans | changes: [transop | trans.changes]}, complete}
+        {%Transaction{trans | changes: [change | trans.changes]}, complete}
     end)
   end
 
-  defp fetch_known_relation(relations, relation_id) do
-    Map.get(relations, relation_id)
+  defp op_to_change(%SatOpInsert{row_data: row_data, tags: tags}, columns) do
+    %NewRecord{record: decode_record(row_data, columns), tags: tags}
   end
 
-  @spec row_to_map([String.t()], %SatOpRow{}) :: %{String.t() => nil | String.t()}
-  def row_to_map(columns, row) do
-    row_to_map(columns, row, false)
+  defp op_to_change(
+         %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags},
+         columns
+       ) do
+    %UpdatedRecord{
+      record: decode_record(row_data, columns),
+      old_record: decode_record(old_row_data, columns, true),
+      tags: tags
+    }
   end
 
-  defp row_to_map(_columns, nil, false) do
+  defp op_to_change(%SatOpDelete{old_row_data: old_row_data, tags: tags}, columns) do
+    %DeletedRecord{
+      old_record: decode_record(old_row_data, columns, true),
+      tags: tags
+    }
+  end
+
+  @spec decode_record(%SatOpRow{}, [String.t()]) :: %{String.t() => nil | String.t()}
+  def decode_record(row, columns) do
+    decode_record(row, columns, false)
+  end
+
+  defp decode_record(nil, _columns, false) do
     raise "protocol violation, empty row"
   end
 
-  defp row_to_map(_columns, nil, true), do: nil
+  defp decode_record(nil, _columns, true), do: nil
 
-  defp row_to_map(columns, %SatOpRow{nulls_bitmask: bitmask, values: values}, _) do
-    bitmask_list = for <<x::1 <- bitmask>>, do: x
-
-    {row, _, []} =
-      Enum.reduce(columns, {%{}, bitmask_list, values}, fn
-        column, {map0, [0 | bitmask_list0], [value | values0]} ->
-          {Map.put(map0, column, value), bitmask_list0, values0}
-
-        column, {map0, [1 | bitmask_list0], [_ | values0]} ->
-          {Map.put(map0, column, nil), bitmask_list0, values0}
-      end)
-
-    row
+  defp decode_record(%SatOpRow{} = row, columns, _) do
+    column_names = Enum.map(columns, & &1.name)
+    row_to_map(row, column_names)
   end
+
+  def row_to_map(%SatOpRow{nulls_bitmask: bitmask, values: values}, column_names) do
+    Enum.zip(column_names, apply_nulls_bitmask(values, bitmask))
+    |> Map.new()
+  end
+
+  defp apply_nulls_bitmask([v | vals], <<0::1, bitmask::bitstring>>),
+    do: [v | apply_nulls_bitmask(vals, bitmask)]
+
+  defp apply_nulls_bitmask([_ | vals], <<1::1, bitmask::bitstring>>),
+    do: [nil | apply_nulls_bitmask(vals, bitmask)]
+
+  defp apply_nulls_bitmask([], _), do: []
 end

@@ -25,8 +25,8 @@ defmodule Electric.Satellite.SerializationTest do
   test "test row deserialization" do
     deserialized_data =
       Serialization.row_to_map(
-        ["null", "this_columns_is_empty", "not_null"],
-        %SatOpRow{nulls_bitmask: <<1::1, 1::1, 0::1, 0::5>>, values: [<<>>, <<>>, <<"4">>]}
+        %SatOpRow{nulls_bitmask: <<1::1, 1::1, 0::1, 0::5>>, values: [<<>>, <<>>, <<"4">>]},
+        ["null", "this_columns_is_empty", "not_null"]
       )
 
     expected = %{"not_null" => <<"4">>, "null" => nil, "this_columns_is_empty" => nil}
@@ -39,8 +39,8 @@ defmodule Electric.Satellite.SerializationTest do
 
     deserialized_data =
       Serialization.row_to_map(
-        Enum.map(0..8, &"bit#{&1}"),
-        %SatOpRow{nulls_bitmask: mask, values: Enum.map(0..8, fn _ -> "" end)}
+        %SatOpRow{nulls_bitmask: mask, values: Enum.map(0..8, fn _ -> "" end)},
+        Enum.map(0..8, &"bit#{&1}")
       )
 
     expected = %{
