@@ -83,3 +83,14 @@ Note that this time, the database URL is used by the migration script (not runni
 ```sh
 npm run db:migrate
 ```
+
+### Postgres <-> Electric interactions
+
+The Electric sync service connects to Postgres using the `DATABASE_URL` environment variable.
+Postgres communicates with Electric through the postgres_1 publication whose target is set by the `LOGICAL_PUBLISHER_HOST` environment variable.
+
+```
+      |---------DATABASE_URL--------->|
+Electric                             Postgres
+      |<----LOGICAL_PUBLISHER_HOST----|
+```
