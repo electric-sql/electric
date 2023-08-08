@@ -67,7 +67,7 @@ test.beforeEach((t) => {
 test.afterEach.always(async (t) => {
   const { server, client } = t.context
 
-  await client.close()
+  client.close()
   server.close()
 })
 

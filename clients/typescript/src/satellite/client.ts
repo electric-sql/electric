@@ -238,6 +238,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void> {
+
+    if(!this.isClosed){
+      this.close()
+    }
+
     const initializing = emptyPromise()
     this.initializing = initializing
 
@@ -292,7 +297,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
   }
 
-  close(): Promise<void> {
+  close() {
     Log.info('closing client')
 
     this.outbound = this.resetReplication(
@@ -318,8 +323,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.socket!.closeAndRemoveListeners()
       this.socket = undefined
     }
-
-    return Promise.resolve()
   }
 
   isClosed(): boolean {
@@ -354,7 +357,11 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
       request = SatInStartReplicationReq.fromPartial({ schemaVersion })
     } else {
-      Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
+      Log.info(
+        `starting replication with lsn: ${base64.fromBytes(
+          lsn
+        )} subscriptions: ${subscriptionIds}`
+      )
       request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
     }
 

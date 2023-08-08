@@ -70,7 +70,7 @@ export interface Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void>
-  close(): Promise<void>
+  close(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
   isClosed(): boolean
   startReplication(
