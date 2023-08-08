@@ -671,8 +671,6 @@ defmodule Electric.Satellite.WsServerTest do
     )
   end
 
-  defp with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
-
   def clean_connections() do
     MockClient.disconnect()
 

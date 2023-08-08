@@ -119,27 +119,8 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     end)
   end
 
-  defp with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
-
   defp server_pid do
     [pid] = :ranch.procs(@ws_listener_name, :connections)
     pid
-  end
-
-  defp migrate(conn, version, table \\ nil, sql) do
-    results =
-      :epgsql.squery(conn, """
-      BEGIN;
-      SELECT electric.migration_version('#{version}');
-      #{sql};
-      #{if table, do: "CALL electric.electrify('#{table}');"}
-      COMMIT;
-      """)
-
-    Enum.each(results, fn result ->
-      assert {:ok, _, _} = result
-    end)
-
-    :ok
   end
 end
