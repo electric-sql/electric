@@ -15,7 +15,7 @@ const pgPort = fetchHostPortPG() ?? 5432
 const appName = fetchAppName() ?? 'electric'
 const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
-const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, '..', 'migrations')
 
 const argv = parseArgs(process.argv.slice(2))
 const targetFile = argv.file

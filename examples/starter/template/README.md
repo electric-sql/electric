@@ -7,7 +7,7 @@ Start the backend:
 yarn backend:start
 ```
 
-Open a new tab in your terminal. Navigate back to the same folder. Apply the migrations (defined in `./backend/migrations`):
+Open a new tab in your terminal. Navigate back to the same folder. Apply the migrations (defined in `./db/migrations`):
 
 ```shell
 yarn db:migrate

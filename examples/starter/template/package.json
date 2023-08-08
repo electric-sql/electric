@@ -6,7 +6,7 @@
     "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
     "backend:stop": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
     "electric:start": "node ./backend/startElectric.js",
-    "db:migrate": "node ./backend/migrate.js",
+    "db:migrate": "node ./db/migrate.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
