@@ -66,7 +66,7 @@ const ExampleComponent = () => {
   useEffect(() => void db.items.sync(), [])
 
   const { results } = useLiveQuery(
-    db.items.liveMany()
+    db.items.liveMany({})
   )
 
   const addItem = async () => {

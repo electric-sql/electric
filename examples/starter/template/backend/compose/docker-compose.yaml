@@ -14,7 +14,7 @@ services:
   postgres:
     image: "${POSTGRESQL_IMAGE:-postgres:14-alpine}"
     environment:
-      POSTGRES_DB: electric
+      POSTGRES_DB: ${APP_NAME:-electric}
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     command:
@@ -38,7 +38,7 @@ services:
     image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
     init: true
     environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
       LOGICAL_PUBLISHER_HOST: electric
       # Currently published version (electric-sql@0.5.0-next.4)
       # still uses `ELECTRIC_HOST` variable
@@ -48,6 +48,7 @@ services:
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: local-development-key-minimum-32-symbols
       OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
+      AUTH_MODE: insecure
     ports:
       - 5050:5050
       - 5133:5133

@@ -17,6 +17,7 @@ npm run backend:start
 ```
 
 The above command starts some Docker containers that run a fresh Postgres DB with the Electric sync service.
+The Postgres DB will have one database that is called after the name of your app (the DB name will start with the first letter in your app name and all non-alphanumeric characters will be replaced with an underscore, e.g. app name `123foo-bar*baz` will become DB name `foo_bar_baz`).
 If instead you want to run Electric on top of your existing Postgres:
 
 ```sh

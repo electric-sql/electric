@@ -12,7 +12,8 @@ const { sql } = require('@databases/pg')
 // to some available port on the host machine.
 // So we fetch this host port and use it in the default url.
 const pgPort = fetchHostPortPG() ?? 5432
-const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/electric`
+const appName = fetchAppName() ?? 'electric'
+const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
 
@@ -71,4 +72,26 @@ function fetchHostPort(container, containerPort) {
   if (!isNaN(port)) {
     return port
   }
+}
+
+// Reads the app name from the backend/.envrc file
+function fetchAppName() {
+  const envrcFile = path.join(__dirname, 'compose', '.envrc')
+  const envrc = fs.readFileSync(envrcFile, 'utf8')
+
+  let appName = undefined
+
+  envrc
+  .split(/\r?\n/) // split lines
+  .reverse() // in case the app name would be defined several times
+  .find(line => {
+    const match = line.match(/^(export APP_NAME=)(.*)/)
+    if (match) {
+      appName = match[2]
+      return true
+    }
+    return false
+  })
+
+  return appName
 }
