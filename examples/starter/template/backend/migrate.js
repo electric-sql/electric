@@ -1,16 +1,27 @@
 const fs = require('fs')
 const path = require('path')
 const parseArgs = require('minimist')
+const shell = require('shelljs')
 
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')
 
-const DEFAULT_URL = 'postgresql://postgres:password@localhost:5432/electric'
+// If we are running the docker compose file
+// there will be a compose-postgres-1 container running
+// which binds the container's 5432 port used by PG
+// to some available port on the host machine.
+// So we fetch this host port and use it in the default url.
+const pgPort = fetchHostPortPG() ?? 5432
+const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/electric`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
 
 const argv = parseArgs(process.argv.slice(2))
 const targetFile = argv.file
+
+if (!process.env.DATABASE_URL) {
+  console.info(`Connecting to Postgres via host port ${pgPort}`)
+}
 
 const db = createPool(DATABASE_URL)
 
@@ -46,4 +57,18 @@ catch (err) {
 }
 finally {
   db.dispose()
+}
+
+function fetchHostPortPG() {
+  return fetchHostPort('compose-postgres-1', 5432)
+}
+
+// Returns the host port to which the `containerPort` of the `container` is bound.
+// Returns undefined if the port is not bound or container does not exist.
+function fetchHostPort(container, containerPort) {
+  const output = shell.exec(`docker inspect --format='{{(index (index .NetworkSettings.Ports "${containerPort}/tcp") 0).HostPort}}' ${container}`)
+  const port = parseInt(output)
+  if (!isNaN(port)) {
+    return port
+  }
 }
