@@ -31,7 +31,7 @@ Now, open a new tab in your terminal and migrate Postgres such that it contains 
 npm run db:migrate
 ```
 
-Make sure to set the DATABASE_URL environment variable prior to executing the command if you are using your own Postgres database.
+Make sure to again set the `DATABASE_URL` environment variable prior to executing the command if you are using your own Postgres database.
 
 ## Frontend
 
