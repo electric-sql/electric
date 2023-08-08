@@ -11,7 +11,8 @@ defmodule Electric.Postgres.OidDatabase.PgType do
     type: :_,
     base_type: :_,
     rel_id: :_,
-    is_array: :_
+    is_array: :_,
+    postgrex_ext: :_
   )
 
   def map_type("b"), do: :base

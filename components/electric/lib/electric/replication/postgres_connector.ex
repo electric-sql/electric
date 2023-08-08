@@ -17,8 +17,14 @@ defmodule Electric.Replication.PostgresConnector do
     origin = Connectors.origin(conn_config)
     Electric.reg(name(origin))
 
+    connection_opts = Connectors.get_connection_opts(conn_config)
+
+    postgrex_conn_opts =
+      connection_opts |> Map.put(:hostname, connection_opts[:host]) |> Enum.to_list()
+
     children = [
       # %{id: :sup, start: {PostgresConnectorSup, :start_link, [origin]}, type: :supervisor},
+      {Postgrex, postgrex_conn_opts},
       %{id: :mng, start: {PostgresConnectorMng, :start_link, [conn_config]}}
     ]
 

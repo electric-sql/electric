@@ -8,8 +8,8 @@ defmodule Electric.Postgres.OidDatabase do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  def save_oids(server \\ __MODULE__, values) do
-    GenServer.call(server, {:save_oids, Enum.map(values, &pg_type_from_tuple/1)})
+  def save_oids(server \\ __MODULE__, oids) do
+    GenServer.call(server, {:save_oids, oids})
   end
 
   @doc """
@@ -39,6 +39,14 @@ defmodule Electric.Postgres.OidDatabase do
     case :ets.match(@ets_table_name, pg_type(name: name, oid: :"$1")) do
       [[oid]] -> oid
       _ -> raise("Unknown name #{name}")
+    end
+  end
+
+  def postgrex_ext_for_name(name) do
+    case :ets.match(@ets_table_name, pg_type(name: name, postgrex_ext: :"$1")) do
+      [[:_]] -> raise "Missing postgrex_ext for name #{name}"
+      [[postgrex_ext]] -> postgrex_ext
+      _ -> raise "Unknown name #{name}"
     end
   end
 

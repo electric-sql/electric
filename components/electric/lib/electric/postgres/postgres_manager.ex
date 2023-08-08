@@ -1,11 +1,14 @@
 defmodule Electric.Replication.PostgresConnectorMng do
+  @behaviour GenServer
+
+  import Electric.Postgres.OidDatabase.PgType
+
   alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
   alias Electric.Postgres.OidDatabase
 
-  @behaviour GenServer
   require Logger
 
   defmodule State do
@@ -160,6 +163,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
            {:ok, oids} <- Client.query_oids(conn),
+           oids =
+             oids
+             |> Enum.map(&pg_type_from_tuple/1)
+             |> assoc_oids_with_postgrex_extensions(conn_config),
            :ok <- OidDatabase.save_oids(oids) do
         Logger.info(
           "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
@@ -168,5 +175,22 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:ok, state}
       end
     end)
+  end
+
+  defp assoc_oids_with_postgrex_extensions(oids, conn_config) do
+    # Here we're using Postgrex's private APIs to get hold of its typename-oid mapping table that includes
+    # Postgrex.Extension.* module for each of the supported Postgres types.
+    # We're associating the extension module with type oid in order to be able to validate values of the type on demand.
+    type_server_key = {conn_config[:host], conn_config[:port], conn_config[:database]}
+    type_server = Postgrex.TypeSupervisor.locate(Postgrex.DefaultTypes, type_server_key)
+    {:lock, ref, type_server_state} = Postgrex.TypeServer.fetch(type_server)
+    Postgrex.TypeServer.done(type_server, ref)
+
+    for pg_type(oid: oid) = record <- oids do
+      case Postgrex.Types.fetch(oid, type_server_state) do
+        {:ok, {:binary, type_mod}} -> pg_type(record, postgrex_ext: type_mod)
+        _ -> record
+      end
+    end
   end
 end
