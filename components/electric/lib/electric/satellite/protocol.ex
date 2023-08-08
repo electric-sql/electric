@@ -421,7 +421,10 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
-    columns = Enum.map(msg.columns, fn %SatRelationColumn{} = x -> x.name end)
+    columns =
+      Enum.map(msg.columns, fn %SatRelationColumn{} = x ->
+        %{name: x.name, type: x.type, primary_key?: x.primaryKey}
+      end)
 
     relations =
       Map.put(in_rep.relations, msg.relation_id, %{
