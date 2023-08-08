@@ -196,6 +196,45 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates uuid values", ctx do
+    vsn = "2023072504"
+    :ok = migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id UUID PRIMARY KEY)")
+
+    valid_records = [
+      %{"id" => "00000000-0000-0000-0000-000000000000"},
+      %{"id" => "ffffffff-ffff-ffff-ffff-ffffffffffff"},
+      %{"id" => Electric.Utils.uuid4()}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      # Wait long enough for the server to process our messages, thus confirming it has been accepted
+      ping_server(conn)
+
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end)
+
+    invalid_records = [
+      %{"id" => ""},
+      %{"id" => "1"},
+      %{"id" => "two"},
+      %{"id" => "00000000000000000000000000000000"},
+      %{"id" => "abcdefgh-ijkl-mnop-qrst-uvwxyz012345"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      end)
+    end)
+  end
+
   defp within_replication_context(ctx, vsn, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony

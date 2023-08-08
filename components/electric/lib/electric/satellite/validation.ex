@@ -28,4 +28,9 @@ defmodule Electric.Satellite.Validation do
   defp parse_column_value(val, type) when type in [:float4, :float8] do
     String.to_float(val)
   end
+
+  defp parse_column_value(val, :uuid) do
+    {:ok, uuid} = Electric.Utils.uuid_to_bin(val)
+    uuid
+  end
 end
