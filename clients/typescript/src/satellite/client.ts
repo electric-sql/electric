@@ -238,8 +238,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void> {
-
-    if(!this.isClosed){
+    if (!this.isClosed) {
       this.close()
     }
 

@@ -288,11 +288,15 @@ export class SatelliteProcess implements Satellite {
     shapeDefs: ShapeDefinition[]
   ): Promise<void> {
     const stmts: Statement[] = []
+    const tablenames: string[] = []
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => 'main.' + select.tablename) // We need "fully qualified" table names in the next calls
+      .map((select: ShapeSelect) => {
+        tablenames.push(select.tablename)
+        return 'main.' + select.tablename
+      }) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
         stmts.push(
           ...this._disableTriggers([tablename]),
@@ -306,6 +310,7 @@ export class SatelliteProcess implements Satellite {
       }, stmts)
 
     await this.adapter.runInTransaction(...stmts)
+    tablenames.forEach((t) => this.notifier.actuallyChanged(t, []))
   }
 
   setClientListeners(): void {
@@ -550,21 +555,40 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  async _handleBehindWindow(): Promise<void> {
+    Log.warn(
+      'client cannot resume replication from server, resetting replication state'
+    )
+    const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+    const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+      .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
+      .filter((s): s is ShapeDefinition[] => s != undefined)
+      .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
+
+    await this.subscriptions.unsubscribeAll()
+
+    await this._resetClientState()
+
+    await this._connectAndStartReplication(true)
+
+    Log.warn(`successfully reconnected with server. re-subscribing.`)
+
+    if (shapeDefs) {
+      this.subscribe(shapeDefs)
+    }
+  }
+
   async _handleSubscriptionError(
     satelliteError: SatelliteError,
     subscriptionId?: string
   ): Promise<void> {
+    Log.error('encountered a subscription error: ' + satelliteError.message)
+
     // this is obviously too conservative and note
     // that it does not update meta transactionally
     await this.subscriptions.unsubscribeAll()
 
-    Log.error('encountered a subscription error: ' + satelliteError.message)
-
-    this._lsn = undefined
-    await this.adapter.runInTransaction(
-      this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
-    )
+    await this._resetClientState()
 
     // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
@@ -572,6 +596,14 @@ export class SatelliteProcess implements Satellite {
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
       onFailure(satelliteError)
     }
+  }
+
+  async _resetClientState() {
+    this._lsn = undefined
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
@@ -597,8 +629,14 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(): Promise<void> {
+  async _connectAndStartReplication(
+    reconnectAfterServerError?: boolean
+  ): Promise<void> {
     Log.info(`connecting and starting replication`)
+
+    if (reconnectAfterServerError) {
+      Log.warn(`trying to reconnect after server error`)
+    }
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
@@ -628,12 +666,10 @@ export class SatelliteProcess implements Satellite {
     } catch (error: any) {
       if (
         error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-        this.opts?.clearOnBehindWindow
+        this.opts?.clearOnBehindWindow &&
+        !reconnectAfterServerError
       ) {
-        await this._handleSubscriptionError(error)
-        await this.client.close()
-        // after clearing subscriptions can't enter here
-        await this._connectAndStartReplication()
+        await this._handleBehindWindow()
         return
       }
 
