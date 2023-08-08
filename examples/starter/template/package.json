@@ -3,15 +3,15 @@
   "version": "0.1.0",
   "main": "builder.js",
   "scripts": {
-    "backend:start": "docker compose --env-file local-stack/.envrc -f local-stack/docker-compose.yaml up",
-    "backend:stop": "docker compose -f local-stack/docker-compose.yaml down --volumes",
+    "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
+    "backend:stop": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
     "electric:start": "node ./backend/startElectric.js",
     "db:migrate": "node ./backend/migrate.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
-    "build-prod": "NODE_ENV=production npm build",
-    "start": "SERVE=true npm build"
+    "build-prod": "NODE_ENV=production npm run build",
+    "start": "SERVE=true npm run build"
   },
   "engines": {
     "node": ">=16.11.0"

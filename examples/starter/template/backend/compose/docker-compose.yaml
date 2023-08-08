@@ -1,0 +1,58 @@
+version: "3.8"
+
+configs:
+  postgres_config:
+    file: "./postgres/postgres.conf"
+  postgres_init_sql:
+    file: "./postgres/init.sql"
+
+volumes:
+  pg_data:
+  electric_data:
+
+services:
+  postgres_1: # TODO: remove _1 here and in electric
+    image: "${POSTGRESQL_IMAGE:-postgres:14-alpine}"
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql.conf
+      - source: postgres_init_sql
+        target: /docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 5432:5432 # NEEDED??? -> can we use env var here with 54321 default?
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  electric_1:
+    image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
+    init: true
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres_1:5432/electric
+      LOGICAL_PUBLISHER_HOST: electric_1
+      # Currently published version (electric-sql@0.5.0-next.4)
+      # still uses `ELECTRIC_HOST` variable
+      # but future versions will use `LOGICAL_PUBLISHER_HOST`
+      # TODO: Remove `ELECTRIC_HOST` when next version is published.
+      ELECTRIC_HOST: electric_1
+      AUTH_JWT_ALG: HS256
+      AUTH_JWT_KEY: local-development-key-minimum-32-symbols
+      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
+    ports:
+      - 5050:5050
+      - 5133:5133
+      - 5433:5433 # probably not needed
+    volumes:
+      - electric_data:/app/data
+    depends_on:
+      - postgres_1

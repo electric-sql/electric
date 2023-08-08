@@ -1,6 +1,6 @@
 const shell = require('shelljs')
 
-let db = undefined
+let db = process.env.DATABASE_URL
 
 if (process.argv.length === 4) {
   const command = process.argv[2]
@@ -10,7 +10,7 @@ if (process.argv.length === 4) {
   }
 
   const url = process.argv[3]
-  db = url ?? process.env.DATABASE_URL
+  db = url
 }
 else if (process.argv.length !== 2) {
   // Wrong number of arguments
@@ -22,10 +22,13 @@ if (db === undefined) {
   process.exit(1)
 }
 
-// TODO: test that electric:start still works :-)
-//       --> with env var
-//       --> and with -db arg
-//       --> and uses db arg if both are provided
-//       --> and complains otherwise
-shell.env['DATABASE_URL'] = db
-shell.exec('docker compose --env-file local-stack/.envrc -f local-stack/docker-compose-electric-only.yaml up')
+const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
+
+shell.exec(`docker run \
+-e "DATABASE_URL=${db}" \
+-e "ELECTRIC_HOST=localhost" \
+-e "LOGICAL_PUBLISHER_HOST=localhost" \
+-e "AUTH_MODE=insecure" \
+-p 5050:5050 \
+-p 5133:5133 \
+-p 5433:5433 ${electric}`)

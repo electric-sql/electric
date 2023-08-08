@@ -33,8 +33,8 @@ await fs.rename(
   path.join(projectDir, '.npmrc')
 )
 await fs.rename(
-  path.join(projectDir, 'local-stack', 'dot_envrc'),
-  path.join(projectDir, 'local-stack', '.envrc')
+  path.join(projectDir, 'backend', 'compose', 'dot_envrc'),
+  path.join(projectDir, 'backend', 'compose', '.envrc')
 )
 
 // import package.json and deep copy it
