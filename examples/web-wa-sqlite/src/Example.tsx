@@ -83,7 +83,7 @@ const ExampleComponent = () => {
     await db.items.deleteMany() // delete all items
   }
 
-  const items: Item[] = results !== undefined ? results : []
+  const items: Item[] = results ?? []
 
   // After the migration, comment out this code and uncomment code block below
   return (
