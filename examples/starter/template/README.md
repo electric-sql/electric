@@ -37,7 +37,7 @@ yarn client:watch
 
 ## Notes
 
-- `yarn backend:start` uses Docker Compose to start Postgres and the [Electric sync service](https://electric-sql.com/docs/api/service). See [running the examples](https://electric-sql.com/docs/examples/running) for information about configuring the Electric sync service to run against an existing Postgres database.
+- `yarn backend:start` uses Docker Compose to start Postgres and the [Electric sync service](https://electric-sql.com/docs/api/service). See [running the examples](https://electric-sql.com/docs/examples/notes/running#running-your-own-postgres) for information about configuring the Electric sync service to run against an existing Postgres database.
 - `yarn client:watch` calls `npx electric-sql generate --watch` under the hood. See [https://electric-sql.com/docs/api/generator](https://electric-sql.com/docs/api/generator) for more details.
 
 ## More information
