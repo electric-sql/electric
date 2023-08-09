@@ -32,9 +32,10 @@ await fs.rename(
   path.join(projectDir, 'dot_npmrc'),
   path.join(projectDir, '.npmrc')
 )
+const envrcFile = path.join(projectDir, 'backend', 'compose', '.envrc')
 await fs.rename(
   path.join(projectDir, 'backend', 'compose', 'dot_envrc'),
-  path.join(projectDir, 'backend', 'compose', '.envrc')
+  envrcFile
 )
 
 // import package.json and deep copy it
@@ -55,6 +56,17 @@ const indexFile = path.join(projectDir, 'public', 'index.html')
 const index = await fs.readFile(indexFile, 'utf8')
 const newIndex = index.replace('ElectricSQL starter template', projectName)
 await fs.writeFile(indexFile, newIndex)
+
+// Store the app's name in .envrc
+// db name must start with a letter
+// and contain only alphanumeric characters and underscores
+// so we let the name start at the first letter
+// and replace non-alphanumeric characters with _
+const name = projectName.match(/[a-zA-Z].*/)?.[0] // strips prefix of non-alphanumeric characters
+if (name) {
+  const dbName = name.replace(/[\W_]+/g, '_')
+  await fs.appendFile(envrcFile, `export APP_NAME=${dbName}`)
+}
 
 // Run `yarn install` in the project directory to install the dependencies
 const proc = spawn('yarn install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
