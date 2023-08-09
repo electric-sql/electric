@@ -123,8 +123,7 @@ defmodule Electric.Satellite.Serialization do
 
           known_relations =
             Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-              {_relation_id, _column_names, known} = load_new_relation(relation, known)
-
+              {_relation_id, _columns, known} = load_new_relation(relation, known)
               known
             end)
 
@@ -160,8 +159,8 @@ defmodule Electric.Satellite.Serialization do
 
     {rel_id, rel_cols, new_relations, known_relations} =
       case fetch_relation_id(relation, known_relations) do
-        {:new, {relation_id, columns, known}} ->
-          {relation_id, columns, [relation | new_relations], known}
+        {:new, {relation_id, columns, known_relations}} ->
+          {relation_id, columns, [relation | new_relations], known_relations}
 
         {:existing, {relation_id, columns}} ->
           {relation_id, columns, new_relations, known_relations}
@@ -221,7 +220,7 @@ defmodule Electric.Satellite.Serialization do
     %SatTransOp{op: {:delete, op_delete}}
   end
 
-  @spec map_to_row(%{String.t() => binary()} | nil, [String.t()]) :: %SatOpRow{}
+  @spec map_to_row(%{String.t() => binary()} | nil, [map]) :: %SatOpRow{}
   def map_to_row(nil, _), do: nil
 
   def map_to_row(data, rel_cols) when is_list(rel_cols) and is_map(data) do
@@ -229,15 +228,15 @@ defmodule Electric.Satellite.Serialization do
     values = []
 
     {num_columns, bitmask, values} =
-      Enum.reduce(rel_cols, {0, bitmask, values}, fn column_name, {num, bitmask0, values0} ->
+      Enum.reduce(rel_cols, {0, bitmask, values}, fn col, {num, bitmask0, values0} ->
         # FIXME: This is inefficient, data should be stored in order, so that we
         # do not have to do lookup here, but filter columns based on the schema instead
-        case Map.get(data, column_name, nil) do
+        case Map.get(data, col.name) do
           nil ->
             {num + 1, [1 | bitmask0], [<<>> | values0]}
 
           value when is_binary(value) ->
-            {num + 1, [0 | bitmask0], [value | values0]}
+            {num + 1, [0 | bitmask0], [encode_column_value(value, col.type) | values0]}
         end
       end)
 
@@ -252,8 +251,31 @@ defmodule Electric.Satellite.Serialization do
     %SatOpRow{nulls_bitmask: bitmask, values: Enum.reverse(values)}
   end
 
+  # Values of type `timestamp` are coming over Postgres' logical replication stream in the following form:
+  #
+  #     2023-08-14 14:01:28.848242
+  #
+  # We don't need to do conversion on those values before passing them on to Satellite clients, so we let the catch-all
+  # function clause handle those. Values of type `timestamptz`, however, are encoded as follows:
+  #
+  #     2023-08-14 10:01:28.848242+00
+  #
+  # This is not valid syntax for SQLite's builtin datetime functions and we would like to avoid letting the Satellite
+  # protocol propagate Postgres' data formatting quirks to clients. So a minor conversion step is done here to replace
+  # `+00` with `Z` so that the whole string becomes conformant with ISO-8601.
+  #
+  # NOTE: We're ensuring the time zone offset is always `+00` by setting the `timezone` parameter to `'UTC'` before
+  # starting the replication stream.
+  defp encode_column_value(val, :timestamptz) do
+    {:ok, dt, 0} = DateTime.from_iso8601(val)
+    DateTime.to_string(dt)
+  end
+
+  # No-op encoding for the rest of supported types
+  defp encode_column_value(val, _type), do: val
+
   def fetch_relation_id(relation, known_relations) do
-    case Map.get(known_relations, relation, nil) do
+    case Map.get(known_relations, relation) do
       nil ->
         {:new, load_new_relation(relation, known_relations)}
 
@@ -264,9 +286,7 @@ defmodule Electric.Satellite.Serialization do
 
   defp load_new_relation(relation, known_relations) do
     %{oid: relation_id, columns: columns} = fetch_relation(relation)
-    column_names = for %{name: column_name} <- columns, do: column_name
-
-    {relation_id, column_names, Map.put(known_relations, relation, {relation_id, column_names})}
+    {relation_id, columns, Map.put(known_relations, relation, {relation_id, columns})}
   end
 
   defp fetch_relation(relation) do

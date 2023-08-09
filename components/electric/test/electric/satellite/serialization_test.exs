@@ -10,7 +10,12 @@ defmodule Electric.Satellite.SerializationTest do
 
   test "test row serialization" do
     data = %{"not_null" => <<"4">>, "null" => nil, "not_present" => <<"some other value">>}
-    columns = ["null", "this_columns_is_empty", "not_null"]
+
+    columns = [
+      %{name: "null", type: :text},
+      %{name: "this_columns_is_empty", type: :text},
+      %{name: "not_null", type: :text}
+    ]
 
     serialized_data = Serialization.map_to_row(data, columns)
 
@@ -73,12 +78,12 @@ defmodule Electric.Satellite.SerializationTest do
     }
 
     columns = [
-      "id",
-      "content",
-      "content_text_null",
-      "content_text_null_default",
-      "intvalue_null",
-      "intvalue_null_default"
+      %{name: "id", type: :uuid},
+      %{name: "content", type: :text},
+      %{name: "content_text_null", type: :text},
+      %{name: "content_text_null_default", type: :text},
+      %{name: "intvalue_null", type: :int4},
+      %{name: "intvalue_null_default", type: :int4}
     ]
 
     serialized_data = Serialization.map_to_row(data, columns)
