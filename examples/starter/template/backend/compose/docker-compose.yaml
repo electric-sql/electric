@@ -3,8 +3,6 @@ version: "3.8"
 configs:
   postgres_config:
     file: "./postgres/postgres.conf"
-  postgres_init_sql:
-    file: "./postgres/init.sql"
 
 volumes:
   pg_data:
@@ -23,8 +21,6 @@ services:
     configs:
       - source: postgres_config
         target: /etc/postgresql.conf
-      - source: postgres_init_sql
-        target: /docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
     extra_hosts:
