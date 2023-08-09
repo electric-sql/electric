@@ -117,14 +117,32 @@ The main code to look at is in [`./src/Example.tsx`](./src/Example.tsx):
 ```tsx
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
-  
+
   useEffect(() => {
+    let isMounted = true
+
     const init = async () => {
+      const config = {
+        auth: {
+          token: await localAuthToken()
+        }
+      }
+
       const conn = await ElectricDatabase.init('electric.db', '')
-      const db = await electrify(conn, schema, config)
-      setElectric(db)
+      const electric = await electrify(conn, schema, config)
+
+      if (!isMounted) {
+        return
+      }
+
+      setElectric(electric)
     }
+
     init()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   if (electric === undefined) {
@@ -139,37 +157,44 @@ export const Example = () => {
 }
 ```
 
-This opens an electrified database client and passes it to the application using the React Context API. Components can then use the [`useElectric`](https://electric-sql.com/docs/usage/frameworks#useelectric-hook) and `useLiveQuery` hooks to access the database client and bind reactive queries to the component state.
+This opens an electrified database client and passes it to the application using the React Context API. Components can then use the [`useElectric`](https://electric-sql.com/docs/integrations/frontend/react#useelectric) and [`useLiveQuery`](https://electric-sql.com/docs/integrations/frontend/react#uselivequery) hooks to access the database client and bind reactive queries to the component state.
 
 ```tsx
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(db.items.liveMany({})) // read all items
+
+  // read all items
+  const { results } = useLiveQuery(
+    db.items.liveMany()
+  )
 
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: crypto.randomUUID(),
+        value: genUUID(),
       }
     })
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany() // delete all items
+    // delete all items
+    await db.items.deleteMany()
   }
-  
+
+  const items: Item[] = results !== undefined ? results : []
+
   return (
     <div>
-      <div className='controls'>
-        <button className='button' onClick={addItem}>
+      <div className="controls">
+        <button className="button" onClick={addItem}>
           Add
         </button>
-        <button className='button' onClick={clearItems}>
+        <button className="button" onClick={clearItems}>
           Clear
         </button>
       </div>
-      {results && results.map((item: any, index: any) => (
-        <p key={ index } className='item'>
+      {items.map((item: any, index: any) => (
+        <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>
       ))}
@@ -214,8 +239,8 @@ Now, let's update the app. In `Example.tsx`, modify the `addItem` function to pr
 const addItem = async () => {
   await db.items.create({
     data: {
-      value: crypto.randomUUID(),
-      other_value: crypto.randomUUID(), // <-- insert value in new row
+      value: genUUID(),
+      other_value: genUUID(), // <-- insert value in new row
     }
   })
 }
@@ -224,8 +249,8 @@ const addItem = async () => {
 Also modify the returned HTML to display the value of the new column:
 
 ```typescript jsx
-{results && results.map((item: any, index: any) => (
-  <p key={ index } className='item'>
+{items.map((item: any, index: any) => (
+  <p key={ index } className="item">
     <code>{ item.value } - { item.other_value }</code>
   </p>
 ))}
