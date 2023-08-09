@@ -654,10 +654,6 @@ export class SatelliteProcess implements Satellite {
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
-      Log.warn(
-        `${this._lsn} ${schemaVersion} ${JSON.stringify(subscriptionIds)}`
-      )
-
       await this.client.startReplication(
         this._lsn,
         schemaVersion,

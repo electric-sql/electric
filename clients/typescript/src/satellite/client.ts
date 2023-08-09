@@ -853,18 +853,16 @@ export class SatelliteClient extends EventEmitter implements Client {
     const messageOrError = toMessage(data)
     if (Log.getLevel() <= 1 && !(messageOrError instanceof SatelliteError))
       Log.debug(`[proto] recv: ${msgToString(messageOrError)}`)
-    if (messageOrError instanceof Error) {
-      this.emit('error', messageOrError)
-    } else {
-      const handler = this.handlerForMessageType[messageOrError.$type]
-      try {
-        const response = handler.handle(messageOrError)
-        if (handler.isRpc) {
-          this.emit('rpc_response', response)
-        }
-      } catch (error) {
-        Log.warn(`uncaught errors while processing incoming message: ${error}`)
+    try {
+      const message: SatPbMsg = toMessage(data)
+      const handler = this.handlerForMessageType[message.$type]
+      const response = handler.handle(message)
+      if (handler.isRpc) {
+        this.emit('rpc_response', response)
       }
+    } catch (error) {
+      Log.warn(`uncaught errors while processing incoming message: ${error}`)
+      this.emit('error', error)
     }
   }
 
@@ -1148,12 +1146,12 @@ function serializeNullData(): Uint8Array {
   return typeEncoder.text('')
 }
 
-export function toMessage(data: Uint8Array): SatPbMsg | SatelliteError {
+export function toMessage(data: Uint8Array): SatPbMsg {
   const code = data[0]
   const type = getTypeFromCode(code)
   const obj = getObjFromString(type)
   if (obj == undefined) {
-    return new SatelliteError(
+    throw new SatelliteError(
       SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
       `${code})`
     )
