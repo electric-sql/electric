@@ -429,8 +429,8 @@ defmodule Electric.Satellite.Protocol do
     relation_columns = Map.new(columns, &{&1.name, &1.type})
 
     columns =
-      Enum.map(msg.columns, fn %SatRelationColumn{name: name} ->
-        %{name: name, type: Map.fetch!(relation_columns, name)}
+      Enum.map(msg.columns, fn %SatRelationColumn{name: name} = col ->
+        %{name: name, type: Map.fetch!(relation_columns, name), nullable?: col.is_nullable}
       end)
 
     relations =

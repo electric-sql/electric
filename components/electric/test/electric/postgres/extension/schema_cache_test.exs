@@ -65,7 +65,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   ]
 
   setup do
-    # we run the sql on the db which sets up a valid environment then simulate the 
+    # we run the sql on the db which sets up a valid environment then simulate the
     # same things here to avoid having to commit the transaction
     migrations = [
       {"20230620160340", [@create_a]},
@@ -189,12 +189,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  %Column{
                    name: "aid",
                    type: :uuid,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }
@@ -219,12 +221,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  %Column{
                    name: "aid",
                    type: :uuid,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }
@@ -251,24 +255,28 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                %Column{
                  name: "aid",
                  type: :uuid,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
+                 nullable?: true,
                  type_modifier: 63,
                  part_of_identity?: true
                }
@@ -297,24 +305,28 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                %Column{
                  name: "aid",
                  type: :uuid,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
+                 nullable?: true,
                  type_modifier: 63,
                  part_of_identity?: true
                }
@@ -327,12 +339,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                %Column{
                  name: "aid",
                  type: :uuid,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                }
@@ -352,18 +366,21 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  %Column{
                    name: "bid1",
                    type: :int4,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bid2",
                    type: :int4,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bvalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }

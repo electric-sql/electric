@@ -145,9 +145,9 @@ defmodule Electric.Test.SatelliteWsClient do
   def send_test_relation(conn \\ __MODULE__) do
     relation = %SatRelation{
       columns: [
-        %SatRelationColumn{name: "id", type: "uuid"},
-        %SatRelationColumn{name: "content", type: "varchar"},
-        %SatRelationColumn{name: "content_b", type: "varchar"}
+        %SatRelationColumn{name: "id", type: "uuid", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "varchar", is_nullable: false},
+        %SatRelationColumn{name: "content_b", type: "varchar", is_nullable: true}
       ],
       relation_id: 11111,
       schema_name: "public",
@@ -162,9 +162,9 @@ defmodule Electric.Test.SatelliteWsClient do
   def send_test_relation_owned(conn \\ __MODULE__) do
     relation = %SatRelation{
       columns: [
-        %SatRelationColumn{name: "id", type: "uuid"},
-        %SatRelationColumn{name: "electric_user_id", type: "varchar"},
-        %SatRelationColumn{name: "content", type: "varchar"}
+        %SatRelationColumn{name: "id", type: "uuid", is_nullable: false},
+        %SatRelationColumn{name: "electric_user_id", type: "varchar", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "varchar", is_nullable: false}
       ],
       relation_id: 22222,
       schema_name: "public",

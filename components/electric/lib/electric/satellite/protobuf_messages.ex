@@ -5972,7 +5972,7 @@
   end,
   defmodule Electric.Satellite.V14.SatRelationColumn do
     @moduledoc false
-    defstruct name: "", type: "", primaryKey: false, __uf__: []
+    defstruct name: "", type: "", primaryKey: false, is_nullable: false, __uf__: []
 
     (
       (
@@ -5991,6 +5991,7 @@
           |> encode_name(msg)
           |> encode_type(msg)
           |> encode_primaryKey(msg)
+          |> encode_is_nullable(msg)
           |> encode_unknown_fields(msg)
         end
       )
@@ -6032,6 +6033,19 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:primaryKey, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_is_nullable(acc, msg) do
+          try do
+            if msg.is_nullable == false do
+              acc
+            else
+              [acc, " ", Protox.Encode.encode_bool(msg.is_nullable)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:is_nullable, "invalid field value"),
+                      __STACKTRACE__
           end
         end
       ]
@@ -6102,6 +6116,10 @@
                 {value, rest} = Protox.Decode.parse_bool(bytes)
                 {[primaryKey: value], rest}
 
+              {4, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_bool(bytes)
+                {[is_nullable: value], rest}
+
               {tag, wire_type, rest} ->
                 {value, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
 
@@ -6165,7 +6183,8 @@
         %{
           1 => {:name, {:scalar, ""}, :string},
           2 => {:type, {:scalar, ""}, :string},
-          3 => {:primaryKey, {:scalar, false}, :bool}
+          3 => {:primaryKey, {:scalar, false}, :bool},
+          4 => {:is_nullable, {:scalar, false}, :bool}
         }
       end
 
@@ -6175,6 +6194,7 @@
             }
       def defs_by_name() do
         %{
+          is_nullable: {4, {:scalar, false}, :bool},
           name: {1, {:scalar, ""}, :string},
           primaryKey: {3, {:scalar, false}, :bool},
           type: {2, {:scalar, ""}, :string}
@@ -6211,6 +6231,15 @@
             label: :optional,
             name: :primaryKey,
             tag: 3,
+            type: :bool
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "isNullable",
+            kind: {:scalar, false},
+            label: :optional,
+            name: :is_nullable,
+            tag: 4,
             type: :bool
           }
         ]
@@ -6305,6 +6334,46 @@
 
           []
         ),
+        (
+          def field_def(:is_nullable) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "isNullable",
+               kind: {:scalar, false},
+               label: :optional,
+               name: :is_nullable,
+               tag: 4,
+               type: :bool
+             }}
+          end
+
+          def field_def("isNullable") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "isNullable",
+               kind: {:scalar, false},
+               label: :optional,
+               name: :is_nullable,
+               tag: 4,
+               type: :bool
+             }}
+          end
+
+          def field_def("is_nullable") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "isNullable",
+               kind: {:scalar, false},
+               label: :optional,
+               name: :is_nullable,
+               tag: 4,
+               type: :bool
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -6351,6 +6420,9 @@
         {:ok, ""}
       end,
       def default(:primaryKey) do
+        {:ok, false}
+      end,
+      def default(:is_nullable) do
         {:ok, false}
       end,
       def default(_) do

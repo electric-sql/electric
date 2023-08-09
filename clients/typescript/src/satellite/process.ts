@@ -1375,6 +1375,7 @@ export class SatelliteProcess implements Satellite {
         relation.columns.push({
           name: c.name!.toString(),
           type: c.type!.toString(),
+          isNullable: Boolean(!c.notnull!.valueOf()),
           primaryKey: Boolean(c.pk!.valueOf()),
         })
       }

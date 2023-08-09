@@ -192,6 +192,7 @@ defmodule Electric.Postgres.Schema do
         %Replication.Column{
           name: col.name,
           type: col_type(col.type),
+          nullable?: col_nullable?(col),
           type_modifier: List.first(col.type.size, -1),
           # since we're using replication identity "full" all columns
           # are identity columns in replication terms
@@ -218,6 +219,12 @@ defmodule Electric.Postgres.Schema do
   defp col_type(t) when t in ["serial", "serial4"], do: :int4
   defp col_type("serial8"), do: :int8
   defp col_type(t) when is_binary(t), do: String.to_atom(t)
+
+  defp col_nullable?(col) do
+    col.constraints
+    |> Enum.find(&match?(%Proto.Constraint{constraint: {:not_null, _}}, &1))
+    |> is_nil()
+  end
 
   def relation(schema, sname, tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do

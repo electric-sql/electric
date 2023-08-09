@@ -281,8 +281,13 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp serialize_table_columns(columns, pks) do
-    Enum.map(columns, fn %{name: name, type: type} ->
-      %SatRelationColumn{name: name, type: to_string(type), primaryKey: MapSet.member?(pks, name)}
+    Enum.map(columns, fn %{name: name, type: type, nullable?: nullable?} ->
+      %SatRelationColumn{
+        name: name,
+        type: to_string(type),
+        is_nullable: nullable?,
+        primaryKey: MapSet.member?(pks, name)
+      }
     end)
   end
 

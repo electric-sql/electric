@@ -189,26 +189,31 @@ const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'title',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'contents',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'nbr',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'authorId',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -222,16 +227,19 @@ const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'bio',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'userId',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],

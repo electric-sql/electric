@@ -176,6 +176,7 @@ message SatRelationColumn {
     string name = 1;
     string type = 2;
     bool primaryKey = 3;
+    bool is_nullable = 4;
 }
 
 message SatRelation {
