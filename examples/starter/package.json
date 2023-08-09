@@ -7,7 +7,8 @@
   "type": "module",
   "platform": "node",
   "files": [
-    "dist"
+    "dist",
+    "template"
   ],
   "bin": {
     "create-electric-app": "dist/index.js"
