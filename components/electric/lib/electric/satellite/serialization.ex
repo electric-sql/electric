@@ -98,10 +98,7 @@ defmodule Electric.Satellite.Serialization do
 
           # unlikely since the extension tables have constraints that prevent this
           if version && version != v,
-            do:
-              raise(RuntimeError,
-                message: "Got DDL transaction with differing migration versions"
-              )
+            do: raise("Got DDL transaction with differing migration versions")
 
           {:ok, schema} = maybe_load_schema(origin, schema, v)
 
@@ -410,6 +407,10 @@ defmodule Electric.Satellite.Serialization do
       {col.name, decode_column_value(val, col.type)}
       | decode_values(values, bitmask, columns)
     ]
+  end
+
+  defp decode_values(_, <<1::1, _::bits>>, [%{nullable?: false} | _]) do
+    raise "protocol violation, null value for a not null column"
   end
 
   defp decode_values([_val | values], <<1::1, bitmask::bits>>, [col | columns]) do

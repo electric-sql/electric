@@ -78,7 +78,9 @@ defmodule Electric.Satellite.WsValidationsTest do
     records = [
       %{"id" => "1", "num" => "abc", "t2" => "hello"},
       %{"id" => "2", "num" => "32768", "t2" => ""},
-      %{"id" => "3", "num" => "-32769", "t2" => ""}
+      %{"id" => "3", "num" => "-32769", "t2" => ""},
+      %{"id" => "4", "t2" => nil},
+      %{"id" => nil, "t2" => "..."}
     ]
 
     Enum.each(records, fn record ->
