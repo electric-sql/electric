@@ -36,7 +36,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
         RETURNS TRIGGER
-        LANGUAGE PLPGSQL AS
+        LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             shadow_row electric.%2$I%%ROWTYPE;
@@ -99,7 +99,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
         RETURNS TRIGGER
-        LANGUAGE PLPGSQL AS
+        LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             __current_tag electric.tag;
@@ -160,7 +160,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
             RETURNS TRIGGER
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             __current_tag electric.tag;
@@ -227,7 +227,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
             RETURNS TRIGGER
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             -- This will throw an error if this setting is missing -- that would be an unexpected situation, so an error is appropriate
@@ -299,7 +299,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
             RETURNS TRIGGER
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             _shadow_row_tmp electric.%2$I%%ROWTYPE;
@@ -349,7 +349,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
             RETURNS TRIGGER
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         BEGIN
             RAISE DEBUG 'Trigger %% executed by operation %% at depth %% (tx %%)', TG_NAME, TG_OP, pg_trigger_depth(), pg_current_xact_id();
@@ -418,7 +418,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I()
             RETURNS TRIGGER
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         BEGIN
             RAISE DEBUG 'Trigger %% executed by operation %% at depth %% (tx %%)', TG_NAME, TG_OP, pg_trigger_depth(), pg_current_xact_id();
@@ -544,7 +544,7 @@ BEGIN
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION electric.%1$I(shadow_row electric.%2$I)
             RETURNS VOID
-            LANGUAGE PLPGSQL AS
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             built_row %4$s%%ROWTYPE;
