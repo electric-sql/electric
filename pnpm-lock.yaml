@@ -399,6 +399,15 @@ importers:
         specifier: ^0.24.5
         version: 0.24.5
 
+  starter:
+    devDependencies:
+      '@tsmodule/tsmodule':
+        specifier: '42'
+        version: 42.6.0
+      '@types/node':
+        specifier: ^18.8.4
+        version: 18.16.16
+
 packages:
 
   /@ampproject/remapping@2.2.1:
@@ -3595,7 +3604,7 @@ packages:
   /@types/react-dom@18.2.4:
     resolution: {integrity: sha512-G2mHoTMTL4yoydITgOGwWdWMVd8sNgyEP85xVmMKAPUBwQWm9wBPQUmvbeF4V3WBY1P7mmL4BkjQ0SqUpf1snw==}
     dependencies:
-      '@types/react': 17.0.20
+      '@types/react': 18.2.7
     dev: true
 
   /@types/react-native-sqlite-storage@6.0.0:
@@ -3607,14 +3616,6 @@ packages:
     deprecated: This is a stub types definition. react-native-uuid provides its own type definitions, so you do not need this installed.
     dependencies:
       react-native-uuid: 2.0.1
-    dev: true
-
-  /@types/react@17.0.20:
-    resolution: {integrity: sha512-wWZrPlihslrPpcKyCSlmIlruakxr57/buQN1RjlIeaaTWDLtJkTtRW429MoQJergvVKc4IWBpRhWw7YNh/7GVA==}
-    dependencies:
-      '@types/prop-types': 15.7.5
-      '@types/scheduler': 0.16.3
-      csstype: 3.1.2
     dev: true
 
   /@types/react@18.2.7:
