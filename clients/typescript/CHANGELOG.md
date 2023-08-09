@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.5.0-next.5
+
+### Patch Changes
+
+- d359cae: Made argument of liveMany optional.
+
 ## 0.5.0-next.4
 
 ### Patch Changes
