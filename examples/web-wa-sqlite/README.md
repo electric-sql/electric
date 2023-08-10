@@ -260,4 +260,4 @@ You now successfully migrated your app, simply build it again and run the app ðŸ
 
 ## More information
 
-See the [documentation](https://electric-sql.com/docs) and [community guidelines](https://github.com/electric-sql/meta). If you need help [let us know on Discord](https://discord.gg/B7kHGwDcbj).
+See the [documentation](https://electric-sql.com/docs) and [community guidelines](https://github.com/electric-sql/meta). If you need help [let us know on Discord](https://discord.electric-sql.com).
