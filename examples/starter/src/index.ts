@@ -85,4 +85,6 @@ proc.on('close', (code) => {
     console.error(Buffer.concat(errors).toString())
     console.log(`⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
   }
+  
+  console.log(`Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the readme.`)
 })
