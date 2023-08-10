@@ -38,6 +38,7 @@ const main = async () => {
       await apply(file)
     }
   }
+  console.log('⚡️ Database is migrated.')
 }
 
 try {
