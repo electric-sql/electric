@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-warnings
 
 // Usage: npx create-electric-app my-app
 
@@ -69,13 +69,20 @@ if (name) {
 }
 
 // Run `yarn install` in the project directory to install the dependencies
-const proc = spawn('yarn install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
+console.log('Installing dependencies (may take some time) ...')
+const proc = spawn('yarn install', [], { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true })
+
+let errors: Uint8Array[] = []
+proc.stderr.on('data', (data) => {
+  errors = errors.concat(data)
+})
 
 proc.on('close', (code) => {
   if (code === 0) {
-    console.log(`Success! Your ElectricSQL app is ready at \`./${projectName}\``)
+    console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
   }
   else {
-    console.log(`Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
+    console.error(Buffer.concat(errors).toString())
+    console.log(`⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
   }
 })
