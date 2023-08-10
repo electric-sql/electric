@@ -6,7 +6,7 @@
 
 [shell pg_1]
     !BEGIN;
-    !ALTER TABLE entries ADD COLUMN new_column VARCHAR(64);
+    !ALTER TABLE entries ADD COLUMN new_column VARCHAR;
     !COMMIT;
     ?$psql
     # Verify column structure of the shadow table:
