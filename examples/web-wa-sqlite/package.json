@@ -1,5 +1,5 @@
 {
-  "name": "web-wa-sqlite",
+  "name": "@examples/web-wa-sqlite",
   "version": "0.1.0",
   "main": "builder.js",
   "scripts": {
