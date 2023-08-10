@@ -29,6 +29,7 @@ BEGIN
 
         CALL <%= schema() %>.__validate_table_column_types(_quoted_name);
         CALL <%= schema() %>.__validate_table_column_defaults(_quoted_name);
+        CALL <%= schema() %>.__validate_table_constraints(_quoted_name);
 
         -- insert the required ddl into the migrations table
         SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _create_sql;

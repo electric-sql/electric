@@ -1,0 +1,30 @@
+-- This procedure checks whether the table that's being electrified
+-- has a primary key and any other contraints.
+-- If there are any CHECK or UNIQUE constraints, electrification is aborted.
+
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_constraints(table_name text)
+SECURITY DEFINER AS $function$
+DECLARE
+    _con_type char;
+    _con_columns text[];
+    _invalid_cols text[];
+BEGIN
+    FOR _con_type, _con_columns IN
+        SELECT contype, (SELECT array_agg(format('%I', attname) ORDER BY attname)
+                         FROM pg_attribute
+                         WHERE attnum = ANY(pg_constraint.conkey)
+                               AND attrelid = pg_constraint.conrelid)
+            FROM pg_constraint
+            WHERE conrelid = table_name::regclass
+    LOOP
+        IF _con_type NOT IN ('p', 'f') THEN
+            _invalid_cols = array_cat(_invalid_cols, _con_columns);
+        END IF;
+    END LOOP;
+
+    IF _invalid_cols IS NOT NULL THEN
+        RAISE EXCEPTION E'Cannot electrify % because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:\n  %',
+                        table_name, array_to_string(_invalid_cols, E'\n  ');
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL;

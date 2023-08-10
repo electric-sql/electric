@@ -1,4 +1,4 @@
--- This function validates each column of the table that's being electrified
+-- This procedure validates each column of the table that's being electrified
 -- and aborts electrification if any column has DEFAULT expression.
 
 CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_defaults(table_name text)
@@ -20,7 +20,7 @@ BEGIN
     END LOOP;
 
     IF _invalid_cols IS NOT NULL THEN
-        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have DEFAULT expression which is not currently supported by Electric:\n  %',
+        RAISE EXCEPTION E'Cannot electrify % because some of its columns have DEFAULT expressions which are not currently supported by Electric:\n  %',
                         table_name, array_to_string(_invalid_cols, E'\n  ');
     END IF;
 END;

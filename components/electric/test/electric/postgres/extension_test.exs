@@ -473,7 +473,7 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
+               Cannot electrify public.t1 because some of its columns have types not supported by Electric:
                  c1 character(1)
                  c2 character(11)
                  "C3" character varying(11)
@@ -516,12 +516,40 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify "public.t1" because some of its columns have DEFAULT expression which is not currently supported by Electric:
+               Cannot electrify public.t1 because some of its columns have DEFAULT expressions which are not currently supported by Electric:
                  t1
                  "Ts"
                """
                |> String.trim()
     end)
+
+    test_tx "table electrification rejects columns with CHECK, UNIQUE or EXCLUDE constraints",
+            fn conn ->
+              assert [
+                       {:ok, [], []},
+                       {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+                     ] =
+                       :epgsql.squery(conn, """
+                       CREATE TABLE public.t1 (
+                         id UUID PRIMARY KEY,
+                         t1 TEXT CHECK (t1 != ''),
+                         "Ts" INT CHECK ("Ts" > 3),
+                         uu INT UNIQUE,
+                         "Email" TEXT,
+                         EXCLUDE USING btree (lower("Email") WITH =)
+                       );
+                       CALL electric.electrify('public.t1');
+                       """)
+
+              assert error_msg ==
+                       """
+                       Cannot electrify public.t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:
+                         "Ts"
+                         t1
+                         uu
+                       """
+                       |> String.trim()
+            end
   end
 
   defp migration_history(conn, after_version \\ nil) do

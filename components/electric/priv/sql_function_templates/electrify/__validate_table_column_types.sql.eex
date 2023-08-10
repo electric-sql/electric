@@ -1,4 +1,4 @@
--- This function validates the type of each column of the table that's being electrified,
+-- This procedure validates the type of each column of the table that's being electrified
 -- to check if the type is supported by Electric.
 
 <%
@@ -35,7 +35,7 @@ BEGIN
     END LOOP;
 
     IF _invalid_cols IS NOT NULL THEN
-        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have types not supported by Electric:\n  %',
+        RAISE EXCEPTION E'Cannot electrify % because some of its columns have types not supported by Electric:\n  %',
                         table_name, array_to_string(_invalid_cols, E'\n  ');
     END IF;
 END;
