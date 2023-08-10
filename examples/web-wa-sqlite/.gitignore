@@ -1,2 +1,4 @@
 dist
 node_modules
+public/wa-sqlite-async.wasm
+src/generated
