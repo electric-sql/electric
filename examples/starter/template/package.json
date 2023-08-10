@@ -7,6 +7,7 @@
     "backend:stop": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
     "electric:start": "node ./backend/startElectric.js",
     "db:migrate": "node ./db/migrate.js",
+    "db:connect": "node ./db/connect.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
