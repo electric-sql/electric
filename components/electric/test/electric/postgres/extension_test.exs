@@ -445,16 +445,20 @@ defmodule Electric.Postgres.ExtensionTest do
     test_tx "table electrification rejects invalidate column types", fn conn ->
       assert [
                {:ok, [], []},
-               {
-                 :error,
-                 {:error, :error, _, :raise_exception,
-                  "Column \"content\" has type \"varchar\" which is not supported by Electric", _}
-               }
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
              ] =
                :epgsql.squery(conn, """
-               CREATE TABLE public.t1 (id UUID PRIMARY KEY, content VARCHAR NOT NULL);
+               CREATE TABLE public.t1 (id UUID PRIMARY KEY, content VARCHAR NOT NULL, created_at TIMESTAMP);
                CALL electric.electrify('public.t1');
                """)
+
+      assert error_msg ==
+               """
+               Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
+                 "content" varchar
+                 "created_at" timestamp
+               """
+               |> String.trim()
     end
 
     test_tx "electrified?/2", fn conn ->

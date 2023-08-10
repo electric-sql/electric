@@ -96,6 +96,7 @@ RETURNS VOID AS $function$
 DECLARE
     _col_name text;
     _col_type text;
+    _invalid_cols text[];
 BEGIN
     FOR _col_name, _col_type IN
         SELECT attname, typname
@@ -105,9 +106,14 @@ BEGIN
       ORDER BY attnum
     LOOP
         IF _col_type NOT IN (<%= valid_column_types %>) THEN
-            RAISE EXCEPTION 'Column "%" has type "%" which is not supported by Electric', _col_name, _col_type;
+            _invalid_cols = array_append(_invalid_cols, format('"%s" %s', _col_name, _col_type));
         END IF;
     END LOOP;
+
+    IF _invalid_cols IS NOT NULL THEN
+        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have types not supported by Electric:\n  %',
+                        table_name, array_to_string(_invalid_cols, E'\n  ');
+    END IF;
 END;
 $function$ LANGUAGE PLPGSQL;
 
