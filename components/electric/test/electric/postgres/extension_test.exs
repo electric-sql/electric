@@ -461,13 +461,26 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
+               Cannot electrify "public"."t1" because some of its columns have types not supported by Electric:
                  "c1" character(1)
                  "c2" character(11)
                  "c3" character varying(11)
                  "created_at" timestamp without time zone
                """
                |> String.trim()
+    end
+
+    test_tx "table electrification rejects tables with missing primary key", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (id TEXT, val INTEGER);
+               CALL electric.electrify('public.t1');
+               """)
+
+      assert error_msg == "Cannot electrify "public"."t1" because it is missing a primary key."
     end
 
     test_tx "electrified?/2", fn conn ->

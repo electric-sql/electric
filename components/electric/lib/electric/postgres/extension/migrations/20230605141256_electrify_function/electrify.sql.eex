@@ -124,6 +124,15 @@ $function$ LANGUAGE PLPGSQL;
 
 -------------------------------------------------
 
+CREATE OR REPLACE FUNCTION <%= schema %>.__validate_table_constraints(table_name text)
+RETURNS VOID AS $function$
+BEGIN
+    -- Fetch info about constraints from pg_constraint, check that we can support all of them.
+END;
+$function$ LANGUAGE PLPGSQL;
+
+-------------------------------------------------
+
 CREATE OR REPLACE PROCEDURE <%= schema %>.electrify(
     name1 text,
     name2 text DEFAULT NULL
@@ -151,6 +160,8 @@ BEGIN
     END IF;
 
     PERFORM <%= schema %>.__validate_table_column_types(_quoted_name);
+
+    PERFORM <%= schema %>.__validate_table_constraints(_quoted_name)
 
     EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
 
