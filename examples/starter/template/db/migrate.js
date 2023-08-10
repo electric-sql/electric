@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const shell = require('shelljs')
+shell.config.silent = true // don't log output of child processes
 
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')
@@ -16,15 +17,12 @@ const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appNam
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
 
-if (!process.env.DATABASE_URL) {
-  console.info(`Connecting to Postgres via host port ${pgPort}`)
-}
-
+console.info(`Connecting to Postgres..`)
 const db = createPool(DATABASE_URL)
 
 const apply = async (fileName) => {
   const filePath = path.join(MIGRATIONS_DIR, fileName)
-  console.log('apply', filePath)
+  console.log('Applying', filePath)
 
   await db.tx(
     (tx) => tx.query(
