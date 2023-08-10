@@ -422,6 +422,41 @@ defmodule Electric.Postgres.ExtensionTest do
                )
     end
 
+    test_tx "table electrification successfully validates column types", fn conn ->
+      assert [{:ok, [], []}, {:ok, [], []}] ==
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (
+                 id UUID PRIMARY KEY,
+                 content TEXT NOT NULL,
+                 num2a INT2,
+                 num2b SMALLINT,
+                 num4a INT4,
+                 num4b INT,
+                 num4c INTEGER,
+                 num8a INT8,
+                 num8b BIGINT,
+                 real8a FLOAT8,
+                 real8b DOUBLE PRECISION
+               );
+               CALL electric.electrify('public.t1');
+               """)
+    end
+
+    test_tx "table electrification rejects invalidate column types", fn conn ->
+      assert [
+               {:ok, [], []},
+               {
+                 :error,
+                 {:error, :error, _, :raise_exception,
+                  "Column \"content\" has type \"varchar\" which is not supported by Electric", _}
+               }
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (id UUID PRIMARY KEY, content VARCHAR NOT NULL);
+               CALL electric.electrify('public.t1');
+               """)
+    end
+
     test_tx "electrified?/2", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"

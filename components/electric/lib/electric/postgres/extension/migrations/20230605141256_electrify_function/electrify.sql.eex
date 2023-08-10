@@ -91,6 +91,28 @@ $function$ LANGUAGE PLPGSQL STABLE;
 
 -------------------------------------------------
 
+CREATE OR REPLACE FUNCTION <%= schema %>.__validate_table_column_types(table_name text)
+RETURNS VOID AS $function$
+DECLARE
+    _col_name text;
+    _col_type text;
+BEGIN
+    FOR _col_name, _col_type IN
+        SELECT attname, typname
+          FROM pg_attribute
+          JOIN pg_type on atttypid = pg_type.oid
+         WHERE attrelid = table_name::regclass AND attnum > 0 AND NOT attisdropped
+      ORDER BY attnum
+    LOOP
+        IF _col_type NOT IN (<%= valid_column_types %>) THEN
+            RAISE EXCEPTION 'Column "%" has type "%" which is not supported by Electric', _col_name, _col_type;
+        END IF;
+    END LOOP;
+END;
+$function$ LANGUAGE PLPGSQL;
+
+-------------------------------------------------
+
 CREATE OR REPLACE PROCEDURE <%= schema %>.electrify(
     name1 text,
     name2 text DEFAULT NULL
@@ -116,6 +138,8 @@ BEGIN
     IF NOT EXISTS (SELECT pc.oid FROM pg_class pc WHERE pc.oid = _oid AND pc.relkind = 'r') THEN
         RAISE EXCEPTION '% is not an ordinary table', _quoted_name;
     END IF;
+
+    PERFORM <%= schema %>.__validate_table_column_types(_quoted_name);
 
     EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
 
