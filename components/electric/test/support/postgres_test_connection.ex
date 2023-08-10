@@ -160,8 +160,8 @@ defmodule Electric.Postgres.TestConnection do
       :epgsql.squery(conn, """
       CREATE TABLE public.my_entries (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        content VARCHAR(64) NOT NULL,
-        content_b VARCHAR(64)
+        content VARCHAR NOT NULL,
+        content_b TEXT
       );
 
       """)
