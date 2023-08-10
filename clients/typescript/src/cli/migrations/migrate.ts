@@ -459,7 +459,7 @@ async function executeShellCommand(
   return new Promise((resolve, reject) => {
     const proc = exec(command, { cwd: appRoot }, (error, _stdout, _stderr) => {
       if (error) {
-        console.error(error);
+        console.error(error)
       }
     })
 
