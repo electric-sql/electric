@@ -65,7 +65,7 @@ import {
 } from '../util/common'
 
 import Log from 'loglevel'
-import { generateOplogTriggers } from '../migrators/triggers'
+import { generateTableTriggers } from '../migrators/triggers'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
@@ -1502,5 +1502,5 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
     }),
   }
   const fullTableName = table.namespace + '.' + table.tableName
-  return generateOplogTriggers(fullTableName, table)
+  return generateTableTriggers(fullTableName, table)
 }
