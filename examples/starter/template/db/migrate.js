@@ -1,6 +1,5 @@
 const fs = require('fs')
 const path = require('path')
-const parseArgs = require('minimist')
 const shell = require('shelljs')
 
 const createPool = require('@databases/pg')
@@ -16,9 +15,6 @@ const appName = fetchAppName() ?? 'electric'
 const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
-
-const argv = parseArgs(process.argv.slice(2))
-const targetFile = argv.file
 
 if (!process.env.DATABASE_URL) {
   console.info(`Connecting to Postgres via host port ${pgPort}`)
@@ -38,13 +34,10 @@ const apply = async (fileName) => {
 }
 
 const main = async () => {
-  if (targetFile !== undefined) {
-    await apply(targetFile)
-  }
-  else {
-    const fileNames = fs.readdirSync(MIGRATIONS_DIR)
-    for (const file of fileNames) {
-      await apply(file)  
+  const fileNames = fs.readdirSync(MIGRATIONS_DIR)
+  for (const file of fileNames) {
+    if (path.extname(file) === '.sql') {
+      await apply(file)
     }
   }
 }
