@@ -22,11 +22,12 @@ defmodule Electric.Satellite.Serialization do
   @spec supported_pg_types :: [atom]
   def supported_pg_types do
     ~w[
-      uuid
-      text
       bytea
       int2 int4 int8
       float8
+      text
+      uuid
+      varchar
     ]a
   end
 
@@ -428,7 +429,7 @@ defmodule Electric.Satellite.Serialization do
   """
   @spec decode_column_value(binary, atom) :: binary
 
-  def decode_column_value(val, type) when type in [:text, :bytea] do
+  def decode_column_value(val, type) when type in [:bytea, :text, :varchar] do
     val
   end
 

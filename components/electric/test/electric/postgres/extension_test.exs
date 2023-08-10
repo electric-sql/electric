@@ -428,6 +428,7 @@ defmodule Electric.Postgres.ExtensionTest do
                CREATE TABLE public.t1 (
                  id UUID PRIMARY KEY,
                  content TEXT NOT NULL,
+                 words VARCHAR,
                  num2a INT2,
                  num2b SMALLINT,
                  num4a INT4,
@@ -448,15 +449,23 @@ defmodule Electric.Postgres.ExtensionTest do
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
              ] =
                :epgsql.squery(conn, """
-               CREATE TABLE public.t1 (id UUID PRIMARY KEY, content VARCHAR NOT NULL, created_at TIMESTAMP);
+               CREATE TABLE public.t1 (
+                 id UUID PRIMARY KEY,
+                 c1 CHARACTER,
+                 c2 CHARACTER(11),
+                 c3 VARCHAR(11),
+                 created_at TIMESTAMP
+               );
                CALL electric.electrify('public.t1');
                """)
 
       assert error_msg ==
                """
                Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
-                 "content" varchar
-                 "created_at" timestamp
+                 "c1" character(1)
+                 "c2" character(11)
+                 "c3" character varying(11)
+                 "created_at" timestamp without time zone
                """
                |> String.trim()
     end
