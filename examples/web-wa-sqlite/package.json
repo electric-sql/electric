@@ -2,6 +2,8 @@
   "name": "@examples/web-wa-sqlite",
   "version": "0.1.0",
   "main": "builder.js",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
   "scripts": {
     "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
     "backend:stop": "docker compose -f backend/compose/docker-compose.yaml down --volumes",

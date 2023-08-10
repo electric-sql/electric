@@ -81,7 +81,7 @@ const ExampleComponent = () => {
     await db.items.deleteMany()
   }
 
-  const items: Items[] = results !== undefined ? results : []
+  const items: Items[] = results ?? []
 
   return (
     <div>

@@ -53,17 +53,13 @@ Generate the TypeScript client from the current database schema:
 yarn client:generate
 ```
 
-This produces a type-checked model of your schema that can be used to build the app.
-
-
-
 You're now ready to start the app:
 
 ```sh
 yarn start
 ```
 
-That's it! You're running a local-first app that synchs changed with other connected devices through Electric sync service.
+That's it! You're running a local-first app that syncs changes with other connected devices through the Electric sync service.
 
 
 
@@ -93,4 +89,6 @@ This will trigger the client generator and automatically update the data model i
 
 ## More information
 
-See the [documentation](https://electric-sql.com/docs) and [community guidelines](https://github.com/electric-sql/meta). If you need help [let us know on Discord](https://discord.electric-sql.com).
+- [Documentation](https://electric-sql.com/docs)
+- [Quickstart](https://electric-sql.com/docs/quickstart)
+- [Usage guide](https://electric-sql.com/docs/usage)
