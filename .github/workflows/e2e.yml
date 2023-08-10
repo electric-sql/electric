@@ -7,6 +7,7 @@ on:
     paths-ignore:
       # Root files
       - '*'
+      - '!pnpm-lock.yaml'
       # CI files not related to GH actions
       - '.buildkite/**'
       - '**/README.md'
