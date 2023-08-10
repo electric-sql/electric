@@ -454,7 +454,7 @@ defmodule Electric.Postgres.ExtensionTest do
                  c1 CHARACTER,
                  c2 CHARACTER(11),
                  c3 VARCHAR(11),
-                 created_at TIMESTAMP
+                 created_at TIMETZ
                );
                CALL electric.electrify('public.t1');
                """)
@@ -466,7 +466,7 @@ defmodule Electric.Postgres.ExtensionTest do
                  "c1" character(1)
                  "c2" character(11)
                  "c3" character varying(11)
-                 "created_at" timestamp without time zone
+                 "created_at" time with time zone
                """
                |> String.trim()
     end

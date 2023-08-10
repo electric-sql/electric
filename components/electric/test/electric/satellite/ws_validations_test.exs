@@ -10,7 +10,6 @@ defmodule Electric.Satellite.WsValidationsTest do
   alias Electric.Satellite.Auth
 
   alias Electric.Satellite.Serialization
-  alias Electric.Replication.Changes.{Transaction, NewRecord}
 
   @table_name "foo"
   @receive_timeout 500
@@ -53,7 +52,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       tx_op_log = serialize_trans(%{"id" => "3", "num" => "-1", "t1" => "", "t2" => "..."})
       MockClient.send_data(conn, tx_op_log)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
   end
 
@@ -110,7 +109,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
 
     invalid_records = [
@@ -162,7 +161,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
 
     invalid_records = [
@@ -207,7 +206,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
 
     invalid_records = [
@@ -216,6 +215,51 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "two"},
       %{"id" => "00000000000000000000000000000000"},
       %{"id" => "abcdefgh-ijkl-mnop-qrst-uvwxyz012345"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
+  test "validates timestamp values", ctx do
+    vsn = "2023072505"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "public.foo",
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t1 timestamp, t2 timestamptz)"
+      )
+
+    valid_records = [
+      %{"id" => "1", "t1" => "2023-08-07 21:28:35.111", "t2" => "2023-08-07 21:28:35.421Z"},
+      %{"id" => "2", "t2" => "2023-08-07 00:00:00"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "t1" => "now"},
+      %{"id" => "11", "t1" => "12345678901234567890"},
+      %{"id" => "12", "t1" => "20230832T000000"},
+      %{"id" => "13", "t1" => "2023-08-07 21:28:35+03:00"},
+      %{"id" => "13", "t2" => "2023-08-07 21:28:35+03:00"},
+      %{"id" => "14", "t2" => ""},
+      %{"id" => "15", "t2" => "+"},
+      %{"id" => "16", "t2" => "2023-08-07 24:28:35"}
     ]
 
     Enum.each(invalid_records, fn record ->
@@ -256,12 +300,19 @@ defmodule Electric.Satellite.WsValidationsTest do
   end
 
   defp serialize_trans(record) do
-    {[op_log], _relations, _relation_mappings} =
-      %Transaction{
-        changes: [%NewRecord{relation: {"public", @table_name}, record: record, tags: []}],
-        commit_timestamp: DateTime.utc_now()
-      }
-      |> Serialization.serialize_trans(1, %{})
+    %{oid: relation_id, columns: columns} =
+      Electric.Postgres.Extension.SchemaCache.Global.relation!({"public", @table_name})
+
+    row_data = Serialization.map_to_row(record, columns, skip_value_encoding?: true)
+    commit_timestamp = DateTime.to_unix(DateTime.utc_now(), :millisecond)
+
+    op_log = %SatOpLog{
+      ops: [
+        %SatTransOp{op: {:begin, %SatOpBegin{lsn: "1", commit_timestamp: commit_timestamp}}},
+        %SatTransOp{op: {:insert, %SatOpInsert{relation_id: relation_id, row_data: row_data}}},
+        %SatTransOp{op: {:commit, %SatOpCommit{}}}
+      ]
+    }
 
     op_log
   end

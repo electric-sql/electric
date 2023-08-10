@@ -25,6 +25,7 @@ defmodule Electric.Satellite.Serialization do
       int2 int4 int8
       float8
       text
+      timestamp timestamptz
       varchar
     ]a
   end
@@ -220,15 +221,22 @@ defmodule Electric.Satellite.Serialization do
     %SatTransOp{op: {:delete, op_delete}}
   end
 
-  @spec map_to_row(%{String.t() => binary()} | nil, [map]) :: %SatOpRow{}
-  def map_to_row(nil, _), do: nil
+  @spec map_to_row(%{String.t() => binary()} | nil, [map], Keyword.t()) :: %SatOpRow{}
+  def map_to_row(data, cols, opts \\ [])
 
-  def map_to_row(data, rel_cols) when is_list(rel_cols) and is_map(data) do
+  def map_to_row(data, cols, opts) when is_list(cols) and is_map(data) do
     bitmask = []
     values = []
 
+    encode_value_fn =
+      if opts[:skip_value_encoding?] do
+        fn val, _type -> val end
+      else
+        &encode_column_value/2
+      end
+
     {num_columns, bitmask, values} =
-      Enum.reduce(rel_cols, {0, bitmask, values}, fn col, {num, bitmask0, values0} ->
+      Enum.reduce(cols, {0, bitmask, values}, fn col, {num, bitmask0, values0} ->
         # FIXME: This is inefficient, data should be stored in order, so that we
         # do not have to do lookup here, but filter columns based on the schema instead
         case Map.get(data, col.name) do
@@ -236,7 +244,7 @@ defmodule Electric.Satellite.Serialization do
             {num + 1, [1 | bitmask0], [<<>> | values0]}
 
           value when is_binary(value) ->
-            {num + 1, [0 | bitmask0], [encode_column_value(value, col.type) | values0]}
+            {num + 1, [0 | bitmask0], [encode_value_fn.(value, col.type) | values0]}
         end
       end)
 
@@ -479,6 +487,21 @@ defmodule Electric.Satellite.Serialization do
 
   def decode_column_value(val, :float8) do
     _ = String.to_float(val)
+    val
+  end
+
+  def decode_column_value(val, :timestamp) do
+    # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
+    # because values of type `timestamp` must not have an offset.
+    {:error, :missing_offset} = DateTime.from_iso8601(val)
+    _ = NaiveDateTime.from_iso8601!(val)
+    val
+  end
+
+  def decode_column_value(val, :timestamptz) do
+    # The offset of datetimes coming over the Satellite protocol MUST be 0.
+    true = String.ends_with?(val, "Z")
+    {:ok, _, 0} = DateTime.from_iso8601(val)
     val
   end
 
