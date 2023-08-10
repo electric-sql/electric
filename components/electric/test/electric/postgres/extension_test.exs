@@ -443,7 +443,7 @@ defmodule Electric.Postgres.ExtensionTest do
                """)
     end
 
-    test_tx "table electrification rejects invalidate column types", fn conn ->
+    test_tx "table electrification rejects invalid column types", fn conn ->
       assert [
                {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
