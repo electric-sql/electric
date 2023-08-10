@@ -27,8 +27,6 @@ jobs:
     defaults:
       run:
         working-directory: e2e
-    permissions:
-      packages: write
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
     steps:
