@@ -1,0 +1,8 @@
+label: Data modelling
+customProps:
+  description: >-
+    How to expose and manage your database schema.
+  icon: /img/icons/postgres.svg
+link:
+  type: doc
+  id: usage/data-modelling/index

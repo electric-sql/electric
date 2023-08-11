@@ -1,0 +1,8 @@
+customProps:
+  description: >-
+    Adapt the SQLite database driver for your target environment.
+  hide_overview: true
+  icon: /img/icons/nodejs.png
+link:
+  type: doc
+  id: integrations/drivers/index

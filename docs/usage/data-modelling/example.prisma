@@ -1,0 +1,79 @@
+datasource db {
+  provider = "postgresql"
+  url = env("PRISMA_DB_URL")
+}
+
+model User {
+  @@map("users")
+
+  username String @id
+
+  comments Comment[]
+  memberships Membership[]
+  projects Project[]
+
+  inserted_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Project {
+  @@map("projects")
+
+  id String @id @default(uuid())
+  name String
+
+  owner User @relation(fields: [owner_id], references: [username], onDelete: Cascade)
+  owner_id String
+
+  issues Issue[]
+  memberships Membership[]
+
+  inserted_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Membership {
+  @@map("memberships")
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  project_id String
+
+  user User @relation(fields: [user_id], references: [username], onDelete: Cascade)
+  user_id String
+
+  inserted_at DateTime @default(now())
+
+  @@id([project_id, user_id])
+}
+
+model Issue {
+  @@map("issues")
+
+  id String @id @default(uuid())
+  title String
+  description String?
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  project_id String
+
+  comments Comment[]
+
+  inserted_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Comment {
+  @@map("comments")
+
+  id String @id @default(uuid())
+  text String
+
+  author User @relation(fields: [author_id], references: [username], onDelete: Cascade)
+  author_id String
+
+  issue Issue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  issue_id String
+
+  inserted_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}

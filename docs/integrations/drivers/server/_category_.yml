@@ -1,0 +1,8 @@
+label: Server
+customProps:
+  description: >-
+    SQLite driver adapters for the server.
+  hide_overview: true
+  icon: /img/icons/nodejs.png
+position: 30
+collapsed: false
