@@ -14,6 +14,8 @@ defmodule Electric.Satellite.Serialization do
   import Electric.Postgres.Extension,
     only: [is_migration_relation: 1, is_ddl_relation: 1, is_extension_relation: 1]
 
+  import Bitwise
+
   require Logger
 
   @type relation_mapping() ::
@@ -225,9 +227,6 @@ defmodule Electric.Satellite.Serialization do
   def map_to_row(data, cols, opts \\ [])
 
   def map_to_row(data, cols, opts) when is_list(cols) and is_map(data) do
-    bitmask = []
-    values = []
-
     encode_value_fn =
       if opts[:skip_value_encoding?] do
         fn val, _type -> val end
@@ -235,28 +234,20 @@ defmodule Electric.Satellite.Serialization do
         &encode_column_value/2
       end
 
-    {num_columns, bitmask, values} =
-      Enum.reduce(cols, {0, bitmask, values}, fn col, {num, bitmask0, values0} ->
+    {values, {bitmask, num_cols}} =
+      Enum.map_reduce(cols, {0, 0}, fn col, {bitmask, num_cols} ->
         # FIXME: This is inefficient, data should be stored in order, so that we
         # do not have to do lookup here, but filter columns based on the schema instead
         case Map.get(data, col.name) do
           nil ->
-            {num + 1, [1 | bitmask0], [<<>> | values0]}
+            {"", {bor(bitmask <<< 1, 1), num_cols + 1}}
 
-          value when is_binary(value) ->
-            {num + 1, [0 | bitmask0], [encode_value_fn.(value, col.type) | values0]}
+          val when is_binary(val) ->
+            {encode_value_fn.(val, col.type), {bitmask <<< 1, num_cols + 1}}
         end
       end)
 
-    bitmask =
-      case rem(num_columns, 8) do
-        0 -> bitmask
-        n -> :lists.duplicate(8 - n, 0) ++ bitmask
-      end
-
-    bitmask = for i <- Enum.reverse(bitmask), do: <<i::1>>, into: <<>>
-
-    %SatOpRow{nulls_bitmask: bitmask, values: Enum.reverse(values)}
+    %SatOpRow{nulls_bitmask: encode_nulls_bitmask(bitmask, num_cols), values: values}
   end
 
   # Values of type `timestamp` are coming over Postgres' logical replication stream in the following form:
@@ -281,6 +272,18 @@ defmodule Electric.Satellite.Serialization do
 
   # No-op encoding for the rest of supported types
   defp encode_column_value(val, _type), do: val
+
+  defp encode_nulls_bitmask(bitmask, num_cols) do
+    case rem(num_cols, 8) do
+      0 ->
+        <<bitmask::size(num_cols)>>
+
+      n ->
+        extra_bits = 8 - n
+        bitmask = bitmask <<< extra_bits
+        <<bitmask::size(num_cols + extra_bits)>>
+    end
+  end
 
   def fetch_relation_id(relation, known_relations) do
     case Map.get(known_relations, relation) do
