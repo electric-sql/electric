@@ -152,13 +152,16 @@ defmodule Electric.Satellite.WsValidationsTest do
         ctx.db,
         vsn,
         "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f4 REAL, f8 DOUBLE PRECISION)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f8 DOUBLE PRECISION)"
       )
 
     valid_records = [
-      %{"id" => "1", "f4" => "-0.0", "f8" => "+0.0"},
-      %{"id" => "2", "f4" => "-1.0", "f8" => "+0.1"},
-      %{"id" => "3", "f4" => "-1.0e10", "f8" => "7.3e-4"}
+      %{"id" => "1", "f8" => "+0.0"},
+      %{"id" => "2", "f8" => "+0.1"},
+      %{"id" => "3", "f8" => "7.3e-4"},
+      %{"id" => "4", "f8" => "-0.0"},
+      %{"id" => "5", "f8" => "-1.0"},
+      %{"id" => "6", "f8" => "-1.0e10"}
     ]
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -174,11 +177,11 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
 
     invalid_records = [
-      %{"id" => "10", "f4" => ""},
-      %{"id" => "11", "f4" => "five"},
-      %{"id" => "12", "f4" => "."},
-      %{"id" => "13", "f4" => "-"},
-      %{"id" => "14", "f4" => "+"},
+      %{"id" => "10", "f8" => ""},
+      %{"id" => "11", "f8" => "five"},
+      %{"id" => "12", "f8" => "."},
+      %{"id" => "13", "f8" => "-"},
+      %{"id" => "14", "f8" => "+"},
       %{"id" => "15", "f8" => "0"},
       %{"id" => "16", "f8" => "1"},
       %{"id" => "17", "f8" => "20_30"},

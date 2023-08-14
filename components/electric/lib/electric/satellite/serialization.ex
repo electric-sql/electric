@@ -392,43 +392,60 @@ defmodule Electric.Satellite.Serialization do
     raise "protocol violation, empty row"
   end
 
-  defp decode_record(%SatOpRow{} = row, columns, _) do
-    column_types = Enum.map(columns, &String.to_existing_atom(&1.type))
-    column_names = Enum.map(columns, & &1.name)
-    row |> validate_values!(column_types) |> row_to_map(column_names)
-  end
-
-  defp validate_values!(%SatOpRow{} = row, column_types) do
-    row
-    |> values_from_sat_op_row()
-    |> Enum.zip(column_types)
-    |> Enum.each(fn {val, type} ->
-      if val, do: Electric.Satellite.Validation.assert_type!(val, type)
-    end)
-
-    row
-  end
-
-  defp values_from_sat_op_row(%SatOpRow{nulls_bitmask: bitmask, values: values}) do
-    {values, _bitmask} =
-      Enum.map_reduce(values, bitmask, fn
-        _val, <<1::1, bitmask::bitstring>> -> {nil, bitmask}
-        val, <<0::1, bitmask::bitstring>> when is_binary(val) -> {val, bitmask}
-      end)
-
+  defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, _) do
     values
-  end
-
-  def row_to_map(%SatOpRow{nulls_bitmask: bitmask, values: values}, column_names) do
-    Enum.zip(column_names, apply_nulls_bitmask(values, bitmask))
+    |> apply_nulls_bitmask(bitmask)
+    |> Enum.zip(columns)
+    |> Enum.map(fn
+      {nil, col} -> {col.name, nil}
+      {val, col} -> {col.name, decode_column_value(val, String.to_existing_atom(col.type))}
+    end)
     |> Map.new()
   end
 
-  defp apply_nulls_bitmask([v | vals], <<0::1, bitmask::bitstring>>),
-    do: [v | apply_nulls_bitmask(vals, bitmask)]
+  defp apply_nulls_bitmask([val | values], <<0::1, bitmask::bitstring>>),
+    do: [val | apply_nulls_bitmask(values, bitmask)]
 
-  defp apply_nulls_bitmask([_ | vals], <<1::1, bitmask::bitstring>>),
-    do: [nil | apply_nulls_bitmask(vals, bitmask)]
+  defp apply_nulls_bitmask([_ | values], <<1::1, bitmask::bitstring>>),
+    do: [nil | apply_nulls_bitmask(values, bitmask)]
 
   defp apply_nulls_bitmask([], _), do: []
+
+  @doc """
+  Given a column value received from a Satellite client, transcode it into the format that can be fed into Postgres'
+  logical replication stream (aka "server-native format").
+  """
+  @spec decode_column_value(binary, atom) :: binary
+
+  def decode_column_value(val, type) when type in [:text, :bpchar, :varchar, :bytea] do
+    # TODO: validate value length for sized bpchar and varchar types.
+    val
+  end
+
+  def decode_column_value(val, type) when type in [:int2, :int4, :int8] do
+    :ok =
+      val
+      |> String.to_integer()
+      |> assert_integer_in_range!(type)
+
+    val
+  end
+
+  def decode_column_value(val, :float8) do
+    _ = String.to_float(val)
+    val
+  end
+
+  def decode_column_value(val, :uuid) do
+    {:ok, uuid} = Electric.Utils.validate_uuid(val)
+    uuid
+  end
+
+  @int2_range -32768..32767
+  @int4_range -2_147_483_648..2_147_483_647
+  @int8_range -9_223_372_036_854_775_808..9_223_372_036_854_775_807
+
+  defp assert_integer_in_range!(int, :int2) when int in @int2_range, do: :ok
+  defp assert_integer_in_range!(int, :int4) when int in @int4_range, do: :ok
+  defp assert_integer_in_range!(int, :int8) when int in @int8_range, do: :ok
 end
