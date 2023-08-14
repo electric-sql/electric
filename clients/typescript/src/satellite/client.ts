@@ -1026,15 +1026,17 @@ export class SatelliteClient extends EventEmitter implements Client {
       }, this.opts.timeout)
 
       // reject on any error
-      this.once('error', (error: SatelliteError) => {
+      const errorListener = (error: SatelliteError) => {
         return reject(error)
-      })
+      }
 
+      this.once('error', errorListener)
       if (distinguishOn) {
         const handleRpcResp = (resp: T) => {
           // TODO: remove this comment when RPC types are fixed
           // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
           if (resp[distinguishOn] === request[distinguishOn]) {
+            this.removeListener('error', errorListener)
             return resolve(resp)
           } else {
             // This WAS an RPC response, but not the one we were expecting, waiting more
@@ -1043,9 +1045,11 @@ export class SatelliteClient extends EventEmitter implements Client {
         }
         this.once('rpc_response', handleRpcResp)
       } else {
-        this.once('rpc_response', (resp: T) => resolve(resp))
+        this.once('rpc_response', (resp: T) => {
+          this.removeListener('error', errorListener)
+          resolve(resp)
+        })
       }
-
       this.sendMessage(request)
     }).finally(() => clearTimeout(waitingFor))
   }
