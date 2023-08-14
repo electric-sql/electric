@@ -3,24 +3,14 @@ defmodule Electric.Postgres.OidDatabase do
 
   import Electric.Postgres.OidDatabase.PgType
 
-  alias Electric.Replication.Postgres.Client
-
   @ets_table_name :oid_database
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  def query_and_save_oids(server \\ __MODULE__, conn_config) do
-    with {:ok, oids} <- Client.with_conn(conn_config, &Client.query_oids/1),
-         oids = Enum.map(oids, &pg_type_from_tuple/1),
-         oids = assoc_oids_with_postgrex_extensions(oids, conn_config) do
-      save_oids(server, oids)
-    end
-  end
-
-  def save_oids(server \\ __MODULE__, oids) do
-    GenServer.call(server, {:save_oids, oids})
+  def save_oids(server \\ __MODULE__, values) do
+    GenServer.call(server, {:save_oids, Enum.map(values, &pg_type_from_tuple/1)})
   end
 
   @doc """
@@ -50,14 +40,6 @@ defmodule Electric.Postgres.OidDatabase do
     case :ets.match(@ets_table_name, pg_type(name: name, oid: :"$1")) do
       [[oid]] -> oid
       _ -> raise("Unknown name #{name}")
-    end
-  end
-
-  def postgrex_ext_for_name(name) do
-    case :ets.match(@ets_table_name, pg_type(name: name, postgrex_ext: :"$1")) do
-      [[:_]] -> raise "Missing postgrex_ext for name #{name}"
-      [[postgrex_ext]] -> postgrex_ext
-      _ -> raise "Unknown name #{name}"
     end
   end
 
@@ -96,22 +78,5 @@ defmodule Electric.Postgres.OidDatabase do
     ETS.Set.put(state.table, values)
 
     {:reply, :ok, state}
-  end
-
-  defp assoc_oids_with_postgrex_extensions(oids, conn_config) do
-    # Here we're using Postgrex's private APIs to get hold of its typename-oid mapping table that includes
-    # Postgrex.Extension.* module for each of the supported Postgres types.
-    # We're associating the extension module with type oid in order to be able to validate values of the type on demand.
-    type_server_key = {conn_config[:host], conn_config[:port], conn_config[:database]}
-    type_server = Postgrex.TypeSupervisor.locate(Postgrex.DefaultTypes, type_server_key)
-    {:lock, ref, type_server_state} = Postgrex.TypeServer.fetch(type_server)
-    Postgrex.TypeServer.done(type_server, ref)
-
-    for pg_type(oid: oid) = record <- oids do
-      case Postgrex.Types.fetch(oid, type_server_state) do
-        {:ok, {:binary, type_mod}} -> pg_type(record, postgrex_ext: type_mod)
-        _ -> record
-      end
-    end
   end
 end

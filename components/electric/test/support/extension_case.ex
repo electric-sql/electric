@@ -52,11 +52,8 @@ defmodule Electric.Extension.Case.Helpers do
 
     ExUnit.Assertions.assert({:ok, ^expected_versions} = Extension.migrate(conn))
 
-    {:ok, oids} = Electric.Replication.Postgres.Client.query_oids(conn)
-
-    oids
-    |> Enum.map(&Electric.Postgres.OidDatabase.PgType.pg_type_from_tuple/1)
-    |> Electric.Postgres.OidDatabase.save_oids()
+    {:ok, oid} = Electric.Replication.Postgres.Client.query_oids(conn)
+    Electric.Postgres.OidDatabase.save_oids(oid)
 
     public_schema(conn, opts)
   end

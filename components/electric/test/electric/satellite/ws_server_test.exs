@@ -85,11 +85,6 @@ defmodule Electric.Satellite.WsServerTest do
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
       lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end
-    },
-    {
-      Electric.Postgres.OidDatabase,
-      [:passthrough],
-      postgrex_ext_for_name: fn _ -> Postgrex.Extensions.Raw end
     }
   ]) do
     {:ok, %{}}
