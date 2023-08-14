@@ -398,20 +398,25 @@ defmodule Electric.Satellite.Serialization do
     row |> validate_values!(column_types) |> row_to_map(column_names)
   end
 
-  defp validate_values!(%SatOpRow{nulls_bitmask: bitmask, values: values} = row, column_types) do
-    Enum.each(Enum.zip([column_types, values, bitmask_to_boolean(bitmask)]), fn
-      {_type, _val, true = _null?} ->
-        :ok
-
-      {type, val, false = _null?} when is_binary(val) ->
-        Electric.Satellite.Validation.assert_type!(val, type)
+  defp validate_values!(%SatOpRow{} = row, column_types) do
+    row
+    |> values_from_sat_op_row()
+    |> Enum.zip(column_types)
+    |> Enum.each(fn {val, type} ->
+      if val, do: Electric.Satellite.Validation.assert_type!(val, type)
     end)
 
     row
   end
 
-  defp bitmask_to_boolean(bitmask) do
-    for <<b::1 <- bitmask>>, do: b == 1
+  defp values_from_sat_op_row(%SatOpRow{nulls_bitmask: bitmask, values: values}) do
+    {values, _bitmask} =
+      Enum.map_reduce(values, bitmask, fn
+        _val, <<1::1, bitmask::bitstring>> -> {nil, bitmask}
+        val, <<0::1, bitmask::bitstring>> when is_binary(val) -> {val, bitmask}
+      end)
+
+    values
   end
 
   def row_to_map(%SatOpRow{nulls_bitmask: bitmask, values: values}, column_names) do
