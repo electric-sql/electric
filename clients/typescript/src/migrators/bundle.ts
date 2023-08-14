@@ -113,7 +113,7 @@ export class BundleMigrator implements Migrator {
 
       if (migration.version !== version) {
         throw new Error(
-          `Migrations cannot be altered once applied: expecting ${version} at index ${i}.`
+          `Migrations cannot be altered once applied: expecting ${version} at index ${i}. Check documentation (https://electric-sql.com/docs/reference/limitations) to learn possible reasons for this error.`
         )
       }
     })
