@@ -10,7 +10,7 @@ agent:
 steps:
   - label: ":whale: Build & push the electric container"
     env:
-      TAG_AS_LATEST: "true"
+      TAG_AS_LATEST_AND_PUSH: "true"
     command:
       - git fetch --tags
       - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
