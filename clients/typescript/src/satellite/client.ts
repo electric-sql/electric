@@ -367,7 +367,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     const promise = this.rpc<void>(request)
       .then(() => this.initializing?.resolve())
       .catch((e) => {
-        this.initializing?.reject(e)
+        // when subscribe is not waiting on promise this is not caught.
+        // a subscriber pattern would only call reject if someone is waiting
+        // this.initializing?.reject(e)
         throw e
       })
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
