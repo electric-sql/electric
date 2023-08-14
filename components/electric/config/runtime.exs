@@ -51,7 +51,7 @@ config :electric, Electric.Replication.Postgres,
 config :electric,
   http_api_port: System.get_env("HTTP_API_PORT", default_http_api_port) |> String.to_integer()
 
-config :electric, Electric.Satellite.WsServer,
+config :electric, Electric.Satellite.WebsocketServer,
   port: System.get_env("WEBSOCKET_PORT", default_ws_server_port) |> String.to_integer()
 
 pg_server_port =

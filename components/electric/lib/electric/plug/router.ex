@@ -1,5 +1,5 @@
 defmodule Electric.Plug.Router do
-  use Plug.Router
+  use Plug.Router, init_mode: :runtime
   import Plug.Conn
   require Logger
 

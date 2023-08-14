@@ -1,4 +1,4 @@
-defmodule Electric.Satellite.WsServerTest do
+defmodule Electric.Satellite.WebsocketServerTest do
   use ExUnit.Case, async: false
 
   use Electric.Satellite.Protobuf
@@ -45,21 +45,15 @@ defmodule Electric.Satellite.WsServerTest do
 
     port = 55133
 
-    _sup_pid =
-      Electric.Satellite.WsServer.start_link(
-        name: :ws_test,
-        port: port,
-        auth_provider: Auth.provider(),
-        pg_connector_opts: [origin: "fake_origin", replication: []],
-        subscription_data_fun: ctx.subscription_data_fun
-      )
+    plug =
+      {Electric.Plug.SatelliteWebsocketPlug,
+       auth_provider: Auth.provider(),
+       pg_connector_opts: [origin: "fake_origin", replication: []],
+       subscription_data_fun: ctx.subscription_data_fun}
+
+    start_link_supervised!({Bandit, port: port, plug: plug})
 
     server_id = Electric.instance_id()
-
-    on_exit(fn ->
-      :cowboy.stop_listener(:ws_test)
-      Process.sleep(100)
-    end)
 
     {:ok, port: port, server_id: server_id}
   end
@@ -107,9 +101,9 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "resource related check" do
-    test "Check that resources are create and removed accordingly", cxt do
+    test "Check that resources are create and removed accordingly", ctx do
       with_connect(
-        [auth: cxt, port: cxt.port],
+        [auth: ctx, port: ctx.port],
         fn _conn ->
           [{Electric.Replication.SatelliteConnector, _pid}] = connectors()
         end
@@ -121,47 +115,48 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "decode/encode" do
-    test "sanity check" do
-      with_connect([], fn conn ->
+    test "sanity check", ctx do
+      with_connect([port: ctx.port], fn conn ->
+        Process.sleep(1000)
         assert true == MockClient.is_alive(conn)
       end)
     end
 
-    test "Server will respond to auth request", cxt do
+    test "Server will respond to auth request", ctx do
       with_connect(
-        [port: cxt.port],
+        [port: ctx.port],
         fn conn ->
           MockClient.send_data(conn, %SatAuthReq{
-            id: cxt.client_id,
-            token: cxt.token,
-            headers: cxt.headers
+            id: ctx.client_id,
+            token: ctx.token,
+            headers: ctx.headers
           })
 
-          server_id = cxt.server_id
+          server_id = ctx.server_id
           assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
         end
       )
     end
 
-    test "Server will respond with error to auth request without headers", cxt do
+    test "Server will respond with error to auth request without headers", ctx do
       with_connect(
-        [port: cxt.port],
+        [port: ctx.port],
         fn conn ->
-          MockClient.send_data(conn, %SatAuthReq{id: cxt.client_id, token: cxt.token})
+          MockClient.send_data(conn, %SatAuthReq{id: ctx.client_id, token: ctx.token})
           assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @default_wait
         end
       )
     end
 
-    test "Server with error to auth request with wrong headers headers", cxt do
+    test "Server with error to auth request with wrong headers headers", ctx do
       with_connect(
-        [port: cxt.port],
+        [port: ctx.port],
         fn conn ->
           MockClient.send_data(
             conn,
             %SatAuthReq{
-              id: cxt.client_id,
-              token: cxt.token,
+              id: ctx.client_id,
+              token: ctx.token,
               headers: build_headers("not_a_version_9_3")
             }
           )
@@ -171,114 +166,114 @@ defmodule Electric.Satellite.WsServerTest do
       )
     end
 
-    test "Server will handle bad requests", _cxt do
-      with_connect([], fn conn ->
+    test "Server will handle bad requests", ctx do
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_bin_data(conn, <<"rubbish">>)
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
 
-    test "Server will handle bad requests after auth", cxt do
-      with_connect([port: cxt.port, auth: cxt], fn conn ->
+    test "Server will handle bad requests after auth", ctx do
+      with_connect([port: ctx.port, auth: ctx], fn conn ->
         MockClient.send_bin_data(conn, <<"rubbish">>)
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
 
-    test "Server will respond with error on attempt to skip auth", cxt do
-      with_connect([port: cxt.port], fn conn ->
+    test "Server will respond with error on attempt to skip auth", ctx do
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatPingReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
-          id: cxt.client_id,
-          token: cxt.token,
-          headers: cxt.headers
+          id: ctx.client_id,
+          token: ctx.token,
+          headers: ctx.headers
         })
 
-        server_id = cxt.server_id
+        server_id = ctx.server_id
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
 
         ping_server(conn)
       end)
     end
 
-    test "Auth is handled", cxt do
-      server_id = cxt.server_id
+    test "Auth is handled", ctx do
+      server_id = ctx.server_id
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatPingReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
-          id: cxt.client_id,
-          token: cxt.token,
-          headers: cxt.headers
+          id: ctx.client_id,
+          token: ctx.token,
+          headers: ctx.headers
         })
 
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
       end)
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
-          id: cxt.client_id,
+          id: ctx.client_id,
           token: "invalid_token",
-          headers: cxt.headers
+          headers: ctx.headers
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
       past = System.os_time(:second) - 24 * 3600
-      expired_token = Auth.Secure.create_token(cxt.user_id, expiry: past)
+      expired_token = Auth.Secure.create_token(ctx.user_id, expiry: past)
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
-          id: cxt.client_id,
+          id: ctx.client_id,
           token: expired_token,
-          headers: cxt.headers
+          headers: ctx.headers
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
-          id: cxt.client_id,
-          token: cxt.token,
-          headers: cxt.headers
+          id: ctx.client_id,
+          token: ctx.token,
+          headers: ctx.headers
         })
 
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
       end)
     end
 
-    test "cluster/app id mismatch is detected", cxt do
-      invalid_token = Auth.Secure.create_token(cxt.user_id, issuer: "some-other-cluster-id")
+    test "cluster/app id mismatch is detected", ctx do
+      invalid_token = Auth.Secure.create_token(ctx.user_id, issuer: "some-other-cluster-id")
 
-      with_connect([port: cxt.port], fn conn ->
+      with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: "client_id",
           token: invalid_token,
-          headers: cxt.headers
+          headers: ctx.headers
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
     end
 
-    test "Server will forbid two connections that use same id", cxt do
-      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn _conn ->
-        {:ok, pid} = MockClient.connect_and_spawn(auto_register: false, port: cxt.port)
+    test "Server will forbid two connections that use same id", ctx do
+      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn _conn ->
+        {:ok, pid} = MockClient.connect_and_spawn(auto_register: false, port: ctx.port)
 
         MockClient.send_data(pid, %SatAuthReq{
-          id: cxt.client_id,
-          token: cxt.token,
-          headers: cxt.headers
+          id: ctx.client_id,
+          token: ctx.token,
+          headers: ctx.headers
         })
 
         assert_receive {^pid, %SatErrorResp{}}, @default_wait
@@ -289,8 +284,8 @@ defmodule Electric.Satellite.WsServerTest do
 
   describe "Outgoing replication (PG -> Satellite)" do
     @tag with_migrations: [@test_migration]
-    test "common replication", cxt do
-      with_connect([port: cxt.port, auth: cxt, id: cxt.client_id], fn conn ->
+    test "common replication", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_initial_replication_response(conn, 1)
 
@@ -317,7 +312,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(cxt.user_id, 10)
+            simple_transes(ctx.user_id, 10)
           )
 
         Enum.map(0..10, fn n ->
@@ -330,10 +325,10 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     @tag with_migrations: [@test_migration]
-    test "Start/stop replication", cxt do
+    test "Start/stop replication", ctx do
       limit = 10
 
-      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         # Skip initial sync
         lsn = to_string(@current_wal_pos + 1)
         MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
@@ -362,7 +357,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(cxt.user_id, limit)
+            simple_transes(ctx.user_id, limit)
           )
 
         MockClient.send_data(conn, %SatInStopReplicationReq{})
@@ -376,7 +371,7 @@ defmodule Electric.Satellite.WsServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(cxt.user_id, limit, num_lsn)
+            simple_transes(ctx.user_id, limit, num_lsn)
           )
 
         for n <- num_lsn..limit do
@@ -542,12 +537,12 @@ defmodule Electric.Satellite.WsServerTest do
            {"20230815",
             ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
          ]
-    test "common replication", cxt do
+    test "common replication", ctx do
       self = self()
 
       with_mock Electric.DummyConsumer, [:passthrough],
         notify: fn _, ws_pid, events -> send(self, {:dummy_consumer, ws_pid, events}) end do
-        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
           MockClient.send_data(conn, %SatInStartReplicationReq{})
           assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
@@ -620,7 +615,7 @@ defmodule Electric.Satellite.WsServerTest do
           # After restart we still get same lsn
         end)
 
-        with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
           lsn = "some_long_internal_lsn"
 
           MockClient.send_data(conn, %SatInStartReplicationReq{})
@@ -630,8 +625,8 @@ defmodule Electric.Satellite.WsServerTest do
       end
     end
 
-    test "stop subscription when consumer is not available, and restart when it's back", cxt do
-      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+    test "stop subscription when consumer is not available, and restart when it's back", ctx do
+      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
 
@@ -649,8 +644,8 @@ defmodule Electric.Satellite.WsServerTest do
     end
 
     test "results in an error response when the client is outside of the cached WAL window",
-         cxt do
-      with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+         ctx do
+      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "1"})
         assert_receive {^conn, %SatInStartReplicationResp{err: error}}, @default_wait
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
