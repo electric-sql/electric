@@ -102,6 +102,8 @@ const throwErrors = [
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
 
+const allowedErrors = []
+
 export class SatelliteProcess implements Satellite {
   dbName: DbName
   adapter: DatabaseAdapter
@@ -310,7 +312,6 @@ export class SatelliteProcess implements Satellite {
       }, stmts)
 
     await this.adapter.runInTransaction(...stmts)
-    tablenames.forEach((t) => this.notifier.actuallyChanged(t, []))
   }
 
   setClientListeners(): void {
@@ -562,10 +563,8 @@ export class SatelliteProcess implements Satellite {
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
     const shapeDefs: ClientShapeDefinition[] = subscriptionIds
       .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
-      .filter((s): s is ShapeDefinition[] => s != undefined)
+      .filter((s): s is ShapeDefinition[] => s !== undefined)
       .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
-
-    await this.subscriptions.unsubscribeAll()
 
     await this._resetClientState()
 
@@ -584,10 +583,6 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     Log.error('encountered a subscription error: ' + satelliteError.message)
 
-    // this is obviously too conservative and note
-    // that it does not update meta transactionally
-    await this.subscriptions.unsubscribeAll()
-
     await this._resetClientState()
 
     // Call the `onFailure` callback for this subscription
@@ -600,6 +595,12 @@ export class SatelliteProcess implements Satellite {
 
   async _resetClientState() {
     this._lsn = undefined
+
+    // TODO: this is obviously too conservative
+    // we should also work on updating subscriptions
+    // atomically on unsubscribe()
+    await this.subscriptions.unsubscribeAll()
+
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
@@ -630,11 +631,11 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectAndStartReplication(
-    reconnectAfterServerError?: boolean
+    currentlyReconnecting?: boolean
   ): Promise<void> {
     Log.info(`connecting and starting replication`)
 
-    if (reconnectAfterServerError) {
+    if (currentlyReconnecting) {
       Log.warn(`trying to reconnect after server error`)
     }
 
@@ -660,10 +661,14 @@ export class SatelliteProcess implements Satellite {
         subscriptionIds.length > 0 ? subscriptionIds : undefined
       )
     } catch (error: any) {
+      if (!(error instanceof SatelliteError)) {
+        throw error
+      }
+
       if (
         error.code == SatelliteErrorCode.BEHIND_WINDOW &&
         this.opts?.clearOnBehindWindow &&
-        !reconnectAfterServerError
+        !currentlyReconnecting
       ) {
         await this._handleBehindWindow()
         return
@@ -672,7 +677,9 @@ export class SatelliteProcess implements Satellite {
       if (throwErrors.includes(error.code)) {
         throw error
       }
-      Log.warn(`couldn't start replication: ${error}`)
+
+      // connection failed with no recovery action
+      Log.warn(`couldn't start replication with reason: ${error.message}`)
     }
   }
 

@@ -2,4 +2,4 @@
 "electric-sql": patch
 ---
 
-Fixedreconnect issues after BEHIND_WINDOW
+Fixed reconnect issues when the client is too far behind the server

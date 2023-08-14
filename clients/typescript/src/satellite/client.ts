@@ -242,8 +242,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       this.close()
     }
 
-    const initializing = emptyPromise()
-    this.initializing = initializing
+    this.initializing = emptyPromise()
 
     const connectPromise = new Promise<void>((resolve, reject) => {
       // TODO: ensure any previous socket is closed, or reject
@@ -291,7 +290,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return backOff(() => connectPromise, retryPolicy).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      initializing.reject(e)
+      this.initializing?.reject(e)
       throw e
     })
   }
@@ -854,7 +853,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     if (Log.getLevel() <= 1 && !(messageOrError instanceof SatelliteError))
       Log.debug(`[proto] recv: ${msgToString(messageOrError)}`)
     try {
-      const message: SatPbMsg = toMessage(data)
+      const message = toMessage(data)
       const handler = this.handlerForMessageType[message.$type]
       const response = handler.handle(message)
       if (handler.isRpc) {
@@ -862,7 +861,12 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
     } catch (error) {
       Log.warn(`uncaught errors while processing incoming message: ${error}`)
-      this.emit('error', error)
+      if (error instanceof SatelliteError) {
+        this.emit('error', error)
+      } else {
+        // This is an unexpected runtime error
+        throw error
+      }
     }
   }
 
