@@ -365,28 +365,32 @@ defmodule Electric.Satellite.Serialization do
        ) do
     %UpdatedRecord{
       record: decode_record(row_data, columns),
-      old_record: decode_record(old_row_data, columns, true),
+      old_record: decode_record(old_row_data, columns, :allow_empty_row),
       tags: tags
     }
   end
 
   defp op_to_change(%SatOpDelete{old_row_data: old_row_data, tags: tags}, columns) do
     %DeletedRecord{
-      old_record: decode_record(old_row_data, columns, true),
+      old_record: decode_record(old_row_data, columns, :allow_empty_row),
       tags: tags
     }
   end
 
-  @spec decode_record(%SatOpRow{}, [String.t()]) :: %{String.t() => nil | String.t()}
+  @spec decode_record(%SatOpRow{}, [String.t()], :allow_empty_row | nil) ::
+          %{
+            String.t() => nil | String.t()
+          }
+          | nil
   def decode_record(row, columns) do
-    decode_record(row, columns, false)
+    decode_record(row, columns, nil)
   end
 
-  defp decode_record(nil, _columns, false) do
+  defp decode_record(nil, _columns, :allow_empty_row), do: nil
+
+  defp decode_record(nil, _columns, nil) do
     raise "protocol violation, empty row"
   end
-
-  defp decode_record(nil, _columns, true), do: nil
 
   defp decode_record(%SatOpRow{} = row, columns, _) do
     column_types = Enum.map(columns, &String.to_existing_atom(&1.type))
