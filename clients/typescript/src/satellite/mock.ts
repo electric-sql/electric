@@ -16,6 +16,8 @@ import {
   SatelliteErrorCode,
   RelationsCache,
   Record as DataRecord,
+  StartReplicationResponse,
+  StopReplicationResponse,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -250,7 +252,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(_authState: AuthState): Promise<AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(lsn: LSN): Promise<void> {
+  startReplication(lsn: LSN): Promise<StartReplicationResponse> {
     this.replicating = true
     this.inboundAck = lsn
 
@@ -258,28 +260,29 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
-      return Promise.reject(
-        new SatelliteError(
+      return Promise.resolve({
+        error: new SatelliteError(
           SatelliteErrorCode.BEHIND_WINDOW,
           'MOCK BEHIND_WINDOW_LSN ERROR'
-        )
-      )
+        ),
+      })
     }
 
     if (lsn && bytesToNumber(lsn) == MOCK_INVALID_POSITION_LSN) {
-      return Promise.reject(
-        new SatelliteError(
+      return Promise.resolve({
+        error: new SatelliteError(
           SatelliteErrorCode.INVALID_POSITION,
           'MOCK INVALID_POSITION ERROR'
-        )
-      )
+        ),
+      })
     }
 
-    return Promise.resolve()
+    return Promise.resolve({})
   }
-  stopReplication(): Promise<void> {
+
+  stopReplication(): Promise<StopReplicationResponse> {
     this.replicating = false
-    return Promise.resolve()
+    return Promise.resolve({})
   }
 
   subscribeToRelations(_callback: (relation: Relation) => void): void {}

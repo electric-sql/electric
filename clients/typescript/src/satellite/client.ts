@@ -59,6 +59,8 @@ import {
   SchemaChange,
   OutgoingReplication,
   Transaction,
+  StartReplicationResponse,
+  StopReplicationResponse,
 } from '../util/types'
 import {
   base64,
@@ -89,7 +91,13 @@ import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 type IncomingHandler = {
   handle: (
     msg: any
-  ) => void | AuthResponse | SubscribeResponse | UnsubscribeResponse
+  ) =>
+    | void
+    | AuthResponse
+    | StartReplicationResponse
+    | StopReplicationResponse
+    | SubscribeResponse
+    | UnsubscribeResponse
   isRpc: boolean
 }
 
@@ -331,7 +339,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
-  ): Promise<void> {
+  ): Promise<StartReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
@@ -342,7 +350,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     // Perform validations and prepare the request
-    let request
+    let request: SatInStartReplicationReq
     if (!lsn || lsn.length == 0) {
       Log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
@@ -364,20 +372,19 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     // Then set the replication state
-    const promise = this.rpc<void>(request)
-      .then(() => this.initializing?.resolve())
+    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
+    return this.rpc<StartReplicationResponse>(request)
+      .then((resp) => {
+        this.initializing?.resolve()
+        return resp
+      })
       .catch((e) => {
-        // when subscribe is not waiting on promise this is not caught.
-        // a subscriber pattern would only call reject if someone is waiting
-        // this.initializing?.reject(e)
+        this.initializing?.reject(e)
         throw e
       })
-    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
-
-    return promise
   }
 
-  stopReplication(): Promise<void> {
+  stopReplication(): Promise<StopReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -644,23 +651,25 @@ export class SatelliteClient extends EventEmitter implements Client {
     return { serverId, error }
   }
 
-  private handleStartResp(resp: SatInStartReplicationResp): void {
+  private handleStartResp(
+    resp: SatInStartReplicationResp
+  ): StartReplicationResponse {
     if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
-        this.emit('error', startReplicationErrorToSatelliteError(resp.err))
+        return { error: startReplicationErrorToSatelliteError(resp.err) }
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
       }
     } else {
-      this.emit(
-        'error',
-        new SatelliteError(
+      return {
+        error: new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
           `unexpected state ${this.inbound.isReplicating} handling 'start' response`
-        )
-      )
+        ),
+      }
     }
+    return {}
   }
 
   private handleStartReq(message: SatInStartReplicationReq) {
@@ -730,17 +739,17 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  private handleStopResp() {
+  private handleStopResp(): StopReplicationResponse {
     if (this.inbound.isReplicating == ReplicationStatus.STOPPING) {
       this.inbound.isReplicating = ReplicationStatus.STOPPED
-    } else {
-      this.emit(
-        'error',
-        new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_STATE,
-          `unexpected state ${this.inbound.isReplicating} handling 'stop' response`
-        )
-      )
+      return {}
+    }
+
+    return {
+      error: new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_STATE,
+        `unexpected state ${this.inbound.isReplicating} handling 'stop' response`
+      ),
     }
   }
 
@@ -808,7 +817,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handleError(error: SatErrorResp) {
     this.emit(
       'error',
-      new Error(`server replied with error code: ${error.errorType}`)
+      new SatelliteError(
+        SatelliteErrorCode.SERVER_ERROR,
+        `server replied with error code: ${error.errorType}`
+      )
     )
   }
 
@@ -854,17 +866,23 @@ export class SatelliteClient extends EventEmitter implements Client {
     const messageOrError = toMessage(data)
     if (Log.getLevel() <= 1 && !(messageOrError instanceof SatelliteError))
       Log.debug(`[proto] recv: ${msgToString(messageOrError)}`)
+    let handleIsRpc = false
     try {
       const message = toMessage(data)
       const handler = this.handlerForMessageType[message.$type]
       const response = handler.handle(message)
-      if (handler.isRpc) {
+      if ((handleIsRpc = handler.isRpc)) {
         this.emit('rpc_response', response)
       }
     } catch (error) {
-      Log.warn(`uncaught errors while processing incoming message: ${error}`)
       if (error instanceof SatelliteError) {
-        this.emit('error', error)
+        if (handleIsRpc) {
+          this.emit('error', error)
+        }
+        // no one is watching this error
+        Log.warn(
+          `unhandled satellite errors while processing incoming message: ${error}`
+        )
       } else {
         // This is an unexpected runtime error
         throw error

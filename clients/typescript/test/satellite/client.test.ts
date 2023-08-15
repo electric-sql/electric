@@ -153,10 +153,10 @@ test.serial('connect subscription error', async (t) => {
   server.nextResponses([startResp])
 
   try {
-    await client.startReplication()
-    t.fail()
+    const resp = await client.startReplication()
+    t.is(resp.error?.code, SatelliteErrorCode.BEHIND_WINDOW)
   } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.BEHIND_WINDOW)
+    t.fail()
   }
 })
 

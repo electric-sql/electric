@@ -13,6 +13,8 @@ import {
   DataTransaction,
   Transaction,
   Relation,
+  StartReplicationResponse,
+  StopReplicationResponse,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -77,8 +79,8 @@ export interface Client {
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
-  ): Promise<void>
-  stopReplication(): Promise<void>
+  ): Promise<StartReplicationResponse>
+  stopReplication(): Promise<StopReplicationResponse>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>
