@@ -19,6 +19,18 @@ defmodule Electric.Satellite.Serialization do
   @type relation_mapping() ::
           %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
+  @spec supported_pg_types :: [atom]
+  def supported_pg_types do
+    ~w[
+      bytea
+      int2 int4 int8
+      float8
+      text
+      uuid
+      varchar
+    ]a
+  end
+
   @doc """
   Serialize from internal format to Satellite PB format
   """
@@ -417,8 +429,7 @@ defmodule Electric.Satellite.Serialization do
   """
   @spec decode_column_value(binary, atom) :: binary
 
-  def decode_column_value(val, type) when type in [:text, :bpchar, :varchar, :bytea] do
-    # TODO: validate value length for sized bpchar and varchar types.
+  def decode_column_value(val, type) when type in [:bytea, :text, :varchar] do
     val
   end
 

@@ -120,9 +120,9 @@
         """
         CREATE TABLE public.items (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            content VARCHAR(64) NOT NULL,
-            content_text_null VARCHAR(64),
-            content_text_null_default VARCHAR(64) DEFAULT '',
+            content VARCHAR NOT NULL,
+            content_text_null VARCHAR,
+            content_text_null_default VARCHAR DEFAULT '',
             intvalue_null integer,
             intvalue_null_default integer DEFAULT 10
         );

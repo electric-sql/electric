@@ -34,7 +34,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     CREATE TABLE buttercup (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -58,7 +58,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     CREATE TABLE buttercup (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -125,7 +125,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     CREATE TABLE balloons.buttercup (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -187,7 +187,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     CREATE TABLE buttercup (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
