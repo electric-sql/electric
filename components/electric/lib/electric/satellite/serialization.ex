@@ -393,23 +393,23 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, _) do
-    values
-    |> apply_nulls_bitmask(bitmask)
-    |> Enum.zip(columns)
-    |> Enum.map(fn
-      {nil, col} -> {col.name, nil}
-      {val, col} -> {col.name, decode_column_value(val, String.to_existing_atom(col.type))}
-    end)
+    decode_values(values, bitmask, columns)
     |> Map.new()
   end
 
-  defp apply_nulls_bitmask([val | values], <<0::1, bitmask::bitstring>>),
-    do: [val | apply_nulls_bitmask(values, bitmask)]
+  defp decode_values([], _bitmask, []), do: []
 
-  defp apply_nulls_bitmask([_ | values], <<1::1, bitmask::bitstring>>),
-    do: [nil | apply_nulls_bitmask(values, bitmask)]
+  defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns])
+       when is_binary(val) do
+    [
+      {col.name, decode_column_value(val, String.to_existing_atom(col.type))}
+      | decode_values(values, bitmask, columns)
+    ]
+  end
 
-  defp apply_nulls_bitmask([], _), do: []
+  defp decode_values([_val | values], <<1::1, bitmask::bits>>, [col | columns]) do
+    [{col.name, nil} | decode_values(values, bitmask, columns)]
+  end
 
   @doc """
   Given a column value received from a Satellite client, transcode it into the format that can be fed into Postgres'
