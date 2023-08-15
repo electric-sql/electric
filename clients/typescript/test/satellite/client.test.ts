@@ -309,8 +309,8 @@ test.serial('receive transaction over multiple messages', async (t) => {
     table: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'name1', type: 'TEXT' },
-      { name: 'name2', type: 'TEXT' },
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
     ],
   }
 
@@ -320,8 +320,16 @@ test.serial('receive transaction over multiple messages', async (t) => {
     tableName: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      Proto.SatRelationColumn.fromPartial({ name: 'name1', type: 'TEXT' }),
-      Proto.SatRelationColumn.fromPartial({ name: 'name2', type: 'TEXT' }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name1',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name2',
+        type: 'TEXT',
+        isNullable: true,
+      }),
     ],
   })
 
@@ -614,12 +622,12 @@ test.serial('default and null test', async (t) => {
     table: 'Items',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'id', type: 'uuid' },
-      { name: 'content', type: 'text' },
-      { name: 'text_null', type: 'text' },
-      { name: 'text_null_default', type: 'text' },
-      { name: 'intvalue_null', type: 'integer' },
-      { name: 'intvalue_null_default', type: 'integer' },
+      { name: 'id', type: 'uuid', isNullable: false },
+      { name: 'content', type: 'text', isNullable: false },
+      { name: 'text_null', type: 'text', isNullable: true },
+      { name: 'text_null_default', type: 'text', isNullable: true },
+      { name: 'intvalue_null', type: 'integer', isNullable: true },
+      { name: 'intvalue_null_default', type: 'integer', isNullable: true },
     ],
   }
 
@@ -929,8 +937,8 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
     table: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'name1', type: 'TEXT' },
-      { name: 'name2', type: 'TEXT' },
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
     ],
   }
 

@@ -187,6 +187,7 @@ export interface SatRelationColumn {
   name: string;
   type: string;
   primaryKey: boolean;
+  isNullable: boolean;
 }
 
 export interface SatRelation {
@@ -1242,7 +1243,13 @@ export const SatInStopReplicationResp = {
 messageTypeRegistry.set(SatInStopReplicationResp.$type, SatInStopReplicationResp);
 
 function createBaseSatRelationColumn(): SatRelationColumn {
-  return { $type: "Electric.Satellite.v1_4.SatRelationColumn", name: "", type: "", primaryKey: false };
+  return {
+    $type: "Electric.Satellite.v1_4.SatRelationColumn",
+    name: "",
+    type: "",
+    primaryKey: false,
+    isNullable: false,
+  };
 }
 
 export const SatRelationColumn = {
@@ -1257,6 +1264,9 @@ export const SatRelationColumn = {
     }
     if (message.primaryKey === true) {
       writer.uint32(24).bool(message.primaryKey);
+    }
+    if (message.isNullable === true) {
+      writer.uint32(32).bool(message.isNullable);
     }
     return writer;
   },
@@ -1289,6 +1299,13 @@ export const SatRelationColumn = {
 
           message.primaryKey = reader.bool();
           continue;
+        case 4:
+          if (tag !== 32) {
+            break;
+          }
+
+          message.isNullable = reader.bool();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1307,6 +1324,7 @@ export const SatRelationColumn = {
     message.name = object.name ?? "";
     message.type = object.type ?? "";
     message.primaryKey = object.primaryKey ?? false;
+    message.isNullable = object.isNullable ?? false;
     return message;
   },
 };

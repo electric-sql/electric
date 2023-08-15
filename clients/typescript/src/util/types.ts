@@ -152,6 +152,7 @@ export type Relation = {
 export type RelationColumn = {
   name: string
   type: string
+  isNullable: boolean
   primaryKey?: boolean
 }
 

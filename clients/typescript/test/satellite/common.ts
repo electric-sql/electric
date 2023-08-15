@@ -27,11 +27,13 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'parent',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -45,16 +47,19 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'value',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'other',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -68,6 +73,7 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
     ],

@@ -550,7 +550,11 @@ export class SatelliteClient extends EventEmitter implements Client {
           tableName: relation.table,
           tableType: relation.tableType,
           columns: relation.columns.map((c) =>
-            SatRelationColumn.fromPartial({ name: c.name, type: c.type })
+            SatRelationColumn.fromPartial({
+              name: c.name,
+              type: c.type,
+              isNullable: c.isNullable,
+            })
           ),
         })
 
@@ -750,6 +754,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       columns: message.columns.map((c) => ({
         name: c.name,
         type: c.type,
+        isNullable: c.isNullable,
         primaryKey: c.primaryKey,
       })),
     }

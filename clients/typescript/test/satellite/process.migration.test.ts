@@ -157,21 +157,25 @@ const addColumnRelation = {
     {
       name: 'id',
       type: 'INTEGER',
+      isNullable: false,
       primaryKey: true,
     },
     {
       name: 'value',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'other',
       type: 'INTEGER',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'baz',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
   ],
@@ -185,16 +189,19 @@ const newTableRelation = {
     {
       name: 'id',
       type: 'TEXT',
+      isNullable: false,
       primaryKey: true,
     },
     {
       name: 'foo',
       type: 'INTEGER',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'bar',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
   ],
