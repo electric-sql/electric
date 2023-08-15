@@ -538,6 +538,10 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "Incoming replication (Satellite -> PG)" do
+    @tag with_migrations: [
+           {"20230815",
+            ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
+         ]
     test "common replication", cxt do
       self = self()
 
