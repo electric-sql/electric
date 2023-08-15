@@ -88,6 +88,8 @@ import {
 import { SubscriptionsDataCache } from './shapes/cache'
 import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 
+type ConnectRetryHandler = (error: Error, attempt: number) => boolean
+
 type IncomingHandler = {
   handle: (
     msg: any
@@ -99,6 +101,15 @@ type IncomingHandler = {
     | SubscribeResponse
     | UnsubscribeResponse
   isRpc: boolean
+}
+
+const connectionRetryPolicy: Partial<IBackOffOptions> = {
+  delayFirstAttempt: false,
+  startingDelay: 100,
+  jitter: 'none',
+  maxDelay: 5000,
+  numOfAttempts: 100,
+  timeMultiple: 2,
 }
 
 export class SatelliteClient extends EventEmitter implements Client {
@@ -198,15 +209,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
-  connectionRetryPolicy: Partial<IBackOffOptions> = {
-    delayFirstAttempt: false,
-    startingDelay: 100,
-    jitter: 'none',
-    maxDelay: 100,
-    numOfAttempts: 10,
-    timeMultiple: 2,
-  }
-
   constructor(
     dbName: string,
     socketFactory: SocketFactory,
@@ -243,63 +245,80 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  connect(
-    retryHandler?: (error: any, attempt: number) => boolean
-  ): Promise<void> {
-    if (!this.isClosed) {
+  async connect(): Promise<void> {
+    if (!this.isClosed()) {
       this.close()
     }
 
     this.initializing = emptyPromise()
 
-    const connectPromise = new Promise<void>((resolve, reject) => {
-      // TODO: ensure any previous socket is closed, or reject
-      if (this.socket) {
-        throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_STATE,
-          'a socket already exist. ensure it is closed before reconnecting.'
-        )
-      }
-      this.socket = this.socketFactory.create()
-      this.socket.onceConnect(() => {
-        if (!this.socket)
+    const tryConnect = () =>
+      new Promise<void>((resolve, reject) => {
+        if (this.socket) {
           throw new SatelliteError(
             SatelliteErrorCode.UNEXPECTED_STATE,
-            'socket got unassigned somehow'
+            'a socket already exist. ensure it is closed before reconnecting.'
           )
-        this.socketHandler = (message) => this.handleIncoming(message)
-        this.notifier.connectivityStateChanged(this.dbName, 'connected')
-        this.socket.onMessage(this.socketHandler)
-        this.socket.onError(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'error')
+        }
+        this.socket = this.socketFactory.create()
+        this.socket.onceConnect(() => {
+          if (!this.socket)
+            throw new SatelliteError(
+              SatelliteErrorCode.UNEXPECTED_STATE,
+              'socket got unassigned somehow'
+            )
+          this.socketHandler = (message) => this.handleIncoming(message)
+          this.notifier.connectivityStateChanged(this.dbName, 'connected')
+          this.socket.onMessage(this.socketHandler)
+          this.socket.onError(() => {
+            this.notifier.connectivityStateChanged(this.dbName, 'error')
+          })
+          this.socket.onClose(() => {
+            this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+          })
+          resolve()
         })
-        this.socket.onClose(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+
+        this.socket.onceError((error) => {
+          this.socket?.closeAndRemoveListeners()
+          this.socket = undefined
+
+          reject(error)
         })
-        resolve()
+
+        const { host, port, ssl } = this.opts
+        const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
+        this.socket.open({ url })
       })
 
-      this.socket.onceError((error) => {
-        this.socket = undefined
-        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-        reject(error)
-      })
+    const retry: ConnectRetryHandler = (error, attempts) => {
+      // only retry on known errors
+      if (!(error instanceof SatelliteError)) {
+        return false
+      }
+      if (error.code == SatelliteErrorCode.CONNECTION_FAILED) {
+        return true
+      }
 
-      const { host, port, ssl } = this.opts
-      const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
-      this.socket.open({ url })
-    })
-
-    const retryPolicy = { ...this.connectionRetryPolicy }
-    if (retryHandler) {
-      retryPolicy.retry = retryHandler
+      Log.debug(`stopped trying to connect after ${attempts} attempts`)
+      return false
     }
 
-    return backOff(() => connectPromise, retryPolicy).catch((e) => {
+    await backOff(() => tryConnect(), {
+      ...connectionRetryPolicy,
+      retry,
+    }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.initializing?.reject(e)
-      throw e
+
+      const error = new SatelliteError(
+        SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
+        `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
+      )
+
+      this.initializing?.reject(error)
+      this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+      throw error
     })
   }
 
@@ -826,6 +845,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
+    this.close()
+
+    this.notifier.connectivityStateChanged(this.dbName, 'available')
+
     // TODO: this causing intermittent issues in tests because
     // no one might catch this error. We shall pass this information
     // as part of connectivity state
