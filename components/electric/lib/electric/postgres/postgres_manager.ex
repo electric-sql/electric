@@ -1,11 +1,12 @@
 defmodule Electric.Replication.PostgresConnectorMng do
+  use GenServer
+
   alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.Connectors
   alias Electric.Postgres.OidDatabase
 
-  @behaviour GenServer
   require Logger
 
   defmodule State do
