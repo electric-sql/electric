@@ -68,6 +68,8 @@ import {
   ShapeSelect,
   SubscribeResponse,
   SubscriptionData,
+  SubscriptionDeliveredCallback,
+  SubscriptionErrorCallback,
 } from './shapes/types'
 import { mergeEntries } from './merge'
 import { generateTableTriggers } from '../migrators/triggers'
@@ -141,6 +143,9 @@ export class SatelliteProcess implements Satellite {
   private maxSqlParameters: 999 | 32766 = 999
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
+
+  private subsDeliveredCallback?: SubscriptionDeliveredCallback
+  private subsErrorCallback?: SubscriptionErrorCallback
 
   constructor(
     dbName: DbName,
@@ -294,6 +299,7 @@ export class SatelliteProcess implements Satellite {
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
+        Log.debug(`deleting all rows from table ${select.tablename}`)
         tablenames.push(select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls
@@ -325,9 +331,12 @@ export class SatelliteProcess implements Satellite {
       this._throttledSnapshot()
     )
 
+    this.subsDeliveredCallback = this._handleSubscriptionData.bind(this)
+    this.subsErrorCallback = this._handleSubscriptionError.bind(this)
+
     this.client.subscribeToSubscriptionEvents(
-      this._handleSubscriptionData.bind(this),
-      this._handleSubscriptionError.bind(this)
+      this.subsDeliveredCallback,
+      this.subsErrorCallback
     )
   }
 
@@ -603,6 +612,13 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
+
+    if (this.subsDeliveredCallback && this.subsErrorCallback) {
+      this.client.unsubscribeToSubscriptionEvents(
+        this.subsDeliveredCallback,
+        this.subsErrorCallback
+      )
+    }
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {

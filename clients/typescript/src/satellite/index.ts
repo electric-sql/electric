@@ -69,9 +69,7 @@ export interface Satellite {
 }
 
 export interface Client {
-  connect(
-    retryHandler?: (error: any, attempt: number) => boolean
-  ): Promise<void>
+  connect(): Promise<void>
   close(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
   isClosed(): boolean
