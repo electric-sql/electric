@@ -201,7 +201,7 @@ BEGIN
                 END IF;
             WHEN _cmd.command_tag = 'CREATE INDEX' THEN
                 _table_id := <%= schema %>.__create_index_is_electrified(_cmd.classid, _cmd.objid);
-                IF _table_id THEN
+                IF _table_id IS NOT NULL THEN
                     -- capture the index id into a special electrified_index table
                     -- so that we can check if it's electrified when it's being dropped
                     -- without this, by the time we get the cmd in the event trigger the 

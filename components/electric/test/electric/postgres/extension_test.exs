@@ -481,7 +481,7 @@ defmodule Electric.Postgres.ExtensionTest do
                |> String.trim()
     end
 
-    test_tx "electrified?/2", fn conn ->
+    test_tx "electrified?/3", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -495,6 +495,29 @@ defmodule Electric.Postgres.ExtensionTest do
 
       refute Extension.electrified?(conn, "daisy")
       refute Extension.electrified?(conn, "public", "daisy")
+    end
+
+    test_tx "index_electrified?/3", fn conn ->
+      sqls = [
+        "CREATE SCHEMA meadow;",
+        "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+        "CREATE TABLE meadow.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+        "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+        "CALL electric.electrify('buttercup')",
+        "CALL electric.electrify('meadow.daisy')",
+        "CREATE INDEX buttercup_id_idx ON public.buttercup (id)",
+        "CREATE INDEX daisy_id_idx ON meadow.daisy (id)",
+        "CREATE INDEX daisy_id_idx ON public.daisy (id)"
+      ]
+
+      for sql <- sqls do
+        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      end
+
+      assert {:ok, true} = Extension.index_electrified?(conn, "public", "buttercup_id_idx")
+      assert {:ok, true} = Extension.index_electrified?(conn, "meadow", "daisy_id_idx")
+      assert {:ok, false} = Extension.index_electrified?(conn, "public", "daisy_id_idx")
+      assert {:ok, false} = Extension.index_electrified?(conn, "public", "parsley_id_idx")
     end
   end
 

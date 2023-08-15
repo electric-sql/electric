@@ -199,6 +199,22 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Schema.new()
   end
 
+  @impl true
+  def table_electrified?(state, {schema, name}) do
+    with {:ok, tables} <- electrified_tables(state) do
+      {:ok, Enum.any?(tables, &(&1.schema == schema && &1.name == name))}
+    end
+  end
+
+  @impl true
+  def index_electrified?({[version | _versions], _opts}, {schema, name}) do
+    {:ok,
+     Enum.any?(
+       Schema.indexes(version.schema, include_constraints: false),
+       &(&1.table.schema == schema && &1.name == name)
+     )}
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end

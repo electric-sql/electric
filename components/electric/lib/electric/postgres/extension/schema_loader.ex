@@ -16,6 +16,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
   @type table() :: Electric.Postgres.Replication.Table.t()
+  @type t() :: {module(), state()}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
@@ -29,6 +30,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
   @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
+  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
+  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
+  @callback table_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
+  @callback index_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -97,5 +102,13 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
        |> Schema.table_info()
        |> Enum.count(&(not is_extension_relation({&1.schema, &1.name})))}
     end
+  end
+
+  def table_electrified?({module, state}, relation) do
+    module.table_electrified?(state, relation)
+  end
+
+  def index_electrified?({module, state}, relation) do
+    module.index_electrified?(state, relation)
   end
 end

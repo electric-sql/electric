@@ -161,11 +161,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       $function$ LANGUAGE PLPGSQL;
       """,
       ##################
-      """
-      CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
-          WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")})
-          EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
-      """,
+      # """
+      # CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
+      #     WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")})
+      #     EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
+      # """,
       """
       CREATE PUBLICATION "#{publication_name}";
       """,

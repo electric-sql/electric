@@ -25,6 +25,10 @@ defmodule Electric.Postgres.Extension do
   @electrified_index_relation "electrified_idx"
   @acked_client_lsn_relation "acknowledged_client_lsns"
 
+  @grants_relation "grants"
+  @roles_relation "roles"
+  @assignments_relation "assignments"
+
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
   @migration_table electric.("schema_migrations")
@@ -35,6 +39,10 @@ defmodule Electric.Postgres.Extension do
   @electrified_index_table electric.(@electrified_index_relation)
   @transaction_marker_table electric.("transaction_marker")
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
+
+  @grants_table electric.(@grants_relation)
+  @roles_table electric.(@roles_relation)
+  @assignments_table electric.(@assignments_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -94,6 +102,10 @@ defmodule Electric.Postgres.Extension do
   def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
+
+  def grants_table, do: @grants_table
+  def roles_table, do: @roles_table
+  def assignments_table, do: @assignments_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -204,6 +216,24 @@ defmodule Electric.Postgres.Extension do
   def electrified_indexes(conn) do
     with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
       {:ok, rows}
+    end
+  end
+
+  @index_electrified_query """
+  SELECT COUNT(ei.id) AS count
+    FROM #{@electrified_index_table} ei
+      INNER JOIN pg_class pc ON pc.oid = ei.id
+      INNER JOIN pg_namespace pn ON pc.relnamespace = pn.oid
+      INNER JOIN #{@electrified_tracking_table} et ON ei.table_id = et.id
+    WHERE 
+      pn.nspname  = $1 
+      AND pc.relname = $2;
+  """
+
+  @spec index_electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
+  def index_electrified?(conn, schema, name) do
+    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) do
+      {:ok, n == 1}
     end
   end
 

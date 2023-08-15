@@ -56,10 +56,12 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
   @create_a "CREATE TABLE a (aid uuid NOT NULL PRIMARY KEY, avalue text);"
   @create_b "CREATE TABLE b.b (bid1 int4, bid2 int4, bvalue text, PRIMARY KEY (bid1, bid2));"
+  @index_b "CREATE INDEX bidx ON b.b (bid1);"
   @sqls [
     @create_a,
     "CREATE SCHEMA b;",
     @create_b,
+    @index_b,
     "CALL electric.electrify('a');",
     "CALL electric.electrify('b', 'b');"
   ]
@@ -69,7 +71,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     # same things here to avoid having to commit the transaction
     migrations = [
       {"20230620160340", [@create_a]},
-      {"20230620162106", [@create_b]}
+      {"20230620162106", [@create_b, @index_b]}
     ]
 
     {:ok, origin: "pg", migrations: migrations, versions: Enum.map(migrations, &elem(&1, 0))}
@@ -397,6 +399,33 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     test_tx "returns true if schema cache is online", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert Extension.SchemaCache.ready?(cxt.origin)
+    end
+  end
+
+  describe "table_electrified?/2" do
+    test_tx "returns true if table present in schema", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"public", "a"})
+      assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "b"})
+    end
+
+    test_tx "returns false if table unknown", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, false} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "c"})
+    end
+  end
+
+  describe "index_electrified?/2" do
+    test_tx "returns true index exists in schema", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, true} = Extension.SchemaCache.index_electrified?(cxt.origin, {"b", "bidx"})
+    end
+
+    test_tx "returns false for unknown indexes", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+
+      assert {:ok, false} =
+               Extension.SchemaCache.index_electrified?(cxt.origin, {"public", "aidx"})
     end
   end
 end

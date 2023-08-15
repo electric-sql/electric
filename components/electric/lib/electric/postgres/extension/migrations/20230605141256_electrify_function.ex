@@ -55,12 +55,12 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       # This function definition is included here because it is referenced in the definition of the electrify() function
       # below it.
       Extension.Functions.by_name(:validate_table_column_types),
-      electrify_function,
-      """
-      CREATE EVENT TRIGGER #{event_triggers[:sql_drop]} ON sql_drop
-          WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")})
-          EXECUTE FUNCTION #{schema}.ddlx_sql_drop_handler();
-      """
+      electrify_function
+      # """
+      # CREATE EVENT TRIGGER #{event_triggers[:sql_drop]} ON sql_drop
+      #     WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
+      #     EXECUTE FUNCTION #{schema}.ddlx_sql_drop_handler();
+      # """
     ]
   end
 

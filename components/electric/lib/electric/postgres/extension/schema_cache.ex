@@ -133,6 +133,16 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     |> Schema.table_info()
   end
 
+  @impl SchemaLoader
+  def table_electrified?(origin, {schema, name}) do
+    call(origin, {:table_electrified?, schema, name})
+  end
+
+  @impl SchemaLoader
+  def index_electrified?(origin, {schema, name}) do
+    call(origin, {:index_electrified?, schema, name})
+  end
+
   def relation(origin, oid) when is_integer(oid) do
     call(origin, {:relation, oid})
   end
@@ -272,36 +282,38 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call(:electrified_tables, _from, state) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {{:ok, Schema.table_info(schema)}, state}
-      else
-        error -> {error, state}
-      end
+    load_and_reply(state, fn schema ->
+      {:ok, Schema.table_info(schema)}
+    end)
+  end
 
-    {:reply, result, state}
+  def handle_call({:table_electrified?, sname, tname}, _from, state) do
+    load_and_reply(state, fn schema ->
+      {:ok, Enum.any?(schema.tables, &(&1.name.schema == sname && &1.name.name == tname))}
+    end)
+  end
+
+  def handle_call({:index_electrified?, sname, iname}, _from, state) do
+    load_and_reply(state, fn schema ->
+      electrified? =
+        schema
+        |> Schema.indexes(include_constraints: false)
+        |> Enum.any?(&(&1.table.schema == sname && &1.name == iname))
+
+      {:ok, electrified?}
+    end)
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {Schema.table_info(schema, oid), state}
-      else
-        error -> {error, state}
-      end
-
-    {:reply, result, state}
+    load_and_reply(state, fn schema ->
+      Schema.table_info(schema, oid)
+    end)
   end
 
   def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {Schema.table_info(schema, relation), state}
-      else
-        error -> {error, state}
-      end
-
-    {:reply, result, state}
+    load_and_reply(state, fn schema ->
+      Schema.table_info(schema, relation)
+    end)
   end
 
   def handle_call({:relation, relation, version}, _from, state) do
@@ -393,5 +405,16 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       error ->
         {error, state}
     end
+  end
+
+  defp load_and_reply(state, process) when is_function(process, 1) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {process.(schema), state}
+      else
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
   end
 end

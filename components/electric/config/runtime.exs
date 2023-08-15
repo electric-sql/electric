@@ -123,6 +123,10 @@ if config_env() == :prod do
     end
 
   config :electric, :telemetry, telemetry
+
+  proxy_port = System.get_env("PG_PROXY_PORT", "65433") |> String.to_integer()
+
+  config :electric, Electric.Postgres.Proxy, port: proxy_port
 else
   config :electric, :telemetry, :disabled
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)
