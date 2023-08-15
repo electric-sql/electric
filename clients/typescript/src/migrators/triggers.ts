@@ -111,6 +111,14 @@ export function generateOplogTriggers(
 
 /**
  * Generates triggers for compensations for all foreign keys in the provided table.
+ * 
+ * Compensation is recorded as a specially-formatted update. It acts as a no-op, with
+ * previous value set to NULL, and it's on the server to figure out that this is a no-op
+ * compensation operation (usually `UPDATE` would have previous row state known). The entire
+ * reason for it existing is to maybe revive the row if it has been deleted, so we need correct tags.
+ * 
+ * The compensation update contains _just_ the primary keys, no other columns are present.
+ * 
  * @param tableFullName Full name of the table.
  * @param table The corresponding table.
  * @param tables Map of all tables (needed to look up the tables that are pointed at by FKs).
@@ -127,12 +135,8 @@ function generateCompensationTriggers(
 
     const fkTableNamespace = 'main' // currently, Electric always uses the 'main' namespace
     const fkTableName = foreignKey.table
-    // Current assumption is that tables have exactly one PK
-    // and that FKs always point to that PK.
-    // cf. "Known limitations" document on Slab.
     const fkTablePK = foreignKey.parentKey // primary key of the table pointed at by the FK.
     const joinedFkPKs = joinColsForJSON([fkTablePK])
-    const joinedFkCols = joinColsForJSON([fkTablePK]) // Column pointed at by FK is the PK
 
     return [
       `-- Triggers for foreign key compensations`,
@@ -148,7 +152,7 @@ function generateCompensationTriggers(
              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkCols}), NULL, NULL
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
         FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
       END;
       `,
@@ -160,7 +164,7 @@ function generateCompensationTriggers(
               1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkCols}), NULL, NULL
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
         FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
       END;
       `,
