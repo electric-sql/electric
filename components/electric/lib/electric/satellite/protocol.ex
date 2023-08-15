@@ -421,9 +421,16 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
+    # Look up the latest schema for the relation to assign correct column types.
+    #
+    # Even though the server may have applied migrations to the schema that the client hasn't seen yet,
+    # we can still look up column types on it due our migrations being additive-only and backwards-compatible.
+    %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
+    relation_columns = Map.new(columns, &{&1.name, &1.type})
+
     columns =
-      Enum.map(msg.columns, fn %SatRelationColumn{} = x ->
-        %{name: x.name, type: x.type, primary_key?: x.primaryKey}
+      Enum.map(msg.columns, fn %SatRelationColumn{name: name} ->
+        %{name: name, type: Map.fetch!(relation_columns, name)}
       end)
 
     relations =

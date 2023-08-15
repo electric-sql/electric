@@ -402,7 +402,7 @@ defmodule Electric.Satellite.Serialization do
   defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns])
        when is_binary(val) do
     [
-      {col.name, decode_column_value(val, String.to_existing_atom(col.type))}
+      {col.name, decode_column_value(val, col.type)}
       | decode_values(values, bitmask, columns)
     ]
   end
