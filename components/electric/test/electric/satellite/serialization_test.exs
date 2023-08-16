@@ -18,7 +18,8 @@ defmodule Electric.Satellite.SerializationTest do
         "int" => "13",
         "var" => "...",
         "real" => "-3.14",
-        "id" => uuid
+        "id" => uuid,
+        "bytes" => <<0xFF, 0xA0, 0x01>>
       }
 
       columns = [
@@ -28,11 +29,21 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "id", type: :uuid},
         %{name: "int", type: :int4},
         %{name: "var", type: :varchar},
-        %{name: "real", type: :float8}
+        %{name: "real", type: :float8},
+        %{name: "bytes", type: :bytea}
       ]
 
       assert %SatOpRow{
-               values: ["", "", "4", uuid, "13", "...", "-3.14"],
+               values: [
+                 "",
+                 "",
+                 "4",
+                 uuid,
+                 "13",
+                 "...",
+                 "-3.14",
+                 <<0xFF, 0xA0, 0x01>>
+               ],
                nulls_bitmask: <<0b11000000>>
              } == Serialization.map_to_row(data, columns)
     end
@@ -64,7 +75,7 @@ defmodule Electric.Satellite.SerializationTest do
   describe "decode_record" do
     test "decodes a SatOpRow struct into a map" do
       row = %SatOpRow{
-        nulls_bitmask: <<0b00100001>>,
+        nulls_bitmask: <<0b00100001, 0>>,
         values: [
           "256",
           "hello",
@@ -73,7 +84,8 @@ defmodule Electric.Satellite.SerializationTest do
           "-1.0e124",
           "2023-08-15 17:20:31",
           "2023-08-15 17:20:31Z",
-          ""
+          "",
+          <<0xFF, 0xA0, 0x01>>
         ]
       }
 
@@ -85,7 +97,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "real2", type: :float8},
         %{name: "t", type: :timestamp},
         %{name: "tz", type: :timestamptz},
-        %{name: "x", type: :float4, nullable?: true}
+        %{name: "x", type: :float4, nullable?: true},
+        %{name: "bytes", type: :bytea}
       ]
 
       assert %{
@@ -96,7 +109,8 @@ defmodule Electric.Satellite.SerializationTest do
                "real2" => "-1.0e124",
                "t" => "2023-08-15 17:20:31",
                "tz" => "2023-08-15 17:20:31Z",
-               "x" => nil
+               "x" => nil,
+               "bytes" => <<0xFF, 0xA0, 0x01>>
              } == Serialization.decode_record(row, columns)
     end
 

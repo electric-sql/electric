@@ -24,6 +24,7 @@ defmodule Electric.Satellite.Serialization do
   @spec supported_pg_types :: [atom]
   def supported_pg_types do
     ~w[
+      bytea
       int2 int4 int8
       float8
       text
@@ -231,7 +232,7 @@ defmodule Electric.Satellite.Serialization do
       if opts[:skip_value_encoding?] do
         fn val, _type -> val end
       else
-        &encode_column_value/2
+        &serialize_column_value/2
       end
 
     {values, {bitmask, num_cols}} =
@@ -250,7 +251,7 @@ defmodule Electric.Satellite.Serialization do
     %SatOpRow{nulls_bitmask: encode_nulls_bitmask(bitmask, num_cols), values: values}
   end
 
-  # Values of type `timestamp` are coming over Postgres' logical replication stream in the following form:
+  # Values of type `timestamp` are coming in from Postgres' logical replication stream in the following form:
   #
   #     2023-08-14 14:01:28.848242
   #
@@ -259,19 +260,36 @@ defmodule Electric.Satellite.Serialization do
   #
   #     2023-08-14 10:01:28.848242+00
   #
-  # This is not valid syntax for SQLite's builtin datetime functions and we would like to avoid letting the Satellite
-  # protocol propagate Postgres' data formatting quirks to clients. So a minor conversion step is done here to replace
-  # `+00` with `Z` so that the whole string becomes conformant with ISO-8601.
+  # This is not valid syntax for SQLite's builtin datetime functions and we would like to avoid propagating Postgres'
+  # data formatting quirks outside of the Postgres <-> Electric communications protocol. So a minor conversion step is
+  # done here to replace `+00` with `Z` so that the whole string becomes conformant with ISO-8601.
   #
   # NOTE: We're ensuring the time zone offset is always `+00` by setting the `timezone` parameter to `'UTC'` before
   # starting the replication stream.
-  defp encode_column_value(val, :timestamptz) do
+  defp serialize_column_value(val, :timestamptz) do
     {:ok, dt, 0} = DateTime.from_iso8601(val)
     DateTime.to_string(dt)
   end
 
-  # No-op encoding for the rest of supported types
-  defp encode_column_value(val, _type), do: val
+  # NOTE: We're ensuring that `bytea` values are coming in encoded in the Hex format by setting the `bytea_output` parameter before
+  # starting the replication stream.
+  #
+  # Sample value: "\\xffa001".
+  #
+  # https://www.postgresql.org/docs/current/datatype-binary.html#id-1.5.7.12.9
+  defp serialize_column_value("\\x" <> hex_str, :bytea), do: decode_hex_str(hex_str)
+
+  # No-op serialization for the rest of supported types
+  defp serialize_column_value(val, _type), do: val
+
+  defp decode_hex_str(""), do: ""
+
+  defp decode_hex_str(<<c>> <> hex_str),
+    do: <<decode_hex_char(c)::4, decode_hex_str(hex_str)::bits>>
+
+  defp decode_hex_char(char) when char in ?0..?9, do: char - ?0
+  defp decode_hex_char(char) when char in ?a..?f, do: char - ?a + 10
+  defp decode_hex_char(char) when char in ?A..?F, do: char - ?A + 10
 
   defp encode_nulls_bitmask(bitmask, num_cols) do
     case rem(num_cols, 8) do

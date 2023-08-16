@@ -39,7 +39,15 @@ defmodule Electric.Satellite.WsValidationsTest do
         ctx.db,
         vsn,
         "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, num INTEGER, t1 TEXT, t2 VARCHAR NOT NULL)"
+        """
+        CREATE TABLE public.foo (
+          id TEXT PRIMARY KEY,
+          num INTEGER,
+          t1 TEXT,
+          t2 VARCHAR NOT NULL,
+          bytes BYTEA
+        )
+        """
       )
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -50,6 +58,9 @@ defmodule Electric.Satellite.WsValidationsTest do
       MockClient.send_data(conn, tx_op_log)
 
       tx_op_log = serialize_trans(%{"id" => "3", "num" => "-1", "t1" => "", "t2" => "..."})
+      MockClient.send_data(conn, tx_op_log)
+
+      tx_op_log = serialize_trans(%{"id" => "4", "t2" => "...", "bytes" => <<0, 0xFF, 0x10>>})
       MockClient.send_data(conn, tx_op_log)
 
       refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout

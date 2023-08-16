@@ -31,7 +31,7 @@
 
   -no previous LSN
 
-  # Server requests replication. The `AAAAAQ==` here is [0, 0, 0, 1] UInt8Array, representing an integer 1 - the one rowid
+  # Server requests replication. The `AAAAAQ==` here is [0, 0, 0, 1] Uint8Array, representing an integer 1 - the one rowid
   ?+\[proto\] recv: #SatInStartReplicationReq\{lsn: AAAAAQ==,
   ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
   ??[proto] recv: #SatInStartReplicationResp
