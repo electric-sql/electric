@@ -41,7 +41,6 @@ services:
 
   satellite_client:
     image: "satellite_client:local"
-    user: "${UID}:${GID}"
     environment:
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: integration-tests-signing-key-example
@@ -49,9 +48,6 @@ services:
       SATELLITE_DB_PATH: /var/lib/satellite/data
       NODE_DISABLE_COLORS: 1
       NODE_REPL_HISTORY: ""
-      TERM: dumb
-      UID: ${UID}
-      GID: ${GID}
     tmpfs:
       - /var/lib/satellite/data
     privileged: true

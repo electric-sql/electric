@@ -6,6 +6,8 @@
 
 [invoke setup_client 1 "electric_1" 5133]
 
+# PREPARATION: Set up dependent tables and add a row that will be referenced
+
 [shell pg_1]
     [local sql=
         """
@@ -43,6 +45,21 @@
     })
     """
     ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+
+# TEST:
+    # Disconnect the client
+    !db.notifier.connectivityStateChanged(db.notifier.dbName, 'disconnected')
+
+[shell pg_1]
+    # Concurrently, update and then delete the referenced row on the server
+    !UPDATE public.items SET content = 'brand new content' WHERE id = 'test_id_1';
+    !DELETE FROM public.items WHERE id = 'test_id_1';
+    ?$psql
+
+[shell satellite_1]
+    # On a disconnected client, insert a dependent row
+    ?$node
     """!await db.db.other_items.create({
       data: {
         id: "other_test_id_1",
@@ -51,8 +68,25 @@
       }
     })
     """
+    ?$node
+
+
+[shell satellite_1]
+    # Reconnect the client, expecting no errors to show up
+    !db.notifier.connectivityStateChanged(db.notifier.dbName, 'available')
     ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
-    -Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+
+[shell pg_1]
+    # and expect the previously deleted row to be present
+    !\x
+    [invoke wait-for "SELECT content FROM public.items;" "content \| brand new content" 10 $psql]
+    [invoke wait-for "SELECT COUNT(*) FROM public.other_items;" "count \| 1" 10 $psql]
+
+[shell satellite_1]
+    # and the client should have the same view of the data
+    [invoke node_await_get "brand new content"]
+
 
 [cleanup]
-  [invoke teardown]
+   [invoke teardown]

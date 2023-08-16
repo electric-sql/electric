@@ -87,6 +87,7 @@ start_elixir_test_%:
 start_satellite_client_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm \
+		-e TERM=dumb \
 		satellite_client_$*
 
 

@@ -111,14 +111,14 @@ export function generateOplogTriggers(
 
 /**
  * Generates triggers for compensations for all foreign keys in the provided table.
- * 
+ *
  * Compensation is recorded as a specially-formatted update. It acts as a no-op, with
  * previous value set to NULL, and it's on the server to figure out that this is a no-op
  * compensation operation (usually `UPDATE` would have previous row state known). The entire
  * reason for it existing is to maybe revive the row if it has been deleted, so we need correct tags.
- * 
+ *
  * The compensation update contains _just_ the primary keys, no other columns are present.
- * 
+ *
  * @param tableFullName Full name of the table.
  * @param table The corresponding table.
  * @param tables Map of all tables (needed to look up the tables that are pointed at by FKs).
@@ -139,8 +139,8 @@ function generateCompensationTriggers(
     const joinedFkPKs = joinColsForJSON([fkTablePK])
 
     return [
-      `-- Triggers for foreign key compensations`,
-      `DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
+      `-- Triggers for foreign key compensations
+      DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
       // The compensation trigger inserts a row in `_electric_oplog` if the row pointed at by the FK exists
       // The way how this works is that the values for the row are passed to the nested SELECT
       // which will return those values for every record that matches the query

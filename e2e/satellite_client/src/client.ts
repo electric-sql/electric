@@ -29,7 +29,11 @@ export const electrify_db = async (
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
-  return await electrify(db, schema, config)
+  const result = await electrify(db, schema, config)
+
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
+
+  return result
 }
 
 export const set_subscribers = (db: Electric) => {
@@ -108,7 +112,6 @@ export const insert_extended_item = async (electric: Electric, values: { string:
 }
 
 export const delete_item = async (electric: Electric, keys: [string]) => {
-  electric.db.raw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations'"})
   for (const key of keys) {
     await electric.db.items.deleteMany({
       where: {
