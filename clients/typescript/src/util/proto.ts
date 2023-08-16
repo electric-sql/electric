@@ -2,6 +2,8 @@ import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 import { SatelliteError, SatelliteErrorCode } from './types'
 import { ShapeRequest } from '../satellite/shapes/types'
+import { base64, typeDecoder } from './common'
+import { getMaskBit } from './bitmaskHelpers'
 
 type GetName<T extends { $type: string }> =
   T['$type'] extends `Electric.Satellite.v1_4.${infer K}` ? K : never
@@ -268,4 +270,133 @@ export function shapeRequestToSatShapeReq(
     shapeReqs.push(req)
   }
   return shapeReqs
+}
+
+export function msgToString(message: SatPbMsg): string {
+  switch (message.$type) {
+    case 'Electric.Satellite.v1_4.SatAuthReq':
+      return `#SatAuthReq{id: ${message.id}, token: ${message.token}}`
+    case 'Electric.Satellite.v1_4.SatAuthResp':
+      return `#SatAuthResp{id: ${message.id}}`
+    case 'Electric.Satellite.v1_4.SatErrorResp':
+      return `#SatErrorResp{type: ${
+        Pb.SatErrorResp_ErrorCode[message.errorType]
+      }}`
+    case 'Electric.Satellite.v1_4.SatInStartReplicationReq': {
+      const schemaVersion = message.schemaVersion
+        ? ` schema: ${message.schemaVersion},`
+        : ''
+      return `#SatInStartReplicationReq{lsn: ${base64.fromBytes(
+        message.lsn
+      )},${schemaVersion} subscriptions: [${message.subscriptionIds}]}`
+    }
+    case 'Electric.Satellite.v1_4.SatInStartReplicationResp':
+      return `#SatInStartReplicationResp{}`
+    case 'Electric.Satellite.v1_4.SatInStopReplicationReq':
+      return `#SatInStopReplicationReq{}`
+    case 'Electric.Satellite.v1_4.SatInStopReplicationResp':
+      return `#SatInStopReplicationResp{}`
+    case 'Electric.Satellite.v1_4.SatMigrationNotification':
+      return `#SatMigrationNotification{to: ${message.newSchemaVersion}, from: ${message.newSchemaVersion}}`
+    case 'Electric.Satellite.v1_4.SatPingReq':
+      return `#SatPingReq{}`
+    case 'Electric.Satellite.v1_4.SatPingResp':
+      return `#SatPingResp{lsn: ${
+        message.lsn ? base64.fromBytes(message.lsn) : 'NULL'
+      }}`
+    case 'Electric.Satellite.v1_4.SatRelation': {
+      const cols = message.columns
+        .map((x) => `${x.name}: ${x.type}${x.primaryKey ? ' PK' : ''}`)
+        .join(', ')
+      return `#SatRelation{for: ${message.schemaName}.${message.tableName}, as: ${message.relationId}, cols: [${cols}]}`
+    }
+    case 'Electric.Satellite.v1_4.SatSubsDataBegin':
+      return `#SatSubsDataBegin{id: ${
+        message.subscriptionId
+      }, lsn: ${base64.fromBytes(message.lsn)}}`
+    case 'Electric.Satellite.v1_4.SatSubsDataEnd':
+      return `#SatSubsDataEnd{}`
+    case 'Electric.Satellite.v1_4.SatShapeDataBegin':
+      return `#SatShapeDataBegin{id: ${message.requestId}}`
+    case 'Electric.Satellite.v1_4.SatShapeDataEnd':
+      return `#SatShapeDataEnd{}`
+    case 'Electric.Satellite.v1_4.SatSubsDataError': {
+      const shapeErrors = message.shapeRequestError.map(
+        (x) =>
+          `${x.requestId}: ${Pb.SatSubsDataError_ShapeReqError_Code[x.code]} (${
+            x.message
+          })`
+      )
+      const code = Pb.SatSubsDataError_Code[message.code]
+      return `#SatSubsDataError{id: ${message.subscriptionId}, code: ${code}, msg: "${message.message}", errors: [${shapeErrors}]}`
+    }
+    case 'Electric.Satellite.v1_4.SatSubsReq':
+      return `#SatSubsReq{id: ${message.subscriptionId}, shapes: ${message.shapeRequests}}`
+    case 'Electric.Satellite.v1_4.SatSubsResp': {
+      if (message.err) {
+        const shapeErrors = message.err.shapeRequestError.map(
+          (x) =>
+            `${x.requestId}: ${
+              Pb.SatSubsResp_SatSubsError_ShapeReqError_Code[x.code]
+            } (${x.message})`
+        )
+        return `#SatSubsReq{id: ${message.subscriptionId}, err: ${
+          Pb.SatSubsResp_SatSubsError_Code[message.err.code]
+        } (${message.err.message}), shapes: [${shapeErrors}]}`
+      } else {
+        return `#SatSubsReq{id: ${message.subscriptionId}}`
+      }
+    }
+    case 'Electric.Satellite.v1_4.SatUnsubsReq':
+      return `#SatUnsubsReq{ids: ${message.subscriptionIds}}`
+    case 'Electric.Satellite.v1_4.SatUnsubsResp':
+      return `#SatUnsubsResp{}`
+    case 'Electric.Satellite.v1_4.SatOpLog':
+      return `#SatOpLog{ops: [${message.ops.map(opToString).join(', ')}]}`
+  }
+}
+
+function opToString(op: Pb.SatTransOp): string {
+  if (op.begin)
+    return `#Begin{lsn: ${base64.fromBytes(
+      op.begin.lsn
+    )}, ts: ${op.begin.commitTimestamp.toString()}, migration?: ${
+      op.begin.isMigration
+    }}`
+  if (op.commit) return `#Commit{lsn: ${base64.fromBytes(op.commit.lsn)}}`
+  if (op.insert)
+    return `#Insert{for: ${op.insert.relationId}, tags: [${
+      op.insert.tags
+    }], new: [${op.insert.rowData ? rowToString(op.insert.rowData) : ''}]}`
+  if (op.update)
+    return `#Update{for: ${op.update.relationId}, tags: [${
+      op.update.tags
+    }], new: [${
+      op.update.rowData ? rowToString(op.update.rowData) : ''
+    }], old: data: [${
+      op.update.oldRowData ? rowToString(op.update.oldRowData) : ''
+    }]}`
+  if (op.delete)
+    return `#Delete{for: ${op.delete.relationId}, tags: [${
+      op.delete.tags
+    }], old: [${
+      op.delete.oldRowData ? rowToString(op.delete.oldRowData) : ''
+    }]}`
+  if (op.migrate)
+    return `#Migrate{vsn: ${op.migrate.version}, for: ${
+      op.migrate.table?.name
+    }, stmts: [${op.migrate.stmts
+      .map((x) => x.sql.replaceAll('\n', '\\n'))
+      .join('; ')}]}`
+  return ''
+}
+
+function rowToString(row: Pb.SatOpRow): string {
+  return row.values
+    .map((x, i) =>
+      getMaskBit(row.nullsBitmask, i) == 0
+        ? JSON.stringify(typeDecoder.text(x))
+        : '∅'
+    )
+    .join(', ')
 }
