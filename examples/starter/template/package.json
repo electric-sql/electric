@@ -7,7 +7,7 @@
     "backend:stop": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
     "electric:start": "node ./backend/startElectric.js",
     "db:migrate": "node ./db/migrate.js",
-    "db:connect": "node ./db/connect.js",
+    "db:psql": "node ./db/connect.js",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "build": "node copy-wasm-files.js && node builder.js",
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "next",
-    "@types/node": "^16.9.1",
+    "@types/node": ">=16.11.0",
     "@types/react": "^18.0.18",
     "@types/react-dom": "^18.0.11",
     "esbuild": "^0.12.26",

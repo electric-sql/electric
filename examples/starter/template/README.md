@@ -12,8 +12,6 @@ Open a new tab in your terminal. Navigate back to the same folder. Apply the mig
 ```shell
 yarn db:migrate
 ```
-The above command applies all sql files in the migrations folder so make sure they are idempotent if you run the command multiple times.
-Or, alternatively, use proper migration tooling.
 
 Generate your client:
 

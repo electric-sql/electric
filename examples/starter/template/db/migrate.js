@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const { DATABASE_URL } = require('util.js')
+const { DATABASE_URL } = require('./util.js')
 
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')
@@ -28,7 +28,7 @@ const main = async () => {
       await apply(file)
     }
   }
-  console.log('⚡️ Database is migrated.')
+  console.log('⚡️ Database migrated.')
 }
 
 try {
