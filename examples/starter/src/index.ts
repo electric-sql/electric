@@ -6,6 +6,9 @@ import { spawn } from 'child_process'
 import * as fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import ora from 'ora'
+
+const spinner = ora('Creating project structure').start()
 
 // The first argument will be the project name
 const projectName = process.argv[2]
@@ -69,7 +72,7 @@ if (name) {
 }
 
 // Run `yarn install` in the project directory to install the dependencies
-console.log('Installing dependencies (may take some time) ...')
+spinner.text = 'Installing dependencies (may take some time) ...'
 const proc = spawn('yarn install', [], { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true })
 
 let errors: Uint8Array[] = []
@@ -78,6 +81,7 @@ proc.stderr.on('data', (data) => {
 })
 
 proc.on('close', (code) => {
+  spinner.stop()
   if (code === 0) {
     console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
   }
@@ -85,6 +89,6 @@ proc.on('close', (code) => {
     console.error(Buffer.concat(errors).toString())
     console.log(`⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
   }
-  
+
   console.log(`Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the readme.`)
 })
