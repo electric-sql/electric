@@ -37,4 +37,5 @@ test('merging entries: local no-op updates should cancel incoming delete', (t) =
   // Merge should resolve into the UPSERT for this row, since the remote DELETE didn't observe this local update
   t.like(merged, { 'main.public': { [pk]: { optype: 'UPSERT' } } })
   t.deepEqual(merged['main.public'][pk].tags, ['local@100001000'])
+  t.deepEqual(merged['main.public'][pk].fullRow, { id: 1, value: 'TEST' })
 })
