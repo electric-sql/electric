@@ -4,7 +4,7 @@ import {
   OplogEntryChanges,
   ShadowEntryChanges,
   OplogEntry,
-  ShadowTableChanges,
+  PendingChanges,
   localOperationsToTableChanges,
   remoteOperationsToTableChanges,
   generateTag,
@@ -15,22 +15,22 @@ import { Row } from '../util'
 
 /**
  * Merge server-sent operation with local pending oplog to arrive at the same row state the server is at.
- * @param local_origin string specifying the local origin
+ * @param localOrigin string specifying the local origin
  * @param local local oplog entries
- * @param incoming_origin string specifying the upstream origin
+ * @param incomingOrigin string specifying the upstream origin
  * @param incoming incoming oplog entries
  * @returns Changes to be made to the shadow tables
  */
 export function mergeEntries(
-  local_origin: string,
+  localOrigin: string,
   local: OplogEntry[],
-  incoming_origin: string,
+  incomingOrigin: string,
   incoming: OplogEntry[]
-): ShadowTableChanges {
+): PendingChanges {
   const localTableChanges = localOperationsToTableChanges(
     local,
     (timestamp: Date) => {
-      return generateTag(local_origin, timestamp)
+      return generateTag(localOrigin, timestamp)
     }
   )
   const incomingTableChanges = remoteOperationsToTableChanges(incoming)
@@ -54,9 +54,9 @@ export function mergeEntries(
       const [_, localChanges] = localInfo
 
       const changes = mergeChangesLastWriteWins(
-        local_origin,
+        localOrigin,
         localChanges.changes,
-        incoming_origin,
+        incomingOrigin,
         incomingChanges.changes,
         incomingChanges.fullRow
       )
@@ -138,14 +138,14 @@ export const mergeChangesLastWriteWins = (
   }, initialValue)
 }
 
-export const mergeOpTags = (
+function mergeOpTags(
   local: OplogEntryChanges,
   remote: ShadowEntryChanges
-): Tag[] => {
+): Tag[] {
   return calculateTags(local.tag, remote.tags, local.clearTags)
 }
 
-const calculateTags = (tag: Tag | null, tags: Tag[], clear: Tag[]) => {
+function calculateTags(tag: Tag | null, tags: Tag[], clear: Tag[]): Tag[] {
   if (tag == null) {
     return difference(tags, clear)
   } else {
