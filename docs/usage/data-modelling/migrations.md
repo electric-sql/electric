@@ -200,7 +200,9 @@ We only currently support additive migrations. This means you can't remove or re
 
 ### Data types
 
-ElectricSQL maps between Postgres data types on the server and SQLite data types in the local app. This is not a perfect match. In many cases, SQLite does not have native support for a Postgres data type.
+ElectricSQL maps between Postgres data types on the server and SQLite data types in the local app. This is not a perfect match. In many cases, SQLite does not have native support for a Postgres data type. However, our client libraries bridge the gap for the majority of Postgres types, providing a native JavaScript/TypeScript experience for any data type supported in electrified tables.
+
+We're actively working on expanding the range of Postgres data types ElectricSQL supports out of the box.
 
 ### Primary keys
 
