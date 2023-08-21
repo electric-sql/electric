@@ -40,7 +40,7 @@
     """!await db.db.items.create({
       data: {
         id: "test_id_1",
-        content: ""
+        content: "hello world"
       }
     })
     """
@@ -53,7 +53,6 @@
 
 [shell pg_1]
     # Concurrently, update and then delete the referenced row on the server
-    !UPDATE public.items SET content = 'brand new content' WHERE id = 'test_id_1';
     !DELETE FROM public.items WHERE id = 'test_id_1';
     ?$psql
 
@@ -80,12 +79,12 @@
 [shell pg_1]
     # and expect the previously deleted row to be present
     !\x
-    [invoke wait-for "SELECT content FROM public.items;" "content \| brand new content" 10 $psql]
+    [invoke wait-for "SELECT content FROM public.items;" "content \| hello world" 10 $psql]
     [invoke wait-for "SELECT COUNT(*) FROM public.other_items;" "count \| 1" 10 $psql]
 
 [shell satellite_1]
     # and the client should have the same view of the data
-    [invoke node_await_get "brand new content"]
+    [invoke node_await_get "hello world"]
 
 
 [cleanup]
