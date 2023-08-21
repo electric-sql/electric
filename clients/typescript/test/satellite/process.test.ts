@@ -46,6 +46,7 @@ import {
   ClientShapeDefinition,
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
+import { mergeEntries } from '../../src/satellite/merge'
 
 const parentRecord = {
   id: 1,
@@ -84,7 +85,7 @@ test('load metadata', async (t) => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
-    compensations: 0,
+    compensations: 1,
     lastAckdRowId: '0',
     lastSentRowId: '0',
     lsn: '',
@@ -295,9 +296,7 @@ test('take snapshot and merge local wins', async (t) => {
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
-  const merged = satellite._mergeEntries(clientId, local, 'remote', [
-    incomingEntry,
-  ])
+  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -352,9 +351,7 @@ test('take snapshot and merge incoming wins', async (t) => {
     }
   )
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', [
-    incomingEntry,
-  ])
+  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -610,7 +607,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
     ),
   ]
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -686,7 +683,7 @@ test('concurrent updates take all changed values', async (t) => {
     ),
   ]
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   // The incoming entry modified the value of the `value` column to `'remote'`
@@ -738,7 +735,7 @@ test('merge incoming with empty local', async (t) => {
   ]
 
   const local: OplogEntry[] = []
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {

@@ -1,0 +1,91 @@
+[doc NodeJS Satellite uses compensations correctly]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+# PREPARATION: Set up dependent tables and add a row that will be referenced
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            content_text_null TEXT,
+            content_text_null_default TEXT DEFAULT '',
+            intvalue_null integer,
+            intvalue_null_default integer DEFAULT 10
+        );
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id TEXT REFERENCES public.items(id)
+        );
+        CALL electric.electrify('public.items');
+        CALL electric.electrify('public.other_items');
+        """]
+    [invoke migrate_pg 11111 $sql]
+
+[shell satellite_1]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    [invoke node_await_table "other_items"]
+    [invoke node_sync_table "other_items"]
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatSubsDataEnd"\}
+    !await db.db.raw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
+    ?$node
+
+    """!await db.db.items.create({
+      data: {
+        id: "test_id_1",
+        content: "hello world"
+      }
+    })
+    """
+    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+
+# TEST:
+    # Disconnect the client
+    !db.notifier.connectivityStateChanged(db.notifier.dbName, 'disconnected')
+
+[shell pg_1]
+    # Concurrently, update and then delete the referenced row on the server
+    !DELETE FROM public.items WHERE id = 'test_id_1';
+    ?$psql
+
+[shell satellite_1]
+    # On a disconnected client, insert a dependent row
+    ?$node
+    """!await db.db.other_items.create({
+      data: {
+        id: "other_test_id_1",
+        content: "",
+        item_id: "test_id_1"
+      }
+    })
+    """
+    ?$node
+
+
+[shell satellite_1]
+    # Reconnect the client, expecting no errors to show up
+    !db.notifier.connectivityStateChanged(db.notifier.dbName, 'available')
+    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+
+[shell pg_1]
+    # and expect the previously deleted row to be present
+    !\x
+    [invoke wait-for "SELECT content FROM public.items;" "content \| hello world" 10 $psql]
+    [invoke wait-for "SELECT COUNT(*) FROM public.other_items;" "count \| 1" 10 $psql]
+
+[shell satellite_1]
+    # and the client should have the same view of the data
+    [invoke node_await_get "hello world"]
+
+
+[cleanup]
+   [invoke teardown]

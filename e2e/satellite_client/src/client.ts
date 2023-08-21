@@ -5,7 +5,7 @@ import { authToken } from 'electric-sql/auth'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
-import { schema, Electric } from './generated/models'
+import { schema, Electric } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
@@ -29,7 +29,11 @@ export const electrify_db = async (
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
-  return await electrify(db, schema, config)
+  const result = await electrify(db, schema, config)
+
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
+
+  return result
 }
 
 export const set_subscribers = (db: Electric) => {
@@ -48,8 +52,13 @@ export const set_subscribers = (db: Electric) => {
 }
 
 export const syncTable = async (electric: Electric, table: 'items' | 'other_items') => {
-  const { synced } = await electric.db[table].sync()
-  return await synced
+  if (table === 'items') {
+    const { synced } = await electric.db.items.sync()
+    return await synced
+  } else if (table === 'other_items') {
+    const { synced } = await electric.db.other_items.sync({ include: { items: true } })
+    return await synced
+  }
 }
 
 export const get_tables = async (electric: Electric) => {
@@ -121,6 +130,13 @@ export const insert_other_item = async (electric: Electric, keys: [string]) => {
     return {
       id: uuidv4(),
       content: k
+    }
+  })
+
+  electric.db.items.create({
+    data: {
+      id: "test_id_1",
+      content: ""
     }
   })
 

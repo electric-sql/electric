@@ -36,20 +36,17 @@ import {
   SqlValue,
 } from '../util/types'
 import { SatelliteOpts } from './config'
-import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
+import { mergeEntries } from './merge'
 import {
   encodeTags,
   fromTransaction,
   generateTag,
   getShadowPrimaryKey,
-  localOperationsToTableChanges,
   OplogEntry,
   OPTYPES,
   primaryKeyToStr,
-  remoteOperationsToTableChanges,
   ShadowEntry,
   ShadowEntryChanges,
-  ShadowTableChanges,
   toTransactions,
 } from './oplog'
 import {
@@ -65,7 +62,7 @@ import {
 } from '../util/common'
 
 import Log from 'loglevel'
-import { generateOplogTriggers } from '../migrators/triggers'
+import { generateTableTriggers } from '../migrators/triggers'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
@@ -869,7 +866,7 @@ export class SatelliteProcess implements Satellite {
   // any existing subscription. We need a way to detect and prevent that.
   async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
-    const merged = this._mergeEntries(
+    const merged = mergeEntries(
       this._authState!.clientId,
       local,
       incoming_origin,
@@ -951,64 +948,6 @@ export class SatelliteProcess implements Satellite {
         shadow.tags,
       ],
     }
-  }
-
-  // Merge changes, with last-write-wins and add-wins semantics.
-  // clearTags field is used by the calling code to determine new value of
-  // the shadowTags
-  _mergeEntries(
-    local_origin: string,
-    local: OplogEntry[],
-    incoming_origin: string,
-    incoming: OplogEntry[]
-  ): ShadowTableChanges {
-    const localTableChanges = localOperationsToTableChanges(
-      local,
-      (timestamp: Date) => {
-        return generateTag(local_origin, timestamp)
-      }
-    )
-    const incomingTableChanges = remoteOperationsToTableChanges(incoming)
-
-    for (const [tablename, incomingMapping] of Object.entries(
-      incomingTableChanges
-    )) {
-      const localMapping = localTableChanges[tablename]
-
-      if (localMapping === undefined) {
-        continue
-      }
-
-      for (const [primaryKey, incomingChanges] of Object.entries(
-        incomingMapping
-      )) {
-        const localInfo = localMapping[primaryKey]
-        if (localInfo === undefined) {
-          continue
-        }
-        const [_, localChanges] = localInfo
-
-        const changes = mergeChangesLastWriteWins(
-          local_origin,
-          localChanges.changes,
-          incoming_origin,
-          incomingChanges.changes,
-          incomingChanges.fullRow
-        )
-        let optype
-
-        const tags = mergeOpTags(localChanges, incomingChanges)
-        if (tags.length == 0) {
-          optype = OPTYPES.delete
-        } else {
-          optype = OPTYPES.upsert
-        }
-
-        Object.assign(incomingChanges, { changes, optype, tags })
-      }
-    }
-
-    return incomingTableChanges
   }
 
   _updateRelations(rel: Omit<Relation, 'id'>) {
@@ -1503,5 +1442,5 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
     }),
   }
   const fullTableName = table.namespace + '.' + table.tableName
-  return generateOplogTriggers(fullTableName, table)
+  return generateTableTriggers(fullTableName, table)
 }
