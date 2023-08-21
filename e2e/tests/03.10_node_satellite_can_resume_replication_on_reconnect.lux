@@ -16,17 +16,12 @@
 
 [shell satellite_1]
   # The client starts replication from scratch.
-  ?no previous LSN, start replication from scratch
-  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+  ??no previous LSN, start replication from scratch
+  ??[proto] send: #SatInStartReplicationReq{lsn: ,
+  ??[proto] recv: #SatInStartReplicationResp
 
-  # The client receives both migrations during initial sync.
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*"lsn":\{"type":"Buffer","data":\[[\d,]+\].*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration1_vsn",.*,"table":\{.*,"name":"foo"
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*"lsn":\{"type":"Buffer","data":\[[\d,]+\].*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration2_vsn",.*,"table":\{.*,"name":"bar"
+  ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration1_vsn, for: foo
+  ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration2_vsn, for: bar
 
   [progress stopping client]
   !await client.stop(db)
@@ -40,8 +35,8 @@
   -no previous LSN
 
   ?starting replication with lsn:
-  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{"0":\d+,.*?\}
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+  ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ??[proto] recv: #SatInStartReplicationResp
 
 [cleanup]
   [invoke teardown]

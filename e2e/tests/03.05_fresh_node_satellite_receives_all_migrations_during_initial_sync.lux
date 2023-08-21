@@ -38,19 +38,15 @@
 [invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
-  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\}
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+  ??[proto] send: #SatInStartReplicationReq
+  ??[proto] recv: #SatInStartReplicationResp
 
   # Verifying the initial sync. The client receives migrations corresponding to all electrified tables on the server.
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"entries"
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"[0-9_]+",.*,"table":\{.*,"name":"entries"
+  ??[proto] recv: #SatRelation{for: public.entries
+  ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: [0-9_]+, for: entries
 
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatRelation","schemaName":"public",.*"tableName":"items"
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"[0-9_]+",.*,"table":\{.*,"name":"items"
+  ??[proto] recv: #SatRelation{for: public.items
+  ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: [0-9_]+, for: items
 
 [cleanup]
   [invoke teardown]

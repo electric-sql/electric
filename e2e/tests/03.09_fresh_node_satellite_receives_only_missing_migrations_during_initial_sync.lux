@@ -33,16 +33,14 @@
   # The client starts replication from scratch.
   ?no previous LSN, start replication from scratch
   # It passes its schema version to the server.
-  ?Sending message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationReq","lsn":\{\},.*?"schemaVersion":"$migration1_vsn"
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatInStartReplicationResp"\}
+  ??[proto] send: #SatInStartReplicationReq{lsn: , schema: $migration1_vsn
+  ??[proto] recv: #SatInStartReplicationResp{}
 
   # The client receives only the second migration.
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatOpLog","ops":\[\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","begin":\{.*\}\},\
-    \{"\$$type":"Electric.Satellite.v[0-9_]+.SatTransOp","migrate":\{.*,"version":"$migration2_vsn",.*,"table":\{.*,"name":"bar"
+  ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration2_vsn, for: bar
 
   # Wait for the ping message to make sure we don't receive anything mentioning $migration1_vsn from the server.
-  ?Received message \{"\$$type":"Electric.Satellite.v[0-9_]+.SatPingReq"\}
+  ??[proto] recv: #SatPingReq{}
 
 [cleanup]
   [invoke teardown]
