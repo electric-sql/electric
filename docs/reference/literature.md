@@ -6,11 +6,11 @@ description: >-
 
 import literature from '@site/data/literature.json'
 
-The [ElectricSQL system](../index.md) builds on decades of research into local-first software and distributed database consistency, integrity and performance. In many cases, this research has been pioneered by [ElectricSQL's team and advisors](/about/team).
+The [ElectricSQL system](../index.md) builds on decades of research into local-first software and distributed database consistency, integrity and performance. In many cases, this research has been authored by [ElectricSQL's team and advisors](/about/team).
 
 ## Research papers
 
-This page lists a selection of papers that chart the development of some of the key concepts and algorithms. It is not an exhaustive list but this selection of papers and the references they cite should provide a good entry point to the research and systems that ElectricSQL is based on.
+This page lists a non-exhaustive selection of papers that chart the development of some of the key concepts and algorithms that ElectricSQL is based on.
 
 <div className="table-responsive my-6">
   <table className="table table-lg">
