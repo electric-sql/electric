@@ -54,7 +54,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     Transaction
   }
 
-  @create_a "CREATE TABLE a (aid uuid NOT NULL PRIMARY KEY, avalue text);"
+  @create_a "CREATE TABLE a (aid text NOT NULL PRIMARY KEY, avalue text);"
   @create_b "CREATE TABLE b.b (bid1 int4, bid2 int4, bvalue text, PRIMARY KEY (bid1, bid2));"
   @sqls [
     @create_a,
@@ -188,7 +188,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: :text,
                    nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
@@ -220,7 +220,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: :text,
                    nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
@@ -254,7 +254,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
                  nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
@@ -304,7 +304,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
                  nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
@@ -338,7 +338,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
                  nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true

@@ -22,11 +22,9 @@ defmodule Electric.Satellite.Serialization do
   @spec supported_pg_types :: [atom]
   def supported_pg_types do
     ~w[
-      bytea
       int2 int4 int8
       float8
       text
-      uuid
       varchar
     ]a
   end

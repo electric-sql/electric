@@ -119,7 +119,7 @@
     [local sql=
         """
         CREATE TABLE public.items (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
             content VARCHAR NOT NULL,
             content_text_null VARCHAR,
             content_text_null_default VARCHAR DEFAULT '',

@@ -16,7 +16,7 @@
     """!
     BEGIN;
     SELECT electric.migration_version('$migration_version');
-    CREATE TABLE mtable1 (id uuid PRIMARY KEY);
+    CREATE TABLE mtable1 (id text PRIMARY KEY);
     CALL electric.electrify('mtable1');
     COMMIT;
     """
