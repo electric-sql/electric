@@ -1,0 +1,8 @@
+customProps:
+  description: >-
+    Integrate with your app's reactive component framework.
+  hide_overview: true
+  icon: /img/icons/react.svg
+link:
+  type: doc
+  id: integrations/frontend/index

@@ -1,0 +1,21 @@
+.widget {
+  position: relative;
+  display: block;
+  margin-bottom: 1rem;
+}
+.widgetHeading h3 {
+  margin-left: 0.15rem;
+}
+@media (max-width: 639px) {
+  .widgetHeading {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .latencyLabel {
+    max-height: 2rem;
+  }
+}

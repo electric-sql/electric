@@ -1,0 +1,25 @@
+.items {
+  position: relative;
+  display: block;
+  min-height: 4rem;
+  margin: 1.5rem 0 1rem;
+}
+.item {
+  width: 40px;
+  height: 40px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  position: relative;
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0;
+}
+.electric-green {
+  background-image: url('/img/icons/shape.green.svg');
+}
+.script-red {
+  background-image: url('/img/icons/shape.red.svg');
+}
+.script-purple {
+  background-image: url('/img/icons/shape.purple.svg');
+}

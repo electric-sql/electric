@@ -1,0 +1,8 @@
+label: Web
+customProps:
+  description: >-
+    SQLite driver adapters for the web.
+  hide_overview: true
+  icon: /img/icons/firefox.svg
+position: 10
+collapsed: false

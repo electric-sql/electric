@@ -1,0 +1,8 @@
+label: Authentication
+customProps:
+  description: >-
+    How to authenticate the client with the replication protocol.
+  icon: /img/usage/auth.svg
+link:
+  type: doc
+  id: usage/auth/index

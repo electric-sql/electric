@@ -1,0 +1,8 @@
+label: Mobile
+customProps:
+  description: >-
+    SQLite driver adapters for mobile apps.
+  hide_overview: true
+  icon: /img/icons/android.svg
+position: 20
+collapsed: false
