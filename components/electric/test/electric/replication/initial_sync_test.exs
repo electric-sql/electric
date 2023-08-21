@@ -125,7 +125,7 @@ defmodule Electric.Replication.InitialSyncTest do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.users (
-        id UUID PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL
       )
       """)
@@ -137,9 +137,9 @@ defmodule Electric.Replication.InitialSyncTest do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.documents (
-        id UUID PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        user_id UUID REFERENCES users(id)
+        user_id TEXT REFERENCES users(id)
       )
       """)
 

@@ -20,7 +20,7 @@
     BEGIN;
 
     CREATE TABLE items (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
       content VARCHAR NOT NULL
     );
     CALL electric.electrify('public.items');
