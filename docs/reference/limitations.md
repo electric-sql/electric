@@ -49,9 +49,11 @@ This is a very temporary workaround and will be removed soon!
 
 We don't currently support any constraints except primary keys. You must remove all unique and check constraints from your Postgres data model.
 
-We have limited data type support. Currently, we only support strings (`text` and non-length-limited `varchar`) and numbers (`smallint`, `integer`, `bigint`, `double precision`). The authoritative list of supported data types is maintained in the `Electric.Satellite.Serialization.supported_pg_types/0` function defined in [`components/electric/lib/electric/satellite/serialization.ex`](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/satellite/serialization.ex).
+We have limited data type support. Currently, we only support strings (`text` and non-length-limited `varchar`) and numbers (`smallint`, `integer`, `bigint`, `double precision`). The authoritative list of supported data types is maintained in the [`supported_pg_types/0` function][1].
 
 We also only support forward and additive migrations. Migrations that remove columns or make them more restrictive will fail when applied to electrified tables.
+
+[1]: https://github.com/search?q=repo%3Aelectric-sql%2Felectric+symbol%3Asupported_pg_types&type=code
 
 ### Failure modes
 
