@@ -97,37 +97,41 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
          origin,
          filtering_context
        ) do
-    table = Enum.find(schema.tables, &(&1.name.schema == schema_name && &1.name.name == name))
-    columns = Enum.map_join(table.columns, ", ", &~s|main."#{&1.name}"|)
-    {:ok, pks} = Schema.primary_keys(table)
-    pk_clause = Enum.map_join(pks, " AND ", &~s|main."#{&1}" = shadow."#{&1}"|)
+    if filtering_context[:sent_tables] && MapSet.member?(filtering_context[:sent_tables], rel) do
+      {:ok, []}
+    else
+      table = Enum.find(schema.tables, &(&1.name.schema == schema_name && &1.name.name == name))
+      columns = Enum.map_join(table.columns, ", ", &~s|main."#{&1.name}"|)
+      {:ok, pks} = Schema.primary_keys(table)
+      pk_clause = Enum.map_join(pks, " AND ", &~s|main."#{&1}" = shadow."#{&1}"|)
 
-    ownership_column = Ownership.id_column_name()
+      ownership_column = Ownership.id_column_name()
 
-    where_clause =
-      if filtering_context[:user_id] && Enum.any?(table.columns, &(&1.name == ownership_column)) do
-        escaped = String.replace(filtering_context[:user_id], "'", "''")
+      where_clause =
+        if filtering_context[:user_id] && Enum.any?(table.columns, &(&1.name == ownership_column)) do
+          escaped = String.replace(filtering_context[:user_id], "'", "''")
 
-        # We're using explicit interpolation here instead of extended query, because we need all columns regardless of type to be returned as binaries
-        "WHERE #{ownership_column} = '#{escaped}'"
-      else
-        ""
+          # We're using explicit interpolation here instead of extended query, because we need all columns regardless of type to be returned as binaries
+          "WHERE #{ownership_column} = '#{escaped}'"
+        else
+          ""
+        end
+
+      query = """
+      SELECT shadow."_tags", #{columns}
+        FROM #{Schema.name(schema_name)}.#{Schema.name(name)} as main
+        JOIN electric."shadow__#{schema_name}__#{name}" as shadow
+          ON #{pk_clause}
+        #{where_clause}
+      """
+
+      case :epgsql.squery(conn, query) do
+        {:ok, _, rows} ->
+          {:ok, rows_to_records_with_tags(rows, Enum.map(table.columns, & &1.name), rel, origin)}
+
+        {:error, _} = error ->
+          error
       end
-
-    query = """
-    SELECT shadow."_tags", #{columns}
-      FROM #{Schema.name(schema_name)}.#{Schema.name(name)} as main
-      JOIN electric."shadow__#{schema_name}__#{name}" as shadow
-        ON #{pk_clause}
-      #{where_clause}
-    """
-
-    case :epgsql.squery(conn, query) do
-      {:ok, _, rows} ->
-        {:ok, rows_to_records_with_tags(rows, Enum.map(table.columns, & &1.name), rel, origin)}
-
-      {:error, _} = error ->
-        error
     end
   end
 

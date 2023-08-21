@@ -312,6 +312,79 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
+         """
+    test "Second subscription for the same table yields no data",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
+        assert_initial_replication_response(conn, 3)
+
+        sub_id1 = uuid4()
+        request_id1 = uuid4()
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: sub_id1,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id1,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "users"}]
+              }
+            }
+          ]
+        })
+
+        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id1, err: nil}}
+        received = receive_subscription_data(conn, sub_id1)
+        assert Map.keys(received) == [request_id1]
+        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
+
+        sub_id2 = uuid4()
+        request_id2 = uuid4()
+
+        MockClient.send_data(conn, %SatSubsReq{
+          subscription_id: sub_id2,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id2,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "users"}]
+              }
+            }
+          ]
+        })
+
+        # Since we already got the data for this table, we shouldn't receive it again
+        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, err: nil}}
+        received = receive_subscription_data(conn, sub_id2)
+        assert Map.keys(received) == [request_id2]
+        assert [] == received[request_id2]
+
+        # But an unsubscribe from one of those still keeps messages coming for the mentioned table
+        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id1]})
+        assert_receive {^conn, %SatUnsubsResp{}}
+
+        # We still get the message because the other subscription is active
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+            uuid4(),
+            "Garry"
+          ])
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            _begin,
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            _commit
+                          ]
+                        }},
+                       1000
+      end)
+    end
+
     test "The client can connect and subscribe, and then unsubscribe, and gets no data after unsubscribing",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->

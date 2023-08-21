@@ -18,6 +18,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
+  alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
@@ -828,7 +829,15 @@ defmodule Electric.Satellite.Protocol do
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
     opts = state.pg_connector_opts
-    context = %{user_id: Pathex.get(state, path(:auth / :user_id))}
+
+    context = %{
+      user_id: Pathex.get(state, path(:auth / :user_id)),
+      sent_tables:
+        Map.values(state.subscriptions)
+        |> List.flatten()
+        |> Enum.flat_map(fn %ShapeRequest{included_tables: tables} -> tables end)
+        |> MapSet.new()
+    }
 
     Task.start(fn ->
       # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.
