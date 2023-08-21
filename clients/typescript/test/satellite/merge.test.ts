@@ -2,7 +2,7 @@ import test from 'ava'
 import { mergeEntries } from '../../src/satellite/merge'
 import { OplogEntry, primaryKeyToStr } from '../../src/satellite/oplog'
 
-test('merging entires: no-op updates should cancel a delete', (t) => {
+test('merging entries: local no-op updates should cancel incoming delete', (t) => {
   const pk = primaryKeyToStr({ id: 1 })
 
   const local: OplogEntry[] = [
