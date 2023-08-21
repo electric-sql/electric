@@ -340,7 +340,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "something_else",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }
@@ -354,7 +354,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "other_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }
@@ -368,7 +368,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "yet_another_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }
