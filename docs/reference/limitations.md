@@ -164,17 +164,6 @@ Any existing trigger in an Electrified table will not be propagated to the clien
 
 The same trigger written for Postgres or SQLite end up having very different definitions and is difficult to convert between them.
 
-### Data types
-
-#### Input validation
-
-SQLite and Postgres have very different type support, with SQLite having more basic data type support. It is crucial to respect Postgres schema when upstreaming changes, to ensure the replication stream doesn’t break.
-
-**Roadmap**
-
-- We are shipping proper support for type validation soon
-- Working on ways of recovering ElectricSQL replication stream in case of client or server errors
-
 ### Shapes
 
 #### Transitively replicate tables referred in foreign keys
