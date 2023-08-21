@@ -90,6 +90,19 @@ import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
 
+const connectionRetryHandler: ConnectRetryHandler = (error, attempts) => {
+  // only retry on known errors
+  if (!(error instanceof SatelliteError)) {
+    return false
+  }
+  if (error.code == SatelliteErrorCode.CONNECTION_FAILED) {
+    return true
+  }
+
+  Log.debug(`stopped trying to connect after ${attempts} attempts`)
+  return false
+}
+
 type IncomingHandler = {
   handle: (
     msg: any
@@ -120,6 +133,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socket?: Socket
 
   private notifier: Notifier
+
+  private connectionRetryHandler = connectionRetryHandler
 
   private initializing?: {
     promise: Promise<void>
@@ -291,22 +306,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.socket.open({ url })
       })
 
-    const retry: ConnectRetryHandler = (error, attempts) => {
-      // only retry on known errors
-      if (!(error instanceof SatelliteError)) {
-        return false
-      }
-      if (error.code == SatelliteErrorCode.CONNECTION_FAILED) {
-        return true
-      }
-
-      Log.debug(`stopped trying to connect after ${attempts} attempts`)
-      return false
-    }
-
     await backOff(() => tryConnect(), {
       ...connectionRetryPolicy,
-      retry,
+      retry: this.connectionRetryHandler,
     }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
