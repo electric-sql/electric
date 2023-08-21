@@ -360,7 +360,7 @@ function opToString(op: Pb.SatTransOp): string {
   if (op.begin)
     return `#Begin{lsn: ${base64.fromBytes(
       op.begin.lsn
-    )}, ts: ${op.begin.commitTimestamp.toString()}, migration?: ${
+    )}, ts: ${op.begin.commitTimestamp.toString()}, isMigration: ${
       op.begin.isMigration
     }}`
   if (op.commit) return `#Commit{lsn: ${base64.fromBytes(op.commit.lsn)}}`
