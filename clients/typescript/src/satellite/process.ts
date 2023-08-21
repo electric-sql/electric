@@ -653,27 +653,26 @@ export class SatelliteProcess implements Satellite {
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
-      const startReplicationResp = await this.client.startReplication(
+      const { error } = await this.client.startReplication(
         this._lsn,
         schemaVersion,
         subscriptionIds.length > 0 ? subscriptionIds : undefined
       )
 
-      const error = startReplicationResp.error
       if (error) {
-        if (
-          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-          this.opts?.clearOnBehindWindow &&
-          !currentlyReconnecting
-        ) {
-          return await this._handleBehindWindow()
-        }
-
         throw error
       }
     } catch (error: any) {
       if (!(error instanceof SatelliteError)) {
         throw error
+      }
+
+      if (
+        error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+        this.opts?.clearOnBehindWindow &&
+        !currentlyReconnecting
+      ) {
+        return await this._handleBehindWindow()
       }
 
       if (throwErrors.includes(error.code)) {

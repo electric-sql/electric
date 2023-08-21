@@ -815,6 +815,9 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
+    // TODO: this causing intermittent issues in tests because
+    // no one might catch this error. We shall pass this information
+    // as part of connectivity state
     this.emit(
       'error',
       new SatelliteError(
@@ -1046,7 +1049,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       }, this.opts.timeout)
 
       // reject on any error
-      const errorListener = (error: SatelliteError) => {
+      const errorListener = (error: any) => {
         return reject(error)
       }
 
