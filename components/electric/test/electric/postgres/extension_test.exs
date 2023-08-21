@@ -426,7 +426,7 @@ defmodule Electric.Postgres.ExtensionTest do
       assert [{:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
                CREATE TABLE public.t1 (
-                 id TEXT PRIMARY KEY,
+                 id UUID PRIMARY KEY,
                  content TEXT NOT NULL,
                  words VARCHAR,
                  num2a INT2,
@@ -464,7 +464,6 @@ defmodule Electric.Postgres.ExtensionTest do
       assert error_msg ==
                """
                Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
-                 "id" uuid
                  "c1" character(1)
                  "c2" character(11)
                  "c3" character varying(11)

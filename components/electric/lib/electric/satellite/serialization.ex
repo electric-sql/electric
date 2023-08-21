@@ -28,6 +28,7 @@ defmodule Electric.Satellite.Serialization do
       float8
       text
       timestamp timestamptz
+      uuid
       varchar
     ]a
   end

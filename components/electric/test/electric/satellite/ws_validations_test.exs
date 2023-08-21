@@ -187,9 +187,6 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
-  # Support for UUID is already implemented on the server but not in DAL on the client. Once the latter is ready, we can
-  # add `:uuid` to the list of supported types in `Electric.Satellite.Serialization` and re-enable this test.
-  @tag :skip
   test "validates uuid values", ctx do
     vsn = "2023072504"
     :ok = migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id UUID PRIMARY KEY)")
