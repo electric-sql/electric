@@ -2,19 +2,19 @@ import { EventEmitter } from 'events'
 import { ConnectionOptions, Data, Socket, SocketFactory } from './index'
 
 export class MockSocketFactory implements SocketFactory {
-  create() {
+  create(): MockSocket {
     return new MockSocket()
   }
 }
 
 export class MockSocket extends EventEmitter implements Socket {
-  open(_opts: ConnectionOptions): MockSocket {
+  open(_opts: ConnectionOptions): this {
     return this
   }
-  write(_data: string | Uint8Array | Buffer): MockSocket {
+  write(_data: string | Uint8Array | Buffer): this {
     return this
   }
-  closeAndRemoveListeners(): MockSocket {
+  closeAndRemoveListeners(): this {
     return this
   }
 
@@ -23,4 +23,5 @@ export class MockSocket extends EventEmitter implements Socket {
   onClose(_cb: () => void): void {}
   onceConnect(_cb: () => void): void {}
   onceError(_cb: (error: Error) => void): void {}
+  removeErrorListener(_cb: (error: Error) => void): void {}
 }

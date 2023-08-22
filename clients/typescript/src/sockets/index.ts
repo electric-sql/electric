@@ -5,9 +5,9 @@ export interface ConnectionOptions {
 }
 
 export interface Socket {
-  open(opts: ConnectionOptions): Socket
-  write(data: Data): Socket
-  closeAndRemoveListeners(): Socket
+  open(opts: ConnectionOptions): this
+  write(data: Data): this
+  closeAndRemoveListeners(): this
 
   onMessage(cb: (data: Data) => void): void
   onError(cb: (error: Error) => void): void
@@ -15,6 +15,8 @@ export interface Socket {
 
   onceConnect(cb: () => void): void
   onceError(cb: (error: Error) => void): void
+
+  removeErrorListener(cb: (error: Error) => void): void
 }
 
 export interface SocketFactory {
