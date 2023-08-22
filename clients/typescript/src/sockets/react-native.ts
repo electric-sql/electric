@@ -2,7 +2,7 @@ import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketReactNativeFactory implements SocketFactory {
-  create() {
+  create(): WebSocketReactNative {
     return new WebSocketReactNative()
   }
 }
@@ -10,17 +10,12 @@ export class WebSocketReactNativeFactory implements SocketFactory {
 export class WebSocketReactNative implements Socket {
   private socket?: WebSocket
 
-  private connectCallbacks: (() => void)[]
-  private errorCallbacks: ((error: Error) => void)[]
-  private messageCallbacks: ((data: any) => void)[]
+  private connectCallbacks: (() => void)[] = []
+  private errorCallbacks: ((error: Error) => void)[] = []
+  private onceErrorCallbacks: ((error: Error) => void)[] = []
+  private messageCallbacks: ((data: any) => void)[] = []
 
-  constructor() {
-    this.connectCallbacks = []
-    this.errorCallbacks = []
-    this.messageCallbacks = []
-  }
-
-  open(opts: ConnectionOptions): Socket {
+  open(opts: ConnectionOptions): this {
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'arraybuffer'
 
@@ -30,14 +25,14 @@ export class WebSocketReactNative implements Socket {
       }
     }
 
-    this.socket.onerror = (event: any) => {
-      while (this.errorCallbacks.length > 0) {
-        this.errorCallbacks.pop()!(
-          new SatelliteError(
-            SatelliteErrorCode.CONNECTION_FAILED,
-            event.message
-          )
-        )
+    // event doesn't provide much
+    this.socket.onerror = () => {
+      for (const cb of this.errorCallbacks) {
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+      }
+
+      for (const cb of this.onceErrorCallbacks) {
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
       }
     }
 
@@ -52,12 +47,12 @@ export class WebSocketReactNative implements Socket {
     return this
   }
 
-  write(data: Data): Socket {
+  write(data: Data): this {
     this.socket?.send(data)
     return this
   }
 
-  closeAndRemoveListeners(): Socket {
+  closeAndRemoveListeners(): this {
     this.connectCallbacks = []
     this.errorCallbacks = []
     this.messageCallbacks = []
@@ -91,6 +86,18 @@ export class WebSocketReactNative implements Socket {
   }
 
   onceError(cb: (error: Error) => void): void {
-    this.errorCallbacks.push(cb)
+    this.onceErrorCallbacks.push(cb)
+  }
+
+  removeErrorListener(cb: (error: Error) => void): void {
+    const idx = this.errorCallbacks.indexOf(cb)
+    if (idx >= 0) {
+      this.errorCallbacks.splice(idx, 1)
+    }
+
+    const idxOnce = this.onceErrorCallbacks.indexOf(cb)
+    if (idxOnce >= 0) {
+      this.onceErrorCallbacks.splice(idxOnce, 1)
+    }
   }
 }

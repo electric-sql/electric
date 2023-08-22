@@ -90,12 +90,12 @@ import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
 
-const connectionRetryHandler: ConnectRetryHandler = (error, attempts) => {
+const connectRetryHandler: ConnectRetryHandler = (error, attempts) => {
   // only retry on known errors
   if (!(error instanceof SatelliteError)) {
     return false
   }
-  if (error.code == SatelliteErrorCode.CONNECTION_FAILED) {
+  if (error.code == SatelliteErrorCode.SOCKET_ERROR) {
     return true
   }
 
@@ -134,7 +134,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private notifier: Notifier
 
-  private connectionRetryHandler = connectionRetryHandler
+  private connectRetryHandler = connectRetryHandler
 
   private initializing?: {
     promise: Promise<void>
@@ -276,30 +276,38 @@ export class SatelliteClient extends EventEmitter implements Client {
           )
         }
         this.socket = this.socketFactory.create()
-        this.socket.onceConnect(() => {
+
+        const onceError = (error: Error) => {
+          this.socket?.closeAndRemoveListeners()
+          this.socket = undefined
+
+          reject(error)
+        }
+
+        const onceConnect = () => {
           if (!this.socket)
             throw new SatelliteError(
               SatelliteErrorCode.UNEXPECTED_STATE,
               'socket got unassigned somehow'
             )
+
+          this.socket.removeErrorListener(onceError)
           this.socketHandler = (message) => this.handleIncoming(message)
-          this.notifier.connectivityStateChanged(this.dbName, 'connected')
+
           this.socket.onMessage(this.socketHandler)
-          this.socket.onError(() => {
+          this.socket.onError(() =>
             this.notifier.connectivityStateChanged(this.dbName, 'error')
-          })
-          this.socket.onClose(() => {
+          )
+          this.socket.onClose(() =>
             this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-          })
+          )
+
+          this.notifier.connectivityStateChanged(this.dbName, 'connected')
           resolve()
-        })
+        }
 
-        this.socket.onceError((error) => {
-          this.socket?.closeAndRemoveListeners()
-          this.socket = undefined
-
-          reject(error)
-        })
+        this.socket.onceError(onceError)
+        this.socket.onceConnect(onceConnect)
 
         const { host, port, ssl } = this.opts
         const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
@@ -308,7 +316,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     await backOff(() => tryConnect(), {
       ...connectionRetryPolicy,
-      retry: this.connectionRetryHandler,
+      retry: this.connectRetryHandler,
     }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -855,7 +863,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     // no one might catch this error. We shall pass this information
     // as part of connectivity state
     this.emit(
-      'error',
+      'rpc_error',
       new SatelliteError(
         SatelliteErrorCode.SERVER_ERROR,
         `server replied with error code: ${error.errorType}`
@@ -918,9 +926,10 @@ export class SatelliteClient extends EventEmitter implements Client {
     } catch (error) {
       if (error instanceof SatelliteError) {
         if (handleIsRpc) {
-          this.emit('error', error)
+          this.emit('rpc_error', error)
         }
-        // no one is watching this error
+
+        // FIXME: this errors shall be handled or thrown
         Log.warn(
           `unhandled satellite errors while processing incoming message: ${error}`
         )
@@ -1091,13 +1100,13 @@ export class SatelliteClient extends EventEmitter implements Client {
         return reject(error)
       }
 
-      this.once('error', errorListener)
+      this.once('rpc_error', errorListener)
       if (distinguishOn) {
         const handleRpcResp = (resp: T) => {
           // TODO: remove this comment when RPC types are fixed
           // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
           if (resp[distinguishOn] === request[distinguishOn]) {
-            this.removeListener('error', errorListener)
+            this.removeListener('rpc_error', errorListener)
             return resolve(resp)
           } else {
             // This WAS an RPC response, but not the one we were expecting, waiting more
@@ -1107,7 +1116,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.once('rpc_response', handleRpcResp)
       } else {
         this.once('rpc_response', (resp: T) => {
-          this.removeListener('error', errorListener)
+          this.removeListener('rpc_error', errorListener)
           resolve(resp)
         })
       }

@@ -2,7 +2,7 @@ import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketWebFactory implements SocketFactory {
-  create() {
+  create(): WebSocketWeb {
     return new WebSocketWeb()
   }
 }
@@ -10,15 +10,11 @@ export class WebSocketWebFactory implements SocketFactory {
 export class WebSocketWeb implements Socket {
   private socket?: WebSocket
 
-  private connectCallbacks: (() => void)[]
-  private errorCallbacks: ((error: Error) => void)[]
+  private connectCallbacks: (() => void)[] = []
+  private errorCallbacks: ((error: Error) => void)[] = []
+  private onceErrorCallbacks: ((error: Error) => void)[] = []
 
-  constructor() {
-    this.connectCallbacks = []
-    this.errorCallbacks = []
-  }
-
-  open(opts: ConnectionOptions): Socket {
+  open(opts: ConnectionOptions): this {
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'arraybuffer'
 
@@ -30,25 +26,24 @@ export class WebSocketWeb implements Socket {
 
     // event doesn't provide much
     this.socket.addEventListener('error', () => {
-      while (this.errorCallbacks.length > 0) {
-        this.errorCallbacks.pop()!(
-          new SatelliteError(
-            SatelliteErrorCode.CONNECTION_FAILED,
-            'failed to establish connection'
-          )
-        )
+      for (const cb of this.errorCallbacks) {
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+      }
+
+      for (const cb of this.onceErrorCallbacks) {
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
       }
     })
 
     return this
   }
 
-  write(data: Data): Socket {
+  write(data: Data): this {
     this.socket?.send(data)
     return this
   }
 
-  closeAndRemoveListeners(): Socket {
+  closeAndRemoveListeners(): this {
     this.socket?.close()
     return this
   }
@@ -61,7 +56,7 @@ export class WebSocketWeb implements Socket {
   }
 
   onError(cb: (error: Error) => void): void {
-    this.socket?.addEventListener('error', () => cb(new Error('socket error')))
+    this.errorCallbacks.push(cb)
   }
 
   onClose(cb: () => void): void {
@@ -73,6 +68,18 @@ export class WebSocketWeb implements Socket {
   }
 
   onceError(cb: (error: Error) => void): void {
-    this.errorCallbacks.push(cb)
+    this.onceErrorCallbacks.push(cb)
+  }
+
+  removeErrorListener(cb: (error: Error) => void): void {
+    const idx = this.errorCallbacks.indexOf(cb)
+    if (idx >= 0) {
+      this.errorCallbacks.splice(idx, 1)
+    }
+
+    const idxOnce = this.onceErrorCallbacks.indexOf(cb)
+    if (idxOnce >= 0) {
+      this.onceErrorCallbacks.splice(idxOnce, 1)
+    }
   }
 }

@@ -99,7 +99,6 @@ type MetaEntries = {
 }
 
 const throwErrors = [
-  SatelliteErrorCode.CONNECTION_FAILED,
   SatelliteErrorCode.INVALID_POSITION,
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
@@ -299,7 +298,6 @@ export class SatelliteProcess implements Satellite {
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
-        Log.debug(`deleting all rows from table ${select.tablename}`)
         tablenames.push(select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls

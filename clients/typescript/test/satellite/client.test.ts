@@ -92,7 +92,7 @@ test.serial('connection backoff success', async (t) => {
   }
 
   try {
-    client['connectionRetryHandler'] = retry
+    client['connectRetryHandler'] = retry
     await client.connect()
   } catch (e) {}
 })
@@ -110,7 +110,7 @@ test.serial('connection backoff failure', async (t) => {
   }
 
   try {
-    client['connectionRetryHandler'] = retry
+    client['connectRetryHandler'] = retry
     await client.connect()
   } catch (e) {
     t.pass()

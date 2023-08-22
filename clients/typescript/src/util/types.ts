@@ -35,7 +35,6 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
-  CONNECTION_FAILED,
   CONNECTION_FAILED_AFTER_RETRY,
   INTERNAL,
   TIMEOUT,
@@ -47,6 +46,7 @@ export enum SatelliteErrorCode {
   UNKNOWN_DATA_TYPE,
   AUTH_ERROR,
   SERVER_ERROR,
+  SOCKET_ERROR,
 
   SUBSCRIPTION_ALREADY_EXISTS,
   UNEXPECTED_SUBSCRIPTION_STATE,
