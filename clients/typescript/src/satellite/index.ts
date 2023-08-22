@@ -13,6 +13,8 @@ import {
   DataTransaction,
   Transaction,
   Relation,
+  StartReplicationResponse,
+  StopReplicationResponse,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -47,8 +49,6 @@ export type ConnectionWrapper = {
   connectionPromise: Promise<void | Error>
 }
 
-export type SatelliteReplicationOptions = { clearOnBehindWindow: boolean }
-
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {
@@ -60,10 +60,7 @@ export interface Satellite {
 
   connectivityState?: ConnectivityState
 
-  start(
-    authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
-  ): Promise<ConnectionWrapper>
+  start(authConfig: AuthConfig): Promise<ConnectionWrapper>
   stop(): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]
@@ -75,15 +72,15 @@ export interface Client {
   connect(
     retryHandler?: (error: any, attempt: number) => boolean
   ): Promise<void>
-  close(): Promise<void>
+  close(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
   isClosed(): boolean
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
-  ): Promise<void>
-  stopReplication(): Promise<void>
+  ): Promise<StartReplicationResponse>
+  stopReplication(): Promise<StopReplicationResponse>
   subscribeToRelations(callback: (relation: Relation) => void): void
   subscribeToTransactions(
     callback: (transaction: Transaction) => Promise<void>

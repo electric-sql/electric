@@ -1,4 +1,5 @@
 import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketReactNativeFactory implements SocketFactory {
   create() {
@@ -31,7 +32,12 @@ export class WebSocketReactNative implements Socket {
 
     this.socket.onerror = (event: any) => {
       while (this.errorCallbacks.length > 0) {
-        this.errorCallbacks.pop()!(new Error(event.message))
+        this.errorCallbacks.pop()!(
+          new SatelliteError(
+            SatelliteErrorCode.CONNECTION_FAILED,
+            event.message
+          )
+        )
       }
     }
 

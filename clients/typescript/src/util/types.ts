@@ -35,6 +35,7 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
+  CONNECTION_FAILED,
   INTERNAL,
   TIMEOUT,
   REPLICATION_NOT_STARTED,
@@ -44,6 +45,7 @@ export enum SatelliteErrorCode {
   PROTOCOL_VIOLATION,
   UNKNOWN_DATA_TYPE,
   AUTH_ERROR,
+  SERVER_ERROR,
 
   SUBSCRIPTION_ALREADY_EXISTS,
   UNEXPECTED_SUBSCRIPTION_STATE,
@@ -74,6 +76,14 @@ export enum SatelliteErrorCode {
 export type AuthResponse = {
   serverId?: string
   error?: Error
+}
+
+export type StartReplicationResponse = {
+  error?: SatelliteError
+}
+
+export type StopReplicationResponse = {
+  error?: SatelliteError
 }
 
 export type Transaction = {

@@ -1,5 +1,9 @@
 import throttle from 'lodash.throttle'
 
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -10,11 +14,12 @@ import {
   Notifier,
 } from '../notifiers/index'
 import {
-  Client,
-  ConnectionWrapper,
-  Satellite,
-  SatelliteReplicationOptions,
-} from './index'
+  base64,
+  bytesToNumber,
+  emptyPromise,
+  numberToBytes,
+  uuid,
+} from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AckType,
@@ -22,47 +27,38 @@ import {
   ConnectivityState,
   DataChange,
   DbName,
-  isDataChange,
   LSN,
+  MigrationTable,
   Relation,
   RelationsCache,
+  Row,
   SatelliteError,
+  SatelliteErrorCode,
   SchemaChange,
+  SqlValue,
   Statement,
   Transaction,
-  Row,
-  MigrationTable,
-  SatelliteErrorCode,
-  SqlValue,
+  isDataChange,
 } from '../util/types'
 import { SatelliteOpts } from './config'
-import { mergeEntries } from './merge'
+import { Client, ConnectionWrapper, Satellite } from './index'
 import {
+  OPTYPES,
+  OplogEntry,
+  ShadowEntry,
+  ShadowEntryChanges,
   encodeTags,
   fromTransaction,
   generateTag,
   getShadowPrimaryKey,
-  OplogEntry,
-  OPTYPES,
   primaryKeyToStr,
-  ShadowEntry,
-  ShadowEntryChanges,
   toTransactions,
 } from './oplog'
-import {
-  SatOpMigrate_Type,
-  SatRelation_RelationType,
-} from '../_generated/protocol/satellite'
-import {
-  base64,
-  bytesToNumber,
-  emptyPromise,
-  numberToBytes,
-  uuid,
-} from '../util/common'
 
+import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
-import { generateTableTriggers } from '../migrators/triggers'
+import { prepareInsertBatchedStatements } from '../util/statements'
+import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
@@ -73,9 +69,8 @@ import {
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
-import { SubscriptionsManager } from './shapes'
-import { prepareInsertBatchedStatements } from '../util/statements'
-import { Mutex } from 'async-mutex'
+import { mergeEntries } from './merge'
+import { generateTableTriggers } from '../migrators/triggers'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -102,6 +97,7 @@ type MetaEntries = {
 }
 
 const throwErrors = [
+  SatelliteErrorCode.CONNECTION_FAILED,
   SatelliteErrorCode.INVALID_POSITION,
   SatelliteErrorCode.BEHIND_WINDOW,
 ]
@@ -196,10 +192,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async start(
-    authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
-  ): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -283,7 +276,7 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.setState(subscriptionsState)
     }
 
-    const connectionPromise = this._connectAndStartReplication(opts)
+    const connectionPromise = this._connectAndStartReplication()
     return { connectionPromise }
   }
 
@@ -295,11 +288,15 @@ export class SatelliteProcess implements Satellite {
     shapeDefs: ShapeDefinition[]
   ): Promise<void> {
     const stmts: Statement[] = []
+    const tablenames: string[] = []
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => 'main.' + select.tablename) // We need "fully qualified" table names in the next calls
+      .map((select: ShapeSelect) => {
+        tablenames.push(select.tablename)
+        return 'main.' + select.tablename
+      }) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
         stmts.push(
           ...this._disableTriggers([tablename]),
@@ -367,7 +364,7 @@ export class SatelliteProcess implements Satellite {
       this._potentialDataChangeSubscription = undefined
     }
 
-    await this.client.close()
+    this.client.close()
   }
 
   async subscribe(
@@ -557,25 +554,36 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  async _handleBehindWindow(): Promise<void> {
+    Log.warn(
+      'client cannot resume replication from server, resetting replication state'
+    )
+    const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+    const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+      .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
+      .filter((s): s is ShapeDefinition[] => s !== undefined)
+      .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
+
+    await this._resetClientState()
+
+    await this._connectAndStartReplication()
+
+    Log.warn(`successfully reconnected with server. re-subscribing.`)
+
+    if (shapeDefs) {
+      this.subscribe(shapeDefs)
+    }
+  }
+
   async _handleSubscriptionError(
     satelliteError: SatelliteError,
     subscriptionId?: string
   ): Promise<void> {
-    // this is obviously too conservative and note
-    // that it does not update meta transactionally
-    const ids = await this.subscriptions.unsubscribeAll()
+    Log.error('encountered a subscription error: ' + satelliteError.message)
 
-    Log.error('Encountered a subscription error: ' + satelliteError.message)
+    await this._resetClientState()
 
-    this._lsn = undefined
-    await this.adapter.runInTransaction(
-      this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
-    )
-
-    await this.client.unsubscribe(ids)
-
-    // Call the `onSuccess` callback for this subscription
+    // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
       const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
@@ -583,9 +591,23 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  async _resetClientState() {
+    this._lsn = undefined
+
+    // TODO: this is obviously too conservative
+    // we should also work on updating subscriptions
+    // atomically on unsubscribe()
+    await this.subscriptions.unsubscribeAll()
+
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
+  }
+
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
-
+    Log.debug(`connectivity state changed ${status}`)
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
@@ -606,9 +628,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(
-    opts?: SatelliteReplicationOptions
-  ): Promise<void> {
+  async _connectAndStartReplication(): Promise<void> {
     Log.info(`connecting and starting replication`)
 
     if (!this._authState) {
@@ -627,26 +647,29 @@ export class SatelliteProcess implements Satellite {
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
-      await this.client.startReplication(
+      const { error } = await this.client.startReplication(
         this._lsn,
         schemaVersion,
-        subscriptionIds
+        subscriptionIds.length > 0 ? subscriptionIds : undefined
       )
-    } catch (error: any) {
-      if (
-        error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-        opts?.clearOnBehindWindow
-      ) {
-        return this._handleSubscriptionError(error).then(() =>
-          this._connectAndStartReplication()
-        )
-      }
 
+      if (error) {
+        if (
+          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          this.opts?.clearOnBehindWindow
+        ) {
+          return await this._handleBehindWindow()
+        }
+        throw error
+      }
+    } catch (error: any) {
+      if (!(error instanceof SatelliteError)) {
+        throw error
+      }
       if (throwErrors.includes(error.code)) {
         throw error
       }
-      Log.warn(`couldn't start replication: ${error}`)
-      return Promise.resolve()
+      Log.warn(`couldn't start replication with reason: ${error.message}`)
     }
   }
 

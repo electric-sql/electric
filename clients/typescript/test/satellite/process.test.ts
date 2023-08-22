@@ -1199,7 +1199,7 @@ test('clear database on BEHIND_WINDOW', async (t) => {
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
   await satellite._setMeta('lsn', base64lsn)
   try {
-    const conn = await satellite.start(authState, { clearOnBehindWindow: true })
+    const conn = await satellite.start(authState)
     await conn.connectionPromise
     const lsnAfter = await satellite._getMeta('lsn')
     t.not(lsnAfter, base64lsn)
