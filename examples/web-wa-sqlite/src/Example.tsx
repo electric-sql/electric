@@ -6,7 +6,7 @@ import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { authToken } from 'electric-sql/auth'
 import { genUUID } from 'electric-sql/util'
 
-import { Electric, Item, schema } from './generated/client'
+import { Electric, Items, schema } from './generated/client'
 
 import './Example.css'
 
@@ -73,53 +73,31 @@ const ExampleComponent = () => {
     await db.items.create({
       data: {
         value: genUUID(),
-        // uncomment the line below after migration
-        //other_value: genUUID(),
       }
     })
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany() // delete all items
+    await db.items.deleteMany()
   }
 
-  const items: Item[] = results ?? []
+  const items: Items[] = results ?? []
 
-  // After the migration, comment out this code and uncomment code block below
   return (
     <div>
       <div className="controls">
-        <button className="button" onClick={addItem}>
+        <button className="button" onClick={ addItem }>
           Add
         </button>
-        <button className="button" onClick={clearItems}>
+        <button className="button" onClick={ clearItems }>
           Clear
         </button>
       </div>
-      {items.map((item: any, index: any) => (
+      {items.map((item: Items, index: number) => (
         <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>
       ))}
     </div>
   )
-
-  // Uncomment after migration
-  //return (
-  //  <div>
-  //    <div className="controls">
-  //      <button className="button" onClick={addItem}>
-  //        Add
-  //      </button>
-  //      <button className="button" onClick={clearItems}>
-  //        Clear
-  //      </button>
-  //    </div>
-  //    {items.map((item: any, index: any) => (
-  //      <p key={ index } className="item">
-  //        <code>{ item.value } - { item.other_value }</code>
-  //      </p>
-  //    ))}
-  //  </div>
-  //)
 }
