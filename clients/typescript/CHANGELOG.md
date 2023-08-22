@@ -1,5 +1,13 @@
 # electric-sql
 
+## 0.5.0-next.6
+
+### Patch Changes
+
+- 1c20e29: Improve starter template output and introduced new db:connect command.
+- f60ce16: Implemented correct semantics for compensations to work across the stack
+- 8209293: Fixed reconnect issues when the client is too far behind the server
+
 ## 0.5.0-next.5
 
 ### Patch Changes
