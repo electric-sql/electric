@@ -15,8 +15,8 @@
 </p>
 
 <p align="center">
-  Local-first software platform for developing web and mobile apps with instant reactivity, realtime multi-user collaboration and conflict-free offline. From the inventors of CRDTs. Based on standard open source Postgres and SQLite.
-</p>
+  Local-first sync layer for web and mobile apps. From the inventors of CRDTs. Use it to build reactive, realtime, local-first apps directly on Postgres.
+<p>
 
 <p align="center">
   <a href="https://github.com/electric-sql/electric/stargazers/"><img src="https://img.shields.io/github/stars/electric-sql/electric?style=social&label=Star&maxAge=2592000" /></a>
@@ -40,10 +40,8 @@
 # Quick links
 
 - [Documentation](https://electric-sql.com/docs)
-- [Technical intro](https://electric-sql.com/docs/overview/technical-intro)
-- [Quickstart](https://electric-sql.com/docs/usage/quickstart)
-- [Examples](https://github.com/electric-sql/examples)
-- [FAQs](https://electric-sql.com/docs/overview/faqs)
+- [Introduction](https://electric-sql.com/docs/intro/local-first)
+- [Quickstart](https://electric-sql.com/docs/quickstart)
 
 # What is ElectricSQL?
 
@@ -55,7 +53,7 @@ ElectricSQL is a local-first software platform that makes it easy to develop hig
 
 ElectricSQL gives you instant local-first for your Postgres. Think of it like "Hasura for local-first". Drop ElectricSQL onto an existing Postgres-based system and you get instant local-first data synced into your apps.
 
-ElectricSQL then provides a whole developer experience for you to control what data syncs where and to work with it locally in your app code. See the [Documentation](https://electric-sql.com/docs) and the [Quickstart guide](https://electric-sql.com/docs/usage/quickstart) to get started.
+ElectricSQL then provides a whole developer experience for you to control what data syncs where and to work with it locally in your app code. See the [Introduction](https://electric-sql.com/docs/intro-local-first) and the [Quickstart guide](https://electric-sql.com/docs/quickstart) to get started.
 
 # Repo structure
 
@@ -73,7 +71,7 @@ See the Makefiles for test and build instructions and the [e2e](https://github.c
 
 ElectricSQL was founded by [@thruflo](https://github.com/thruflo) and [@balegas](https://github.com/balegas), under the guidance of:
 
-- [Marc Shapiro](https://lip6.fr/Marc.Shapiro) and [Nuno Preguiça](https://asc.di.fct.unl.pt/~nmp), the co-inventors of CRDTs
+- [Marc Shapiro](https://lip6.fr/Marc.Shapiro) and [Nuno Preguiça](https://asc.di.fct.unl.pt/~nmp), two of the co-inventors of CRDTs
 - [@bieniusa](https://linkedin.com/in/annette-bieniusa-b0807b145), the lead developer of [AntidoteDB](https://www.antidotedb.eu)
 - [@josevalim](https://www.linkedin.com/in/josevalim), the creator of the [Elixir](https://elixir-lang.org) programming language
 
