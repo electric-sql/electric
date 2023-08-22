@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  Local-first sync layer for web and mobile apps. From the inventors of CRDTs. Use it to build reactive, realtime, local-first apps directly on Postgres.
+  Local-first sync layer for web and mobile apps. Build reactive, realtime, local-first apps directly on Postgres.
 <p>
 
 <p align="center">
@@ -37,25 +37,30 @@
   </table>
 </p>
 
-# Quick links
+# ElectricSQL
 
+Sync for modern apps. From the inventors of CRDTs.
+
+## Quick links
+
+- [Website](https://electric-sql.com)
 - [Documentation](https://electric-sql.com/docs)
 - [Introduction](https://electric-sql.com/docs/intro/local-first)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 
-# What is ElectricSQL?
+## What is ElectricSQL?
 
 ElectricSQL is a local-first software platform that makes it easy to develop high-quality, modern apps with instant reactivity, realtime multi-user collaboration and conflict-free offline support.
 
 [Local-first](https://www.inkandswitch.com/local-first/) is a new development paradigm where your app code talks directly to an embedded local database and data syncs in the background via active-active database replication. Because the app code talks directly to a local database, apps feel instant. Because data syncs in the background via active-active replication it naturally supports multi-user collaboration and conflict-free offline.
 
-# How do I use it?
+## How do I use it?
 
 ElectricSQL gives you instant local-first for your Postgres. Think of it like "Hasura for local-first". Drop ElectricSQL onto an existing Postgres-based system and you get instant local-first data synced into your apps.
 
 ElectricSQL then provides a whole developer experience for you to control what data syncs where and to work with it locally in your app code. See the [Introduction](https://electric-sql.com/docs/intro-local-first) and the [Quickstart guide](https://electric-sql.com/docs/quickstart) to get started.
 
-# Repo structure
+## Repo structure
 
 This is the main repository for the ElectricSQL source code. Key components include:
 
@@ -67,7 +72,7 @@ This is the main repository for the ElectricSQL source code. Key components incl
 
 See the Makefiles for test and build instructions and the [e2e](https://github.com/electric-sql/electric/tree/main/e2e) folder for integration tests.
 
-# Team
+## Team
 
 ElectricSQL was founded by [@thruflo](https://github.com/thruflo) and [@balegas](https://github.com/balegas), under the guidance of:
 
@@ -77,11 +82,11 @@ ElectricSQL was founded by [@thruflo](https://github.com/thruflo) and [@balegas]
 
 See the [Team](https://electric-sql.com/about/team) and [Literature](https://electric-sql.com/docs/reference/literature) pages for more details.
 
-# Contributing
+## Contributing
 
 See the [Community Guidelines](https://github.com/electric-sql/electric/blob/main/CODE_OF_CONDUCT.md) including the [Guide to Contributing](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) and [Contributor License Agreement](https://github.com/electric-sql/electric/blob/main/CLA.md).
 
-# Support
+## Support
 
 We have an [open community Discord](https://discord.electric-sql.com). Come and say hello and let us know if you have any questions or need any help getting things running.
 
