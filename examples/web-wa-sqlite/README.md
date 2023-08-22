@@ -20,7 +20,7 @@ This is an example web application using ElectricSQL in the browser with [wa-sql
 
 Clone this repo and change directory into this folder:
 
-```sh
+```shell
 git clone https://github.com/electric-sql/electric
 cd electric/examples/web-wa-sqlite
 ```
@@ -28,13 +28,13 @@ cd electric/examples/web-wa-sqlite
 Install the dependencies:
 
 ```shell
-yarn
+pnpm install --frozen-lockfile
 ```
 
 You can start the backend services for this example using docker:
 
 ```shell
-yarn backend:start
+pnpm backend:start
 ```
 
 If you're looking into running the services yourself, check the instructions in [running the examples](https://electric-sql.com/docs/examples/notes/running#running-your-own-postgres) page, which has information on how to connect Electric sync service to an existing Postgres database.
@@ -44,19 +44,19 @@ If you're looking into running the services yourself, check the instructions in 
 Initialise the schema for the app in your backend Postgres:
 
 ```shell
-yarn db:migrate
+pnpm db:migrate
 ```
 
 Generate the TypeScript client from the current database schema:
 
-```
-yarn client:generate
+```shell
+pnpm client:generate
 ```
 
 You're now ready to start the app:
 
-```sh
-yarn start
+```shell
+pnpm start
 ```
 
 That's it! You're running a local-first app that syncs changes with other connected devices through the Electric sync service.
@@ -69,14 +69,14 @@ During development, it might be useful to automatically re-generate the client t
 
 You can watch for database schema changes and automatically generate a new client with:
 
-```sh
-yarn client:watch
+```shell
+pnpm client:watch
 ```
 
 Now, open a `psql` shell to the backend Postgres:
 
 ```shell
-yarn db:psql
+pnpm db:psql
 ```
 
 And modify the items table:
