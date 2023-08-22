@@ -375,9 +375,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
     return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
       .then((resp) => {
+        // FIXME: process handles BEHIND_WINDOW, we cant reject or resolve
+        // initializing. If process returns without triggering another
+        // RPC, initializing will never resolve.
+        // We shall improve this code to make no assumptions on how
+        // process handles errors
         if (resp.error) {
-          this.initializing?.reject(resp.error)
-          return resp
+          if (resp.error.code !== SatelliteErrorCode.BEHIND_WINDOW) {
+            this.initializing?.reject(resp.error)
+          }
         } else {
           this.initializing?.resolve()
         }

@@ -566,7 +566,7 @@ export class SatelliteProcess implements Satellite {
 
     await this._resetClientState()
 
-    await this._connectAndStartReplication(true)
+    await this._connectAndStartReplication()
 
     Log.warn(`successfully reconnected with server. re-subscribing.`)
 
@@ -628,14 +628,8 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(
-    currentlyReconnecting?: boolean
-  ): Promise<void> {
+  async _connectAndStartReplication(): Promise<void> {
     Log.info(`connecting and starting replication`)
-
-    if (currentlyReconnecting) {
-      Log.warn(`trying to reconnect after server error`)
-    }
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
@@ -662,8 +656,7 @@ export class SatelliteProcess implements Satellite {
       if (error) {
         if (
           error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-          this.opts?.clearOnBehindWindow &&
-          !currentlyReconnecting
+          this.opts?.clearOnBehindWindow
         ) {
           return await this._handleBehindWindow()
         }
