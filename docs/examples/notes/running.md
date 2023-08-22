@@ -8,38 +8,38 @@ Source code for the example applications is in [electric-sql/examples](https://g
 Install dependencies:
 
 ```shell
-pnpm install --frozen-lockfile
+yarn
 ```
 
 Run the backend services ([Postgres](../../usage/installation/postgres.md) + [Electric](../../usage/installation/service.md)):
 
 ```shell
-pnpm backend:start
+yarn backend:start
 ```
 
 Apply database [migrations](../../usage/data-modelling/migrations.md):
 
 ```shell
-pnpm db:migrate
+yarn db:migrate
 ```
 
 Use the database schema to generate your [type-safe Client](../../usage/data-access/client.md):
 
 ```shell
-pnpm client:generate
+yarn client:generate
 ```
 
-(Or `pnpm client:watch` to montior for database schema changes and auto-generate the client whenever the schema changes.)
+(Or `yarn client:watch` to montior for database schema changes and auto-generate the client whenever the schema changes.)
 
 Start the app:
 
 ```shell
-pnpm start
+yarn start
 ```
 
 ## Running your own Postgres
 
-`pnpm backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
+`yarn backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
 
 - your Postgres is up and running and configured with `wal_level = 'logical'`
 - you don't already have a publication called `postgres_1`
@@ -47,10 +47,10 @@ pnpm start
 
 ### Running the sync service
 
-Instead of `pnpm backend:start`, run:
+Instead of `yarn backend:start`, run:
 
 ```shell
-DATABASE_URL="postgresql://..." pnpm electric:start
+DATABASE_URL="postgresql://..." yarn electric:start
 ```
 
 Setting the `DATABASE_URL` value to the connection string to your database, in the format `postgresql://user:pass@host:port/database`. This database URL will be used by the Electric service that runs within Docker to connect to your Postgres database.
@@ -62,7 +62,7 @@ If your Postgres database runs on the host machine, you may need to provide `hos
 Then, prefix the `db:migrate` command with the same `DATABASE_URL`:
 
 ```shell
-DATABASE_URL="postgresql://..." pnpm db:migrate
+DATABASE_URL="postgresql://..." yarn db:migrate
 ```
 
 :::note
@@ -79,4 +79,4 @@ Postgres |                               | Electric
          |-----LOGICAL_PUBLISHER_HOST--->|
 ```
 
-With the `pnpm electric:start` script, `LOGICAL_PUBLISHER_HOST` defaults to `localhost`. If you sync service is running on a different host, you may need to change this. Either by patching the `./backend/startElectric.js` script, or by just running the Electric sync service directly using the docker command shown in <DocPageLink path="api/service" />.
+With the `yarn electric:start` script, `LOGICAL_PUBLISHER_HOST` defaults to `localhost`. If you sync service is running on a different host, you may need to change this. Either by patching the `./backend/startElectric.js` script, or by just running the Electric sync service directly using the docker command shown in <DocPageLink path="api/service" />.
