@@ -660,21 +660,19 @@ export class SatelliteProcess implements Satellite {
       )
 
       if (error) {
+        if (
+          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          this.opts?.clearOnBehindWindow &&
+          !currentlyReconnecting
+        ) {
+          return await this._handleBehindWindow()
+        }
         throw error
       }
     } catch (error: any) {
       if (!(error instanceof SatelliteError)) {
         throw error
       }
-
-      if (
-        error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-        this.opts?.clearOnBehindWindow &&
-        !currentlyReconnecting
-      ) {
-        return await this._handleBehindWindow()
-      }
-
       if (throwErrors.includes(error.code)) {
         throw error
       }

@@ -373,9 +373,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     // Then set the replication state
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
-    return this.rpc<StartReplicationResponse>(request)
+    return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
       .then((resp) => {
-        this.initializing?.resolve()
+        if (resp.error) {
+          this.initializing?.reject(resp.error)
+          return resp
+        } else {
+          this.initializing?.resolve()
+        }
         return resp
       })
       .catch((e) => {
