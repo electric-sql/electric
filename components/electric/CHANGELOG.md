@@ -1,5 +1,16 @@
 # @core/electric
 
+## 0.5.0-next.6
+
+### Patch Changes
+
+- 11acadd: Allow for enabling SSL for PG connections via an env variable
+- 57324c4: Add server-side validation of row values incoming from Satellite clients
+- f60ce16: Implemented correct semantics for compensations to work across the stack
+- 3cf2bc2: Support for intersecting shape subscriptions
+- 571119a: Add a validation step in the electrify() function that only lets tables with supported column types to be electrified
+- 00d5a67: Add server-side enforcement of "NOT NULL" for values incoming from Satellite clients
+
 ## 0.5.0-next.5
 
 ### Patch Changes
