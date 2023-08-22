@@ -49,9 +49,11 @@ This is a very temporary workaround and will be removed soon!
 
 We don't currently support any constraints except primary keys. You must remove all unique and check constraints from your Postgres data model.
 
-We have limited data type support. The basic two types are TEXT and INTEGER. You can track progress on wider Postgres type support on [electric-sql/electric/pull/331](https://github.com/electric-sql/electric/pull/331) and related PRs.
+We have limited data type support. Currently, we only support strings (`text` and non-length-limited `varchar`) and numbers (`smallint`, `integer`, `bigint`, `double precision`). The authoritative list of supported data types is maintained in the [`supported_pg_types/0` function][1].
 
 We also only support forward and additive migrations. Migrations that remove columns or make them more restrictive will fail when applied to electrified tables.
+
+[1]: https://github.com/search?q=repo%3Aelectric-sql%2Felectric+symbol%3Asupported_pg_types&type=code
 
 ### Failure modes
 
@@ -163,17 +165,6 @@ Any existing trigger in an Electrified table will not be propagated to the clien
 #### No conversion of triggers between Postgres and SQLite
 
 The same trigger written for Postgres or SQLite end up having very different definitions and is difficult to convert between them.
-
-### Data types
-
-#### Input validation
-
-SQLite and Postgres have very different type support, with SQLite having more basic data type support. It is crucial to respect Postgres schema when upstreaming changes, to ensure the replication stream doesn’t break.
-
-**Roadmap**
-
-- We are shipping proper support for type validation soon
-- Working on ways of recovering ElectricSQL replication stream in case of client or server errors
 
 ### Shapes
 
