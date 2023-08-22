@@ -24,8 +24,9 @@ defmodule Electric.Satellite.Serialization do
   @spec supported_pg_types :: [atom]
   def supported_pg_types do
     ~w[
-      int2 int4 int8
+      date
       float8
+      int2 int4 int8
       text
       timestamp timestamptz
       varchar
@@ -479,17 +480,34 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
-  def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
-    :ok =
-      val
-      |> String.to_integer()
-      |> assert_integer_in_range!(type)
+  def decode_column_value!(val, :date) do
+    <<yyyy::binary-4, ?-, mm::binary-2, ?-, dd::binary-2>> = val
+
+    year = String.to_integer(yyyy)
+    :ok = assert_year_in_range(year)
+
+    month = String.to_integer(mm)
+    true = month in 1..12
+
+    day = String.to_integer(dd)
+    true = day in 1..31
+
+    %Date{} = Date.from_iso8601!(val)
 
     val
   end
 
   def decode_column_value!(val, :float8) do
     _ = String.to_float(val)
+    val
+  end
+
+  def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
+    :ok =
+      val
+      |> String.to_integer()
+      |> assert_integer_in_range!(type)
+
     val
   end
 
