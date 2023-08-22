@@ -37,7 +37,7 @@ You can start the backend services for this example using docker:
 yarn backend:start
 ```
 
-If you're looking into running the services yourself, check the instructions in [running the examples](https://electric-sql.com/docs/examples/notes/running#running-your-own-postgres) page, which has information on how to connect Electric sync service to an existing Postgres database. 
+If you're looking into running the services yourself, check the instructions in [running the examples](https://electric-sql.com/docs/examples/notes/running#running-your-own-postgres) page, which has information on how to connect Electric sync service to an existing Postgres database.
 
 > In that case, make sure you set the `DATABASE_URL` environment variable before running the following commands.
 
@@ -76,7 +76,7 @@ yarn client:watch
 Now, open a `psql` shell to the backend Postgres:
 
 ```shell
-yarn db:connect
+yarn db:psql
 ```
 
 And modify the items table:
