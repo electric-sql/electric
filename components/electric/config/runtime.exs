@@ -67,12 +67,15 @@ if config_env() == :prod do
 
   config :electric, Electric.Satellite.Auth, provider: auth_provider
 
+  require_ssl? =
+    String.downcase(System.get_env("DATABASE_REQUIRE_SSL", "false")) in ["yes", "true"]
+
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
     |> PostgresqlUri.parse()
     |> then(&Keyword.put(&1, :host, &1[:hostname]))
     |> Keyword.delete(:hostname)
-    |> Keyword.put_new(:ssl, false)
+    |> Keyword.put_new(:ssl, require_ssl?)
     |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
     |> Keyword.put(:replication, "database")
 
