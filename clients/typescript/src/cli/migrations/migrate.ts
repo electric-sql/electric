@@ -7,7 +7,7 @@ import https from 'node:https'
 import decompress from 'decompress'
 import Database from 'better-sqlite3'
 import { buildMigrations, getMigrationNames } from './builder'
-import { exec, StdioOptions } from 'child_process'
+import { exec } from 'child_process'
 import { dedent } from 'ts-dedent'
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
@@ -227,7 +227,8 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
   } catch (e: any) {
-    console.error('generate command failed: ' + JSON.stringify(e.message))
+    console.error('generate command failed: ' + e)
+    process.exit(1)
   } finally {
     // Delete our temporary directory
     await fs.rm(tmpFolder, { recursive: true })
@@ -437,11 +438,6 @@ async function setDataSource(
   await fs.writeFile(prismaSchema, data)
 }
 
-const shellOpts = {
-  cwd: appRoot,
-  stdio: 'inherit' as StdioOptions,
-}
-
 async function introspectDB(prismaSchema: string): Promise<void> {
   await executeShellCommand(
     `npx prisma db pull --schema="${prismaSchema}"`,
@@ -461,9 +457,11 @@ async function executeShellCommand(
   errMsg: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = exec(command, shellOpts)
-    proc.stdout!.pipe(process.stdout)
-    proc.stderr!.pipe(process.stderr)
+    const proc = exec(command, { cwd: appRoot }, (error, _stdout, _stderr) => {
+      if (error) {
+        console.error(error)
+      }
+    })
 
     proc.on('close', (code) => {
       if (code === 0) {

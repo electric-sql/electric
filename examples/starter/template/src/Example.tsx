@@ -6,7 +6,7 @@ import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { authToken } from 'electric-sql/auth'
 import { genUUID } from 'electric-sql/util'
 
-import { Electric, Item, schema } from './generated/client'
+import { Electric, Items, schema } from './generated/client'
 
 import './Example.css'
 
@@ -81,7 +81,7 @@ const ExampleComponent = () => {
     await db.items.deleteMany()
   }
 
-  const items: Item[] = results !== undefined ? results : []
+  const items: Items[] = results !== undefined ? results : []
 
   return (
     <div>

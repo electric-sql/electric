@@ -101,6 +101,9 @@
       ],
       "satellite": [
         "./dist/satellite/index.d.ts"
+      ],
+      "util": [
+        "./dist/util/index.d.ts"
       ]
     }
   },
