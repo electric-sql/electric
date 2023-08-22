@@ -24,6 +24,7 @@ defmodule Electric.Satellite.Serialization do
   @spec supported_pg_types :: [atom]
   def supported_pg_types do
     ~w[
+      bool
       date
       float8
       int2 int4 int8
@@ -477,6 +478,11 @@ defmodule Electric.Satellite.Serialization do
   logical replication stream (aka "server-native format").
   """
   @spec decode_column_value!(binary, atom) :: binary
+
+  def decode_column_value!(val, :bool) do
+    true = val in ["t", "f"]
+    val
+  end
 
   def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
     val

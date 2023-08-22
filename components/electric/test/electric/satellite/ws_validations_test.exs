@@ -84,6 +84,52 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates boolean values", ctx do
+    vsn = "2023072502"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "public.foo",
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, b BOOLEAN)"
+      )
+
+    valid_records = [
+      %{"id" => "1", "b" => "t"},
+      %{"id" => "2", "b" => "f"},
+      %{"id" => "3", "b" => ""}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "b" => "1"},
+      %{"id" => "11", "b" => "0"},
+      %{"id" => "12", "b" => "True"},
+      %{"id" => "13", "b" => "false"},
+      %{"id" => "14", "b" => "+"},
+      %{"id" => "15", "b" => "-"},
+      %{"id" => "16", "b" => "yes"},
+      %{"id" => "17", "b" => "no"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   test "validates integer values", ctx do
     vsn = "2023072502"
 

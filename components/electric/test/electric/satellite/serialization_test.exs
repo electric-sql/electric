@@ -20,7 +20,8 @@ defmodule Electric.Satellite.SerializationTest do
         "real" => "-3.14",
         "id" => uuid,
         "date" => "2024-12-24",
-        "time" => "12:01:00.123"
+        "time" => "12:01:00.123",
+        "bool" => "t"
       }
 
       columns = [
@@ -32,11 +33,23 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "var", type: :varchar},
         %{name: "real", type: :float8},
         %{name: "date", type: :date},
-        %{name: "time", type: :time}
+        %{name: "time", type: :time},
+        %{name: "bool", type: :bool}
       ]
 
       assert %SatOpRow{
-               values: ["", "", "4", uuid, "13", "...", "-3.14", "2024-12-24", "12:01:00.123"],
+               values: [
+                 "",
+                 "",
+                 "4",
+                 uuid,
+                 "13",
+                 "...",
+                 "-3.14",
+                 "2024-12-24",
+                 "12:01:00.123",
+                 "t"
+               ],
                nulls_bitmask: <<0b11000000, 0>>
              } == Serialization.map_to_row(data, columns)
     end
@@ -79,7 +92,8 @@ defmodule Electric.Satellite.SerializationTest do
           "2023-08-15 17:20:31Z",
           "",
           "0400-02-29",
-          "03:59:59"
+          "03:59:59",
+          "f"
         ]
       }
 
@@ -93,7 +107,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "tz", type: :timestamptz},
         %{name: "x", type: :float4, nullable?: true},
         %{name: "date", type: :date},
-        %{name: "time", type: :time}
+        %{name: "time", type: :time},
+        %{name: "bool", type: :bool}
       ]
 
       assert %{
@@ -106,7 +121,8 @@ defmodule Electric.Satellite.SerializationTest do
                "tz" => "2023-08-15 17:20:31Z",
                "x" => nil,
                "date" => "0400-02-29",
-               "time" => "03:59:59"
+               "time" => "03:59:59",
+               "bool" => "f"
              } == Serialization.decode_record!(row, columns)
     end
 
@@ -147,7 +163,12 @@ defmodule Electric.Satellite.SerializationTest do
         {"010203", :time},
         {"016003", :time},
         {"00:00:00.", :time},
-        {"00:00:00.1234567", :time}
+        {"00:00:00.1234567", :time},
+        {"true", :bool},
+        {"false", :bool},
+        {"yes", :bool},
+        {"no", :bool},
+        {"-1", :bool}
       ]
 
       Enum.each(test_data, fn {val, type} ->
