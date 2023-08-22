@@ -25,6 +25,8 @@ git clone https://github.com/electric-sql/electric
 cd electric/examples/web-wa-sqlite
 ```
 
+This repository uses `pnpm` as the package manager - find out how to install it [in their docs](https://pnpm.io/installation).
+
 Install the dependencies:
 
 ```shell
