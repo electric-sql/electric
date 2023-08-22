@@ -30,10 +30,10 @@
     [invoke migrate_pg 11111 $sql]
 
 [shell satellite_1]
-    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatInStartReplicationResp"\}
+    ??[proto] recv: #SatInStartReplicationResp
     [invoke node_await_table "other_items"]
     [invoke node_sync_table "other_items"]
-    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatSubsDataEnd"\}
+    ??[proto] recv: #SatSubsDataEnd
     !await db.db.raw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
     ?$node
 
@@ -44,8 +44,8 @@
       }
     })
     """
-    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
-    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ??[proto] send: #SatOpLog
+    ??[proto] recv: #SatOpLog
 
 # TEST:
     # Disconnect the client
@@ -73,8 +73,8 @@
 [shell satellite_1]
     # Reconnect the client, expecting no errors to show up
     !db.notifier.connectivityStateChanged(db.notifier.dbName, 'available')
-    ?Sending message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
-    ?Received message \{"\$$type":"Electric.Satellite.v\d+_\d+.SatOpLog"
+    ??[proto] send: #SatOpLog
+    ??[proto] recv: #SatOpLog
 
 [shell pg_1]
     # and expect the previously deleted row to be present
