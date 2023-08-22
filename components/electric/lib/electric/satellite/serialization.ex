@@ -372,59 +372,70 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp op_to_change(
+         %SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags},
+         columns
+       ) do
+    %UpdatedRecord{
+      record: decode_record(row_data, columns, :allow_nulls),
+      old_record: nil,
+      tags: tags
+    }
+  end
+
+  defp op_to_change(
          %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags},
          columns
        ) do
     %UpdatedRecord{
       record: decode_record(row_data, columns),
-      old_record: decode_record(old_row_data, columns, :allow_empty_row),
+      old_record: decode_record(old_row_data, columns),
       tags: tags
     }
+  end
+
+  defp op_to_change(%SatOpDelete{old_row_data: nil, tags: tags}, _columns) do
+    %DeletedRecord{old_record: nil, tags: tags}
   end
 
   defp op_to_change(%SatOpDelete{old_row_data: old_row_data, tags: tags}, columns) do
     %DeletedRecord{
-      old_record: decode_record(old_row_data, columns, :allow_empty_row),
+      old_record: decode_record(old_row_data, columns),
       tags: tags
     }
   end
 
-  @spec decode_record(%SatOpRow{}, [String.t()], :allow_empty_row | nil) ::
-          %{
-            String.t() => nil | String.t()
-          }
-          | nil
+  @spec decode_record(%SatOpRow{}, [String.t()], :allow_nulls | nil) ::
+          %{String.t() => nil | String.t()} | nil
   def decode_record(row, columns) do
     decode_record(row, columns, nil)
   end
 
-  defp decode_record(nil, _columns, :allow_empty_row), do: nil
-
-  defp decode_record(nil, _columns, nil) do
+  defp decode_record(nil, _columns, _opt) do
     raise "protocol violation, empty row"
   end
 
-  defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, _) do
-    decode_values(values, bitmask, columns)
+  defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, opt) do
+    decode_values(values, bitmask, columns, opt)
     |> Map.new()
   end
 
-  defp decode_values([], _bitmask, []), do: []
+  defp decode_values([], _bitmask, [], _opt), do: []
 
-  defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns])
+  defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns], opt)
        when is_binary(val) do
     [
       {col.name, decode_column_value(val, col.type)}
-      | decode_values(values, bitmask, columns)
+      | decode_values(values, bitmask, columns, opt)
     ]
   end
 
-  defp decode_values(_, <<1::1, _::bits>>, [%{nullable?: false} | _]) do
+  defp decode_values(_, <<1::1, _::bits>>, [%{nullable?: false} | _], opt)
+       when opt != :allow_nulls do
     raise "protocol violation, null value for a not null column"
   end
 
-  defp decode_values([_val | values], <<1::1, bitmask::bits>>, [col | columns]) do
-    [{col.name, nil} | decode_values(values, bitmask, columns)]
+  defp decode_values(["" | values], <<1::1, bitmask::bits>>, [col | columns], opt) do
+    [{col.name, nil} | decode_values(values, bitmask, columns, opt)]
   end
 
   @doc """
