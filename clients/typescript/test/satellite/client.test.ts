@@ -79,6 +79,7 @@ test.serial('connect success', async (t) => {
 })
 
 test.serial('connection backoff success', async (t) => {
+  t.plan(1)
   const { client, server } = t.context
 
   server.close()
