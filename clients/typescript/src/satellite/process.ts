@@ -57,7 +57,9 @@ import {
 
 import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
+import { generateTableTriggers } from '../migrators/triggers'
 import { prepareInsertBatchedStatements } from '../util/statements'
+import { mergeEntries } from './merge'
 import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
@@ -71,8 +73,6 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
 } from './shapes/types'
-import { mergeEntries } from './merge'
-import { generateTableTriggers } from '../migrators/triggers'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -182,6 +182,8 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+
+    this.setClientListeners()
   }
 
   /**
@@ -261,7 +263,6 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
-    this.setClientListeners()
     this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
       numberToBytes(this._lastSentRowId)
@@ -629,8 +630,6 @@ export class SatelliteProcess implements Satellite {
     switch (status) {
       case 'available': {
         Log.warn(`checking network availability and reconnecting`)
-        // this.setClientListeners()
-
         return this._connectAndStartReplication()
       }
       case 'error':
