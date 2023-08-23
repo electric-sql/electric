@@ -1,0 +1,72 @@
+[doc NodeJS Satellite correctly syncs DATE values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.dates (
+            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            d DATE
+        );
+        CALL electric.electrify('public.dates');
+        """]
+    [invoke migrate_pg 20230823 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "dates"]
+    [invoke node_sync_table "dates"]
+
+[shell pg_1]
+    !INSERT INTO public.dates (id, d) VALUES ('001', '2023-08-23'), ('002', '01-01-0001'), ('003', 'Feb 29 6000');
+    ??INSERT 0 3
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "dates" "003"]
+
+    ??id: '001'
+    ??d: '2023-08-23'
+
+    ??id: '002'
+    ??d: '0001-01-01'
+
+    ??id: '003'
+    ??d: '6000-02-29'
+
+    [invoke node_await_insert_extended_into "dates" "{id: '004', d: '1999-12-31'}"]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.dates;" "004" 10 $psql]
+
+    !SELECT id, d FROM public.dates;
+    ??001 | 2023-08-23
+    ??002 | 0001-01-01
+    ??003 | 6000-02-29
+    ??004 | 1999-12-31
+
+# Start a new Satellite client and verify that it receives all dates
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "dates"]
+    [invoke node_sync_table "dates"]
+
+    [invoke node_await_get_from_table "dates" "004"]
+    ??id: '001'
+    ??d: '2023-08-23'
+
+    ??id: '002'
+    ??d: '0001-01-01'
+
+    ??id: '003'
+    ??d: '6000-02-29'
+
+    ??id: '004'
+    ??d: '1999-12-31'
+
+[cleanup]
+  [invoke teardown]
