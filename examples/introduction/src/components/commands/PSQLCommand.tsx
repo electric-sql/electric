@@ -64,6 +64,7 @@ const PSQLCommand = () => {
   }
 
   const [protocol, remainder] = DATABASE_URL.split('://')
+  const [_loginPassword, hostPortDb] = remainder.split('@')
   const { userId, password } = userCreds
 
   const parts = [
@@ -73,7 +74,7 @@ const PSQLCommand = () => {
     ':',
     password,
     '@',
-    remainder
+    hostPortDb
   ]
 
   return (
