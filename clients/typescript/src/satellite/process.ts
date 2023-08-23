@@ -298,22 +298,24 @@ export class SatelliteProcess implements Satellite {
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
-        tablenames.push(select.tablename)
+        tablenames.push('main.' + select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
-        stmts.push(
-          ...this._disableTriggers([tablename]),
-          {
-            sql: `DELETE FROM ${tablename}`,
-          },
-          ...this._enableTriggers([tablename])
-        )
+        stmts.push({
+          sql: `DELETE FROM ${tablename}`,
+        })
         return stmts
         // does not delete shadow rows but we can do that
       }, stmts)
 
-    await this.adapter.runInTransaction(...stmts)
+    const stmtsWithTriggers = [
+      ...this._disableTriggers(tablenames),
+      ...stmts,
+      ...this._enableTriggers(tablenames),
+    ]
+
+    await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
   setClientListeners(): void {
