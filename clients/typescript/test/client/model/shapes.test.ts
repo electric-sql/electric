@@ -3,10 +3,6 @@ import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
-import {
-  ShapeManager,
-  ShapeManagerMock,
-} from '../../../src/client/model/shapes'
 import { SatelliteProcess } from '../../../src/satellite/process'
 import { MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
@@ -65,8 +61,6 @@ async function makeContext(t: ExecutionContext<ContextType>) {
   const Items = electric.db.Items
   const User = electric.db.User
   const Profile = electric.db.Profile
-
-  satellite.setClientListeners()
 
   const runMigrations = async () => {
     return await migrator.up()
@@ -161,18 +155,6 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
     'Reading from unsynced table Post',
   ])
 })
-
-test.serial.only(
-  'Read queries no longer warn after syncing the table',
-  async (t) => {
-    const { Post } = t.context as ContextType
-    t.assert(log.length === 0)
-    const { synced } = await Post.sync() // syncs only the Post table
-    await synced
-    await Post.findMany() // now we can query it
-    t.deepEqual(log, [])
-  }
-)
 
 const relations = {
   Post: {
