@@ -4,7 +4,6 @@ import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import {
-  shapeManager,
   ShapeManager,
   ShapeManagerMock,
 } from '../../../src/client/model/shapes'
@@ -36,11 +35,6 @@ Log.methodFactory = function (methodName, logLevel, loggerName) {
 }
 Log.setLevel(Log.getLevel()) // Be sure to call setLevel method in order to apply plugin
 
-// Use a mocked shape manager for these tests
-// which does not wait for Satellite
-// to acknowledge the subscription
-Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
-
 const config = {
   auth: {
     token: 'test-token',
@@ -66,12 +60,13 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     satelliteDefaults
   )
 
-  shapeManager.init(satellite)
-  const electric = ElectricClient.create(schema, adapter, notifier)
+  const electric = ElectricClient.create(schema, adapter, notifier, satellite)
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User
   const Profile = electric.db.Profile
+
+  satellite.setClientListeners()
 
   const runMigrations = async () => {
     return await migrator.up()
@@ -125,7 +120,6 @@ function init({ db }: ContextType) {
 
 test.beforeEach(makeContext)
 test.afterEach.always((t: ExecutionContext<ContextType>) => {
-  shapeManager['tablesPreviouslySubscribed'] = new Set<string>()
   return cleanAndStopSatellite(t)
 })
 
@@ -168,14 +162,15 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
   ])
 })
 
-test.serial(
+test.serial.only(
   'Read queries no longer warn after syncing the table',
   async (t) => {
     const { Post } = t.context as ContextType
     t.assert(log.length === 0)
-    await Post.sync() // syncs only the Post table
+    const { synced } = await Post.sync() // syncs only the Post table
+    await synced
     await Post.findMany() // now we can query it
-    t.assert(log.length === 0)
+    t.deepEqual(log, [])
   }
 )
 
@@ -261,8 +256,6 @@ const profile = {
 }
 
 test.serial('promise resolves when subscription starts loading', async (t) => {
-  Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
-
   const { satellite, client } = t.context as ContextType
   await satellite.start(config.auth)
 
