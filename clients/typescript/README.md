@@ -26,7 +26,7 @@ See the:
 - [Introduction](https://electric-sql.com/docs/intro/local-first)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 
-And see the [Drivers documentation](https://main--wip-electric-sql-docs.netlify.app/docs/integrations/drivers) for information on how to use for web, mobile, and server applications including wa-sqlite, React Native, Expo and NodeJS.
+And see the [Drivers documentation](https://electric-sql.com/docs/integrations/drivers) for information on how to use for web, mobile, and server applications including wa-sqlite, React Native, Expo and NodeJS.
 
 ## Install
 
