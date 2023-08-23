@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
-import { mockSecureAuthToken } from 'electric-sql/auth'
+import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'

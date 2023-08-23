@@ -1,5 +1,4 @@
-export { mockSecureAuthToken } from './mock'
-export { insecureAuthToken, secureAuthToken } from './util'
+export { insecureAuthToken } from './insecure'
 
 export interface AuthState {
   clientId: string
@@ -9,4 +8,8 @@ export interface AuthState {
 export interface AuthConfig {
   clientId?: string
   token: string
+}
+
+export interface TokenClaims {
+  [key: string]: any
 }

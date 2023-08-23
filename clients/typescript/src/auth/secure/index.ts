@@ -1,11 +1,9 @@
 import { SignJWT } from 'jose'
 
-type Claims = {
-  [key: string]: any
-}
+import { TokenClaims } from '../index'
 
 export function secureAuthToken(
-  claims: Claims,
+  claims: TokenClaims,
   iss: string,
   key: string,
   alg?: string,
@@ -28,17 +26,12 @@ export function secureAuthToken(
     .sign(encodedKey)
 }
 
-export function insecureAuthToken(claims: Claims): string {
-  const header = {
-    alg: 'none',
-  }
+export function mockSecureAuthToken(
+  iss?: string,
+  key?: string
+): Promise<string> {
+  const mockIss = iss ?? 'dev.electric-sql.com'
+  const mockKey = key ?? 'integration-tests-signing-key-example'
 
-  return `${encode(header)}.${encode(claims)}.`
-}
-
-function encode(data: object): string {
-  const str = JSON.stringify(data)
-  const encoded = new Buffer(str).toString('base64')
-
-  return encoded.replace(/\+/g, '-').replace(/\//, '_').replace(/=+$/, '')
+  return secureAuthToken({ user_id: 'test-user' }, mockIss, mockKey)
 }
