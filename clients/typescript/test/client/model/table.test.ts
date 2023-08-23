@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import test from 'ava'
-
 import Database, { SqliteError } from 'better-sqlite3'
+
+import { MockRegistry } from '../../../src/satellite/mock'
+
 import { electrify } from '../../../src/drivers/better-sqlite3'
 import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
 import { UpdateManyInput } from '../../../src/client/input/updateInput'
@@ -10,17 +12,18 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { schema, Post } from '../generated'
-import {
-  shapeManager,
-  ShapeManagerMock,
-} from '../../../src/client/model/shapes'
 
 const db = new Database(':memory:')
-const electric = await electrify(db, schema, {
-  auth: {
-    token: 'test-token',
+const electric = await electrify(
+  db,
+  schema,
+  {
+    auth: {
+      token: 'test-token',
+    },
   },
-})
+  { registry: new MockRegistry() }
+)
 
 // TODO: write test with nested includes (e.g. introduce a category table and every post has 1 category)
 //       then check that we can find users and include their authored posts and include the category of those posts
@@ -32,11 +35,6 @@ const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
 const profileTable = electric.db.Profile
-
-// Use a mocked shape manager for this test
-// which does not wait for Satellite
-// to acknowledge the subscription
-Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
 
 // Sync all shapes such that we don't get warnings on every query
 await postTable.sync()

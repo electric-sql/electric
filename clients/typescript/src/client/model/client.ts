@@ -5,6 +5,8 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
+import { Satellite } from '../../satellite'
+import { ShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -57,23 +59,39 @@ interface RawQueries {
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
+  private _satellite: Satellite
+  public get satellite(): Satellite {
+    return this._satellite
+  }
+
   private constructor(
     public db: ClientTables<DB> & RawQueries,
     adapter: DatabaseAdapter,
-    notifier: Notifier
+    notifier: Notifier,
+    satellite: Satellite
   ) {
     super(adapter, notifier)
+    this._satellite = satellite
   }
 
   // Builds the DAL namespace from a `dbDescription` object
   static create<DB extends DbSchema<any>>(
     dbDescription: DB,
     adapter: DatabaseAdapter,
-    notifier: Notifier
+    notifier: Notifier,
+    satellite: Satellite
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
+    const shapeManager = new ShapeManager(satellite)
+
     const createTable = (tableName: string) => {
-      return new Table(tableName, adapter, notifier, dbDescription)
+      return new Table(
+        tableName,
+        adapter,
+        notifier,
+        shapeManager,
+        dbDescription
+      )
     }
 
     // Create all tables
@@ -94,6 +112,6 @@ export class ElectricClient<
       liveRaw: liveRaw.bind(null, adapter),
     }
 
-    return new ElectricClient(db, adapter, notifier)
+    return new ElectricClient(db, adapter, notifier, satellite)
   }
 }
