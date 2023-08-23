@@ -1,3 +1,4 @@
+import { btoa } from 'Base64'
 import { TokenClaims } from './index'
 
 export function insecureAuthToken(claims: TokenClaims): string {
@@ -10,7 +11,7 @@ export function insecureAuthToken(claims: TokenClaims): string {
 
 function encode(data: object): string {
   const str = JSON.stringify(data)
-  const encoded = new Buffer(str).toString('base64')
+  const encoded = btoa(str)
 
   return encoded.replace(/\+/g, '-').replace(/\//, '_').replace(/=+$/, '')
 }

@@ -14,6 +14,9 @@ importers:
 
   clients/typescript:
     dependencies:
+      Base64:
+        specifier: ^1.2.0
+        version: 1.2.0
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -3948,6 +3951,10 @@ packages:
     resolution: {integrity: sha512-UDi3g6Jss/W5FnSzO9jCtQwEpfymt0M+sPPlmLhDH6h2TJ8j4ESE/LpmNPBij15J5NKkk4/cg/qoVMdWI3vnlQ==}
     engines: {node: '>=10.0.0'}
     dev: true
+
+  /Base64@1.2.0:
+    resolution: {integrity: sha512-ZjJhVKZWYWbiq9Sf2HqcXS5qLiaHAvJcq3yc+j0gBgIMasMY/hAHxum30QxrXEG13TNUMwZhuWTT3fIFC4UBJw==}
+    dev: false
 
   /abab@2.0.6:
     resolution: {integrity: sha512-j2afSsaIENvHZN2B8GOpF566vZ5WVk5opAiMTvWgaQT8DkbOqsTfvNAvHoRGU2zzP8cPoqys+xHTRDWW8L+/BA==}
