@@ -182,6 +182,7 @@ export enum AckType {
 }
 
 export type AckCallback = (lsn: LSN, type: AckType) => void
+export type ErrorCallback = (error: SatelliteError) => void
 
 export type ConnectivityState =
   | 'available'

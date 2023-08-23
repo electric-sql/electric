@@ -17,21 +17,22 @@ export class WebSocketNode extends EventEmitter implements Socket {
   }
 
   open(opts: ConnectionOptions): this {
+    if (this.socket) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'trying to open a socket before closing existing socket'
+      )
+    }
+
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'nodebuffer'
 
     this.socket.on('open', () => this.emit('open'))
     this.socket.on('message', (data) => this.emit('message', data))
-
-    // TODO: check if can get extract more info from the socket error
-    // and propagate that to the handler
     this.socket.on('error', (_unusedError) =>
       this.emit(
         'error',
-        new SatelliteError(
-          SatelliteErrorCode.SOCKET_ERROR,
-          'failed to establish connection'
-        )
+        new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
       )
     )
 
@@ -54,7 +55,7 @@ export class WebSocketNode extends EventEmitter implements Socket {
     this.on('message', cb)
   }
 
-  onError(cb: (error: Error) => void): void {
+  onError(cb: (error: SatelliteError) => void): void {
     this.on('error', cb)
   }
 
@@ -66,11 +67,11 @@ export class WebSocketNode extends EventEmitter implements Socket {
     this.once('open', cb)
   }
 
-  onceError(cb: (error: Error) => void): void {
+  onceError(cb: (error: SatelliteError) => void): void {
     this.once('error', cb)
   }
 
-  removeErrorListener(cb: (error: Error) => void): void {
+  removeErrorListener(cb: (error: SatelliteError) => void): void {
     this.removeListener('error', cb)
   }
 }

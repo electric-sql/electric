@@ -15,6 +15,7 @@ import {
   Relation,
   StartReplicationResponse,
   StopReplicationResponse,
+  ErrorCallback,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -90,6 +91,8 @@ export interface Client {
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
+  subscribeToError(callback: ErrorCallback): void
+  unsubscribeToError(callback: ErrorCallback): void
 
   subscribe(subId: string, shapes: ShapeRequest[]): Promise<SubscribeResponse>
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse>

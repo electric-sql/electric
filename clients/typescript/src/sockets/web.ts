@@ -7,12 +7,13 @@ export class WebSocketWebFactory implements SocketFactory {
   }
 }
 
+// FIXME: This implementation is a bit contrived because it is not using EventEmitter
 export class WebSocketWeb implements Socket {
   private socket?: WebSocket
 
   private connectCallbacks: (() => void)[] = []
-  private errorCallbacks: ((error: Error) => void)[] = []
-  private onceErrorCallbacks: ((error: Error) => void)[] = []
+  private errorCallbacks: ((error: SatelliteError) => void)[] = []
+  private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
 
   // event doesn't provide much
   private errorListener = () => {
@@ -20,8 +21,10 @@ export class WebSocketWeb implements Socket {
       cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
     }
 
-    for (const cb of this.onceErrorCallbacks) {
-      cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+    while (this.onceErrorCallbacks.length > 0) {
+      const cb = this.onceErrorCallbacks.pop()
+      if (cb)
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
     }
   }
 
@@ -84,7 +87,7 @@ export class WebSocketWeb implements Socket {
     this.socket?.addEventListener('message', this.messageListener)
   }
 
-  onError(cb: (error: Error) => void): void {
+  onError(cb: (error: SatelliteError) => void): void {
     this.errorCallbacks.push(cb)
   }
 
@@ -104,11 +107,11 @@ export class WebSocketWeb implements Socket {
     this.connectCallbacks.push(cb)
   }
 
-  onceError(cb: (error: Error) => void): void {
+  onceError(cb: (error: SatelliteError) => void): void {
     this.onceErrorCallbacks.push(cb)
   }
 
-  removeErrorListener(cb: (error: Error) => void): void {
+  removeErrorListener(cb: (error: SatelliteError) => void): void {
     const idx = this.errorCallbacks.indexOf(cb)
     if (idx >= 0) {
       this.errorCallbacks.splice(idx, 1)

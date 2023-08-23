@@ -227,6 +227,14 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
 
+  subscribeToError(cb: ErrorCallback): void {
+    this.on('error', cb)
+  }
+
+  unsubscribeToError(cb: ErrorCallback): void {
+    this.removeListener('error', cb)
+  }
+
   isClosed(): boolean {
     return this.closed
   }

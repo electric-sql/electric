@@ -1,6 +1,7 @@
 import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
+// FIXME: This implementation is a bit contrived because it is not using EventEmitter
 export class WebSocketReactNativeFactory implements SocketFactory {
   create(): WebSocketReactNative {
     return new WebSocketReactNative()
@@ -11,11 +12,18 @@ export class WebSocketReactNative implements Socket {
   private socket?: WebSocket
 
   private connectCallbacks: (() => void)[] = []
-  private errorCallbacks: ((error: Error) => void)[] = []
-  private onceErrorCallbacks: ((error: Error) => void)[] = []
+  private errorCallbacks: ((error: SatelliteError) => void)[] = []
+  private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
   private messageCallbacks: ((data: any) => void)[] = []
 
   open(opts: ConnectionOptions): this {
+    if (this.socket) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'trying to open a socket before closing existing socket'
+      )
+    }
+
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'arraybuffer'
 
@@ -31,8 +39,12 @@ export class WebSocketReactNative implements Socket {
         cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
       }
 
-      for (const cb of this.onceErrorCallbacks) {
-        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+      while (this.onceErrorCallbacks.length > 0) {
+        const cb = this.onceErrorCallbacks.pop()
+        if (cb)
+          cb(
+            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+          )
       }
     }
 
@@ -65,10 +77,10 @@ export class WebSocketReactNative implements Socket {
     this.messageCallbacks.push(cb)
   }
 
-  onError(cb: (error: Error) => void): void {
+  onError(cb: (error: SatelliteError) => void): void {
     if (this.socket) {
       this.socket.onerror = () => {
-        cb(new Error('socket error'))
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
       }
     }
   }
@@ -85,11 +97,11 @@ export class WebSocketReactNative implements Socket {
     this.connectCallbacks.push(cb)
   }
 
-  onceError(cb: (error: Error) => void): void {
+  onceError(cb: (error: SatelliteError) => void): void {
     this.onceErrorCallbacks.push(cb)
   }
 
-  removeErrorListener(cb: (error: Error) => void): void {
+  removeErrorListener(cb: (error: SatelliteError) => void): void {
     const idx = this.errorCallbacks.indexOf(cb)
     if (idx >= 0) {
       this.errorCallbacks.splice(idx, 1)
