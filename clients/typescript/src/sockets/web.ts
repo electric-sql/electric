@@ -14,26 +14,39 @@ export class WebSocketWeb implements Socket {
   private errorCallbacks: ((error: Error) => void)[] = []
   private onceErrorCallbacks: ((error: Error) => void)[] = []
 
+  // event doesn't provide much
+  private errorListener = () => {
+    for (const cb of this.errorCallbacks) {
+      cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+    }
+
+    for (const cb of this.onceErrorCallbacks) {
+      cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+    }
+  }
+
+  private connectListener = () => {
+    while (this.connectCallbacks.length > 0) {
+      this.connectCallbacks.pop()!()
+    }
+  }
+  private messageListener?: (event: MessageEvent<any>) => void
+  private closeListener?: () => void
+
   open(opts: ConnectionOptions): this {
+    if (this.socket) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'trying to open a socket before closing existing socket'
+      )
+    }
+
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'arraybuffer'
 
-    this.socket.addEventListener('open', () => {
-      while (this.connectCallbacks.length > 0) {
-        this.connectCallbacks.pop()!()
-      }
-    })
+    this.socket.addEventListener('open', this.connectListener)
 
-    // event doesn't provide much
-    this.socket.addEventListener('error', () => {
-      for (const cb of this.errorCallbacks) {
-        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
-      }
-
-      for (const cb of this.onceErrorCallbacks) {
-        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
-      }
-    })
+    this.socket.addEventListener('error', this.errorListener)
 
     return this
   }
@@ -44,15 +57,31 @@ export class WebSocketWeb implements Socket {
   }
 
   closeAndRemoveListeners(): this {
+    this.socket?.removeEventListener('error', this.errorListener)
+    if (this.messageListener)
+      this.socket?.removeEventListener('message', this.messageListener)
+    if (this.closeListener)
+      this.socket?.removeEventListener('close', this.closeListener)
+
     this.socket?.close()
+
+    this.socket = undefined
     return this
   }
 
   onMessage(cb: (data: Data) => void): void {
-    this.socket?.addEventListener('message', (event) => {
+    if (this.messageListener) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'socket does not support multiple message listeners'
+      )
+    }
+
+    this.messageListener = (event: MessageEvent<any>) => {
       const buffer = new Uint8Array(event.data)
       cb(buffer)
-    })
+    }
+    this.socket?.addEventListener('message', this.messageListener)
   }
 
   onError(cb: (error: Error) => void): void {
@@ -60,7 +89,15 @@ export class WebSocketWeb implements Socket {
   }
 
   onClose(cb: () => void): void {
-    this.socket?.addEventListener('close', cb)
+    if (this.closeListener) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'socket does not support multiple close listeners'
+      )
+    }
+
+    this.closeListener = cb
+    this.socket?.addEventListener('close', this.closeListener)
   }
 
   onceConnect(cb: () => void): void {

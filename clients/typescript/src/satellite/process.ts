@@ -573,6 +573,7 @@ export class SatelliteProcess implements Satellite {
       .filter((s): s is ShapeDefinition[] => s !== undefined)
       .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
 
+    this.client.close()
     await this._resetClientState()
 
     await this._connectAndStartReplication()
@@ -627,13 +628,15 @@ export class SatelliteProcess implements Satellite {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
-        this.setClientListeners()
+        Log.warn(`checking network availability and reconnecting`)
+        // this.setClientListeners()
 
         return this._connectAndStartReplication()
       }
       case 'error':
       case 'disconnected': {
-        return this.client.close()
+        this.client.close()
+        return
       }
       case 'connected': {
         return

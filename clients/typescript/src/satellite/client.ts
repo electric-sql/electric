@@ -262,6 +262,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   async connect(): Promise<void> {
     if (!this.isClosed()) {
+      Log.debug("a open client exists. closing it first")
       this.close()
     }
 
@@ -269,12 +270,6 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     const tryConnect = () =>
       new Promise<void>((resolve, reject) => {
-        if (this.socket) {
-          throw new SatelliteError(
-            SatelliteErrorCode.UNEXPECTED_STATE,
-            'a socket already exist. ensure it is closed before reconnecting.'
-          )
-        }
         this.socket = this.socketFactory.create()
 
         const onceError = (error: Error) => {
@@ -291,16 +286,22 @@ export class SatelliteClient extends EventEmitter implements Client {
               'socket got unassigned somehow'
             )
 
+          Log.debug('socket connected')
+
           this.socket.removeErrorListener(onceError)
           this.socketHandler = (message) => this.handleIncoming(message)
 
           this.socket.onMessage(this.socketHandler)
-          this.socket.onError(() =>
-            this.notifier.connectivityStateChanged(this.dbName, 'error')
-          )
-          this.socket.onClose(() =>
-            this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-          )
+          this.socket.onError(() => {
+            Log.info('closing client on socket error')
+            this.close()
+            this.notifier.connectivityStateChanged(this.dbName, 'available')
+          })
+          this.socket.onClose(() => {
+            Log.warn('socket closed')
+            this.close()
+            this.notifier.connectivityStateChanged(this.dbName, 'available')
+          })
 
           this.notifier.connectivityStateChanged(this.dbName, 'connected')
           resolve()
@@ -419,6 +420,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         return resp
       })
       .catch((e) => {
+        Log.warn(`caught error while starting repl ${JSON.stringify(e)}`)
         this.initializing?.reject(e)
         throw e
       })
@@ -461,6 +463,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     callback: (transaction: Transaction) => Promise<void>
   ) {
     this.on('transaction', async (txn, ackCb) => {
+      Log.error('emiting txn')
       // move callback execution outside the message handling path
       await callback(txn)
       ackCb()
@@ -855,13 +858,6 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    this.close()
-
-    this.notifier.connectivityStateChanged(this.dbName, 'available')
-
-    // TODO: this causing intermittent issues in tests because
-    // no one might catch this error. We shall pass this information
-    // as part of connectivity state
     this.emit(
       'error',
       new SatelliteError(
@@ -931,8 +927,10 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         // FIXME: this errors shall be handled or thrown
         Log.warn(
-          `unhandled satellite errors while processing incoming message: ${error}`
+          `caunght unhandled errors while processing incoming message: ${error}. restarting client.`
         )
+        this.close()
+        this.notifier.connectivityStateChanged(this.dbName, 'available')
       } else {
         // This is an unexpected runtime error
         throw error
