@@ -994,7 +994,7 @@ export function serializeRow(rec: Record, relation: Relation): SatOpRow {
   const recordValues = relation!.columns.reduce(
     (acc: Uint8Array[], c: RelationColumn) => {
       if (rec[c.name] != null) {
-        acc.push(serializeColumnData(rec[c.name]!))
+        acc.push(serializeColumnData(rec[c.name]!, c.type))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -1054,6 +1054,8 @@ function deserializeColumnData(
     case 'UUID':
     case 'VARCHAR':
       return typeDecoder.text(column)
+    case 'BOOL':
+      return typeDecoder.bool(column)
     case 'FLOAT4':
     case 'FLOAT8':
     case 'INT':
@@ -1070,8 +1072,16 @@ function deserializeColumnData(
 }
 
 // All values serialized as textual representation
-function serializeColumnData(column: string | number): Uint8Array {
-  return typeEncoder.text(column as string)
+function serializeColumnData(
+  col_val: string | number,
+  col_type: string
+): Uint8Array {
+  switch (col_type.toUpperCase()) {
+    case 'BOOL':
+      return typeEncoder.bool(col_val as number)
+    default:
+      return typeEncoder.text(col_val as string)
+  }
 }
 
 function serializeNullData(): Uint8Array {
