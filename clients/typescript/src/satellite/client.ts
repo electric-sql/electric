@@ -863,7 +863,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     // no one might catch this error. We shall pass this information
     // as part of connectivity state
     this.emit(
-      'rpc_error',
+      'error',
       new SatelliteError(
         SatelliteErrorCode.SERVER_ERROR,
         `server replied with error code: ${error.errorType}`
