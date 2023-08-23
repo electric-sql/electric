@@ -1,1 +1,2 @@
-declare module 'sqlite-parser'
+declare module 'Base64';
+declare module 'sqlite-parser';
