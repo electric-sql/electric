@@ -10,7 +10,16 @@ export function insecureAuthToken(claims: TokenClaims): string {
 
 function encode(data: object): string {
   const str = JSON.stringify(data)
-  const encoded = btoa(str)
+  const encoded = base64(str)
 
   return encoded.replace(/\+/g, '-').replace(/\//, '_').replace(/=+$/, '')
+}
+
+function base64(s: string): string {
+  const bytes = new TextEncoder().encode(s)
+
+  const binArray = Array.from(bytes, (x) => String.fromCodePoint(x))
+  const binString = binArray.join("")
+
+  return btoa(binString)
 }
