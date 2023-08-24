@@ -1,7 +1,6 @@
 import React, { ReactNode, createContext, useContext, useEffect, useState } from 'react'
 import { useElectric } from '../../electric'
 import { getCachedSessionId, getExistingDemo } from '../../session'
-import { getOrSetTabId } from '../../tab'
 
 import ElectricProvider from '../ElectricProvider'
 import SessionProvider from '../SessionProvider'

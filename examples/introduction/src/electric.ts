@@ -2,6 +2,7 @@ import { makeElectricContext } from 'electric-sql/react'
 import { globalRegistry } from 'electric-sql/satellite'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { ClientTables } from 'electric-sql/client/model'
+import { uniqueTabId } from 'electric-sql/util'
 import { Electric, schema } from './generated/client/index'
 import { unsigned, userId } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
@@ -20,7 +21,10 @@ export type DB = Electric['db']
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const initElectric = async (name: string = 'intro') => {
-  const conn = await ElectricDatabase.init(name, '/')
+  const { tabId } = uniqueTabId()
+  const tabScopedDbName = `${name}-${tabId}.db`
+
+  const conn = await ElectricDatabase.init(tabScopedDbName, '/')
 
   const config = {
     auth: {

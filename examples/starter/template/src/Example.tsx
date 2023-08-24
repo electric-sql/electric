@@ -4,7 +4,7 @@ import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 
 import { authToken } from 'electric-sql/auth'
-import { genUUID } from 'electric-sql/util'
+import { genUUID, uniqueTabId } from 'electric-sql/util'
 
 import { Electric, Items, schema } from './generated/client'
 
@@ -32,7 +32,10 @@ export const Example = () => {
         }
       }
 
-      const conn = await ElectricDatabase.init('electric.db', '')
+      const { tabId } = uniqueTabId()
+      const tabScopedDbName = `electric-${tabId}.db`
+
+      const conn = await ElectricDatabase.init(tabScopedDbName, '')
       const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {
