@@ -1,0 +1,252 @@
+body {
+  margin: 0;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 18px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #1c1e20;
+  min-width: 360px;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+a {
+  cursor: pointer;
+}
+
+.pull-left {
+  float: left;
+}
+.pull-right {
+  float: right;
+}
+.hidden {
+  visibility: hidden;
+}
+
+.app {
+}
+
+.nav-bar,
+.beers-widget,
+.star-listing {
+  color: white;
+  margin: min(15px, 3vmin);
+}
+
+.beers-widget {
+  margin-bottom: min(22.5px, 4.5vmin);
+}
+
+.qr-modal {
+  border: 1px solid #2A3030;
+  border-radius: 4px;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+  position: relative;
+  display: block;
+  padding: min(30px, 6vmin);
+  margin: min(30px, 6vmin) min(15px, 3vmin);
+  text-align: center;
+}
+
+.qr-modal-url {
+  font-size: 1.25rem;
+  margin-bottom: min(25px, 5vmin);
+  margin-top: calc(0px - min(5px, 1vmin));
+}
+@media (max-width: 450px) {
+  .qr-modal-url {
+    margin-bottom: min(20px, 4vmin);
+    margin-top: calc(0px - min(10px, 2vmin));
+    font-size: 1.15rem;
+  }
+}
+@media (min-width: 768px) {
+  .qr-modal-url {
+    font-size: 1.4rem;
+    margin-bottom: min(30px, 6vmin);
+    margin-top: 0px;
+  }
+}
+.qr-modal-url a {
+  text-decoration: none;
+  color: white;
+}
+
+.qr-modal img {
+  position: relative;
+  display: block;
+  margin: auto;
+  width: 100%;
+}
+
+.qr-link {
+  float: right;
+  padding: min(7.5px, 1.5vmin) 0;
+  cursor: pointer;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+}
+
+.qr-link-icon {
+  width: 22px;
+}
+.qr-link-icon.close {
+  margin-top: -3px;
+}
+
+.logo {
+  height: 41px;
+}
+
+.btn {
+  padding: 12px;
+  border: 1px solid #1C1E20;
+  background: #2A3030;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+}
+
+.block-buttons {
+  width: 100%;
+  position: relative;
+  display: block;
+}
+.block-buttons .btn {
+  position: relative;
+  display: inline-block;
+  width: calc(50% - 26px - min(7.5px, 1.5vmin));
+}
+.block-buttons .btn:first-child {
+  margin-right: min(15px, 3vmin);
+}
+
+ul.available-beers {
+  list-style: none;
+  margin: min(15px, 3vmin) 0;
+  padding: 0;
+}
+ul.available-beers li {
+  position: relative;
+  display: inline-block;
+}
+
+.beer,
+.beer-label {
+  background: #2A3030;
+  border: 1px solid #1C1E20;
+  border-radius: 22px;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+  display: inline-block;
+  line-height: 66px;
+  position: relative;
+  text-align: center;
+}
+
+.beer {
+  font-size: 1.5rem;
+  width: 66px;
+  margin-right: -22px;
+}
+.beer-label {
+  margin-right: min(7.5px, 1.5vmin);
+  padding: 0 12px;
+}
+
+ul.star-listing {
+  position: relative;
+  display: block;
+  margin-left: min(7.5px, 1.5vmin);
+  margin-right: min(7.5px, 1.5vmin);
+  padding: 0;
+}
+
+ul.star-listing li {
+  position: relative;
+  display: inline-block;
+  margin: min(7.5px, 1.5vmin);
+}
+
+.unallocated-star {
+  border: 1px solid #2A3030;
+  border-radius: 4px;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+  position: relative;
+  display: block;
+  padding: min(30px, 6vmin);
+  width: calc(100vw - min(30px, 6vmin) - 46px);
+  min-height: 66px;
+}
+
+.unallocated-star .add-btn {
+  background: #2A3030;
+  border: 1px solid #1C1E20;
+  border-radius: 22px;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+  display: inline-block;
+  float: right;
+  line-height: 54px;
+  position: relative;
+  text-align: center;
+  padding: 0 12px;
+  min-width: 30px;
+  margin-top: 6px;
+}
+
+.unallocated-star .avatar {
+  float: left;
+  height: 66px;
+  margin-right: min(15px, 3vmin);
+  width: 66px;
+}
+
+.unallocated-star .names {
+  position: relative;
+  display: block;
+
+  margin-top: 4px;
+  max-width: calc(100% - 66px - 66px - min(30px, 6vmin));
+
+  overflow-x: hidden;
+}
+
+.unallocated-star .names .name {
+  font-size: 1.2rem;
+  margin-bottom: 4px;
+
+  white-space: nowrap;
+}
+
+.unallocated-star .names .username {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .unallocated-star .names {
+    margin-top: 6px;
+  }
+  .unallocated-star .names .name {
+    font-size: 1.1rem;
+  }
+  .unallocated-star .names .username {
+    font-size: 0.95rem;
+  }
+}
+
+.allocated-star {
+  border: 1px solid #2A3030;
+  border-radius: 4px;
+  box-shadow: 1px 2px 25px rgba(0,0,0,0.4);
+  position: relative;
+  display: block;
+  padding: min(15px, 3vmin);
+}
+
+.allocated-star .avatar {
+  height: 44px;
+  width: 44px;
+}

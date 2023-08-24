@@ -1,0 +1,54 @@
+{
+  "name": "@beer-stars/web",
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "beers:allocate": "docker compose --env-file backend/.envrc -f backend/compose.yaml run server eval \"BeerStars.Release.allocate_beers()\"",
+    "backend:down": "docker compose --env-file backend/.envrc -f backend/compose.yaml down --volumes postgres electric",
+    "backend:start": "docker compose --env-file backend/.envrc -f backend/compose.yaml up postgres electric",
+    "backend:up": "docker compose --env-file backend/.envrc -f backend/compose.yaml up --detach postgres electric",
+    "build": "rm -rf dist && node builder.js",
+    "build:prod": "rm -rf dist && NODE_ENV=production node builder.js",
+    "client:generate": "npx --no-install electric-sql generate --out ./src/generated/client",
+    "copy-wasm": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
+    "db:migrate": "docker compose --env-file backend/.envrc -f backend/compose.yaml run server eval \"BeerStars.Release.migrate()\"",
+    "db:psql": "psql \"postgresql://postgres:password@localhost:54321/electric\"",
+    "server:down": "docker compose --env-file backend/.envrc -f backend/compose.yaml down --volumes --rmi local server",
+    "server:start": "docker compose --env-file backend/.envrc -f backend/compose.yaml up --build server",
+    "server:up": "docker compose --env-file backend/.envrc -f backend/compose.yaml up --build --detach server",
+    "services:up": "yarn backend:up && sleep 2 && yarn db:migrate && yarn server:up",
+    "services:down": "yarn server:down && yarn backend:down",
+    "start": "SERVE=true node builder.js",
+    "typecheck": "tsc"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "@prisma/client": "4.13.0",
+    "Base64": "^1.2.0",
+    "axios": "^1.3.5",
+    "electric-sql": "next",
+    "fs-extra": "^10.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "uuid": "^9.0.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#master"
+  },
+  "devDependencies": {
+    "@databases/pg": "^5.4.1",
+    "@electric-sql/prisma-generator": "next",
+    "@types/node": "^16.18.16",
+    "@types/react": "^17.0.2",
+    "@types/react-dom": "^17.0.2",
+    "@types/uuid": "^9.0.1",
+    "better-sqlite3": "^8.4.0",
+    "esbuild": "^0.16.17",
+    "esbuild-css-modules-plugin": "^2.7.1",
+    "esbuild-plugin-inline-image": "^0.0.9",
+    "prisma": "4.13.0",
+    "typescript": "^4.9.5"
+  }
+}
