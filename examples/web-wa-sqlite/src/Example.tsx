@@ -6,6 +6,7 @@ import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { authToken } from 'electric-sql/auth'
 import { genUUID } from 'electric-sql/util'
 
+import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items, schema } from './generated/client'
 
 import './Example.css'
@@ -29,7 +30,9 @@ export const Example = () => {
       const config = {
         auth: {
           token: await localAuthToken()
-        }
+        },
+        debug: DEBUG_MODE,
+        url: ELECTRIC_URL
       }
 
       const conn = await ElectricDatabase.init('electric.db', '')
