@@ -1,5 +1,12 @@
 # electric-sql
 
+## 0.5.0-next.8
+
+### Patch Changes
+
+- 0bcc92c: Added a uniqueTabId utility function for apps that want to use tab-scoped DB names.
+- 345cfc6: Added auth.insecureAuthToken function and updated examples to use it.
+
 ## 0.5.0-next.7
 
 ### Patch Changes
