@@ -633,18 +633,24 @@ export class SatelliteProcess implements Satellite {
   }
 
   _handleClientError(satelliteError: SatelliteError) {
-    // not yet initialized, propagate error to retry policy
     if (this.initializing) {
-      throw satelliteError
+      if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
+        Log.warn(`an unexpected socket error occurred. retrying connection`)
+        this._connectivityStateChanged('available')
+      } else {
+        throw satelliteError
+      }
+      return
+    }
+
+    if (!this.client.isClosed()) {
+      this.client.close()
+      this._connectivityStateChanged('available')
     }
 
     Log.warn(
-      `retrying connection on unexpected client error: ${satelliteError.message}`
+      `received an error from the client but client is closed. No action ${satelliteError.message}`
     )
-    this.client.close()
-
-    // handled async
-    this._connectivityStateChanged('available')
   }
 
   async _resetClientState() {
@@ -659,13 +665,6 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
-
-    if (this.subsDeliveredCallback && this.subsErrorCallback) {
-      this.client.unsubscribeToSubscriptionEvents(
-        this.subsDeliveredCallback,
-        this.subsErrorCallback
-      )
-    }
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
@@ -692,7 +691,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _connectWithBackoff(): Promise<void> {
-    this.initializing = emptyPromise()
+    this.initializing = this.initializing ?? emptyPromise()
 
     await backOff(() => this._connect(), {
       ...connectionRetryPolicy,
@@ -751,7 +750,8 @@ export class SatelliteProcess implements Satellite {
 
       if (error) {
         if (
-          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          (error.code == SatelliteErrorCode.BEHIND_WINDOW ||
+            error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
           return await this._handleBehindWindow()
@@ -759,6 +759,8 @@ export class SatelliteProcess implements Satellite {
         throw error
       }
 
+      // FIXME: once removed from client
+      // this.notifier.connectivityStateChanged(this.dbName, 'connected')
       this.initializing?.resolve()
     } catch (error: any) {
       // FIXME: this results in unhandled exception if no one is waiting on it
@@ -771,9 +773,9 @@ export class SatelliteProcess implements Satellite {
         throw error
       }
 
-      // some tests might reach here
+      await this._connectivityStateChanged('disconnected')
       Log.error(
-        `Couldn't start replication with reason: ${error.message}. NO ACTION AFTER THIS`
+        `Couldn't start replication with reason: ${error.message}. Try reconnecting manually`
       )
     } finally {
       this.initializing = undefined

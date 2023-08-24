@@ -261,11 +261,11 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         this.socket.onMessage(this.socketHandler)
         this.socket.onError((error) => {
-          Log.error(`unexpected socket error: ${error.message}`)
+          Log.warn(`unexpected socket error: ${error.message}`)
           this.emit('error', error)
         })
         this.socket.onClose(() => {
-          Log.error(`socket closed unexpectedly`)
+          Log.warn(`socket closed unexpectedly`)
           this.emit(
             'error',
             new SatelliteError(
@@ -275,6 +275,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           )
         })
 
+        // FIXME: remove this line and dont need notifier anymore
         this.notifier.connectivityStateChanged(this.dbName, 'connected')
         resolve()
       }
@@ -978,10 +979,10 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private sendMessage<T extends SatPbMsg>(request: T) {
     if (Log.getLevel() <= 1) Log.debug(`[proto] send: ${msgToString(request)}`)
-    if (!this.socket) {
+    if (!this.socket || this.isClosed()) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
-        'trying to send message, but no socket exists'
+        'trying to send message, but client is closed'
       )
     }
     const obj = getObjFromString(request.$type)
