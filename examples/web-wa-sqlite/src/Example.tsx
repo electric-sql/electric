@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react'
 
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
+import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 
-import { insecureAuthToken } from 'electric-sql/auth'
-import { genUUID, uniqueTabId } from 'electric-sql/util'
-
+import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
-import { Electric, Items, schema } from './generated/client'
+import { Electric, Items as Item, schema } from './generated/client'
 
 import './Example.css'
 
@@ -22,7 +21,7 @@ export const Example = () => {
     const init = async () => {
       const config = {
         auth: {
-          token: insecureAuthToken({'user_id': 'dummy'})
+          token: authToken()
         },
         debug: DEBUG_MODE,
         url: ELECTRIC_URL
@@ -61,12 +60,21 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-
-  useEffect(() => void db.items.sync(), [])
-
   const { results } = useLiveQuery(
     db.items.liveMany()
   )
+
+  useEffect(() => {
+    const syncItems = async () => {
+      // Resolves when the shape subscription has been established.
+      const shape = await db.items.sync()
+
+      // Resolves when the data has been synced into the local database.
+      await shape.synced
+    }
+
+    syncItems()
+  }, [])
 
   const addItem = async () => {
     await db.items.create({
@@ -80,7 +88,7 @@ const ExampleComponent = () => {
     await db.items.deleteMany()
   }
 
-  const items: Items[] = results ?? []
+  const items: Item[] = results ?? []
 
   return (
     <div>
@@ -92,7 +100,7 @@ const ExampleComponent = () => {
           Clear
         </button>
       </div>
-      {items.map((item: Items, index: number) => (
+      {items.map((item: Item, index: number) => (
         <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>

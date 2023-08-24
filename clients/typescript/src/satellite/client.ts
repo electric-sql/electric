@@ -877,12 +877,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
-    const messageOrError = toMessage(data)
-    if (Log.getLevel() <= 1 && !(messageOrError instanceof SatelliteError))
-      Log.debug(`[proto] recv: ${msgToString(messageOrError)}`)
     let handleIsRpc = false
     try {
       const message = toMessage(data)
+
+      if (Log.getLevel() <= 1) {
+        Log.debug(`[proto] recv: ${msgToString(message)}`)
+      }
+
       const handler = this.handlerForMessageType[message.$type]
       const response = handler.handle(message)
       if ((handleIsRpc = handler.isRpc)) {
