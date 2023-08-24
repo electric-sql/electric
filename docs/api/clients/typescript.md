@@ -22,14 +22,16 @@ passing along the generated database schema.
 
 ```ts
 import { schema } from './generated/client'
+import { insecureAuthToken } from 'electric-sql/auth'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 
-const db = await ElectricDatabase.init('electric.db', '')
-const electric = await electrify(db, schema, {
+const config = {
   auth: {
-    token: await authToken('local-development', 'local-development-key-minimum-32-symbols')
+    token: await insecureAuthToken({user_id: 'dummy'})
   }
-})
+}
+const conn = await ElectricDatabase.init('electric.db', '')
+const electric = await electrify(conn, schema, config)
 ```
 
 The electrify call returns a promise that will resolve to an `ElectricClient` for our database.
