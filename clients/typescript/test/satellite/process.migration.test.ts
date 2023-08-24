@@ -704,7 +704,7 @@ const migrationWithFKs: SchemaChange[] = [
   },
 ]
 
-test.serial.only('apply another migration', async (t) => {
+test.serial('apply another migration', async (t) => {
   const { satellite } = t.context
 
   const migrationTx = {
