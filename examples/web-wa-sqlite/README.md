@@ -18,77 +18,73 @@ This is an example web application using ElectricSQL in the browser with [wa-sql
 
 ## Instructions
 
-Clone this repo and change directory into this folder:
+Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
 
 ```sh
 git clone https://github.com/electric-sql/electric
 cd electric/examples/web-wa-sqlite
 ```
 
-Install the dependencies:
+## Pre-reqs
+
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
 
 ```shell
+npm -g install yarn
+```
+
+## Install
+
+Install the dependencies:
+
+```sh
 yarn
 ```
 
-You can start the backend services for this example using docker:
+## Setup
+
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-yarn backend:start
+yarn backend:up
+# Or `yarn backend:start` to foreground
 ```
 
-If you're looking into running the services yourself, check the instructions in [running the examples](https://electric-sql.com/docs/examples/notes/running#running-your-own-postgres) page, which has information on how to connect the Electric sync service to an existing Postgres database.
-
-> In that case, make sure you set the `DATABASE_URL` environment variable before running the following commands.
-
-Initialise the schema for the app in your backend Postgres:
-
-```shell
-yarn db:migrate
-```
-
-Generate the TypeScript client from the current database schema:
-
-```
-yarn client:generate
-```
-
-You're now ready to start the app:
-
-```sh
-yarn start
-```
-
-That's it! You're running a local-first app that syncs changes with other connected devices through the Electric sync service.
-
-
-
-## Evolving the schema
-
-During development, it might be useful to automatically re-generate the client to reflect changes made to the database schema.
-
-You can watch for database schema changes and automatically generate a new client with:
-
-```sh
-yarn client:watch
-```
-
-Now, open a `psql` shell to the backend Postgres:
+Note that, if useful, you can connect to Postgres using:
 
 ```shell
 yarn db:psql
 ```
 
-And modify the items table:
+Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
-```sql
-ALTER TABLE items ADD COLUMN another TEXT;
+```shell
+yarn db:migrate
 ```
 
-This will trigger the client generator and automatically update the data model in the source code. Go ahead and check that attribute `another` is immediately available in the `Items` model.
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
-## More information
+```shell
+yarn client:generate
+# or `yarn client:watch`` to re-generate whenever the DB schema changes
+```
+
+## Run
+
+Start your app:
+
+```sh
+yarn start
+```
+
+Open [localhost:3001](http://localhost:3001) in your web browser.
+
+## Develop
+
+`./src/Example.tsx` has the main example code. For more information see the:
 
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 - [Usage guide](https://electric-sql.com/docs/usage)
+
+If you need help [let us know on Discord](https://discord.electric-sql.com).
