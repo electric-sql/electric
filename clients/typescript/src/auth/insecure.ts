@@ -19,7 +19,7 @@ function base64(s: string): string {
   const bytes = new TextEncoder().encode(s)
 
   const binArray = Array.from(bytes, (x) => String.fromCodePoint(x))
-  const binString = binArray.join("")
+  const binString = binArray.join('')
 
   return btoa(binString)
 }
