@@ -139,7 +139,6 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
-    "Base64": "^1.2.0",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",

@@ -1,4 +1,3 @@
-import { btoa } from 'Base64'
 import { TokenClaims } from './index'
 
 export function insecureAuthToken(claims: TokenClaims): string {
