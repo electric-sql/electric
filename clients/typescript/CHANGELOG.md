@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.5.0-next.7
+
+### Patch Changes
+
+- c30483f: Fixed conflicts when using multiple instances of Electric on the same page
+
 ## 0.5.0-next.6
 
 ### Patch Changes

@@ -31,7 +31,7 @@ import hasOwn from 'object.hasown'
 import * as z from 'zod'
 import { parseTableNames, Row, Statement } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
-import { shapeManager } from './shapes'
+import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
@@ -62,6 +62,7 @@ export class Table<
 {
   private _builder: Builder
   private _executor: Executor
+  private _shapeManager: IShapeManager
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
 
@@ -89,13 +90,16 @@ export class Table<
     public tableName: string,
     adapter: DatabaseAdapter,
     notifier: Notifier,
+    shapeManager: IShapeManager,
     private _dbDescription: DbSchema<any>
   ) {
     this._builder = new Builder(
       tableName,
-      this._dbDescription.getFields(tableName)
+      this._dbDescription.getFields(tableName),
+      shapeManager
     )
     this._executor = new Executor(adapter, notifier)
+    this._shapeManager = shapeManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     const tableDescription = this._dbDescription.getTableDescription(tableName)
@@ -172,7 +176,7 @@ export class Table<
     const shape = {
       tables: tableNames,
     }
-    return shapeManager.sync(shape)
+    return this._shapeManager.sync(shape)
   }
 
   /*

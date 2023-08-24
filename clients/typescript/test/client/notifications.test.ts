@@ -2,12 +2,7 @@ import test from 'ava'
 import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import { schema } from './generated'
-import { shapeManager, ShapeManagerMock } from '../../src/client/model/shapes'
-
-// Use a mocked shape manager for these tests
-// which does not wait for Satellite
-// to acknowledge the subscription
-Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
+import { MockRegistry } from '../../src/satellite/mock'
 
 const conn = new Database(':memory:')
 const config = {
@@ -16,7 +11,9 @@ const config = {
   },
 }
 
-const { notifier, adapter, db } = await electrify(conn, schema, config)
+const { notifier, adapter, db } = await electrify(conn, schema, config, {
+  registry: new MockRegistry(),
+})
 await db.Items.sync() // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {

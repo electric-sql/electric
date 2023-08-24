@@ -1,5 +1,5 @@
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
-import test from 'ava'
+import anyTest, { TestFn } from 'ava'
 
 import browserEnv from '@ikscodes/browser-env'
 browserEnv()
@@ -21,7 +21,11 @@ import {
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { schema, Electric } from '../client/generated'
-import { shapeManager, ShapeManagerMock } from '../../src/client/model/shapes'
+import { MockSatelliteProcess } from '../../src/satellite/mock'
+import { Migrator } from '../../src/migrators'
+import { SocketFactory } from '../../src/sockets'
+import { SatelliteOpts } from '../../src/satellite/config'
+import { Notifier } from '../../src/notifiers'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -34,17 +38,33 @@ type FC = React.FC<React.PropsWithChildren>
 const ctxInformation = makeElectricContext<Electric>()
 const ElectricProvider = ctxInformation.ElectricProvider
 
-// Use a mocked shape manager for this test
-// which does not wait for Satellite
-// to acknowledge the subscription
-Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
-await shapeManager.sync({ tables: ['Items'] })
+const test = anyTest as TestFn<{
+  dal: Electric
+  adapter: DatabaseAdapter
+  notifier: Notifier
+}>
 
-test('liveFirst arguments are optional', async (t) => {
+test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
   const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const satellite = new MockSatelliteProcess(
+    'test.db',
+    adapter,
+    {} as Migrator,
+    notifier,
+    {} as SocketFactory,
+    {} as SatelliteOpts
+  )
+  const dal = ElectricClient.create(schema, adapter, notifier, satellite)
+
+  dal.db.Items.sync()
+
+  t.context = { dal, adapter, notifier }
+})
+
+test('liveFirst arguments are optional', async (t) => {
+  const { dal } = t.context
 
   const liveQuery = dal.db.Items.liveFirst() // this one already fails because later down `result.current` contains an error...
 
@@ -62,10 +82,7 @@ test('liveFirst arguments are optional', async (t) => {
 })
 
 test('liveMany arguments are optional', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal } = t.context
 
   const liveQuery = dal.db.Items.liveMany() // this one already fails because later down `result.current` contains an error...
 
@@ -83,10 +100,7 @@ test('liveMany arguments are optional', async (t) => {
 })
 
 test('useLiveQuery returns query results', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, adapter } = t.context
 
   const query = 'select i from bars'
   const liveQuery = dal.db.liveRaw({
@@ -104,11 +118,7 @@ test('useLiveQuery returns query results', async (t) => {
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal } = t.context
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -125,10 +135,7 @@ test('useLiveQuery returns error when query errors', async (t) => {
 })
 
 test('useLiveQuery re-runs query when data changes', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -160,10 +167,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
 })
 
 test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   await notifier.attach('baz.db', 'baz')
 
@@ -197,10 +201,7 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
 })
 
 test('useLiveQuery never sets results if unmounted immediately', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal } = t.context
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -221,10 +222,7 @@ test('useLiveQuery never sets results if unmounted immediately', async (t) => {
 })
 
 test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -259,10 +257,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
 })
 
 test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRaw({
@@ -301,10 +296,7 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
 })
 
 test('useConnectivityState defaults to disconnected', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal } = t.context
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -319,10 +311,7 @@ test('useConnectivityState defaults to disconnected', async (t) => {
 })
 
 test('useConnectivityState handles connectivity events', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -337,24 +326,25 @@ test('useConnectivityState handles connectivity events', async (t) => {
 })
 
 test('useConnectivityState ignores connectivity events after unmounting', async (t) => {
-  const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
-  const dal = ElectricClient.create(schema, adapter, notifier)
+  const { dal, notifier } = t.context
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
+  notifier.connectivityStateChanged('test.db', 'disconnected')
+
   const { result, unmount } = renderHook(() => useConnectivityState(), {
     wrapper,
   })
+  t.is(result.current.connectivityState, 'disconnected')
+
   unmount()
 
   notifier.connectivityStateChanged('test.db', 'connected')
 
   await sleepAsync(1000)
-  t.assert(result.current.connectivityState === 'disconnected')
+  t.is(result.current.connectivityState, 'disconnected')
 })
 
 const mockLiveQueryError = async () => {

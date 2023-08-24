@@ -19,28 +19,17 @@
 
 # ElectricSQL
 
-Local-first. Electrified.
-
-You develop local-first apps. We provide the cloud sync. Without changing your database or your code.
+Sync for modern apps. From the inventors of CRDTs.
 
 ## What is ElectricSQL?
 
-ElectricSQL is a local-first SQL system that adds active-active replication and reactive queries to SQLite and Postgres. Use it to make local-first apps that feel instant, work offline and sync via the cloud.
+ElectricSQL is a local-first sync layer for web and mobile apps. Use it to build reactive, realtime, local-first apps directly on Postgres.
 
 ## Getting started
 
-- [Quickstart](https://electric-sql.com/docs/usage/quickstart)
-- [Examples](https://github.com/electric-sql/examples)
 - [Documentation](https://electric-sql.com/docs)
-
-## Repo structure
-
-This repo contains the core backend services that proovide ElectricSQL's cloud sync. It's an Elixir application that integrates with Postgres over logical replication and SQLite via a Protobuf web socket protocol.
-
-See also:
-
-- [electric-sql/typescript-client](https://github.com/electric-sql/typescript-client) Typescript client library for local-first application development
-- [electric-sql/cli](https://github.com/electric-sql/cli) command line interface (CLI) tool to manage config and migrations
+- [Introduction](https://electric-sql.com/docs/intro/local-first)
+- [Quickstart](https://electric-sql.com/docs/quickstart)
 
 ## Pre-reqs
 
@@ -79,8 +68,6 @@ For example to write some data into one of the Postgres instances:
 ```sh
 docker exec -it -e PGPASSWORD=password electric_db_a_1 psql -h 127.0.0.1 -U electric -d electric
 ```
-
-There's a second instance, `electric-db_b_1`, if you want to see data being replicated between them.
 
 Note that you can tear down all the containers with:
 

@@ -9,7 +9,6 @@ import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
-import { shapeManager } from '../client/model/shapes'
 
 export { ElectricNamespace }
 
@@ -46,8 +45,6 @@ export const electrify = async <DB extends DbSchema<any>>(
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const registry = opts?.registry || globalRegistry
 
-  const electric = ElectricClient.create(dbDescription, adapter, notifier)
-
   const satellite = await registry.ensureStarted(
     dbName,
     adapter,
@@ -57,11 +54,16 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
+  const electric = ElectricClient.create(
+    dbDescription,
+    adapter,
+    notifier,
+    satellite
+  )
+
   if (satellite.connectivityState !== undefined) {
     electric.setIsConnected(satellite.connectivityState)
   }
 
-  // initialize the shape manager
-  shapeManager.init(satellite)
   return electric
 }

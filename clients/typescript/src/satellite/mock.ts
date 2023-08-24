@@ -177,7 +177,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
           })
         } else {
           shapeReqToUuid[shape.requestId] = uuid()
-          const records: DataRecord[] = this.relationData[tablename]
+          const records: DataRecord[] = this.relationData[tablename] ?? []
 
           for (const record of records) {
             const dataChange: InitialDataChange = {
