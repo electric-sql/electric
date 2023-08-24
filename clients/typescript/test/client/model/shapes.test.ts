@@ -29,7 +29,7 @@ Log.methodFactory = function (methodName, logLevel, loggerName) {
     }
   }
 }
-Log.setLevel(Log.getLevel()) // Be sure to call setLevel method in order to apply plugin
+Log.setLevel(Log.levels.DEBUG) // Be sure to call setLevel method in order to apply plugin
 
 const config = {
   auth: {
