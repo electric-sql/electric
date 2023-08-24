@@ -39,7 +39,7 @@ let tabId: string | null = null
 //
 // Uses window.sessionStorage. Some browsers disable access to sessionStorage
 // even when saying its available (e.g.: as a result of disabling third party
-// cookies o_O). So we handle this by falling back to an in-memory tabId 
+// cookies o_O). So we handle this by falling back to an in-memory tabId
 // singleton -- which means each page load syncs data into a new DB.
 //
 // Other platforms can pass in a storage implementation or default to the
