@@ -238,7 +238,6 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   async connect(): Promise<void> {
     if (!this.isClosed()) {
-      Log.debug('a open client exists. closing it first')
       this.close()
     }
 
@@ -262,9 +261,11 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         this.socket.onMessage(this.socketHandler)
         this.socket.onError((error) => {
+          Log.error(`unexpected socket error: ${error.message}`)
           this.emit('error', error)
         })
         this.socket.onClose(() => {
+          Log.error(`socket closed unexpectedly`)
           this.emit(
             'error',
             new SatelliteError(

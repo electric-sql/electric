@@ -442,9 +442,7 @@ export class SatelliteProcess implements Satellite {
     // this could especially happen in unit tests
     this.subscriptionNotifiers[subId] = emptyPromise()
 
-    if (this.initializing) {
-      await this.initializing.promise
-    }
+    await this.initializing?.promise
 
     const { subscriptionId, error }: SubscribeResponse =
       await this.client.subscribe(subId, shapeReqs)
@@ -715,7 +713,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   // NO DIRECT CALLS TO CONNECT
-  async _connect(): Promise<void> {
+  private async _connect(): Promise<void> {
     Log.info(`connecting to electric server`)
 
     if (!this._authState) {
