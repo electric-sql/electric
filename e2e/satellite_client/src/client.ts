@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
-import { authToken } from 'electric-sql/auth'
+import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
@@ -24,7 +24,7 @@ export const electrify_db = async (
     url: `electric://${host}:${port}`,
     debug: true,
     auth: {
-      token: await authToken()
+      token: await mockSecureAuthToken()
     }
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)

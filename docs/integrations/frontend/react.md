@@ -35,6 +35,7 @@ We provide this dynamic API rather than static `ElectricProvider` and `useElectr
 ```tsx
 // wrapper.tsx
 import React, { ReactNode, useEffect, useState } from 'react'
+import { insecureAuthToken } from 'electric-sql/auth'
 import { makeElectricContext } from 'electric-sql/react'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { Electric, schema } from './generated/client'
@@ -48,12 +49,13 @@ export const ElectricWrapper = ({ children }) => {
     const isMounted = true
 
     const init = async () => {
-      const conn = await ElectricDatabase.init('electric.db', '')
-      const electric = await electrify(conn, schema, {
+      const config = {
         auth: {
-          token: '...'
+          token: insecureAuthToken({user_id: 'dummy'})
         }
-      })
+      }
+      const conn = await ElectricDatabase.init('electric.db', '')
+      const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {
         return

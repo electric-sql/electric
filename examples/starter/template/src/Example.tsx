@@ -3,21 +3,15 @@ import React, { useEffect, useState } from 'react'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 
-import { authToken } from 'electric-sql/auth'
+import { insecureAuthToken } from 'electric-sql/auth'
 import { genUUID, uniqueTabId } from 'electric-sql/util'
 
+import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items, schema } from './generated/client'
 
 import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
-const localAuthToken = (): Promise<string> => {
-  const issuer = 'local-development'
-  const signingKey = 'local-development-key-minimum-32-symbols'
-
-  return authToken(issuer, signingKey)
-}
 
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
@@ -28,8 +22,10 @@ export const Example = () => {
     const init = async () => {
       const config = {
         auth: {
-          token: await localAuthToken()
-        }
+          token: insecureAuthToken({user_id: 'dummy'})
+        },
+        debug: DEBUG_MODE,
+        url: ELECTRIC_URL
       }
 
       const { tabId } = uniqueTabId()
