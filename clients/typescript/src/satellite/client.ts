@@ -100,6 +100,15 @@ type IncomingHandler = {
   isRpc: boolean
 }
 
+const subscriptionError = [
+  SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+  SatelliteErrorCode.SUBSCRIPTION_ERROR,
+  SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_ID_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+  SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
+]
+
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
   private dbName: string
@@ -839,7 +848,8 @@ export class SatelliteClient extends EventEmitter implements Client {
         if (handleIsRpc) {
           this.emit('rpc_error', error)
         } else {
-          this.emit('error', error)
+          // subscription errors are emitted elsewhere
+          if (!subscriptionError.includes(error.code)) this.emit('error', error)
         }
       } else {
         // This is an unexpected runtime error

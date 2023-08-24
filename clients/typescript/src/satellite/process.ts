@@ -163,6 +163,13 @@ export class SatelliteProcess implements Satellite {
 
   private subsDeliveredCallback?: SubscriptionDeliveredCallback
   private subsErrorCallback?: SubscriptionErrorCallback
+  private _connectRetryHandler: ConnectRetryHandler
+
+  private initializing?: {
+    promise: Promise<void>
+    resolve: () => void
+    reject: (e?: unknown) => void
+  }
 
   constructor(
     dbName: DbName,
@@ -200,6 +207,8 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+
+    this._connectRetryHandler = connectRetryHandler
 
     this.setClientListeners()
   }
@@ -668,8 +677,7 @@ export class SatelliteProcess implements Satellite {
     switch (status) {
       case 'available': {
         Log.warn(`checking network availability and reconnecting`)
-        await this._connectWithBackoff()
-        return this._startReplication()
+        return this._connectWithBackoff().then(() => this._startReplication())
       }
       case 'error':
       case 'disconnected': {
@@ -685,18 +693,12 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  private initializing?: {
-    promise: Promise<void>
-    resolve: () => void
-    reject: (e?: unknown) => void
-  }
-
-  async _connectWithBackoff() {
+  async _connectWithBackoff(): Promise<void> {
     this.initializing = emptyPromise()
 
     await backOff(() => this._connect(), {
       ...connectionRetryPolicy,
-      retry: connectRetryHandler,
+      retry: this._connectRetryHandler,
     }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -761,6 +763,7 @@ export class SatelliteProcess implements Satellite {
 
       this.initializing?.resolve()
     } catch (error: any) {
+      // FIXME: this results in unhandled exception if no one is waiting on it
       this.initializing?.reject(error)
 
       if (!(error instanceof SatelliteError)) {
@@ -987,7 +990,7 @@ export class SatelliteProcess implements Satellite {
 
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
-      return this.client.enqueueTransaction(txn)
+      this.client.enqueueTransaction(txn)
     }
   }
 

@@ -1230,7 +1230,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
   t.is(acknowledgedLsn, '1')
 
-  satellite._connectivityStateChanged('disconnected')
+  await satellite._connectivityStateChanged('disconnected')
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1241,7 +1241,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  satellite._connectivityStateChanged('available')
+  await satellite._connectivityStateChanged('available')
 
   await sleepAsync(200)
   const lsn2 = await satellite._getMeta('lastSentRowId')
@@ -1300,19 +1300,20 @@ test('clear database on BEHIND_WINDOW', async (t) => {
 })
 
 test('throw other replication errors', async (t) => {
+  t.plan(2)
   const { satellite } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
 
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
   await satellite._setMeta('lsn', base64lsn)
-  try {
-    const conn = await satellite.start(authState)
-    await conn.connectionPromise
-    t.fail('start should throw')
-  } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
-  }
+
+  const conn = await satellite.start(authState)
+  return Promise.all(
+    [satellite['initializing']?.promise, conn.connectionPromise].map((p) =>
+      p?.catch((e) => t.is(e.code, SatelliteErrorCode.INVALID_POSITION))
+    )
+  )
 })
 
 test('apply shape data and persist subscription', async (t) => {
@@ -1809,6 +1810,29 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   t.is(delete2.optype, 'DELETE')
   // The second should have clearTags
   t.not(delete2.clearTags, '[]')
+})
+
+test.serial('connection backoff success', async (t) => {
+  t.plan(3)
+  const { client, satellite } = t.context
+
+  client.close()
+
+  const retry = (_e: any, a: number) => {
+    if (a > 0) {
+      t.pass()
+      return false
+    }
+    return true
+  }
+
+  satellite['_connectRetryHandler'] = retry
+
+  await Promise.all(
+    [satellite._connectWithBackoff(), satellite['initializing']?.promise].map(
+      (p) => p?.catch(() => t.pass())
+    )
+  )
 })
 
 // TODO: implement reconnect protocol

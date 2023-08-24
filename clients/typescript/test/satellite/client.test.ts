@@ -66,7 +66,6 @@ test.beforeEach((t) => {
 
 test.afterEach.always(async (t) => {
   const { server, client } = t.context
-
   client.close()
   server.close()
 })
@@ -76,46 +75,6 @@ test.serial('connect success', async (t) => {
 
   await client.connect()
   t.pass()
-})
-
-test.serial('connection backoff success', async (t) => {
-  t.plan(1)
-  const { client, server } = t.context
-
-  server.close()
-
-  const retry = (_e: any, a: number) => {
-    if (a > 0) {
-      t.pass()
-      return false
-    }
-    return true
-  }
-
-  try {
-    client['connectRetryHandler'] = retry
-    await client.connect()
-  } catch (e) {}
-})
-
-test.serial('connection backoff failure', async (t) => {
-  const { client, server } = t.context
-
-  server.close()
-
-  const retry = (_e: any, a: number) => {
-    if (a > 0) {
-      return false
-    }
-    return true
-  }
-
-  try {
-    client['connectRetryHandler'] = retry
-    await client.connect()
-  } catch (e) {
-    t.pass()
-  }
 })
 
 // TODO: handle connection errors scenarios
@@ -807,12 +766,15 @@ test.serial('listen to subscription events: error', async (t) => {
   const subscriptionId = 'THE_ID'
 
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const subsData = Proto.SatSubsDataBegin.fromPartial({
+    subscriptionId,
+  })
   const subsError = Proto.SatSubsDataError.fromPartial({
     code: Proto.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR,
     message: 'FAKE ERROR',
     subscriptionId,
   })
-  server.nextResponses([subsResp, subsError])
+  server.nextResponses([subsResp, subsData, subsError])
 
   const success = () => t.fail()
   const error = () => t.pass()
