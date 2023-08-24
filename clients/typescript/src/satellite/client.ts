@@ -849,7 +849,9 @@ export class SatelliteClient extends EventEmitter implements Client {
           this.emit('rpc_error', error)
         } else {
           // subscription errors are emitted elsewhere
-          if (!subscriptionError.includes(error.code)) this.emit('error', error)
+          if (!subscriptionError.includes(error.code)) {
+            this.emit('error', error)
+          }
         }
       } else {
         // This is an unexpected runtime error
