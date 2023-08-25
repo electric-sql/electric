@@ -728,7 +728,7 @@ export class SatelliteProcess implements Satellite {
         throw authResp.error
       }
     } catch (error: any) {
-      Log.warn(`couldn't connect with reason: ${error.message}`)
+      Log.error(`couldn't connect with reason: ${error.message}`)
       throw error
     }
   }
@@ -759,8 +759,7 @@ export class SatelliteProcess implements Satellite {
         throw error
       }
 
-      // FIXME: once removed from client
-      // this.notifier.connectivityStateChanged(this.dbName, 'connected')
+      this.notifier.connectivityStateChanged(this.dbName, 'connected')
       this.initializing?.resolve()
     } catch (error: any) {
       // FIXME: this results in unhandled exception if no one is waiting on it

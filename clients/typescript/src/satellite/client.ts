@@ -111,12 +111,9 @@ const subscriptionError = [
 
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
-  private dbName: string
 
   private socketFactory: SocketFactory
   private socket?: Socket
-
-  private notifier: Notifier
 
   private inbound: Replication
   private outbound: OutgoingReplication
@@ -201,19 +198,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
 
   constructor(
-    dbName: string,
+    _dbName: string,
     socketFactory: SocketFactory,
-    notifier: Notifier,
+    _notifier: Notifier,
     opts: SatelliteClientOpts
   ) {
     super()
 
-    this.dbName = dbName
-
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
-
-    this.notifier = notifier
 
     this.inbound = this.resetReplication()
     this.outbound = this.resetReplication()
@@ -261,22 +254,23 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         this.socket.onMessage(this.socketHandler)
         this.socket.onError((error) => {
-          Log.warn(`unexpected socket error: ${error.message}`)
+          if (this.listenerCount('error') === 0) {
+            Log.error(
+              `socket error but no listener is attached: ${error.message}`
+            )
+          }
           this.emit('error', error)
         })
         this.socket.onClose(() => {
-          Log.warn(`socket closed unexpectedly`)
+          if (this.listenerCount('error') === 0) {
+            Log.error(`socket closed but no listener is attached`)
+          }
           this.emit(
             'error',
-            new SatelliteError(
-              SatelliteErrorCode.SOCKET_ERROR,
-              'socket closed unexpectedly'
-            )
+            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
           )
         })
 
-        // FIXME: remove this line and dont need notifier anymore
-        this.notifier.connectivityStateChanged(this.dbName, 'connected')
         resolve()
       }
 

@@ -291,7 +291,11 @@ export function msgToString(message: SatPbMsg): string {
       )},${schemaVersion} subscriptions: [${message.subscriptionIds}]}`
     }
     case 'Electric.Satellite.v1_4.SatInStartReplicationResp':
-      return `#SatInStartReplicationResp{}`
+      return `#SatInStartReplicationResp{${
+        message.err
+          ? '`' + startReplicationErrorToSatelliteError(message.err) + '`'
+          : ''
+      }}`
     case 'Electric.Satellite.v1_4.SatInStopReplicationReq':
       return `#SatInStopReplicationReq{}`
     case 'Electric.Satellite.v1_4.SatInStopReplicationResp':
@@ -331,7 +335,9 @@ export function msgToString(message: SatPbMsg): string {
       return `#SatSubsDataError{id: ${message.subscriptionId}, code: ${code}, msg: "${message.message}", errors: [${shapeErrors}]}`
     }
     case 'Electric.Satellite.v1_4.SatSubsReq':
-      return `#SatSubsReq{id: ${message.subscriptionId}, shapes: ${message.shapeRequests}}`
+      return `#SatSubsReq{id: ${
+        message.subscriptionId
+      }, shapes: ${JSON.stringify(message.shapeRequests)}}`
     case 'Electric.Satellite.v1_4.SatSubsResp': {
       if (message.err) {
         const shapeErrors = message.err.shapeRequestError.map(
