@@ -255,6 +255,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.socket.onMessage(this.socketHandler)
         this.socket.onError((error) => {
           if (this.listenerCount('error') === 0) {
+            this.close()
             Log.error(
               `socket error but no listener is attached: ${error.message}`
             )
@@ -262,6 +263,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           this.emit('error', error)
         })
         this.socket.onClose(() => {
+          this.close()
           if (this.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
@@ -844,7 +846,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         if (handleIsRpc) {
           this.emit('rpc_error', error)
         } else {
-          // subscription errors are emitted elsewhere
+          // subscription errors are emitted through specific event
           if (!subscriptionError.includes(error.code)) {
             this.emit('error', error)
           }

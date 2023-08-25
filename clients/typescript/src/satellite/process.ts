@@ -14,9 +14,11 @@ import {
   Notifier,
 } from '../notifiers/index'
 import {
+  Waiter,
   base64,
   bytesToNumber,
   emptyPromise,
+  getWaiter,
   numberToBytes,
   uuid,
 } from '../util/common'
@@ -165,11 +167,7 @@ export class SatelliteProcess implements Satellite {
   private subsErrorCallback?: SubscriptionErrorCallback
   private _connectRetryHandler: ConnectRetryHandler
 
-  private initializing?: {
-    promise: Promise<void>
-    resolve: () => void
-    reject: (e?: unknown) => void
-  }
+  private initializing?: Waiter
 
   constructor(
     dbName: DbName,
@@ -442,7 +440,7 @@ export class SatelliteProcess implements Satellite {
     // this could especially happen in unit tests
     this.subscriptionNotifiers[subId] = emptyPromise()
 
-    await this.initializing?.promise
+    await this.initializing?.waitOn()
 
     const { subscriptionId, error }: SubscribeResponse =
       await this.client.subscribe(subId, shapeReqs)
@@ -632,8 +630,9 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  // client error can be a socket error or a replication error
   _handleClientError(satelliteError: SatelliteError) {
-    if (this.initializing) {
+    if (this.initializing && !this.initializing.finished) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
         Log.warn(`an unexpected socket error occurred. retrying connection`)
         this._connectivityStateChanged('available')
@@ -643,10 +642,12 @@ export class SatelliteProcess implements Satellite {
       return
     }
 
-    if (!this.client.isClosed()) {
-      this.client.close()
-      this._connectivityStateChanged('available')
-    }
+    // if client is starting replication, it will receive an error and stop
+    // this and all other errors are handled by closing the client if hasn't
+    // already and retring connection
+
+    this.client.close()
+    this._connectivityStateChanged('available')
 
     Log.warn(
       `received an error from the client but client is closed. No action ${satelliteError.message}`
@@ -690,8 +691,11 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  // we might just move starting replication into the retrier, which might be more simple to manage
   async _connectWithBackoff(): Promise<void> {
-    this.initializing = this.initializing ?? emptyPromise()
+    if (!this.initializing || this.initializing?.finished) {
+      this.initializing = getWaiter()
+    }
 
     await backOff(() => this._connect(), {
       ...connectionRetryPolicy,
@@ -705,7 +709,7 @@ export class SatelliteProcess implements Satellite {
         `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
       )
 
-      this.initializing?.reject(error)
+      this.initializing?.reject(e)
       this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
       throw error
     })
@@ -750,7 +754,8 @@ export class SatelliteProcess implements Satellite {
 
       if (error) {
         if (
-          (error.code == SatelliteErrorCode.BEHIND_WINDOW ||
+          (error.code == SatelliteErrorCode.INVALID_POSITION ||
+            error.code == SatelliteErrorCode.BEHIND_WINDOW ||
             error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
@@ -762,7 +767,6 @@ export class SatelliteProcess implements Satellite {
       this.notifier.connectivityStateChanged(this.dbName, 'connected')
       this.initializing?.resolve()
     } catch (error: any) {
-      // FIXME: this results in unhandled exception if no one is waiting on it
       this.initializing?.reject(error)
 
       if (!(error instanceof SatelliteError)) {

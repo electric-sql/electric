@@ -1,5 +1,6 @@
 import BASE64 from 'base-64'
 import { v4 } from 'uuid'
+import { SatelliteError } from './types'
 
 // default implementation for uuid()
 // platforms that don't support 'uuid' shall override definition
@@ -68,4 +69,38 @@ export function emptyPromise<T = void>() {
 
   // @ts-ignore TS complains that resolve/reject are used here before assignment, but promise constructor will run synchronously
   return { promise, resolve, reject }
+}
+
+export type Waiter = {
+  waitOn: () => Promise<void>
+  resolve: () => Promise<void>
+  reject: (error: SatelliteError) => Promise<void>
+  finished: boolean
+}
+
+export function getWaiter(): Waiter {
+  {
+    const { promise, resolve, reject } = emptyPromise()
+    let waiting = false
+    let finished = false
+
+    return {
+      waitOn: async () => {
+        waiting = true
+        await promise
+      },
+
+      resolve: async () => {
+        finished = true
+        resolve()
+      },
+
+      reject: async () => {
+        finished = true
+        waiting ? reject() : resolve()
+      },
+
+      finished,
+    }
+  }
 }
