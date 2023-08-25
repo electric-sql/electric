@@ -22,7 +22,7 @@ You can use react-native-sqlite-storage with or without the promise API enabled.
 
 ```tsx
 import SQLite from 'react-native-sqlite-storage'
-import { electrify } from 'electric-sql/expo'
+import { electrify } from 'electric-sql/react-native'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
