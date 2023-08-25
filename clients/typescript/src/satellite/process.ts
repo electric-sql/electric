@@ -73,8 +73,6 @@ import {
   ShapeSelect,
   SubscribeResponse,
   SubscriptionData,
-  SubscriptionDeliveredCallback,
-  SubscriptionErrorCallback,
 } from './shapes/types'
 import { IBackOffOptions, backOff } from 'exponential-backoff'
 
@@ -100,13 +98,6 @@ type MetaEntries = {
   lastSentRowId: `${number}`
   lsn: string | null
   subscriptions: string
-}
-
-type ConnectRetryHandler = (error: Error, attempt: number) => boolean
-
-const connectRetryHandler: ConnectRetryHandler = (_error, _attempts) => {
-  // for simplicity, always retry
-  return true
 }
 
 const connectionRetryPolicy: Partial<IBackOffOptions> = {
@@ -163,10 +154,6 @@ export class SatelliteProcess implements Satellite {
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
-  private subsDeliveredCallback?: SubscriptionDeliveredCallback
-  private subsErrorCallback?: SubscriptionErrorCallback
-  private _connectRetryHandler: ConnectRetryHandler
-
   private initializing?: Waiter
 
   constructor(
@@ -205,8 +192,6 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
-
-    this._connectRetryHandler = connectRetryHandler
 
     this.setClientListeners()
   }
@@ -358,12 +343,9 @@ export class SatelliteProcess implements Satellite {
       this._throttledSnapshot.bind(this)
     )
 
-    this.subsDeliveredCallback = this._handleSubscriptionData.bind(this)
-    this.subsErrorCallback = this._handleSubscriptionError.bind(this)
-
     this.client.subscribeToSubscriptionEvents(
-      this.subsDeliveredCallback,
-      this.subsErrorCallback
+      this._handleSubscriptionData.bind(this),
+      this._handleSubscriptionError.bind(this)
     )
   }
 
@@ -592,7 +574,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _handleBehindWindow(): Promise<void> {
+  async _resetClientState(): Promise<void> {
     Log.warn(
       'client cannot resume replication from server, resetting replication state'
     )
@@ -603,7 +585,18 @@ export class SatelliteProcess implements Satellite {
       .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
 
     this.client.close()
-    await this._resetClientState()
+
+    this._lsn = undefined
+
+    // TODO: this is obviously too conservative
+    // we should also work on updating subscriptions
+    // atomically on unsubscribe()
+    await this.subscriptions.unsubscribeAll()
+
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
 
     await this._connectWithBackoff()
     await this._startReplication()
@@ -654,20 +647,6 @@ export class SatelliteProcess implements Satellite {
     )
   }
 
-  async _resetClientState() {
-    this._lsn = undefined
-
-    // TODO: this is obviously too conservative
-    // we should also work on updating subscriptions
-    // atomically on unsubscribe()
-    await this.subscriptions.unsubscribeAll()
-
-    await this.adapter.runInTransaction(
-      this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
-    )
-  }
-
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
     Log.debug(`connectivity state changed ${status}`)
@@ -699,7 +678,6 @@ export class SatelliteProcess implements Satellite {
 
     await backOff(() => this._connect(), {
       ...connectionRetryPolicy,
-      retry: this._connectRetryHandler,
     }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -759,7 +737,7 @@ export class SatelliteProcess implements Satellite {
             error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
-          return await this._handleBehindWindow()
+          return await this._resetClientState()
         }
         throw error
       }
