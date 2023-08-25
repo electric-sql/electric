@@ -382,7 +382,7 @@ export class SatelliteProcess implements Satellite {
       this._potentialDataChangeSubscription = undefined
     }
 
-    this.client.close()
+    return this._connectivityStateChanged('disconnected')
   }
 
   async subscribe(
@@ -574,17 +574,15 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _resetClientState(): Promise<void> {
-    Log.warn(
-      'client cannot resume replication from server, resetting replication state'
-    )
+  // maintains subscriptions
+  async _resetClientStateAndReconnect(): Promise<void> {
+    await this._connectivityStateChanged('disconnected')
+
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
     const shapeDefs: ClientShapeDefinition[] = subscriptionIds
       .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
       .filter((s): s is ShapeDefinition[] => s !== undefined)
       .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
-
-    this.client.close()
 
     this._lsn = undefined
 
@@ -598,11 +596,11 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
+    // FIXME: I think we should handle this outside this function
     await this._connectWithBackoff()
     await this._startReplication()
 
     if (shapeDefs.length > 0) {
-      Log.warn(`successfully reconnected with server. re-subscribing.`)
       this.subscribe(shapeDefs)
     }
   }
@@ -613,7 +611,7 @@ export class SatelliteProcess implements Satellite {
   ): Promise<void> {
     Log.error('encountered a subscription error: ' + satelliteError.message)
 
-    await this._resetClientState()
+    await this._resetClientStateAndReconnect()
 
     // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
@@ -623,7 +621,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // client error can be a socket error or a replication error
+  // client error can be a socket error or a server error message
   _handleClientError(satelliteError: SatelliteError) {
     if (this.initializing && !this.initializing.finished) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
@@ -635,15 +633,9 @@ export class SatelliteProcess implements Satellite {
       return
     }
 
-    // if client is starting replication, it will receive an error and stop
-    // this and all other errors are handled by closing the client if hasn't
-    // already and retring connection
-
-    this.client.close()
-    this._connectivityStateChanged('available')
-
-    Log.warn(
-      `received an error from the client but client is closed. No action ${satelliteError.message}`
+    // all other errors are handled by closing the client (if not yet) and retrying
+    this._connectivityStateChanged('disconnected').then(() =>
+      this._connectivityStateChanged('available')
     )
   }
 
@@ -710,7 +702,9 @@ export class SatelliteProcess implements Satellite {
         throw authResp.error
       }
     } catch (error: any) {
-      Log.error(`couldn't connect with reason: ${error.message}`)
+      Log.warn(
+        `server returned an error while establishing connection: ${error.message}`
+      )
       throw error
     }
   }
@@ -737,8 +731,12 @@ export class SatelliteProcess implements Satellite {
             error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
-          return await this._resetClientState()
+          Log.warn(
+            `server error: ${error.message}. resetting client state and retrying connection`
+          )
+          return await this._resetClientStateAndReconnect()
         }
+
         throw error
       }
 
@@ -754,10 +752,10 @@ export class SatelliteProcess implements Satellite {
         throw error
       }
 
-      await this._connectivityStateChanged('disconnected')
-      Log.error(
-        `Couldn't start replication with reason: ${error.message}. Try reconnecting manually`
+      Log.warn(
+        `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
       )
+      return this._resetClientStateAndReconnect()
     } finally {
       this.initializing = undefined
     }
