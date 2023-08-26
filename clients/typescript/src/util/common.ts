@@ -95,9 +95,9 @@ export function getWaiter(): Waiter {
         resolve()
       },
 
-      reject: async () => {
+      reject: async (error) => {
         finished = true
-        waiting ? reject() : resolve()
+        waiting ? reject(error) : resolve()
       },
 
       finished,

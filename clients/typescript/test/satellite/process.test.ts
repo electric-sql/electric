@@ -2,7 +2,7 @@ import anyTest, { TestFn } from 'ava'
 
 import {
   MOCK_BEHIND_WINDOW_LSN,
-  MOCK_INVALID_POSITION_LSN,
+  MOCK_INTERNAL_ERROR,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -32,6 +32,7 @@ import {
   DataTransaction,
   SatelliteError,
   SatelliteErrorCode,
+  StartReplicationResponse,
 } from '../../src/util/types'
 import {
   makeContext,
@@ -209,23 +210,27 @@ test('starting and stopping the process works', async (t) => {
 
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 1)
+  // connect, 1st txn
+  t.is(notifier.notifications.length, 2)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // 2nd txm
+  t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // no txn notified
+  t.is(notifier.notifications.length, 3)
 
   await satellite.start(authState)
   await sleepAsync(0)
 
-  t.is(notifier.notifications.length, 3)
+  // connect, 4th txn
+  t.is(notifier.notifications.length, 5)
 })
 
 test('snapshots on potential data change', async (t) => {
@@ -1305,13 +1310,16 @@ test('throw other replication errors', async (t) => {
   const { runMigrations, authState } = t.context
   await runMigrations()
 
-  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INTERNAL_ERROR))
   await satellite._setMeta('lsn', base64lsn)
 
   const conn = await satellite.start(authState)
   return Promise.all(
-    [satellite['initializing']?.promise, conn.connectionPromise].map((p) =>
-      p?.catch((e) => t.is(e.code, SatelliteErrorCode.INVALID_POSITION))
+    [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
+      p?.catch((e: SatelliteError) => {
+        console.log(`error ${e}`)
+        t.is(e.code, SatelliteErrorCode.INTERNAL)
+      })
     )
   )
 })
@@ -1340,9 +1348,10 @@ test('apply shape data and persist subscription', async (t) => {
   const { synced } = await satellite.subscribe([shapeDef])
   await synced
 
-  t.is(notifier.notifications.length, 1)
-  t.is(notifier.notifications[0].changes.length, 1)
-  t.deepEqual(notifier.notifications[0].changes[0], {
+  // first notification is 'connected'
+  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications[1].changes.length, 1)
+  t.deepEqual(notifier.notifications[1].changes[0], {
     qualifiedTablename: qualified,
     rowids: [],
   })
@@ -1829,7 +1838,7 @@ test.serial('connection backoff success', async (t) => {
   satellite['_connectRetryHandler'] = retry
 
   await Promise.all(
-    [satellite._connectWithBackoff(), satellite['initializing']?.promise].map(
+    [satellite._connectWithBackoff(), satellite['initializing']?.waitOn()].map(
       (p) => p?.catch(() => t.pass())
     )
   )

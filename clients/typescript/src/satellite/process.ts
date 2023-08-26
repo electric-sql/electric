@@ -100,6 +100,13 @@ type MetaEntries = {
   subscriptions: string
 }
 
+type ConnectRetryHandler = (error: Error, attempt: number) => boolean
+
+const connectRetryHandler: ConnectRetryHandler = (_error, _attempts) => {
+  // for simplicity, always retry
+  return true
+}
+
 const connectionRetryPolicy: Partial<IBackOffOptions> = {
   delayFirstAttempt: false,
   startingDelay: 100,
@@ -109,10 +116,7 @@ const connectionRetryPolicy: Partial<IBackOffOptions> = {
   timeMultiple: 2,
 }
 
-const throwErrors = [
-  SatelliteErrorCode.INVALID_POSITION,
-  SatelliteErrorCode.BEHIND_WINDOW,
-]
+const throwErrors = [SatelliteErrorCode.INTERNAL]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -154,6 +158,7 @@ export class SatelliteProcess implements Satellite {
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
+  private _connectRetryHandler: ConnectRetryHandler
   private initializing?: Waiter
 
   constructor(
@@ -192,6 +197,8 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+
+    this._connectRetryHandler = connectRetryHandler
 
     this.setClientListeners()
   }
@@ -575,7 +582,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   // maintains subscriptions
-  async _resetClientStateAndReconnect(): Promise<void> {
+  async _resetClientState(): Promise<ClientShapeDefinition[]> {
     await this._connectivityStateChanged('disconnected')
 
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
@@ -596,7 +603,10 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    // FIXME: I think we should handle this outside this function
+    return shapeDefs
+  }
+
+  async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
     await this._connectWithBackoff()
     await this._startReplication()
 
@@ -605,13 +615,17 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  async _resetClientStateAndReconnect() {
+    return this._resetClientState().then(this._reconnect.bind(this))
+  }
+
   async _handleSubscriptionError(
     satelliteError: SatelliteError,
     subscriptionId?: string
   ): Promise<void> {
     Log.error('encountered a subscription error: ' + satelliteError.message)
 
-    await this._resetClientStateAndReconnect()
+    await this._resetClientState()
 
     // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
@@ -621,7 +635,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // client error can be a socket error or a server error message
+  // handles async client erros: can be a socket error or a server error message
   _handleClientError(satelliteError: SatelliteError) {
     if (this.initializing && !this.initializing.finished) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
@@ -670,6 +684,7 @@ export class SatelliteProcess implements Satellite {
 
     await backOff(() => this._connect(), {
       ...connectionRetryPolicy,
+      retry: this._connectRetryHandler,
     }).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -734,6 +749,7 @@ export class SatelliteProcess implements Satellite {
           Log.warn(
             `server error: ${error.message}. resetting client state and retrying connection`
           )
+          // restart reconnection loop
           return await this._resetClientStateAndReconnect()
         }
 
