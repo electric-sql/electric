@@ -159,6 +159,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
        slot_name: slot,
        origin: origin,
        producer_name: producer,
+       producer_pid: nil,
        opts: Map.get(replication_opts, :opts, []),
        # Under the current implementation, this function is always going to be
        # `ShadowTableTransformation.split_change_into_main_and_shadow/4`,
@@ -300,7 +301,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
             send_all(wal_messages, state.send_fn, origin)
 
-            %{
+            OffsetStorage.save_pg_position(
+              state.slot_name,
+              new_lsn,
+              position
+            )
+
+            %State{
               state
               | current_lsn: new_lsn,
                 sent_relations: relations,
@@ -309,11 +316,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
         end
       end)
 
-    OffsetStorage.save_pg_position(
-      state.slot_name,
-      state.current_lsn,
-      state.current_source_position
-    )
+    send(state.producer_pid, {:sent_all_up_to, state.current_source_position})
 
     {:noreply, [], state}
   end
@@ -328,6 +331,11 @@ defmodule Electric.Replication.Postgres.SlotServer do
     Logger.debug("wait for producer")
     :gproc.nb_wait(state.producer_name)
     {:noreply, [], state}
+  end
+
+  @impl true
+  def handle_subscribe(:producer, _opts, {pid, _tag}, %State{} = state) do
+    {:automatic, %{state | producer_pid: pid}}
   end
 
   # Private function
