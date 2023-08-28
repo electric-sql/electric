@@ -1,5 +1,12 @@
 # @core/electric
 
+## 0.5.1
+
+### Patch Changes
+
+- 5bec40a: Fixed multiple operations touching the same row within a tx not being applied properly on PG
+- 212ec8d: Fixed a bug with lost writes when PG dropped the replication connection
+
 ## 0.5.0
 
 ### Minor Changes

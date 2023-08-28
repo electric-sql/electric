@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.1.2
+
+### Patch Changes
+
+- 7cc6e27: Use correct version of `electric-sql` on the starter template
+
 ## 0.1.1
 
 ### Patch Changes
