@@ -44,16 +44,10 @@ Install the dependencies:
 yarn
 ```
 
-Copy the wa-sqlite WASM files into `./static`:
+Copy the wa-sqlite WASM files into `./public`:
 
 ```shell
 yarn copy-wasm
-```
-
-Build the server app (requires Docker):
-
-```shell
-yarn server:build
 ```
 
 ### GitHub
