@@ -16,7 +16,7 @@ export class WebSocketWeb implements Socket {
   private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
 
   // event doesn't provide much
-  private errorListener() {
+  private errorListener = () => {
     for (const callback of this.errorCallbacks) {
       callback(
         new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
