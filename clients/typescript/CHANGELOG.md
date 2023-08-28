@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.5.1
+
+### Patch Changes
+
+- 6a7c6be: Increase max listener limit on shared global event emitter instance to avoid unnecessary warnings.
+
 ## 0.5.0
 
 ### Minor Changes
