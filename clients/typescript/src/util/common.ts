@@ -75,32 +75,32 @@ export type Waiter = {
   waitOn: () => Promise<void>
   resolve: () => Promise<void>
   reject: (error: SatelliteError) => Promise<void>
-  finished: boolean
+  finished: () => boolean
 }
 
 export function getWaiter(): Waiter {
-  {
-    const { promise, resolve, reject } = emptyPromise()
-    let waiting = false
-    let finished = false
+  const { promise, resolve, reject } = emptyPromise()
+  let waiting = false
+  let finished = false
 
-    return {
-      waitOn: async () => {
-        waiting = true
-        await promise
-      },
+  return {
+    waitOn: async () => {
+      waiting = true
+      await promise
+    },
 
-      resolve: async () => {
-        finished = true
-        resolve()
-      },
+    resolve: async () => {
+      finished = true
+      resolve()
+    },
 
-      reject: async (error) => {
-        finished = true
-        waiting ? reject(error) : resolve()
-      },
+    reject: async (error) => {
+      finished = true
+      waiting ? reject(error) : resolve()
+    },
 
-      finished,
-    }
+    finished: () => {
+      return finished
+    },
   }
 }

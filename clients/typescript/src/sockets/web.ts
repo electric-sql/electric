@@ -16,21 +16,25 @@ export class WebSocketWeb implements Socket {
   private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
 
   // event doesn't provide much
-  private errorListener = () => {
-    for (const cb of this.errorCallbacks) {
-      cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+  private errorListener() {
+    for (const callback of this.errorCallbacks) {
+      callback(
+        new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+      )
     }
 
-    while (this.onceErrorCallbacks.length > 0) {
-      const cb = this.onceErrorCallbacks.pop()
-      if (cb)
-        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+    let callback: ((error: SatelliteError) => void) | undefined
+    while ((callback = this.onceErrorCallbacks.pop())) {
+      callback(
+        new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+      )
     }
   }
 
   private connectListener = () => {
-    while (this.connectCallbacks.length > 0) {
-      this.connectCallbacks.pop()!()
+    let callback: (() => void) | undefined
+    while ((callback = this.connectCallbacks.pop())) {
+      callback()
     }
   }
   private messageListener?: (event: MessageEvent<any>) => void

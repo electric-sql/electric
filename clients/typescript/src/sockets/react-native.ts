@@ -28,23 +28,25 @@ export class WebSocketReactNative implements Socket {
     this.socket.binaryType = 'arraybuffer'
 
     this.socket.onopen = () => {
-      while (this.connectCallbacks.length > 0) {
-        this.connectCallbacks.pop()!()
+      let callback: (() => void) | undefined
+      while ((callback = this.connectCallbacks.pop())) {
+        callback()
       }
     }
 
     // event doesn't provide much
     this.socket.onerror = () => {
-      for (const cb of this.errorCallbacks) {
-        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
+      for (const callback of this.errorCallbacks) {
+        callback(
+          new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+        )
       }
 
-      while (this.onceErrorCallbacks.length > 0) {
-        const cb = this.onceErrorCallbacks.pop()
-        if (cb)
-          cb(
-            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
-          )
+      let callback: ((error: SatelliteError) => void) | undefined
+      while ((callback = this.onceErrorCallbacks.pop())) {
+        callback(
+          new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+        )
       }
     }
 

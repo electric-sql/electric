@@ -24,7 +24,6 @@ import {
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  AckCallback,
   AckType,
   Change as Chg,
   ConnectivityState,
@@ -396,6 +395,9 @@ export class SatelliteProcess implements Satellite {
   async subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription> {
+    // Await for client to be ready before doing anything else
+    await this.initializing?.waitOn()
+
     // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
     const existingSubscription =
       this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
@@ -429,8 +431,6 @@ export class SatelliteProcess implements Satellite {
     // and this resolver and rejecter would not yet be stored
     // this could especially happen in unit tests
     this.subscriptionNotifiers[subId] = emptyPromise()
-
-    await this.initializing?.waitOn()
 
     const { subscriptionId, error }: SubscribeResponse =
       await this.client.subscribe(subId, shapeReqs)
@@ -617,7 +617,8 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _resetClientStateAndReconnect() {
-    return this._resetClientState().then(this._reconnect.bind(this))
+    const shapes = await this._resetClientState()
+    return await this._reconnect(shapes)
   }
 
   async _handleSubscriptionError(
@@ -638,7 +639,7 @@ export class SatelliteProcess implements Satellite {
 
   // handles async client erros: can be a socket error or a server error message
   _handleClientError(satelliteError: SatelliteError) {
-    if (this.initializing && !this.initializing.finished) {
+    if (this.initializing && !this.initializing.finished()) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
         Log.warn(
           `a socket error occurred while connecting to server: ${satelliteError.message}`
@@ -662,6 +663,11 @@ export class SatelliteProcess implements Satellite {
     this._connectivityStateChanged('disconnected').then(() =>
       this._connectivityStateChanged('available')
     )
+  }
+
+  async _handleAck(lsn: LSN, type: AckType) {
+    const decoded = bytesToNumber(lsn)
+    await this._ack(decoded, type == AckType.REMOTE_COMMIT)
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
@@ -689,7 +695,7 @@ export class SatelliteProcess implements Satellite {
 
   // we might just move starting replication into the retrier, which might be more simple to manage
   async _connectWithBackoff(): Promise<void> {
-    if (!this.initializing || this.initializing?.finished) {
+    if (!this.initializing || this.initializing?.finished()) {
       this.initializing = getWaiter()
     }
 
