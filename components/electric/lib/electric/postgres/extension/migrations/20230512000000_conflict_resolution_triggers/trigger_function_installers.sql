@@ -520,7 +520,7 @@ BEGIN
 
     built_row_overrides := electric.zip_format_every_and_join(tag_column_list, non_pk_column_list,
         $$
-            IF shadow_row.%1$I != shadow_row._tag THEN
+            IF shadow_row.%1$I != shadow_row._tag OR NOT shadow_row._modified_columns_bit_mask[%3$s] THEN
                 built_row.%2$I = current_row.%2$I;
             END IF;
         $$, '');
@@ -587,8 +587,10 @@ BEGIN
 
             old_row_found := FOUND AND %12$s;
 
-            -- If tag of the column differs from the tag of the entire operation, prefer saved one
-            -- otherwise, prefer what has been sent in the reordered operation
+            -- If tag of the column differs from the tag of the entire operation, prefer saved value
+            --   otherwise, prefer what has been sent in the reordered operation,
+            --   but if the column isn't marked as modified, always take the saved value.
+            -- Tags being equal for non-modified columns can occur if the column has been modified by another operation in the same transaction.
             -- REPEATED BLOCK PER COLUMN
             %13$s
 

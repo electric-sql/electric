@@ -1,0 +1,75 @@
+[doc When an update coming from Satellite doesn't have the latest DELETE operation in the observed tags, it restores the row]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL
+        );
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id TEXT REFERENCES public.items(id)
+        );
+        CALL electric.electrify('public.items');
+        CALL electric.electrify('public.other_items');
+        """]
+    [invoke migrate_pg 11111 $sql]
+
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    
+    !alias Electric.Satellite.V14.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
+
+    """!
+    Electric.Test.SatelliteWsClient.send_data(conn, %SatRelation{
+      columns: [
+        %SatRelationColumn{name: "id", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "text", is_nullable: false},
+      ],
+      relation_id: 1,
+      schema_name: "public",
+      table_name: "items",
+      table_type: :TABLE
+    })
+    """
+    ?$eprompt
+    """!
+    Electric.Test.SatelliteWsClient.send_data(conn, %SatRelation{
+      columns: [
+        %SatRelationColumn{name: "id", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "item_id", type: "text", is_nullable: false},
+      ],
+      relation_id: 2,
+      schema_name: "public",
+      table_name: "other_items",
+      table_type: :TABLE
+    })
+    """
+    ?$eprompt
+    """!
+    Electric.Test.SatelliteWsClient.send_tx_data(conn, "1", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
+      %SatOpInsert{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000000", "test_content"]}},
+      %SatOpUpdate{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0::1, 1::1, 0::6>>, values: ["00000000-0000-0000-0000-000000000000", ""]}},
+      %SatOpInsert{relation_id: 2, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000001", "child content", "00000000-0000-0000-0000-000000000000"]}},
+    ])
+    """
+    ?$eprompt
+
+[shell electric]
+    ??pg_slot=postgres_1 [debug] Will send 3 to subscriber:
+    ?pg_slot=postgres_1 \[debug\] Sending 12 messages to the subscriber: from (#Lsn<[0-9a-f]+/[0-9a-f]+>)
+    [my expected_lsn=$1]
+    # We expect to see the status update without PG failing to apply the operations sent above
+    ??<StatusUpdate> [written_wal: $expected_lsn
+
+[cleanup]
+   [invoke teardown]
