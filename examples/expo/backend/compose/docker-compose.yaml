@@ -36,11 +36,6 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
       LOGICAL_PUBLISHER_HOST: electric
-      # Currently published version (electric-sql@0.5.0-next.4)
-      # still uses `ELECTRIC_HOST` variable
-      # but future versions will use `LOGICAL_PUBLISHER_HOST`
-      # TODO: Remove `ELECTRIC_HOST` when next version is published.
-      ELECTRIC_HOST: electric
       OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
       AUTH_MODE: insecure
     ports:
