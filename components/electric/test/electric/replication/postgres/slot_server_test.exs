@@ -37,7 +37,7 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       {:ok, state} = init_slot_server("fake_slot")
       send_back = send_back_message(self())
 
-      state = %{state | send_fn: send_back}
+      state = %{state | send_fn: send_back, producer_pid: self()}
 
       assert {:noreply, [], _state} =
                %Changes.NewRecord{
@@ -57,24 +57,27 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
       {:ok, state} = init_slot_server("fake_slot")
       send_back = send_back_message(self())
 
-      state = %{state | send_fn: send_back}
+      state = %{state | send_fn: send_back, producer_pid: self()}
 
       assert {:noreply, [], state} =
                %Changes.NewRecord{
                  record: %{"content" => "a", "id" => "fakeid"},
                  relation: {"fake", "slot_server_test"}
                }
-               |> build_events()
+               |> build_events(1)
                |> SlotServer.handle_events(self(), state)
+
+      assert_received {:sent_all_up_to, 1}
 
       assert {:noreply, [], _state} =
                %Changes.NewRecord{
                  record: %{"content" => "a", "id" => "fakeid"},
                  relation: {"fake", "slot_server_test"}
                }
-               |> build_events()
+               |> build_events(2)
                |> SlotServer.handle_events(self(), state)
 
+      assert_received {:sent_all_up_to, 2}
       assert_received {:sent, %Messages.Begin{}}
       assert_received {:sent, %Messages.Relation{}}
       assert_received {:sent, %Messages.Insert{}}
@@ -187,10 +190,10 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   defp push_transaction_event(producer_pid, changes),
     do: DownstreamProducerMock.produce(producer_pid, build_events(changes))
 
-  defp build_events(changes),
+  defp build_events(changes, position \\ 0),
     do: [
       {%Changes.Transaction{changes: List.wrap(changes), commit_timestamp: DateTime.utc_now()},
-       {0, 0}}
+       position}
     ]
 
   defp send_back_message(pid) do
