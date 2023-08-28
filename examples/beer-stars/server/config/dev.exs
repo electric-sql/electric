@@ -2,13 +2,7 @@ import Config
 
 # Configure your database
 config :beer_stars, BeerStars.Repo,
-  # XXX default local dev
-  # username: "postgres",
-  # password: "postgres",
-  # hostname: "localhost",
-  # database: "beer_stars_dev",
-  # XXX run against the local stack
-  url: "postgres://postgres:password@localhost:5439/electric",
+  url: "postgres://postgres:password@localhost:5439/beer-stars",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

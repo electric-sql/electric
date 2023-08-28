@@ -14,7 +14,7 @@
     "client:generate": "npx --no-install electric-sql generate --out ./src/generated/client",
     "copy-wasm": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
     "db:migrate": "docker compose --env-file backend/.envrc -f backend/compose.yaml run server eval \"BeerStars.Release.migrate()\"",
-    "db:psql": "psql \"postgresql://postgres:password@localhost:54321/electric\"",
+    "db:psql": "psql \"postgresql://postgres:password@localhost:54321/beer-stars\"",
     "server:down": "docker compose --env-file backend/.envrc -f backend/compose.yaml down --volumes --rmi local server",
     "server:start": "docker compose --env-file backend/.envrc -f backend/compose.yaml up --build server",
     "server:up": "docker compose --env-file backend/.envrc -f backend/compose.yaml up --build --detach server",

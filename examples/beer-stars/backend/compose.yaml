@@ -12,7 +12,7 @@ services:
   postgres:
     image: postgres:14-alpine
     environment:
-      POSTGRES_DB: electric
+      POSTGRES_DB: "beer-stars"
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     command:
@@ -34,7 +34,7 @@ services:
     image: electricsql/electric:latest
     init: true
     environment:
-      DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric"
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
       ELECTRIC_HOST: electric
       LOGICAL_PUBLISHER_HOST: electric
       OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
@@ -54,7 +54,7 @@ services:
     environment:
       BEER_STARS_WORKER: true
       DATABASE_HOST: "postgres"
-      DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric"
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
       GITHUB_REPO: "${GITHUB_REPO:-electric-sql/electric}"
       GITHUB_TOKENS: "${GITHUB_TOKENS}"
       PHX_HOST: "localhost"
