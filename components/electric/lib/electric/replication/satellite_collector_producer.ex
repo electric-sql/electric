@@ -55,7 +55,8 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
       "Subscription request to satellite collector producer from #{producer_or_consumer} with #{inspect(subscription_options)}"
     )
 
-    {:automatic, %{state | starting_from: Keyword.get(subscription_options, :starting_from) || -1}}
+    {:automatic,
+     %{state | starting_from: Keyword.get(subscription_options, :starting_from) || -1}}
   end
 
   @impl GenStage
