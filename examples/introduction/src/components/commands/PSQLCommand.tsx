@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api'
-import { DATABASE_URL } from '../../config'
+import { SANITISED_DATABASE_URL } from '../../config'
 import { useCommandCreds } from './CommandCreds'
 
 type UserCreds = {
@@ -63,8 +63,7 @@ const PSQLCommand = () => {
     )
   }
 
-  const [protocol, remainder] = DATABASE_URL.split('://')
-  const [_loginPassword, hostPortDb] = remainder.split('@')
+  const [ protocol, remainder ] = SANITISED_DATABASE_URL.split('://')
   const { userId, password } = userCreds
 
   const parts = [
@@ -74,7 +73,7 @@ const PSQLCommand = () => {
     ':',
     password,
     '@',
-    hostPortDb
+    remainder
   ]
 
   return (
