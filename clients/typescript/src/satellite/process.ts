@@ -75,6 +75,7 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { IBackOffOptions, backOff } from 'exponential-backoff'
+import { SCHEMA_VSN_ERROR_MSG } from '../migrators/bundle'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -639,12 +640,22 @@ export class SatelliteProcess implements Satellite {
   _handleClientError(satelliteError: SatelliteError) {
     if (this.initializing && !this.initializing.finished) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
-        Log.warn(`an unexpected socket error occurred. retrying connection`)
-        this._connectivityStateChanged('available')
-      } else {
-        throw satelliteError
+        Log.warn(
+          `a socket error occurred while connecting to server: ${satelliteError.message}`
+        )
+        return
       }
-      return
+
+      if (satelliteError.code === SatelliteErrorCode.AUTH_REQUIRED) {
+        // TODO: should stop retrying
+        Log.warn(
+          `a fatal error occurred while initializing: ${satelliteError.message}`
+        )
+        return
+      }
+
+      // throw unhandled error
+      throw satelliteError
     }
 
     // all other errors are handled by closing the client (if not yet) and retrying
@@ -759,19 +770,30 @@ export class SatelliteProcess implements Satellite {
       this.notifier.connectivityStateChanged(this.dbName, 'connected')
       this.initializing?.resolve()
     } catch (error: any) {
-      this.initializing?.reject(error)
+      if (error.code == SatelliteErrorCode.UNKNOWN_SCHEMA_VSN) {
+        Log.warn(SCHEMA_VSN_ERROR_MSG)
 
-      if (!(error instanceof SatelliteError)) {
-        throw error
-      }
-      if (throwErrors.includes(error.code)) {
-        throw error
-      }
+        // FIXME: I think at this point it's clear the client needs to be re-generated
+        this.initializing?.reject(
+          new SatelliteError(error.code, SCHEMA_VSN_ERROR_MSG)
+        )
+        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+        return
+      } else {
+        this.initializing?.reject(error)
 
-      Log.warn(
-        `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
-      )
-      return this._resetClientStateAndReconnect()
+        if (!(error instanceof SatelliteError)) {
+          throw error
+        }
+        if (throwErrors.includes(error.code)) {
+          throw error
+        }
+
+        Log.warn(
+          `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
+        )
+        return this._resetClientStateAndReconnect()
+      }
     } finally {
       this.initializing = undefined
     }

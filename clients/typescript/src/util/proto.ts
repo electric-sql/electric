@@ -11,6 +11,24 @@ type MappingTuples = {
   [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k>]
 }
 
+const serverErrorToSatError: Record<
+  Pb.SatErrorResp_ErrorCode,
+  SatelliteErrorCode
+> = {
+  [Pb.SatErrorResp_ErrorCode.AUTH_FAILED]: SatelliteErrorCode.AUTH_FAILED,
+  [Pb.SatErrorResp_ErrorCode.AUTH_REQUIRED]: SatelliteErrorCode.AUTH_REQUIRED,
+  [Pb.SatErrorResp_ErrorCode.INVALID_REQUEST]:
+    SatelliteErrorCode.INVALID_REQUEST,
+  [Pb.SatErrorResp_ErrorCode.PROTO_VSN_MISMATCH]:
+    SatelliteErrorCode.PROTO_VSN_MISMATCH,
+  [Pb.SatErrorResp_ErrorCode.REPLICATION_FAILED]:
+    SatelliteErrorCode.REPLICATION_FAILED,
+  [Pb.SatErrorResp_ErrorCode.SCHEMA_VSN_MISMATCH]:
+    SatelliteErrorCode.UNKNOWN_SCHEMA_VSN,
+  [Pb.SatErrorResp_ErrorCode.INTERNAL]: SatelliteErrorCode.INTERNAL,
+  [Pb.SatErrorResp_ErrorCode.UNRECOGNIZED]: SatelliteErrorCode.UNRECOGNIZED,
+}
+
 const startReplicationErrorToSatError: Record<
   Pb.SatInStartReplicationResp_ReplicationError_Code,
   SatelliteErrorCode
@@ -191,6 +209,15 @@ export function getProtocolVersion(): string {
 
 export function getFullTypeName(message: string): string {
   return getProtocolVersion() + '.' + message
+}
+
+export function serverErrorToSatelliteError(
+  error: Pb.SatErrorResp
+): SatelliteError {
+  return new SatelliteError(
+    serverErrorToSatError[error.errorType],
+    'server error'
+  )
 }
 
 export function startReplicationErrorToSatelliteError(

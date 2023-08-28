@@ -10,6 +10,9 @@ import { DatabaseAdapter } from '../electric/adapter'
 import { overrideDefined } from '../util/options'
 import { data as baseMigration } from './schema'
 import Log from 'loglevel'
+import { SatelliteError, SatelliteErrorCode } from '../util'
+
+export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/limitations) to learn more.`
 
 const DEFAULTS: MigratorOptions = {
   tableName: '_electric_migrations',
@@ -112,10 +115,9 @@ export class BundleMigrator implements Migrator {
       const migration = migrations[i]
 
       if (migration.version !== version) {
-        throw new Error(
-          `Local migrations ${version} does not match server version ${migration.version}.\
-          This is an unrecoverable error. Please clear your local storage and try again.\
-          Check documentation (https://electric-sql.com/docs/reference/limitations) to learn more.`
+        throw new SatelliteError(
+          SatelliteErrorCode.UNKNOWN_SCHEMA_VSN,
+          SCHEMA_VSN_ERROR_MSG
         )
       }
     })

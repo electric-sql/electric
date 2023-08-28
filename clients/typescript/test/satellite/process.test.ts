@@ -32,7 +32,6 @@ import {
   DataTransaction,
   SatelliteError,
   SatelliteErrorCode,
-  StartReplicationResponse,
 } from '../../src/util/types'
 import {
   makeContext,

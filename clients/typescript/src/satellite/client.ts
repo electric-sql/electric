@@ -38,6 +38,7 @@ import {
   shapeRequestToSatShapeReq,
   subsErrorToSatelliteError,
   msgToString,
+  serverErrorToSatelliteError,
 } from '../util/proto'
 import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
@@ -780,13 +781,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    this.emit(
-      'error',
-      new SatelliteError(
-        SatelliteErrorCode.SERVER_ERROR,
-        `server replied with error code: ${error.errorType}`
-      )
-    )
+    this.emit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
