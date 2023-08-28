@@ -18,9 +18,9 @@ This is a slightly silly app to connect beers with stars and stars to beers. It 
 
 ## How it works
 
-The server-side Phoenix app talks to the GitHub GraphQL API and recieves webhook events to pick up on new stars and write them into the database. The client then provides a local-first web app that create beers and assign them to to stars.
+The server-side Phoenix app talks to the GitHub GraphQL API and recieves webhook events to pick up on new stars and write them into the database. The client then provides a local-first web app that creates beers and assigns them to stars.
 
-Stars are synced onto the local devices from the central Postgres. Beers and their assignments are synced from the local devices to Postgres (and out again to any other devices). This demonstrates:
+Stars are synced onto local devices from the central Postgres. Beers and their assignments are synced from the local devices to Postgres (and out again to any other devices). This demonstrates:
 
 1. active-active replication between Postgres and SQLite
 2. adding interactive local-first behaviour on top of centrally published/aggregated data
@@ -87,29 +87,30 @@ Run the backend services using Docker Compose:
 yarn services:up
 ```
 
-This runs a Postgres you can connect to locally on port `54321`:
+This runs a Postgres database and applies the Ecto migrations defined in `./server/priv/migrations` to it.
+You can connect to the databsae locally on port `54321`:
 
 ```shell
 yarn db:psql
 ```
 
-Runs an Electric sync service running replication on port `5133` and a status API on post `5050`, e.g.:
+Another service is an Electric sync service running replication on port `5133` and a status API on post `5050`:
 
-```console
+```shell
 $ curl http://localhost:5050/api/status
 {"connectors":{"postgres_1":true}}
 ```
 
-Applies the Ecto migrations defined in `./server/priv/migrations`. And runs the server service on `40001`:
+Finally, the app backend that talks to GitHub's GraphQL API runs on port `40001`:
 
-```console
+```shell
 $ curl http://localhost:40001
 {"errors":{"detail":"Not Found"}}
 ```
 
 ### Client
 
-Generate the client:
+Generate client models from Postgres' electrified database schema:
 
 ```shell
 yarn client:generate
