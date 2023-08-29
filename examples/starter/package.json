@@ -14,7 +14,8 @@
     "create-electric-app": "dist/index.js"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsc && tsmodule build"
+    "build": "rm -rf ./dist && tsc && tsmodule build",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@tsmodule/tsmodule": "42",
