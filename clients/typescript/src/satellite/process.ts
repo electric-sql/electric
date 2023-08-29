@@ -1103,6 +1103,9 @@ export class SatelliteProcess implements Satellite {
       newTables = new Set([...newTables, ...createdTables])
     }
 
+    // Start with garbage collection, because if this a transaction after round-trip, then we don't want it in conflict resolution
+    await this.maybeGarbageCollect(origin, commitTimestamp)
+
     // Now process all changes per chunk.
     // We basically take a prefix of changes of the same type
     // which we call a `dmlChunk` or `ddlChunk` if the changes
@@ -1171,16 +1174,13 @@ export class SatelliteProcess implements Satellite {
       await this.adapter.runInTransaction(...allStatements)
     }
 
-    await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
+    await this._notifyChanges(opLogEntries)
   }
 
-  private async notifyChangesAndGCopLog(
-    oplogEntries: OplogEntry[],
+  private async maybeGarbageCollect(
     origin: string,
     commitTimestamp: Date
-  ) {
-    await this._notifyChanges(oplogEntries)
-
+  ): Promise<void> {
     if (origin == this._authState!.clientId) {
       /* Any outstanding transaction that originated on Satellite but haven't
        * been received back from the Electric is considered to be concurrent with
