@@ -121,8 +121,8 @@ defmodule Electric.Postgres.Extension do
   defguard is_acked_client_lsn_relation(relation)
            when relation == {@schema, @acked_client_lsn_relation}
 
-  def extract_ddl_version(%{"txid" => _, "txts" => _, "version" => version, "query" => query}) do
-    {:ok, version, query}
+  def extract_ddl_sql(%{"txid" => _, "txts" => _, "query" => query}) do
+    {:ok, query}
   end
 
   def schema_version(conn, version) do
@@ -167,6 +167,31 @@ defmodule Electric.Postgres.Extension do
     with {:ok, [_, _, _], rows} <- :epgsql.equery(conn, @all_schema_query, []) do
       {:ok, rows}
     end
+  end
+
+  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1::xid8 and txts = $2 LIMIT 1"
+
+  @doc """
+  Given a db row which points to a compound transaction id, returns the version
+  for that transaction.
+  """
+  @spec tx_version(conn(), %{binary() => integer() | binary()}) ::
+          {:ok, String.t()} | {:error, term()}
+  def tx_version(conn, %{"txid" => txid, "txts" => txts}) do
+    with {:ok, _cols, rows} <- :epgsql.equery(conn, @tx_version_query, [txid, txts]) do
+      case rows do
+        [] ->
+          {:error, "No version found for tx txid: #{txid}, txts: #{txts}"}
+
+        [{version}] ->
+          {:ok, version}
+      end
+    end
+  end
+
+  def get_tx_version(_conn, row) do
+    raise ArgumentError,
+      message: "invalid tx fk row #{inspect(row)}, expecting %{\"txid\" => _, \"txts\" => _}"
   end
 
   @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
@@ -227,7 +252,7 @@ defmodule Electric.Postgres.Extension do
 
   @spec index_electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
   def index_electrified?(conn, schema, name) do
-    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) do
+    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) |> dbg do
       {:ok, n == 1}
     end
   end

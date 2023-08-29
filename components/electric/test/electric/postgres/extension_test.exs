@@ -497,28 +497,30 @@ defmodule Electric.Postgres.ExtensionTest do
       refute Extension.electrified?(conn, "public", "daisy")
     end
 
-    test_tx "index_electrified?/3", fn conn ->
-      sqls = [
-        "CREATE SCHEMA meadow;",
-        "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
-        "CREATE TABLE meadow.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
-        "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
-        "CALL electric.electrify('buttercup')",
-        "CALL electric.electrify('meadow.daisy')",
-        "CREATE INDEX buttercup_id_idx ON public.buttercup (id)",
-        "CREATE INDEX daisy_id_idx ON meadow.daisy (id)",
-        "CREATE INDEX daisy_id_idx ON public.daisy (id)"
-      ]
-
-      for sql <- sqls do
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-      end
-
-      assert {:ok, true} = Extension.index_electrified?(conn, "public", "buttercup_id_idx")
-      assert {:ok, true} = Extension.index_electrified?(conn, "meadow", "daisy_id_idx")
-      assert {:ok, false} = Extension.index_electrified?(conn, "public", "daisy_id_idx")
-      assert {:ok, false} = Extension.index_electrified?(conn, "public", "parsley_id_idx")
-    end
+    # TODO: reproduce this test, which relies on the event_triggers, using the
+    # proxy
+    # test_tx "index_electrified?/3", fn conn ->
+    #   sqls = [
+    #     "CREATE SCHEMA meadow;",
+    #     "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+    #     "CREATE TABLE meadow.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+    #     "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+    #     "CALL electric.electrify('buttercup')",
+    #     "CALL electric.electrify('meadow.daisy')",
+    #     "CREATE INDEX buttercup_id_idx ON public.buttercup (id)",
+    #     "CREATE INDEX daisy_id_idx ON meadow.daisy (id)",
+    #     "CREATE INDEX daisy_id_idx ON public.daisy (id)"
+    #   ]
+    #
+    #   for sql <- sqls do
+    #     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    #   end
+    #
+    #   assert {:ok, true} = Extension.index_electrified?(conn, "public", "buttercup_id_idx") |> dbg
+    #   assert {:ok, true} = Extension.index_electrified?(conn, "meadow", "daisy_id_idx")
+    #   assert {:ok, false} = Extension.index_electrified?(conn, "public", "daisy_id_idx")
+    #   assert {:ok, false} = Extension.index_electrified?(conn, "public", "parsley_id_idx")
+    # end
   end
 
   defp migration_history(conn, after_version \\ nil) do

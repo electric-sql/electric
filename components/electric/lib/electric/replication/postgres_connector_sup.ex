@@ -43,8 +43,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
       {Postgres.SlotServer,
        conn_config: conn_config, producer: SatelliteCollectorProducer.name()},
       # Uses a globally registered name
-      {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]}
-      # {Proxy, conn_config: conn_config}
+      {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]},
+      {Proxy, conn_config: conn_config}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

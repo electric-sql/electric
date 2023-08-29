@@ -6,8 +6,6 @@ defmodule Electric.Postgres.Proxy.Injector.NameParserTest do
 
   property "parse/2" do
     check all generated_name <- table_name(), {false, default_schema} <- unquoted_name() do
-      dbg(generated_name)
-
       assert {:ok, {schema, name}} =
                NameParser.parse(quote_name(generated_name), default_schema: default_schema)
 

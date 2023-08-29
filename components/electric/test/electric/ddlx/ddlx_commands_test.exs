@@ -1,9 +1,10 @@
 defmodule DDLXCommandsTest do
-  use ExUnit.Case, async: true
-
   @moduledoc """
-  These tests expect to have an empty postgres to connect to as per init_helper_db. Warning it will delete the DB.
+  These tests expect to have an empty postgres to connect to as per
+  init_helper_db. Warning it will delete the DB.
   """
+
+  use ExUnit.Case, async: true
 
   alias Electric.DDLX.TestHelper
   alias Electric.DDLX
@@ -19,6 +20,8 @@ defmodule DDLXCommandsTest do
     Disable,
     SQLite
   }
+
+  @moduletag ddlx: true
 
   @electric_grants "electric.grants"
 

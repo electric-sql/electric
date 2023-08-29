@@ -48,8 +48,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
     versions = migrate_versions(Keyword.get(opts, :migrations, []), oid_loader)
     parent = Keyword.get(opts, :parent, self())
     pks = Keyword.get(opts, :pks, nil)
+    txids = Keyword.get(opts, :txids, %{})
 
-    {__MODULE__, [parent: parent, versions: versions, oid_loader: oid_loader, pks: pks]}
+    {__MODULE__,
+     [parent: parent, versions: versions, oid_loader: oid_loader, pks: pks, txids: txids]}
   end
 
   defp make_oid_loader(fun) when is_function(fun, 3) do
@@ -217,5 +219,29 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
+  end
+
+  @impl true
+  def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts}) do
+    notify(opts, {:tx_version, txid, txts})
+
+    # we may not explicitly configure the mock loader with txids
+    case Map.fetch(opts[:txids] || %{}, txid) do
+      :error ->
+        # we only use the txid which MUST be set to the version because
+        # the mocking system has no way to propagate transaction ids through
+        # -- the txid/txts stuff is an implementation detail of the proxy system
+        # FIXME: re-factor the proxy impl to cache actions until it has a version
+        case Enum.find(versions, &(&1.txid == String.to_integer(txid))) do
+          %Migration{version: version} ->
+            {:ok, version}
+
+          _other ->
+            {:error, "No migration matching #{txid}"}
+        end
+
+      {:ok, version} ->
+        {:ok, version}
+    end
   end
 end

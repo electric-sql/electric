@@ -144,7 +144,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   defp apply_migrations(state, transactions) do
     transactions
-    |> Enum.flat_map(&transaction_changes_to_migrations/1)
+    |> Enum.flat_map(&transaction_changes_to_migrations(&1, state))
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Enum.reduce(state, &perform_migration/2)
   end
@@ -166,9 +166,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     state
   end
 
-  defp transaction_changes_to_migrations(%Transaction{changes: changes}) do
+  defp transaction_changes_to_migrations(%Transaction{changes: changes}, state) do
     for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
-      {:ok, version, sql} = Extension.extract_ddl_version(record)
+      {:ok, version} = SchemaLoader.tx_version(state.loader, record)
+      {:ok, sql} = Extension.extract_ddl_sql(record)
       {version, sql}
     end
   end

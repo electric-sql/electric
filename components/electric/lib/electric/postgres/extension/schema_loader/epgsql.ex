@@ -211,4 +211,11 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       Extension.index_electrified?(conn, schema, name)
     end)
   end
+
+  @impl true
+  def tx_version(pool, row) do
+    checkout!(pool, fn conn ->
+      Extension.tx_version(conn, row)
+    end)
+  end
 end

@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.Extension.SchemaCache do
+defnitmodule Electric.Postgres.Extension.SchemaCache do
   @moduledoc """
   Per-Postgres instance schema load/save functionality.
 
@@ -143,6 +143,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     call(origin, {:index_electrified?, schema, name})
   end
 
+  @impl SchemaLoader
+  def tx_version(origin, row) do
+    call(origin, {:tx_version, row})
+  end
+
   def relation(origin, oid) when is_integer(oid) do
     call(origin, {:relation, oid})
   end
@@ -224,7 +229,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       opts: opts,
       current: nil,
       refresh_task: nil,
-      internal_schema: nil
+      internal_schema: nil,
+      tx_version_cache: %{}
     }
 
     {:ok, state}
@@ -302,6 +308,15 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
       {:ok, electrified?}
     end)
+  end
+
+  def handle_call({:tx_version, %{"txid" => txid, "txts" => txts} = row}, _from, state) do
+    # TODO: replace simple map with some size-bounded implementation for tx version cache
+    tx_version_cache =
+      Map.put_new_lazy(state.tx_version_cache, {txid, txts}, fn -> load_tx_version(state, row) end)
+
+    {:reply, Map.fetch(tx_version_cache, {txid, txts}),
+     %{state | tx_version_cache: tx_version_cache}}
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
@@ -387,6 +402,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   defp load_internal_schema(state) do
     state
+  end
+
+  defp load_tx_version(state, row) do
+    {:ok, version} = SchemaLoader.tx_version(state.backend, row)
+    Logger.debug("Loaded version #{inspect(version)} for tx: #{row["txid"]}/#{row["txts"]}")
+    version
   end
 
   defp current_schema(%{current: nil} = state) do

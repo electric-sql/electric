@@ -65,6 +65,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, producer} = start_supervised({FakeProducer, producer_name})
 
+      txid = "749"
+      version = "20220421"
+
       # provide fake oids for the new tables
       oids = %{
         table: %{
@@ -81,7 +84,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "mistakes"} => ["id"]
       }
 
-      backend = MockSchemaLoader.backend_spec(oids: oids, pks: pks)
+      txids = %{
+        txid => version
+      }
+
+      backend = MockSchemaLoader.backend_spec(oids: oids, pks: pks, txids: txids)
 
       {:ok, pid} =
         start_supervised(
@@ -95,7 +102,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, _consumer} = start_supervised({FakeConsumer, {pid, self()}})
 
-      {:ok, origin: origin, producer: producer}
+      {:ok, origin: origin, producer: producer, version: version, txid: txid}
     end
 
     test "migration consumer refreshes subscription after receiving a relation", cxt do
@@ -123,8 +130,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     end
 
     test "migration consumer stage captures migration records", cxt do
-      %{origin: origin, producer: producer} = cxt
-      version = "20220421"
+      %{origin: origin, producer: producer, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
@@ -135,8 +141,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => "20220421",
-                "txid" => "749",
+                "version" => version,
+                "txid" => cxt.txid,
                 "txts" => "2023-04-20 19:41:56.236357+00"
               },
               tags: []
@@ -146,8 +152,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "7",
                 "query" => "create table other_thing (id uuid primary key);",
-                "version" => "20220421",
-                "txid" => "749",
+                "version" => version,
+                "txid" => cxt.txid,
                 "txts" => "2023-04-20 19:41:56.236357+00"
               },
               tags: []
@@ -157,8 +163,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "8",
                 "query" => "create table yet_another_thing (id uuid primary key);",
-                "version" => "20220421",
-                "txid" => "749",
+                "version" => version,
+                "txid" => cxt.txid,
                 "txts" => "2023-04-20 19:41:56.236357+00"
               },
               tags: []
@@ -190,8 +196,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     end
 
     test "migration consumer filters non-migration records", cxt do
-      %{origin: origin, producer: producer} = cxt
-      version = "20220421"
+      %{origin: origin, producer: producer, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       raw_events = [
@@ -202,8 +207,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => "20220421",
-                "txid" => "749",
+                "version" => version,
+                "txid" => cxt.txid,
                 "txts" => "2023-04-20 19:41:56.236357+00"
               },
               tags: []
@@ -212,7 +217,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               relation: {"electric", "schema"},
               record: %{
                 "id" => "7",
-                "version" => "20220421",
+                "version" => version,
                 "schema" => "{}"
               },
               tags: []
@@ -233,8 +238,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => "20220421",
-                "txid" => "749",
+                "version" => version,
+                "txid" => cxt.txid,
                 "txts" => "2023-04-20 19:41:56.236357+00"
               },
               tags: []
