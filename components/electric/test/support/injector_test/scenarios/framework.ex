@@ -38,42 +38,11 @@ defmodule Electric.Postgres.Proxy.TestScenario.Framework do
       |> server(complete_ready("BEGIN"))
 
     queries
-    |> Enum.reduce(injector, &execute_sql/2)
+    |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :extended))
     |> assert_capture_migration_version("20230822143453")
     |> client(commit())
     |> server(complete_ready("COMMIT", :idle))
     |> idle!()
-  end
-
-  defp execute_sql({:passthrough, query}, injector) do
-    injector
-    |> client(parse_describe(query))
-    |> server(parse_describe_complete())
-    |> client(bind_execute())
-    |> server(bind_execute_complete())
-  end
-
-  defp execute_sql({:electric, query}, injector) do
-    {:ok, command} = DDLX.ddlx_to_commands(query)
-
-    injector
-    |> client(parse_describe(query), client: parse_describe_complete(), server: [])
-    |> electric(bind_execute(), command, bind_execute_complete(DDLX.Command.tag(command)))
-  end
-
-  defp execute_sql({:capture, query}, injector) do
-    tag = random_tag()
-
-    injector
-    |> client(parse_describe(query))
-    |> server(parse_describe_complete())
-    |> client(bind_execute())
-    |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
-    |> server(capture_ddl_complete(), client: bind_execute_complete(tag))
-  end
-
-  defp execute_sql(sql, injector) when is_binary(sql) do
-    execute_sql({:capture, sql}, injector)
   end
 
   def assert_injector_error(injector, query, error_details) do

@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Proxy.TestScenario do
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
+  alias Electric.DDLX
 
   import ExUnit.Assertions
 
@@ -362,5 +363,58 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   # ensure that original response is returned using a random tag
   def random_tag do
     "TAG #{:crypto.strong_rand_bytes(8) |> Base.encode16()}"
+  end
+
+  def execute_tx_sql(sql, injector, mode) when is_binary(sql) do
+    execute_tx_sql({:capture, sql}, injector, mode)
+  end
+
+  def execute_tx_sql({:passthrough, query}, injector, :simple) do
+    injector
+    |> client(query(query))
+    |> server(complete_ready())
+  end
+
+  def execute_tx_sql({:electric, query}, injector, :simple) do
+    {:ok, command} = DDLX.ddlx_to_commands(query)
+
+    injector
+    |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
+  end
+
+  def execute_tx_sql({:capture, query}, injector, :simple) do
+    tag = random_tag()
+
+    injector
+    |> client(query(query))
+    |> server(complete_ready(tag), server: capture_ddl_query(query))
+    |> server(capture_ddl_complete(), client: complete_ready(tag))
+  end
+
+  def execute_tx_sql({:passthrough, query}, injector, :extended) do
+    injector
+    |> client(parse_describe(query))
+    |> server(parse_describe_complete())
+    |> client(bind_execute())
+    |> server(bind_execute_complete())
+  end
+
+  def execute_tx_sql({:electric, query}, injector, :extended) do
+    {:ok, command} = DDLX.ddlx_to_commands(query)
+
+    injector
+    |> client(parse_describe(query), client: parse_describe_complete(), server: [])
+    |> electric(bind_execute(), command, bind_execute_complete(DDLX.Command.tag(command)))
+  end
+
+  def execute_tx_sql({:capture, query}, injector, :extended) do
+    tag = random_tag()
+
+    injector
+    |> client(parse_describe(query))
+    |> server(parse_describe_complete())
+    |> client(bind_execute())
+    |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
+    |> server(capture_ddl_complete(), client: bind_execute_complete(tag))
   end
 end

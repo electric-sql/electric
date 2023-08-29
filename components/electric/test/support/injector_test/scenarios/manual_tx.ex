@@ -34,37 +34,11 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
       |> server(complete_ready("BEGIN"))
 
     queries
-    |> Enum.reduce(injector, &execute_sql/2)
+    |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :simple))
     |> client(commit(), server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle))
     |> idle!()
-  end
-
-  defp execute_sql({:passthrough, query}, injector) do
-    injector
-    |> client(query(query))
-    |> server(complete_ready())
-  end
-
-  defp execute_sql({:electric, query}, injector) do
-    {:ok, command} = DDLX.ddlx_to_commands(query)
-
-    injector
-    |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
-  end
-
-  defp execute_sql({:capture, query}, injector) do
-    tag = random_tag()
-
-    injector
-    |> client(query(query))
-    |> server(complete_ready(tag), server: capture_ddl_query(query))
-    |> server(capture_ddl_complete(), client: complete_ready(tag))
-  end
-
-  defp execute_sql(sql, injector) when is_binary(sql) do
-    execute_sql({:capture, sql}, injector)
   end
 
   def assert_injector_error(injector, query, error_details) do
