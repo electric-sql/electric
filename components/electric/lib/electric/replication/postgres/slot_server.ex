@@ -20,7 +20,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
-  alias Electric.Replication.OffsetStorage
   alias Electric.Postgres.ShadowTableTransformation
 
   import Electric.Postgres.Extension, only: [is_extension_relation: 1]
@@ -220,8 +219,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     :gproc.await(state.producer_name, 1_000)
 
-    # TODO: We're currently not using this position in a the `SatelliteCollectorProducer`, but we should
-    position = get_pg_position(state.slot_name, start_lsn)
+    {position, state} = logical_publisher_position_from_lsn(state, start_lsn)
     Logger.debug("Got position #{inspect(position)} for start_lsn #{inspect(start_lsn)}")
 
     GenStage.async_subscribe(
@@ -301,12 +299,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
             send_all(wal_messages, state.send_fn, origin)
 
-            OffsetStorage.save_pg_position(
-              state.slot_name,
-              new_lsn,
-              position
-            )
-
             %State{
               state
               | current_lsn: new_lsn,
@@ -380,21 +372,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.each(send_fn)
   end
 
-  defp get_pg_position(slot_name, start_lsn) do
-    case OffsetStorage.get_pg_position(slot_name, start_lsn) do
-      nil ->
-        case OffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
-          {lsn, position} ->
-            Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to #{inspect(lsn)}")
-            position
+  defp logical_publisher_position_from_lsn(state, start_lsn) do
+    case Lsn.compare(state.current_lsn, start_lsn) do
+      :lt ->
+        # Electric was restarted. Use start_lsn as the initial value for current_lsn and start streaming from the
+        # beginning of the outgoing logical replication stream.
+        {-1, %{state | current_lsn: start_lsn}}
 
-          nil ->
-            Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to 0")
-            nil
-        end
-
-      position ->
-        position
+      _gt_or_eq ->
+        {state.current_source_position, state}
     end
   end
 
