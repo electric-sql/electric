@@ -110,6 +110,16 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
           true
 
         %{relation: relation} = change when is_extension_relation(relation) ->
+          if relation == Extension.acked_client_lsn_relation() do
+            %{"client_id" => client_id, "lsn" => encoded_client_lsn} = change.record
+
+            with {:ok, client_pid} <- Electric.Satellite.ClientManager.fetch_client(client_id) do
+              client_lsn = decode_bytea(encoded_client_lsn)
+              send(client_pid, {:lsn_ack, client_lsn})
+              Logger.info("acknowledged lsn: #{inspect(client_lsn)} for #{client_id}")
+            end
+          end
+
           Logger.debug("---- Filtering #{inspect(change)}")
           false
 
@@ -229,4 +239,16 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         max_demand: 50
       )
   end
+
+  # Hex format: "\\xffa001"
+  defp decode_bytea("\\x" <> hex_str), do: decode_hex_str(hex_str)
+
+  defp decode_hex_str(""), do: ""
+
+  defp decode_hex_str(<<c>> <> hex_str),
+    do: <<decode_hex_char(c)::4, decode_hex_str(hex_str)::bits>>
+
+  defp decode_hex_char(char) when char in ?0..?9, do: char - ?0
+  defp decode_hex_char(char) when char in ?a..?f, do: char - ?a + 10
+  defp decode_hex_char(char) when char in ?A..?F, do: char - ?A + 10
 end

@@ -17,7 +17,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
-  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
   alias Electric.Postgres.ShadowTableTransformation
@@ -283,28 +283,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_events(events, _from, %State{origin: origin} = state)
       when replication_started?(state) do
     state =
-      Enum.reduce(events, state, fn {transaction, position}, state ->
-        transaction = filter_extension_relations(transaction)
-
-        case transaction do
-          %{changes: []} ->
-            state
-
-          transaction ->
-            Logger.debug(fn ->
-              "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
-            end)
-
-            {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
-
-            send_all(wal_messages, state.send_fn, origin)
-
-            %State{
-              state
-              | current_lsn: new_lsn,
-                sent_relations: relations,
-                current_source_position: position
-            }
+      Enum.reduce(events, state, fn {tx, pos}, state ->
+        case filter_extension_relations(tx) do
+          %{changes: []} -> state
+          tx -> send_transaction(tx, pos, origin, state)
         end
       end)
 
@@ -333,13 +315,27 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Private function
 
   defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
-    %{
-      tx
-      | changes:
-          Enum.reject(changes, fn
-            %{relation: relation} when is_extension_relation(relation) -> true
-            _ -> false
-          end)
+    filtered_changes =
+      Enum.reject(changes, fn %{relation: relation} ->
+        is_extension_relation(relation) and relation != Extension.acked_client_lsn_relation()
+      end)
+
+    %{tx | changes: filtered_changes}
+  end
+
+  defp send_transaction(tx, pos, origin, state) do
+    Logger.debug(fn ->
+      "Will send #{length(tx.changes)} to subscriber: #{inspect(tx.changes, pretty: true)}"
+    end)
+
+    {wal_messages, relations, new_lsn} = convert_to_wal(tx, state)
+    send_all(wal_messages, state.send_fn, origin)
+
+    %State{
+      state
+      | current_lsn: new_lsn,
+        sent_relations: relations,
+        current_source_position: pos
     }
   end
 
@@ -396,9 +392,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
     relations =
       changes
       |> Enum.map(& &1.relation)
+      |> Enum.reject(&is_extension_relation/1)
       |> state.preprocess_relation_list_fn.()
       |> Enum.uniq()
-      |> Enum.map(&SchemaCache.Global.relation!/1)
+      |> Enum.map(&Extension.SchemaCache.Global.relation!/1)
 
     # detect missing relations based on name *and* on column list
     missing_relations =

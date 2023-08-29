@@ -38,6 +38,7 @@ defmodule Electric.Postgres.Extension do
   @electrified_tracking_table electric.(@electrified_table_relation)
   @electrified_index_table electric.(@electrified_index_relation)
   @transaction_marker_table electric.("transaction_marker")
+  @acked_client_lsn_table electric.(@acked_client_lsn_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -96,6 +97,7 @@ defmodule Electric.Postgres.Extension do
   def electrified_tracking_table, do: @electrified_tracking_table
   def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
+  def acked_client_lsn_table, do: @acked_client_lsn_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -250,6 +252,7 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
     ]
   end
