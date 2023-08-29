@@ -34,14 +34,11 @@ CREATE OR REPLACE FUNCTION <%= schema %>.capture_ddl(query text DEFAULT NULL) RE
 DECLARE
     _txid xid8;
     _txts timestamptz;
-    _version text;
     _trid int8;
 BEGIN
-    SELECT v.txid, v.txts, v.version
-        INTO _txid, _txts, _version
-        FROM <%= schema %>.current_migration_version() v;
+    SELECT v.txid, v.txts INTO _txid, _txts FROM <%= schema %>.current_transaction_id() v;
 
-    _trid := (SELECT <%= schema %>.create_active_migration(_txid, _txts, _version, query));
+    _trid := (SELECT <%= schema %>.create_active_migration(_txid, _txts, query));
 
     RETURN _trid;
 END;

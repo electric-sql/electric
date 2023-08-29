@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS electric.assignments (
 CREATE OR REPLACE FUNCTION electric.enable(table_name text)
   RETURNS BOOLEAN AS $$
   BEGIN
-
+    CALL electric.electrify(table_name);
     RETURN 1;
   END;
 $$ LANGUAGE plpgsql;

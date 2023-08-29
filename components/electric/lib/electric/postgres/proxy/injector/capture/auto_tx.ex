@@ -46,6 +46,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
     end
 
     def recv_backend(_atx, %M.ErrorResponse{} = msg, state, send) do
+      Logger.info("Got an error response from the server, aborting AutoTx")
       commit(state, Send.front(send, msg), "ROLLBACK")
     end
 

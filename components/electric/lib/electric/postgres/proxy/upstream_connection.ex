@@ -70,7 +70,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   def handle_info({:tcp, _conn, data}, state) do
     {:ok, decoder, msgs} = PgProtocol.decode(state.decoder, data)
 
-    Logger.debug("Backend msgs: #{M.inspect(msgs)}")
+    # Logger.debug("Backend msgs: #{M.inspect(msgs)}")
 
     state = handle_backend_msgs(msgs, %{state | decoder: decoder})
 

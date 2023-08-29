@@ -19,7 +19,11 @@ defmodule Electric.Postgres.Proxy.Handler.Tracing do
 
     defmacro trace_recv(source, msgs) do
       quote do
-        Electric.Postgres.Proxy.Handler.Tracing.do_trace(:recv, unquote(source), unquote(msgs))
+        Electric.Postgres.Proxy.Handler.Tracing.do_trace(
+          :recv,
+          unquote(source),
+          PgProtocol.Message.inspect(unquote(msgs))
+        )
       end
     end
 

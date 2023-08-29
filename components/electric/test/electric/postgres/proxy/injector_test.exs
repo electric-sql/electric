@@ -569,6 +569,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
           {begin_tx_send, begin_tx_recv} = begin_tx()
 
+          # FIXME: this case statement seems redundant
           injector =
             case protocol.migration(query, tag: "DROP TABLE") do
               [{migration_final_send, _migration_final_recv}] ->
@@ -593,6 +594,72 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
             end
 
           refute tx_state?(injector)
+        end
+
+        @tag protocol: p.tag()
+        test "errors from functions are correctly handled", cxt do
+          # handle a ReadyForQuery{status: :failed} correctly:
+          # - forward the :failed response onto the client
+          protocol = unquote(p)
+          %{injector: injector} = cxt
+          query = ~s[CALL electric.electrify('truths')]
+
+          failing = make_failing(protocol.query(query, tag: "CALL"))
+
+          injector =
+            cxt.injector
+            |> apply_message_sequence(protocol.begin_tx())
+            |> apply_message_sequence(failing)
+            |> apply_message_sequence(protocol.rollback_tx())
+
+          refute tx_state?(injector)
+        end
+
+        @tag protocol: p.tag()
+        test "errors from DDLX functions are correctly handled", cxt do
+          # handle a ReadyForQuery{status: :failed} correctly:
+          # - forward the :failed response onto the client
+          protocol = unquote(p)
+          %{injector: injector} = cxt
+
+          query = ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
+          {:ok, command} = DDLX.ddlx_to_commands(query)
+
+          migration_messages = protocol.invalid(query)
+          # refute cxt.injector
+          #        |> apply_message_sequence(protocol.begin_tx())
+          #        |> assert_electrified(
+          #          protocol.migration(query, tag: "ELECTRIC REVOKE"),
+          #          command
+          #        )
+          #        |> apply_message_sequence(protocol.commit_tx())
+          #        |> tx_state?()
+
+          migration_messages = protocol.invalid(query)
+
+          injector =
+            cxt.injector
+            |> apply_message_sequence(protocol.begin_tx())
+            |> apply_message_sequence(protocol.invalid(query))
+            |> apply_message_sequence(protocol.rollback_tx())
+
+          refute tx_state?(injector)
+        end
+
+        @tag protocol: p.tag()
+        test "errors from functions are correctly handled in autotx", cxt do
+          # handle a ReadyForQuery{status: :failed} correctly:
+          # - forward the :failed response onto the client
+          # - rollback the autotx
+          # - don't leak rollback responses to the client
+          # 1. alter table something enable electric
+          # 2. auto tx: begin
+          # 2. is sent to server as: call electric.enable(something)
+          # 3. server sends a bunch of noticeresponses that the client should get
+          # 3. server responds with [ErrorResponse{}, ReadyForQuery{status: :failed}]
+          # 4. auto tx should rollback
+          # 5. rollback [commandcomplete, readyforquery] should disappear
+          # 6. client should get [errorresponse, readyforquery{status: failed}]
         end
       end
     end
@@ -740,6 +807,38 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       assert {:ok, injector, [], ^recv} = Injector.recv_backend(injector, recv)
       injector
     end)
+  end
+
+  defp make_failing(messages, acc \\ [])
+
+  defp make_failing([{send, recv}], acc) do
+    # simulate an error in the given sequence, instead of
+    # [CommandComplete, [other responses], ReadyForQuery{status: :tx}] we return 
+    # [ErrorResponse, ReadyForQuery{status: :failed}]
+    acc ++
+      [
+        {
+          send,
+          Enum.flat_map_reduce(recv, false, fn
+            _m, true ->
+              {:halt, true}
+
+            %Message.CommandComplete{}, false ->
+              {[
+                 %Message.ErrorResponse{code: "00000", severity: "ERROR"},
+                 %Message.ReadyForQuery{status: :failed}
+               ], true}
+
+            m, false ->
+              {[m], false}
+          end)
+          |> elem(0)
+        }
+      ]
+  end
+
+  defp make_failing([seq | rest], acc) do
+    make_failing(rest, acc ++ [seq])
   end
 
   defp begin_tx do

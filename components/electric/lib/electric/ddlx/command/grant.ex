@@ -42,7 +42,7 @@ defmodule Electric.DDLX.Command.Grant do
       ]
     end
 
-    def table_name(%{table_name: table_name}) do
+    def table_name(%{on_table: table_name}) do
       table_name
     end
 

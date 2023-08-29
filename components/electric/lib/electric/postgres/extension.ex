@@ -277,6 +277,7 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230726151202_RemoveEventTrigger,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
     ]
@@ -390,27 +391,38 @@ defmodule Electric.Postgres.Extension do
     fun.()
   end
 
-  defp disabling_event_triggers(conn, _module, fun) do
-    disable =
-      Enum.flat_map(@event_triggers, fn {_type, name} ->
-        case :epgsql.squery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = '#{name}'") do
-          {:ok, _, [_]} ->
-            [name]
+  defp disabling_event_triggers(conn, module, fun) do
+    do_disable? =
+      if function_exported?(module, :disable_event_triggers?, 0) do
+        module.disable_event_triggers?()
+      else
+        true
+      end
 
-          _ ->
-            []
-        end
-      end)
+    if do_disable? do
+      disable =
+        Enum.flat_map(@event_triggers, fn {_type, name} ->
+          case :epgsql.squery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = '#{name}'") do
+            {:ok, _, [_]} ->
+              [name]
 
-    Enum.each(disable, &alter_event_trigger(conn, &1, "DISABLE"))
+            _ ->
+              []
+          end
+        end)
 
-    result = fun.()
+      Enum.each(disable, &alter_event_trigger(conn, &1, "DISABLE"))
 
-    # if there's a problem the tx will be aborted and the event triggers
-    # left in an enabled state, so no need for a try..after..end block
-    Enum.each(disable, &alter_event_trigger(conn, &1, "ENABLE"))
+      result = fun.()
 
-    result
+      # if there's a problem the tx will be aborted and the event triggers
+      # left in an enabled state, so no need for a try..after..end block
+      Enum.each(disable, &alter_event_trigger(conn, &1, "ENABLE"))
+
+      result
+    else
+      fun.()
+    end
   end
 
   defp alter_event_trigger(conn, name, state) do
