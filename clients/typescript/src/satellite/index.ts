@@ -89,6 +89,7 @@ export interface Client {
   subscribeToAck(callback: AckCallback): void
   unsubscribeToAck(callback: AckCallback): void
   resetOutboundLogPositions(sent?: LSN, ack?: LSN): void
+  setOutboundLogPositions(positions: { sent?: LSN; ack?: LSN }): void
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void

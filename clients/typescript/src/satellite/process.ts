@@ -22,7 +22,6 @@ import {
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  AckType,
   Change as Chg,
   ConnectivityState,
   DataChange,
@@ -90,8 +89,8 @@ type Uuid = `${string}-${string}-${string}-${string}-${string}`
 type MetaEntries = {
   clientId: Uuid | ''
   compensations: number
-  lastAckdRowId: `${number}`
-  lastSentRowId: `${number}`
+  lastAckdRowId: string
+  lastSentRowId: string
   lsn: string | null
   subscriptions: string
 }
@@ -258,6 +257,8 @@ export class SatelliteProcess implements Satellite {
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
     this.setClientListeners()
+    // This sets the initial outbound log position
+    // FIXME: we should revise the outbound management
     this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
       numberToBytes(this._lastSentRowId)
@@ -315,14 +316,12 @@ export class SatelliteProcess implements Satellite {
   setClientListeners(): void {
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    // When a local transaction is sent, or an acknowledgement for
-    // a remote transaction commit is received, we update lsn records.
-    this.client.subscribeToAck(async (lsn, type) => {
-      const decoded = bytesToNumber(lsn)
-      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
-    })
-    this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot()
+    // When a local transaction is sent we register it in lastSentRowid.
+    // FIXME: calling an async function in an event emitter
+    this.client.subscribeToAck(this._handleAckSent.bind(this))
+    this.client.subscribeToOutboundEvent(
+      'started',
+      this._throttledSnapshot.bind(this)
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -603,6 +602,11 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
+  }
+
+  async _handleAckSent(lsn: LSN) {
+    const decoded = bytesToNumber(lsn)
+    await this._ackSent(decoded)
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
@@ -1219,26 +1223,13 @@ export class SatelliteProcess implements Satellite {
     else return []
   }
 
-  async _ack(lsn: number, isAck: boolean): Promise<void> {
-    if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
+  async _ackSent(lsn: number): Promise<void> {
+    if (lsn < this._lastAckdRowId) {
       throw new Error('Invalid position')
     }
 
-    const meta = this.opts.metaTable.toString()
-
-    const sql = ` UPDATE ${meta} SET value = ? WHERE key = ?`
-    const args = [
-      `${lsn.toString()}`,
-      isAck ? 'lastAckdRowId' : 'lastSentRowId',
-    ]
-
-    if (isAck) {
-      this._lastAckdRowId = lsn
-      await this.adapter.runInTransaction({ sql, args })
-    } else {
-      this._lastSentRowId = lsn
-      await this.adapter.run({ sql, args })
-    }
+    await this._setMeta('lastSentRowId', lsn.toString())
+    this._lastSentRowId = lsn
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(
@@ -1357,14 +1348,40 @@ export class SatelliteProcess implements Satellite {
     return generateTag(instanceId, timestamp)
   }
 
-  async _garbageCollectOplog(commitTimestamp: Date) {
+  async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
     const oplog = this.opts.oplogTable.tablename.toString()
-    const stmt = `
+
+    // FIXME: the following statement does not return the affected row, just the count
+    // UPDATE ${meta} SET value=tmp.ackedRowId
+    // FROM (SELECT max(rowid) as ackedRowId FROM ${oplog} WHERE timestamp = ?) as tmp
+    // WHERE key = ? RETURNING *
+    // We could avoid q0 by adding the count of affected rows to current acked lsn :||
+
+    const q0: Statement = {
+      sql: `SELECT max(rowid) ackedRowId FROM ${oplog} WHERE timestamp = ?`,
+      args: [isoString],
+    }
+
+    const ackedRowId = (await this.adapter.query(q0))[0].ackedRowId as number
+
+    const meta = this.opts.metaTable.toString()
+    const q1: Statement = {
+      sql: `UPDATE ${meta} SET value= ? WHERE key = ?`,
+      args: [ackedRowId, 'lastAckdRowId'],
+    }
+
+    const q2: Statement = {
+      sql: `
       DELETE FROM ${oplog}
-      WHERE timestamp = ?;
-    `
-    await this.adapter.run({ sql: stmt, args: [isoString] })
+      WHERE timestamp = ?
+      `,
+      args: [isoString],
+    }
+
+    await this.adapter.runInTransaction(q1, q2)
+    this.client.setOutboundLogPositions({ ack: numberToBytes(ackedRowId) })
+    this._lastAckdRowId = ackedRowId
   }
 
   /**
