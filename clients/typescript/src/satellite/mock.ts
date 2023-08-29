@@ -238,10 +238,16 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   isClosed(): boolean {
     return this.closed
   }
-  resetOutboundLogPositions(sent: Uint8Array, ack: Uint8Array): void {
+  resetOutboundLogPositions(sent: LSN, ack: LSN): void {
     this.outboundSent = sent
     this.outboundAck = ack
   }
+
+  setOutboundLogPositions(positions: { sent?: LSN; ack?: LSN }): void {
+    this.outboundSent = positions.sent ?? this.outboundSent
+    this.outboundAck = positions.ack ?? this.outboundAck
+  }
+
   getOutboundLogPositions(): { enqueued: Uint8Array; ack: Uint8Array } {
     return { enqueued: this.outboundSent, ack: this.outboundAck }
   }
@@ -317,11 +323,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   unsubscribeToAck(callback: AckCallback): void {
     this.removeListener('ack_lsn', callback)
-  }
-
-  setOutboundLogPositions(sent: LSN, ack: LSN): void {
-    this.outboundSent = sent
-    this.outboundAck = ack
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {

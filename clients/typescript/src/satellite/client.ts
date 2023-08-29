@@ -45,7 +45,6 @@ import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
   AckCallback,
-  AckType,
   AuthResponse,
   DataChangeType,
   LSN,
@@ -63,6 +62,7 @@ import {
   StartReplicationResponse,
   StopReplicationResponse,
   ErrorCallback,
+  AckType,
 } from '../util/types'
 import {
   base64,
@@ -643,8 +643,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
       const replication = {
         ...this.outbound,
-        ack_lsn: DEFAULT_LOG_POS,
-        enqueued_lsn: DEFAULT_LOG_POS,
+        ack_lsn: this.outbound.ack_lsn ?? DEFAULT_LOG_POS,
+        enqueued_lsn: this.outbound.enqueued_lsn ?? DEFAULT_LOG_POS,
       }
 
       this.outbound = this.resetReplication(
@@ -772,12 +772,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.sendMessage(pong)
   }
 
-  // TODO: emit ping request to clear oplog.
-  private handlePingResp(message: SatPingResp) {
-    if (message.lsn) {
-      this.outbound.ack_lsn = message.lsn
-      this.emit('ack_lsn', message.lsn, AckType.REMOTE_COMMIT)
-    }
+  private handlePingResp(_message: SatPingResp) {
+    // TODO: might be dropping client-initiated pings completely
+    throw Error('not implemented')
   }
 
   private handleError(error: SatErrorResp) {
@@ -1039,6 +1036,12 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   resetOutboundLogPositions(sent: LSN, ack: LSN): void {
     this.outbound = this.resetReplication(sent, ack)
+  }
+
+  setOutboundLogPositions(positions: { enqueued?: LSN; ack?: LSN }) {
+    this.outbound.enqueued_lsn =
+      positions.enqueued ?? this.outbound.enqueued_lsn
+    this.outbound.ack_lsn = positions.ack ?? this.outbound.ack_lsn
   }
 
   getOutboundLogPositions(): { enqueued: LSN; ack: LSN } {
