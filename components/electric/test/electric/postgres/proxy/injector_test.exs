@@ -7,15 +7,21 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   @moduletag capture_log: true
 
   setup do
+    migrations = [
+      {"0001",
+       [
+         "CREATE TABLE public.truths (id uuid PRIMARY KEY, value text)",
+         "CREATE INDEX truths_idx ON public.truths (value)"
+       ]}
+    ]
+
+    {module, opts} = Electric.Postgres.MockSchemaLoader.backend_spec(migrations: migrations)
+
     {:ok, conn} =
-      MockLoader.connect([],
-        parent: self(),
-        electrified_tables: [{"public", "truths"}],
-        electrified_indexes: [{"public", "truths_idx"}]
-      )
+      module.connect([], opts)
 
     {:ok, injector} =
-      Injector.new(loader: {TestScenario.MockLoader, conn}, injector: TestScenario.MockInjector)
+      Injector.new(loader: {module, conn}, injector: TestScenario.MockInjector)
 
     version = System.system_time(:microsecond)
     timestamp = DateTime.utc_now()

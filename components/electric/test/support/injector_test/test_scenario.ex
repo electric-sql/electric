@@ -20,27 +20,6 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     end
   end
 
-  defmodule MockLoader do
-    @behaviour Electric.Postgres.SchemaLoader
-
-    defstruct parent: nil, electrified_tables: nil, electrified_indexes: nil
-
-    def connect(_config, opts) do
-      {:ok, parent} = Keyword.fetch(opts, :parent)
-      tables = Keyword.get(opts, :electrified_tables, []) |> MapSet.new()
-      indexes = Keyword.get(opts, :electrified_indexes, []) |> MapSet.new()
-      {:ok, %{parent: parent, electrified_tables: tables, electrified_indexes: indexes}}
-    end
-
-    def table_electrified?(%{electrified_tables: electrified}, table_name) do
-      MapSet.member?(electrified, table_name)
-    end
-
-    def index_electrified?(%{electrified_indexes: electrified}, index_name) do
-      MapSet.member?(electrified, index_name)
-    end
-  end
-
   defmacro __using__(_opts) do
     m = __MODULE__
 
@@ -53,7 +32,8 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
     quote do
       alias Electric.DDLX
-      alias unquote(m).{MockInjector, MockLoader}
+      alias unquote(m).MockInjector
+      alias Electric.Postgres.MockSchemaLoader
 
       unquote(message_aliases)
 
@@ -382,26 +362,5 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   # ensure that original response is returned using a random tag
   def random_tag do
     "TAG #{:crypto.strong_rand_bytes(8) |> Base.encode16()}"
-  end
-end
-
-defmodule MockLoader do
-  @behaviour Electric.Postgres.SchemaLoader
-
-  defstruct parent: nil, electrified_tables: nil, electrified_indexes: nil
-
-  def connect(_config, opts) do
-    {:ok, parent} = Keyword.fetch(opts, :parent)
-    tables = Keyword.get(opts, :electrified_tables, []) |> MapSet.new()
-    indexes = Keyword.get(opts, :electrified_indexes, []) |> MapSet.new()
-    {:ok, %{parent: parent, electrified_tables: tables, electrified_indexes: indexes}}
-  end
-
-  def table_electrified?(%{electrified_tables: electrified}, table_name) do
-    MapSet.member?(electrified, table_name)
-  end
-
-  def index_electrified?(%{electrified_indexes: electrified}, index_name) do
-    MapSet.member?(electrified, index_name)
   end
 end
