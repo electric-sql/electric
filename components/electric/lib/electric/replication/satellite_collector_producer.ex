@@ -55,8 +55,16 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
       "Subscription request to satellite collector producer from #{producer_or_consumer} with #{inspect(subscription_options)}"
     )
 
-    {:automatic,
-     %{state | starting_from: Keyword.get(subscription_options, :starting_from) || -1}}
+    starting_from = Keyword.get(subscription_options, :starting_from) || -1
+
+    if starting_from >= state.next_key do
+      # The subscriber starts from a point in the future, which is only possible on a server restart,
+      # where PG connects with an LSN mapped to a point in this producer's stream, but the stream was lost.
+      # The only correct thing to do here is to start from scratch.
+      {:automatic, %{state | starting_from: -1}}
+    else
+      {:automatic, %{state | starting_from: starting_from}}
+    end
   end
 
   @impl GenStage

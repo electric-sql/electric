@@ -71,5 +71,17 @@ defmodule Electric.Replication.SatelliteCollectorProducerTest do
     refute third == fourth
   end
 
+  test ~s'produce connection "in the future" starts from scratch' do
+    {:ok, pid} = Producer.start_link([])
+    assert :ok = Producer.store_incoming_transactions(pid, [tx(), tx(), tx()])
+
+    # Arbitrary point in the future
+    {:ok, _} =
+      DummyConsumer.start_link(notify: self(), subscribe_to: [{pid, starting_from: 10000}])
+
+    # Get all the transactions
+    assert_receive {:dummy_consumer, ^pid, [_, _, _]}
+  end
+
   defp tx(), do: %{ack_fn: fn -> nil end, changes: ["change 1"]}
 end
