@@ -1683,6 +1683,45 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
 })
 
+test('DELETE after DELETE sends clearTags', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await runMigrations()
+
+  await satellite._setAuthState(authState)
+
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+  })
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (2,'val2')`,
+  })
+
+  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+
+  await satellite._performSnapshot()
+
+  await adapter.run({ sql: `DELETE FROM parent WHERE id=2` })
+
+  await satellite._performSnapshot()
+
+  const entries = await satellite._getEntries()
+
+  t.is(entries.length, 4)
+
+  const delete1 = entries[2]
+  const delete2 = entries[3]
+
+  t.is(delete1.primaryKey, '{"id":1}')
+  t.is(delete1.optype, 'DELETE')
+  // No tags for first delete
+  t.is(delete1.clearTags, '[]')
+
+  t.is(delete2.primaryKey, '{"id":2}')
+  t.is(delete2.optype, 'DELETE')
+  // The second should have clearTags
+  t.not(delete2.clearTags, '[]')
+})
+
 // TODO: implement reconnect protocol
 
 // test('resume out of window clears subscriptions and clears oplog after ack', async (t) => {})
