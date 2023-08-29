@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.1.3
+
+### Patch Changes
+
+- a05c04d: Add missing `typescript` devDependency to fix package build.
+
 ## 0.1.2
 
 ### Patch Changes
