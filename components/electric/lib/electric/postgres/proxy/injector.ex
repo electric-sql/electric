@@ -17,9 +17,25 @@ defmodule Electric.Postgres.Proxy.Injector do
   def new(opts \\ []) do
     with {:ok, loader} <- Keyword.fetch(opts, :loader) do
       injector = Keyword.get(opts, :injector, __MODULE__)
-      capture = Keyword.get(opts, :capture, nil)
+      capture = Keyword.get(opts, :capture_mode, nil) |> default_capture_mode()
+
+      Logger.debug("Initialising injector in capture mode #{inspect(capture || "default")}")
+
       {:ok, {capture, %State{loader: loader, injector: injector}}}
     end
+  end
+
+  defp default_capture_mode(nil) do
+    nil
+  end
+
+  defp default_capture_mode(module) when is_atom(module) do
+    struct(module)
+  end
+
+  defp default_capture_mode({module, params})
+       when is_atom(module) and (is_list(params) or is_map(params)) do
+    struct(module, params)
   end
 
   @spec recv_frontend(state(), M.t() | [M.t()]) :: response()

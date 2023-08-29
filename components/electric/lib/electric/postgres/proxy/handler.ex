@@ -20,6 +20,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   defmodule S do
     defstruct upstream: [],
+              injector_opts: [],
               injector: nil,
               loader: nil,
               conn_config: nil,
@@ -36,6 +37,7 @@ defmodule Electric.Postgres.Proxy.Handler do
     @type t() :: %__MODULE__{
             upstream: [PgProtocol.Message.t()],
             injector: nil | Injector.t(),
+            injector_opts: Keyword.t(),
             loader: SchemaLoader.t(),
             conn_config: Connectors.config(),
             connection: nil | pid(),
@@ -53,7 +55,8 @@ defmodule Electric.Postgres.Proxy.Handler do
     %S{
       conn_config: conn_config,
       loader: {loader_module, loader_opts},
-      decoder: PgProtocol.Decoder.frontend()
+      decoder: PgProtocol.Decoder.frontend(),
+      injector_opts: Keyword.get(proxy_opts, :injector, [])
     }
   end
 
@@ -62,7 +65,10 @@ defmodule Electric.Postgres.Proxy.Handler do
     %{loader: {loader_module, loader_opts}, conn_config: conn_config} = state
 
     {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
-    {:ok, injector} = Injector.new(loader: {loader_module, loader_conn})
+
+    {:ok, injector} =
+      Keyword.merge(state.injector_opts, loader: {loader_module, loader_conn})
+      |> Injector.new()
 
     session_id = Electric.Postgres.Proxy.session_id()
     Logger.metadata(session_id: session_id)

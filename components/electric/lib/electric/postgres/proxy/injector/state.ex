@@ -83,16 +83,21 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   """
   @spec table_electrified?(t(), {String.t(), String.t()}) :: boolean()
   def table_electrified?(%__MODULE__{loader: {module, conn}} = state, table) do
-    (tx?(state) && Tx.table_electrified?(state.tx, table)) ||
-      apply(module, :table_electrified?, [conn, table])
+    if tx?(state) && Tx.table_electrified?(state.tx, table) do
+      true
+    else
+      {:ok, electrified?} = apply(module, :table_electrified?, [conn, table])
+      electrified?
+    end
   end
 
   @doc """
   Wrapper around the SchemaLoader.index_electrified?/2 behaviour callback.
   """
-  @spec index_electrified?(t(), {String.t(), String.t()}) :: boolean()
+  @spec index_electrified?(t(), {String.t(), String.t()}) :: {:ok, boolean()}
   def index_electrified?(%__MODULE__{loader: {module, conn}}, index) do
-    apply(module, :index_electrified?, [conn, index])
+    {:ok, electrified?} = apply(module, :index_electrified?, [conn, index])
+    electrified?
   end
 
   @doc """
