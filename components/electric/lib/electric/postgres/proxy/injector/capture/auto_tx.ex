@@ -5,7 +5,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
   to electric functions made within a single transaction.
   """
 
-  defstruct subcommand: nil, buffer: [], status: :begin
+  defstruct subcommand: nil, error: nil, buffer: [], status: :begin
 
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
@@ -17,8 +17,11 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
     State
   }
 
+  require Logger
+
   @type t() :: %__MODULE__{
-          subcommand: Capture.t(),
+          subcommand: nil | Capture.t(),
+          error: nil | M.ErrorResponse.t(),
           buffer: [M.t()],
           status: :begin | :tx
         }
@@ -45,11 +48,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
       abort_on_error(%{atx | subcommand: subcommand}, state, send)
     end
 
-    def recv_backend(_atx, %M.ErrorResponse{} = msg, state, send) do
-      Logger.info("Got an error response from the server, aborting AutoTx")
-      commit(state, Send.front(send, msg), "ROLLBACK")
-    end
-
     def recv_backend(atx, %M.NoticeResponse{} = msg, state, send) do
       {atx, state, Send.front(send, msg)}
     end
@@ -69,6 +67,24 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
     # swallow all backend messages until ReadyForQuery{status: :tx}
     def recv_backend(%{status: :begin} = atx, _msg, state, send) do
       {atx, state, send}
+    end
+
+    def recv_backend(%{status: :tx} = atx, %M.ErrorResponse{} = msg, state, send) do
+      # the assumption here is that the error response will be followed with a
+      # ReadyForQuery{status: :failed} message which we will intercept below
+      Logger.info("Got an error response from the server: #{inspect(msg)}")
+      {%{atx | error: msg}, state, send}
+    end
+
+    def recv_backend(
+          %{status: :tx, error: %M.ErrorResponse{}} = atx,
+          %M.ReadyForQuery{status: :failed} = msg,
+          state,
+          send
+        ) do
+      # the command we sent has produced an error, so rollback our tx
+      # then flush our saved error and ReadyForQuery to the client
+      rollback(state, Send.front(send, [atx.error, msg]))
     end
 
     def recv_backend(%{status: :tx} = atx, msg, state, send) do
@@ -114,7 +130,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
       end
     end
 
-    defp commit(state, send, query \\ "COMMIT") do
+    defp commit(state, send) do
       if State.tx?(state) do
         sink =
           %Sink{
@@ -125,15 +141,36 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
             end
           }
 
-        {sink, state, Send.back(send, [%M.Query{query: query}])}
+        {sink, state, Send.back(send, [%M.Query{query: "COMMIT"}])}
       else
         {nil, state, Send.front(send, [%M.ReadyForQuery{status: :idle}])}
       end
     end
 
+    defp rollback(state, send) do
+      pending = Send.pending(send, :front)
+      send = Send.new()
+
+      if State.tx?(state) do
+        sink =
+          %Sink{
+            buffer: Enum.reverse(pending),
+            wait: [M.CommandComplete, M.ReadyForQuery],
+            after_fun: fn state, send ->
+              {nil, State.rollback(state), send}
+            end
+          }
+
+        {sink, state, Send.back(send, [%M.Query{query: "ROLLBACK"}])}
+      else
+        {nil, state, Send.front(send, pending)}
+      end
+    end
+
     defp abort_on_error(atx, state, send) do
       if send_error?(send) do
-        {nil, State.rollback(state), send}
+        rollback(state, send)
+        # {nil, State.rollback(state), send}
       else
         {atx, state, send}
       end

@@ -10,18 +10,19 @@ defmodule Electric.Postgres.Proxy.Injector do
   @callback capture_version_query(version :: binary()) :: binary()
   @callback migration_version() :: binary()
 
-  @type t() :: {Capture.t(), State.t()}
+  @type state() :: {Capture.t(), State.t()}
   @type msgs() :: [M.t()]
-  @type response() :: {:ok, t(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
+  @type response() :: {:ok, state(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
 
   def new(opts \\ []) do
     with {:ok, loader} <- Keyword.fetch(opts, :loader) do
       injector = Keyword.get(opts, :injector, __MODULE__)
-      {:ok, {nil, %State{loader: loader, injector: injector}}}
+      capture = Keyword.get(opts, :capture, nil)
+      {:ok, {capture, %State{loader: loader, injector: injector}}}
     end
   end
 
-  @spec recv_frontend(t(), M.t() | [M.t()]) :: response()
+  @spec recv_frontend(state(), M.t() | [M.t()]) :: response()
   def recv_frontend({c, state}, msgs) do
     {c, state, send} = recv_frontend(c, state, Send.new(), msgs)
 
@@ -36,7 +37,7 @@ defmodule Electric.Postgres.Proxy.Injector do
     end)
   end
 
-  @spec recv_backend(t(), M.t() | [M.t()]) :: response()
+  @spec recv_backend(state(), M.t() | [M.t()]) :: response()
   def recv_backend({c, state}, msgs) do
     {c, state, send} = recv_backend(c, state, Send.new(), msgs)
 
@@ -98,6 +99,9 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       {true, :commit} ->
         :commit
+
+      {true, :rollback} ->
+        :rollback
 
       {true, {:drop, :index} = action} ->
         {:ok, index} = Parser.table_name(query)

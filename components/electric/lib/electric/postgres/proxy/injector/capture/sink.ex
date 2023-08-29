@@ -10,6 +10,8 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
   `after_fun` can be set to perform some action once the sink has completed.
   """
 
+  # TODO: remove the "wait" list. in favour of just handling the "ReadyForQuery"
+  # message. This is because the current version doesn't handle errors
   defstruct [:buffer, :wait, direction: :front, after_fun: nil]
 
   alias PgProtocol.Message, as: M
@@ -37,19 +39,31 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
     end
 
     # we're done - send the buffer to the front/backend
+    def recv_backend(sink, %M.ReadyForQuery{status: :failed} = msg, state, send) do
+      call_after_fun(sink, state, Send.front(send, [msg]))
+    end
+
     def recv_backend(%{wait: [t]} = sink, %t{} = _msg, state, send) do
+      # FIXME: if the backend sends a ReadyForQuery{status: :failed} then we
+      # should forward that on, not use any ReadyForQuery message sitting in
+      # the buffer BUT we should respect the :idle | :tx state of the message
+      # in the buffer otherwise
       send =
         apply(Send, sink.direction, [send, Enum.reverse(sink.buffer)])
 
+      call_after_fun(sink, state, send)
+    end
+
+    def recv_backend(%{wait: [t | rest]} = sink, %t{} = _msg, state, send) do
+      {%{sink | wait: rest}, state, send}
+    end
+
+    defp call_after_fun(sink, state, send) do
       if is_function(sink.after_fun, 2) do
         sink.after_fun.(state, send)
       else
         {nil, state, send}
       end
-    end
-
-    def recv_backend(%{wait: [t | rest]} = sink, %t{} = _msg, state, send) do
-      {%{sink | wait: rest}, state, send}
     end
   end
 end

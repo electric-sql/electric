@@ -3,9 +3,17 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     @moduledoc false
     # holds information about the current transaction
 
-    defstruct electrified: false, version: nil
+    defstruct electrified: false, version: nil, tables: %{}
 
     @type t() :: %__MODULE__{electrified: boolean(), version: nil | String.t()}
+
+    def electrify_table(tx, {schema, table}) do
+      Map.update!(tx, :tables, &Map.put(&1, {schema, table}, true))
+    end
+
+    def table_electrified?(tx, {schema, table}) do
+      Map.get(tx.tables, {schema, table}, false)
+    end
   end
 
   defstruct loader: nil,
@@ -56,9 +64,15 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   Update the transaction status to mark it as affecting electrified tables (or
   not).
   """
-  @spec electrify(t(), boolean()) :: t()
-  def electrify(%__MODULE__{} = state, electrified?) do
-    Map.update!(state, :tx, &Map.put(&1, :electrified, &1.electrified || electrified?))
+  @spec electrify(t()) :: t()
+  def electrify(%__MODULE__{} = state) do
+    Map.update!(state, :tx, &Map.put(&1, :electrified, true))
+  end
+
+  @spec electrify(t(), {String.t(), String.t()}) :: t()
+  def electrify(%__MODULE__{} = state, {_schema, _name} = table) do
+    electrify(state)
+    |> Map.update!(:tx, &Tx.electrify_table(&1, table))
   end
 
   def electrified?(%__MODULE__{tx: %Tx{electrified: electrified?}}), do: electrified?
@@ -68,9 +82,9 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   Wrapper around the SchemaLoader.table_electrified?/2 behaviour callback.
   """
   @spec table_electrified?(t(), {String.t(), String.t()}) :: boolean()
-  def table_electrified?(%__MODULE__{loader: {module, conn}}, table) do
-    {:ok, electrified?} = apply(module, :table_electrified?, [conn, table])
-    electrified?
+  def table_electrified?(%__MODULE__{loader: {module, conn}} = state, table) do
+    (tx?(state) && Tx.table_electrified?(state.tx, table)) ||
+      apply(module, :table_electrified?, [conn, table])
   end
 
   @doc """
@@ -78,8 +92,7 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   """
   @spec index_electrified?(t(), {String.t(), String.t()}) :: boolean()
   def index_electrified?(%__MODULE__{loader: {module, conn}}, index) do
-    {:ok, electrified?} = apply(module, :index_electrified?, [conn, index])
-    electrified?
+    apply(module, :index_electrified?, [conn, index])
   end
 
   @doc """

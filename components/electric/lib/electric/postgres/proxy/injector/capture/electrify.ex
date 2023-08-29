@@ -22,6 +22,23 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electrify do
   alias Electric.Postgres.Proxy.Injector.Send
   alias Electric.DDLX
 
+  def new(%DDLX.Command.Error{} = error, _query, state, send) do
+    msgs = [
+      %M.ErrorResponse{
+        code: "00000",
+        severity: "ERROR",
+        message: "Invalid ELECTRIC statement",
+        detail: error.message,
+        line: 1,
+        query: error.sql
+      },
+      %M.ReadyForQuery{status: :failed}
+    ]
+
+    # lock the send so that any following messages from the client are ignored/dropped
+    {nil, state, send |> Send.clear(:back) |> Send.front(msgs) |> Send.lock()}
+  end
+
   # if we're in simple protocol mode, we need to immediately send the first
   # command query to the backend
   def new(commands, %M.Query{}, state, send) do

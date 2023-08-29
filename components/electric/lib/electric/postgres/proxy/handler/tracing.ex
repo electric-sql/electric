@@ -14,7 +14,7 @@ defmodule Electric.Postgres.Proxy.Handler.Tracing do
           {:recv, :server} -> {"#{side} 🠞 ", :yellow}
         end
 
-      IO.puts(IO.ANSI.format([colour, label, :reset, inspect(msgs)]))
+      IO.puts(IO.ANSI.format([colour, label, :reset, PgProtocol.Message.inspect(msgs)]))
     end
 
     defmacro trace_recv(source, msgs) do
@@ -22,14 +22,18 @@ defmodule Electric.Postgres.Proxy.Handler.Tracing do
         Electric.Postgres.Proxy.Handler.Tracing.do_trace(
           :recv,
           unquote(source),
-          PgProtocol.Message.inspect(unquote(msgs))
+          unquote(msgs)
         )
       end
     end
 
     defmacro trace_send(source, msgs) do
       quote do
-        Electric.Postgres.Proxy.Handler.Tracing.do_trace(:send, unquote(source), unquote(msgs))
+        Electric.Postgres.Proxy.Handler.Tracing.do_trace(
+          :send,
+          unquote(source),
+          unquote(msgs)
+        )
       end
     end
   else

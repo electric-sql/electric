@@ -100,4 +100,8 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   def lock(%__MODULE__{} = send) do
     %{send | locked: true}
   end
+
+  def pending(%__MODULE__{} = send, side) when side in [:front, :back] do
+    Map.fetch!(flush(send), side)
+  end
 end

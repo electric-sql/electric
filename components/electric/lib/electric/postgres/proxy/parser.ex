@@ -279,6 +279,9 @@ defmodule Electric.Postgres.Proxy.Parser do
 
       :index ->
         {true, {:create, :index}}
+
+      _other ->
+        false
     end
   end
 
@@ -288,6 +291,10 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   defkeyword :capture?, "COMMIT", trailing: false do
     {true, :commit}
+  end
+
+  defkeyword :capture?, "ROLLBACK", trailing: false do
+    {true, :rollback}
   end
 
   defkeyword :capture?, "ELECTRIC" do
@@ -316,8 +323,9 @@ defmodule Electric.Postgres.Proxy.Parser do
     :index
   end
 
-  def object(unknown) do
-    raise ArgumentError,
-      message: "Unknown/unsupported target for DDL statement: #{inspect(unknown)}"
+  def object(other) do
+    # raise ArgumentError,
+    #   message: "Unknown/unsupported target for DDL statement: #{inspect(unknown)}"
+    other
   end
 end

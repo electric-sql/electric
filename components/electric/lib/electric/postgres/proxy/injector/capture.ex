@@ -28,6 +28,13 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
         # start of tx
         {nil, State.begin(state), Send.back(send, msg)}
 
+      {:rollback, true} ->
+        {nil, State.rollback(state), Send.back(send, msg)}
+
+      {:rollback, false} ->
+        Logger.warning("Got rollback when injector was not in a transaction")
+        {nil, State.rollback(state), Send.back(send, msg)}
+
       {action, true} ->
         # in tx, standard action
         handle_frontend(action, msg, state, send)
@@ -68,24 +75,38 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
         handle_alter_table(msg, electrified?, query, table, state, send)
 
       {{{:create, :index}, true, query, table}, _} ->
-        migration_state(msg, query, table, State.electrify(state, true), Send.back(send, msg))
+        migration_state(
+          msg,
+          query,
+          table,
+          State.electrify(state, table),
+          Send.back(send, msg)
+        )
 
       {{{:drop, :table}, true, _query, {schema, name}}, _} ->
-        error = %M.ErrorResponse{
-          severity: "ERROR",
-          message: "Cannot DROP Electrified table \"#{schema}\".\"#{name}\"",
-          detail: "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
-          schema: schema,
-          table: name
-        }
+        error = [
+          %M.ErrorResponse{
+            severity: "ERROR",
+            message: "Cannot DROP Electrified table \"#{schema}\".\"#{name}\"",
+            detail:
+              "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
+            schema: schema,
+            table: name
+          },
+          %M.ReadyForQuery{status: :failed}
+        ]
 
-        {nil, State.rollback(state), error_response(send, error)}
+        {nil, state, error_response(send, error)}
 
-      {{{:drop, :index}, true, query, index}, _} ->
-        migration_state(msg, query, index, State.electrify(state, true), Send.back(send, msg))
+      {{{:drop, :index}, true, query, index}, _table} ->
+        migration_state(msg, query, index, State.electrify(state), Send.back(send, msg))
 
-      {{{:electric, command}, _electrified?, _query, _table_name}, _} ->
-        Capture.Electrify.new(command, msg, state, send)
+      {{{:electric, command}, _electrified?, _query, table_name}, _} ->
+        # TODO: have the command parser correctly parse names into {schema, name}
+        {:ok, {_schema, _name} = table} = Electric.Postgres.Proxy.NameParser.parse(table_name)
+
+        # we capture a version for any DDLX because it creates a new schema version
+        Capture.Electrify.new(command, msg, State.electrify(state, table), send)
 
       # migration affecting non-electrified table
       {{_action, false, _query, _table}, _} ->
@@ -118,19 +139,29 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
   defp handle_alter_table(msg, true, query, {schema, name} = table, state, send) do
     case Parser.is_additive_migration(query) do
       {:ok, true} ->
-        migration_state(msg, query, table, State.electrify(state, true), Send.back(send, msg))
+        migration_state(
+          msg,
+          query,
+          table,
+          State.electrify(state, table),
+          Send.back(send, msg)
+        )
 
       {:ok, false} ->
-        error = %M.ErrorResponse{
-          severity: "ERROR",
-          message:
-            "Invalid destructive migration on Electrified table \"#{schema}\".\"#{name}\": #{query}",
-          detail: "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
-          schema: schema,
-          table: name
-        }
+        error = [
+          %M.ErrorResponse{
+            severity: "ERROR",
+            message:
+              "Invalid destructive migration on Electrified table \"#{schema}\".\"#{name}\": #{query}",
+            detail:
+              "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
+            schema: schema,
+            table: name
+          },
+          %M.ReadyForQuery{status: :failed}
+        ]
 
-        {nil, State.rollback(state), error_response(send, error)}
+        {nil, state, error_response(send, error)}
     end
   end
 
@@ -140,7 +171,8 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
   end
 
   defp error_response(send, error) do
-    back_msgs = [%M.Query{query: "ROLLBACK"}]
+    # back_msgs = [%M.Query{query: "ROLLBACK"}]
+    back_msgs = []
     front_msgs = [error]
 
     # send the error messages and prevent any others being appended
