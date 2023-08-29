@@ -51,10 +51,6 @@ defmodule Electric.Postgres.Extension do
   # that will go away once we stop replicating all tables by default)
   @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema", "migration_ddl") VALUES ($1, $2, $3) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
-  @event_triggers %{
-    ddl_command_end: "#{@schema}_event_trigger_ddl_end",
-    sql_drop: "#{@schema}_event_trigger_sql_drop"
-  }
 
   @publication_name "electric_publication"
   @slot_name "electric_replication_out"
@@ -111,7 +107,6 @@ defmodule Electric.Postgres.Extension do
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
-  def event_triggers, do: @event_triggers
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
@@ -278,6 +273,7 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
       Migrations.Migration_20230726151202_RemoveEventTrigger,
+      Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
     ]
@@ -327,27 +323,25 @@ defmodule Electric.Postgres.Extension do
   defp apply_migration(txconn, version, module) do
     Logger.info("Running extension migration: #{version}")
 
-    disabling_event_triggers(txconn, module, fn ->
-      for sql <- module.up(@schema) do
-        case :epgsql.squery(txconn, sql) do
-          results when is_list(results) ->
-            errors = Enum.filter(results, &(elem(&1, 0) == :error))
+    for sql <- module.up(@schema) do
+      case :epgsql.squery(txconn, sql) do
+        results when is_list(results) ->
+          errors = Enum.filter(results, &(elem(&1, 0) == :error))
 
-            unless(Enum.empty?(errors)) do
-              raise RuntimeError,
-                message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-            end
+          unless(Enum.empty?(errors)) do
+            raise RuntimeError,
+              message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
+          end
 
-            :ok
+          :ok
 
-          {:ok, _} ->
-            :ok
+        {:ok, _} ->
+          :ok
 
-          {:ok, _cols, _rows} ->
-            :ok
-        end
+        {:ok, _cols, _rows} ->
+          :ok
       end
-    end)
+    end
 
     {:ok, 1} =
       :epgsql.squery(
@@ -391,47 +385,7 @@ defmodule Electric.Postgres.Extension do
     fun.()
   end
 
-  defp disabling_event_triggers(conn, module, fun) do
-    do_disable? =
-      if function_exported?(module, :disable_event_triggers?, 0) do
-        module.disable_event_triggers?()
-      else
-        true
-      end
-
-    if do_disable? do
-      disable =
-        Enum.flat_map(@event_triggers, fn {_type, name} ->
-          case :epgsql.squery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = '#{name}'") do
-            {:ok, _, [_]} ->
-              [name]
-
-            _ ->
-              []
-          end
-        end)
-
-      Enum.each(disable, &alter_event_trigger(conn, &1, "DISABLE"))
-
-      result = fun.()
-
-      # if there's a problem the tx will be aborted and the event triggers
-      # left in an enabled state, so no need for a try..after..end block
-      Enum.each(disable, &alter_event_trigger(conn, &1, "ENABLE"))
-
-      result
-    else
-      fun.()
-    end
-  end
-
-  defp alter_event_trigger(conn, name, state) do
-    query = ~s|ALTER EVENT TRIGGER "#{name}" #{state}|
-    Logger.debug(query)
-    {:ok, [], []} = :epgsql.squery(conn, query)
-  end
-
-  defp existing_migration_versions(conn) do
+  defp existing_migrations(conn) do
     {:ok, _cols, rows} =
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 

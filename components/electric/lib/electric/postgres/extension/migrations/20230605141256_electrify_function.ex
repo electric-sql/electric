@@ -13,12 +13,9 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
   def version, do: 2023_06_05_14_12_56
 
   @impl true
-  def up(schema) do
-    electrified_tracking_table = Extension.electrified_tracking_table()
+  def up(schema) do electrified_tracking_table = Extension.electrified_tracking_table()
     electrified_index_table = Extension.electrified_index_table()
     publication = Extension.publication_name()
-    event_triggers = Extension.event_triggers()
-    event_trigger_tags = ["'ALTER TABLE'", "'DROP TABLE'", "'DROP INDEX'", "'DROP VIEW'"]
 
     electrify_function =
       electrify_function_sql(

@@ -21,13 +21,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     ddl_table = Extension.ddl_table()
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
-    event_triggers = Extension.event_triggers()
     publication_name = Extension.publication_name()
-
-    event_trigger_tags =
-      for action <- ["CREATE", "ALTER", "DROP"],
-          obj <- ["TABLE", "INDEX", "VIEW"],
-          do: "'#{action} #{obj}'"
 
     [
       """
@@ -188,11 +182,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       $function$ LANGUAGE PLPGSQL;
       """,
       ##################
-      """
-      CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
-          WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")})
-          EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
-      """,
+      # """
+      # CREATE EVENT TRIGGER #{event_triggers[:ddl_command_end]} ON ddl_command_end
+      #     WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")})
+      #     EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
+      # """,
       """
       CREATE PUBLICATION "#{publication_name}";
       """,
