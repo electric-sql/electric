@@ -14,11 +14,13 @@
     "create-electric-app": "dist/index.js"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsc && tsmodule build"
+    "build": "rm -rf ./dist && tsc && tsmodule build",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@tsmodule/tsmodule": "42",
-    "@types/node": "^18.8.4"
+    "@types/node": "^18.8.4",
+    "typescript": "^5.1.3"
   },
   "dependencies": {
     "ora": "^7.0.1"
