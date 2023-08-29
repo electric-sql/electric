@@ -1,6 +1,9 @@
 defmodule Electric.Proxy.InjectorTest.EctoFramework do
   use Electric.Postgres.Proxy.TestScenario
 
+  def description, do: "ecto"
+  def tags, do: [framework: :ecto, ecto: true]
+
   def capture_migration_version(injector, version) do
     injector
     |> bind_execute_version_query(version)
@@ -27,9 +30,12 @@ defmodule Electric.Proxy.InjectorTest.EctoFramework do
       bind_execute(name,
         bind: [
           parameter_format_codes: [1, 1],
-          parameters: Enum.map([String.to_integer(version), DateTime.utc_now()], &version_pg/1)
+          parameters: Enum.map([to_integer(version), DateTime.utc_now()], &version_pg/1)
         ]
       )
     )
   end
+
+  defp to_integer(s) when is_binary(s), do: String.to_integer(s)
+  defp to_integer(i) when is_integer(i), do: i
 end

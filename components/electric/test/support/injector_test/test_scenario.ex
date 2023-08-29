@@ -147,7 +147,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def capture_version_query(version) do
-    query(MockInjector.capture_version_query(version))
+    query(MockInjector.capture_version_query(to_string(version)))
   end
 
   def capture_ddl_query(sql) do
@@ -365,6 +365,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     "TAG #{:crypto.strong_rand_bytes(8) |> Base.encode16()}"
   end
 
+  def random_version do
+    :rand.uniform(999_999_999_999)
+  end
+
   def execute_tx_sql(sql, injector, mode) when is_binary(sql) do
     execute_tx_sql({:capture, sql}, injector, mode)
   end
@@ -416,5 +420,37 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> client(bind_execute())
     |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
     |> server(capture_ddl_complete(), client: bind_execute_complete(tag))
+  end
+
+  def capture_migration_queries(injector, initial_messages, queries, version) do
+    [first_cap | rest_cap] =
+      Enum.flat_map(queries, fn
+        sql when is_binary(sql) -> [sql]
+        {:capture, sql} -> [sql]
+        _other -> []
+      end)
+      |> Enum.map(&capture_ddl_query/1)
+
+    # the initial message triggers the ddl and version capture process
+    # and is the last thing sent
+    [{direction, msg} | _] = initial_messages
+
+    final_msg =
+      case {direction, msg} do
+        {:client, msg} -> [server: msg]
+        {:server, msg} -> [client: msg]
+      end
+
+    injector = apply(__MODULE__, direction, [injector, msg, server: first_cap])
+
+    Enum.reduce(rest_cap, injector, fn cap, injector ->
+      server(injector, capture_ddl_complete(), server: cap)
+    end)
+
+    injector
+    |> server(capture_ddl_complete(), server: capture_version_query(version))
+    |> server(capture_version_complete(), final_msg)
+
+    # injector = server(injector, capture_ddl_complete(), final_msg)
   end
 end

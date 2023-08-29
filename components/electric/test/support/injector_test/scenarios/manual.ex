@@ -15,7 +15,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
   def tx?, do: false
 
-  def assert_non_electrified_migration(injector, query, tag \\ random_tag()) do
+  def assert_non_electrified_migration(injector, _framework, query, tag \\ random_tag()) do
     injector
     |> client(query(query), server: begin())
     |> server(complete_ready("BEGIN", :tx), server: query(query))
@@ -24,7 +24,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_electrified_migration(injector, query) do
+  def assert_electrified_migration(injector, _framework, query) do
     query =
       case query do
         sql when is_binary(sql) ->
@@ -49,7 +49,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_injector_error(injector, query, error_details) do
+  def assert_injector_error(injector, _framework, query, error_details) do
     injector
     |> client(query(query), server: begin())
     |> server(complete_ready("BEGIN"),
@@ -61,7 +61,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_valid_electric_command(injector, query) do
+  def assert_valid_electric_command(injector, _framework, query) do
     {:ok, command} = DDLX.ddlx_to_commands(query)
 
     injector
@@ -82,7 +82,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_electrify_server_error(injector, query, error_details) do
+  def assert_electrify_server_error(injector, _framework, query, error_details) do
     # assert that the electrify command only generates a single query
     {:ok, command} = DDLX.ddlx_to_commands(query)
     [electrify] = Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1)
