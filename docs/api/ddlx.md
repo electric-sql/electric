@@ -8,7 +8,7 @@ sidebar_position: 10
 :::caution Limitations
 The syntax and features described in this page are **not yet implemented**.
 
-Currently, DDLX rules are limited to [electrification by SQL proceedure call syntax](../reference/limitations#ddlx-rules). See the [Limitations](../reference/limitations.md) page for more context.
+Currently, DDLX rules are limited to [electrification by SQL procedure call syntax](../reference/limitations#ddlx-rules). See the [Limitations](../reference/limitations.md) page for more context.
 :::
 
 ElectricSQL extends the PostgreSQL language with the following DDLX statements.

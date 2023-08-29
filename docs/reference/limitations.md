@@ -25,7 +25,7 @@ Key aspects of the system are not yet implemented, including:
 
 The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not yet implemented. Neither are permissions, roles, validation or local SQLite commands.
 
-DDLX support is currently limited to electrifying tables using an SQL proceedure call syntax:
+DDLX support is currently limited to electrifying tables using an SQL procedure call syntax:
 
 ```sql
 CALL electric.electrify('items')

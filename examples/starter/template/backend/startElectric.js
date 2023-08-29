@@ -28,7 +28,6 @@ const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 shell.exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
-      -e "ELECTRIC_HOST=localhost" \
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
       -e "AUTH_MODE=insecure" \
       -p 5050:5050 \
