@@ -27,14 +27,6 @@ defmodule Electric.Replication.OffsetStorage do
     {:ok, dets}
   end
 
-  @doc "Persist satellite lsn"
-  @spec put_satellite_lsn(String.t(), STLsn.t()) :: :ok
-  def put_satellite_lsn(satellite_client, lsn) do
-    Logger.info("Saving lsn #{inspect(lsn)} for satellite: #{inspect(satellite_client)}")
-    :ok = :dets.insert(@table, {{:st, satellite_client}, lsn})
-    :dets.sync(@table)
-  end
-
   @spec get_satellite_lsn(String.t()) :: nil | STLsn.t()
   def get_satellite_lsn(satellite_client) do
     case :dets.lookup(@table, {:st, satellite_client}) do

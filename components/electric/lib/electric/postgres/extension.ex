@@ -27,6 +27,7 @@ defmodule Electric.Postgres.Extension do
   @schema_relation "schema"
   @electrified_table_relation "electrified"
   @electrified_index_relation "electrified_idx"
+  @acked_client_lsn_relation "acknowledged_client_lsns"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -99,6 +100,7 @@ defmodule Electric.Postgres.Extension do
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
+  def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
   def event_triggers, do: @event_triggers
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name

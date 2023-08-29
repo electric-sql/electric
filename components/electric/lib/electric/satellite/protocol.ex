@@ -19,7 +19,6 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
-  alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
   alias Electric.Telemetry.Metrics
@@ -407,15 +406,13 @@ defmodule Electric.Satellite.Protocol do
 
   def process_message(%SatOpLog{} = msg, %State{in_rep: in_rep} = state)
       when in_rep?(state) do
-    self = self()
-
     try do
       case Serialization.deserialize_trans(
              state.client_id,
              msg,
              in_rep.incomplete_trans,
              in_rep.relations,
-             fn lsn -> report_lsn(state.client_id, self, lsn) end
+             fn _lsn -> nil end
            ) do
         {incomplete, []} ->
           {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
@@ -531,11 +528,6 @@ defmodule Electric.Satellite.Protocol do
         Process.send(in_rep.pid, msg, [])
         %InRep{in_rep | demand: remaining_demand, queue: remaining_txns}
     end
-  end
-
-  defp report_lsn(satellite, _pid, lsn) do
-    Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
-    OffsetStorage.put_satellite_lsn(satellite, lsn)
   end
 
   @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) ::
