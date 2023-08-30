@@ -50,7 +50,7 @@ import {
 import { ShapeSubscription } from './process'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
-export const MOCK_INVALID_POSITION_LSN = 27
+export const MOCK_INTERNAL_ERROR = 27
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -227,6 +227,14 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
 
+  subscribeToError(cb: ErrorCallback): void {
+    this.on('error', cb)
+  }
+
+  unsubscribeToError(cb: ErrorCallback): void {
+    this.removeListener('error', cb)
+  }
+
   isClosed(): boolean {
     return this.closed
   }
@@ -243,7 +251,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   close(): Promise<void> {
     this.closed = true
-    this.removeAllListeners()
     for (const t of this.timeouts) {
       clearTimeout(t)
     }
@@ -268,11 +275,11 @@ export class MockSatelliteClient extends EventEmitter implements Client {
       })
     }
 
-    if (lsn && bytesToNumber(lsn) == MOCK_INVALID_POSITION_LSN) {
+    if (lsn && bytesToNumber(lsn) == MOCK_INTERNAL_ERROR) {
       return Promise.resolve({
         error: new SatelliteError(
-          SatelliteErrorCode.INVALID_POSITION,
-          'MOCK INVALID_POSITION ERROR'
+          SatelliteErrorCode.INTERNAL,
+          'MOCK INTERNAL_ERROR'
         ),
       })
     }

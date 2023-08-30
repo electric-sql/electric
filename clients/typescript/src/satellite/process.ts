@@ -14,9 +14,11 @@ import {
   Notifier,
 } from '../notifiers/index'
 import {
+  Waiter,
   base64,
   bytesToNumber,
   emptyPromise,
+  getWaiter,
   numberToBytes,
   uuid,
 } from '../util/common'
@@ -57,7 +59,9 @@ import {
 
 import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
+import { generateTableTriggers } from '../migrators/triggers'
 import { prepareInsertBatchedStatements } from '../util/statements'
+import { mergeEntries } from './merge'
 import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
@@ -69,8 +73,8 @@ import {
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
-import { mergeEntries } from './merge'
-import { generateTableTriggers } from '../migrators/triggers'
+import { IBackOffOptions, backOff } from 'exponential-backoff'
+import { SCHEMA_VSN_ERROR_MSG } from '../migrators/bundle'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -96,11 +100,23 @@ type MetaEntries = {
   subscriptions: string
 }
 
-const throwErrors = [
-  SatelliteErrorCode.CONNECTION_FAILED,
-  SatelliteErrorCode.INVALID_POSITION,
-  SatelliteErrorCode.BEHIND_WINDOW,
-]
+type ConnectRetryHandler = (error: Error, attempt: number) => boolean
+
+const connectRetryHandler: ConnectRetryHandler = (_error, _attempts) => {
+  // for simplicity, always retry
+  return true
+}
+
+const connectionRetryPolicy: Partial<IBackOffOptions> = {
+  delayFirstAttempt: false,
+  startingDelay: 100,
+  jitter: 'full',
+  maxDelay: 5000,
+  numOfAttempts: 100,
+  timeMultiple: 2,
+}
+
+const throwErrors = [SatelliteErrorCode.INTERNAL]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -142,6 +158,9 @@ export class SatelliteProcess implements Satellite {
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
+  private _connectRetryHandler: ConnectRetryHandler
+  private initializing?: Waiter
+
   constructor(
     dbName: DbName,
     adapter: DatabaseAdapter,
@@ -178,6 +197,10 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+
+    this._connectRetryHandler = connectRetryHandler
+
+    this.setClientListeners()
   }
 
   /**
@@ -257,7 +280,6 @@ export class SatelliteProcess implements Satellite {
     this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
     this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
 
-    this.setClientListeners()
     this.client.resetOutboundLogPositions(
       numberToBytes(this._lastAckdRowId),
       numberToBytes(this._lastSentRowId)
@@ -276,7 +298,9 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.setState(subscriptionsState)
     }
 
-    const connectionPromise = this._connectAndStartReplication()
+    const connectionPromise = this._connectWithBackoff().then(() =>
+      this._startReplication()
+    )
     return { connectionPromise }
   }
 
@@ -294,35 +318,36 @@ export class SatelliteProcess implements Satellite {
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
-        tablenames.push(select.tablename)
+        tablenames.push('main.' + select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
-        stmts.push(
-          ...this._disableTriggers([tablename]),
-          {
-            sql: `DELETE FROM ${tablename}`,
-          },
-          ...this._enableTriggers([tablename])
-        )
+        stmts.push({
+          sql: `DELETE FROM ${tablename}`,
+        })
         return stmts
         // does not delete shadow rows but we can do that
       }, stmts)
 
-    await this.adapter.runInTransaction(...stmts)
+    const stmtsWithTriggers = [
+      ...this._disableTriggers(tablenames),
+      ...stmts,
+      ...this._enableTriggers(tablenames),
+    ]
+
+    await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
   setClientListeners(): void {
+    this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     // When a local transaction is sent, or an acknowledgement for
     // a remote transaction commit is received, we update lsn records.
-    this.client.subscribeToAck(async (lsn, type) => {
-      const decoded = bytesToNumber(lsn)
-      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
-    })
-    this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot()
+    this.client.subscribeToAck(this._handleAck.bind(this))
+    this.client.subscribeToOutboundEvent(
+      'started',
+      this._throttledSnapshot.bind(this)
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -364,12 +389,15 @@ export class SatelliteProcess implements Satellite {
       this._potentialDataChangeSubscription = undefined
     }
 
-    this.client.close()
+    return this._connectivityStateChanged('disconnected')
   }
 
   async subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription> {
+    // Await for client to be ready before doing anything else
+    await this.initializing?.waitOn()
+
     // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
     const existingSubscription =
       this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
@@ -554,25 +582,44 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _handleBehindWindow(): Promise<void> {
-    Log.warn(
-      'client cannot resume replication from server, resetting replication state'
-    )
+  // maintains subscriptions
+  async _resetClientState(): Promise<ClientShapeDefinition[]> {
+    await this._connectivityStateChanged('disconnected')
+
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
     const shapeDefs: ClientShapeDefinition[] = subscriptionIds
       .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
       .filter((s): s is ShapeDefinition[] => s !== undefined)
       .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
 
-    await this._resetClientState()
+    this._lsn = undefined
 
-    await this._connectAndStartReplication()
+    // TODO: this is obviously too conservative
+    // we should also work on updating subscriptions
+    // atomically on unsubscribe()
+    await this.subscriptions.unsubscribeAll()
 
-    Log.warn(`successfully reconnected with server. re-subscribing.`)
+    await this.adapter.runInTransaction(
+      this._setMetaStatement('lsn', null),
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+    )
 
-    if (shapeDefs) {
+    return shapeDefs
+  }
+
+  async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
+    Log.warn(`reconnecting to server`)
+    await this._connectWithBackoff()
+    await this._startReplication()
+
+    if (shapeDefs.length > 0) {
       this.subscribe(shapeDefs)
     }
+  }
+
+  async _resetClientStateAndReconnect() {
+    const shapes = await this._resetClientState()
+    return await this._reconnect(shapes)
   }
 
   async _handleSubscriptionError(
@@ -591,18 +638,37 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _resetClientState() {
-    this._lsn = undefined
+  // handles async client erros: can be a socket error or a server error message
+  _handleClientError(satelliteError: SatelliteError) {
+    if (this.initializing && !this.initializing.finished()) {
+      if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
+        Log.warn(
+          `a socket error occurred while connecting to server: ${satelliteError.message}`
+        )
+        return
+      }
 
-    // TODO: this is obviously too conservative
-    // we should also work on updating subscriptions
-    // atomically on unsubscribe()
-    await this.subscriptions.unsubscribeAll()
+      if (satelliteError.code === SatelliteErrorCode.AUTH_REQUIRED) {
+        // TODO: should stop retrying
+        Log.warn(
+          `a fatal error occurred while initializing: ${satelliteError.message}`
+        )
+        return
+      }
 
-    await this.adapter.runInTransaction(
-      this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+      // throw unhandled error
+      throw satelliteError
+    }
+
+    // all other errors are handled by closing the client (if not yet) and retrying
+    this._connectivityStateChanged('disconnected').then(() =>
+      this._connectivityStateChanged('available')
     )
+  }
+
+  async _handleAck(lsn: LSN, type: AckType) {
+    const decoded = bytesToNumber(lsn)
+    await this._ack(decoded, type == AckType.REMOTE_COMMIT)
   }
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
@@ -611,13 +677,14 @@ export class SatelliteProcess implements Satellite {
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
-        this.setClientListeners()
-
-        return this._connectAndStartReplication()
+        Log.warn(`checking network availability and reconnecting`)
+        return this._connectWithBackoff().then(() => this._startReplication())
       }
       case 'error':
       case 'disconnected': {
-        return this.client.close()
+        Log.warn(`client disconnected from server`)
+        this.client.close()
+        return
       }
       case 'connected': {
         return
@@ -628,8 +695,33 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(): Promise<void> {
-    Log.info(`connecting and starting replication`)
+  // we might just move starting replication into the retrier, which might be more simple to manage
+  async _connectWithBackoff(): Promise<void> {
+    if (!this.initializing || this.initializing?.finished()) {
+      this.initializing = getWaiter()
+    }
+
+    await backOff(() => this._connect(), {
+      ...connectionRetryPolicy,
+      retry: this._connectRetryHandler,
+    }).catch((e) => {
+      // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
+      const error = new SatelliteError(
+        SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
+        `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
+      )
+
+      this.initializing?.reject(e)
+      this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+      throw error
+    })
+  }
+
+  // NO DIRECT CALLS TO CONNECT
+  private async _connect(): Promise<void> {
+    Log.info(`connecting to electric server`)
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
@@ -638,8 +730,21 @@ export class SatelliteProcess implements Satellite {
 
     try {
       await this.client.connect()
-      await this.client.authenticate(authState)
+      const authResp = await this.client.authenticate(authState)
 
+      if (authResp.error) {
+        throw authResp.error
+      }
+    } catch (error: any) {
+      Log.debug(
+        `server returned an error while establishing connection: ${error.message}`
+      )
+      throw error
+    }
+  }
+
+  async _startReplication(): Promise<void> {
+    try {
       const schemaVersion = await this.migrator.querySchemaVersion()
 
       // Fetch the subscription IDs that were fulfilled
@@ -655,21 +760,50 @@ export class SatelliteProcess implements Satellite {
 
       if (error) {
         if (
-          error.code == SatelliteErrorCode.BEHIND_WINDOW &&
+          (error.code == SatelliteErrorCode.INVALID_POSITION ||
+            error.code == SatelliteErrorCode.BEHIND_WINDOW ||
+            error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
-          return await this._handleBehindWindow()
+          Log.warn(
+            `server error: ${error.message}. resetting client state and retrying connection`
+          )
+          // restart reconnection loop
+          return await this._resetClientStateAndReconnect()
         }
+
         throw error
       }
+
+      this.notifier.connectivityStateChanged(this.dbName, 'connected')
+      this.initializing?.resolve()
     } catch (error: any) {
-      if (!(error instanceof SatelliteError)) {
-        throw error
+      if (error.code == SatelliteErrorCode.UNKNOWN_SCHEMA_VSN) {
+        Log.warn(SCHEMA_VSN_ERROR_MSG)
+
+        // FIXME: I think at this point it's clear the client needs to be re-generated
+        this.initializing?.reject(
+          new SatelliteError(error.code, SCHEMA_VSN_ERROR_MSG)
+        )
+        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+        return
+      } else {
+        this.initializing?.reject(error)
+
+        if (!(error instanceof SatelliteError)) {
+          throw error
+        }
+        if (throwErrors.includes(error.code)) {
+          throw error
+        }
+
+        Log.warn(
+          `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
+        )
+        return this._resetClientStateAndReconnect()
       }
-      if (throwErrors.includes(error.code)) {
-        throw error
-      }
-      Log.warn(`couldn't start replication with reason: ${error.message}`)
+    } finally {
+      this.initializing = undefined
     }
   }
 
@@ -881,7 +1015,7 @@ export class SatelliteProcess implements Satellite {
 
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
-      return this.client.enqueueTransaction(txn)
+      this.client.enqueueTransaction(txn)
     }
   }
 

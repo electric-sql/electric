@@ -38,6 +38,7 @@ import {
   shapeRequestToSatShapeReq,
   subsErrorToSatelliteError,
   msgToString,
+  serverErrorToSatelliteError,
 } from '../util/proto'
 import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
@@ -61,17 +62,16 @@ import {
   Transaction,
   StartReplicationResponse,
   StopReplicationResponse,
+  ErrorCallback,
 } from '../util/types'
 import {
   base64,
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
-  emptyPromise,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
-import { backOff, IBackOffOptions } from 'exponential-backoff'
 import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
@@ -101,20 +101,20 @@ type IncomingHandler = {
   isRpc: boolean
 }
 
+const subscriptionError = [
+  SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+  SatelliteErrorCode.SUBSCRIPTION_ERROR,
+  SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_ID_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+  SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
+]
+
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
-  private dbName: string
 
   private socketFactory: SocketFactory
   private socket?: Socket
-
-  private notifier: Notifier
-
-  private initializing?: {
-    promise: Promise<void>
-    resolve: () => void
-    reject: (e?: unknown) => void
-  }
 
   private inbound: Replication
   private outbound: OutgoingReplication
@@ -198,29 +198,16 @@ export class SatelliteClient extends EventEmitter implements Client {
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
-  connectionRetryPolicy: Partial<IBackOffOptions> = {
-    delayFirstAttempt: false,
-    startingDelay: 100,
-    jitter: 'none',
-    maxDelay: 100,
-    numOfAttempts: 10,
-    timeMultiple: 2,
-  }
-
   constructor(
-    dbName: string,
+    _dbName: string,
     socketFactory: SocketFactory,
-    notifier: Notifier,
+    _notifier: Notifier,
     opts: SatelliteClientOpts
   ) {
     super()
 
-    this.dbName = dbName
-
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
-
-    this.notifier = notifier
 
     this.inbound = this.resetReplication()
     this.outbound = this.resetReplication()
@@ -243,69 +230,63 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  connect(
-    retryHandler?: (error: any, attempt: number) => boolean
-  ): Promise<void> {
-    if (!this.isClosed) {
+  async connect(): Promise<void> {
+    if (!this.isClosed()) {
       this.close()
     }
 
-    this.initializing = emptyPromise()
-
-    const connectPromise = new Promise<void>((resolve, reject) => {
-      // TODO: ensure any previous socket is closed, or reject
-      if (this.socket) {
-        throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_STATE,
-          'a socket already exist. ensure it is closed before reconnecting.'
-        )
-      }
+    return new Promise<void>((resolve, reject) => {
       this.socket = this.socketFactory.create()
-      this.socket.onceConnect(() => {
+
+      const onceError = (error: Error) => {
+        this.close()
+        reject(error)
+      }
+
+      const onceConnect = () => {
         if (!this.socket)
           throw new SatelliteError(
             SatelliteErrorCode.UNEXPECTED_STATE,
             'socket got unassigned somehow'
           )
+
+        this.socket.removeErrorListener(onceError)
         this.socketHandler = (message) => this.handleIncoming(message)
-        this.notifier.connectivityStateChanged(this.dbName, 'connected')
+
         this.socket.onMessage(this.socketHandler)
-        this.socket.onError(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'error')
+        this.socket.onError((error) => {
+          if (this.listenerCount('error') === 0) {
+            this.close()
+            Log.error(
+              `socket error but no listener is attached: ${error.message}`
+            )
+          }
+          this.emit('error', error)
         })
         this.socket.onClose(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+          this.close()
+          if (this.listenerCount('error') === 0) {
+            Log.error(`socket closed but no listener is attached`)
+          }
+          this.emit(
+            'error',
+            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
+          )
         })
-        resolve()
-      })
 
-      this.socket.onceError((error) => {
-        this.socket = undefined
-        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-        reject(error)
-      })
+        resolve()
+      }
+
+      this.socket.onceError(onceError)
+      this.socket.onceConnect(onceConnect)
 
       const { host, port, ssl } = this.opts
       const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
       this.socket.open({ url })
     })
-
-    const retryPolicy = { ...this.connectionRetryPolicy }
-    if (retryHandler) {
-      retryPolicy.retry = retryHandler
-    }
-
-    return backOff(() => connectPromise, retryPolicy).catch((e) => {
-      // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.initializing?.reject(e)
-      throw e
-    })
   }
 
   close() {
-    Log.info('closing client')
-
     this.outbound = this.resetReplication(
       this.outbound.enqueued_lsn,
       this.outbound.ack_lsn
@@ -316,16 +297,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     )
 
     this.socketHandler = undefined
-    this.removeAllListeners()
-    this.initializing?.promise.catch(() => void 0)
-    this.initializing?.reject(
-      new SatelliteError(
-        SatelliteErrorCode.INTERNAL,
-        'Socket is closed by the client while initializing'
-      )
-    )
-    this.initializing = undefined
-    if (this.socket != undefined) {
+
+    if (this.socket !== undefined) {
       this.socket!.closeAndRemoveListeners()
       this.socket = undefined
     }
@@ -374,25 +347,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     // Then set the replication state
     this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
     return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
-      .then((resp) => {
-        // FIXME: process handles BEHIND_WINDOW, we cant reject or resolve
-        // initializing. If process returns without triggering another
-        // RPC, initializing will never resolve.
-        // We shall improve this code to make no assumptions on how
-        // process handles errors
-        if (resp.error) {
-          if (resp.error.code !== SatelliteErrorCode.BEHIND_WINDOW) {
-            this.initializing?.reject(resp.error)
-          }
-        } else {
-          this.initializing?.resolve()
-        }
-        return resp
-      })
-      .catch((e) => {
-        this.initializing?.reject(e)
-        throw e
-      })
   }
 
   stopReplication(): Promise<StopReplicationResponse> {
@@ -422,10 +376,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       token: token,
       headers: headers,
     })
-    return this.rpc<AuthResponse>(request).catch((e) => {
-      this.initializing?.reject(e)
-      throw e
-    })
+    return this.rpc<AuthResponse>(request)
   }
 
   subscribeToTransactions(
@@ -477,6 +428,14 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
+  subscribeToError(callback: ErrorCallback): void {
+    this.on('error', callback)
+  }
+
+  unsubscribeToError(callback: ErrorCallback): void {
+    this.removeListener('error', callback)
+  }
+
   subscribeToAck(callback: AckCallback): void {
     this.on('ack_lsn', callback)
   }
@@ -519,10 +478,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     subscriptionId: string,
     shapes: ShapeRequest[]
   ): Promise<SubscribeResponse> {
-    if (this.initializing) {
-      await this.initializing.promise
-    }
-
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -656,7 +611,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     } else {
       error = new SatelliteError(
         SatelliteErrorCode.AUTH_ERROR,
-        `${message.errorType}`
+        `An internal error occurred during authentication`
       )
     }
     return { serverId, error }
@@ -826,16 +781,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    // TODO: this causing intermittent issues in tests because
-    // no one might catch this error. We shall pass this information
-    // as part of connectivity state
-    this.emit(
-      'error',
-      new SatelliteError(
-        SatelliteErrorCode.SERVER_ERROR,
-        `server replied with error code: ${error.errorType}`
-      )
-    )
+    this.emit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
@@ -893,12 +839,13 @@ export class SatelliteClient extends EventEmitter implements Client {
     } catch (error) {
       if (error instanceof SatelliteError) {
         if (handleIsRpc) {
-          this.emit('error', error)
+          this.emit('rpc_error', error)
+        } else {
+          // subscription errors are emitted through specific event
+          if (!subscriptionError.includes(error.code)) {
+            this.emit('error', error)
+          }
         }
-        // no one is watching this error
-        Log.warn(
-          `unhandled satellite errors while processing incoming message: ${error}`
-        )
       } else {
         // This is an unexpected runtime error
         throw error
@@ -1023,10 +970,10 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private sendMessage<T extends SatPbMsg>(request: T) {
     if (Log.getLevel() <= 1) Log.debug(`[proto] send: ${msgToString(request)}`)
-    if (!this.socket) {
+    if (!this.socket || this.isClosed()) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
-        'trying to send message, but no socket exists'
+        'trying to send message, but client is closed'
       )
     }
     const obj = getObjFromString(request.$type)
@@ -1066,13 +1013,13 @@ export class SatelliteClient extends EventEmitter implements Client {
         return reject(error)
       }
 
-      this.once('error', errorListener)
+      this.once('rpc_error', errorListener)
       if (distinguishOn) {
         const handleRpcResp = (resp: T) => {
           // TODO: remove this comment when RPC types are fixed
           // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
           if (resp[distinguishOn] === request[distinguishOn]) {
-            this.removeListener('error', errorListener)
+            this.removeListener('rpc_error', errorListener)
             return resolve(resp)
           } else {
             // This WAS an RPC response, but not the one we were expecting, waiting more
@@ -1082,7 +1029,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.once('rpc_response', handleRpcResp)
       } else {
         this.once('rpc_response', (resp: T) => {
-          this.removeListener('error', errorListener)
+          this.removeListener('rpc_error', errorListener)
           resolve(resp)
         })
       }

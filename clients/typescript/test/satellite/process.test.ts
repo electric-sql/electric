@@ -2,7 +2,7 @@ import anyTest, { TestFn } from 'ava'
 
 import {
   MOCK_BEHIND_WINDOW_LSN,
-  MOCK_INVALID_POSITION_LSN,
+  MOCK_INTERNAL_ERROR,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -209,23 +209,27 @@ test('starting and stopping the process works', async (t) => {
 
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 1)
+  // connect, 1st txn
+  t.is(notifier.notifications.length, 2)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // 2nd txm
+  t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // no txn notified
+  t.is(notifier.notifications.length, 3)
 
   await satellite.start(authState)
   await sleepAsync(0)
 
-  t.is(notifier.notifications.length, 3)
+  // connect, 4th txn
+  t.is(notifier.notifications.length, 5)
 })
 
 test('snapshots on potential data change', async (t) => {
@@ -1230,7 +1234,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
   t.is(acknowledgedLsn, '1')
 
-  satellite._connectivityStateChanged('disconnected')
+  await satellite._connectivityStateChanged('disconnected')
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1241,7 +1245,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const lsn1 = await satellite._getMeta('lastSentRowId')
   t.is(lsn1, '1')
 
-  satellite._connectivityStateChanged('available')
+  await satellite._connectivityStateChanged('available')
 
   await sleepAsync(200)
   const lsn2 = await satellite._getMeta('lastSentRowId')
@@ -1300,19 +1304,23 @@ test('clear database on BEHIND_WINDOW', async (t) => {
 })
 
 test('throw other replication errors', async (t) => {
+  t.plan(2)
   const { satellite } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
 
-  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INTERNAL_ERROR))
   await satellite._setMeta('lsn', base64lsn)
-  try {
-    const conn = await satellite.start(authState)
-    await conn.connectionPromise
-    t.fail('start should throw')
-  } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
-  }
+
+  const conn = await satellite.start(authState)
+  return Promise.all(
+    [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
+      p?.catch((e: SatelliteError) => {
+        console.log(`error ${e}`)
+        t.is(e.code, SatelliteErrorCode.INTERNAL)
+      })
+    )
+  )
 })
 
 test('apply shape data and persist subscription', async (t) => {
@@ -1339,9 +1347,10 @@ test('apply shape data and persist subscription', async (t) => {
   const { synced } = await satellite.subscribe([shapeDef])
   await synced
 
-  t.is(notifier.notifications.length, 1)
-  t.is(notifier.notifications[0].changes.length, 1)
-  t.deepEqual(notifier.notifications[0].changes[0], {
+  // first notification is 'connected'
+  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications[1].changes.length, 1)
+  t.deepEqual(notifier.notifications[1].changes[0], {
     qualifiedTablename: qualified,
     rowids: [],
   })
@@ -1809,6 +1818,29 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   t.is(delete2.optype, 'DELETE')
   // The second should have clearTags
   t.not(delete2.clearTags, '[]')
+})
+
+test.serial('connection backoff success', async (t) => {
+  t.plan(3)
+  const { client, satellite } = t.context
+
+  client.close()
+
+  const retry = (_e: any, a: number) => {
+    if (a > 0) {
+      t.pass()
+      return false
+    }
+    return true
+  }
+
+  satellite['_connectRetryHandler'] = retry
+
+  await Promise.all(
+    [satellite._connectWithBackoff(), satellite['initializing']?.waitOn()].map(
+      (p) => p?.catch(() => t.pass())
+    )
+  )
 })
 
 // TODO: implement reconnect protocol

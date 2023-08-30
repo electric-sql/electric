@@ -226,15 +226,15 @@ export class SubscriptionsDataCache extends EventEmitter {
   }
 
   subscriptionDataError(subId: SubscriptionId, msg: SatSubsDataError): never {
-    this.reset(subId)
     let error = subsDataErrorToSatelliteError(msg)
-
     if (!this.inDelivery) {
       error = new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `received subscription data error, but no subscription is being delivered: ${error.message}`
       )
     }
+
+    this.reset(subId)
 
     this.emit(SUBSCRIPTION_ERROR, msg.subscriptionId, error)
     throw error

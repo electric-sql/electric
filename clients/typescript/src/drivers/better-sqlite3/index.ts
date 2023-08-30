@@ -8,13 +8,13 @@ import {
   electrify as baseElectrify,
 } from '../../electric/index'
 
-import { WebSocketNodeFactory } from '../../sockets/node'
 import { DbName } from '../../util/types'
 
 import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
+import { WebSocketNodeFactory } from '../../sockets/node'
 
 export { DatabaseAdapter }
 export type { Database }

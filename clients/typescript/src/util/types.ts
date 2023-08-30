@@ -35,7 +35,7 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
-  CONNECTION_FAILED,
+  CONNECTION_FAILED_AFTER_RETRY,
   INTERNAL,
   TIMEOUT,
   REPLICATION_NOT_STARTED,
@@ -44,11 +44,18 @@ export enum SatelliteErrorCode {
   UNEXPECTED_MESSAGE_TYPE,
   PROTOCOL_VIOLATION,
   UNKNOWN_DATA_TYPE,
-  AUTH_ERROR,
-  SERVER_ERROR,
+  SOCKET_ERROR,
+  UNRECOGNIZED,
 
-  SUBSCRIPTION_ALREADY_EXISTS,
-  UNEXPECTED_SUBSCRIPTION_STATE,
+  // auth errors
+  AUTH_ERROR,
+  AUTH_FAILED,
+  AUTH_REQUIRED,
+
+  // server errors
+  INVALID_REQUEST,
+  PROTO_VSN_MISMATCH,
+  REPLICATION_FAILED,
 
   // start replication errors
   BEHIND_WINDOW,
@@ -61,6 +68,8 @@ export enum SatelliteErrorCode {
   // subscription errors
   SHAPE_REQUEST_ERROR,
   SUBSCRIPTION_ID_ALREADY_EXISTS,
+  SUBSCRIPTION_ALREADY_EXISTS,
+  UNEXPECTED_SUBSCRIPTION_STATE,
 
   // shape request errors
   TABLE_NOT_FOUND,
@@ -181,6 +190,7 @@ export enum AckType {
 }
 
 export type AckCallback = (lsn: LSN, type: AckType) => void
+export type ErrorCallback = (error: SatelliteError) => void
 
 export type ConnectivityState =
   | 'available'
