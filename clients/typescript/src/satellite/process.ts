@@ -608,6 +608,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
+    Log.warn(`reconnecting to server`)
     await this._connectWithBackoff()
     await this._startReplication()
 
@@ -681,6 +682,7 @@ export class SatelliteProcess implements Satellite {
       }
       case 'error':
       case 'disconnected': {
+        Log.warn(`client disconnected from server`)
         this.client.close()
         return
       }
@@ -734,7 +736,7 @@ export class SatelliteProcess implements Satellite {
         throw authResp.error
       }
     } catch (error: any) {
-      Log.warn(
+      Log.debug(
         `server returned an error while establishing connection: ${error.message}`
       )
       throw error
