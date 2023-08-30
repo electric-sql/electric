@@ -179,8 +179,8 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully
-  # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
+  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully.
+  # We need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}
   end
@@ -380,15 +380,7 @@ defmodule Electric.Satellite.WsServer do
           []
       end
 
-    in_rep = %InRep{
-      in_rep
-      | stage_sub: sub_tag,
-        pid: pid,
-        status: :requested,
-        sync_batch_size: 1,
-        sync_counter: 0
-    }
-
+    in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
     {binary_frames(msgs), %State{state | in_rep: in_rep}}
   end
 

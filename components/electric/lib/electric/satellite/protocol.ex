@@ -39,9 +39,7 @@ defmodule Electric.Satellite.Protocol do
               incomplete_trans: nil,
               demand: 0,
               sub_retry: nil,
-              queue: :queue.new(),
-              sync_counter: 0,
-              sync_batch_size: nil
+              queue: :queue.new()
 
     @typedoc """
     Incoming replication Satellite -> PG
@@ -62,10 +60,7 @@ defmodule Electric.Satellite.Protocol do
             },
             incomplete_trans: nil | Transaction.t(),
             demand: pos_integer(),
-            queue: :queue.queue(Transaction.t()),
-            # Parameters used to acknowledge received messages
-            sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer()
+            queue: :queue.queue(Transaction.t())
           }
   end
 
@@ -75,8 +70,6 @@ defmodule Electric.Satellite.Protocol do
               pid: nil,
               stage_sub: nil,
               relations: %{},
-              sync_counter: 0,
-              sync_batch_size: nil,
               last_seen_wal_pos: 0,
               subscription_pause_queue: {nil, :queue.new()},
               outgoing_ops_buffer: :queue.new(),
@@ -97,9 +90,6 @@ defmodule Electric.Satellite.Protocol do
             status: nil | :active | :paused,
             stage_sub: GenStage.subscription_tag() | nil,
             relations: %{Changes.relation() => PB.relation_id()},
-            # Parameters used to acknowledge received messages
-            sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer,
             last_seen_wal_pos: non_neg_integer,
             # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
             subscription_pause_queue:
@@ -454,7 +444,7 @@ defmodule Electric.Satellite.Protocol do
              msg,
              in_rep.incomplete_trans,
              in_rep.relations,
-             fn lsn -> report_lsn(state.client_id, self, in_rep.sync_batch_size, lsn) end
+             fn lsn -> report_lsn(state.client_id, self, lsn) end
            ) do
         {incomplete, []} ->
           {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
@@ -572,14 +562,7 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp report_lsn(satellite, _pid, nil, lsn) do
-    Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
-    OffsetStorage.put_satellite_lsn(satellite, lsn)
-    # We are not operating in a sync mode, so no need to acknowledge lsn in
-    # this call
-  end
-
-  defp report_lsn(satellite, pid, 1, lsn) do
+  defp report_lsn(satellite, pid, lsn) do
     Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
     OffsetStorage.put_satellite_lsn(satellite, lsn)
     Process.send(pid, {__MODULE__, :lsn_report, lsn}, [])
