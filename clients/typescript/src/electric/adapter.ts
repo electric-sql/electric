@@ -21,7 +21,7 @@ export interface DatabaseAdapter {
   // The function may not use async/await otherwise the transaction may commit before the queries are actually executed
   transaction<T>(
     f: (tx: Transaction, setResult: (res: T) => void) => void
-  ): Promise<T | void>
+  ): Promise<T>
 
   // Get the tables potentially used by the query (so that we
   // can re-query if the data in them changes).

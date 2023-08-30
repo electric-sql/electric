@@ -67,8 +67,8 @@ export class DatabaseAdapter
 
   transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
-  ): Promise<T | void> {
-    let result: T | void = undefined
+  ): Promise<T> {
+    let result: T
     return new Promise<void>((resolve, reject) => {
       const txFn = (tx: SQLitePlugin.Transaction) => {
         f(new WrappedTx(tx), (res) => (result = res))
