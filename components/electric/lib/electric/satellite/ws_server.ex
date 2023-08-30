@@ -367,19 +367,13 @@ defmodule Electric.Satellite.WsServer do
       cond do
         in_rep.status == nil or in_rep.status == :paused ->
           [
-            %SatInStartReplicationReq{
-              sync_batch_size: 1,
-              lsn: lsn
-            }
+            %SatInStartReplicationReq{lsn: lsn}
           ]
 
         in_rep.status == :active ->
           [
             %SatInStopReplicationReq{},
-            %SatInStartReplicationReq{
-              sync_batch_size: 1,
-              lsn: lsn
-            }
+            %SatInStartReplicationReq{lsn: lsn}
           ]
 
         in_rep.status == :requested ->

@@ -96,20 +96,17 @@ message SatErrorResp {
 // (Consumer) Starts replication stream from producer to consumer
 message SatInStartReplicationReq {
     enum Option {
-        reserved 1, 3, 4;
+        reserved 1, 2, 3, 4;
 
         // Required by the Protobuf spec.
         NONE = 0;
-        // In sync mode consumer of the stream is expected to send SatPingResp
-        // message for every committed batch of SatOpLog messages
-        SYNC_MODE = 2;
     }
+
+    reserved 3;
+
     // LSN position of the log on the producer side
     bytes lsn = 1;
     repeated Option options = 2;
-    // Amount of message after which SatPingResp message is expected to be
-    // delivered when SYNC_MODE is used
-    int32 sync_batch_size = 3;
 
     // the subscriptions identifiers the client wants to resume subscription    
     repeated string subscription_ids = 4;
