@@ -13,7 +13,7 @@ SET client_min_messages = warning;
 --  Helpers for digesting system catalogs
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_identify(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_identify(
   IN oid,  
   OUT oid oid, OUT classid regclass, 
   OUT name name,  OUT namespace name,  
@@ -382,7 +382,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_describe(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_describe(
   IN regclass,
   OUT ord smallint,
   OUT name name, OUT type text, OUT size integer, OUT not_null boolean,
@@ -476,7 +476,7 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_constraints(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_get_constraints(
  regclass default null,
  OUT namespace name, 
  OUT class_name name, 
@@ -516,7 +516,7 @@ $function$;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_rules(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_get_rules(
   regclass default null,
   OUT namespace text, OUT class_name text, OUT rule_name text, OUT rule_event text, 
   OUT is_instead boolean, OUT rule_definition text, OUT regclass regclass)
@@ -544,7 +544,7 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_rules(
   
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_triggers(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_get_triggers(
   regclass default null,
   OUT oid oid,
   OUT is_constraint text, OUT trigger_name text, OUT action_order text, 
@@ -594,7 +594,7 @@ $function$;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_indexes(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_get_indexes(
   regclass default null,
   OUT oid oid, OUT namespace text, OUT class text, OUT name text, 
   OUT tablespace text, OUT constraint_name text, OUT is_local boolean)
@@ -624,7 +624,7 @@ $function$;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_get_functions(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_get_functions(
   regproc default null,
   OUT sysid oid, OUT namespace name, OUT name name, OUT comment text, 
   OUT owner name, OUT sql_identifier text, OUT language name, OUT attributes text, 
@@ -674,7 +674,7 @@ $function$;
 --  DDL generator functions for individial object types  --
 -----------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_banner(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_banner(
    name text, kind text, namespace text, owner text, extra text default null
  )
  RETURNS text LANGUAGE sql AS $function$
@@ -685,9 +685,9 @@ $function$;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_comment(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_comment(oid)
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select format(
           E'COMMENT ON %s %s IS %L;\n',
           obj.sql_kind, sql_identifier, 
@@ -705,14 +705,14 @@ $function$ strict;
 -- forward declarations, will be redefined later
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create(oid, text[] default '{}') RETURNS text
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create(oid, text[] default '{}') RETURNS text
   LANGUAGE sql AS $function$ select null::text $function$;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_owner(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_owner(oid)
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select
    case
      when obj.sql_kind = 'INDEX' then ''
@@ -724,20 +724,20 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_table_constraints(regclass, OUT sql text)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_table_constraints(regclass, OUT sql text)
     RETURNS SETOF text LANGUAGE sql AS $function$
   select
       ('CONSTRAINT ' || quote_ident(constraint_name) || ' ' || constraint_definition) as sql
-  from @schemaname@.ddlx_get_constraints($1)
+  from <%= schema %>.ddlgen_get_constraints($1)
   where is_local
   order by constraint_type desc, constraint_name;
 $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_table(regclass, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_table(regclass, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
-  with obj as (select * from @schemaname@.ddlx_identify($1))
+  with obj as (select * from <%= schema %>.ddlgen_identify($1))
   select   
     array_to_string(array[
       'CREATE '||
@@ -765,8 +765,8 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_table(regclass, text[] defau
       coalesce(E'\n' ||
         array_to_string(
           array_cat(
-            (SELECT array_agg('    '||definition) FROM @schemaname@.ddlx_describe($1) WHERE is_local),
-            (SELECT array_agg('    '||sql) FROM @schemaname@.ddlx_table_constraints($1))
+            (SELECT array_agg('    '||definition) FROM <%= schema %>.ddlgen_describe($1) WHERE is_local),
+            (SELECT array_agg('    '||sql) FROM <%= schema %>.ddlgen_table_constraints($1))
           ),
           E',\n'
         ), '') || E'\n' ||  ')'
@@ -809,7 +809,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_view(regclass, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_view(regclass, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
  select 
  'CREATE '||
@@ -831,9 +831,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_sequence(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_sequence(regclass)
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select 
     'ALTER SEQUENCE '||(oid::regclass::text) 
  ||E'\n INCREMENT BY '||increment
@@ -848,9 +848,9 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_sequence(regclass)
    AND obj.sql_kind = 'SEQUENCE'
 $function$  strict;
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_sequence(regclass, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_sequence(regclass, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1)),
+ with obj as (select * from <%= schema %>.ddlgen_identify($1)),
  seq as (
   select sc.oid::regclass,d.refobjid::regclass,a.attname
    from pg_class sc
@@ -862,13 +862,13 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_sequence(regclass, text[] de
  'CREATE SEQUENCE '
  || case when 'ine' ilike any($2) then 'IF NOT EXISTS ' else '' end
  ||(obj.oid::regclass::text) || E';\n'
--- || @schemaname@.ddlx_alter_sequence($1)
+-- || <%= schema %>.ddlgen_alter_sequence($1)
    from obj;
 $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type_shell(regtype)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type_shell(regtype)
  RETURNS text LANGUAGE sql AS $function$
 select 'CREATE TYPE ' || format_type(oid,null) || ';\n'
   from pg_type t
@@ -877,7 +877,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type_base(regtype)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type_base(regtype)
  RETURNS text LANGUAGE sql AS $function$
 select 'CREATE TYPE ' || format_type($1,null) || ' (' || E'\n  ' ||
        array_to_string(array[ 
@@ -921,7 +921,7 @@ select 'CREATE TYPE ' || format_type($1,null) || ' (' || E'\n  ' ||
 $function$  strict;
 
 ---------------------------------------------------
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type_range(regtype)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type_range(regtype)
  RETURNS text  LANGUAGE sql AS $function$
 select 'CREATE TYPE ' || format_type($1,null) || E' AS RANGE (\n  ' ||
         array_to_string(array[
@@ -942,7 +942,7 @@ select 'CREATE TYPE ' || format_type($1,null) || E' AS RANGE (\n  ' ||
 $function$  strict;
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type_enum(regtype)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type_enum(regtype)
  RETURNS text LANGUAGE sql AS $function$
 with
 ee as (
@@ -959,7 +959,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type_domain(regtype)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type_domain(regtype)
  RETURNS text LANGUAGE sql AS $function$
 with
 cc as (
@@ -985,7 +985,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_index(regclass,ddlx_options text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_index(regclass,ddlx_options text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
  with ii as (
  SELECT CASE d.refclassid
@@ -1015,14 +1015,14 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_class(regclass, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_class(regclass, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1)),
+ with obj as (select * from <%= schema %>.ddlgen_identify($1)),
 
  comments as (
    select 'COMMENT ON COLUMN ' || text($1) || '.' || quote_ident(name) ||
           ' IS ' || quote_nullable(comment) || ';' as cc
-     from @schemaname@.ddlx_describe($1) 
+     from <%= schema %>.ddlgen_describe($1) 
     where comment IS NOT NULL 
  ),
 
@@ -1033,13 +1033,13 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_class(regclass, text[] defau
      join obj on (true)
  )
 
- select @schemaname@.ddlx_banner(obj.name,obj.sql_kind,obj.namespace,obj.owner) 
+ select <%= schema %>.ddlgen_banner(obj.name,obj.sql_kind,obj.namespace,obj.owner) 
   ||
  case 
-  when obj.sql_kind in ('VIEW','MATERIALIZED VIEW') then @schemaname@.ddlx_create_view($1,$2)  
-  when obj.sql_kind in ('TABLE','TYPE','FOREIGN TABLE') then @schemaname@.ddlx_create_table($1,$2)
-  when obj.sql_kind in ('SEQUENCE') then @schemaname@.ddlx_create_sequence($1,$2)
-  when obj.sql_kind in ('INDEX') then @schemaname@.ddlx_create_index($1,$2)
+  when obj.sql_kind in ('VIEW','MATERIALIZED VIEW') then <%= schema %>.ddlgen_create_view($1,$2)  
+  when obj.sql_kind in ('TABLE','TYPE','FOREIGN TABLE') then <%= schema %>.ddlgen_create_table($1,$2)
+  when obj.sql_kind in ('SEQUENCE') then <%= schema %>.ddlgen_create_sequence($1,$2)
+  when obj.sql_kind in ('INDEX') then <%= schema %>.ddlgen_create_index($1,$2)
   else '-- UNSUPPORTED CLASS: '||obj.sql_kind
  end 
   ||
@@ -1053,7 +1053,7 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_table_defaults(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_table_defaults(regclass)
  RETURNS text LANGUAGE sql AS $function$
 with
 def as (
@@ -1064,7 +1064,7 @@ def as (
                 text($1),name,"default"), 
         E'\n') || E'\n\n', 
     '') as ddl
-   from @schemaname@.ddlx_describe($1)
+   from <%= schema %>.ddlgen_describe($1)
   where "default" is not null
     and "sequence" is null and gen is null
 ),
@@ -1076,7 +1076,7 @@ seq as (
                 "sequence",sql_identifier), 
         E'\n') || E'\n\n', 
     '') as ddl
-   from @schemaname@.ddlx_describe($1)
+   from <%= schema %>.ddlgen_describe($1)
   where "sequence" is not null and ident is null
 )
 select def.ddl || seq.ddl
@@ -1085,11 +1085,11 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_table_storage(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_table_storage(regclass)
  RETURNS text LANGUAGE sql AS $function$
 with 
-obj as (select * from @schemaname@.ddlx_identify($1)),
-d as (select * from @schemaname@.ddlx_describe($1) order by name),
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
+d as (select * from <%= schema %>.ddlgen_describe($1) order by name),
 cs as (
   select 
     coalesce(
@@ -1115,10 +1115,10 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_table_settings(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_table_settings(regclass)
  RETURNS text LANGUAGE sql AS $function$
 with 
-obj as (select * from @schemaname@.ddlx_identify($1)),
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
 ob as (
  select coalesce(string_agg(a.ddl, E'\n') || E'\n\n', '')
         as ddl
@@ -1151,7 +1151,7 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_default(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_default(oid)
  RETURNS text LANGUAGE sql AS $function$
   select format(E'ALTER TABLE %s ALTER %I SET DEFAULT %s;\n',
             cast(c.oid::regclass as text),
@@ -1165,7 +1165,7 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop_default(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop_default(oid)
  RETURNS text LANGUAGE sql AS $function$
   select format(E'ALTER TABLE %s ALTER %I DROP DEFAULT;\n',
             cast(c.oid::regclass as text),
@@ -1178,14 +1178,14 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_constraints(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_constraints(regclass)
  RETURNS text LANGUAGE sql AS $function$
  with cs as (
   select
    'ALTER TABLE ' || text(regclass(regclass)) ||  
    ' ADD CONSTRAINT ' || quote_ident(constraint_name) || 
    E'\n  ' || constraint_definition as sql
-    from @schemaname@.ddlx_get_constraints($1)
+    from <%= schema %>.ddlgen_get_constraints($1)
    where is_local
    order by constraint_type desc, constraint_name
  )
@@ -1195,7 +1195,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_constraint(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_constraint(oid)
  RETURNS text LANGUAGE sql AS $function$
  select format(
    E'ALTER %s %s ADD CONSTRAINT %I\n  %s;\n',
@@ -1215,7 +1215,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop_constraint(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop_constraint(oid)
  RETURNS text LANGUAGE sql AS $function$
  select format(
    E'ALTER %s %s DROP CONSTRAINT %I;\n',
@@ -1234,21 +1234,21 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_rules(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_rules(regclass)
  RETURNS text LANGUAGE sql AS $function$
   select coalesce(string_agg(rule_definition,E'\n')||E'\n\n','')
-    from @schemaname@.ddlx_get_rules()
+    from <%= schema %>.ddlgen_get_rules()
    where regclass = $1
      and rule_definition is not null
 $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_rule(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_rule(oid)
  RETURNS text LANGUAGE sql AS $function$
   select case
          when ev_type='1' and r.rulename='_RETURN'
-         then @schemaname@.ddlx_create_class(c.oid)
+         then <%= schema %>.ddlgen_create_class(c.oid)
          else pg_get_ruledef(r.oid)
          end
     from pg_rewrite r join pg_class c on (c.oid=r.ev_class)
@@ -1257,7 +1257,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_trigger(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_trigger(oid)
  RETURNS text LANGUAGE sql AS $function$
  select pg_get_triggerdef($1,true)||
         case t.tgenabled 
@@ -1275,11 +1275,11 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_triggers(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_triggers(regclass)
  RETURNS text LANGUAGE sql AS $function$
  with tg as (
-  select @schemaname@.ddlx_create_trigger(oid) as sql 
- from @schemaname@.ddlx_get_triggers($1) where is_constraint is null
+  select <%= schema %>.ddlgen_create_trigger(oid) as sql 
+ from <%= schema %>.ddlgen_get_triggers($1) where is_constraint is null
  order by trigger_name 
  -- per SQL triggers get called in order created vs name as in PostgreSQL
  )
@@ -1289,7 +1289,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop_trigger(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop_trigger(oid)
  RETURNS text LANGUAGE sql AS $function$
  select format(
           E'DROP TRIGGER %I ON %s;\n',
@@ -1300,12 +1300,12 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_indexes(regclass,ddlx_options text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_indexes(regclass,ddlx_options text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
  with
- ii as (select * from @schemaname@.ddlx_get_indexes($1) order by name),
+ ii as (select * from <%= schema %>.ddlgen_get_indexes($1) order by name),
  a as (
-  select coalesce(string_agg(@schemaname@.ddlx_create_index(oid,$2),'') || E'\n' , E'') as ddl_idx
+  select coalesce(string_agg(<%= schema %>.ddlgen_create_index(oid,$2),'') || E'\n' , E'') as ddl_idx
     from ii where constraint_name is null
  ),
  c as (
@@ -1319,7 +1319,7 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_indexes(regclass,ddlx_option
  )
  ,
  b as (
-  select coalesce(string_agg(@schemaname@.ddlx_create(oid),'' order by oid)||E'\n', '') as ddl_stx
+  select coalesce(string_agg(<%= schema %>.ddlgen_create(oid),'' order by oid)||E'\n', '') as ddl_stx
     from pg_statistic_ext where stxrelid = $1
  )
 select ddl_idx || ddl_cluster || ddl_stx from a,b,c
@@ -1327,9 +1327,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_aggregate(regproc)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_aggregate(regproc)
  RETURNS text LANGUAGE sql AS $function$ 
-  with obj as (select * from @schemaname@.ddlx_identify($1))
+  with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select 'CREATE AGGREGATE ' || obj.sql_identifier || ' (' || E'\n  ' || 
         array_to_string(array[
           'SFUNC = '  || cast(a.aggtransfn::regproc as text),
@@ -1368,13 +1368,13 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_function(regproc)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_function(regproc)
  RETURNS text LANGUAGE sql AS $function$ 
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select
-  @schemaname@.ddlx_banner(sql_identifier,obj.sql_kind,namespace,owner) ||
+  <%= schema %>.ddlgen_banner(sql_identifier,obj.sql_kind,namespace,owner) ||
   case obj.sql_kind
-    when 'AGGREGATE' then @schemaname@.ddlx_create_aggregate($1)
+    when 'AGGREGATE' then <%= schema %>.ddlgen_create_aggregate($1)
     else trim(trailing E'\n' from pg_get_functiondef($1)) || E';\n'
    end || E'\n' 
    from obj
@@ -1382,7 +1382,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants(regrole) 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_grants(regrole) 
  RETURNS text LANGUAGE sql AS $function$
 with 
 q as (
@@ -1403,7 +1403,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_role_auth(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_role_auth(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  select case when rolpassword is not null
 	     then 'ALTER ROLE '|| quote_ident(rolname)||
@@ -1412,7 +1412,7 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_role_auth(oid)
    from pg_authid where oid = $1
 $function$  strict;
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_role(regrole)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_role(regrole)
  RETURNS text
  LANGUAGE sql
 AS $function$ 
@@ -1429,7 +1429,7 @@ select ddl
   from q1; 
 $function$  strict;
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_role(regrole)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_role(regrole)
  RETURNS text
  LANGUAGE sql
 AS $function$ 
@@ -1453,7 +1453,7 @@ q1 as (
           ' IS '||quote_literal(description)||E';\n'
    end,
    case when has_table_privilege('pg_catalog.pg_authid'::regclass, 'select')
-        then @schemaname@.ddlx_alter_role_auth(a.oid)||E';\n'
+        then <%= schema %>.ddlgen_alter_role_auth(a.oid)||E';\n'
    end,
    case when rolvaliduntil is not null 
         then 'ALTER ROLE '|| quote_ident(rolname)||
@@ -1487,7 +1487,7 @@ $function$  strict
 set datestyle = iso;
 
 ---------------------------------------------------
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_event_trigger(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_event_trigger(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_event_trigger where oid = $1)
  select
@@ -1506,7 +1506,7 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_event_trigger(oid)
 $function$  strict;
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_foreign_data_wrapper(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_foreign_data_wrapper(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_foreign_data_wrapper where oid = $1)
  select
@@ -1532,7 +1532,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_server(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_server(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_foreign_server where oid = $1)
  select
@@ -1556,9 +1556,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_user_mapping(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_user_mapping(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$ 
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select
     'CREATE USER MAPPING '
     || case when 'ine' ilike any($2) then 'IF NOT EXISTS ' else '' end 
@@ -1575,9 +1575,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_policy(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_policy(oid)
  RETURNS text LANGUAGE sql AS $function$ 
- with obj as (select * from @schemaname@.ddlx_identify($1)),
+ with obj as (select * from <%= schema %>.ddlgen_identify($1)),
  pol1 as (
  SELECT
     pol.oid,
@@ -1626,7 +1626,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_transform(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_transform(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_transform where oid = $1)
  select format(
@@ -1644,7 +1644,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_publication(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_publication(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_publication where oid = $1)
  select format(
@@ -1669,7 +1669,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_subscription(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_subscription(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_subscription where oid = $1)
  select format(
@@ -1690,10 +1690,10 @@ $function$  strict;
 --  Grants
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants_columns(regclass) 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_grants_columns(regclass) 
  RETURNS text LANGUAGE sql AS $function$
 with
-obj as (select * from @schemaname@.ddlx_identify($1)),
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
 e as (
 select attrelid::regclass,attname,
        (aclexplode(attacl)).* 
@@ -1727,10 +1727,10 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants(regclass) 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_grants(regclass) 
  RETURNS text LANGUAGE sql AS $function$
  with 
- obj as (select * from @schemaname@.ddlx_identify($1)),
+ obj as (select * from <%= schema %>.ddlgen_identify($1)),
  a   as (
  select
    coalesce(format(
@@ -1755,14 +1755,14 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants(regclass)
  ORDER BY grantee,privilege_type,obj.name
 )
 select coalesce(string_agg(a.ddl,''),'')||
-       @schemaname@.ddlx_grants_columns($1) from a
+       <%= schema %>.ddlgen_grants_columns($1) from a
 $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants(regproc) 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_grants(regproc) 
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select
    format(E'REVOKE ALL ON FUNCTION %s FROM PUBLIC;\n',
           text($1::regprocedure)) ||
@@ -1788,9 +1788,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_grants(oid) 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_grants(oid) 
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1)),
+with obj as (select * from <%= schema %>.ddlgen_identify($1)),
 a as (
  select coalesce(quote_ident(r1.rolname),'PUBLIC') as grantor,
         coalesce(quote_ident(r2.rolname),'PUBLIC') as grantee,
@@ -1820,9 +1820,9 @@ c as (
     from b
 )
 select case obj.classid
-       when 'pg_class'::regclass then @schemaname@.ddlx_grants(obj.oid::regclass)
-       when 'pg_proc'::regclass then @schemaname@.ddlx_grants(obj.oid::regproc)
-       when 'pg_roles'::regclass then @schemaname@.ddlx_grants(obj.oid::regrole)
+       when 'pg_class'::regclass then <%= schema %>.ddlgen_grants(obj.oid::regclass)
+       when 'pg_proc'::regclass then <%= schema %>.ddlgen_grants(obj.oid::regproc)
+       when 'pg_roles'::regclass then <%= schema %>.ddlgen_grants(obj.oid::regrole)
        else c.grants
        end
   from obj full join c on true
@@ -1830,7 +1830,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_language(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_language(oid)
  RETURNS text LANGUAGE sql AS $function$ 
  with obj as (select * from pg_language where oid = $1)
  select format(
@@ -1850,7 +1850,7 @@ $function$  strict;
 --  Dependancy handling
 ---------------------------------------------------
 
-create or replace function ddlx_get_dependants(
+create or replace function <%= schema %>.ddlgen_get_dependants(
  in oid, 
  out depth int, out classid regclass, out objid oid
 )
@@ -1907,7 +1907,7 @@ $$ language sql;
 --  Search query bodies
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_apropos(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_apropos(
   pattern text default null,
   OUT classid regclass,
   OUT objid oid,
@@ -1981,7 +1981,7 @@ $function$;
 --  Main script generating functions
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_table_rls(regclass)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_table_rls(regclass)
  RETURNS text LANGUAGE sql AS $function$
   select case when c.relrowsecurity
 	       then 'ALTER TABLE '||cast($1 as text)||E' ENABLE ROW LEVEL SECURITY;\n'
@@ -1995,9 +1995,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_operator(regoper)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_operator(regoper)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(
          E'CREATE OPERATOR %s%s (\n%s%s%s%s%s%s%s%s%s\n);\n\n',
 	 nullif(obj.namespace,current_schema())||'.',
@@ -2024,16 +2024,16 @@ select format(
  where o.oid = $1
 $function$  strict;
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_operator(regoperator)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_operator(regoperator)
  RETURNS text LANGUAGE sql AS $function$
-   select @schemaname@.ddlx_create_operator($1::regoper)
+   select <%= schema %>.ddlgen_create_operator($1::regoper)
 $function$  strict;
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_text_search_config(regconfig)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_text_search_config(regconfig)
  RETURNS text LANGUAGE sql AS $function$
 with cfg as (select * from pg_ts_config where oid = $1),
-     prs as (select * from @schemaname@.ddlx_identify(
+     prs as (select * from <%= schema %>.ddlgen_identify(
               (select p.oid 
                  from pg_ts_parser p
                  join cfg on p.oid = cfg.cfgparser
@@ -2046,10 +2046,10 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_text_search_dict(regdictionary)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_text_search_dict(regdictionary)
  RETURNS text LANGUAGE sql AS $function$
 with dict as (select * from pg_ts_dict where oid = $1),
-     tmpl as (select * from @schemaname@.ddlx_identify(
+     tmpl as (select * from <%= schema %>.ddlgen_identify(
               (select t.oid 
                  from pg_ts_template t
                  join dict on t.oid = dict.dicttemplate
@@ -2063,9 +2063,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_text_search_parser(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_text_search_parser(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE TEXT SEARCH PARSER %s (\n  %s\n);\n',obj.sql_identifier,
          array_to_string(array[
            'START = '    || cast(nullif(p.prsstart,0)::regproc as text), 
@@ -2081,9 +2081,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_text_search_template(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_text_search_template(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE TEXT SEARCH TEMPLATE %s (\n  %s\n);\n',obj.sql_identifier,
          array_to_string(array[
            'INIT = '   || cast(nullif(t.tmplinit,0)::regproc as text), 
@@ -2096,9 +2096,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_cast(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_cast(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE CAST %s\n  ',obj.sql_identifier)
         || case
            when c.castmethod = 'i'
@@ -2119,9 +2119,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_collation(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_collation(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE COLLATION %s%s (\n  %s\n);\n',
          case when 'ine' ilike any($2) then 'IF NOT EXISTS ' end,
          obj.sql_identifier,
@@ -2145,9 +2145,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_conversion(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_conversion(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE %sCONVERSION %s\n  FOR %L TO %L FROM %s;\n',
         case when c.condefault then 'DEFAULT ' end,
         obj.sql_identifier,
@@ -2161,9 +2161,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_tablespace(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_tablespace(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE TABLESPACE %s%s;\n',
          obj.sql_identifier,
 		 ' LOCATION '||quote_literal(pg_tablespace_location(t.oid))
@@ -2181,9 +2181,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_database(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_database(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE DATABASE %s WITH\n  %s;\n\n',
               obj.sql_identifier,
               array_to_string(array[
@@ -2201,9 +2201,9 @@ select format(E'CREATE DATABASE %s WITH\n  %s;\n\n',
  where d.oid = $1
 $function$  strict;
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter_database(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter_database(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'ALTER DATABASE %s WITH ALLOW_CONNECTIONS %s;\n',
               obj.sql_identifier, d.datallowconn::text) ||
        case when d.datconnlimit>0 then
@@ -2226,9 +2226,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_access_method(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_access_method(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE ACCESS METHOD %I\n  TYPE %s HANDLER %s;\n\n',
         amname,
         case amtype
@@ -2243,9 +2243,9 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_operator_class(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_operator_class(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE OPERATOR CLASS %s\n  %sFOR TYPE %s USING %I%s AS %s;\n\n',
         format('%s%I',quote_ident(nullif(obj.namespace,current_schema()))||'.',
                 obj.name),
@@ -2283,9 +2283,9 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_operator_family(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_operator_family(oid)
  RETURNS text LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'CREATE OPERATOR FAMILY %s;\n',
         obj.sql_identifier,
         amname
@@ -2297,7 +2297,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_amproc(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_amproc(oid)
  RETURNS text LANGUAGE sql AS $function$
 with 
 a as (
@@ -2306,8 +2306,8 @@ a as (
    join pg_opfamily opf on (opf.oid=amp.amprocfamily) 
    join pg_am am on (am.oid=opf.opfmethod)
   where amp.oid = $1),
-f as (select * from @schemaname@.ddlx_identify((select amprocfamily from a)) ),
-obj as (select * from @schemaname@.ddlx_identify($1))
+f as (select * from <%= schema %>.ddlgen_identify((select amprocfamily from a)) ),
+obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'ALTER OPERATOR FAMILY %s ADD %s %s;\n',
         f.sql_identifier, obj.sql_identifier,
 	cast(a.amproc::regprocedure as text)
@@ -2317,7 +2317,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop_amproc(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop_amproc(oid)
  RETURNS text LANGUAGE sql AS $function$
 with 
 a as (
@@ -2326,8 +2326,8 @@ a as (
    join pg_opfamily opf on (opf.oid=amp.amprocfamily) 
    join pg_am am on (am.oid=opf.opfmethod)
   where amp.oid = $1),
-f as (select * from @schemaname@.ddlx_identify((select amprocfamily from a)) ),
-obj as (select * from @schemaname@.ddlx_identify($1))
+f as (select * from <%= schema %>.ddlgen_identify((select amprocfamily from a)) ),
+obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'ALTER OPERATOR FAMILY %s DROP %s;\n',
         f.sql_identifier,
         obj.sql_identifier
@@ -2337,7 +2337,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_amop(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_amop(oid)
  RETURNS text LANGUAGE sql AS $function$
 with 
 a as (
@@ -2346,8 +2346,8 @@ a as (
    join pg_opfamily opf on opf.oid=amp.amopfamily
    join pg_am am on am.oid=opf.opfmethod
   where amp.oid = $1),
-f as (select * from @schemaname@.ddlx_identify((select amopfamily from a)) ),
-obj as (select * from @schemaname@.ddlx_identify($1))
+f as (select * from <%= schema %>.ddlgen_identify((select amopfamily from a)) ),
+obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'ALTER OPERATOR FAMILY %s ADD OPERATOR %s %s (%s) %s;\n',
         f.sql_identifier,
 	amopstrategy,
@@ -2366,7 +2366,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop_amop(oid)
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop_amop(oid)
  RETURNS text LANGUAGE sql AS $function$
 with 
 a as (
@@ -2375,8 +2375,8 @@ a as (
    join pg_opfamily opf on (opf.oid=amp.amopfamily) 
    join pg_am am on (am.oid=opf.opfmethod)
   where amp.oid = $1),
-f as (select * from @schemaname@.ddlx_identify((select amopfamily from a)) ),
-obj as (select * from @schemaname@.ddlx_identify($1))
+f as (select * from <%= schema %>.ddlgen_identify((select amopfamily from a)) ),
+obj as (select * from <%= schema %>.ddlgen_identify($1))
 select format(E'ALTER OPERATOR FAMILY %s DROP %s;\n',
         f.sql_identifier,
         obj.sql_identifier
@@ -2386,7 +2386,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_schema(regnamespace, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_schema(regnamespace, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 select format(E'CREATE SCHEMA %s%I;\n',
               case when 'ine' ilike any($2) then 'IF NOT EXISTS ' end,
@@ -2397,7 +2397,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_extension(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_extension(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 select format(E'CREATE EXTENSION %s%I%s VERSION %s;\n',
               case when 'ine' ilike any($2) then 'IF NOT EXISTS ' end,
@@ -2410,23 +2410,23 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create_type(regtype, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create_type(regtype, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
-   select @schemaname@.ddlx_create_class(c.oid::regclass,$2) -- type
+   select <%= schema %>.ddlgen_create_class(c.oid::regclass,$2) -- type
      from pg_type t
      join pg_class c on (c.oid=t.typrelid)
     where t.oid = $1 and t.typtype = 'c' and c.relkind = 'c'
     union
-   select @schemaname@.ddlx_create(c.oid::regclass, $2) -- table, etc
+   select <%= schema %>.ddlgen_create(c.oid::regclass, $2) -- table, etc
      from pg_type t
      join pg_class c on (c.oid=t.typrelid)
     where t.oid = $1 and t.typtype = 'c' and c.relkind <> 'c'
     union
    select case t.typtype
-          when 'e' then @schemaname@.ddlx_create_type_enum(t.oid)
-          when 'd' then @schemaname@.ddlx_create_type_domain(t.oid)
-          when 'b' then @schemaname@.ddlx_create_type_base(t.oid)
-          when 'r' then @schemaname@.ddlx_create_type_range(t.oid)
+          when 'e' then <%= schema %>.ddlgen_create_type_enum(t.oid)
+          when 'd' then <%= schema %>.ddlgen_create_type_domain(t.oid)
+          when 'b' then <%= schema %>.ddlgen_create_type_base(t.oid)
+          when 'r' then <%= schema %>.ddlgen_create_type_range(t.oid)
           else format(E'-- UNSUPPORTED TYPE: %s\n', t.typtype)
           end 
      from pg_type t
@@ -2435,7 +2435,7 @@ $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_definitions(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_definitions(
    in oid, in options text[] default '{}',
    out oid oid, out classid regclass, out sql_kind text, out sql_identifier text,
    out base_ddl text, out comment text, out owner text, out storage text, 
@@ -2443,45 +2443,45 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_definitions(
    out triggers text, out rules text, out rls text, out grants text
 )
  RETURNS record LANGUAGE sql AS $function$
-with obj as (select * from @schemaname@.ddlx_identify($1))
+with obj as (select * from <%= schema %>.ddlgen_identify($1))
   select 
     obj.oid, obj.classid, obj.sql_kind, obj.sql_identifier,
     case obj.classid
-    when 'pg_class'::regclass          then @schemaname@.ddlx_create_class(oid::regclass,$2)
-    when 'pg_type'::regclass           then @schemaname@.ddlx_create_type(oid::regtype,$2)
-    when 'pg_proc'::regclass           then @schemaname@.ddlx_create_function(oid::regproc)
-    when 'pg_operator'::regclass       then @schemaname@.ddlx_create_operator(oid::regoper)
-    when 'pg_opfamily'::regclass       then @schemaname@.ddlx_create_operator_family(oid)
-    when 'pg_rewrite'::regclass        then @schemaname@.ddlx_create_rule(oid)
-    when 'pg_ts_config'::regclass      then @schemaname@.ddlx_create_text_search_config(oid::regconfig)
-    when 'pg_ts_dict'::regclass        then @schemaname@.ddlx_create_text_search_dict(oid::regdictionary)
-    when 'pg_ts_parser'::regclass      then @schemaname@.ddlx_create_text_search_parser(oid)
-    when 'pg_ts_template'::regclass    then @schemaname@.ddlx_create_text_search_template(oid)
-    when 'pg_database'::regclass       then @schemaname@.ddlx_create_database(oid)
-    when 'pg_constraint'::regclass     then @schemaname@.ddlx_create_constraint(oid)
-    when 'pg_trigger'::regclass        then @schemaname@.ddlx_create_trigger(oid)
-    when 'pg_attrdef'::regclass        then @schemaname@.ddlx_create_default(oid)
-    when 'pg_foreign_data_wrapper'::regclass then @schemaname@.ddlx_create_foreign_data_wrapper(oid)
-    when 'pg_foreign_server'::regclass then @schemaname@.ddlx_create_server(oid,$2)
-    when 'pg_user_mapping'::regclass   then @schemaname@.ddlx_create_user_mapping(oid,$2)
-    when 'pg_cast'::regclass           then @schemaname@.ddlx_create_cast(oid)
-    when 'pg_collation'::regclass      then @schemaname@.ddlx_create_collation(oid,$2)
-    when 'pg_conversion'::regclass     then @schemaname@.ddlx_create_conversion(oid)
-    when 'pg_language'::regclass       then @schemaname@.ddlx_create_language(oid)
-    when 'pg_opclass'::regclass        then @schemaname@.ddlx_create_operator_class(oid)
-    when 'pg_extension'::regclass      then @schemaname@.ddlx_create_extension(oid,$2)
-    when 'pg_roles'::regclass          then @schemaname@.ddlx_create_role(oid::regrole)
-    when 'pg_namespace'::regclass      then @schemaname@.ddlx_create_schema(oid::regnamespace,$2)
-    when 'pg_tablespace'::regclass     then @schemaname@.ddlx_create_tablespace(oid)
-    when 'pg_event_trigger'::regclass  then @schemaname@.ddlx_create_event_trigger(oid)
-    when 'pg_amproc'::regclass         then @schemaname@.ddlx_create_amproc(oid)
-    when 'pg_amop'::regclass           then @schemaname@.ddlx_create_amop(oid)
-    when 'pg_policy'::regclass         then @schemaname@.ddlx_create_policy(oid)
-    when 'pg_transform'::regclass      then @schemaname@.ddlx_create_transform(oid)
-    when 'pg_am'::regclass             then @schemaname@.ddlx_create_access_method(oid)
+    when 'pg_class'::regclass          then <%= schema %>.ddlgen_create_class(oid::regclass,$2)
+    when 'pg_type'::regclass           then <%= schema %>.ddlgen_create_type(oid::regtype,$2)
+    when 'pg_proc'::regclass           then <%= schema %>.ddlgen_create_function(oid::regproc)
+    when 'pg_operator'::regclass       then <%= schema %>.ddlgen_create_operator(oid::regoper)
+    when 'pg_opfamily'::regclass       then <%= schema %>.ddlgen_create_operator_family(oid)
+    when 'pg_rewrite'::regclass        then <%= schema %>.ddlgen_create_rule(oid)
+    when 'pg_ts_config'::regclass      then <%= schema %>.ddlgen_create_text_search_config(oid::regconfig)
+    when 'pg_ts_dict'::regclass        then <%= schema %>.ddlgen_create_text_search_dict(oid::regdictionary)
+    when 'pg_ts_parser'::regclass      then <%= schema %>.ddlgen_create_text_search_parser(oid)
+    when 'pg_ts_template'::regclass    then <%= schema %>.ddlgen_create_text_search_template(oid)
+    when 'pg_database'::regclass       then <%= schema %>.ddlgen_create_database(oid)
+    when 'pg_constraint'::regclass     then <%= schema %>.ddlgen_create_constraint(oid)
+    when 'pg_trigger'::regclass        then <%= schema %>.ddlgen_create_trigger(oid)
+    when 'pg_attrdef'::regclass        then <%= schema %>.ddlgen_create_default(oid)
+    when 'pg_foreign_data_wrapper'::regclass then <%= schema %>.ddlgen_create_foreign_data_wrapper(oid)
+    when 'pg_foreign_server'::regclass then <%= schema %>.ddlgen_create_server(oid,$2)
+    when 'pg_user_mapping'::regclass   then <%= schema %>.ddlgen_create_user_mapping(oid,$2)
+    when 'pg_cast'::regclass           then <%= schema %>.ddlgen_create_cast(oid)
+    when 'pg_collation'::regclass      then <%= schema %>.ddlgen_create_collation(oid,$2)
+    when 'pg_conversion'::regclass     then <%= schema %>.ddlgen_create_conversion(oid)
+    when 'pg_language'::regclass       then <%= schema %>.ddlgen_create_language(oid)
+    when 'pg_opclass'::regclass        then <%= schema %>.ddlgen_create_operator_class(oid)
+    when 'pg_extension'::regclass      then <%= schema %>.ddlgen_create_extension(oid,$2)
+    when 'pg_roles'::regclass          then <%= schema %>.ddlgen_create_role(oid::regrole)
+    when 'pg_namespace'::regclass      then <%= schema %>.ddlgen_create_schema(oid::regnamespace,$2)
+    when 'pg_tablespace'::regclass     then <%= schema %>.ddlgen_create_tablespace(oid)
+    when 'pg_event_trigger'::regclass  then <%= schema %>.ddlgen_create_event_trigger(oid)
+    when 'pg_amproc'::regclass         then <%= schema %>.ddlgen_create_amproc(oid)
+    when 'pg_amop'::regclass           then <%= schema %>.ddlgen_create_amop(oid)
+    when 'pg_policy'::regclass         then <%= schema %>.ddlgen_create_policy(oid)
+    when 'pg_transform'::regclass      then <%= schema %>.ddlgen_create_transform(oid)
+    when 'pg_am'::regclass             then <%= schema %>.ddlgen_create_access_method(oid)
     when 'pg_statistic_ext'::regclass  then pg_get_statisticsobjdef(oid)||E';\n' 
-    when 'pg_publication'::regclass    then @schemaname@.ddlx_create_publication(oid)
-    when 'pg_subscription'::regclass   then @schemaname@.ddlx_create_subscription(oid)
+    when 'pg_publication'::regclass    then <%= schema %>.ddlgen_create_publication(oid)
+    when 'pg_subscription'::regclass   then <%= schema %>.ddlgen_create_subscription(oid)
     else
       case
         when obj.sql_kind is not null
@@ -2489,33 +2489,33 @@ with obj as (select * from @schemaname@.ddlx_identify($1))
         else format(E'-- CREATE UNIDENTIFIED OBJECT: %s\n',text($1))      
       end
     end as base_ddl,
-    @schemaname@.ddlx_comment(oid) as comment,
-    @schemaname@.ddlx_alter_owner(oid) as owner,
-    @schemaname@.ddlx_alter_table_storage(oid) as storage,
-    @schemaname@.ddlx_alter_table_defaults(oid) as defaults,
+    <%= schema %>.ddlgen_comment(oid) as comment,
+    <%= schema %>.ddlgen_alter_owner(oid) as owner,
+    <%= schema %>.ddlgen_alter_table_storage(oid) as storage,
+    <%= schema %>.ddlgen_alter_table_defaults(oid) as defaults,
     case obj.sql_kind
-      when 'ROLE' THEN @schemaname@.ddlx_alter_role(oid)
-      when 'DATABASE' THEN  @schemaname@.ddlx_alter_database(oid)
-      when 'SEQUENCE' THEN @schemaname@.ddlx_alter_sequence(oid)
-      else @schemaname@.ddlx_alter_table_settings(oid)
+      when 'ROLE' THEN <%= schema %>.ddlgen_alter_role(oid)
+      when 'DATABASE' THEN  <%= schema %>.ddlgen_alter_database(oid)
+      when 'SEQUENCE' THEN <%= schema %>.ddlgen_alter_sequence(oid)
+      else <%= schema %>.ddlgen_alter_table_settings(oid)
     end as settings,
---    @schemaname@.ddlx_alter_table_settings(oid) as settings,
-    @schemaname@.ddlx_create_constraints(oid) as constraints,
-    @schemaname@.ddlx_create_indexes(oid, options) as indexes,
-    @schemaname@.ddlx_create_triggers(oid) as triggers,
-    @schemaname@.ddlx_create_rules(oid) as rules,
-     @schemaname@.ddlx_alter_table_rls(oid) as rls,
-     @schemaname@.ddlx_grants(oid) as grants
+--    <%= schema %>.ddlgen_alter_table_settings(oid) as settings,
+    <%= schema %>.ddlgen_create_constraints(oid) as constraints,
+    <%= schema %>.ddlgen_create_indexes(oid, options) as indexes,
+    <%= schema %>.ddlgen_create_triggers(oid) as triggers,
+    <%= schema %>.ddlgen_create_rules(oid) as rules,
+     <%= schema %>.ddlgen_alter_table_rls(oid) as rls,
+     <%= schema %>.ddlgen_grants(oid) as grants
     from obj
 $function$  strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_alter(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_alter(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 with 
-obj as (select * from @schemaname@.ddlx_identify($1)),
-parts as (select * from @schemaname@.ddlx_definitions($1,$2))
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
+parts as (select * from <%= schema %>.ddlgen_definitions($1,$2))
   select array_to_string( array[
            storage,
            case when obj.sql_kind='TABLE' then parts.owner end || e'\n',
@@ -2524,16 +2524,16 @@ parts as (select * from @schemaname@.ddlx_definitions($1,$2))
     from obj,parts
 $function$  strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_alter(oid, text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_alter(oid, text[]) 
      IS 'Get SQL ALTER statement for any object by object id (post-data)';
      
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_createonly(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_createonly(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 with 
-obj as (select * from @schemaname@.ddlx_identify($1)),
-parts as (select * from @schemaname@.ddlx_definitions($1,$2))
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
+parts as (select * from <%= schema %>.ddlgen_definitions($1,$2))
 select array_to_string(array[
         base_ddl,           
         case when obj.sql_kind is distinct from 'DEFAULT' then parts.comment end || e'\n',
@@ -2549,16 +2549,16 @@ select array_to_string(array[
   from obj,parts
 $function$ strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_createonly(oid, text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_createonly(oid, text[]) 
      IS 'Get SQL CREATE statement for any object by object id (pre-data)';
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_create(oid, text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_create(oid, text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 with 
-obj as (select * from @schemaname@.ddlx_identify($1)),
-parts as (select * from @schemaname@.ddlx_definitions($1,$2))
+obj as (select * from <%= schema %>.ddlgen_identify($1)),
+parts as (select * from <%= schema %>.ddlgen_definitions($1,$2))
 select array_to_string(array[
         base_ddl,           
         case when obj.sql_kind is distinct from 'DEFAULT' then parts.comment end || e'\n',
@@ -2580,21 +2580,21 @@ select array_to_string(array[
   from obj,parts
 $function$ strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_create(oid, text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_create(oid, text[]) 
      IS 'Get SQL CREATE statement for any object by object id. Includes constraints, triggers, indexes...';
      
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop(oid,ddlx_options text[] default '{}') 
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_drop(oid,ddlx_options text[] default '{}') 
  RETURNS text LANGUAGE sql AS $function$
- with obj as (select * from @schemaname@.ddlx_identify($1))
+ with obj as (select * from <%= schema %>.ddlgen_identify($1))
  select 
    case obj.classid
-   when 'pg_constraint'::regclass then @schemaname@.ddlx_drop_constraint(oid)
-   when 'pg_trigger'::regclass    then @schemaname@.ddlx_drop_trigger(oid)
-   when 'pg_attrdef'::regclass    then @schemaname@.ddlx_drop_default(oid)
-   when 'pg_amproc'::regclass     then @schemaname@.ddlx_drop_amproc(oid)
-   when 'pg_amop'::regclass       then @schemaname@.ddlx_drop_amop(oid)
+   when 'pg_constraint'::regclass then <%= schema %>.ddlgen_drop_constraint(oid)
+   when 'pg_trigger'::regclass    then <%= schema %>.ddlgen_drop_trigger(oid)
+   when 'pg_attrdef'::regclass    then <%= schema %>.ddlgen_drop_default(oid)
+   when 'pg_amproc'::regclass     then <%= schema %>.ddlgen_drop_amproc(oid)
+   when 'pg_amop'::regclass       then <%= schema %>.ddlgen_drop_amop(oid)
    else
      case
        when obj.sql_kind = 'SEQUENCE'
@@ -2613,12 +2613,12 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_drop(oid,ddlx_options text[] defaul
    from obj
 $function$  strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_drop(oid,text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_drop(oid,text[]) 
      IS 'Get SQL DROP statement for any object by object id';
      
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_script_parts(
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_script_parts(
  IN oid, ddlx_options text[] default '{}',
  OUT ddl_create text, OUT ddl_drop text,
  OUT ddl_create_deps text, OUT ddl_drop_deps text)
@@ -2626,10 +2626,10 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_script_parts(
 with 
 ddl as (
 select row_number() over() as n,
-       @schemaname@.ddlx_drop(gd.objid,$2),
-       @schemaname@.ddlx_create(gd.objid,$2),
+       <%= schema %>.ddlgen_drop(gd.objid,$2),
+       <%= schema %>.ddlgen_create(gd.objid,$2),
        gd.objid
-  from ddlx_get_dependants($1) gd
+  from <%= schema %>.ddlgen_get_dependants($1) gd
   left join pg_depend de
        on de.objid=gd.objid and de.refclassid='pg_extension'::regclass
  where case when 'ext' ilike any($2)
@@ -2637,8 +2637,8 @@ select row_number() over() as n,
 	    else de.refclassid is null end
        and gd.classid not in ('pg_amproc'::regclass,'pg_amop'::regclass)
 )
-select @schemaname@.ddlx_create($1,$2) as ddl_create,
-       @schemaname@.ddlx_drop($1,$2) as ddl_drop,
+select <%= schema %>.ddlgen_create($1,$2) as ddl_create,
+       <%= schema %>.ddlgen_drop($1,$2) as ddl_drop,
        string_agg(ddlx_create,E'\n' order by n) as ddl_create_deps,
        string_agg(ddlx_drop,'' order by n desc) as ddl_drop_deps
   from ddl 
@@ -2646,7 +2646,7 @@ $function$ strict;
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_script(oid, ddlx_options text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_script(oid, ddlx_options text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
 select array_to_string(array[
        E'BEGIN;\n',
@@ -2662,20 +2662,20 @@ select array_to_string(array[
        ddl_create,
        E'-- DEPENDANTS\n\n'||ddl_create_deps,       
        E'END;\n'],E'\n')
-  from @schemaname@.ddlx_script_parts($1,$2)
+  from <%= schema %>.ddlgen_script_parts($1,$2)
 $function$ strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_script(oid, text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_script(oid, text[]) 
      IS 'Get SQL DDL script for any object and dependants by object id';
 
 ---------------------------------------------------
 
-CREATE OR REPLACE FUNCTION @schemaname@.ddlx_script(sql_identifier text, ddlx_options text[] default '{}')
+CREATE OR REPLACE FUNCTION <%= schema %>.ddlgen_script(sql_identifier text, ddlx_options text[] default '{}')
  RETURNS text LANGUAGE sql AS $function$
   select case
     when strpos($1,'(')>0 
-    then @schemaname@.ddlx_script(cast($1 as regprocedure)::oid, $2)
-    else @schemaname@.ddlx_script((
+    then <%= schema %>.ddlgen_script(cast($1 as regprocedure)::oid, $2)
+    else <%= schema %>.ddlgen_script((
          select coalesce(c.oid,t.oid)
            from pg_type t 
            left join pg_class c on (c.oid=t.typrelid and t.typtype = 'c' and c.relkind <> 'c') 
@@ -2684,6 +2684,6 @@ CREATE OR REPLACE FUNCTION @schemaname@.ddlx_script(sql_identifier text, ddlx_op
      end
 $function$  strict;
 
-COMMENT ON FUNCTION @schemaname@.ddlx_script(text, text[]) 
+COMMENT ON FUNCTION <%= schema %>.ddlgen_script(text, text[]) 
      IS 'Get SQL DDL script for any object and dependants by object name';
 
