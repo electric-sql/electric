@@ -1351,24 +1351,16 @@ export class SatelliteProcess implements Satellite {
   async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
     const oplog = this.opts.oplogTable.tablename.toString()
-
-    // FIXME: the following statement does not return the affected row, just the count
-    // UPDATE ${meta} SET value=tmp.ackedRowId
-    // FROM (SELECT max(rowid) as ackedRowId FROM ${oplog} WHERE timestamp = ?) as tmp
-    // WHERE key = ? RETURNING *
-    // We could avoid q0 by adding the count of affected rows to current acked lsn :||
-
-    const q0: Statement = {
-      sql: `SELECT max(rowid) ackedRowId FROM ${oplog} WHERE timestamp = ?`,
-      args: [isoString],
-    }
-
-    const ackedRowId = (await this.adapter.query(q0))[0].ackedRowId as number
-
     const meta = this.opts.metaTable.toString()
+
     const q1: Statement = {
-      sql: `UPDATE ${meta} SET value= ? WHERE key = ?`,
-      args: [ackedRowId, 'lastAckdRowId'],
+      sql: `
+      UPDATE ${meta} SET value=tmp.ackedRowId
+      FROM (SELECT max(rowid) as ackedRowId FROM ${oplog} WHERE timestamp = ?) as tmp
+      WHERE key = ?
+      RETURNING value
+      `,
+      args: [isoString, 'lastAckdRowId'],
     }
 
     const q2: Statement = {
@@ -1379,7 +1371,16 @@ export class SatelliteProcess implements Satellite {
       args: [isoString],
     }
 
-    await this.adapter.runInTransaction(q1, q2)
+    const [{ value }] = await this.adapter.transaction<[{ value: string }]>(
+      (tx, setResult) => {
+        tx.query(q1, (tx, res) =>
+          tx.run(q2, () => setResult(res as [{ value: string }]))
+        )
+      }
+    )
+
+    const ackedRowId = Number(value)
+
     this.client.setOutboundLogPositions({ ack: numberToBytes(ackedRowId) })
     this._lastAckdRowId = ackedRowId
   }

@@ -42,11 +42,11 @@ export class DatabaseAdapter
 
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
-  ): Promise<T | void> {
-    let result: T | void = undefined
+  ): Promise<T> {
+    let result: T
     const txn = this.db.transaction(f)
     txn(new WrappedTx(this.db), (res) => (result = res))
-    return result
+    return result!
   }
 
   // Promise interface, but impl not actually async
