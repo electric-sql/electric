@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.5.2
+
+### Patch Changes
+
+- 73c703f: Fixed an issue with transactions not propagating to PG after Electric restart
+
 ## 0.5.1
 
 ### Patch Changes

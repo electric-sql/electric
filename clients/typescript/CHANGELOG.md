@@ -1,5 +1,13 @@
 # electric-sql
 
+## 0.5.2
+
+### Patch Changes
+
+- 3ba6c5d: Fixed conflict resolution issue leading to a wrong state on the client
+- 7f3d691: Make client try to reconnect to server when connection is lost
+- 34af0ec: Fixed incorrect snapshotting issue which led to weird behaviours
+
 ## 0.5.1
 
 ### Patch Changes
