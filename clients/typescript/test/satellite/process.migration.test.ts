@@ -246,8 +246,22 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   })
 }
 
-const eqSet = <T>(xs: T[], ys: T[]): boolean =>
-  xs.length === ys.length && xs.every((x) => ys.some((y) => isequal(x, y)))
+const testSetEquality = <T>(t: ExecutionContext, xs: T[], ys: T[]): void => {
+  t.is(xs.length, ys.length, 'Expected array lengths to be equal')
+
+  const missing: T[] = []
+
+  for (const x of xs) {
+    if (ys.some((y) => isequal(x, y))) continue
+    else missing.push(x)
+  }
+
+  t.deepEqual(
+    missing,
+    [],
+    'Expected all elements from the first array to be present in the second, but some are missing'
+  )
+}
 
 test.serial('apply migration containing only DDL', async (t) => {
   const { satellite, adapter, txDate } = t.context
@@ -303,7 +317,7 @@ test.serial(
             Insert some rows in newly created table
      - Check that the migration was successfully applied on the local DB
      - Check the modifications (insert, update, delete) to the rows
- */
+    */
 
     const { satellite, adapter, txDate } = t.context
     const timestamp = txDate.getTime()
@@ -453,8 +467,7 @@ test.serial(
         } as Row
       })
       .concat([insertExtendedRow])
-
-    t.assert(eqSet(rowsAfterMigration, expectedRowsAfterMigration))
+    testSetEquality(t, rowsAfterMigration, expectedRowsAfterMigration)
 
     // Check the row that was inserted in the new table
     const newTableRows = await adapter.query({
@@ -543,16 +556,15 @@ test.serial('apply migration containing DDL and conflicting DML', async (t) => {
   )
   const conflictingRow = rowsAfterMigration.find((r) => r.id === deleteRow.id)
 
-  t.assert(
-    eqSet(
-      rowsBeforeMigrationExceptConflictingRow.map((r) => {
-        return {
-          baz: null,
-          ...r,
-        }
-      }),
-      newRowsExceptConflictingRow
-    )
+  testSetEquality(
+    t,
+    rowsBeforeMigrationExceptConflictingRow.map((r) => {
+      return {
+        baz: null,
+        ...r,
+      }
+    }),
+    newRowsExceptConflictingRow
   )
 
   t.deepEqual(conflictingRow, {

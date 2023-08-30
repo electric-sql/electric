@@ -376,6 +376,96 @@ test('take snapshot and merge incoming wins', async (t) => {
   })
 })
 
+test('merge incoming wins on persisted ops', async (t) => {
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
+  await runMigrations()
+  await satellite._setAuthState(authState)
+  satellite.relations = relations
+
+  // This operation is persisted
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+  })
+  await satellite._performSnapshot()
+  const [originalInsert] = await satellite._getEntries()
+  const [tx] = toTransactions([originalInsert], satellite.relations)
+  tx.origin = authState.clientId
+  await satellite._applyTransaction(tx)
+
+  // Verify that GC worked as intended and the oplog entry was deleted
+  t.deepEqual(await satellite._getEntries(), [])
+
+  // This operation is done offline
+  await adapter.run({
+    sql: `UPDATE parent SET value = 'new local' WHERE id = 1`,
+  })
+  await satellite._performSnapshot()
+  const [offlineInsert] = await satellite._getEntries()
+  const offlineTimestamp = new Date(offlineInsert.timestamp).getTime()
+
+  // This operation is done concurrently with offline but at a later point in time. It's sent immediately on connection
+  const incomingTs = offlineTimestamp + 1
+  const firstIncomingEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.update,
+    incomingTs,
+    genEncodedTags('remote', [incomingTs]),
+    { id: 1, value: 'incoming' },
+    { id: 1, value: 'local' }
+  )
+
+  const firstIncomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(incomingTs),
+    changes: [opLogEntryToChange(firstIncomingEntry, satellite.relations)],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(firstIncomingTx)
+
+  const [{ value: value1 }] = await adapter.query({
+    sql: 'SELECT value FROM parent WHERE id = 1',
+  })
+  t.is(
+    value1,
+    'incoming',
+    'LWW conflict merge of the incoming transaction should lead to incoming operation winning'
+  )
+
+  // And after the offline transaction was sent, the resolved no-op transaction comes in
+  const secondIncomingEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.update,
+    offlineTimestamp,
+    encodeTags([
+      generateTag('remote', incomingTs),
+      generateTag(authState.clientId, offlineTimestamp),
+    ]),
+    { id: 1, value: 'incoming' },
+    { id: 1, value: 'incoming' }
+  )
+
+  const secondIncomingTx = {
+    origin: authState.clientId,
+    commit_timestamp: Long.fromNumber(offlineTimestamp),
+    changes: [opLogEntryToChange(secondIncomingEntry, satellite.relations)],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(secondIncomingTx)
+
+  const [{ value: value2 }] = await adapter.query({
+    sql: 'SELECT value FROM parent WHERE id = 1',
+  })
+  t.is(
+    value2,
+    'incoming',
+    'Applying the resolved write from the round trip should be a no-op'
+  )
+})
+
 test('apply does not add anything to oplog', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } =
     t.context as any
@@ -438,8 +528,7 @@ test('apply does not add anything to oplog', async (t) => {
 })
 
 test('apply incoming with no local', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date()

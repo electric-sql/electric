@@ -414,7 +414,11 @@ export const primaryKeyToStr = (primaryKeyObj: {
   return json.slice(0, -1) + '}'
 }
 
-export const generateTag = (instanceId: string, timestamp: Date): Tag => {
-  const milliseconds = timestamp.getTime()
+export const generateTag = (
+  instanceId: string,
+  timestamp: Date | number
+): Tag => {
+  const milliseconds =
+    typeof timestamp === 'number' ? timestamp : timestamp.getTime()
   return instanceId + '@' + milliseconds.toString()
 }
