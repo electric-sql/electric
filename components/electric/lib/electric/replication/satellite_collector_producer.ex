@@ -36,7 +36,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   @impl GenStage
   def handle_call({:store_incoming_transactions, transactions}, _, state) do
     transactions
-    |> Stream.each(& &1.ack_fn())
+    |> Stream.each(& &1.ack_fn.())
     |> Stream.reject(&Enum.empty?(&1.changes))
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
