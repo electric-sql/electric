@@ -210,8 +210,7 @@ defmodule Electric.Satellite.WsServer do
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
     state =
-      state
-      |> Protocol.subscribe_client_to_replication_stream(msg, lsn)
+      Protocol.subscribe_client_to_replication_stream(lsn, state)
       |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
     {binary_frames(msgs), state}
@@ -369,7 +368,6 @@ defmodule Electric.Satellite.WsServer do
         in_rep.status == nil or in_rep.status == :paused ->
           [
             %SatInStartReplicationReq{
-              options: [:SYNC_MODE],
               sync_batch_size: 1,
               lsn: lsn
             }
@@ -379,7 +377,6 @@ defmodule Electric.Satellite.WsServer do
           [
             %SatInStopReplicationReq{},
             %SatInStartReplicationReq{
-              options: [:SYNC_MODE],
               sync_batch_size: 1,
               lsn: lsn
             }

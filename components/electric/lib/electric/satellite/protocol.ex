@@ -544,7 +544,7 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(lsn) do
       case restore_subscriptions(msg.subscription_ids, state) do
         {:ok, state} ->
-          state = subscribe_client_to_replication_stream(state, msg, lsn)
+          state = subscribe_client_to_replication_stream(lsn, state)
           {%SatInStartReplicationResp{}, state}
 
         {:error, bad_id} ->
@@ -649,31 +649,10 @@ defmodule Electric.Satellite.Protocol do
     {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
-  @spec subscribe_client_to_replication_stream(State.t(), %SatInStartReplicationReq{}, any()) ::
-          State.t()
-  def subscribe_client_to_replication_stream(state, msg, lsn) do
+  @spec subscribe_client_to_replication_stream(any(), State.t()) :: State.t()
+  def subscribe_client_to_replication_stream(lsn, %State{out_rep: out_rep} = state) do
     Metrics.satellite_replication_event(%{started: 1})
 
-    state
-    |> maybe_setup_batch_counter(msg)
-    |> initiate_subscription(lsn)
-  end
-
-  defp maybe_setup_batch_counter(
-         %State{out_rep: out_rep} = state,
-         %SatInStartReplicationReq{options: opts} = msg
-       ) do
-    if :SYNC_MODE in opts do
-      sync_batch_size = msg.sync_batch_size
-      true = sync_batch_size > 0
-      out_rep = %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
-      %State{state | out_rep: out_rep}
-    else
-      state
-    end
-  end
-
-  defp initiate_subscription(%State{out_rep: out_rep} = state, lsn) do
     {:via, :gproc, producer} = CachedWal.Producer.name(state.client_id)
     {sub_pid, _} = :gproc.await(producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
