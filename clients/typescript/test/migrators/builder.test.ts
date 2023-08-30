@@ -14,6 +14,7 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import path from 'path'
 import { DbSchema } from '../../src/client/model'
+import { MockSocketFactory } from '../../src/sockets/mock'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
@@ -120,14 +121,19 @@ test('read migration meta data', async (t) => {
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
 })
 
-test.skip('load migration from meta data', async (t) => {
+test('load migration from meta data', async (t) => {
   const db = new Database(':memory:')
   const migration = makeMigration(parseMetadata(migrationMetaData))
-  const electric = await electrify(db, new DbSchema({}, [migration]), {
-    auth: {
-      token: 'test-token',
+  const electric = await electrify(
+    db,
+    new DbSchema({}, [migration]),
+    {
+      auth: {
+        token: 'test-token',
+      },
     },
-  })
+    { socketFactory: new MockSocketFactory() }
+  )
 
   // Check that the DB is initialized with the stars table
   const tables = await electric.db.raw({
