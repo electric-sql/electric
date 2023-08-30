@@ -253,15 +253,6 @@
           def encode("NONE") do
             0
           end
-        ),
-        (
-          def encode(:SYNC_MODE) do
-            2
-          end
-
-          def encode("SYNC_MODE") do
-            2
-          end
         )
       ]
 
@@ -273,9 +264,6 @@
       [
         def decode(0) do
           :NONE
-        end,
-        def decode(2) do
-          :SYNC_MODE
         end
       ]
 
@@ -285,16 +273,13 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :NONE}, {2, :SYNC_MODE}]
+        [{0, :NONE}]
       end
 
       @spec has_constant?(any()) :: boolean()
       (
         [
           def has_constant?(:NONE) do
-            true
-          end,
-          def has_constant?(:SYNC_MODE) do
             true
           end
         ]
@@ -1424,12 +1409,7 @@
   end,
   defmodule Electric.Satellite.V14.SatInStartReplicationReq do
     @moduledoc false
-    defstruct lsn: "",
-              options: [],
-              sync_batch_size: 0,
-              subscription_ids: [],
-              schema_version: nil,
-              __uf__: []
+    defstruct lsn: "", options: [], subscription_ids: [], schema_version: nil, __uf__: []
 
     (
       (
@@ -1448,7 +1428,6 @@
           |> encode_schema_version(msg)
           |> encode_lsn(msg)
           |> encode_options(msg)
-          |> encode_sync_batch_size(msg)
           |> encode_subscription_ids(msg)
           |> encode_unknown_fields(msg)
         end
@@ -1499,19 +1478,6 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:options, "invalid field value"), __STACKTRACE__
-          end
-        end,
-        defp encode_sync_batch_size(acc, msg) do
-          try do
-            if msg.sync_batch_size == 0 do
-              acc
-            else
-              [acc, "\x18", Protox.Encode.encode_int32(msg.sync_batch_size)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:sync_batch_size, "invalid field value"),
-                      __STACKTRACE__
           end
         end,
         defp encode_subscription_ids(acc, msg) do
@@ -1628,10 +1594,6 @@
 
                 {[options: msg.options ++ [value]], rest}
 
-              {3, _, bytes} ->
-                {value, rest} = Protox.Decode.parse_int32(bytes)
-                {[sync_batch_size: value], rest}
-
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
@@ -1706,7 +1668,6 @@
           1 => {:lsn, {:scalar, ""}, :bytes},
           2 =>
             {:options, :packed, {:enum, Electric.Satellite.V14.SatInStartReplicationReq.Option}},
-          3 => {:sync_batch_size, {:scalar, 0}, :int32},
           4 => {:subscription_ids, :unpacked, :string},
           5 => {:schema_version, {:oneof, :_schema_version}, :string}
         }
@@ -1721,8 +1682,7 @@
           lsn: {1, {:scalar, ""}, :bytes},
           options: {2, :packed, {:enum, Electric.Satellite.V14.SatInStartReplicationReq.Option}},
           schema_version: {5, {:oneof, :_schema_version}, :string},
-          subscription_ids: {4, :unpacked, :string},
-          sync_batch_size: {3, {:scalar, 0}, :int32}
+          subscription_ids: {4, :unpacked, :string}
         }
       end
     )
@@ -1748,15 +1708,6 @@
             name: :options,
             tag: 2,
             type: {:enum, Electric.Satellite.V14.SatInStartReplicationReq.Option}
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "syncBatchSize",
-            kind: {:scalar, 0},
-            label: :optional,
-            name: :sync_batch_size,
-            tag: 3,
-            type: :int32
           },
           %{
             __struct__: Protox.Field,
@@ -1838,46 +1789,6 @@
           end
 
           []
-        ),
-        (
-          def field_def(:sync_batch_size) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "syncBatchSize",
-               kind: {:scalar, 0},
-               label: :optional,
-               name: :sync_batch_size,
-               tag: 3,
-               type: :int32
-             }}
-          end
-
-          def field_def("syncBatchSize") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "syncBatchSize",
-               kind: {:scalar, 0},
-               label: :optional,
-               name: :sync_batch_size,
-               tag: 3,
-               type: :int32
-             }}
-          end
-
-          def field_def("sync_batch_size") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "syncBatchSize",
-               kind: {:scalar, 0},
-               label: :optional,
-               name: :sync_batch_size,
-               tag: 3,
-               type: :int32
-             }}
-          end
         ),
         (
           def field_def(:subscription_ids) do
@@ -2003,9 +1914,6 @@
       end,
       def default(:options) do
         {:error, :no_default_value}
-      end,
-      def default(:sync_batch_size) do
-        {:ok, 0}
       end,
       def default(:subscription_ids) do
         {:error, :no_default_value}

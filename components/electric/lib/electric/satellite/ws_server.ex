@@ -179,8 +179,8 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
-  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully
-  # and as long as %InRep.sync_batch_size is enabled we need to report to Satellite.
+  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully.
+  # We need to report to Satellite.
   def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
     {[binary_frame(%SatPingResp{lsn: lsn})], state}
   end
@@ -210,8 +210,7 @@ defmodule Electric.Satellite.WsServer do
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
     state =
-      state
-      |> Protocol.subscribe_client_to_replication_stream(msg, lsn)
+      Protocol.subscribe_client_to_replication_stream(lsn, state)
       |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
     {binary_frames(msgs), state}
@@ -368,36 +367,20 @@ defmodule Electric.Satellite.WsServer do
       cond do
         in_rep.status == nil or in_rep.status == :paused ->
           [
-            %SatInStartReplicationReq{
-              options: [:SYNC_MODE],
-              sync_batch_size: 1,
-              lsn: lsn
-            }
+            %SatInStartReplicationReq{lsn: lsn}
           ]
 
         in_rep.status == :active ->
           [
             %SatInStopReplicationReq{},
-            %SatInStartReplicationReq{
-              options: [:SYNC_MODE],
-              sync_batch_size: 1,
-              lsn: lsn
-            }
+            %SatInStartReplicationReq{lsn: lsn}
           ]
 
         in_rep.status == :requested ->
           []
       end
 
-    in_rep = %InRep{
-      in_rep
-      | stage_sub: sub_tag,
-        pid: pid,
-        status: :requested,
-        sync_batch_size: 1,
-        sync_counter: 0
-    }
-
+    in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
     {binary_frames(msgs), %State{state | in_rep: in_rep}}
   end
 

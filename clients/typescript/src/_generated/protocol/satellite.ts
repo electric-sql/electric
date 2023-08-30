@@ -114,11 +114,6 @@ export interface SatInStartReplicationReq {
   /** LSN position of the log on the producer side */
   lsn: Uint8Array;
   options: SatInStartReplicationReq_Option[];
-  /**
-   * Amount of message after which SatPingResp message is expected to be
-   * delivered when SYNC_MODE is used
-   */
-  syncBatchSize: number;
   /** the subscriptions identifiers the client wants to resume subscription */
   subscriptionIds: string[];
   /** The version of the most recent migration seen by the client. */
@@ -128,11 +123,6 @@ export interface SatInStartReplicationReq {
 export enum SatInStartReplicationReq_Option {
   /** NONE - Required by the Protobuf spec. */
   NONE = 0,
-  /**
-   * SYNC_MODE - In sync mode consumer of the stream is expected to send SatPingResp
-   * message for every committed batch of SatOpLog messages
-   */
-  SYNC_MODE = 2,
   UNRECOGNIZED = -1,
 }
 
@@ -939,7 +929,6 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     $type: "Electric.Satellite.v1_4.SatInStartReplicationReq",
     lsn: new Uint8Array(),
     options: [],
-    syncBatchSize: 0,
     subscriptionIds: [],
     schemaVersion: undefined,
   };
@@ -957,9 +946,6 @@ export const SatInStartReplicationReq = {
       writer.int32(v);
     }
     writer.ldelim();
-    if (message.syncBatchSize !== 0) {
-      writer.uint32(24).int32(message.syncBatchSize);
-    }
     for (const v of message.subscriptionIds) {
       writer.uint32(34).string(v!);
     }
@@ -1000,13 +986,6 @@ export const SatInStartReplicationReq = {
           }
 
           break;
-        case 3:
-          if (tag !== 24) {
-            break;
-          }
-
-          message.syncBatchSize = reader.int32();
-          continue;
         case 4:
           if (tag !== 34) {
             break;
@@ -1038,7 +1017,6 @@ export const SatInStartReplicationReq = {
     const message = createBaseSatInStartReplicationReq();
     message.lsn = object.lsn ?? new Uint8Array();
     message.options = object.options?.map((e) => e) || [];
-    message.syncBatchSize = object.syncBatchSize ?? 0;
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     message.schemaVersion = object.schemaVersion ?? undefined;
     return message;
