@@ -9,7 +9,7 @@ import {
 } from '../../src/satellite/client'
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { WebSocketNodeFactory } from '../../src/sockets/node'
-import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
+import { base64, bytesToNumber } from '../../src/util/common'
 import {
   getObjFromString,
   getTypeFromCode,
@@ -17,8 +17,6 @@ import {
   SatPbMsg,
 } from '../../src/util/proto'
 import {
-  AckType,
-  DataChangeType,
   Relation,
   SatelliteErrorCode,
   DataTransaction,
@@ -518,55 +516,6 @@ test.serial('send transaction', async (t) => {
       client.enqueueTransaction(transaction[2])
     }, 100)
   })
-})
-
-test('ack on send and pong', async (t) => {
-  await connectAndAuth(t.context)
-  const { client, server } = t.context
-
-  const lsn_1 = numberToBytes(1)
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  const pingResponse = Proto.SatPingResp.fromPartial({ lsn: lsn_1 })
-
-  server.nextResponses([startResp])
-  server.nextResponses([])
-  server.nextResponses([pingResponse])
-
-  await client.startReplication()
-
-  const transaction: DataTransaction = {
-    lsn: lsn_1,
-    commit_timestamp: Long.UZERO,
-    changes: [
-      {
-        relation: relations.parent,
-        type: DataChangeType.INSERT,
-        record: { id: 0 },
-        tags: [], // actual value is not relevent here
-      },
-    ],
-  }
-
-  const res = new Promise<void>((res) => {
-    let sent = false
-    client.subscribeToAck((lsn, type) => {
-      if (type == AckType.LOCAL_SEND) {
-        t.is(bytesToNumber(lsn), 1)
-        sent = true
-      } else if (sent && type == AckType.REMOTE_COMMIT) {
-        t.is(bytesToNumber(lsn), 1)
-        t.is(sent, true)
-        res()
-      }
-    })
-  })
-
-  setTimeout(() => {
-    client.enqueueTransaction(transaction)
-  }, 100)
-
-  await res
 })
 
 test.serial('default and null test', async (t) => {

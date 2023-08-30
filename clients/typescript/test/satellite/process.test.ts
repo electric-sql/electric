@@ -86,8 +86,6 @@ test('load metadata', async (t) => {
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
     compensations: 1,
-    lastAckdRowId: '0',
-    lastSentRowId: '0',
     lsn: '',
     clientId: '',
     subscriptions: '',
@@ -841,44 +839,6 @@ test('merge incoming with empty local', async (t) => {
   })
 })
 
-test('advance oplog cursor', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context
-  await runMigrations()
-
-  // fake current propagated rowId
-  satellite._lastSentRowId = 2
-
-  // Get tablenames.
-  const oplogTablename = opts.oplogTable.tablename
-  const metaTablename = opts.metaTable.tablename
-
-  // Insert a couple of rows.
-  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
-
-  // We have two rows in the oplog.
-  let rows = await adapter.query({
-    sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}`,
-  })
-  t.is(rows[0].num_rows, 2)
-
-  // Ack.
-  await satellite._ack(2, true)
-
-  // NOTE: The oplog is not clean! This is a current design decision to clear
-  // oplog only when receiving transaction that originated from Satellite in the
-  // first place.
-  rows = await adapter.query({
-    sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}`,
-  })
-  t.is(rows[0].num_rows, 2)
-
-  // Verify the meta.
-  rows = await adapter.query({
-    sql: `SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId'`,
-  })
-  t.is(rows[0].value, '2')
-})
-
 test('compensations: referential integrity is enforced', async (t) => {
   const { adapter, runMigrations, satellite } = t.context
   await runMigrations()
@@ -1007,14 +967,13 @@ test('compensations: using triggers with flag 0', async (t) => {
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
-  satellite._lastSentRowId = 1
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await satellite._setAuthState(authState)
-  await satellite._performSnapshot()
-  await satellite._ack(1, true)
+  const ts = await satellite._performSnapshot()
+  await satellite._garbageCollectOplog(ts)
 
   await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
@@ -1053,14 +1012,13 @@ test('compensations: using triggers with flag 1', async (t) => {
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 1)
-  satellite._lastSentRowId = 1
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await satellite._setAuthState(authState)
   await satellite._performSnapshot()
-  await satellite._ack(1, true)
+  await satellite._garbageCollectOplog
 
   await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
@@ -1198,20 +1156,8 @@ test('get transactions from opLogEntries', async (t) => {
   t.deepEqual(opLog, expected)
 })
 
-test('rowid acks updates meta', async (t) => {
-  const { runMigrations, satellite, client, authState } = t.context
-  await runMigrations()
-  await satellite.start(authState)
-
-  const lsn1 = numberToBytes(1)
-  client['emit']('ack_lsn', lsn1, false)
-
-  const lsn = await satellite['_getMeta']('lastSentRowId')
-  t.is(lsn, '1')
-})
-
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState, client } = t.context
+  const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1221,12 +1167,9 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const sentLsn = await satellite._getMeta('lastSentRowId')
-  t.is(sentLsn, '1')
-  await new Promise<void>((r) => client.once('ack_lsn', () => r()))
-
-  const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
-  t.is(acknowledgedLsn, '1')
+  // We should have sent (or at least enqueued to send) one row
+  const sentLsn = await satellite.client.getLastSentLsn()
+  t.deepEqual(sentLsn, numberToBytes(1))
 
   await satellite._connectivityStateChanged('disconnected')
 
@@ -1236,14 +1179,15 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const lsn1 = await satellite._getMeta('lastSentRowId')
-  t.is(lsn1, '1')
+  // Since connectivity is down, that row isn't yet sent
+  const lsn1 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn1, sentLsn)
 
+  // Once connectivity is restored, we will immediately run a snapshot to send pending rows
   await satellite._connectivityStateChanged('available')
-
-  await sleepAsync(200)
-  const lsn2 = await satellite._getMeta('lastSentRowId')
-  t.is(lsn2, '2')
+  await sleepAsync(200) // Wait for snapshot to run
+  const lsn2 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn2, numberToBytes(2))
 })
 
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
@@ -1259,19 +1203,20 @@ test('garbage collection is triggered when transaction from the same origin is r
     sql: `UPDATE parent SET value = 'local', other = 2 WHERE id = 1;`,
   })
 
-  let lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '0')
+  // Before snapshot, we didn't send anything
+  const lsn1 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn1, numberToBytes(0))
 
+  // Snapshot sends these oplog entries
   await satellite._performSnapshot()
-
-  lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '2')
-  lsn = await satellite._getMeta('lastAckdRowId')
+  const lsn2 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn2, numberToBytes(2))
 
   const old_oplog = await satellite._getEntries()
-  let transactions = toTransactions(old_oplog, relations)
+  const transactions = toTransactions(old_oplog, relations)
   transactions[0].origin = satellite._authState!.clientId
 
+  // Transaction containing these oplogs is applies, which means we delete them
   await satellite._applyTransaction(transactions[0])
   const new_oplog = await satellite._getEntries()
   t.deepEqual(new_oplog, [])

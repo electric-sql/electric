@@ -4,8 +4,6 @@ import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
 import {
-  AckCallback,
-  AckType,
   AuthResponse,
   DbName,
   LSN,
@@ -131,7 +129,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   inboundAck: Uint8Array = DEFAULT_LOG_POS
 
   outboundSent: Uint8Array = DEFAULT_LOG_POS
-  outboundAck: Uint8Array = DEFAULT_LOG_POS
 
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
@@ -238,18 +235,9 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   isClosed(): boolean {
     return this.closed
   }
-  resetOutboundLogPositions(sent: LSN, ack: LSN): void {
-    this.outboundSent = sent
-    this.outboundAck = ack
-  }
 
-  setOutboundLogPositions(positions: { sent?: LSN; ack?: LSN }): void {
-    this.outboundSent = positions.sent ?? this.outboundSent
-    this.outboundAck = positions.ack ?? this.outboundAck
-  }
-
-  getOutboundLogPositions(): { enqueued: Uint8Array; ack: Uint8Array } {
-    return { enqueued: this.outboundSent, ack: this.outboundAck }
+  getLastSentLsn(): Uint8Array {
+    return this.outboundSent
   }
   connect(): Promise<void> {
     this.closed = false
@@ -306,23 +294,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   enqueueTransaction(transaction: DataTransaction): void {
     this.outboundSent = transaction.lsn
-
-    this.emit('ack_lsn', transaction.lsn, AckType.LOCAL_SEND)
-
-    // simulate ping message effect
-    const t = setTimeout(() => {
-      this.outboundAck = transaction.lsn
-      this.emit('ack_lsn', transaction.lsn, AckType.REMOTE_COMMIT)
-    }, 500)
-    this.timeouts.push(t)
-  }
-
-  subscribeToAck(callback: AckCallback): void {
-    this.on('ack_lsn', callback)
-  }
-
-  unsubscribeToAck(callback: AckCallback): void {
-    this.removeListener('ack_lsn', callback)
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {

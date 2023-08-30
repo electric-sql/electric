@@ -17,8 +17,14 @@ export interface DatabaseAdapter {
   // Query the database.
   query(statement: Statement): Promise<Row[]>
 
-  // Runs the provided function inside a transaction
-  // The function may not use async/await otherwise the transaction may commit before the queries are actually executed
+  /**
+   * Runs the provided __non-async__ function inside a transaction.
+   *
+   * The function may not use async/await otherwise the transaction may commit before
+   * the queries are actually executed. This is a limitation of some adapters, that the
+   * function passed to the transaction runs "synchronously" through callbacks without
+   * releasing the event loop.
+   */
   transaction<T>(
     f: (tx: Transaction, setResult: (res: T) => void) => void
   ): Promise<T>

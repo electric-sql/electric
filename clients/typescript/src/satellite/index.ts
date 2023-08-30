@@ -5,7 +5,6 @@ import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { SocketFactory } from '../sockets'
 import {
-  AckCallback,
   AuthResponse,
   ConnectivityState,
   DbName,
@@ -85,11 +84,7 @@ export interface Client {
     callback: (transaction: Transaction) => Promise<void>
   ): void
   enqueueTransaction(transaction: DataTransaction): void
-  subscribeToAck(callback: AckCallback): void
-  unsubscribeToAck(callback: AckCallback): void
-  resetOutboundLogPositions(sent?: LSN, ack?: LSN): void
-  setOutboundLogPositions(positions: { sent?: LSN; ack?: LSN }): void
-  getOutboundLogPositions(): { enqueued: LSN; ack: LSN }
+  getLastSentLsn(): LSN
   subscribeToOutboundEvent(event: 'started', callback: () => void): void
   unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
   subscribeToError(callback: ErrorCallback): void

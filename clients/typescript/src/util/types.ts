@@ -156,7 +156,10 @@ export type Replication = {
   transactions: Transaction[]
 }
 
-export type OutgoingReplication = Omit<Replication, 'transactions'> & {
+export type OutgoingReplication = Omit<
+  Replication,
+  'transactions' | 'ack_lsn'
+> & {
   transactions: DataTransaction[] // outgoing transactions cannot contain migrations
 }
 
@@ -184,12 +187,6 @@ export enum ReplicationStatus {
   ACTIVE,
 }
 
-export enum AckType {
-  LOCAL_SEND,
-  REMOTE_COMMIT,
-}
-
-export type AckCallback = (lsn: LSN, type: AckType) => void
 export type ErrorCallback = (error: SatelliteError) => void
 
 export type ConnectivityState =
