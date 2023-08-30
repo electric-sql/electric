@@ -273,8 +273,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
 })
 
 test('take snapshot and merge local wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime() - 1
@@ -296,7 +295,7 @@ test('take snapshot and merge local wins', async (t) => {
 
   await satellite._setAuthState(authState)
   const localTime = await satellite._performSnapshot()
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
@@ -326,8 +325,7 @@ test('take snapshot and merge local wins', async (t) => {
 })
 
 test('take snapshot and merge incoming wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   await adapter.run({
@@ -335,7 +333,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   })
 
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -471,15 +469,14 @@ test('merge incoming wins on persisted ops', async (t) => {
 })
 
 test('apply does not add anything to oplog', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTimestamp = await satellite._performSnapshot()
 
@@ -571,8 +568,7 @@ test('apply empty incoming', async (t) => {
 })
 
 test('apply incoming with null on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, authState } =
-    t.context as any
+  const { runMigrations, satellite, adapter, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime()
@@ -611,8 +607,7 @@ test('apply incoming with null on column with default', async (t) => {
 })
 
 test('apply incoming with undefined on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, authState } =
-    t.context as any
+  const { runMigrations, satellite, adapter, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime()
@@ -650,10 +645,10 @@ test('apply incoming with undefined on column with default', async (t) => {
 })
 
 test('INSERT wins over DELETE and restored deleted values', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -726,10 +721,10 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
 })
 
 test('concurrent updates take all changed values', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -804,10 +799,10 @@ test('concurrent updates take all changed values', async (t) => {
 })
 
 test('merge incoming with empty local', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -904,7 +899,7 @@ test('compensations: referential integrity is enforced', async (t) => {
 
 test('compensations: incoming operation breaks referential integrity', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
-    t.context as any
+    t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
@@ -943,13 +938,13 @@ test('compensations: incoming operation breaks referential integrity', async (t)
 
 test('compensations: incoming operations accepted if restore referential integrity', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
-    t.context as any
+    t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const childInsertEntry = generateRemoteOplogEntry(
     tableInfo,
@@ -1007,8 +1002,7 @@ test('compensations: incoming operations accepted if restore referential integri
 })
 
 test('compensations: using triggers with flag 0', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
