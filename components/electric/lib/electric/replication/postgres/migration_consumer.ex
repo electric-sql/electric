@@ -175,30 +175,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, old_version, schema} = load_schema(state)
-
-    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
-
-    oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
-
-    schema =
-      stmts
-      |> Enum.reduce(schema, fn stmt, schema ->
-        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
-        Schema.update(schema, stmt, oid_loader: oid_loader)
-      end)
-      |> Schema.add_shadow_tables(oid_loader: oid_loader)
-
-    save_schema(state, version, schema, stmts)
-  end
-
-  defp load_schema(state) do
-    SchemaLoader.load(state.loader)
-  end
-
-  defp save_schema(state, version, schema, stmts) do
-    Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
-    {:ok, loader} = SchemaLoader.save(state.loader, version, schema, stmts)
+    {:ok, loader} = apply_migration(version, stmts, state.loader)
 
     {:ok, table_count} = SchemaLoader.count_electrified_tables(loader)
 
@@ -238,5 +215,30 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         min_demand: 10,
         max_demand: 50
       )
+  end
+
+  @doc """
+  Apply a migration, composed of a version and a list of DDL statements, to a schema
+  using the given implementation of SchemaLoader.
+  """
+  @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
+          {:ok, SchemaLoader.t()} | {:error, term()}
+  def apply_migration(version, stmts, loader) when is_list(stmts) do
+    {:ok, old_version, schema} = SchemaLoader.load(loader)
+
+    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
+
+    oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
+
+    schema =
+      Enum.reduce(stmts, schema, fn stmt, schema ->
+        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
+        Schema.update(schema, stmt, oid_loader: oid_loader)
+      end)
+      |> Schema.add_shadow_tables(oid_loader: oid_loader)
+
+    Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
+
+    {:ok, _loader} = SchemaLoader.save(loader, version, schema, stmts)
   end
 end
