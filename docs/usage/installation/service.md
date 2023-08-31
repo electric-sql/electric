@@ -34,7 +34,6 @@ docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "AUTH_MODE=insecure" \
-    -p 5050:5050 \
     -p 5133:5133 \
     -p 5433:5433 \
     electricsql/electric
@@ -67,7 +66,6 @@ services:
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
     ports:
-      - 5050:5050
       - 5133:5133
     restart: always
     volumes:
@@ -89,7 +87,6 @@ docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "AUTH_MODE=insecure" \
-    -p 5050:5050 \
     -p 5133:5133 \
     -p 5433:5433 \
     -it electric:local-build

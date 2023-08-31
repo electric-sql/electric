@@ -10,7 +10,6 @@ import Config
 default_log_level = "info"
 default_instance_id = "electric"
 default_auth_mode = "secure"
-default_http_api_port = "5050"
 default_ws_server_port = "5133"
 default_pg_server_port = "5433"
 default_offset_storage_path = "./offset_storage_data.dat"
@@ -47,9 +46,6 @@ config :electric,
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
-
-config :electric,
-  http_api_port: System.get_env("HTTP_API_PORT", default_http_api_port) |> String.to_integer()
 
 config :electric, Electric.Satellite.WebsocketServer,
   port: System.get_env("WEBSOCKET_PORT", default_ws_server_port) |> String.to_integer()

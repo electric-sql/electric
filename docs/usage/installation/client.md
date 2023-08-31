@@ -78,7 +78,7 @@ Then run:
 npx electric-sql generate
 ```
 
-By default this will connect to the [sync service](./service.md) on `http://localhost:5050` and output generated files to a `./src/generated/client` folder.
+By default this will connect to the [sync service](./service.md) on `http://localhost:5133` and output generated files to a `./src/generated/client` folder.
 
 See <DocPageLink path="api/generator" /> for the command-line options.
 

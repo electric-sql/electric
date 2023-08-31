@@ -13,7 +13,7 @@ import { dedent } from 'ts-dedent'
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
-  service: process.env.ELECTRIC_URL ?? 'http://127.0.0.1:5050',
+  service: process.env.ELECTRIC_URL ?? 'http://127.0.0.1:5133',
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
   pollingInterval: 1000, // in ms

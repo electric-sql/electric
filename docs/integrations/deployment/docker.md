@@ -15,7 +15,6 @@ docker run \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
-    -p 5050:5050 \
     -p 5133:5133 \
     -p 5433:5433 \
     electricsql/electric

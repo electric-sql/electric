@@ -35,7 +35,7 @@
 [newshell developer]
     !cd $(mktemp -d)
     ?SH-PROMPT:
-    !curl -v -o migrations.zip http://localhost:5050/api/migrations?dialect=sqlite
+    !curl -v -o migrations.zip http://localhost:5133/api/migrations?dialect=sqlite
     ?200 OK
     !unzip migrations.zip
     ?inflating: ${migration_version_1}/migration.sql
