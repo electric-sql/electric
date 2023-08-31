@@ -134,11 +134,19 @@ defnitmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
+  def table_electrified?(_origin, {"electric", _name}) do
+    {:ok, false}
+  end
+
   def table_electrified?(origin, {schema, name}) do
     call(origin, {:table_electrified?, schema, name})
   end
 
   @impl SchemaLoader
+  def index_electrified?(_origin, {"electric", _name}) do
+    {:ok, false}
+  end
+
   def index_electrified?(origin, {schema, name}) do
     call(origin, {:index_electrified?, schema, name})
   end
