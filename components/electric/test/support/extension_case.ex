@@ -86,10 +86,10 @@ end
 
 defmodule Electric.Extension.Case do
   defmacro __using__(opts) do
-    case_opts = Keyword.take(opts, [:async]) |> dbg
+    case_opts = Keyword.take(opts, [:async])
     extension_opts = Keyword.take(opts, [:proxy])
     proxy_opts = Keyword.get(extension_opts, :proxy, false)
-    proxy? = proxy_opts not in [false, nil] |> dbg
+    proxy? = proxy_opts not in [false, nil]
     proxy_opts = if(is_list(proxy_opts), do: proxy_opts, else: [])
 
     quote do
@@ -99,14 +99,16 @@ defmodule Electric.Extension.Case do
 
       import Electric.Extension.Case.Helpers
 
-      setup cxt do
-        do_setup(cxt)
-      end
+      setup [:db_connect]
 
-      def do_setup(cxt) do
+      def db_connect(cxt) do
+        origin = "my-origin"
+
         if unquote(proxy?) do
           pg_config = Electric.Postgres.TestConnection.config()
-          conn_config = [origin: "my-origin", connection: pg_config]
+          conn_config = [origin: origin, connection: pg_config]
+
+          handler_config = Keyword.get(unquote(proxy_opts), :handler_config, [])
 
           {:ok, _pid} =
             start_supervised(
@@ -114,14 +116,16 @@ defmodule Electric.Extension.Case do
                [
                  conn_config: conn_config,
                  proxy: Keyword.take(unquote(proxy_opts), [:port]),
-                 handler_config: Keyword.get(unquote(proxy_opts), :handler_config, [])
+                 handler_config: handler_config
                ]}
             )
+
+          {:ok, _pid} = start_supervised({Extension.SchemaCache, conn_config})
         end
 
         {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config()))
 
-        {:ok, conn: conn}
+        {:ok, conn: conn, origin: origin}
       end
 
       if unquote(proxy?) do

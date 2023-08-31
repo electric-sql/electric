@@ -1,25 +1,16 @@
 defmodule Electric.Postgres.Extension.DDLCaptureTest do
+  alias Electric.Postgres.MockSchemaLoader
+  alias Electric.Replication.Postgres.MigrationConsumer
+
   use Electric.Extension.Case,
     async: false,
     proxy: [
       port: 65432,
       handler_config: [
         # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
+        loader: MockSchemaLoader.agent_spec([], name: __MODULE__.Loader)
       ]
     ]
-
-  # def do_setup(cxt) do
-  #   dbg(:start_proxy)
-  #   super(cxt)
-  # end
-  #
-  # # replace with configuration for proxy
-  # def pg_config do
-  #   super() |> dbg
-  # end
-  setup cxt do
-    pg_config() |> dbg
-  end
 
   test_tx "migration of non-electrified tables", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
@@ -37,7 +28,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   test_tx "ALTER electrified TABLE is captured", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-    sql3 = "CALL electric.electrify('buttercup')"
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
     sql4 = "ALTER TABLE buttercup ADD COLUMN petal text;"
     sql5 = "ALTER TABLE daisy ADD COLUMN stem text, ADD COLUMN leaf text;"
 
@@ -54,7 +45,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   test_tx "CREATE INDEX on electrified table is captured", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql3 = "CALL electric.electrify('buttercup')"
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
     sql5 = "CREATE INDEX daisy_value_idx ON daisy (value);"
 
@@ -69,13 +60,23 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "DROP INDEX on electrified table is captured", fn conn ->
+    # this loader instance is used by the proxy injector
+    loader = MockSchemaLoader.agent_id(__MODULE__.Loader)
+
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql3 = "CALL electric.electrify('buttercup')"
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
     sql5 = "DROP INDEX buttercup_value_idx;"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)
+
+    # we have to setup the loader with knowledge of the electrified table
+    # and the attached index, otherwise (since we're running in a tx via the proxy)
+    # the default schema loader (backed by schemaloader.epgsql) therefore
+    # can't lookup schema information
+    {:ok, ^loader} = MigrationConsumer.apply_migration("001", [sql1], loader)
+    {:ok, ^loader} = MigrationConsumer.apply_migration("002", [sql4], loader)
 
     for sql <- [sql1, sql2, sql3, sql4, sql5] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -92,7 +93,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   test_tx "DROP electrified TABLE is rejected", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql3 = "CALL electric.electrify('buttercup')"
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)
 
@@ -108,9 +109,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   test_tx "ALTER electrified TABLE DROP COLUMN is rejected", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql3 = "CALL electric.electrify('buttercup')"
-
-    assert {:ok, []} = Extension.electrified_indexes(conn)
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2, sql3] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -124,7 +123,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   test_tx "ALTER electrified TABLE RENAME COLUMN is rejected", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql3 = "CALL electric.electrify('buttercup')"
+    sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     assert {:ok, []} = Extension.electrified_indexes(conn)
 
