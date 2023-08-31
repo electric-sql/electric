@@ -38,33 +38,29 @@ CREATE TABLE IF NOT EXISTS <%= assignments_table %> (
 
 
 -- CUT HERE enable function
-CREATE OR REPLACE FUNCTION <%= schema %>.enable(table_name text)
-  RETURNS BOOLEAN AS $$
+CREATE OR REPLACE PROCEDURE <%= schema %>.enable(table_name text) SECURITY DEFINER AS
+$$
   BEGIN
-
-    RETURN 1;
+    CALL <%= schema %>.electrify(table_name);
   END;
 $$ LANGUAGE plpgsql;
 
 -- CUT HERE disable function
-CREATE OR REPLACE FUNCTION <%= schema %>.disable(table_name text)
-  RETURNS BOOLEAN AS $$
+CREATE OR REPLACE PROCEDURE <%= schema %>.disable(table_name text) SECURITY DEFINER AS
+$$
   BEGIN
-
-    RETURN 1;
   END;
-
 $$ LANGUAGE plpgsql;
 
 -- CUT HERE grant function
-CREATE OR REPLACE FUNCTION <%= schema %>.grant(privilege_name text,
+CREATE OR REPLACE PROCEDURE <%= schema %>.grant(privilege_name text,
   on_table_name text,
   role_name text,
   columns text[],
   scope_name text,
   using_path text,
   check_fn text)
-  RETURNS BOOLEAN AS $$
+  SECURITY DEFINER AS $$
 
   DECLARE
     col TEXT;
@@ -77,19 +73,17 @@ CREATE OR REPLACE FUNCTION <%= schema %>.grant(privilege_name text,
         ON CONFLICT ON CONSTRAINT grants_pkey DO UPDATE SET
         (using_path, check_fn) = (EXCLUDED.using_path, EXCLUDED.check_fn);
     END LOOP;
-
-    RETURN 1;
   END;
-
 $$ LANGUAGE plpgsql;
 
 -- CUT HERE revoke function
-CREATE OR REPLACE FUNCTION <%= schema %>.revoke(privilege_name text,
+CREATE OR REPLACE PROCEDURE <%= schema %>.revoke(
+  privilege_name text,
   on_table_name text,
   role_name text,
   columns text[],
-  scope_name text)
-  RETURNS BOOLEAN AS $$
+  scope_name text
+) SECURITY DEFINER AS $$
 
   DECLARE
     all_columns BOOLEAN;
@@ -111,15 +105,12 @@ CREATE OR REPLACE FUNCTION <%= schema %>.revoke(privilege_name text,
           scope = scope_name AND
           column_name = any(columns);
     END IF;
-
-    RETURN 1;
   END;
-
 $$ LANGUAGE plpgsql;
 
 
 -- CUT HERE assign function
-CREATE OR REPLACE FUNCTION <%= schema %>.assign(
+CREATE OR REPLACE PROCEDURE <%= schema %>.assign(
     assign_schema text,
     assign_table text,
     scope text,
@@ -127,8 +118,7 @@ CREATE OR REPLACE FUNCTION <%= schema %>.assign(
     role_name_string text,
     role_column_name text,
     if_fn text
-)
-    RETURNS BOOLEAN AS $$
+) SECURITY DEFINER AS $$
 
 DECLARE
     assignment_id        uuid;
@@ -339,7 +329,7 @@ BEGIN
     -- when there is no scope
     IF scope IS NULL THEN
 
-        EXECUTE format(E'CREATE OR REPLACE FUNCTION <%= schema %>.upsert_role_%1$s() RETURNS TRIGGER
+        EXECUTE format(E'CREATE OR REPLACE FUNCTION <%= schema %>.upsert_role_%1$s() RETURNS TRIGGER SECURITY DEFINER
                         AS $%2$s$
                         DECLARE
                             role_key uuid;
@@ -415,7 +405,7 @@ BEGIN
             ARRAY_TO_STRING(scope_key.to_columns, ', ')
             );
 
-        EXECUTE format(E'CREATE OR REPLACE FUNCTION <%= schema %>.upsert_role_%1$s() RETURNS TRIGGER
+        EXECUTE format(E'CREATE OR REPLACE FUNCTION <%= schema %>.upsert_role_%1$s() RETURNS TRIGGER SECURITY DEFINER
                         AS $%2$s$
                         DECLARE
                             scope_key TEXT;
@@ -478,7 +468,7 @@ BEGIN
     END IF;
 
     -- adds a trigger to the join table that deletes the role itself
-    EXECUTE format(E'CREATE OR REPLACE FUNCTION  <%= schema %>.cleanup_role_%s() RETURNS TRIGGER
+    EXECUTE format(E'CREATE OR REPLACE FUNCTION  <%= schema %>.cleanup_role_%s() RETURNS TRIGGER SECURITY DEFINER
                    AS $%s$
                    BEGIN
                       DELETE FROM <%= roles_table %> WHERE id = OLD.role_id;
@@ -520,22 +510,19 @@ BEGIN
     DROP TABLE scope_fkeys;
     DROP TABLE user_fkeys;
     DROP TABLE pkeys;
-    return 1;
-
 END;
-
 $$ LANGUAGE plpgsql;
 
 
 -- CUT HERE unassign function
-CREATE OR REPLACE FUNCTION <%= schema %>.unassign(assign_schema text,
-                                             assign_table text,
-                                             scope text,
-                                             user_column_name text,
-                                             role_name_string text,
-                                             role_column_name text
-)
-    RETURNS BOOLEAN AS
+CREATE OR REPLACE PROCEDURE <%= schema %>.unassign(
+    assign_schema text,
+    assign_table text,
+    scope text,
+    user_column_name text,
+    role_name_string text,
+    role_column_name text
+) SECURITY DEFINER AS
 $$
 
 DECLARE
@@ -596,22 +583,15 @@ BEGIN
 
     -- remove assignment
     DELETE FROM <%= assignments_table %> WHERE id = assignment_id;
-
-    return 1;
-
 END;
-
 $$ LANGUAGE plpgsql;
 
 -- CUT HERE sqlite function
-CREATE OR REPLACE FUNCTION <%= schema %>.sqlite(sql text)
-  RETURNS BOOLEAN AS $$
-
+CREATE OR REPLACE PROCEDURE <%= schema %>.sqlite(sql text)
+  SECURITY DEFINER AS $$
   BEGIN
-
-    RETURN 1;
+      NULL;
   END;
-
 $$ LANGUAGE plpgsql;
 
 
@@ -627,7 +607,7 @@ CREATE OR REPLACE FUNCTION <%= schema %>.find_fk_to_table(
         to_table name,
         to_columns name[10],
         to_types information_schema.character_data[10]
-        ) AS $$
+        ) SECURITY DEFINER AS $$
 
     BEGIN
         RETURN QUERY
@@ -666,7 +646,7 @@ CREATE OR REPLACE FUNCTION <%= schema %>.find_fk_for_column(
         to_table name,
         to_columns name[10],
         to_types information_schema.character_data[10]
-        ) AS $$
+        ) SECURITY DEFINER AS $$
 
     BEGIN
         RETURN QUERY
@@ -699,7 +679,7 @@ CREATE OR REPLACE FUNCTION <%= schema %>.find_pk(
     src_table text) RETURNS TABLE(
         columns name[10],
         types information_schema.character_data[10]
-        ) AS $$
+        ) SECURITY DEFINER AS $$
     BEGIN
         RETURN QUERY
         SELECT ARRAY_AGG(col.attname ORDER BY u.attposition) AS "columns",

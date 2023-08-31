@@ -19,7 +19,7 @@ defmodule Electric.DDLX.Command.Enable do
     def pg_sql(enable) do
       [
         """
-        SELECT electric.enable(#{sql_repr(enable.table_name)});
+        CALL electric.enable(#{sql_repr(enable.table_name)});
         """
       ]
     end

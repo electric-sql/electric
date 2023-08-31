@@ -29,7 +29,7 @@ defmodule Electric.DDLX.Command.Unassign do
     def pg_sql(unassign) do
       [
         """
-        SELECT electric.unassign(assign_schema => #{sql_repr(unassign.schema_name)},
+        CALL electric.unassign(assign_schema => #{sql_repr(unassign.schema_name)},
           assign_table => #{sql_repr(unassign.table_name)},
           scope => #{sql_repr(unassign.scope)},
           user_column_name => #{sql_repr(unassign.user_column)},

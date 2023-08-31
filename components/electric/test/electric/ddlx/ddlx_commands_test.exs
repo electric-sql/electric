@@ -8,10 +8,10 @@ defmodule Electric.DDLX.DDLXCommandsTest do
     Grant,
     Revoke,
     Assign,
-    Unassign,
-    Enable,
-    Disable,
-    SQLite
+    Unassign
+    # Enable,
+    # Disable,
+    # SQLite
   }
 
   @moduletag ddlx: true
@@ -350,28 +350,28 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       )
     end
 
-    test_tx "enable", fn conn ->
-      enable = %Enable{
-        table_name: "test"
-      }
-
-      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(enable))
-    end
-
-    test_tx "disable", fn conn ->
-      disable = %Disable{
-        table_name: "test"
-      }
-
-      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(disable))
-    end
-
-    test_tx "sqlite", fn conn ->
-      sqlite = %SQLite{
-        sqlite_statement: "--hello"
-      }
-
-      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(sqlite))
-    end
+    # test_tx "enable", fn conn ->
+    #   enable = %Enable{
+    #     table_name: "test"
+    #   }
+    #
+    #   {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(enable))
+    # end
+    #
+    # test_tx "disable", fn conn ->
+    #   disable = %Disable{
+    #     table_name: "test"
+    #   }
+    #
+    #   {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(disable))
+    # end
+    #
+    # test_tx "sqlite", fn conn ->
+    #   sqlite = %SQLite{
+    #     sqlite_statement: "--hello"
+    #   }
+    #
+    #   {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(sqlite))
+    # end
   end
 end

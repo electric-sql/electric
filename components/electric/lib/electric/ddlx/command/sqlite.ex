@@ -19,7 +19,7 @@ defmodule Electric.DDLX.Command.SQLite do
     def pg_sql(sqlite) do
       [
         """
-        SELECT electric.sqlite(sql => #{sql_repr(sqlite.sqlite_statement)});
+        CALL electric.sqlite(sql => #{sql_repr(sqlite.sqlite_statement)});
         """
       ]
     end

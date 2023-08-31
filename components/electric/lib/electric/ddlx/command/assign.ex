@@ -31,7 +31,7 @@ defmodule Electric.DDLX.Command.Assign do
     def pg_sql(assign) do
       [
         """
-        SELECT electric.assign(assign_schema => #{sql_repr(assign.schema_name)},
+        CALL electric.assign(assign_schema => #{sql_repr(assign.schema_name)},
           assign_table => #{sql_repr(assign.table_name)},
           scope => #{sql_repr(assign.scope)},
           user_column_name => #{sql_repr(assign.user_column)},

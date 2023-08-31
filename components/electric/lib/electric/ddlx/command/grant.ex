@@ -31,7 +31,7 @@ defmodule Electric.DDLX.Command.Grant do
     def pg_sql(grant) do
       [
         """
-        SELECT electric.grant(privilege_name => #{sql_repr(grant.privilege)},
+        CALL electric.grant(privilege_name => #{sql_repr(grant.privilege)},
           on_table_name => #{sql_repr(grant.on_table)},
           role_name => #{sql_repr(grant.role)},
           columns => #{sql_repr(grant.column_names)},

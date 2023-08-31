@@ -19,7 +19,7 @@ defmodule Electric.DDLX.Command.Disable do
     def pg_sql(disable) do
       [
         """
-        SELECT electric.disable(#{sql_repr(disable.table_name)});
+        CALL electric.disable(#{sql_repr(disable.table_name)});
         """
       ]
     end
