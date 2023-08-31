@@ -117,7 +117,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
                   {%{atx | subcommand: subcommand}, state, send}
 
                 {_, _} ->
-                  commit(state, Send.front(send, Enum.reverse(msgs)))
+                  commit(state, msgs, send)
               end
 
             # there's still some messages pending from the server
@@ -130,11 +130,11 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
       end
     end
 
-    defp commit(state, send) do
+    defp commit(state, msgs, send) do
       if State.tx?(state) do
         sink =
           %Sink{
-            buffer: [%M.ReadyForQuery{status: :idle}],
+            buffer: [%M.ReadyForQuery{status: :idle}] ++ msgs,
             wait: [M.CommandComplete, M.ReadyForQuery],
             after_fun: fn state, send ->
               {nil, State.commit(state), send}
@@ -143,7 +143,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
 
         {sink, state, Send.back(send, [%M.Query{query: "COMMIT"}])}
       else
-        {nil, state, Send.front(send, [%M.ReadyForQuery{status: :idle}])}
+        {nil, state, Send.front(send, Enum.reverse([%M.ReadyForQuery{status: :idle} | msgs]))}
       end
     end
 

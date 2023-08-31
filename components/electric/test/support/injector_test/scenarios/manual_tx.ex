@@ -20,10 +20,12 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
     tag = random_tag()
 
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: query(query))
-    |> server(complete_ready(tag, :tx), server: commit(), client: complete(tag))
-    |> server(complete_ready("COMMIT", :idle), client: ready(:idle))
+    |> client(query("BEGIN"))
+    |> server(complete_ready("BEGIN"))
+    |> client(query(query))
+    |> server(complete_ready(tag, :tx))
+    |> client(commit())
+    |> server(complete_ready("COMMIT", :idle))
     |> idle!()
   end
 

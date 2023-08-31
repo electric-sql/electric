@@ -38,24 +38,21 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
       {sink, state, Send.front(send, msg)}
     end
 
-    # we're done - send the buffer to the front/backend
+    # shortcut the process - we've received an error so forward that on
     def recv_backend(sink, %M.ReadyForQuery{status: :failed} = msg, state, send) do
       call_after_fun(sink, state, Send.front(send, [msg]))
     end
 
-    def recv_backend(%{wait: [t]} = sink, %t{} = _msg, state, send) do
-      # FIXME: if the backend sends a ReadyForQuery{status: :failed} then we
-      # should forward that on, not use any ReadyForQuery message sitting in
-      # the buffer BUT we should respect the :idle | :tx state of the message
-      # in the buffer otherwise
+    # we're done - send the buffer to the front/backend
+    def recv_backend(sink, %M.ReadyForQuery{} = _msg, state, send) do
       send =
         apply(Send, sink.direction, [send, Enum.reverse(sink.buffer)])
 
       call_after_fun(sink, state, send)
     end
 
-    def recv_backend(%{wait: [t | rest]} = sink, %t{} = _msg, state, send) do
-      {%{sink | wait: rest}, state, send}
+    def recv_backend(sink, _msg, state, send) do
+      {sink, state, send}
     end
 
     defp call_after_fun(sink, state, send) do

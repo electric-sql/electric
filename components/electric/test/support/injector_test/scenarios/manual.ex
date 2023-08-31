@@ -19,8 +19,8 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     injector
     |> client(query(query), server: begin())
     |> server(complete_ready("BEGIN", :tx), server: query(query))
-    |> server(complete_ready(tag, :tx), server: commit(), client: complete(tag))
-    |> server(complete_ready("COMMIT", :idle), client: ready(:idle))
+    |> server(complete_ready(tag, :tx), server: commit())
+    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
     |> idle!()
   end
 
@@ -44,8 +44,8 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> server(complete_ready("BEGIN", :tx), server: query(query))
     |> server(complete_ready(tag, :tx), server: capture_ddl_query(query))
     |> server(capture_ddl_complete(), server: capture_version_query())
-    |> server(capture_version_complete(), server: commit(), client: complete(tag))
-    |> server(complete_ready("COMMIT", :idle), client: ready(:idle))
+    |> server(capture_version_complete(), server: commit())
+    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
     |> idle!()
   end
 
@@ -73,11 +73,11 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
       origin: :server
     )
     |> server(capture_version_complete(),
-      server: commit(),
-      client: complete(DDLX.Command.tag(command))
+      server: commit()
+      # client: complete(DDLX.Command.tag(command))
     )
     |> server(complete_ready("COMMIT", :idle),
-      client: ready(:idle)
+      client: complete_ready(DDLX.Command.tag(command), :idle)
     )
     |> idle!()
   end
