@@ -365,10 +365,10 @@ test.serial('acknowledge lsn', async (t) => {
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: DataTransaction, ack: any) => {
-      const lsn0 = client['inbound'].ack_lsn
+      const lsn0 = client['inbound'].last_lsn
       t.is(lsn0, undefined)
       ack()
-      const lsn1 = base64.fromBytes(client['inbound'].ack_lsn!)
+      const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
       t.is(lsn1, 'FAKE')
       res()
     })

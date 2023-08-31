@@ -147,20 +147,12 @@ export function isDataChange(change: Change): change is DataChange {
 
 export type Record = { [key: string]: string | number | undefined | null }
 
-export type Replication = {
+export type Replication<TransactionType> = {
   authenticated: boolean
   isReplicating: ReplicationStatus
   relations: Map<number, Relation>
-  ack_lsn?: LSN
-  enqueued_lsn?: LSN
-  transactions: Transaction[]
-}
-
-export type OutgoingReplication = Omit<
-  Replication,
-  'transactions' | 'ack_lsn'
-> & {
-  transactions: DataTransaction[] // outgoing transactions cannot contain migrations
+  last_lsn: LSN | undefined
+  transactions: TransactionType[]
 }
 
 export type Relation = {

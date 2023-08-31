@@ -1017,8 +1017,8 @@ test('compensations: using triggers with flag 1', async (t) => {
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await satellite._setAuthState(authState)
-  await satellite._performSnapshot()
-  await satellite._garbageCollectOplog
+  const ts = await satellite._performSnapshot()
+  await satellite._garbageCollectOplog(ts)
 
   await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()

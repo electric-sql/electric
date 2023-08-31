@@ -56,7 +56,6 @@ import {
   Record,
   Relation,
   SchemaChange,
-  OutgoingReplication,
   Transaction,
   StartReplicationResponse,
   StopReplicationResponse,
@@ -115,8 +114,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socketFactory: SocketFactory
   private socket?: Socket
 
-  private inbound: Replication
-  private outbound: OutgoingReplication
+  private inbound: Replication<Transaction>
+  private outbound: Replication<DataTransaction>
 
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
@@ -214,15 +213,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.subscriptionsDataCache = new SubscriptionsDataCache()
   }
 
-  private resetReplication(
-    enqueued?: LSN,
+  private resetReplication<T = any>(
+    last_lsn?: LSN,
     isReplicating?: ReplicationStatus
-  ): OutgoingReplication {
+  ): Replication<T> {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
       relations: new Map(),
-      enqueued_lsn: enqueued,
+      last_lsn: last_lsn,
       transactions: [],
     }
   }
@@ -284,8 +283,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   close() {
-    this.outbound = this.resetReplication(this.outbound.enqueued_lsn)
-    this.inbound = this.resetReplication(this.inbound.enqueued_lsn)
+    this.outbound = this.resetReplication(this.outbound.last_lsn)
+    this.inbound = this.resetReplication(this.inbound.last_lsn)
 
     this.socketHandler = undefined
 
@@ -393,7 +392,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     this.outbound.transactions.push(transaction)
-    this.outbound.enqueued_lsn = transaction.lsn
+    this.outbound.last_lsn = transaction.lsn
 
     this.throttledPushTransaction?.()
   }
@@ -495,7 +494,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private sendMissingRelations(
     transaction: DataTransaction,
-    replication: Replication
+    replication: Replication<DataTransaction>
   ): void {
     transaction.changes.forEach((change) => {
       const relation = change.relation
@@ -743,10 +742,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handlePingReq() {
     Log.info(
       `respond to ping with last ack ${
-        this.inbound.ack_lsn ? base64.fromBytes(this.inbound.ack_lsn) : 'NULL'
+        this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
       }`
     )
-    const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
+    const pong = SatPingResp.fromPartial({ lsn: this.inbound.last_lsn })
     this.sendMessage(pong)
   }
 
@@ -856,7 +855,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.emit(
           'transaction',
           transaction,
-          () => (this.inbound.ack_lsn = transaction.lsn)
+          () => (this.inbound.last_lsn = transaction.lsn)
         )
         replication.transactions.splice(lastTxnIdx)
       }
@@ -1015,7 +1014,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   getLastSentLsn(): LSN {
-    return this.outbound.enqueued_lsn ?? DEFAULT_LOG_POS
+    return this.outbound.last_lsn ?? DEFAULT_LOG_POS
   }
 }
 
