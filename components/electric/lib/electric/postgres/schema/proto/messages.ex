@@ -1497,6 +1497,7 @@
             {:check, _field_value} -> encode_check(acc, msg)
             {:generated, _field_value} -> encode_generated(acc, msg)
             {:default, _field_value} -> encode_default(acc, msg)
+            {:identity, _field_value} -> encode_identity(acc, msg)
           end
         end
       ]
@@ -1563,6 +1564,15 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:default, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_identity(acc, msg) do
+          try do
+            {_, child_field_value} = msg.constraint
+            [acc, "B", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:identity, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -1749,6 +1759,27 @@
                    end
                  ], rest}
 
+              {8, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.constraint do
+                     {:identity, previous_value} ->
+                       {:constraint,
+                        {:identity,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Postgres.Schema.Proto.Constraint.Identity.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:constraint,
+                        {:identity,
+                         Electric.Postgres.Schema.Proto.Constraint.Identity.decode!(delimited)}}
+                   end
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -1826,7 +1857,10 @@
              {:message, Electric.Postgres.Schema.Proto.Constraint.Generated}},
           7 =>
             {:default, {:oneof, :constraint},
-             {:message, Electric.Postgres.Schema.Proto.Constraint.Default}}
+             {:message, Electric.Postgres.Schema.Proto.Constraint.Default}},
+          8 =>
+            {:identity, {:oneof, :constraint},
+             {:message, Electric.Postgres.Schema.Proto.Constraint.Identity}}
         }
       end
 
@@ -1848,6 +1882,9 @@
           generated:
             {6, {:oneof, :constraint},
              {:message, Electric.Postgres.Schema.Proto.Constraint.Generated}},
+          identity:
+            {8, {:oneof, :constraint},
+             {:message, Electric.Postgres.Schema.Proto.Constraint.Identity}},
           not_null:
             {1, {:oneof, :constraint},
              {:message, Electric.Postgres.Schema.Proto.Constraint.NotNull}},
@@ -1927,6 +1964,15 @@
             name: :default,
             tag: 7,
             type: {:message, Electric.Postgres.Schema.Proto.Constraint.Default}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "identity",
+            kind: {:oneof, :constraint},
+            label: :optional,
+            name: :identity,
+            tag: 8,
+            type: {:message, Electric.Postgres.Schema.Proto.Constraint.Identity}
           }
         ]
       end
@@ -2147,6 +2193,35 @@
 
           []
         ),
+        (
+          def field_def(:identity) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "identity",
+               kind: {:oneof, :constraint},
+               label: :optional,
+               name: :identity,
+               tag: 8,
+               type: {:message, Electric.Postgres.Schema.Proto.Constraint.Identity}
+             }}
+          end
+
+          def field_def("identity") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "identity",
+               kind: {:oneof, :constraint},
+               label: :optional,
+               name: :identity,
+               tag: 8,
+               type: {:message, Electric.Postgres.Schema.Proto.Constraint.Identity}
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -2190,6 +2265,9 @@
         {:error, :no_default_value}
       end,
       def default(:default) do
+        {:error, :no_default_value}
+      end,
+      def default(:identity) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -4095,6 +4173,172 @@
       def default(:expr) do
         {:ok, nil}
       end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Postgres.Schema.Proto.Constraint.Identity do
+    @moduledoc false
+    defstruct []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata}
+        def encode(msg) do
+          {:ok, encode!(msg)}
+        end
+
+        @spec encode!(struct) :: iodata
+        def encode!(_msg) do
+          []
+        end
+      )
+
+      []
+      []
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Postgres.Schema.Proto.Constraint.Identity))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Postgres.Schema.Proto.Constraint.Identity,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        []
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
       def default(_) do
         {:error, :no_such_field}
       end
