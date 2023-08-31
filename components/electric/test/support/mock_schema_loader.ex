@@ -42,6 +42,26 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Enum.reverse(versions)
   end
 
+  @doc """
+  Use this if you need a schema loader that's shared between multiple processes
+  It replaces the loader state with an Agent instance and calls the various
+  loader functions via that. Passing a `:name` in the args allows for this
+  loader to be called via this registered name.
+  """
+  def agent_spec(opts, args \\ []) do
+    {module, opts} = backend_spec(opts)
+
+    {module, {:agent, opts, args}}
+  end
+
+  @doc """
+  Gives the SchemaLoader instance that allows you to share a single agent-based
+  mock loader via a registered name.
+  """
+  def agent_id(name) when is_atom(name) do
+    {__MODULE__, {:agent, name}}
+  end
+
   def backend_spec(opts) do
     oid_loader = Keyword.get(opts, :oids, &oid_loader/3) |> make_oid_loader()
 
@@ -92,6 +112,21 @@ defmodule Electric.Postgres.MockSchemaLoader do
   @behaviour SchemaLoader
 
   @impl true
+  def connect(conn_config, {:agent, opts, args}) do
+    name = Keyword.get(args, :name)
+    pid = name && GenServer.whereis(name)
+
+    if pid && Process.alive?(pid) do
+      # use existing agent
+      {:ok, {:agent, name}}
+    else
+      with {:ok, conn} <- connect(conn_config, opts),
+           {:ok, pid} <- Agent.start_link(fn -> conn end, args) do
+        {:ok, {:agent, name || pid}}
+      end
+    end
+  end
+
   def connect(conn_config, opts) do
     {versions, opts} =
       opts
@@ -103,6 +138,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def load({:agent, pid}) do
+    Agent.get(pid, &load/1)
+  end
+
   def load({[], opts}) do
     notify(opts, :load)
     {:ok, nil, Schema.new()}
@@ -114,6 +153,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def load({:agent, pid}, version) do
+    Agent.get(pid, &load(&1, version))
+  end
+
   def load({versions, opts}, version) do
     case Enum.find(versions, &(&1.version == version)) do
       %Migration{schema: schema} ->
@@ -127,6 +170,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def save({:agent, pid}, version, schema, stmts) do
+    with :ok <-
+           Agent.update(pid, fn state ->
+             {:ok, state} = save(state, version, schema, stmts)
+             state
+           end) do
+      {:ok, {:agent, pid}}
+    end
+  end
+
   def save({versions, opts}, version, schema, stmts) do
     notify(opts, {:save, version, schema, stmts})
 
@@ -134,6 +187,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def relation_oid({:agent, pid}, type, schema, name) do
+    Agent.get(pid, &relation_oid(&1, type, schema, name))
+  end
+
   def relation_oid({_versions, %{oid_loader: oid_loader}}, type, schema, name)
       when is_function(oid_loader, 3) do
     oid_loader.(type, schema, name)
@@ -151,6 +208,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def primary_keys({:agent, pid}, schema, name) do
+    Agent.get(pid, &primary_keys(&1, schema, name))
+  end
+
   def primary_keys({_versions, %{pks: pks} = opts}, schema, name) when is_map(pks) do
     notify(opts, {:primary_keys, schema, name})
 
@@ -173,17 +234,29 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def primary_keys({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &primary_keys(&1, {schema, name}))
+  end
+
   def primary_keys({_versions, _opts} = state, {schema, name}) do
     primary_keys(state, schema, name)
   end
 
   @impl true
+  def refresh_subscription({:agent, pid}, name) do
+    Agent.get(pid, &refresh_subscription(&1, name))
+  end
+
   def refresh_subscription({_versions, opts}, name) do
     notify(opts, {:refresh_subscription, name})
     :ok
   end
 
   @impl true
+  def migration_history({:agent, pid}, after_version) do
+    Agent.get(pid, &migration_history(&1, after_version))
+  end
+
   def migration_history({versions, opts}, after_version) do
     notify(opts, {:migration_history, after_version})
 
@@ -200,6 +273,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def known_migration_version?({:agent, pid}, version) do
+    Agent.get(pid, &known_migration_version?(&1, version))
+  end
+
   def known_migration_version?({versions, opts}, version) do
     notify(opts, {:known_migration_version?, version})
 
@@ -211,7 +288,23 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Schema.new()
   end
 
+  def electrified_tables({:agent, pid}) do
+    Agent.get(pid, &electrified_tables/1)
+  end
+
+  def electrified_tables({[version | _versions], _opts}) do
+    {:ok, Schema.table_info(version.schema)}
+  end
+
+  def electrified_tables(_state) do
+    {:ok, []}
+  end
+
   @impl true
+  def table_electrified?({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &table_electrified?(&1, {schema, name}))
+  end
+
   def table_electrified?(state, {schema, name}) do
     with {:ok, tables} <- electrified_tables(state) do
       {:ok, Enum.any?(tables, &(&1.schema == schema && &1.name == name))}
@@ -219,6 +312,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def index_electrified?({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &index_electrified?(&1, {schema, name}))
+  end
+
   def index_electrified?({[version | _versions], _opts}, {schema, name}) do
     {:ok,
      Enum.any?(
@@ -232,6 +329,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def tx_version({:agent, pid}, row) do
+    Agent.get(pid, &tx_version(&1, row))
+  end
+
   def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts}) do
     notify(opts, {:tx_version, txid, txts})
 
