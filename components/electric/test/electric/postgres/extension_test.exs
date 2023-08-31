@@ -516,7 +516,7 @@ defmodule Electric.Postgres.ExtensionTest do
     #     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     #   end
     #
-    #   assert {:ok, true} = Extension.index_electrified?(conn, "public", "buttercup_id_idx") |> dbg
+    #   assert {:ok, true} = Extension.index_electrified?(conn, "public", "buttercup_id_idx") 
     #   assert {:ok, true} = Extension.index_electrified?(conn, "meadow", "daisy_id_idx")
     #   assert {:ok, false} = Extension.index_electrified?(conn, "public", "daisy_id_idx")
     #   assert {:ok, false} = Extension.index_electrified?(conn, "public", "parsley_id_idx")

@@ -73,9 +73,10 @@ defmodule Electric.Replication.ElectrificationTest do
   end
 
   defp create_test_table(conn) do
-    assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}] =
+    assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}] =
              :epgsql.squery(conn, """
              BEGIN;
+             CALL electric.migration_version('20230830173206');
              CREATE TABLE public.foo (id TEXT PRIMARY KEY);
              CALL electric.electrify('public.foo');
              COMMIT;

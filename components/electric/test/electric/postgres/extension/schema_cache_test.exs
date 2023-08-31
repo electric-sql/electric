@@ -42,6 +42,57 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     end
   end
 
+  defmodule MockVersion do
+    use GenServer
+
+    alias Electric.Postgres.Extension
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args, name: __MODULE__)
+    end
+
+    def txid(conn, version) do
+      GenServer.call(__MODULE__, {:txid, conn, version})
+    end
+
+    def init(_args) do
+      state = %{
+        txid: 1,
+        txts: 10000,
+        ids: %{}
+      }
+
+      {:ok, state}
+    end
+
+    def handle_call({:txid, conn, version}, _from, state) do
+      %{ids: ids} = state
+
+      case Map.fetch(ids, version) do
+        {:ok, {txid, txts}} ->
+          {:reply, {:ok, txid, txts}, state}
+
+        :error ->
+          %{txid: txid, txts: txts} = state
+
+          {:ok, 1} =
+            :epgsql.equery(
+              conn,
+              "INSERT INTO #{Extension.version_table()} (txid, txts, version) VALUES ($1, $2, $3)",
+              [txid, txts, version]
+            )
+
+          {:reply, {:ok, txid, txts},
+           %{
+             state
+             | txid: txid + 1,
+               txts: txts + 1,
+               ids: Map.put(ids, version, {txid, txts})
+           }}
+      end
+    end
+  end
+
   use Electric.Extension.Case, async: false
 
   alias Electric.Replication.Postgres
@@ -74,6 +125,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       {"20230620162106", [@create_b, @index_b]}
     ]
 
+    {:ok, _pid} = start_supervised({MockVersion, parent: self()})
+
     {:ok, origin: "pg", migrations: migrations, versions: Enum.map(migrations, &elem(&1, 0))}
   end
 
@@ -90,19 +143,21 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       replication: []
     ]
 
-    {:ok, _pid} = start_supervised({Extension.SchemaCache, {conn_config, [producer: producer]}})
+    {:ok, _pid} =
+      start_supervised({Extension.SchemaCache, {conn_config, [_backend: {MockVersion, []}]}})
 
     {:ok, migration_consumer} =
       start_supervised(
         {Postgres.MigrationConsumer,
-         {conn_config, [producer: producer, refresh_subscription: false]}}
+         {conn_config,
+          [producer: producer, refresh_subscription: false, _backend: {MockVersion, []}]}}
       )
 
     {:ok, _pid} = start_supervised({MockConsumer, parent: self(), producer: migration_consumer})
 
     txs =
       for {version, stmts} <- cxt.migrations do
-        migration_transaction(version, stmts)
+        migration_transaction(conn, version, stmts)
       end
 
     produce_txs(producer, txs)
@@ -116,11 +171,17 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     assert_receive {MockConsumer, :events, ^txs}, 1000
   end
 
-  defp migration_transaction(version, stmts) do
+  defp migration_transaction(conn, version, stmts) do
     changes =
       Enum.map(stmts, fn sql ->
+        {:ok, txid, txts} = MockVersion.txid(conn, version)
+
         %NewRecord{
-          record: %{"txid" => "", "txts" => "", "version" => version, "query" => sql},
+          record: %{
+            "txid" => "#{txid}",
+            "txts" => "#{txts}",
+            "query" => sql
+          },
           relation: Extension.ddl_relation()
         }
       end)
@@ -249,7 +310,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
-      produce_txs(producer, [migration_transaction(version, stmts)])
+      produce_txs(producer, [migration_transaction(conn, version, stmts)])
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
 
@@ -298,7 +359,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
-      produce_txs(producer, [migration_transaction(version3, stmts)])
+      produce_txs(producer, [migration_transaction(conn, version3, stmts)])
 
       assert {:ok, table_info} =
                Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version3)

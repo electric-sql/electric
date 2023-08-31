@@ -32,10 +32,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
     {versions, _schema} =
       migrations
-      |> Enum.map(fn {version, stmts} -> {version, List.wrap(stmts)} end)
-      |> Enum.map_reduce(Schema.new(), fn {version, stmts}, schema ->
+      |> Enum.map(fn {opts, stmts} -> {opts, List.wrap(stmts)} end)
+      |> Enum.map_reduce(Schema.new(), fn {opts, stmts}, schema ->
         schema = Enum.reduce(stmts, schema, &schema_update(&2, &1, oid_loader))
-        {mock_version(version, schema, stmts), schema}
+        {mock_version(opts, schema, stmts), schema}
       end)
 
     # we need versions in reverse order, with the latest migration first
@@ -69,15 +69,25 @@ defmodule Electric.Postgres.MockSchemaLoader do
     end
   end
 
-  defp mock_version(version, schema, stmts) do
+  defp mock_version(version, schema, stmts) when is_binary(version) do
+    mock_version([version: version], schema, stmts)
+  end
+
+  defp mock_version(opts, schema, stmts) do
+    version = Keyword.fetch!(opts, :version)
+
     %Migration{
-      txid: String.to_integer(version),
-      txts: DateTime.utc_now(),
+      txid: Keyword.get(opts, :txid, to_integer(version)),
+      txts: Keyword.get(opts, :txts, DateTime.utc_now()),
       version: version,
       schema: schema,
-      stmts: stmts
+      stmts: stmts,
+      timestamp: Keyword.get(opts, :timestamp, DateTime.utc_now())
     }
   end
+
+  defp to_integer(i) when is_integer(i), do: i
+  defp to_integer(s) when is_binary(s), do: String.to_integer(s)
 
   @behaviour SchemaLoader
 
@@ -232,7 +242,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
         # the mocking system has no way to propagate transaction ids through
         # -- the txid/txts stuff is an implementation detail of the proxy system
         # FIXME: re-factor the proxy impl to cache actions until it has a version
-        case Enum.find(versions, &(&1.txid == String.to_integer(txid))) do
+        case Enum.find(versions, &(&1.txid == to_integer(txid))) do
           %Migration{version: version} ->
             {:ok, version}
 

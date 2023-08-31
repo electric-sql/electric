@@ -1,5 +1,25 @@
 defmodule Electric.Postgres.Extension.DDLCaptureTest do
-  use Electric.Extension.Case, async: false
+  use Electric.Extension.Case,
+    async: false,
+    proxy: [
+      port: 65432,
+      handler_config: [
+        # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
+      ]
+    ]
+
+  # def do_setup(cxt) do
+  #   dbg(:start_proxy)
+  #   super(cxt)
+  # end
+  #
+  # # replace with configuration for proxy
+  # def pg_config do
+  #   super() |> dbg
+  # end
+  setup cxt do
+    pg_config() |> dbg
+  end
 
   test_tx "migration of non-electrified tables", fn conn ->
     sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"

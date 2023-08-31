@@ -2639,8 +2639,8 @@ select row_number() over() as n,
 )
 select <%= schema %>.ddlgen_create($1,$2) as ddl_create,
        <%= schema %>.ddlgen_drop($1,$2) as ddl_drop,
-       string_agg(ddlx_create,E'\n' order by n) as ddl_create_deps,
-       string_agg(ddlx_drop,'' order by n desc) as ddl_drop_deps
+       string_agg(ddlgen_create,E'\n' order by n) as ddl_create_deps,
+       string_agg(ddlgen_drop,'' order by n desc) as ddl_drop_deps
   from ddl 
 $function$ strict;
 

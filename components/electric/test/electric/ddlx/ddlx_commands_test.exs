@@ -1,14 +1,7 @@
-defmodule DDLXCommandsTest do
-  @moduledoc """
-  These tests expect to have an empty postgres to connect to as per
-  init_helper_db. Warning it will delete the DB.
-  """
+defmodule Electric.DDLX.DDLXCommandsTest do
+  use Electric.Extension.Case, async: false
 
-  use ExUnit.Case, async: true
-
-  alias Electric.DDLX.TestHelper
   alias Electric.DDLX
-
   alias Electric.DDLX.Command
 
   alias Electric.DDLX.Command.{
@@ -25,14 +18,39 @@ defmodule DDLXCommandsTest do
 
   @electric_grants "electric.grants"
 
-  def init_helper_db() do
-    TestHelper.init_db()
+  def query(conn, query) do
+    with {:ok, cols, rows} <- :epgsql.equery(conn, query, []) do
+      {:ok, cols, Enum.map(rows, &Tuple.to_list/1) |> Enum.map(&null_to_nil/1)}
+    end
   end
 
-  def setup_ddlx(conn) do
-    # for statement <- DDLX.init_statements() do
-    #   TestHelper.sql_do(conn, statement)
-    # end
+  defp null_to_nil(row) do
+    Enum.map(row, fn
+      :null -> nil
+      value -> value
+    end)
+  end
+
+  def assert_rows(conn, table_name, expected_rows) do
+    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
+
+    assert(
+      rows == expected_rows,
+      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
+    )
+  end
+
+  def assert_rows_slice(conn, table_name, expected_rows, range) do
+    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
+
+    rows =
+      rows
+      |> Enum.map(&Enum.slice(&1, range))
+
+    assert(
+      rows == expected_rows,
+      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
+    )
   end
 
   describe "checking statements" do
@@ -60,18 +78,8 @@ defmodule DDLXCommandsTest do
     end
   end
 
-  describe "setup ddlx" do
-    test "tables" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-    end
-  end
-
   describe "creating rows in postgres from command structs" do
-    test "adding a grant from electric" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding a grant from electric", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -82,17 +90,14 @@ defmodule DDLXCommandsTest do
         check_fn: nil
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(grant1))
+      query(conn, Electric.DDLX.command_to_postgres(grant1))
 
-      TestHelper.assert_rows(conn, @electric_grants, [
+      assert_rows(conn, @electric_grants, [
         ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
       ])
     end
 
-    test "adding a grant from electric twice" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding a grant from electric twice", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -105,14 +110,11 @@ defmodule DDLXCommandsTest do
 
       sql = Electric.DDLX.command_to_postgres(grant1)
 
-      TestHelper.sql_do(conn, sql)
-      TestHelper.sql_do(conn, sql)
+      query(conn, sql)
+      query(conn, sql)
     end
 
-    test "adding a grant with multiple grant columns" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding a grant with multiple grant columns", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -123,9 +125,9 @@ defmodule DDLXCommandsTest do
         check_fn: nil
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(grant1))
+      query(conn, Electric.DDLX.command_to_postgres(grant1))
 
-      TestHelper.assert_rows(
+      assert_rows(
         conn,
         @electric_grants,
         [
@@ -135,10 +137,7 @@ defmodule DDLXCommandsTest do
       )
     end
 
-    test "adding and delete a grant" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding and delete a grant", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -149,9 +148,9 @@ defmodule DDLXCommandsTest do
         check_fn: nil
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(grant1))
+      query(conn, Electric.DDLX.command_to_postgres(grant1))
 
-      TestHelper.assert_rows(conn, @electric_grants, [
+      assert_rows(conn, @electric_grants, [
         ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
       ])
 
@@ -163,19 +162,16 @@ defmodule DDLXCommandsTest do
         scope: "projects"
       }
 
-      TestHelper.sql_do(conn, Command.pg_sql(revoke))
+      query(conn, Command.pg_sql(revoke))
 
-      TestHelper.assert_rows(
+      assert_rows(
         conn,
         @electric_grants,
         []
       )
     end
 
-    test "adding and delete a grant no op" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding and delete a grant no op", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -186,9 +182,9 @@ defmodule DDLXCommandsTest do
         check_fn: nil
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(grant1))
+      query(conn, Electric.DDLX.command_to_postgres(grant1))
 
-      TestHelper.assert_rows(conn, @electric_grants, [
+      assert_rows(conn, @electric_grants, [
         ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
       ])
 
@@ -200,17 +196,14 @@ defmodule DDLXCommandsTest do
         scope: "projects"
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(revoke))
+      query(conn, Electric.DDLX.command_to_postgres(revoke))
 
-      TestHelper.assert_rows(conn, @electric_grants, [
+      assert_rows(conn, @electric_grants, [
         ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
       ])
     end
 
-    test "adding a grant with using path" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "adding a grant with using path", fn conn ->
       grant1 = %Grant{
         privilege: "update",
         on_table: "thing.Köln_en$ts",
@@ -221,16 +214,16 @@ defmodule DDLXCommandsTest do
         check_fn: nil
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(grant1))
+      query(conn, Electric.DDLX.command_to_postgres(grant1))
 
-      TestHelper.assert_rows(conn, @electric_grants, [
+      assert_rows(conn, @electric_grants, [
         ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", "project_id", nil]
       ])
     end
 
-    test "assign creates an assignment" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
+    test_tx "assign creates an assignment", fn conn ->
+      # {:ok, conn} = init_helper_db()
+      # setup_ddlx(conn)
 
       projects_sql = """
       CREATE TABLE projects(
@@ -238,7 +231,7 @@ defmodule DDLXCommandsTest do
         name VARCHAR(64) NOT NULL);
       """
 
-      TestHelper.sql_do(conn, projects_sql)
+      query(conn, projects_sql)
 
       users_sql = """
       CREATE TABLE users(
@@ -246,7 +239,7 @@ defmodule DDLXCommandsTest do
         name VARCHAR(64) NOT NULL);
       """
 
-      TestHelper.sql_do(conn, users_sql)
+      query(conn, users_sql)
 
       memberships_sql = """
       CREATE TABLE public.memberships(
@@ -263,7 +256,7 @@ defmodule DDLXCommandsTest do
       );
       """
 
-      TestHelper.sql_do(conn, memberships_sql)
+      query(conn, memberships_sql)
 
       assign = %Assign{
         schema_name: "public",
@@ -275,9 +268,9 @@ defmodule DDLXCommandsTest do
         if_statement: "hello"
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(assign))
+      query(conn, Electric.DDLX.command_to_postgres(assign))
 
-      TestHelper.assert_rows_slice(
+      assert_rows_slice(
         conn,
         "electric.assignments",
         [["public.memberships", "projects", "user_id", "__none__", "role", "hello"]],
@@ -285,17 +278,14 @@ defmodule DDLXCommandsTest do
       )
     end
 
-    test "unassign" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "unassign", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
         id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
         name VARCHAR(64) NOT NULL);
       """
 
-      TestHelper.sql_do(conn, projects_sql)
+      query(conn, projects_sql)
 
       users_sql = """
       CREATE TABLE public.users(
@@ -303,7 +293,7 @@ defmodule DDLXCommandsTest do
         name VARCHAR(64) NOT NULL);
       """
 
-      TestHelper.sql_do(conn, users_sql)
+      query(conn, users_sql)
 
       memberships_sql = """
       CREATE TABLE public.memberships(
@@ -320,7 +310,7 @@ defmodule DDLXCommandsTest do
       );
       """
 
-      TestHelper.sql_do(conn, memberships_sql)
+      query(conn, memberships_sql)
 
       assign = %Assign{
         schema_name: "public",
@@ -332,9 +322,9 @@ defmodule DDLXCommandsTest do
         if_statement: "hello"
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(assign))
+      query(conn, Electric.DDLX.command_to_postgres(assign))
 
-      TestHelper.assert_rows_slice(
+      assert_rows_slice(
         conn,
         "electric.assignments",
         [["public.memberships", "projects", "user_id", "__none__", "role", "hello"]],
@@ -350,9 +340,9 @@ defmodule DDLXCommandsTest do
         role_column: "role"
       }
 
-      TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(unassign))
+      query(conn, Electric.DDLX.command_to_postgres(unassign))
 
-      TestHelper.assert_rows_slice(
+      assert_rows_slice(
         conn,
         "electric.assignments",
         [],
@@ -360,37 +350,28 @@ defmodule DDLXCommandsTest do
       )
     end
 
-    test "enable" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "enable", fn conn ->
       enable = %Enable{
         table_name: "test"
       }
 
-      {:ok, _, _result} = TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(enable))
+      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(enable))
     end
 
-    test "disable" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "disable", fn conn ->
       disable = %Disable{
         table_name: "test"
       }
 
-      {:ok, _, _result} = TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(disable))
+      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(disable))
     end
 
-    test "sqlite" do
-      {:ok, conn} = init_helper_db()
-      setup_ddlx(conn)
-
+    test_tx "sqlite", fn conn ->
       sqlite = %SQLite{
         sqlite_statement: "--hello"
       }
 
-      {:ok, _, _result} = TestHelper.sql_do(conn, Electric.DDLX.command_to_postgres(sqlite))
+      {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(sqlite))
     end
   end
 end

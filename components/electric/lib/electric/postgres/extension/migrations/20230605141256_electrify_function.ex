@@ -38,8 +38,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       );
       """,
       """
-      CREATE INDEX electrified_tracking_table_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
-      CREATE INDEX electrified_tracking_table_name_oid ON #{electrified_tracking_table} (oid);
+      CREATE INDEX #{Extension.electrified_tracking_relation()}_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
+      CREATE INDEX #{Extension.electrified_tracking_relation()}_oid_idx ON #{electrified_tracking_table} (oid);
       """,
       """
       CREATE TABLE #{electrified_index_table} (

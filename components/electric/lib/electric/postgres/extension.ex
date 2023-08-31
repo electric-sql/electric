@@ -67,11 +67,12 @@ defmodule Electric.Postgres.Extension do
 
     """
     SELECT
-      v.txid,
-      v.txts,
-      v.version,
-      s.schema,
-      s.migration_ddl
+      v.txid::xid8,
+      v.txts::int8,
+      v.version::text,
+      v.inserted_at::timestamptz,
+      s.schema::text,
+      s.migration_ddl::text[]
     FROM
       #{@version_table} v
     JOIN
@@ -94,6 +95,7 @@ defmodule Electric.Postgres.Extension do
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
+  def electrified_tracking_relation, do: @electrified_table_relation
   def electrified_tracking_table, do: @electrified_tracking_table
   def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
@@ -169,7 +171,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1::xid8 and txts = $2 LIMIT 1"
+  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1 and txts = $2 LIMIT 1"
 
   @doc """
   Given a db row which points to a compound transaction id, returns the version
@@ -178,7 +180,8 @@ defmodule Electric.Postgres.Extension do
   @spec tx_version(conn(), %{binary() => integer() | binary()}) ::
           {:ok, String.t()} | {:error, term()}
   def tx_version(conn, %{"txid" => txid, "txts" => txts}) do
-    with {:ok, _cols, rows} <- :epgsql.equery(conn, @tx_version_query, [txid, txts]) do
+    with {:ok, _cols, rows} <-
+           :epgsql.equery(conn, @tx_version_query, [txid, to_integer(txts)]) do
       case rows do
         [] ->
           {:error, "No version found for tx txid: #{txid}, txts: #{txts}"}
@@ -201,7 +204,7 @@ defmodule Electric.Postgres.Extension do
     query = migration_history_query(after_version)
     param = after_version || :null
 
-    with {:ok, [_, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
+    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
       {:ok, load_migrations(rows)}
     end
   end
@@ -214,11 +217,12 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp load_migrations(rows) do
-    Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
+    Enum.map(rows, fn {txid_str, txts, version, timestamp, schema_json, stmts} ->
       %Migration{
         version: version,
         txid: String.to_integer(txid_str),
-        txts: decode_epgsql_timestamp(txts_tuple),
+        txts: txts,
+        timestamp: decode_epgsql_timestamp(timestamp),
         schema: Proto.Schema.json_decode!(schema_json),
         stmts: stmts
       }
@@ -252,7 +256,7 @@ defmodule Electric.Postgres.Extension do
 
   @spec index_electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
   def index_electrified?(conn, schema, name) do
-    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) |> dbg do
+    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) do
       {:ok, n == 1}
     end
   end
@@ -558,4 +562,7 @@ defmodule Electric.Postgres.Extension do
     RETURNING content->>0;
     """)
   end
+
+  defp to_integer(i) when is_integer(i), do: i
+  defp to_integer(s) when is_binary(s), do: String.to_integer(s)
 end

@@ -56,15 +56,27 @@ defmodule ElectricTest.SatelliteHelpers do
 
   def with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
 
-  def migrate(conn, version, table \\ nil, sql) do
+  defp migrate(conn, version, sql, opts \\ []) do
+    # we need to explicitly capture ddl statements affecting electrified tables
+    # unless we're connecting via the proxy
+    electrify =
+      if table = opts[:electrify], do: "CALL electric.electrify('#{table}')"
+
+    capture =
+      if opts[:capture], do: "CALL electric.capture_ddl($$#{sql}$$)"
+
     results =
-      :epgsql.squery(conn, """
-      BEGIN;
-      SELECT electric.migration_version('#{version}');
-      #{sql};
-      #{if table, do: "CALL electric.electrify('#{table}');"}
-      COMMIT;
-      """)
+      :epgsql.squery(
+        conn,
+        """
+        BEGIN;
+          CALL electric.migration_version('#{version}');
+          #{sql};
+          #{electrify};
+          #{capture};
+        COMMIT;
+        """
+      )
 
     Enum.each(results, fn result ->
       assert {:ok, _, _} = result

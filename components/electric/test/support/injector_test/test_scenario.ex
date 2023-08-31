@@ -9,11 +9,11 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     @behaviour Electric.Postgres.Proxy.Injector
 
     def capture_ddl_query(query) do
-      ~s|SELECT electric.capture_ddl('#{query}')|
+      ~s|CALL electric.capture_ddl($query$#{query}$query$)|
     end
 
     def capture_version_query(version \\ migration_version()) do
-      ~s|SELECT electric.migration_version('#{version}')|
+      ~s|CALL electric.assign_migration_version('#{version}')|
     end
 
     def migration_version do

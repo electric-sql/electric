@@ -78,7 +78,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def capture_ddl_query(query) do
-    ~s|SELECT electric.capture_ddl('#{query}')|
+    ~s|CALL electric.capture_ddl(#{quote_query(query)})|
   end
 
   def inject_version_query(version, state) do
@@ -98,7 +98,12 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def capture_version_query(version) do
-    ~s|SELECT electric.migration_version('#{version}')|
+    ~s|SELECT electric.migration_version(#{quote_query(version)})|
+  end
+
+  defp quote_query(query) do
+    quote = "$__" <> (:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)) <> "__$"
+    quote <> query <> quote
   end
 
   def migration_version do

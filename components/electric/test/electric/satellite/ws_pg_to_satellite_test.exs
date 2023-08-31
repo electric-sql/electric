@@ -43,7 +43,10 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     vsn2 = "2023071702"
     vsn3 = "2023071703"
 
-    :ok = migrate(ctx.db, vsn1, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY)")
+    :ok =
+      migrate(ctx.db, vsn1, "CREATE TABLE public.foo (id TEXT PRIMARY KEY)",
+        electrify: "public.foo"
+      )
 
     with_connect(ctx.conn_opts, fn conn ->
       ref = make_ref()
@@ -53,7 +56,10 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
       assert_receive {^ref, :server_paused}
 
-      :ok = migrate(ctx.db, vsn2, "public.bar", "CREATE TABLE public.bar (id TEXT PRIMARY KEY)")
+      :ok =
+        migrate(ctx.db, vsn2, "CREATE TABLE public.bar (id TEXT PRIMARY KEY)",
+          electrify: "public.bar"
+        )
 
       assert_receive_migration(conn, vsn1, "foo")
       assert_receive_migration(conn, vsn2, "bar")
@@ -61,7 +67,9 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       refute_receive {^conn, _}
 
       # Make sure the server keeps streaming migrations to the client after the initial sync is done.
-      :ok = migrate(ctx.db, vsn3, "ALTER TABLE foo ADD COLUMN bar TEXT DEFAULT 'quux'")
+      :ok =
+        migrate(ctx.db, vsn3, "ALTER TABLE foo ADD COLUMN bar TEXT DEFAULT 'quux'", capture: true)
+
       assert_receive_migration(conn, vsn3, "foo")
 
       refute_receive {^conn, _}
@@ -72,8 +80,16 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
        ctx do
     vsn1 = "2023071901"
     vsn2 = "2023071902"
-    :ok = migrate(ctx.db, vsn1, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY)")
-    :ok = migrate(ctx.db, vsn2, "public.bar", "CREATE TABLE public.bar (id TEXT PRIMARY KEY)")
+
+    :ok =
+      migrate(ctx.db, vsn1, "CREATE TABLE public.foo (id TEXT PRIMARY KEY)",
+        electrify: "public.foo"
+      )
+
+    :ok =
+      migrate(ctx.db, vsn2, "CREATE TABLE public.bar (id TEXT PRIMARY KEY)",
+        electrify: "public.bar"
+      )
 
     # First, verify that the client receives all migrations when it doesn't provide its schema version
     with_connect(ctx.conn_opts, fn conn ->
