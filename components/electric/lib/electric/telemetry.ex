@@ -8,14 +8,13 @@ defmodule Electric.Telemetry do
 
   def init(_) do
     children = [
-      {:telemetry_poller, measurements: periodic_measurements(), period: 2_000},
-      {TelemetryMetricsPrometheus, [metrics: metrics()]}
+      {:telemetry_poller, measurements: periodic_measurements(), period: 2_000}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp metrics(),
+  def metrics(),
     do: [
       Metrics.counter("electric.postgres_tcp_server.connection.total"),
       Metrics.counter("electric.postgres_slot.replication.start"),

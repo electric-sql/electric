@@ -54,7 +54,6 @@ defmodule Electric.MixProject do
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_metrics_prometheus, "~> 1.1.0"},
       {:joken, "~> 2.6"},
       {:ets, "~> 0.9.0"},
       {:libgraph, "~> 0.16.0"},
