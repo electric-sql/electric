@@ -100,7 +100,6 @@ export interface TestNotifier extends EventNotifier {
 }
 
 export interface TestSatellite extends Satellite {
-  _lastSentRowId: number
   _authState?: AuthState
   relations: RelationsCache
   initializing?: {

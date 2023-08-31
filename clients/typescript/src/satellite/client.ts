@@ -44,8 +44,6 @@ import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
-  AckCallback,
-  AckType,
   AuthResponse,
   DataChangeType,
   LSN,
@@ -58,7 +56,6 @@ import {
   Record,
   Relation,
   SchemaChange,
-  OutgoingReplication,
   Transaction,
   StartReplicationResponse,
   StopReplicationResponse,
@@ -69,6 +66,7 @@ import {
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
+  bytesToNumber,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
@@ -116,8 +114,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socketFactory: SocketFactory
   private socket?: Socket
 
-  private inbound: Replication
-  private outbound: OutgoingReplication
+  private inbound: Replication<Transaction>
+  private outbound: Replication<DataTransaction>
 
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
@@ -215,17 +213,15 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.subscriptionsDataCache = new SubscriptionsDataCache()
   }
 
-  private resetReplication(
-    enqueued?: LSN,
-    ack?: LSN,
+  private resetReplication<T = any>(
+    last_lsn?: LSN,
     isReplicating?: ReplicationStatus
-  ): OutgoingReplication {
+  ): Replication<T> {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: ack,
-      enqueued_lsn: enqueued,
+      last_lsn: last_lsn,
       transactions: [],
     }
   }
@@ -287,14 +283,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   close() {
-    this.outbound = this.resetReplication(
-      this.outbound.enqueued_lsn,
-      this.outbound.ack_lsn
-    )
-    this.inbound = this.resetReplication(
-      this.inbound.enqueued_lsn,
-      this.inbound.ack_lsn
-    )
+    this.outbound = this.resetReplication(this.outbound.last_lsn)
+    this.inbound = this.resetReplication(this.inbound.last_lsn)
 
     this.socketHandler = undefined
 
@@ -345,7 +335,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     // Then set the replication state
-    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
+    this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
     return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
   }
 
@@ -402,11 +392,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     this.outbound.transactions.push(transaction)
-    this.outbound.enqueued_lsn = transaction.lsn
+    this.outbound.last_lsn = transaction.lsn
 
-    if (this.throttledPushTransaction) {
-      this.throttledPushTransaction()
-    }
+    this.throttledPushTransaction?.()
   }
 
   private pushTransactions() {
@@ -424,7 +412,6 @@ export class SatelliteClient extends EventEmitter implements Client {
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
       this.sendMessage(satOpLog)
-      this.emit('ack_lsn', next.lsn, AckType.LOCAL_SEND)
     }
   }
 
@@ -434,14 +421,6 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   unsubscribeToError(callback: ErrorCallback): void {
     this.removeListener('error', callback)
-  }
-
-  subscribeToAck(callback: AckCallback): void {
-    this.on('ack_lsn', callback)
-  }
-
-  unsubscribeToAck(callback: AckCallback) {
-    this.removeListener('ack_lsn', callback)
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {
@@ -515,7 +494,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private sendMissingRelations(
     transaction: DataTransaction,
-    replication: Replication
+    replication: Replication<DataTransaction>
   ): void {
     transaction.changes.forEach((change) => {
       const relation = change.relation
@@ -639,30 +618,28 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleStartReq(message: SatInStartReplicationReq) {
-    Log.info(`received replication request ${JSON.stringify(message)}`)
-    if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
-      const replication = {
-        ...this.outbound,
-        ack_lsn: DEFAULT_LOG_POS,
-        enqueued_lsn: DEFAULT_LOG_POS,
-      }
+    Log.info(
+      `Server sent a replication request to start from ${bytesToNumber(
+        message.lsn
+      )}, and options ${JSON.stringify(message.options)}`
+    )
 
+    if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
+      // Use server-sent LSN as the starting point for replication
       this.outbound = this.resetReplication(
-        replication.enqueued_lsn,
-        replication.ack_lsn,
+        message.lsn,
         ReplicationStatus.ACTIVE
       )
 
-      const throttleOpts = { leading: true, trailing: true }
       this.throttledPushTransaction = throttle(
         () => this.pushTransactions(),
         this.opts.pushPeriod,
-        throttleOpts
+        { leading: true, trailing: true }
       )
 
       const response = SatInStartReplicationResp.fromPartial({})
       this.sendMessage(response)
-      this.emit('outbound_started', replication.enqueued_lsn)
+      this.emit('outbound_started', message.lsn)
     } else {
       const response = SatErrorResp.fromPartial({
         errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
@@ -765,19 +742,18 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handlePingReq() {
     Log.info(
       `respond to ping with last ack ${
-        this.inbound.ack_lsn ? base64.fromBytes(this.inbound.ack_lsn) : 'NULL'
+        this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
       }`
     )
-    const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
+    const pong = SatPingResp.fromPartial({ lsn: this.inbound.last_lsn })
     this.sendMessage(pong)
   }
 
-  // TODO: emit ping request to clear oplog.
-  private handlePingResp(message: SatPingResp) {
-    if (message.lsn) {
-      this.outbound.ack_lsn = message.lsn
-      this.emit('ack_lsn', message.lsn, AckType.REMOTE_COMMIT)
-    }
+  private handlePingResp(_message: SatPingResp) {
+    // TODO: This message is not used in any way right now.
+    //       We might be dropping client-initiated pings completely.
+    //       However, the server sends these messages without any prompting,
+    //       so this handler cannot just throw an error
   }
 
   private handleError(error: SatErrorResp) {
@@ -879,7 +855,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.emit(
           'transaction',
           transaction,
-          () => (this.inbound.ack_lsn = transaction.lsn)
+          () => (this.inbound.last_lsn = transaction.lsn)
         )
         replication.transactions.splice(lastTxnIdx)
       }
@@ -1037,15 +1013,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     }).finally(() => clearTimeout(waitingFor))
   }
 
-  resetOutboundLogPositions(sent: LSN, ack: LSN): void {
-    this.outbound = this.resetReplication(sent, ack)
-  }
-
-  getOutboundLogPositions(): { enqueued: LSN; ack: LSN } {
-    return {
-      ack: this.outbound.ack_lsn ?? DEFAULT_LOG_POS,
-      enqueued: this.outbound.enqueued_lsn ?? DEFAULT_LOG_POS,
-    }
+  getLastSentLsn(): LSN {
+    return this.outbound.last_lsn ?? DEFAULT_LOG_POS
   }
 }
 

@@ -147,17 +147,12 @@ export function isDataChange(change: Change): change is DataChange {
 
 export type Record = { [key: string]: string | number | undefined | null }
 
-export type Replication = {
+export type Replication<TransactionType> = {
   authenticated: boolean
   isReplicating: ReplicationStatus
   relations: Map<number, Relation>
-  ack_lsn?: LSN
-  enqueued_lsn?: LSN
-  transactions: Transaction[]
-}
-
-export type OutgoingReplication = Omit<Replication, 'transactions'> & {
-  transactions: DataTransaction[] // outgoing transactions cannot contain migrations
+  last_lsn: LSN | undefined
+  transactions: TransactionType[]
 }
 
 export type Relation = {
@@ -184,12 +179,6 @@ export enum ReplicationStatus {
   ACTIVE,
 }
 
-export enum AckType {
-  LOCAL_SEND,
-  REMOTE_COMMIT,
-}
-
-export type AckCallback = (lsn: LSN, type: AckType) => void
 export type ErrorCallback = (error: SatelliteError) => void
 
 export type ConnectivityState =

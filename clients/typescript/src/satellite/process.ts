@@ -19,12 +19,10 @@ import {
   bytesToNumber,
   emptyPromise,
   getWaiter,
-  numberToBytes,
   uuid,
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  AckType,
   Change as Chg,
   ConnectivityState,
   DataChange,
@@ -33,7 +31,6 @@ import {
   MigrationTable,
   Relation,
   RelationsCache,
-  Row,
   SatelliteError,
   SatelliteErrorCode,
   SchemaChange,
@@ -94,8 +91,6 @@ type Uuid = `${string}-${string}-${string}-${string}-${string}`
 type MetaEntries = {
   clientId: Uuid | ''
   compensations: number
-  lastAckdRowId: `${number}`
-  lastSentRowId: `${number}`
   lsn: string | null
   subscriptions: string
 }
@@ -137,8 +132,6 @@ export class SatelliteProcess implements Satellite {
   _potentialDataChangeSubscription?: string
   _throttledSnapshot: ThrottleFunction
 
-  _lastAckdRowId: number
-  _lastSentRowId: number
   _lsn?: LSN
 
   relations: RelationsCache
@@ -176,10 +169,6 @@ export class SatelliteProcess implements Satellite {
     this.client = client
 
     this.opts = opts
-
-    this._lastAckdRowId = 0
-    this._lastSentRowId = 0
-
     this.relations = {}
 
     this.subscriptions = new InMemorySubscriptionsManager(
@@ -277,14 +266,6 @@ export class SatelliteProcess implements Satellite {
     this.relations = await this._getLocalRelations()
     this.checkMaxSqlParameters()
 
-    this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
-    this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
-
-    this.client.resetOutboundLogPositions(
-      numberToBytes(this._lastAckdRowId),
-      numberToBytes(this._lastSentRowId)
-    )
-
     const lsnBase64 = await this._getMeta('lsn')
     if (lsnBase64 && lsnBase64.length > 0) {
       this._lsn = base64.toBytes(lsnBase64)
@@ -341,10 +322,8 @@ export class SatelliteProcess implements Satellite {
   setClientListeners(): void {
     this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
+    // FIXME: calling an async function in an event emitter
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    // When a local transaction is sent, or an acknowledgement for
-    // a remote transaction commit is received, we update lsn records.
-    this.client.subscribeToAck(this._handleAck.bind(this))
     this.client.subscribeToOutboundEvent(
       'started',
       this._throttledSnapshot.bind(this)
@@ -666,11 +645,6 @@ export class SatelliteProcess implements Satellite {
     )
   }
 
-  async _handleAck(lsn: LSN, type: AckType) {
-    const decoded = bytesToNumber(lsn)
-    await this._ack(decoded, type == AckType.REMOTE_COMMIT)
-  }
-
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
     Log.debug(`connectivity state changed ${status}`)
@@ -874,12 +848,11 @@ export class SatelliteProcess implements Satellite {
       WHERE rowid in (
         SELECT rowid FROM ${oplog}
             WHERE timestamp is NULL
-            AND rowid > ?
         ORDER BY rowid ASC
         )
       RETURNING *
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
@@ -895,12 +868,11 @@ export class SatelliteProcess implements Satellite {
             AND op.tablename = shadow.tablename
             AND op.primaryKey = shadow.primaryKey
         WHERE op.timestamp = ?
-              AND op.rowid > ?
         GROUP BY op.namespace, op.tablename, op.primaryKey
       ) AS updates
       WHERE updates.op_rowid = ${oplog}.rowid
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
@@ -910,15 +882,10 @@ export class SatelliteProcess implements Satellite {
       SELECT namespace, tablename, primaryKey, ?
         FROM ${oplog} AS op
         WHERE timestamp = ?
-              AND rowid > ?
         GROUP BY namespace, tablename, primaryKey
         HAVING rowid = max(rowid) AND optype != 'DELETE'
-    `,
-      args: [
-        encodeTags([newTag]),
-        timestamp.toISOString(),
-        this._lastAckdRowId,
-      ],
+      `,
+      args: [encodeTags([newTag]), timestamp.toISOString()],
     }
 
     // And finally delete any shadow rows where the last oplog operation was a `DELETE`
@@ -931,15 +898,14 @@ export class SatelliteProcess implements Satellite {
           INNER JOIN ${shadow} AS shadow
             ON shadow.namespace = op.namespace AND shadow.tablename = op.tablename AND shadow.primaryKey = op.primaryKey
           WHERE op.timestamp = ?
-                AND op.rowid > ?
           GROUP BY op.namespace, op.tablename, op.primaryKey
           HAVING op.rowid = max(op.rowid) AND op.optype = 'DELETE'
       )
 
       DELETE FROM ${shadow}
       WHERE rowid IN _to_be_deleted
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // Execute the four queries above in a transaction, returning the results from the first query
@@ -963,7 +929,7 @@ export class SatelliteProcess implements Satellite {
     if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
 
     if (!this.client.isClosed()) {
-      const { enqueued } = this.client.getOutboundLogPositions()
+      const enqueued = this.client.getLastSentLsn()
       const enqueuedLogPos = bytesToNumber(enqueued)
 
       // TODO: handle case where pending oplog is large
@@ -1066,9 +1032,8 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
-    if (since === undefined) {
-      since = this._lastAckdRowId
-    }
+    // `rowid` is never below 0, so -1 means "everything"
+    since ??= -1
     const oplog = this.opts.oplogTable.toString()
 
     const selectEntries = `
@@ -1353,28 +1318,6 @@ export class SatelliteProcess implements Satellite {
     else return []
   }
 
-  async _ack(lsn: number, isAck: boolean): Promise<void> {
-    if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
-      throw new Error('Invalid position')
-    }
-
-    const meta = this.opts.metaTable.toString()
-
-    const sql = ` UPDATE ${meta} SET value = ? WHERE key = ?`
-    const args = [
-      `${lsn.toString()}`,
-      isAck ? 'lastAckdRowId' : 'lastSentRowId',
-    ]
-
-    if (isAck) {
-      this._lastAckdRowId = lsn
-      await this.adapter.runInTransaction({ sql, args })
-    } else {
-      this._lastSentRowId = lsn
-      await this.adapter.run({ sql, args })
-    }
-  }
-
   _setMetaStatement<K extends keyof MetaEntries>(
     key: K,
     value: MetaEntries[K]
@@ -1429,7 +1372,7 @@ export class SatelliteProcess implements Satellite {
     return clientId
   }
 
-  private async _getLocalTableNames(): Promise<Row[]> {
+  private async _getLocalTableNames(): Promise<{ name: string }[]> {
     const notIn = [
       this.opts.metaTable.tablename.toString(),
       this.opts.migrationsTable.tablename.toString(),
@@ -1446,7 +1389,9 @@ export class SatelliteProcess implements Satellite {
         WHERE type = 'table'
           AND name NOT IN (${notIn.map(() => '?').join(',')})
     `
-    return await this.adapter.query({ sql: tables, args: notIn })
+    return (await this.adapter.query({ sql: tables, args: notIn })) as {
+      name: string
+    }[]
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.
@@ -1458,7 +1403,7 @@ export class SatelliteProcess implements Satellite {
     let id = 0
     const schema = 'public' // TODO
     for (const table of tableNames) {
-      const tableName = table.name as any
+      const tableName = table.name
       const sql = 'SELECT * FROM pragma_table_info(?)'
       const args = [tableName]
       const columnsForTable = await this.adapter.query({ sql, args })
@@ -1491,14 +1436,14 @@ export class SatelliteProcess implements Satellite {
     return generateTag(instanceId, timestamp)
   }
 
-  async _garbageCollectOplog(commitTimestamp: Date) {
+  async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
     const oplog = this.opts.oplogTable.tablename.toString()
-    const stmt = `
-      DELETE FROM ${oplog}
-      WHERE timestamp = ?;
-    `
-    await this.adapter.run({ sql: stmt, args: [isoString] })
+
+    await this.adapter.run({
+      sql: `DELETE FROM ${oplog} WHERE timestamp = ?`,
+      args: [isoString],
+    })
   }
 
   /**

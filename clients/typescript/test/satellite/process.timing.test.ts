@@ -15,8 +15,7 @@ test.beforeEach(async (t) => makeContext(t, opts))
 test.afterEach.always(clean)
 
 test('throttled snapshot respects window', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, authState } =
-    t.context as any
+  const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
   await satellite._setAuthState(authState)
