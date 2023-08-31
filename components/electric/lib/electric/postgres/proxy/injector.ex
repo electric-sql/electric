@@ -124,14 +124,14 @@ defmodule Electric.Postgres.Proxy.Injector do
       {true, :rollback} ->
         :rollback
 
-      {true, {:drop, :index} = action} ->
+      {true, {:drop, "index"} = action} ->
         {:ok, index} = Parser.table_name(query)
         {action, State.index_electrified?(state, index), query, index}
 
       {true, {:electric, command} = action} ->
         {action, true, query, DDLX.Command.table_name(command)}
 
-      {true, {:alter, :table} = action} ->
+      {true, {:alter, "table"} = action} ->
         # To handle the alter table enable electric we need to intercept this special syntax before
         # it reaches the pg_query parser
 

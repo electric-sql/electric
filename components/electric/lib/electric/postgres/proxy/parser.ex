@@ -97,6 +97,10 @@ defmodule Electric.Postgres.Proxy.Parser do
     {:ok, name}
   end
 
+  def table_name(_stmt, opts) do
+    {:ok, {blank(nil, opts), nil}}
+  end
+
   #   enum AlterTableType
   # {
   #   ALTER_TABLE_TYPE_UNDEFINED = 0;
@@ -269,16 +273,22 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   defkeyword :capture?, "ALTER" do
-    {true, {:alter, object(rest)}}
+    case object(rest) do
+      "table" ->
+        {true, {:alter, "table"}}
+
+      _other ->
+        false
+    end
   end
 
   defkeyword :capture?, "CREATE" do
     case object(rest) do
-      :table ->
+      "table" ->
         false
 
-      :index ->
-        {true, {:create, :index}}
+      "index" ->
+        {true, {:create, "index"}}
 
       _other ->
         false
@@ -286,7 +296,16 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   defkeyword :capture?, "DROP" do
-    {true, {:drop, object(rest)}}
+    case object(rest) do
+      "index" ->
+        {true, {:drop, "index"}}
+
+      "table" ->
+        {true, {:drop, "table"}}
+
+      _other ->
+        false
+    end
   end
 
   defkeyword :capture?, "COMMIT", trailing: false do
@@ -316,16 +335,16 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   defkeyword :object, "TABLE" do
-    :table
+    "table"
   end
 
   defkeyword :object, "INDEX" do
-    :index
+    "index"
   end
 
+  @split_ws Enum.map(@wspc, &IO.iodata_to_binary([&1]))
   def object(other) do
-    # raise ArgumentError,
-    #   message: "Unknown/unsupported target for DDL statement: #{inspect(unknown)}"
-    other
+    [type, _rest] = :binary.split(other, @split_ws)
+    String.downcase(type)
   end
 end

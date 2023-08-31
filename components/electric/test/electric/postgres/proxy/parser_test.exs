@@ -35,13 +35,20 @@ defmodule Electric.Postgres.Proxy.ParserTest do
             refute Parser.capture?(cmd)
 
           a ->
-            assert {true, {^a, :table}} = Parser.capture?(cmd)
+            assert {true, {^a, "table"}} = Parser.capture?(cmd)
         end
       end
 
       for i <- all_case("index"), s <- @whitespace do
         cmd = Enum.join([cmd, " ", i, s, "name"])
-        assert {true, {^action, :index}} = Parser.capture?(cmd)
+
+        case action do
+          :alter ->
+            assert false == Parser.capture?(cmd)
+
+          _ ->
+            assert {true, {^action, "index"}} = Parser.capture?(cmd)
+        end
       end
     end
 

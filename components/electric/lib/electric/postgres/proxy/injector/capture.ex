@@ -71,10 +71,10 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
       {:commit, false} ->
         {nil, State.commit(state), Send.back(send, msg)}
 
-      {{{:alter, :table}, electrified?, query, table}, _} ->
+      {{{:alter, "table"}, electrified?, query, table}, _} ->
         handle_alter_table(msg, electrified?, query, table, state, send)
 
-      {{{:create, :index}, true, query, table}, _} ->
+      {{{:create, "index"}, true, query, table}, _} ->
         migration_state(
           msg,
           query,
@@ -83,7 +83,7 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
           Send.back(send, msg)
         )
 
-      {{{:drop, :table}, true, _query, {schema, name}}, _} ->
+      {{{:drop, "table"}, true, _query, {schema, name}}, _} ->
         error = [
           %M.ErrorResponse{
             severity: "ERROR",
@@ -98,7 +98,7 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
 
         {nil, state, error_response(send, error)}
 
-      {{{:drop, :index}, true, query, index}, _table} ->
+      {{{:drop, "index"}, true, query, index}, _table} ->
         migration_state(msg, query, index, State.electrify(state), Send.back(send, msg))
 
       {{{:electric, command}, _electrified?, _query, table_name}, _} ->
