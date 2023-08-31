@@ -94,8 +94,6 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:ok, injector, upstream_msgs, downstream_msgs} =
       Injector.recv_backend(state.injector, msgs)
 
-    dbg(downstream_msgs)
-
     :ok = upstream(upstream_msgs, state)
     :ok = downstream(downstream_msgs, socket)
     {:noreply, {socket, %{state | injector: injector}}}
@@ -157,7 +155,7 @@ defmodule Electric.Postgres.Proxy.Handler do
           # it does when you enter the wrong password against a real db
           # Docs say that options are the various auth messages or an ErrorResponse
           # so maybe it's something about my ErrorResponse that's wrong?
-          Logger.warn("Password authentication for user '#{username}' failed")
+          Logger.warning("Password authentication for user '#{username}' failed")
 
           :ok =
             downstream(
@@ -185,7 +183,6 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:ok, injector, upstream_msgs, downstream_msgs} =
       Injector.recv_frontend(state.injector, msg)
 
-    dbg(downstream_msgs)
     :ok = upstream(upstream_msgs, state)
     :ok = downstream(downstream_msgs, socket)
 
