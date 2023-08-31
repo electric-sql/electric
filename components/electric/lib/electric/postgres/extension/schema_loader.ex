@@ -22,7 +22,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
   @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
-  @callback save(state(), version(), Schema.t(), [String.t()]) :: {:ok, state()}
+  @callback save(state(), version(), Schema.t(), [String.t()]) ::
+              {:ok, state()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback primary_keys(state(), relation()) :: pk_result()
