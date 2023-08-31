@@ -205,6 +205,39 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
             message: "table truths already electrified"
           )
         end
+
+        test "non-electrified ALTER object", cxt do
+          objects =
+            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP INDEX LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TEXT TEXT TEXT TEXT TRIGGER TYPE USER USERVIEW)
+
+          for object <- objects do
+            query = ~s[ALTER #{object} "something" DO SOMETHING]
+
+            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
+          end
+        end
+
+        test "non-electrified CREATE object", cxt do
+          objects =
+            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TEXT TEXT TEXT TEXT TRIGGER TYPE USER USERVIEW)
+
+          for object <- objects do
+            query = ~s[CREATE #{object} "something" DO SOMETHING]
+
+            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
+          end
+        end
+
+        test "non-electrified DROP object", cxt do
+          objects =
+            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TEXT TEXT TEXT TEXT TRIGGER TYPE USER USERVIEW)
+
+          for object <- objects do
+            query = ~s[DROP #{object} "something" DO SOMETHING]
+
+            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
+          end
+        end
       end
     end
   end
