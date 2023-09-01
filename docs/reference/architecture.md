@@ -78,7 +78,7 @@ Once changes arrive at the client, the satellite process consuming the replicati
 1. the changes from any overlapping concurrent writes in the oplog merged into them
 2. any required [compensations](./consistency#rich-crdts) applied to maintain referential integrity
 
-The satellite process then fires notifications about the data that has changes, which triggers the reactivity system.
+The satellite process then fires data change notifications, which triggers the [reactivity system](#reactivity).
 
 ### Local writes
 
