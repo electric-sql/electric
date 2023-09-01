@@ -5,8 +5,8 @@ description: >-
 sidebar_position: 20
 ---
 
-:::caution Limitations
-SolidJS support is not yet implemented. See <DocPageLink path="reference/limitations" /> for context.
+:::caution Work in progress
+SolidJS support is not yet implemented.
 
 [Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to develop SolidJS support. 
 :::

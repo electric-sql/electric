@@ -11,10 +11,6 @@ import CodeBlock from '@theme/CodeBlock';
 import ExampleSchema from '!!raw-loader!./example.prisma';
 import ExampleSQL from '!!raw-loader!./example.sql';
 
-:::caution Limitations
-See the [limitations page](../../reference/limitations.md) for context.
-:::
-
 ElectricSQL is designed to work with and on top of a Postgres data model.
 
 If you don't have a data model you can create one using your preferred migrations tooling. You then use the same migrations tooling to extend your data model with [DDLX statements](./electrification.md) to expose data to the replication machinery.
@@ -36,6 +32,10 @@ ELECTRIC GRANT SELECT
   ON projects
   TO ANYONE;
 ```
+
+:::caution Work in progress
+See the [Limitations](#limitations) section below and the [Roadmap](../../reference/roadmap.md) page for more context.
+:::
 
 ## Creating a data model
 
@@ -198,16 +198,6 @@ We only currently support forward migrations. Rollbacks must be implemented as f
 
 We only currently support additive migrations. This means you can't remove or restrict a field. Instead, you need to create new fields and tables (that are pre-constrained on creation) and switch / mirror data to them.
 
-### Data types
+### Data types and constraints
 
-ElectricSQL maps between Postgres data types on the server and SQLite data types in the local app. This is not a perfect match. In many cases, SQLite does not have native support for a Postgres data type. However, our client libraries bridge the gap for the majority of Postgres types, providing a native JavaScript/TypeScript experience for any data type supported in electrified tables.
-
-We're actively working on expanding the range of Postgres data types ElectricSQL supports out of the box.
-
-### Primary keys
-
-We do not support sequential autoincrementing integer IDs. You must use binary UUIDs.
-
-### Constraints
-
-We support referential integrity. We do not currently support unique or check constraints. We plan to do so [using Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
+See the pages on [Types](./types.md) and [Constraints](./constraints.md).

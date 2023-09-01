@@ -1,31 +1,40 @@
 ---
-title: Limitations
+title: Roadmap
 description: >-
   Summary of the maturity stage of the project and known limitations.
 ---
 
 ElectricSQL is in <strong className="warning-color">public alpha</strong> phase.
 
-:::caution
 APIs are not guaranteed to be stable. Backwards incompatible changes may (and will) be introduced in both minor and major version releases.
-
-Key aspects of the system *as currently documented* are not fully implemented yet, as outlined on this page.
-:::
 
 ## Practical limitations
 
-Key aspects of the system are not yet implemented, including:
+Key aspects of the system are not fully implemented yet:
 
-1. [DDLX rules](#ddlx-rules) &mdash; SQL syntax, permissions and validation are not supported
-2. [Shapes](#shapes) &mdash; currently limited to whole table sync
-3. [Data modelling](../usage/data-modelling/index.md) &mdash; limited data types and constraint support
-4. [Failure modes](#failure-modes) &mdash; you may need to workaround in development
+1. [Data modelling](#data-modelling) &mdash; limited data types and constraints
+2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification with proceedure call syntax
+3. [Shapes](#shapes) &mdash; currently limited to whole table sync
+
+Plus you may encounter [failure modes](#failure-modes) that you need to work around in development
+
+### Data modelling
+
+There are a number of [fundamental limitations](#fundamental-limitations) of the local-first model you should be aware of. These have a practical impact on data model support, for example:
+
+- **primary keys**: sequential IDs are not supported; you [must use binary UUIDs](../usage/data-modelling/types.md#primary-keys)
+
+In addition, there are a number of limitations of the current implementation that impact data model support:
+
+- **data types**: see the list of [supported data types](../usage/data-modelling/types.md#supported-data-types)
+- **constraints**: you must remove [unique and check constraints](../usage/data-modelling/constraints.md#unsupported)
+- **migrations**: you must use [additive, forward migrations](../usage/data-modelling/migrations.md#limitations)
+
+See <DocPageLink path="usage/data-modelling" /> for more information.
 
 ### DDLX rules
 
-The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not yet implemented. Neither are permissions, roles, validation or local SQLite commands.
-
-DDLX support is currently limited to electrifying tables using an SQL procedure call syntax:
+The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not yet implemented. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using an SQL procedure call syntax:
 
 ```sql
 CALL electric.electrify('items')
@@ -35,9 +44,7 @@ You can track progress on DDLX support here [electric-sql/pg_proxy/pulls](https:
 
 ### Shapes
 
-[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function API](../api/clients/typescript.md#sync) currently only supports whole table sync.
-
-There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
+[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
 
 :::note
 There is one temporary feature to filter data onto the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).
@@ -45,32 +52,13 @@ There is one temporary feature to filter data onto the local device: set an `ele
 This is a very temporary workaround and will be removed soon!
 :::
 
-### Data modelling
-
-We don't currently support any constraints except primary keys. You must remove all unique and check constraints from your Postgres data model.
-
-We have limited data type support. Currently, we only support strings (`text` and non-length-limited `varchar`) and numbers (`smallint`, `integer`, `bigint`, `double precision`). The authoritative list of supported data types is maintained in the [`supported_pg_types/0` function][1].
-
-We also only support forward and additive migrations. Migrations that remove columns or make them more restrictive will fail when applied to electrified tables.
-
-[1]: https://github.com/search?q=repo%3Aelectric-sql%2Felectric+symbol%3Asupported_pg_types&type=code
-
 ### Failure modes
 
-Currently, you are likely to experience bugs or behaviour that leads to an inconsistent data state. This is **not** related to the core [consistency model](./consistency.md). It's a consequence of the maturity of the implementation.
+Currently, you may experience bugs or behaviour that leads to an inconsistent data state. This is **not** related to the core [consistency model](./consistency.md). It's a consequence of the lack of validation and some recovery modes still being pending implementation.
 
-If you experience errors like:
+In development, you can usually recovery from these bugs by resetting your database(s). In the browser, if you clear localStorage and IndexedDB (for example in Chrome, "Inspect" to open the developer tools -> Application -> Storage -> Clear site data) that will reset the client and your local app will re-sync from the server.
 
-- `Migrations cannot be altered once applied`
-- `Cannot catch up to the server's current state` 
-- `FOREIGN KEY CONSTRAINT failed`
-
-You may need to reset your databases. This involves:
-
-- wiping your client databases by clearing IndexedDB in the browser
-- resetting your Potsgres database
-
-To reset your Postgres database, you may need to drop the replication publication. This requires:
+If you need to re-set your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you may need to drop the replication publication manually:
 
 ```sql
 ALTER SUBSCRIPTION postgres_1 DISABLE;
@@ -82,7 +70,7 @@ You can then recreate your database, e.g.:
 
 ```shell
 dropdb -f intro
-createdb -T template0 -E UTF-8 intro
+createdb -T template0 -E UTF-8 electric
 ```
 
 Then:
@@ -93,7 +81,7 @@ Then:
 
 Keep an eye on [electric-sql/electric/pulls](https://github.com/electric-sql/electric) for the latest bugfixes.
 
-## Integrity limitations
+## Fundamental limitations
 
 ElectricSQL uses a [rich-CRDT data model](./consistency.md#rich-crdts) that allows building local-first applications without falling into common pitfalls of working with eventually consistent databases. However, you still need to follow certain constraints that can’t be verified or enforced automatically by ElectricSQL. The purpose of this section is to document these constraints and why they are required.
 

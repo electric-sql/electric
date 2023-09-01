@@ -5,11 +5,15 @@ description: >-
 sidebar_position: 30
 ---
 
-:::caution Limitations
-See the [limitations page](../../reference/limitations.md) for context.
-:::
+By default, ElectricSQL does not expose or replicate any data.
 
-By default, ElectricSQL does not expose or replicate any data. In order to sync data between Postgres and local-devices, you have to first electrify tables to add them to the replication machinery. Then you can [assign permissions](./permissions.md) to expose read and write access to the data.
+In order to sync data between Postgres and local-devices, you have to first "electrify" tables to add them to the replication machinery. You can then [assign permissions](./permissions.md) to expose read and write access to the data.
+
+You can only electrify tables with supported data types and constrainsts. See [Types](./types.md) and [Constraints](./constraints.md) for more information.
+
+:::caution Work in progress
+Currently, electrification is supported by an [SQL procedure call syntax](../../reference/roadmap.md#ddlx-rules).
+:::
 
 ## Enable
 
@@ -40,7 +44,7 @@ Note that this will fail if you have any roles, permissions or other rules defin
   <hr className="doc-divider" />
 </div>
 
-:::note
+:::info
 Electrification on its own does not expose any data. It's like an extra security measure to make sure you only ever replicate data from tables you've explicitly enabled.
 
 In addition, tables that are not electrified are not included in the database schema that the client has access to. So sensitive information in the DDL schema itself (such as private dynamic table names) is not exposed unless explicitly enabled.

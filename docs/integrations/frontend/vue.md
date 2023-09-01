@@ -5,8 +5,8 @@ description: >-
 sidebar_position: 40
 ---
 
-:::caution Limitations
-Vue.js support is not yet implemented. See <DocPageLink path="reference/limitations" /> for context.
+:::caution Work in progress
+Vue.js support is not yet implemented.
 
 [Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to develop Vue.js support. 
 :::

@@ -5,15 +5,15 @@ description: >-
 sidebar_position: 10
 ---
 
-:::caution Limitations
-The syntax and features described in this page are **not yet implemented**.
-
-Currently, DDLX rules are limited to [electrification by SQL procedure call syntax](../reference/limitations#ddlx-rules). See the [Limitations](../reference/limitations.md) page for more context.
-:::
-
 ElectricSQL extends the PostgreSQL language with the following DDLX statements.
 
 Use these in your [migrations](../usage/data-modelling/migrations.md) to [electrify tables](../usage/data-modelling/electrification.md) and expose data by granting [permissions](../usage/data-modelling/permissions.md) to roles and assigning roles to [authenticated](../usage/auth/index.md) users.
+
+:::caution Work in progress
+The syntax and features described in this page are not fully implemented.
+
+Currently, DDLX rules are limited to [electrification by SQL procedure call syntax](../reference/roadmap#ddlx-rules). See [Roadmap -> DDLX rules](../reference/roadmap.md#ddlx-rules) for more context.
+:::
 
 ## Electrification
 

@@ -3,7 +3,7 @@ title: LinearLite
 description: Local-first project management app, based on a simplified Linear clone.
 ---
 
-:::caution Limitations
+:::caution Work in progress
 We haven't published this example yet. Check back soon for an online demo.
 :::
 

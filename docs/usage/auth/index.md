@@ -40,12 +40,10 @@ Insecure mode is designed for development or testing. It supports unsigned JWTs 
 
 If you have a backend for your app with a cookie-based login session mechanism already in place, we recommend creating an HTTP endpoint to generate one-off tokens for signed-in users and using that to obtain a fresh token before initializing the client.
 
-## Limitations
+<hr className="doc-divider" />
 
-We don't currently support unauthenticated use.
+:::caution Work in progress
+We don't currently support unauthenticated use, or changing the authentication state on an active replication connection.
 
-We don't currently support changing the authentication state on an active replication connection. To work around this, you can either defer instantiating your client until the user authenticates, or you can [stop][1] and [start][2] the [satellite process][3] manually yourself.
-
-[1]: https://github.com/electric-sql/electric/blob/2e8bfdf4992d355d0b1928a097fe406d283303bf/clients/typescript/src/satellite/process.ts#L293
-[2]: https://github.com/electric-sql/electric/blob/2e8bfdf4992d355d0b1928a097fe406d283303bf/clients/typescript/src/satellite/process.ts#L167-L170
-[3]: https://github.com/electric-sql/electric/blob/2e8bfdf4992d355d0b1928a097fe406d283303bf/clients/typescript/src/satellite/process.ts
+[Get in touch](https://discord.electric-sql.com) if this is a blocker or you need help with a workaround.
+:::
