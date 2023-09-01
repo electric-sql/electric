@@ -5,7 +5,7 @@ import { ClientTables } from 'electric-sql/client/model'
 import { uniqueTabId } from 'electric-sql/util'
 import { Electric, schema } from './generated/client/index'
 import { unsigned, userId } from './auth'
-import { DEBUG_MODE, ELECTRIC_URL } from './config'
+import { ELECTRIC_URL, debugMode } from './config'
 
 export type {
   Electric,
@@ -31,7 +31,7 @@ export const initElectric = async (name: string = 'intro') => {
       token: unsigned(userId())
     },
     url: ELECTRIC_URL,
-    debug: DEBUG_MODE
+    debug: debugMode()
   }
 
   const electric = await electrify(conn, schema, config)
