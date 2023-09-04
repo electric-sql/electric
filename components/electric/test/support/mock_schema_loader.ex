@@ -44,7 +44,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   def start_link(opts, args \\ []) do
     {module, spec} = agent_spec(opts, args)
-    {:ok, state} = connect([], spec) 
+    {:ok, state} = connect([], spec)
     {module, state}
   end
 
@@ -104,7 +104,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
     %Migration{
       txid: Keyword.get(opts, :txid, to_integer(version)),
-      txts: Keyword.get(opts, :txts, DateTime.utc_now()),
+      txts: Keyword.get(opts, :txts, to_integer(version)),
       version: version,
       schema: schema,
       stmts: stmts,
@@ -115,13 +115,28 @@ defmodule Electric.Postgres.MockSchemaLoader do
   defp to_integer(i) when is_integer(i), do: i
   defp to_integer(s) when is_binary(s), do: String.to_integer(s)
 
+  @doc """
+  Update the mock loader with a new {txid, txts} => version mapping
+  Returns the updated state
+  """
+  def receive_tx({__MODULE__, state}, tx, version) do
+    {__MODULE__, receive_tx(state, tx, version)}
+  end
+
   def receive_tx({:agent, pid}, %{"txid" => _txid, "txts" => _txts} = tx, version) do
-    Agent.update(pid, &receive_tx(&1, tx, version))
+    with :ok <- Agent.update(pid, &receive_tx(&1, tx, version)) do
+      {:agent, pid}
+    end
   end
 
   def receive_tx({versions, opts}, %{"txid" => _txid, "txts" => _txts} = row, version) do
     key = tx_key(row)
-    {versions, Map.update(opts, :txids, %{key => version}, &Map.put(&1, key, version))} 
+    {versions, Map.update(opts, :txids, %{key => version}, &Map.put(&1, key, version))}
+  end
+
+  # ignore rows that don't define a txid, txts key
+  def receive_tx({versions, opts}, _row, _version) do
+    {versions, opts}
   end
 
   defp tx_key(%{"txid" => txid, "txts" => txts}) do
@@ -359,7 +374,6 @@ defmodule Electric.Postgres.MockSchemaLoader do
   def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts} = row) do
     notify(opts, {:tx_version, txid, txts})
 
-
     key = tx_key(row)
 
     # we may not explicitly configure the mock loader with txids
@@ -369,7 +383,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
         # the mocking system has no way to propagate transaction ids through
         # -- the txid/txts stuff is an implementation detail of the proxy system
         # FIXME: re-factor the proxy impl to cache actions until it has a version
-        case Enum.find(versions, &(to_integer(&1.txid) == to_integer(txid) && to_integer(&1.txts) == to_integer(txts))) do
+        case Enum.find(
+               versions,
+               &(to_integer(&1.txid) == to_integer(txid) &&
+                   to_integer(&1.txts) == to_integer(txts))
+             ) do
           %Migration{version: version} ->
             {:ok, version}
 

@@ -34,7 +34,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     end
 
     @impl GenStage
-    def handle_call({:emit, events}, _from, state) do
+    def handle_call({:emit, loader, events, version}, _from, state) do
+      for tx <- events, is_struct(tx, Transaction) do
+        for change <- tx.changes do
+          MockSchemaLoader.receive_tx(loader, change.record, version)
+        end
+      end
+
       {:reply, :ok, events, state}
     end
   end
@@ -65,7 +71,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, producer} = start_supervised({FakeProducer, producer_name})
 
-      txid = "749"
+      # txid = "749"
       version = "20220421"
 
       # provide fake oids for the new tables
@@ -84,11 +90,12 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "mistakes"} => ["id"]
       }
 
-      txids = %{
-        txid => version
-      }
+      # txids = %{
+      #   txid => version
+      # }
 
-      backend = MockSchemaLoader.backend_spec(oids: oids, pks: pks, txids: txids)
+      backend =
+        MockSchemaLoader.start_link([oids: oids, pks: pks], name: __MODULE__.Loader)
 
       {:ok, pid} =
         start_supervised(
@@ -102,11 +109,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, _consumer} = start_supervised({FakeConsumer, {pid, self()}})
 
-      {:ok, origin: origin, producer: producer, version: version, txid: txid}
+      {:ok, origin: origin, producer: producer, version: version, loader: backend}
     end
 
     test "migration consumer refreshes subscription after receiving a relation", cxt do
-      %{producer: producer, origin: origin} = cxt
+      %{producer: producer, origin: origin, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
@@ -123,7 +130,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, events})
+      GenStage.call(producer, {:emit, cxt.loader, events, version})
 
       refute_receive {FakeConsumer, :events, _}, 500
       assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 500
@@ -141,9 +148,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => version,
-                "txid" => cxt.txid,
-                "txts" => "2023-04-20 19:41:56.236357+00"
+                "txid" => "100",
+                "txts" => "200"
               },
               tags: []
             },
@@ -152,9 +158,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "7",
                 "query" => "create table other_thing (id uuid primary key);",
-                "version" => version,
-                "txid" => cxt.txid,
-                "txts" => "2023-04-20 19:41:56.236357+00"
+                "txid" => "100",
+                "txts" => "200"
               },
               tags: []
             },
@@ -163,9 +168,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "8",
                 "query" => "create table yet_another_thing (id uuid primary key);",
-                "version" => version,
-                "txid" => cxt.txid,
-                "txts" => "2023-04-20 19:41:56.236357+00"
+                "txid" => "100",
+                "txts" => "200"
               },
               tags: []
             }
@@ -177,7 +181,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, events})
+      GenStage.call(producer, {:emit, cxt.loader, events, version})
 
       assert_receive {FakeConsumer, :events, ^events}, 500
       assert_receive {MockSchemaLoader, :load}, 500
@@ -207,9 +211,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => version,
-                "txid" => cxt.txid,
-                "txts" => "2023-04-20 19:41:56.236357+00"
+                "txid" => "101",
+                "txts" => "201"
               },
               tags: []
             },
@@ -238,9 +241,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               record: %{
                 "id" => "6",
                 "query" => "create table something_else (id uuid primary key);",
-                "version" => version,
-                "txid" => cxt.txid,
-                "txts" => "2023-04-20 19:41:56.236357+00"
+                "txid" => "101",
+                "txts" => "201"
               },
               tags: []
             }
@@ -252,7 +254,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, raw_events})
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
 
       assert_receive {FakeConsumer, :events, ^filtered_events}, 500
       assert_receive {MockSchemaLoader, :load}, 500
