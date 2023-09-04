@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 50
 ---
 
-Invariant support is currently limited to referential integrity and non-null constraints. Unique and check constraints are not yet supported.
+Invariant support is currently limited to referential integrity and not-null constraints. Unique and check constraints are not yet supported.
 
 ## Supported
 
@@ -27,11 +27,11 @@ CREATE TABLE comments (
 
 This works even when making writes locally in an offline database. See [Introduction -> Conflict-free offline -> Preserving data integrity](../../intro/offline.md#preserving-data-integrity) and the Rich-CRDT post on [Compensations](/blog/2022/05/03/introducing-rich-crdts#compensations) for more information.
 
-### Non-null constraints
+### Not-null constraints
 
-ElectricSQL supports [non-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the column.
+ElectricSQL supports [not-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the column.
 
-I.e.: the non-null constraint must be defined in an [additive migration](./migrations.md#limitations). So the following is supported because creating the table with new columns is *additive*:
+I.e.: the not-null constraint must be defined in an [additive migration](./migrations.md#limitations). So the following is supported because creating the table with new columns is *additive*:
 
 ```sql
 CREATE TABLE items (
@@ -46,23 +46,26 @@ CREATE TABLE items (
 )
 ```
 
-This is supported because adding a column is *additive*:
+Adding a column with a not-null constraint is supported because it's *additive*:
 
 ```sql
 ALTER TABLE items
   ADD COLUMN baz TEXT NOT NULL;
 ```
 
-This is **not supported** because constraining the existing column is *destructive*:
+Constraining an existing column by adding a not-null constraint to it is **not supported**:
 
 ```sql
+-- Not supported
 ALTER TABLE items
   ALTER COLUMN bar TEXT NOT NULL;
 ```
 
+This is not supported because it may invalidate concurrent, in-flight operations. Specifically, writes that were accepted locally with null values would need to be rejected, which would violate the [finality of local writes](../../reference/architecture.md#local-writes).
+
 ## Unsupported
 
-Where a constraint on a table is unsupported, you must remove it before [electrifying](./electrification.md) that table.
+Unsupported constraints must be removed from a table before [electrifying](./electrification.md) it.
 
 ### Check constraints
 

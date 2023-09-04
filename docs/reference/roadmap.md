@@ -54,9 +54,9 @@ This is a very temporary workaround and will be removed soon!
 
 ### Failure modes
 
-Currently, you may experience bugs or behaviour that leads to an inconsistent data state. This is **not** related to the core [consistency model](./consistency.md). It's a consequence of the lack of validation and some recovery modes still being pending implementation.
+Currently, you may experience bugs or behaviour that leads to an inconsistent data state. This is **not** related to the core [consistency model](./consistency.md). It's a consequence of the lack of validation and some recovery modes still pending implementation.
 
-In development, you can usually recovery from these bugs by resetting your database(s). In the browser, if you clear localStorage and IndexedDB (for example in Chrome, "Inspect" to open the developer tools -> Application -> Storage -> Clear site data) that will reset the client and your local app will re-sync from the server.
+In development, you can usually recover from these bugs by resetting your database(s). In the browser, if you clear localStorage and IndexedDB (for example in Chrome, "Inspect" to open the developer tools -> Application -> Storage -> Clear site data) that will reset the client and your local app will re-sync from the server.
 
 If you need to re-set your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you may need to drop the replication publication manually:
 
