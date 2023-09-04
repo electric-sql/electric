@@ -5,15 +5,15 @@ description: >-
 sidebar_position: 30
 ---
 
-:::caution Limitations
-Shapes are currently limited to whole-table sync. See the [limitations page](../../reference/limitations.md) for context.
-:::
-
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
 Local apps establish shape subscriptions. This syncs data from the cloud onto the local device using the [Satellite replication protocol](../../api/satellite.md), into the local embedded SQLite database. Once the initial data has synced, [queries](./queries.md) can run against it.
 
 The [Electric sync service](../installation/service.md) maintains shape subscriptions and streams any new data and data changes onto the local device. In this way, local devices can sync a sub-set of a larger database for interactive offline use.
+
+:::caution Work in progress
+Shapes are currently limited to whole-table sync. See [Roadmap -> Shapes](../../reference/roadmap.md#shapes) for more&nbsp;information.
+:::
 
 ## What is a shape?
 

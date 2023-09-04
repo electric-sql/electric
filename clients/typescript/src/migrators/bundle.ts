@@ -12,7 +12,7 @@ import { data as baseMigration } from './schema'
 import Log from 'loglevel'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
-export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/limitations) to learn more.`
+export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
 const DEFAULTS: MigratorOptions = {
   tableName: '_electric_migrations',

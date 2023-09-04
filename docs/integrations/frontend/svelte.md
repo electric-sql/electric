@@ -5,8 +5,8 @@ description: >-
 sidebar_position: 30
 ---
 
-:::caution Limitations
-Svelte support is not yet implemented. See <DocPageLink path="reference/limitations" /> for context.
+:::caution Work in progress
+Svelte support is not yet implemented.
 
 [Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to develop Svelte support. 
 :::

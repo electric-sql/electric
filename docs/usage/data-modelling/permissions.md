@@ -2,16 +2,16 @@
 title: Permissions
 description: >-
   How to authorise data access by authenticated clients.
-sidebar_position: 40
+sidebar_position: 60
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
 
-:::caution Limitations
-See the [limitations page](../../reference/limitations.md) for context.
-:::
-
 Once you've [electrified](./electrification.md) a table, you can grant and assign permissions to read and write the data in it using the [`GRANT`](../../api/ddlx.md#grant) and [`ASSIGN`](../../api/ddlx.md#assign) DDLX statements.
+
+:::caution Work in progress
+Permissions are not yet implemented. See the [Roadmap](../../reference/roadmap.md#ddlx-rules) for more information.
+:::
 
 ## 1. Grant permissions to roles
 

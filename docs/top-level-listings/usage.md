@@ -12,7 +12,7 @@ This guide explains how to use ElectricSQL. It's broken down into four main sect
 ## See also
 
 See the [Integrations](./integrations.md) guide and the [API docs](./api.md).
-You might also be interested in some of the [Reference](./reference.md) docs, such as the [Limitations](../reference/limitations.md) and [Architecture](../reference/architecture.md) pages.
+You might also be interested in some of the [Reference](./reference.md) docs, such as the [Architecture](../reference/architecture.md) and [Roadmap](../reference/roadmap.md) pages.
 
 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
   <div className="tile">
