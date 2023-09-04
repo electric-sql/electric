@@ -42,9 +42,9 @@ spec:
         - name: AUTH_JWT_KEY
           value: "..."
         ports:
-        - name: satellite-ws
+        - name: satellite-http
           containerPort: 5133
-        - name: logical-publisher
+        - name: logical-publisher-tcp
           containerPort: 5433
 ```
 
