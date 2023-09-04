@@ -9,7 +9,9 @@ defmodule Electric.DDLX.DDLXCommandsTest do
     Revoke,
     Assign,
     Unassign
+    # "enable" is just `electrify` so covered by other tests
     # Enable,
+    ## Disabled for the moment until we work on support
     # Disable,
     # SQLite
   }
@@ -350,14 +352,6 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       )
     end
 
-    # test_tx "enable", fn conn ->
-    #   enable = %Enable{
-    #     table_name: "test"
-    #   }
-    #
-    #   {:ok, _, _result} = query(conn, Electric.DDLX.command_to_postgres(enable))
-    # end
-    #
     # test_tx "disable", fn conn ->
     #   disable = %Disable{
     #     table_name: "test"
