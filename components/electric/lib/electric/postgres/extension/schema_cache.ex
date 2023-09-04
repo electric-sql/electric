@@ -123,6 +123,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     call(origin, :electrified_tables)
   end
 
+  @impl SchemaLoader
+  def internal_schema(_origin) do
+    raise "Not implemented"
+  end
+
   def relation(origin, oid) when is_integer(oid) do
     call(origin, {:relation, oid})
   end
@@ -154,6 +159,17 @@ defmodule Electric.Postgres.Extension.SchemaCache do
         raise ArgumentError,
           message:
             "unknown relation #{inspect(relation)} for version #{inspect(version)}: #{inspect(error)}"
+    end
+  end
+
+  def internal_relation!(origin, relation) do
+    case call(origin, {:internal_relation, relation}) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError,
+          message: "unknown internal relation #{inspect(relation)}: #{inspect(error)}"
     end
   end
 
@@ -192,10 +208,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       conn_config: conn_config,
       opts: opts,
       current: nil,
-      refresh_task: nil
+      refresh_task: nil,
+      internal_schema: nil
     }
 
-    {:ok, state}
+    {:ok, state, {:continue, :init}}
   end
 
   @impl GenServer
@@ -321,6 +338,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, :ok, state}
   end
 
+  def handle_call({:internal_relation, relation}, _from, state) do
+    {:reply, Schema.table_info(state.internal_schema, relation), state}
+  end
+
   @impl GenServer
   # refresh subscription Task process done
   def handle_info({ref, :ok}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
@@ -336,6 +357,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_continue({:close, conn}, state) do
     :ok = :epgsql.close(conn)
     {:noreply, state}
+  end
+
+  def handle_continue(:init, state) do
+    {:noreply, %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}}
   end
 
   defp current_schema(%{current: nil} = state) do

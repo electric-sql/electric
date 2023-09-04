@@ -203,6 +203,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {:ok, []}
   end
 
+  @impl true
+  def internal_schema(_state) do
+    Schema.new()
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
   end

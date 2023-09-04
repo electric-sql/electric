@@ -386,25 +386,34 @@ defmodule Electric.Replication.Postgres.SlotServer do
        ) do
     first_lsn = Lsn.increment(state.current_lsn)
 
+    {internal_relations, user_relations} =
+      changes
+      |> Enum.map(& &1.relation)
+      |> Enum.split_with(&is_extension_relation/1)
+
+    internal_relations =
+      internal_relations
+      |> Stream.uniq()
+      |> Stream.map(&Extension.SchemaCache.Global.internal_relation!/1)
+
     # always fetch the table info from the schema registry, don't rely on
     # our cache, which is just to determine which relations to send
     # this keeps the column lists up to date in the case of migrations
-    relations =
-      changes
-      |> Enum.map(& &1.relation)
-      |> Enum.reject(&is_extension_relation/1)
+    user_relations =
+      user_relations
       |> state.preprocess_relation_list_fn.()
-      |> Enum.uniq()
-      |> Enum.map(&Extension.SchemaCache.Global.relation!/1)
+      |> Stream.uniq()
+      |> Stream.map(&Extension.SchemaCache.Global.relation!/1)
+
+    combined_relations = Enum.concat(internal_relations, user_relations)
 
     # detect missing relations based on name *and* on column list
     missing_relations =
-      relations
-      |> Enum.reject(fn r ->
-        Map.get(state.sent_relations, {r.schema, r.name}) == r
+      Enum.reject(combined_relations, fn table_info ->
+        Map.get(state.sent_relations, {table_info.schema, table_info.name}) == table_info
       end)
 
-    relations = Enum.into(relations, state.sent_relations, &{{&1.schema, &1.name}, &1})
+    relations = Enum.into(combined_relations, state.sent_relations, &{{&1.schema, &1.name}, &1})
 
     # Final LSN as specified by `BEGIN` message should be after all LSNs of actual changes but before the LSN of the commit
     {messages, final_lsn} =
@@ -415,9 +424,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
       |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
 
     relation_messages =
-      missing_relations
-      |> Enum.map(&relation_to_wal/1)
-      |> Enum.map(&{%Lsn{segment: 0, offset: 0}, &1})
+      Enum.map(missing_relations, fn table_info ->
+        {%Lsn{segment: 0, offset: 0}, relation_to_wal(table_info)}
+      end)
 
     commit_lsn = Lsn.increment(final_lsn)
 
@@ -443,7 +452,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {begin ++ relation_messages ++ messages ++ commit, relations, commit_lsn}
   end
 
-  defp preprocess_changes(%State{preprocess_change_fn: nil}, change, _, _), do: [change]
+  defp preprocess_changes(%State{} = state, change, _, _)
+       when is_nil(state.preprocess_change_fn) or is_extension_relation(change.relation),
+       do: [change]
 
   defp preprocess_changes(%State{preprocess_change_fn: fun} = state, change, relations, tag)
        when is_function(fun, 4),
@@ -492,13 +503,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
-  defp relation_to_wal(relation) do
+  defp relation_to_wal(table_info) do
     %ReplicationMessages.Relation{
-      id: relation.oid,
-      name: relation.name,
-      namespace: relation.schema,
-      replica_identity: relation.replica_identity,
-      columns: Enum.map(relation.columns, &column_to_wal/1)
+      id: table_info.oid,
+      name: table_info.name,
+      namespace: table_info.schema,
+      replica_identity: table_info.replica_identity,
+      columns: Enum.map(table_info.columns, &column_to_wal/1)
     }
   end
 

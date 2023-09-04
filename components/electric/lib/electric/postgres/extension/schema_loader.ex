@@ -27,6 +27,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
   @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
+  @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -86,5 +87,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def electrified_tables({module, state}) do
     module.electrified_tables(state)
+  end
+
+  def internal_schema({module, state}) do
+    module.internal_schema(state)
   end
 end
