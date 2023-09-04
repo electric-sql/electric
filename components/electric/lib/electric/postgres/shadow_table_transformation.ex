@@ -97,7 +97,7 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   defp build_bitmask(%Changes.NewRecord{}, columns), do: Enum.map(columns, fn _ -> "t" end)
 
   defp build_bitmask(%Changes.UpdatedRecord{old_record: nil}, columns),
-    do: Enum.map(columns, fn _ -> "t" end)
+    do: Enum.map(columns, fn _ -> "f" end)
 
   defp build_bitmask(%Changes.UpdatedRecord{old_record: old, record: new}, columns),
     do: Enum.map(columns, fn col -> if old[col] != new[col], do: "t", else: "f" end)

@@ -4,8 +4,6 @@ import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { sleepAsync } from '../util/timer'
 import {
-  AckCallback,
-  AckType,
   AuthResponse,
   DbName,
   LSN,
@@ -16,6 +14,8 @@ import {
   SatelliteErrorCode,
   RelationsCache,
   Record as DataRecord,
+  StartReplicationResponse,
+  StopReplicationResponse,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -48,7 +48,7 @@ import {
 import { ShapeSubscription } from './process'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
-export const MOCK_INVALID_POSITION_LSN = 27
+export const MOCK_INTERNAL_ERROR = 27
 
 export class MockSatelliteProcess implements Satellite {
   dbName: DbName
@@ -129,7 +129,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   inboundAck: Uint8Array = DEFAULT_LOG_POS
 
   outboundSent: Uint8Array = DEFAULT_LOG_POS
-  outboundAck: Uint8Array = DEFAULT_LOG_POS
 
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
@@ -175,7 +174,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
           })
         } else {
           shapeReqToUuid[shape.requestId] = uuid()
-          const records: DataRecord[] = this.relationData[tablename]
+          const records: DataRecord[] = this.relationData[tablename] ?? []
 
           for (const record of records) {
             const dataChange: InitialDataChange = {
@@ -225,15 +224,20 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
 
+  subscribeToError(cb: ErrorCallback): void {
+    this.on('error', cb)
+  }
+
+  unsubscribeToError(cb: ErrorCallback): void {
+    this.removeListener('error', cb)
+  }
+
   isClosed(): boolean {
     return this.closed
   }
-  resetOutboundLogPositions(sent: Uint8Array, ack: Uint8Array): void {
-    this.outboundSent = sent
-    this.outboundAck = ack
-  }
-  getOutboundLogPositions(): { enqueued: Uint8Array; ack: Uint8Array } {
-    return { enqueued: this.outboundSent, ack: this.outboundAck }
+
+  getLastSentLsn(): Uint8Array {
+    return this.outboundSent
   }
   connect(): Promise<void> {
     this.closed = false
@@ -241,7 +245,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   }
   close(): Promise<void> {
     this.closed = true
-    this.removeAllListeners()
     for (const t of this.timeouts) {
       clearTimeout(t)
     }
@@ -250,7 +253,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   authenticate(_authState: AuthState): Promise<AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(lsn: LSN): Promise<void> {
+  startReplication(lsn: LSN): Promise<StartReplicationResponse> {
     this.replicating = true
     this.inboundAck = lsn
 
@@ -258,28 +261,29 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
-      return Promise.reject(
-        new SatelliteError(
+      return Promise.resolve({
+        error: new SatelliteError(
           SatelliteErrorCode.BEHIND_WINDOW,
           'MOCK BEHIND_WINDOW_LSN ERROR'
-        )
-      )
+        ),
+      })
     }
 
-    if (lsn && bytesToNumber(lsn) == MOCK_INVALID_POSITION_LSN) {
-      return Promise.reject(
-        new SatelliteError(
-          SatelliteErrorCode.INVALID_POSITION,
-          'MOCK INVALID_POSITION ERROR'
-        )
-      )
+    if (lsn && bytesToNumber(lsn) == MOCK_INTERNAL_ERROR) {
+      return Promise.resolve({
+        error: new SatelliteError(
+          SatelliteErrorCode.INTERNAL,
+          'MOCK INTERNAL_ERROR'
+        ),
+      })
     }
 
-    return Promise.resolve()
+    return Promise.resolve({})
   }
-  stopReplication(): Promise<void> {
+
+  stopReplication(): Promise<StopReplicationResponse> {
     this.replicating = false
-    return Promise.resolve()
+    return Promise.resolve({})
   }
 
   subscribeToRelations(_callback: (relation: Relation) => void): void {}
@@ -290,28 +294,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   enqueueTransaction(transaction: DataTransaction): void {
     this.outboundSent = transaction.lsn
-
-    this.emit('ack_lsn', transaction.lsn, AckType.LOCAL_SEND)
-
-    // simulate ping message effect
-    const t = setTimeout(() => {
-      this.outboundAck = transaction.lsn
-      this.emit('ack_lsn', transaction.lsn, AckType.REMOTE_COMMIT)
-    }, 500)
-    this.timeouts.push(t)
-  }
-
-  subscribeToAck(callback: AckCallback): void {
-    this.on('ack_lsn', callback)
-  }
-
-  unsubscribeToAck(callback: AckCallback): void {
-    this.removeListener('ack_lsn', callback)
-  }
-
-  setOutboundLogPositions(sent: LSN, ack: LSN): void {
-    this.outboundSent = sent
-    this.outboundAck = ack
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {

@@ -145,9 +145,9 @@ defmodule Electric.Test.SatelliteWsClient do
   def send_test_relation(conn \\ __MODULE__) do
     relation = %SatRelation{
       columns: [
-        %SatRelationColumn{name: "id", type: "uuid"},
-        %SatRelationColumn{name: "content", type: "varchar"},
-        %SatRelationColumn{name: "content_b", type: "varchar"}
+        %SatRelationColumn{name: "id", type: "uuid", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "varchar", is_nullable: false},
+        %SatRelationColumn{name: "content_b", type: "varchar", is_nullable: true}
       ],
       relation_id: 11111,
       schema_name: "public",
@@ -162,9 +162,9 @@ defmodule Electric.Test.SatelliteWsClient do
   def send_test_relation_owned(conn \\ __MODULE__) do
     relation = %SatRelation{
       columns: [
-        %SatRelationColumn{name: "id", type: "uuid"},
-        %SatRelationColumn{name: "electric_user_id", type: "varchar"},
-        %SatRelationColumn{name: "content", type: "varchar"}
+        %SatRelationColumn{name: "id", type: "uuid", is_nullable: false},
+        %SatRelationColumn{name: "electric_user_id", type: "varchar", is_nullable: false},
+        %SatRelationColumn{name: "content", type: "varchar", is_nullable: false}
       ],
       relation_id: 22222,
       schema_name: "public",
@@ -302,18 +302,20 @@ defmodule Electric.Test.SatelliteWsClient do
     )
   end
 
-  def send_tx_data(conn, lsn, commit_time, op) do
-    tx = %SatOpLog{
-      ops: [
-        %SatTransOp{
-          op: {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
-        },
-        %SatTransOp{op: op},
-        %SatTransOp{
-          op: {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
-        }
-      ]
-    }
+  def send_tx_data(conn, lsn, commit_time, op_or_ops) do
+    begin = {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
+    commit = {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
+    ops = [begin] ++ List.wrap(op_or_ops) ++ [commit]
+
+    ops =
+      Enum.map(ops, fn
+        {type, op} -> %SatTransOp{op: {type, op}}
+        %SatOpInsert{} = op -> %SatTransOp{op: {:insert, op}}
+        %SatOpUpdate{} = op -> %SatTransOp{op: {:update, op}}
+        %SatOpDelete{} = op -> %SatTransOp{op: {:delete, op}}
+      end)
+
+    tx = %SatOpLog{ops: ops}
 
     send_data(conn, tx)
     :ok

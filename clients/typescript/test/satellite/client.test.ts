@@ -9,7 +9,7 @@ import {
 } from '../../src/satellite/client'
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { WebSocketNodeFactory } from '../../src/sockets/node'
-import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
+import { base64, bytesToNumber } from '../../src/util/common'
 import {
   getObjFromString,
   getTypeFromCode,
@@ -17,8 +17,6 @@ import {
   SatPbMsg,
 } from '../../src/util/proto'
 import {
-  AckType,
-  DataChangeType,
   Relation,
   SatelliteErrorCode,
   DataTransaction,
@@ -66,8 +64,7 @@ test.beforeEach((t) => {
 
 test.afterEach.always(async (t) => {
   const { server, client } = t.context
-
-  await client.close()
+  client.close()
   server.close()
 })
 
@@ -76,43 +73,6 @@ test.serial('connect success', async (t) => {
 
   await client.connect()
   t.pass()
-})
-
-test.serial('connection backoff success', async (t) => {
-  const { client, server } = t.context
-
-  server.close()
-
-  const retry = (_e: any, a: number) => {
-    if (a > 0) {
-      t.pass()
-      return false
-    }
-    return true
-  }
-
-  try {
-    await client.connect(retry)
-  } catch (e) {}
-})
-
-test.serial('connection backoff failure', async (t) => {
-  const { client, server } = t.context
-
-  server.close()
-
-  const retry = (_e: any, a: number) => {
-    if (a > 0) {
-      return false
-    }
-    return true
-  }
-
-  try {
-    await client.connect(retry)
-  } catch (e) {
-    t.pass()
-  }
 })
 
 // TODO: handle connection errors scenarios
@@ -153,10 +113,10 @@ test.serial('connect subscription error', async (t) => {
   server.nextResponses([startResp])
 
   try {
-    await client.startReplication()
-    t.fail()
+    const resp = await client.startReplication()
+    t.is(resp.error?.code, SatelliteErrorCode.BEHIND_WINDOW)
   } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.BEHIND_WINDOW)
+    t.fail()
   }
 })
 
@@ -309,8 +269,8 @@ test.serial('receive transaction over multiple messages', async (t) => {
     table: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'name1', type: 'TEXT' },
-      { name: 'name2', type: 'TEXT' },
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
     ],
   }
 
@@ -320,8 +280,16 @@ test.serial('receive transaction over multiple messages', async (t) => {
     tableName: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      Proto.SatRelationColumn.fromPartial({ name: 'name1', type: 'TEXT' }),
-      Proto.SatRelationColumn.fromPartial({ name: 'name2', type: 'TEXT' }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name1',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name2',
+        type: 'TEXT',
+        isNullable: true,
+      }),
     ],
   })
 
@@ -397,10 +365,10 @@ test.serial('acknowledge lsn', async (t) => {
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: DataTransaction, ack: any) => {
-      const lsn0 = client['inbound'].ack_lsn
+      const lsn0 = client['inbound'].last_lsn
       t.is(lsn0, undefined)
       ack()
-      const lsn1 = base64.fromBytes(client['inbound'].ack_lsn!)
+      const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
       t.is(lsn1, 'FAKE')
       res()
     })
@@ -550,55 +518,6 @@ test.serial('send transaction', async (t) => {
   })
 })
 
-test('ack on send and pong', async (t) => {
-  await connectAndAuth(t.context)
-  const { client, server } = t.context
-
-  const lsn_1 = numberToBytes(1)
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  const pingResponse = Proto.SatPingResp.fromPartial({ lsn: lsn_1 })
-
-  server.nextResponses([startResp])
-  server.nextResponses([])
-  server.nextResponses([pingResponse])
-
-  await client.startReplication()
-
-  const transaction: DataTransaction = {
-    lsn: lsn_1,
-    commit_timestamp: Long.UZERO,
-    changes: [
-      {
-        relation: relations.parent,
-        type: DataChangeType.INSERT,
-        record: { id: 0 },
-        tags: [], // actual value is not relevent here
-      },
-    ],
-  }
-
-  const res = new Promise<void>((res) => {
-    let sent = false
-    client.subscribeToAck((lsn, type) => {
-      if (type == AckType.LOCAL_SEND) {
-        t.is(bytesToNumber(lsn), 1)
-        sent = true
-      } else if (sent && type == AckType.REMOTE_COMMIT) {
-        t.is(bytesToNumber(lsn), 1)
-        t.is(sent, true)
-        res()
-      }
-    })
-  })
-
-  setTimeout(() => {
-    client.enqueueTransaction(transaction)
-  }, 100)
-
-  await res
-})
-
 test.serial('default and null test', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
@@ -614,12 +533,12 @@ test.serial('default and null test', async (t) => {
     table: 'Items',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'id', type: 'uuid' },
-      { name: 'content', type: 'text' },
-      { name: 'text_null', type: 'text' },
-      { name: 'text_null_default', type: 'text' },
-      { name: 'intvalue_null', type: 'integer' },
-      { name: 'intvalue_null_default', type: 'integer' },
+      { name: 'id', type: 'uuid', isNullable: false },
+      { name: 'content', type: 'text', isNullable: false },
+      { name: 'text_null', type: 'text', isNullable: true },
+      { name: 'text_null_default', type: 'text', isNullable: true },
+      { name: 'intvalue_null', type: 'integer', isNullable: true },
+      { name: 'intvalue_null_default', type: 'integer', isNullable: true },
     ],
   }
 
@@ -796,12 +715,15 @@ test.serial('listen to subscription events: error', async (t) => {
   const subscriptionId = 'THE_ID'
 
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const subsData = Proto.SatSubsDataBegin.fromPartial({
+    subscriptionId,
+  })
   const subsError = Proto.SatSubsDataError.fromPartial({
     code: Proto.SatSubsDataError_Code.SHAPE_DELIVERY_ERROR,
     message: 'FAKE ERROR',
     subscriptionId,
   })
-  server.nextResponses([subsResp, subsError])
+  server.nextResponses([subsResp, subsData, subsError])
 
   const success = () => t.fail()
   const error = () => t.pass()
@@ -929,8 +851,8 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
     table: 'table',
     tableType: Proto.SatRelation_RelationType.TABLE,
     columns: [
-      { name: 'name1', type: 'TEXT' },
-      { name: 'name2', type: 'TEXT' },
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
     ],
   }
 

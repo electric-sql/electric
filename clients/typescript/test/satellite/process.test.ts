@@ -2,7 +2,7 @@ import anyTest, { TestFn } from 'ava'
 
 import {
   MOCK_BEHIND_WINDOW_LSN,
-  MOCK_INVALID_POSITION_LSN,
+  MOCK_INTERNAL_ERROR,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -46,6 +46,7 @@ import {
   ClientShapeDefinition,
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
+import { mergeEntries } from '../../src/satellite/merge'
 
 const parentRecord = {
   id: 1,
@@ -84,9 +85,7 @@ test('load metadata', async (t) => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
-    compensations: 0,
-    lastAckdRowId: '0',
-    lastSentRowId: '0',
+    compensations: 1,
     lsn: '',
     clientId: '',
     subscriptions: '',
@@ -208,23 +207,27 @@ test('starting and stopping the process works', async (t) => {
 
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 1)
+  // connect, 1st txn
+  t.is(notifier.notifications.length, 2)
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // 2nd txm
+  t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
-  t.is(notifier.notifications.length, 2)
+  // no txn notified
+  t.is(notifier.notifications.length, 3)
 
   await satellite.start(authState)
   await sleepAsync(0)
 
-  t.is(notifier.notifications.length, 3)
+  // connect, 4th txn
+  t.is(notifier.notifications.length, 5)
 })
 
 test('snapshots on potential data change', async (t) => {
@@ -268,8 +271,7 @@ test('snapshot of INSERT after DELETE', async (t) => {
 })
 
 test('take snapshot and merge local wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime() - 1
@@ -291,13 +293,11 @@ test('take snapshot and merge local wins', async (t) => {
 
   await satellite._setAuthState(authState)
   const localTime = await satellite._performSnapshot()
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
-  const merged = satellite._mergeEntries(clientId, local, 'remote', [
-    incomingEntry,
-  ])
+  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -323,8 +323,7 @@ test('take snapshot and merge local wins', async (t) => {
 })
 
 test('take snapshot and merge incoming wins', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   await adapter.run({
@@ -332,7 +331,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   })
 
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
   await satellite._performSnapshot()
 
   const local = await satellite._getEntries()
@@ -352,9 +351,7 @@ test('take snapshot and merge incoming wins', async (t) => {
     }
   )
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', [
-    incomingEntry,
-  ])
+  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -379,16 +376,105 @@ test('take snapshot and merge incoming wins', async (t) => {
   })
 })
 
+test('merge incoming wins on persisted ops', async (t) => {
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
+  await runMigrations()
+  await satellite._setAuthState(authState)
+  satellite.relations = relations
+
+  // This operation is persisted
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+  })
+  await satellite._performSnapshot()
+  const [originalInsert] = await satellite._getEntries()
+  const [tx] = toTransactions([originalInsert], satellite.relations)
+  tx.origin = authState.clientId
+  await satellite._applyTransaction(tx)
+
+  // Verify that GC worked as intended and the oplog entry was deleted
+  t.deepEqual(await satellite._getEntries(), [])
+
+  // This operation is done offline
+  await adapter.run({
+    sql: `UPDATE parent SET value = 'new local' WHERE id = 1`,
+  })
+  await satellite._performSnapshot()
+  const [offlineInsert] = await satellite._getEntries()
+  const offlineTimestamp = new Date(offlineInsert.timestamp).getTime()
+
+  // This operation is done concurrently with offline but at a later point in time. It's sent immediately on connection
+  const incomingTs = offlineTimestamp + 1
+  const firstIncomingEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.update,
+    incomingTs,
+    genEncodedTags('remote', [incomingTs]),
+    { id: 1, value: 'incoming' },
+    { id: 1, value: 'local' }
+  )
+
+  const firstIncomingTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(incomingTs),
+    changes: [opLogEntryToChange(firstIncomingEntry, satellite.relations)],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(firstIncomingTx)
+
+  const [{ value: value1 }] = await adapter.query({
+    sql: 'SELECT value FROM parent WHERE id = 1',
+  })
+  t.is(
+    value1,
+    'incoming',
+    'LWW conflict merge of the incoming transaction should lead to incoming operation winning'
+  )
+
+  // And after the offline transaction was sent, the resolved no-op transaction comes in
+  const secondIncomingEntry = generateRemoteOplogEntry(
+    tableInfo,
+    'main',
+    'parent',
+    OPTYPES.update,
+    offlineTimestamp,
+    encodeTags([
+      generateTag('remote', incomingTs),
+      generateTag(authState.clientId, offlineTimestamp),
+    ]),
+    { id: 1, value: 'incoming' },
+    { id: 1, value: 'incoming' }
+  )
+
+  const secondIncomingTx = {
+    origin: authState.clientId,
+    commit_timestamp: Long.fromNumber(offlineTimestamp),
+    changes: [opLogEntryToChange(secondIncomingEntry, satellite.relations)],
+    lsn: new Uint8Array(),
+  }
+  await satellite._applyTransaction(secondIncomingTx)
+
+  const [{ value: value2 }] = await adapter.query({
+    sql: 'SELECT value FROM parent WHERE id = 1',
+  })
+  t.is(
+    value2,
+    'incoming',
+    'Applying the resolved write from the round trip should be a no-op'
+  )
+})
+
 test('apply does not add anything to oplog', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTimestamp = await satellite._performSnapshot()
 
@@ -441,8 +527,7 @@ test('apply does not add anything to oplog', async (t) => {
 })
 
 test('apply incoming with no local', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date()
@@ -481,8 +566,7 @@ test('apply empty incoming', async (t) => {
 })
 
 test('apply incoming with null on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, authState } =
-    t.context as any
+  const { runMigrations, satellite, adapter, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime()
@@ -521,8 +605,7 @@ test('apply incoming with null on column with default', async (t) => {
 })
 
 test('apply incoming with undefined on column with default', async (t) => {
-  const { runMigrations, satellite, adapter, tableInfo, authState } =
-    t.context as any
+  const { runMigrations, satellite, adapter, tableInfo, authState } = t.context
   await runMigrations()
 
   const incomingTs = new Date().getTime()
@@ -560,10 +643,10 @@ test('apply incoming with undefined on column with default', async (t) => {
 })
 
 test('INSERT wins over DELETE and restored deleted values', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -610,7 +693,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
     ),
   ]
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -636,10 +719,10 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
 })
 
 test('concurrent updates take all changed values', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -686,7 +769,7 @@ test('concurrent updates take all changed values', async (t) => {
     ),
   ]
 
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   // The incoming entry modified the value of the `value` column to `'remote'`
@@ -714,10 +797,10 @@ test('concurrent updates take all changed values', async (t) => {
 })
 
 test('merge incoming with empty local', async (t) => {
-  const { runMigrations, satellite, tableInfo, authState } = t.context as any
+  const { runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const localTs = new Date().getTime()
   const incomingTs = localTs + 1
@@ -738,7 +821,7 @@ test('merge incoming with empty local', async (t) => {
   ]
 
   const local: OplogEntry[] = []
-  const merged = satellite._mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -754,44 +837,6 @@ test('merge incoming with empty local', async (t) => {
     },
     tags: [generateTag('remote', new Date(incomingTs))],
   })
-})
-
-test('advance oplog cursor', async (t) => {
-  const { adapter, runMigrations, satellite } = t.context
-  await runMigrations()
-
-  // fake current propagated rowId
-  satellite._lastSentRowId = 2
-
-  // Get tablenames.
-  const oplogTablename = opts.oplogTable.tablename
-  const metaTablename = opts.metaTable.tablename
-
-  // Insert a couple of rows.
-  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
-
-  // We have two rows in the oplog.
-  let rows = await adapter.query({
-    sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}`,
-  })
-  t.is(rows[0].num_rows, 2)
-
-  // Ack.
-  await satellite._ack(2, true)
-
-  // NOTE: The oplog is not clean! This is a current design decision to clear
-  // oplog only when receiving transaction that originated from Satellite in the
-  // first place.
-  rows = await adapter.query({
-    sql: `SELECT count(rowid) as num_rows FROM ${oplogTablename}`,
-  })
-  t.is(rows[0].num_rows, 2)
-
-  // Verify the meta.
-  rows = await adapter.query({
-    sql: `SELECT value FROM ${metaTablename} WHERE key = 'lastAckdRowId'`,
-  })
-  t.is(rows[0].value, '2')
 })
 
 test('compensations: referential integrity is enforced', async (t) => {
@@ -814,7 +859,7 @@ test('compensations: referential integrity is enforced', async (t) => {
 
 test('compensations: incoming operation breaks referential integrity', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
-    t.context as any
+    t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
@@ -853,13 +898,13 @@ test('compensations: incoming operation breaks referential integrity', async (t)
 
 test('compensations: incoming operations accepted if restore referential integrity', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
-    t.context as any
+    t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
-  const clientId = satellite['_authState']['clientId']
+  const clientId = satellite._authState!.clientId
 
   const childInsertEntry = generateRemoteOplogEntry(
     tableInfo,
@@ -917,20 +962,18 @@ test('compensations: incoming operations accepted if restore referential integri
 })
 
 test('compensations: using triggers with flag 0', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, authState } =
-    t.context as any
+  const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
-  satellite._lastSentRowId = 1
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await satellite._setAuthState(authState)
-  await satellite._performSnapshot()
-  await satellite._ack(1, true)
+  const ts = await satellite._performSnapshot()
+  await satellite._garbageCollectOplog(ts)
 
   await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
@@ -969,14 +1012,13 @@ test('compensations: using triggers with flag 1', async (t) => {
 
   await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 1)
-  satellite._lastSentRowId = 1
 
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
   })
   await satellite._setAuthState(authState)
-  await satellite._performSnapshot()
-  await satellite._ack(1, true)
+  const ts = await satellite._performSnapshot()
+  await satellite._garbageCollectOplog(ts)
 
   await adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 1)` })
   await satellite._performSnapshot()
@@ -1114,20 +1156,8 @@ test('get transactions from opLogEntries', async (t) => {
   t.deepEqual(opLog, expected)
 })
 
-test('rowid acks updates meta', async (t) => {
-  const { runMigrations, satellite, client, authState } = t.context
-  await runMigrations()
-  await satellite.start(authState)
-
-  const lsn1 = numberToBytes(1)
-  client['emit']('ack_lsn', lsn1, false)
-
-  const lsn = await satellite['_getMeta']('lastSentRowId')
-  t.is(lsn, '1')
-})
-
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState, client } = t.context
+  const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
   await satellite.start(authState)
 
@@ -1137,14 +1167,11 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const sentLsn = await satellite._getMeta('lastSentRowId')
-  t.is(sentLsn, '1')
-  await new Promise<void>((r) => client.once('ack_lsn', () => r()))
+  // We should have sent (or at least enqueued to send) one row
+  const sentLsn = await satellite.client.getLastSentLsn()
+  t.deepEqual(sentLsn, numberToBytes(1))
 
-  const acknowledgedLsn = await satellite._getMeta('lastAckdRowId')
-  t.is(acknowledgedLsn, '1')
-
-  satellite._connectivityStateChanged('disconnected')
+  await satellite._connectivityStateChanged('disconnected')
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1152,14 +1179,15 @@ test('handling connectivity state change stops queueing operations', async (t) =
 
   await satellite._performSnapshot()
 
-  const lsn1 = await satellite._getMeta('lastSentRowId')
-  t.is(lsn1, '1')
+  // Since connectivity is down, that row isn't yet sent
+  const lsn1 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn1, sentLsn)
 
-  satellite._connectivityStateChanged('available')
-
-  await sleepAsync(200)
-  const lsn2 = await satellite._getMeta('lastSentRowId')
-  t.is(lsn2, '2')
+  // Once connectivity is restored, we will immediately run a snapshot to send pending rows
+  await satellite._connectivityStateChanged('available')
+  await sleepAsync(200) // Wait for snapshot to run
+  const lsn2 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn2, numberToBytes(2))
 })
 
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
@@ -1175,19 +1203,20 @@ test('garbage collection is triggered when transaction from the same origin is r
     sql: `UPDATE parent SET value = 'local', other = 2 WHERE id = 1;`,
   })
 
-  let lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '0')
+  // Before snapshot, we didn't send anything
+  const lsn1 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn1, numberToBytes(0))
 
+  // Snapshot sends these oplog entries
   await satellite._performSnapshot()
-
-  lsn = await satellite._getMeta('lastSentRowId')
-  t.is(lsn, '2')
-  lsn = await satellite._getMeta('lastAckdRowId')
+  const lsn2 = await satellite.client.getLastSentLsn()
+  t.deepEqual(lsn2, numberToBytes(2))
 
   const old_oplog = await satellite._getEntries()
-  let transactions = toTransactions(old_oplog, relations)
+  const transactions = toTransactions(old_oplog, relations)
   transactions[0].origin = satellite._authState!.clientId
 
+  // Transaction containing these oplogs is applies, which means we delete them
   await satellite._applyTransaction(transactions[0])
   const new_oplog = await satellite._getEntries()
   t.deepEqual(new_oplog, [])
@@ -1202,7 +1231,7 @@ test('clear database on BEHIND_WINDOW', async (t) => {
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
   await satellite._setMeta('lsn', base64lsn)
   try {
-    const conn = await satellite.start(authState, { clearOnBehindWindow: true })
+    const conn = await satellite.start(authState)
     await conn.connectionPromise
     const lsnAfter = await satellite._getMeta('lsn')
     t.not(lsnAfter, base64lsn)
@@ -1214,19 +1243,23 @@ test('clear database on BEHIND_WINDOW', async (t) => {
 })
 
 test('throw other replication errors', async (t) => {
+  t.plan(2)
   const { satellite } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
 
-  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INVALID_POSITION_LSN))
+  const base64lsn = base64.fromBytes(numberToBytes(MOCK_INTERNAL_ERROR))
   await satellite._setMeta('lsn', base64lsn)
-  try {
-    const conn = await satellite.start(authState)
-    await conn.connectionPromise
-    t.fail('start should throw')
-  } catch (e: any) {
-    t.is(e.code, SatelliteErrorCode.INVALID_POSITION)
-  }
+
+  const conn = await satellite.start(authState)
+  return Promise.all(
+    [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
+      p?.catch((e: SatelliteError) => {
+        console.log(`error ${e}`)
+        t.is(e.code, SatelliteErrorCode.INTERNAL)
+      })
+    )
+  )
 })
 
 test('apply shape data and persist subscription', async (t) => {
@@ -1253,9 +1286,10 @@ test('apply shape data and persist subscription', async (t) => {
   const { synced } = await satellite.subscribe([shapeDef])
   await synced
 
-  t.is(notifier.notifications.length, 1)
-  t.is(notifier.notifications[0].changes.length, 1)
-  t.deepEqual(notifier.notifications[0].changes[0], {
+  // first notification is 'connected'
+  t.is(notifier.notifications.length, 2)
+  t.is(notifier.notifications[1].changes.length, 1)
+  t.deepEqual(notifier.notifications[1].changes[0], {
     qualifiedTablename: qualified,
     rowids: [],
   })
@@ -1684,6 +1718,68 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
     sql: `SELECT * FROM _electric_oplog`,
   })
   t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
+})
+
+test('DELETE after DELETE sends clearTags', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await runMigrations()
+
+  await satellite._setAuthState(authState)
+
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+  })
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (2,'val2')`,
+  })
+
+  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+
+  await satellite._performSnapshot()
+
+  await adapter.run({ sql: `DELETE FROM parent WHERE id=2` })
+
+  await satellite._performSnapshot()
+
+  const entries = await satellite._getEntries()
+
+  t.is(entries.length, 4)
+
+  const delete1 = entries[2]
+  const delete2 = entries[3]
+
+  t.is(delete1.primaryKey, '{"id":1}')
+  t.is(delete1.optype, 'DELETE')
+  // No tags for first delete
+  t.is(delete1.clearTags, '[]')
+
+  t.is(delete2.primaryKey, '{"id":2}')
+  t.is(delete2.optype, 'DELETE')
+  // The second should have clearTags
+  t.not(delete2.clearTags, '[]')
+})
+
+test.serial('connection backoff success', async (t) => {
+  t.plan(3)
+  const { client, satellite } = t.context
+
+  client.close()
+
+  const retry = (_e: any, a: number) => {
+    if (a > 0) {
+      t.pass()
+      return false
+    }
+    return true
+  }
+
+  satellite['_connectRetryHandler'] = retry
+
+  await Promise.all(
+    [satellite._connectWithBackoff(), satellite['initializing']?.waitOn()].map(
+      (p) => p?.catch(() => t.pass())
+    )
+  )
 })
 
 // TODO: implement reconnect protocol

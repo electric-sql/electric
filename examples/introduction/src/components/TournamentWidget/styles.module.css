@@ -1,0 +1,59 @@
+.tournament {
+  position: relative;
+  display: block;
+  min-height: 4rem;
+  margin: 0.5rem 0 1rem;
+
+  border-radius: 12px;
+  border: 1px dashed var(--cool-grey-800, #5A5C64);
+}
+.tournamentActive {
+  border-color: var(--electric-green);
+}
+
+.tournamentLabel {
+  position: relative;
+  display: block;
+  float: left;
+  padding: 0 0.3rem;
+  transform: scale(0.85);
+  margin-top: -0.7rem;
+  background: rgb(25, 24, 27);
+
+  max-width: calc(100% - 2rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 1.5rem;
+}
+.tournamentClose {
+  cursor: pointer;
+  color: inherit;
+}
+.tournamentClose:hover {
+  color: inherit;
+}
+.tournamentClose svg {
+  font-size: inherit;
+  width: 1.4em;
+  height: 1.15em;
+
+  position: relative;
+  display: block;
+  float: right;
+  transform: scale(0.9);
+  margin-top: -0.5rem;
+  background: rgb(25, 24, 27);
+  margin-right: 0.5rem;
+  padding: 0.075rem 0.2rem;
+  border: 1px solid var(--cool-grey-800);
+  border-radius: 50px;
+}
+.playerListings {
+  position: relative;
+  display: block;
+  min-height: 3.6rem;
+  margin: 0.5rem 0 1rem;
+  clear: both;
+  padding: 0.5rem 1rem 0;
+}
+

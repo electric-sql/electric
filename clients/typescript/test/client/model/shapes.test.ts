@@ -3,11 +3,6 @@ import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
-import {
-  shapeManager,
-  ShapeManager,
-  ShapeManagerMock,
-} from '../../../src/client/model/shapes'
 import { SatelliteProcess } from '../../../src/satellite/process'
 import { MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
@@ -34,12 +29,7 @@ Log.methodFactory = function (methodName, logLevel, loggerName) {
     }
   }
 }
-Log.setLevel(Log.getLevel()) // Be sure to call setLevel method in order to apply plugin
-
-// Use a mocked shape manager for these tests
-// which does not wait for Satellite
-// to acknowledge the subscription
-Object.setPrototypeOf(shapeManager, ShapeManagerMock.prototype)
+Log.setLevel(Log.levels.DEBUG) // Be sure to call setLevel method in order to apply plugin
 
 const config = {
   auth: {
@@ -66,8 +56,7 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     satelliteDefaults
   )
 
-  shapeManager.init(satellite)
-  const electric = ElectricClient.create(schema, adapter, notifier)
+  const electric = ElectricClient.create(schema, adapter, notifier, satellite)
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User
@@ -125,7 +114,6 @@ function init({ db }: ContextType) {
 
 test.beforeEach(makeContext)
 test.afterEach.always((t: ExecutionContext<ContextType>) => {
-  shapeManager['tablesPreviouslySubscribed'] = new Set<string>()
   return cleanAndStopSatellite(t)
 })
 
@@ -168,17 +156,6 @@ test.serial('Upsert query issues warning if table is not synced', async (t) => {
   ])
 })
 
-test.serial(
-  'Read queries no longer warn after syncing the table',
-  async (t) => {
-    const { Post } = t.context as ContextType
-    t.assert(log.length === 0)
-    await Post.sync() // syncs only the Post table
-    await Post.findMany() // now we can query it
-    t.assert(log.length === 0)
-  }
-)
-
 const relations = {
   Post: {
     id: 0,
@@ -189,26 +166,31 @@ const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'title',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'contents',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'nbr',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'authorId',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -222,16 +204,19 @@ const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'bio',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'userId',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -253,8 +238,6 @@ const profile = {
 }
 
 test.serial('promise resolves when subscription starts loading', async (t) => {
-  Object.setPrototypeOf(shapeManager, ShapeManager.prototype)
-
   const { satellite, client } = t.context as ContextType
   await satellite.start(config.auth)
 

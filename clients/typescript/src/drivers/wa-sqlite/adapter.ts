@@ -51,7 +51,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
-  ): Promise<T | void> {
+  ): Promise<T> {
     const release = await this.txMutex.acquire()
 
     try {

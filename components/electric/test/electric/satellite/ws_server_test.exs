@@ -538,6 +538,10 @@ defmodule Electric.Satellite.WsServerTest do
   end
 
   describe "Incoming replication (Satellite -> PG)" do
+    @tag with_migrations: [
+           {"20230815",
+            ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
+         ]
     test "common replication", cxt do
       self = self()
 
@@ -551,8 +555,8 @@ defmodule Electric.Satellite.WsServerTest do
           MockClient.send_data(conn, %SatInStartReplicationResp{})
 
           columns = [
-            %SatRelationColumn{name: "satellite-column-1", type: "type1"},
-            %SatRelationColumn{name: "satellite-column-2", type: "type2"}
+            %SatRelationColumn{name: "satellite-column-1", type: "text"},
+            %SatRelationColumn{name: "satellite-column-2", type: "varchar"}
           ]
 
           relation = %SatRelation{
@@ -670,8 +674,6 @@ defmodule Electric.Satellite.WsServerTest do
       data_delay_ms
     )
   end
-
-  defp with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
 
   def clean_connections() do
     MockClient.disconnect()

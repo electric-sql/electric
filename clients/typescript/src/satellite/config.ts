@@ -16,6 +16,8 @@ export interface SatelliteOpts {
   pollingInterval: number
   /** Throttle snapshotting to once per `minSnapshotWindow` milliseconds. */
   minSnapshotWindow: number
+  /** On reconnect, clear client's state if cannot catch up with Electric buffered WAL*/
+  clearOnBehindWindow: boolean
 }
 
 export interface SatelliteOverrides {
@@ -34,6 +36,7 @@ export const satelliteDefaults: SatelliteOpts = {
   shadowTable: new QualifiedTablename('main', '_electric_shadow'),
   pollingInterval: 2000,
   minSnapshotWindow: 40,
+  clearOnBehindWindow: true,
 }
 
 export const satelliteClientDefaults = {

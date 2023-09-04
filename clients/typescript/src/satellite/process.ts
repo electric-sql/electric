@@ -1,5 +1,9 @@
 import throttle from 'lodash.throttle'
 
+import {
+  SatOpMigrate_Type,
+  SatRelation_RelationType,
+} from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -10,62 +14,52 @@ import {
   Notifier,
 } from '../notifiers/index'
 import {
-  Client,
-  ConnectionWrapper,
-  Satellite,
-  SatelliteReplicationOptions,
-} from './index'
+  Waiter,
+  base64,
+  bytesToNumber,
+  emptyPromise,
+  getWaiter,
+  uuid,
+} from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  AckType,
   Change as Chg,
   ConnectivityState,
   DataChange,
   DbName,
-  isDataChange,
   LSN,
+  MigrationTable,
   Relation,
   RelationsCache,
   SatelliteError,
+  SatelliteErrorCode,
   SchemaChange,
+  SqlValue,
   Statement,
   Transaction,
-  Row,
-  MigrationTable,
-  SatelliteErrorCode,
-  SqlValue,
+  isDataChange,
 } from '../util/types'
 import { SatelliteOpts } from './config'
-import { mergeChangesLastWriteWins, mergeOpTags } from './merge'
+import { Client, ConnectionWrapper, Satellite } from './index'
 import {
+  OPTYPES,
+  OplogEntry,
+  ShadowEntry,
+  ShadowEntryChanges,
   encodeTags,
   fromTransaction,
   generateTag,
   getShadowPrimaryKey,
-  localOperationsToTableChanges,
-  OplogEntry,
-  OPTYPES,
   primaryKeyToStr,
-  remoteOperationsToTableChanges,
-  ShadowEntry,
-  ShadowEntryChanges,
-  ShadowTableChanges,
   toTransactions,
 } from './oplog'
-import {
-  SatOpMigrate_Type,
-  SatRelation_RelationType,
-} from '../_generated/protocol/satellite'
-import {
-  base64,
-  bytesToNumber,
-  emptyPromise,
-  numberToBytes,
-  uuid,
-} from '../util/common'
 
+import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
-import { generateOplogTriggers } from '../migrators/triggers'
+import { generateTableTriggers } from '../migrators/triggers'
+import { prepareInsertBatchedStatements } from '../util/statements'
+import { mergeEntries } from './merge'
+import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   ClientShapeDefinition,
@@ -76,9 +70,8 @@ import {
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
-import { SubscriptionsManager } from './shapes'
-import { prepareInsertBatchedStatements } from '../util/statements'
-import { Mutex } from 'async-mutex'
+import { IBackOffOptions, backOff } from 'exponential-backoff'
+import { SCHEMA_VSN_ERROR_MSG } from '../migrators/bundle'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -98,16 +91,27 @@ type Uuid = `${string}-${string}-${string}-${string}-${string}`
 type MetaEntries = {
   clientId: Uuid | ''
   compensations: number
-  lastAckdRowId: `${number}`
-  lastSentRowId: `${number}`
   lsn: string | null
   subscriptions: string
 }
 
-const throwErrors = [
-  SatelliteErrorCode.INVALID_POSITION,
-  SatelliteErrorCode.BEHIND_WINDOW,
-]
+type ConnectRetryHandler = (error: Error, attempt: number) => boolean
+
+const connectRetryHandler: ConnectRetryHandler = (_error, _attempts) => {
+  // for simplicity, always retry
+  return true
+}
+
+const connectionRetryPolicy: Partial<IBackOffOptions> = {
+  delayFirstAttempt: false,
+  startingDelay: 100,
+  jitter: 'full',
+  maxDelay: 5000,
+  numOfAttempts: 100,
+  timeMultiple: 2,
+}
+
+const throwErrors = [SatelliteErrorCode.INTERNAL]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -128,8 +132,6 @@ export class SatelliteProcess implements Satellite {
   _potentialDataChangeSubscription?: string
   _throttledSnapshot: ThrottleFunction
 
-  _lastAckdRowId: number
-  _lastSentRowId: number
   _lsn?: LSN
 
   relations: RelationsCache
@@ -149,6 +151,9 @@ export class SatelliteProcess implements Satellite {
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
+  private _connectRetryHandler: ConnectRetryHandler
+  private initializing?: Waiter
+
   constructor(
     dbName: DbName,
     adapter: DatabaseAdapter,
@@ -164,10 +169,6 @@ export class SatelliteProcess implements Satellite {
     this.client = client
 
     this.opts = opts
-
-    this._lastAckdRowId = 0
-    this._lastSentRowId = 0
-
     this.relations = {}
 
     this.subscriptions = new InMemorySubscriptionsManager(
@@ -185,6 +186,10 @@ export class SatelliteProcess implements Satellite {
 
     this.subscriptionIdGenerator = () => uuid()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
+
+    this._connectRetryHandler = connectRetryHandler
+
+    this.setClientListeners()
   }
 
   /**
@@ -199,10 +204,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async start(
-    authConfig: AuthConfig,
-    opts?: SatelliteReplicationOptions
-  ): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -264,15 +266,6 @@ export class SatelliteProcess implements Satellite {
     this.relations = await this._getLocalRelations()
     this.checkMaxSqlParameters()
 
-    this._lastAckdRowId = Number(await this._getMeta('lastAckdRowId'))
-    this._lastSentRowId = Number(await this._getMeta('lastSentRowId'))
-
-    this.setClientListeners()
-    this.client.resetOutboundLogPositions(
-      numberToBytes(this._lastAckdRowId),
-      numberToBytes(this._lastSentRowId)
-    )
-
     const lsnBase64 = await this._getMeta('lsn')
     if (lsnBase64 && lsnBase64.length > 0) {
       this._lsn = base64.toBytes(lsnBase64)
@@ -286,7 +279,9 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.setState(subscriptionsState)
     }
 
-    const connectionPromise = this._connectAndStartReplication(opts)
+    const connectionPromise = this._connectWithBackoff().then(() =>
+      this._startReplication()
+    )
     return { connectionPromise }
   }
 
@@ -298,37 +293,40 @@ export class SatelliteProcess implements Satellite {
     shapeDefs: ShapeDefinition[]
   ): Promise<void> {
     const stmts: Statement[] = []
+    const tablenames: string[] = []
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => 'main.' + select.tablename) // We need "fully qualified" table names in the next calls
+      .map((select: ShapeSelect) => {
+        tablenames.push('main.' + select.tablename)
+        return 'main.' + select.tablename
+      }) // We need "fully qualified" table names in the next calls
       .reduce((stmts: Statement[], tablename: string) => {
-        stmts.push(
-          ...this._disableTriggers([tablename]),
-          {
-            sql: `DELETE FROM ${tablename}`,
-          },
-          ...this._enableTriggers([tablename])
-        )
+        stmts.push({
+          sql: `DELETE FROM ${tablename}`,
+        })
         return stmts
         // does not delete shadow rows but we can do that
       }, stmts)
 
-    await this.adapter.runInTransaction(...stmts)
+    const stmtsWithTriggers = [
+      ...this._disableTriggers(tablenames),
+      ...stmts,
+      ...this._enableTriggers(tablenames),
+    ]
+
+    await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
   setClientListeners(): void {
+    this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
+    // FIXME: calling an async function in an event emitter
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    // When a local transaction is sent, or an acknowledgement for
-    // a remote transaction commit is received, we update lsn records.
-    this.client.subscribeToAck(async (lsn, type) => {
-      const decoded = bytesToNumber(lsn)
-      await this._ack(decoded, type == AckType.REMOTE_COMMIT)
-    })
-    this.client.subscribeToOutboundEvent('started', () =>
-      this._throttledSnapshot()
+    this.client.subscribeToOutboundEvent(
+      'started',
+      this._throttledSnapshot.bind(this)
     )
 
     this.client.subscribeToSubscriptionEvents(
@@ -370,12 +368,15 @@ export class SatelliteProcess implements Satellite {
       this._potentialDataChangeSubscription = undefined
     }
 
-    await this.client.close()
+    return this._connectivityStateChanged('disconnected')
   }
 
   async subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription> {
+    // Await for client to be ready before doing anything else
+    await this.initializing?.waitOn()
+
     // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
     const existingSubscription =
       this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
@@ -560,25 +561,55 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _handleSubscriptionError(
-    satelliteError: SatelliteError,
-    subscriptionId?: string
-  ): Promise<void> {
-    // this is obviously too conservative and note
-    // that it does not update meta transactionally
-    const ids = await this.subscriptions.unsubscribeAll()
+  // maintains subscriptions
+  async _resetClientState(): Promise<ClientShapeDefinition[]> {
+    await this._connectivityStateChanged('disconnected')
 
-    Log.error('Encountered a subscription error: ' + satelliteError.message)
+    const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+    const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+      .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
+      .filter((s): s is ShapeDefinition[] => s !== undefined)
+      .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
 
     this._lsn = undefined
+
+    // TODO: this is obviously too conservative
+    // we should also work on updating subscriptions
+    // atomically on unsubscribe()
+    await this.subscriptions.unsubscribeAll()
+
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
 
-    await this.client.unsubscribe(ids)
+    return shapeDefs
+  }
 
-    // Call the `onSuccess` callback for this subscription
+  async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
+    Log.warn(`reconnecting to server`)
+    await this._connectWithBackoff()
+    await this._startReplication()
+
+    if (shapeDefs.length > 0) {
+      this.subscribe(shapeDefs)
+    }
+  }
+
+  async _resetClientStateAndReconnect() {
+    const shapes = await this._resetClientState()
+    return await this._reconnect(shapes)
+  }
+
+  async _handleSubscriptionError(
+    satelliteError: SatelliteError,
+    subscriptionId?: string
+  ): Promise<void> {
+    Log.error('encountered a subscription error: ' + satelliteError.message)
+
+    await this._resetClientState()
+
+    // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
       const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
@@ -586,19 +617,48 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  // handles async client erros: can be a socket error or a server error message
+  _handleClientError(satelliteError: SatelliteError) {
+    if (this.initializing && !this.initializing.finished()) {
+      if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
+        Log.warn(
+          `a socket error occurred while connecting to server: ${satelliteError.message}`
+        )
+        return
+      }
+
+      if (satelliteError.code === SatelliteErrorCode.AUTH_REQUIRED) {
+        // TODO: should stop retrying
+        Log.warn(
+          `a fatal error occurred while initializing: ${satelliteError.message}`
+        )
+        return
+      }
+
+      // throw unhandled error
+      throw satelliteError
+    }
+
+    // all other errors are handled by closing the client (if not yet) and retrying
+    this._connectivityStateChanged('disconnected').then(() =>
+      this._connectivityStateChanged('available')
+    )
+  }
+
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
-
+    Log.debug(`connectivity state changed ${status}`)
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
-        this.setClientListeners()
-
-        return this._connectAndStartReplication()
+        Log.warn(`checking network availability and reconnecting`)
+        return this._connectWithBackoff().then(() => this._startReplication())
       }
       case 'error':
       case 'disconnected': {
-        return this.client.close()
+        Log.warn(`client disconnected from server`)
+        this.client.close()
+        return
       }
       case 'connected': {
         return
@@ -609,10 +669,33 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectAndStartReplication(
-    opts?: SatelliteReplicationOptions
-  ): Promise<void> {
-    Log.info(`connecting and starting replication`)
+  // we might just move starting replication into the retrier, which might be more simple to manage
+  async _connectWithBackoff(): Promise<void> {
+    if (!this.initializing || this.initializing?.finished()) {
+      this.initializing = getWaiter()
+    }
+
+    await backOff(() => this._connect(), {
+      ...connectionRetryPolicy,
+      retry: this._connectRetryHandler,
+    }).catch((e) => {
+      // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
+      const error = new SatelliteError(
+        SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
+        `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
+      )
+
+      this.initializing?.reject(e)
+      this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+      throw error
+    })
+  }
+
+  // NO DIRECT CALLS TO CONNECT
+  private async _connect(): Promise<void> {
+    Log.info(`connecting to electric server`)
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
@@ -621,8 +704,21 @@ export class SatelliteProcess implements Satellite {
 
     try {
       await this.client.connect()
-      await this.client.authenticate(authState)
+      const authResp = await this.client.authenticate(authState)
 
+      if (authResp.error) {
+        throw authResp.error
+      }
+    } catch (error: any) {
+      Log.debug(
+        `server returned an error while establishing connection: ${error.message}`
+      )
+      throw error
+    }
+  }
+
+  async _startReplication(): Promise<void> {
+    try {
       const schemaVersion = await this.migrator.querySchemaVersion()
 
       // Fetch the subscription IDs that were fulfilled
@@ -630,26 +726,58 @@ export class SatelliteProcess implements Satellite {
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
-      await this.client.startReplication(
+      const { error } = await this.client.startReplication(
         this._lsn,
         schemaVersion,
-        subscriptionIds
+        subscriptionIds.length > 0 ? subscriptionIds : undefined
       )
-    } catch (error: any) {
-      if (
-        error.code == SatelliteErrorCode.BEHIND_WINDOW &&
-        opts?.clearOnBehindWindow
-      ) {
-        return this._handleSubscriptionError(error).then(() =>
-          this._connectAndStartReplication()
-        )
-      }
 
-      if (throwErrors.includes(error.code)) {
+      if (error) {
+        if (
+          (error.code == SatelliteErrorCode.INVALID_POSITION ||
+            error.code == SatelliteErrorCode.BEHIND_WINDOW ||
+            error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
+          this.opts?.clearOnBehindWindow
+        ) {
+          Log.warn(
+            `server error: ${error.message}. resetting client state and retrying connection`
+          )
+          // restart reconnection loop
+          return await this._resetClientStateAndReconnect()
+        }
+
         throw error
       }
-      Log.warn(`couldn't start replication: ${error}`)
-      return Promise.resolve()
+
+      this.notifier.connectivityStateChanged(this.dbName, 'connected')
+      this.initializing?.resolve()
+    } catch (error: any) {
+      if (error.code == SatelliteErrorCode.UNKNOWN_SCHEMA_VSN) {
+        Log.warn(SCHEMA_VSN_ERROR_MSG)
+
+        // FIXME: I think at this point it's clear the client needs to be re-generated
+        this.initializing?.reject(
+          new SatelliteError(error.code, SCHEMA_VSN_ERROR_MSG)
+        )
+        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+        return
+      } else {
+        this.initializing?.reject(error)
+
+        if (!(error instanceof SatelliteError)) {
+          throw error
+        }
+        if (throwErrors.includes(error.code)) {
+          throw error
+        }
+
+        Log.warn(
+          `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
+        )
+        return this._resetClientStateAndReconnect()
+      }
+    } finally {
+      this.initializing = undefined
     }
   }
 
@@ -720,12 +848,11 @@ export class SatelliteProcess implements Satellite {
       WHERE rowid in (
         SELECT rowid FROM ${oplog}
             WHERE timestamp is NULL
-            AND rowid > ?
         ORDER BY rowid ASC
         )
       RETURNING *
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
@@ -741,12 +868,11 @@ export class SatelliteProcess implements Satellite {
             AND op.tablename = shadow.tablename
             AND op.primaryKey = shadow.primaryKey
         WHERE op.timestamp = ?
-              AND op.rowid > ?
         GROUP BY op.namespace, op.tablename, op.primaryKey
       ) AS updates
       WHERE updates.op_rowid = ${oplog}.rowid
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
@@ -756,31 +882,30 @@ export class SatelliteProcess implements Satellite {
       SELECT namespace, tablename, primaryKey, ?
         FROM ${oplog} AS op
         WHERE timestamp = ?
-              AND rowid > ?
         GROUP BY namespace, tablename, primaryKey
         HAVING rowid = max(rowid) AND optype != 'DELETE'
-    `,
-      args: [
-        encodeTags([newTag]),
-        timestamp.toISOString(),
-        this._lastAckdRowId,
-      ],
+      `,
+      args: [encodeTags([newTag]), timestamp.toISOString()],
     }
 
     // And finally delete any shadow rows where the last oplog operation was a `DELETE`
+    // We do an inner join in a CTE instead of a `WHERE EXISTS (...)` since this is not reliant on re-executing a query per every row in shadow table, but uses a PK join instead.
     const q4: Statement = {
       sql: `
-      DELETE FROM ${shadow}
-      WHERE EXISTS (
-        SELECT 1
-        FROM ${oplog} AS op
-        WHERE timestamp = ?
-              AND rowid > ?
-        GROUP BY namespace, tablename, primaryKey
-        HAVING rowid = max(rowid) AND optype = 'DELETE'
+      WITH _to_be_deleted (rowid) AS (
+        SELECT shadow.rowid
+          FROM ${oplog} AS op
+          INNER JOIN ${shadow} AS shadow
+            ON shadow.namespace = op.namespace AND shadow.tablename = op.tablename AND shadow.primaryKey = op.primaryKey
+          WHERE op.timestamp = ?
+          GROUP BY op.namespace, op.tablename, op.primaryKey
+          HAVING op.rowid = max(op.rowid) AND op.optype = 'DELETE'
       )
-    `,
-      args: [timestamp.toISOString(), this._lastAckdRowId],
+
+      DELETE FROM ${shadow}
+      WHERE rowid IN _to_be_deleted
+      `,
+      args: [timestamp.toISOString()],
     }
 
     // Execute the four queries above in a transaction, returning the results from the first query
@@ -804,7 +929,7 @@ export class SatelliteProcess implements Satellite {
     if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
 
     if (!this.client.isClosed()) {
-      const { enqueued } = this.client.getOutboundLogPositions()
+      const enqueued = this.client.getLastSentLsn()
       const enqueuedLogPos = bytesToNumber(enqueued)
 
       // TODO: handle case where pending oplog is large
@@ -856,7 +981,7 @@ export class SatelliteProcess implements Satellite {
 
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
-      return this.client.enqueueTransaction(txn)
+      this.client.enqueueTransaction(txn)
     }
   }
 
@@ -869,7 +994,7 @@ export class SatelliteProcess implements Satellite {
   // any existing subscription. We need a way to detect and prevent that.
   async _apply(incoming: OplogEntry[], incoming_origin: string) {
     const local = await this._getEntries()
-    const merged = this._mergeEntries(
+    const merged = mergeEntries(
       this._authState!.clientId,
       local,
       incoming_origin,
@@ -907,9 +1032,8 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _getEntries(since?: number): Promise<OplogEntry[]> {
-    if (since === undefined) {
-      since = this._lastAckdRowId
-    }
+    // `rowid` is never below 0, so -1 means "everything"
+    since ??= -1
     const oplog = this.opts.oplogTable.toString()
 
     const selectEntries = `
@@ -951,64 +1075,6 @@ export class SatelliteProcess implements Satellite {
         shadow.tags,
       ],
     }
-  }
-
-  // Merge changes, with last-write-wins and add-wins semantics.
-  // clearTags field is used by the calling code to determine new value of
-  // the shadowTags
-  _mergeEntries(
-    local_origin: string,
-    local: OplogEntry[],
-    incoming_origin: string,
-    incoming: OplogEntry[]
-  ): ShadowTableChanges {
-    const localTableChanges = localOperationsToTableChanges(
-      local,
-      (timestamp: Date) => {
-        return generateTag(local_origin, timestamp)
-      }
-    )
-    const incomingTableChanges = remoteOperationsToTableChanges(incoming)
-
-    for (const [tablename, incomingMapping] of Object.entries(
-      incomingTableChanges
-    )) {
-      const localMapping = localTableChanges[tablename]
-
-      if (localMapping === undefined) {
-        continue
-      }
-
-      for (const [primaryKey, incomingChanges] of Object.entries(
-        incomingMapping
-      )) {
-        const localInfo = localMapping[primaryKey]
-        if (localInfo === undefined) {
-          continue
-        }
-        const [_, localChanges] = localInfo
-
-        const changes = mergeChangesLastWriteWins(
-          local_origin,
-          localChanges.changes,
-          incoming_origin,
-          incomingChanges.changes,
-          incomingChanges.fullRow
-        )
-        let optype
-
-        const tags = mergeOpTags(localChanges, incomingChanges)
-        if (tags.length == 0) {
-          optype = OPTYPES.delete
-        } else {
-          optype = OPTYPES.upsert
-        }
-
-        Object.assign(incomingChanges, { changes, optype, tags })
-      }
-    }
-
-    return incomingTableChanges
   }
 
   _updateRelations(rel: Omit<Relation, 'id'>) {
@@ -1136,6 +1202,9 @@ export class SatelliteProcess implements Satellite {
       newTables = new Set([...newTables, ...createdTables])
     }
 
+    // Start with garbage collection, because if this a transaction after round-trip, then we don't want it in conflict resolution
+    await this.maybeGarbageCollect(origin, commitTimestamp)
+
     // Now process all changes per chunk.
     // We basically take a prefix of changes of the same type
     // which we call a `dmlChunk` or `ddlChunk` if the changes
@@ -1204,16 +1273,13 @@ export class SatelliteProcess implements Satellite {
       await this.adapter.runInTransaction(...allStatements)
     }
 
-    await this.notifyChangesAndGCopLog(opLogEntries, origin, commitTimestamp)
+    await this._notifyChanges(opLogEntries)
   }
 
-  private async notifyChangesAndGCopLog(
-    oplogEntries: OplogEntry[],
+  private async maybeGarbageCollect(
     origin: string,
     commitTimestamp: Date
-  ) {
-    await this._notifyChanges(oplogEntries)
-
+  ): Promise<void> {
     if (origin == this._authState!.clientId) {
       /* Any outstanding transaction that originated on Satellite but haven't
        * been received back from the Electric is considered to be concurrent with
@@ -1250,28 +1316,6 @@ export class SatelliteProcess implements Satellite {
         },
       ]
     else return []
-  }
-
-  async _ack(lsn: number, isAck: boolean): Promise<void> {
-    if (lsn < this._lastAckdRowId || (lsn > this._lastSentRowId && isAck)) {
-      throw new Error('Invalid position')
-    }
-
-    const meta = this.opts.metaTable.toString()
-
-    const sql = ` UPDATE ${meta} SET value = ? WHERE key = ?`
-    const args = [
-      `${lsn.toString()}`,
-      isAck ? 'lastAckdRowId' : 'lastSentRowId',
-    ]
-
-    if (isAck) {
-      this._lastAckdRowId = lsn
-      await this.adapter.runInTransaction({ sql, args })
-    } else {
-      this._lastSentRowId = lsn
-      await this.adapter.run({ sql, args })
-    }
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(
@@ -1328,7 +1372,7 @@ export class SatelliteProcess implements Satellite {
     return clientId
   }
 
-  private async _getLocalTableNames(): Promise<Row[]> {
+  private async _getLocalTableNames(): Promise<{ name: string }[]> {
     const notIn = [
       this.opts.metaTable.tablename.toString(),
       this.opts.migrationsTable.tablename.toString(),
@@ -1345,7 +1389,9 @@ export class SatelliteProcess implements Satellite {
         WHERE type = 'table'
           AND name NOT IN (${notIn.map(() => '?').join(',')})
     `
-    return await this.adapter.query({ sql: tables, args: notIn })
+    return (await this.adapter.query({ sql: tables, args: notIn })) as {
+      name: string
+    }[]
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.
@@ -1357,7 +1403,7 @@ export class SatelliteProcess implements Satellite {
     let id = 0
     const schema = 'public' // TODO
     for (const table of tableNames) {
-      const tableName = table.name as any
+      const tableName = table.name
       const sql = 'SELECT * FROM pragma_table_info(?)'
       const args = [tableName]
       const columnsForTable = await this.adapter.query({ sql, args })
@@ -1375,6 +1421,7 @@ export class SatelliteProcess implements Satellite {
         relation.columns.push({
           name: c.name!.toString(),
           type: c.type!.toString(),
+          isNullable: Boolean(!c.notnull!.valueOf()),
           primaryKey: Boolean(c.pk!.valueOf()),
         })
       }
@@ -1389,14 +1436,14 @@ export class SatelliteProcess implements Satellite {
     return generateTag(instanceId, timestamp)
   }
 
-  async _garbageCollectOplog(commitTimestamp: Date) {
+  async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
     const oplog = this.opts.oplogTable.tablename.toString()
-    const stmt = `
-      DELETE FROM ${oplog}
-      WHERE timestamp = ?;
-    `
-    await this.adapter.run({ sql: stmt, args: [isoString] })
+
+    await this.adapter.run({
+      sql: `DELETE FROM ${oplog} WHERE timestamp = ?`,
+      args: [isoString],
+    })
   }
 
   /**
@@ -1502,5 +1549,5 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
     }),
   }
   const fullTableName = table.namespace + '.' + table.tableName
-  return generateOplogTriggers(fullTableName, table)
+  return generateTableTriggers(fullTableName, table)
 }

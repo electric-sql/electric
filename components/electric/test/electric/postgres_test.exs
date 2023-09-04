@@ -5,7 +5,7 @@ defmodule Electric.PostgresTest do
   import Electric.Postgres.TestConnection
 
   setup do
-    context = setup_test_db()
+    context = create_test_db()
 
     # start the replication process here so that it will be stopped before
     # we get to the on_exit handler defined in the setup_all

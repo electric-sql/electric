@@ -1,0 +1,36 @@
+.players {
+  position: relative;
+  display: block;
+  min-height: 4rem;
+  margin: 0.5rem 0.5rem 1rem -0.5rem;
+
+  border-radius: 12px;
+  border: none;
+}
+.playersActive {
+  border: 1px dashed var(--electric-green);
+}
+
+.playersLabel {
+  position: relative;
+  display: block;
+  float: left;
+  padding: 0 0.3rem;
+  transform: scale(0.85);
+  margin-top: -0.7rem;
+  background: rgb(25, 24, 27);
+
+  max-width: calc(100% - 2rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 1.5rem;
+}
+
+.playerListings {
+  position: relative;
+  display: block;
+  min-height: 4rem;
+  margin: 0.5rem 0 1rem;
+  clear: both;
+  padding: 0.5rem 0.5rem 0;
+}

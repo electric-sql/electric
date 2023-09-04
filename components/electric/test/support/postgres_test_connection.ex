@@ -46,7 +46,7 @@ defmodule Electric.Postgres.TestConnection do
     end)
   end
 
-  def setup_test_db(setup_fun \\ fn _ -> nil end, teardown_fun \\ fn _ -> nil end) do
+  def create_test_db(setup_fun \\ fn _ -> nil end, teardown_fun \\ fn _ -> nil end) do
     db_name = "electric_postgres_test_#{DateTime.utc_now() |> DateTime.to_unix()}"
     config = config() |> Keyword.delete(:database)
 
@@ -109,7 +109,7 @@ defmodule Electric.Postgres.TestConnection do
       )
     end
 
-    context = Map.merge(context, setup_test_db(setup_fun, teardown_fun))
+    context = Map.merge(context, create_test_db(setup_fun, teardown_fun))
 
     pg_connector_opts =
       context
@@ -142,7 +142,7 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.users (
-        id UUID PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL
       )
       """)
@@ -150,18 +150,18 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.documents (
-        id UUID PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        electric_user_id UUID REFERENCES users(id)
+        electric_user_id TEXT REFERENCES users(id)
       )
       """)
 
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.my_entries (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        content VARCHAR(64) NOT NULL,
-        content_b VARCHAR(64)
+        id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+        content VARCHAR NOT NULL,
+        content_b TEXT
       );
 
       """)

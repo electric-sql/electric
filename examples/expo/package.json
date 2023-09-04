@@ -1,0 +1,44 @@
+{
+  "name": "electric-sql-expo-example",
+  "version": "1.0.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "backend:down": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
+    "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
+    "backend:stop": "yarn backend:down",
+    "backend:up": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up --detach",
+    "client:generate": "npx electric-sql generate",
+    "client:watch": "npx electric-sql generate --watch",
+    "db:migrate": "node ./db/migrate.js",
+    "db:psql": "node ./db/connect.js",
+    "electric:start": "node ./backend/startElectric.js",
+    "start": "expo start",
+    "start:android": "expo start --android",
+    "start:ios": "expo start --ios"
+  },
+  "dependencies": {
+    "electric-sql": "latest",
+    "expo": "~49.0.8",
+    "expo-sqlite": "^11.3.2",
+    "expo-status-bar": "~1.6.0",
+    "react": "^18.2.0",
+    "react-native": "0.72.4",
+    "react-native-base64": "^0.2.1",
+    "react-native-get-random-values": "^1.9.0",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.12.9",
+    "@databases/pg": "^5.4.1",
+    "@electric-sql/prisma-generator": "latest",
+    "@prisma/client": "4.8.1",
+    "@tsconfig/react-native": "^2.0.2",
+    "@types/react": "^18.0.18",
+    "@types/react-native": "^18.0.18",
+    "prisma": "4.8.1",
+    "shelljs": "^0.8.5",
+    "typescript": "^5.1.3"
+  }
+}

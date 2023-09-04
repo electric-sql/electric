@@ -1,0 +1,8 @@
+label: Other
+customProps:
+  description: >-
+    Create your own SQLite driver adapter.
+  hide_overview: true
+  icon: /img/icons/other.svg
+position: 40
+collapsed: false

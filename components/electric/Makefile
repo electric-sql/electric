@@ -71,8 +71,10 @@ docker-build-ci:
       -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
       -t electric:local-build ${CACHING_SETTINGS_ELECTRIC}\
 			.
-ifeq (${TAG_AS_LATEST}, true)
+ifeq (${TAG_AS_LATEST_AND_PUSH}, true)
 	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
+	docker push "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}"
+	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
 docker-build-ws-client:

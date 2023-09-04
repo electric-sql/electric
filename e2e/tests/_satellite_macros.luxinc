@@ -68,5 +68,4 @@
 
 [macro node_sync_table table]
     !await client.syncTable(db, "${table}")
-    ?$node
 [endmacro]

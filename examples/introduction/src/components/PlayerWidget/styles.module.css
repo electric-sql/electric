@@ -1,0 +1,30 @@
+.players {
+  position: relative;
+  display: block;
+  min-height: 4rem;
+  margin: 1.5rem 0 1rem;
+}
+.player {
+  width: 40px;
+  height: 40px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  position: relative;
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0;
+
+  cursor: grab;
+}
+.green {
+  background-image: url('/img/icons/player1.svg');
+}
+.yellow {
+  background-image: url('/img/icons/player2.svg');
+}
+.red {
+  background-image: url('/img/icons/player3.svg');
+}
+.purple {
+  background-image: url('/img/icons/player4.svg');
+}

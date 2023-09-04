@@ -1,0 +1,8 @@
+label: Data access
+customProps:
+  description: >-
+    How to sync and work with local data in your client app.
+  icon: /img/icons/react.svg
+link:
+  type: doc
+  id: usage/data-access/index

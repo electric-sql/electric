@@ -30,13 +30,13 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   @impl GenStage
   def init(_) do
     table = ETS.Set.new!(ordered: true, keypos: 2)
-    {:producer, %{table: table, next_key: 0, demand: 0}}
+    {:producer, %{table: table, next_key: 0, demand: 0, starting_from: -1}}
   end
 
   @impl GenStage
   def handle_call({:store_incoming_transactions, transactions}, _, state) do
     transactions
-    |> Stream.each(& &1.ack_fn())
+    |> Stream.each(& &1.ack_fn.())
     |> Stream.reject(&Enum.empty?(&1.changes))
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
@@ -55,7 +55,16 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
       "Subscription request to satellite collector producer from #{producer_or_consumer} with #{inspect(subscription_options)}"
     )
 
-    {:automatic, state}
+    starting_from = Keyword.get(subscription_options, :starting_from) || -1
+
+    if starting_from >= state.next_key do
+      # The subscriber starts from a point in the future, which is only possible on a server restart,
+      # where PG connects with an LSN mapped to a point in this producer's stream, but the stream was lost.
+      # The only correct thing to do here is to start from scratch.
+      {:automatic, %{state | starting_from: -1}}
+    else
+      {:automatic, %{state | starting_from: starting_from}}
+    end
   end
 
   @impl GenStage
@@ -64,21 +73,29 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     send_events_from_ets(Map.update!(state, :demand, &(&1 + incoming_demand)))
   end
 
+  @impl GenStage
+  def handle_info({:sent_all_up_to, key}, state) do
+    ETS.Set.select_delete!(state.table, [{{:_, :"$1"}, [{:"=<", :"$1", key}], [true]}])
+
+    {:noreply, [], state}
+  end
+
   defp send_events_from_ets(%{demand: 0} = state), do: {:noreply, [], state}
 
-  defp send_events_from_ets(%{demand: demand, table: set} = state) do
-    {results, _} = ETS.Set.match!(set, {:"$1", :"$2"}, demand)
+  defp send_events_from_ets(%{demand: demand, table: set, starting_from: from} = state) do
+    results =
+      case ETS.Set.select!(set, [{{:"$1", :"$2"}, [{:>, :"$2", from}], [:"$$"]}], demand) do
+        :"$end_of_table" -> []
+        {results, _continuation} -> results
+      end
 
     case Electric.Utils.list_last_and_length(results) do
       {_, 0} ->
         {:noreply, [], state}
 
       {[_, last_key], fulfilled} ->
-        # Delete items we're going to return now
-        ETS.Set.select_delete!(set, [{{:_, :"$1"}, [{:"=<", :"$1", last_key}], [true]}])
-
         {:noreply, Enum.map(results, fn [tx, pos] -> {tx, pos} end),
-         Map.update!(state, :demand, &(&1 - fulfilled))}
+         %{state | demand: demand - fulfilled, starting_from: last_key}}
     end
   end
 end

@@ -1,0 +1,9 @@
+customProps:
+  description: >-
+    Integrate on the server-side with change data capture.
+  hide_overview: true
+  icon: /img/icons/materialize.svg
+label: Event sourcing
+link:
+  type: doc
+  id: integrations/event-sourcing/index

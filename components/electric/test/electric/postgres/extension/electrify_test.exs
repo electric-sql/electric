@@ -16,7 +16,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   end
 
   test_tx "inserts a row into the electrified table", fn conn ->
-    sql = "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    sql = "CREATE TABLE buttercup (id text PRIMARY KEY DEFAULT uuid_generate_v4());"
     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
     sql = "CALL electric.electrify('buttercup');"
@@ -32,9 +32,9 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   test_tx "inserts the DDL for the table into the migration table", fn conn ->
     sql = """
     CREATE TABLE buttercup (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id text PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -56,9 +56,9 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   test_tx "duplicate call raises", fn conn ->
     sql = """
     CREATE TABLE buttercup (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id text PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -75,10 +75,10 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   end
 
   test_tx "handles quoted table names", fn conn ->
-    sql = "CREATE TABLE \"la la daisy\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    sql = "CREATE TABLE \"la la daisy\" (id text PRIMARY KEY DEFAULT uuid_generate_v4());"
     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
-    sql = "CREATE TABLE \"la la buttercup\" (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    sql = "CREATE TABLE \"la la buttercup\" (id text PRIMARY KEY DEFAULT uuid_generate_v4());"
     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
     sql = "CALL electric.electrify('public', 'la la daisy');"
@@ -96,7 +96,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   end
 
   test_tx "allows for namespaced table names", fn conn ->
-    sql = "CREATE TABLE daisy (id uuid PRIMARY KEY DEFAULT uuid_generate_v4());"
+    sql = "CREATE TABLE daisy (id text PRIMARY KEY DEFAULT uuid_generate_v4());"
     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
     sql = "CALL electric.electrify('public.daisy');"
@@ -123,9 +123,9 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
 
     sql = """
     CREATE TABLE balloons.buttercup (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id text PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 
@@ -167,7 +167,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   test_tx "adds the electrified table to the publication", fn conn ->
     assert published_tables(conn) == []
 
-    sql = "CREATE TABLE buttercup (id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), value text);"
+    sql = "CREATE TABLE buttercup (id text PRIMARY KEY DEFAULT uuid_generate_v4(), value text);"
 
     {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
 
@@ -185,9 +185,9 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
 
     sql = """
     CREATE TABLE buttercup (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id text PRIMARY KEY DEFAULT uuid_generate_v4(),
       value text,
-      secret bool
+      secret integer
     );
     """
 

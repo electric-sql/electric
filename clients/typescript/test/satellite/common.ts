@@ -2,7 +2,6 @@ import { mkdir, rm as removeFile } from 'node:fs/promises'
 import {
   ConnectivityState,
   DataTransaction,
-  LSN,
   Relation,
   RelationsCache,
   SqlValue,
@@ -27,11 +26,13 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'parent',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -45,16 +46,19 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
       {
         name: 'value',
         type: 'TEXT',
+        isNullable: true,
         primaryKey: false,
       },
       {
         name: 'other',
         type: 'INTEGER',
+        isNullable: true,
         primaryKey: false,
       },
     ],
@@ -68,6 +72,7 @@ export const relations = {
       {
         name: 'id',
         type: 'INTEGER',
+        isNullable: false,
         primaryKey: true,
       },
     ],
@@ -95,20 +100,26 @@ export interface TestNotifier extends EventNotifier {
 }
 
 export interface TestSatellite extends Satellite {
-  _lastSentRowId: number
   _authState?: AuthState
   relations: RelationsCache
+  initializing?: {
+    promise: Promise<void>
+    resolve: () => void
+    reject: (e?: unknown) => void
+  }
 
   _setAuthState(authState: AuthState): Promise<void>
   _performSnapshot(): Promise<Date>
   _getEntries(): Promise<OplogEntry[]>
-  _apply(incoming: OplogEntry[], lsn?: LSN): Promise<void>
+  _apply(incoming: OplogEntry[], incoming_origin: string): void
   _applyTransaction(transaction: DataTransaction): any
   _setMeta(key: string, value: SqlValue): Promise<void>
   _getMeta(key: string): Promise<string>
   _ack(lsn: number, isAck: boolean): Promise<void>
-  _connectivityStateChange(status: ConnectivityState): void
+  _connectivityStateChanged(status: ConnectivityState): void
   _getLocalRelations(): Promise<{ [k: string]: Relation }>
+  _connectRetryHandler: (error: Error, attempt: number) => boolean
+  _connectWithBackoff(): Promise<void>
 }
 
 export type ContextType<Extra = {}> = {

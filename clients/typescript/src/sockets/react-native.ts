@@ -1,7 +1,9 @@
 import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 
+// FIXME: This implementation is a bit contrived because it is not using EventEmitter
 export class WebSocketReactNativeFactory implements SocketFactory {
-  create() {
+  create(): WebSocketReactNative {
     return new WebSocketReactNative()
   }
 }
@@ -9,29 +11,42 @@ export class WebSocketReactNativeFactory implements SocketFactory {
 export class WebSocketReactNative implements Socket {
   private socket?: WebSocket
 
-  private connectCallbacks: (() => void)[]
-  private errorCallbacks: ((error: Error) => void)[]
-  private messageCallbacks: ((data: any) => void)[]
+  private connectCallbacks: (() => void)[] = []
+  private errorCallbacks: ((error: SatelliteError) => void)[] = []
+  private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
+  private messageCallbacks: ((data: any) => void)[] = []
 
-  constructor() {
-    this.connectCallbacks = []
-    this.errorCallbacks = []
-    this.messageCallbacks = []
-  }
+  open(opts: ConnectionOptions): this {
+    if (this.socket) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'trying to open a socket before closing existing socket'
+      )
+    }
 
-  open(opts: ConnectionOptions): Socket {
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'arraybuffer'
 
     this.socket.onopen = () => {
-      while (this.connectCallbacks.length > 0) {
-        this.connectCallbacks.pop()!()
+      let callback: (() => void) | undefined
+      while ((callback = this.connectCallbacks.pop())) {
+        callback()
       }
     }
 
-    this.socket.onerror = (event: any) => {
-      while (this.errorCallbacks.length > 0) {
-        this.errorCallbacks.pop()!(new Error(event.message))
+    // event doesn't provide much
+    this.socket.onerror = () => {
+      for (const callback of this.errorCallbacks) {
+        callback(
+          new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+        )
+      }
+
+      let callback: ((error: SatelliteError) => void) | undefined
+      while ((callback = this.onceErrorCallbacks.pop())) {
+        callback(
+          new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+        )
       }
     }
 
@@ -46,12 +61,12 @@ export class WebSocketReactNative implements Socket {
     return this
   }
 
-  write(data: Data): Socket {
+  write(data: Data): this {
     this.socket?.send(data)
     return this
   }
 
-  closeAndRemoveListeners(): Socket {
+  closeAndRemoveListeners(): this {
     this.connectCallbacks = []
     this.errorCallbacks = []
     this.messageCallbacks = []
@@ -64,10 +79,10 @@ export class WebSocketReactNative implements Socket {
     this.messageCallbacks.push(cb)
   }
 
-  onError(cb: (error: Error) => void): void {
+  onError(cb: (error: SatelliteError) => void): void {
     if (this.socket) {
       this.socket.onerror = () => {
-        cb(new Error('socket error'))
+        cb(new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error'))
       }
     }
   }
@@ -84,7 +99,19 @@ export class WebSocketReactNative implements Socket {
     this.connectCallbacks.push(cb)
   }
 
-  onceError(cb: (error: Error) => void): void {
-    this.errorCallbacks.push(cb)
+  onceError(cb: (error: SatelliteError) => void): void {
+    this.onceErrorCallbacks.push(cb)
+  }
+
+  removeErrorListener(cb: (error: SatelliteError) => void): void {
+    const idx = this.errorCallbacks.indexOf(cb)
+    if (idx >= 0) {
+      this.errorCallbacks.splice(idx, 1)
+    }
+
+    const idxOnce = this.onceErrorCallbacks.indexOf(cb)
+    if (idxOnce >= 0) {
+      this.onceErrorCallbacks.splice(idxOnce, 1)
+    }
   }
 }

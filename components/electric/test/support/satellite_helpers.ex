@@ -17,17 +17,32 @@ defmodule ElectricTest.SatelliteHelpers do
     assert_receive {^conn,
                     %SatOpLog{
                       ops: [
-                        %SatTransOp{
-                          op: {:begin, %SatOpBegin{is_migration: true, lsn: lsn_str}}
-                        },
-                        %SatTransOp{
-                          op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}
-                        },
-                        %SatTransOp{op: {:commit, _}}
+                        %{op: {:begin, %SatOpBegin{is_migration: true, lsn: lsn_str}}},
+                        %{op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}},
+                        %{op: {:commit, _}}
                       ]
                     }}
 
     assert {lsn, ""} = Integer.parse(lsn_str)
     assert lsn > 0
+  end
+
+  def with_connect(opts, fun), do: Electric.Test.SatelliteWsClient.with_connect(opts, fun)
+
+  def migrate(conn, version, table \\ nil, sql) do
+    results =
+      :epgsql.squery(conn, """
+      BEGIN;
+      SELECT electric.migration_version('#{version}');
+      #{sql};
+      #{if table, do: "CALL electric.electrify('#{table}');"}
+      COMMIT;
+      """)
+
+    Enum.each(results, fn result ->
+      assert {:ok, _, _} = result
+    end)
+
+    :ok
   end
 end

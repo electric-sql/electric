@@ -1,0 +1,8 @@
+label: Installation
+customProps:
+  description: >-
+    Instuctions on how to install and setup ElectricSQL.
+  icon: /img/usage/installation.svg
+link:
+  type: doc
+  id: usage/installation/index

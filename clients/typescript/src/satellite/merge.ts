@@ -3,9 +3,78 @@ import {
   Tag,
   OplogEntryChanges,
   ShadowEntryChanges,
+  OplogEntry,
+  PendingChanges,
+  localOperationsToTableChanges,
+  remoteOperationsToTableChanges,
+  generateTag,
+  OPTYPES,
 } from './oplog'
 import { difference, union } from '../util/sets'
 import { Row } from '../util'
+
+/**
+ * Merge server-sent operation with local pending oplog to arrive at the same row state the server is at.
+ * @param localOrigin string specifying the local origin
+ * @param local local oplog entries
+ * @param incomingOrigin string specifying the upstream origin
+ * @param incoming incoming oplog entries
+ * @returns Changes to be made to the shadow tables
+ */
+export function mergeEntries(
+  localOrigin: string,
+  local: OplogEntry[],
+  incomingOrigin: string,
+  incoming: OplogEntry[]
+): PendingChanges {
+  const localTableChanges = localOperationsToTableChanges(
+    local,
+    (timestamp: Date) => {
+      return generateTag(localOrigin, timestamp)
+    }
+  )
+  const incomingTableChanges = remoteOperationsToTableChanges(incoming)
+
+  for (const [tablename, incomingMapping] of Object.entries(
+    incomingTableChanges
+  )) {
+    const localMapping = localTableChanges[tablename]
+
+    if (localMapping === undefined) {
+      continue
+    }
+
+    for (const [primaryKey, incomingChanges] of Object.entries(
+      incomingMapping
+    )) {
+      const localInfo = localMapping[primaryKey]
+      if (localInfo === undefined) {
+        continue
+      }
+      const [_, localChanges] = localInfo
+
+      const changes = mergeChangesLastWriteWins(
+        localOrigin,
+        localChanges.changes,
+        incomingOrigin,
+        incomingChanges.changes,
+        incomingChanges.fullRow
+      )
+      let optype
+
+      const tags = mergeOpTags(localChanges, incomingChanges)
+      if (tags.length == 0) {
+        optype = OPTYPES.delete
+      } else {
+        optype = OPTYPES.upsert
+      }
+
+      Object.assign(incomingChanges, { changes, optype, tags })
+    }
+  }
+
+  return incomingTableChanges
+}
 
 /**
  * Merge two sets of changes, using the timestamp to arbitrate conflicts
@@ -69,14 +138,14 @@ export const mergeChangesLastWriteWins = (
   }, initialValue)
 }
 
-export const mergeOpTags = (
+function mergeOpTags(
   local: OplogEntryChanges,
   remote: ShadowEntryChanges
-): Tag[] => {
+): Tag[] {
   return calculateTags(local.tag, remote.tags, local.clearTags)
 }
 
-const calculateTags = (tag: Tag | null, tags: Tag[], clear: Tag[]) => {
+function calculateTags(tag: Tag | null, tags: Tag[], clear: Tag[]): Tag[] {
   if (tag == null) {
     return difference(tags, clear)
   } else {

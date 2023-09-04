@@ -1,0 +1,6 @@
+# Generated
+src/generated/client
+public/wa-sqlite-async.*
+
+# Misc
+.DS_Store

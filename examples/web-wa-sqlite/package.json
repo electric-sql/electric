@@ -1,37 +1,44 @@
 {
   "name": "@examples/web-wa-sqlite",
   "version": "0.1.0",
-  "private": true,
   "main": "builder.js",
-  "author": "Valter Balegas",
+  "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "node builder.js",
-    "build-prod": "NODE_ENV=production node builder.js",
-    "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
-    "prepare": "pnpm run prepare-wa-sqlite",
-    "start": "SERVE=true node builder.js"
+    "backend:down": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
+    "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
+    "backend:stop": "yarn backend:down",
+    "backend:up": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up --detach",
+    "client:generate": "npx electric-sql generate",
+    "client:watch": "npx electric-sql generate --watch",
+    "db:migrate": "node ./db/migrate.js",
+    "db:psql": "node ./db/connect.js",
+    "electric:start": "node ./backend/startElectric.js",
+    "build": "node copy-wasm-files.js && node builder.js",
+    "build-prod": "NODE_ENV=production npm run build",
+    "start": "SERVE=true npm run build"
   },
   "engines": {
     "node": ">=16.11.0"
   },
   "dependencies": {
-    "@prisma/client": "4.8.1",
-    "electric-sql": "workspace:*",
-    "fs-extra": "^10.0.0",
+    "electric-sql": "latest",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#breaking-changes",
-    "zod": "^3.20.2"
+    "wa-sqlite": "rhashimoto/wa-sqlite#master"
   },
   "devDependencies": {
-    "@types/node": "^16.9.1",
+    "@databases/pg": "^5.4.1",
+    "@electric-sql/prisma-generator": "latest",
+    "@prisma/client": "4.8.1",
+    "@types/node": ">=16.11.0",
     "@types/react": "^18.0.18",
     "@types/react-dom": "^18.0.11",
-    "esbuild": "^0.12.26",
-    "esbuild-plugin-inline-image": "^0.0.8",
+    "esbuild": "^0.16.17",
+    "esbuild-plugin-inline-image": "^0.0.9",
+    "fs-extra": "^10.0.0",
     "prisma": "4.8.1",
-    "typescript": "^4.4.3",
-    "@electric-sql/prisma-generator": "workspace:*"
+    "shelljs": "^0.8.5",
+    "typescript": "^4.4.3"
   }
 }

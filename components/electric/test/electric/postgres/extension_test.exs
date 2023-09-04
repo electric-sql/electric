@@ -422,6 +422,55 @@ defmodule Electric.Postgres.ExtensionTest do
                )
     end
 
+    test_tx "table electrification successfully validates column types", fn conn ->
+      assert [{:ok, [], []}, {:ok, [], []}] ==
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (
+                 id TEXT PRIMARY KEY,
+                 content TEXT NOT NULL,
+                 words VARCHAR,
+                 num2a INT2,
+                 num2b SMALLINT,
+                 num4a INT4,
+                 num4b INT,
+                 num4c INTEGER,
+                 num8a INT8,
+                 num8b BIGINT,
+                 real8a FLOAT8,
+                 real8b DOUBLE PRECISION
+               );
+               CALL electric.electrify('public.t1');
+               """)
+    end
+
+    test_tx "table electrification rejects invalid column types", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (
+                 id UUID PRIMARY KEY,
+                 c1 CHARACTER,
+                 c2 CHARACTER(11),
+                 c3 VARCHAR(11),
+                 created_at TIMESTAMP
+               );
+               CALL electric.electrify('public.t1');
+               """)
+
+      assert error_msg ==
+               """
+               Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
+                 "id" uuid
+                 "c1" character(1)
+                 "c2" character(11)
+                 "c3" character varying(11)
+                 "created_at" timestamp without time zone
+               """
+               |> String.trim()
+    end
+
     test_tx "electrified?/2", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"

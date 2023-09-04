@@ -19,6 +19,16 @@ defmodule Electric.Satellite.Serialization do
   @type relation_mapping() ::
           %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
+  @spec supported_pg_types :: [atom]
+  def supported_pg_types do
+    ~w[
+      int2 int4 int8
+      float8
+      text
+      varchar
+    ]a
+  end
+
   @doc """
   Serialize from internal format to Satellite PB format
   """
@@ -98,10 +108,7 @@ defmodule Electric.Satellite.Serialization do
 
           # unlikely since the extension tables have constraints that prevent this
           if version && version != v,
-            do:
-              raise(RuntimeError,
-                message: "Got DDL transaction with differing migration versions"
-              )
+            do: raise("Got DDL transaction with differing migration versions")
 
           {:ok, schema} = maybe_load_schema(origin, schema, v)
 
@@ -281,8 +288,13 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp serialize_table_columns(columns, pks) do
-    Enum.map(columns, fn %{name: name, type: type} ->
-      %SatRelationColumn{name: name, type: to_string(type), primaryKey: MapSet.member?(pks, name)}
+    Enum.map(columns, fn %{name: name, type: type, nullable?: nullable?} ->
+      %SatRelationColumn{
+        name: name,
+        type: to_string(type),
+        is_nullable: nullable?,
+        primaryKey: MapSet.member?(pks, name)
+      }
     end)
   end
 
@@ -344,66 +356,122 @@ defmodule Electric.Satellite.Serialization do
         {nil, [trans | complete]}
 
       %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
-        relation = fetch_known_relation(relations, relation_id)
+        relation = Map.get(relations, relation_id)
 
-        transop =
-          case op do
-            %SatOpInsert{row_data: row_data, tags: tags} ->
-              data = row_to_map(relation.columns, row_data, false)
-              %NewRecord{relation: {relation.schema, relation.table}, record: data, tags: tags}
+        change =
+          op
+          |> op_to_change(relation.columns)
+          |> Map.put(:relation, {relation.schema, relation.table})
 
-            %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags} ->
-              old_data = row_to_map(relation.columns, old_row_data, true)
-              data = row_to_map(relation.columns, row_data, false)
-
-              %UpdatedRecord{
-                relation: {relation.schema, relation.table},
-                record: data,
-                old_record: old_data,
-                tags: tags
-              }
-
-            %SatOpDelete{old_row_data: old_row_data, tags: tags} ->
-              old_data = row_to_map(relation.columns, old_row_data, true)
-
-              %DeletedRecord{
-                relation: {relation.schema, relation.table},
-                old_record: old_data,
-                tags: tags
-              }
-          end
-
-        {%Transaction{trans | changes: [transop | trans.changes]}, complete}
+        {%Transaction{trans | changes: [change | trans.changes]}, complete}
     end)
   end
 
-  defp fetch_known_relation(relations, relation_id) do
-    Map.get(relations, relation_id)
+  defp op_to_change(%SatOpInsert{row_data: row_data, tags: tags}, columns) do
+    %NewRecord{record: decode_record(row_data, columns), tags: tags}
   end
 
-  @spec row_to_map([String.t()], %SatOpRow{}) :: %{String.t() => nil | String.t()}
-  def row_to_map(columns, row) do
-    row_to_map(columns, row, false)
+  defp op_to_change(
+         %SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags},
+         columns
+       ) do
+    %UpdatedRecord{
+      record: decode_record(row_data, columns, :allow_nulls),
+      old_record: nil,
+      tags: tags
+    }
   end
 
-  defp row_to_map(_columns, nil, false) do
+  defp op_to_change(
+         %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags},
+         columns
+       ) do
+    %UpdatedRecord{
+      record: decode_record(row_data, columns),
+      old_record: decode_record(old_row_data, columns),
+      tags: tags
+    }
+  end
+
+  defp op_to_change(%SatOpDelete{old_row_data: nil, tags: tags}, _columns) do
+    %DeletedRecord{old_record: nil, tags: tags}
+  end
+
+  defp op_to_change(%SatOpDelete{old_row_data: old_row_data, tags: tags}, columns) do
+    %DeletedRecord{
+      old_record: decode_record(old_row_data, columns),
+      tags: tags
+    }
+  end
+
+  @spec decode_record(%SatOpRow{}, [String.t()], :allow_nulls | nil) ::
+          %{String.t() => nil | String.t()} | nil
+  def decode_record(row, columns) do
+    decode_record(row, columns, nil)
+  end
+
+  defp decode_record(nil, _columns, _opt) do
     raise "protocol violation, empty row"
   end
 
-  defp row_to_map(_columns, nil, true), do: nil
-
-  defp row_to_map(columns, %SatOpRow{nulls_bitmask: bitmask, values: values}, _) do
-    bitmask_list = for <<x::1 <- bitmask>>, do: x
-
-    {row, _, []} =
-      Enum.reduce(columns, {%{}, bitmask_list, values}, fn
-        column, {map0, [0 | bitmask_list0], [value | values0]} ->
-          {Map.put(map0, column, value), bitmask_list0, values0}
-
-        column, {map0, [1 | bitmask_list0], [_ | values0]} ->
-          {Map.put(map0, column, nil), bitmask_list0, values0}
-      end)
-
-    row
+  defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, opt) do
+    decode_values(values, bitmask, columns, opt)
+    |> Map.new()
   end
+
+  defp decode_values([], _bitmask, [], _opt), do: []
+
+  defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns], opt)
+       when is_binary(val) do
+    [
+      {col.name, decode_column_value(val, col.type)}
+      | decode_values(values, bitmask, columns, opt)
+    ]
+  end
+
+  defp decode_values(_, <<1::1, _::bits>>, [%{nullable?: false} | _], opt)
+       when opt != :allow_nulls do
+    raise "protocol violation, null value for a not null column"
+  end
+
+  defp decode_values(["" | values], <<1::1, bitmask::bits>>, [col | columns], opt) do
+    [{col.name, nil} | decode_values(values, bitmask, columns, opt)]
+  end
+
+  @doc """
+  Given a column value received from a Satellite client, transcode it into the format that can be fed into Postgres'
+  logical replication stream (aka "server-native format").
+  """
+  @spec decode_column_value(binary, atom) :: binary
+
+  def decode_column_value(val, type) when type in [:bytea, :text, :varchar] do
+    val
+  end
+
+  def decode_column_value(val, type) when type in [:int2, :int4, :int8] do
+    :ok =
+      val
+      |> String.to_integer()
+      |> assert_integer_in_range!(type)
+
+    val
+  end
+
+  def decode_column_value(val, :float8) do
+    _ = String.to_float(val)
+    val
+  end
+
+  def decode_column_value(val, :uuid) do
+    {:ok, uuid} = Electric.Utils.validate_uuid(val)
+    uuid
+  end
+
+  @int2_range -32768..32767
+  @int4_range -2_147_483_648..2_147_483_647
+  @int8_range -9_223_372_036_854_775_808..9_223_372_036_854_775_807
+
+  defp assert_integer_in_range!(int, :int2) when int in @int2_range, do: :ok
+  defp assert_integer_in_range!(int, :int4) when int in @int4_range, do: :ok
+  defp assert_integer_in_range!(int, :int8) when int in @int8_range, do: :ok
 end

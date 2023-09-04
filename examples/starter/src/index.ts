@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-warnings
 
 // Usage: npx create-electric-app my-app
 
@@ -6,6 +6,9 @@ import { spawn } from 'child_process'
 import * as fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import ora from 'ora'
+
+const spinner = ora('Creating project structure').start()
 
 // The first argument will be the project name
 const projectName = process.argv[2]
@@ -69,13 +72,23 @@ if (name) {
 }
 
 // Run `yarn install` in the project directory to install the dependencies
-const proc = spawn('yarn install', [], { stdio: 'inherit', cwd: projectDir, shell: true })
+spinner.text = 'Installing dependencies (may take some time) ...'
+const proc = spawn('yarn install', [], { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true })
+
+let errors: Uint8Array[] = []
+proc.stderr.on('data', (data) => {
+  errors = errors.concat(data)
+})
 
 proc.on('close', (code) => {
+  spinner.stop()
   if (code === 0) {
-    console.log(`Success! Your ElectricSQL app is ready at \`./${projectName}\``)
+    console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
   }
   else {
-    console.log(`Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
+    console.error(Buffer.concat(errors).toString())
+    console.log(`⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
   }
+
+  console.log(`Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the README.md.`)
 })

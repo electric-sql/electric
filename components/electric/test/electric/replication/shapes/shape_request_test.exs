@@ -82,5 +82,21 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
                  user_id: "00000000-0000-0000-0000-000000000001"
                })
     end
+
+    @tag with_sql: """
+         INSERT INTO public.my_entries (content) VALUES ('test content');
+         """
+    test "should not fulfill full-table requests if the table has already been sent", %{
+      origin: origin,
+      conn: conn,
+      schema: schema
+    } do
+      request = %ShapeRequest{id: "id", included_tables: [{"public", "my_entries"}]}
+
+      assert {:ok, []} =
+               ShapeRequest.query_initial_data(request, conn, schema, origin, %{
+                 sent_tables: MapSet.new([{"public", "my_entries"}])
+               })
+    end
   end
 end

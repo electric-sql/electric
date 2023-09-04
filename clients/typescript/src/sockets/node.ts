@@ -1,9 +1,10 @@
 import EventEmitter from 'events'
 import { ConnectionOptions, Data, Socket, SocketFactory } from './index'
 import { WebSocket } from 'ws'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 
 export class WebSocketNodeFactory implements SocketFactory {
-  create() {
+  create(): WebSocketNode {
     return new WebSocketNode()
   }
 }
@@ -15,23 +16,35 @@ export class WebSocketNode extends EventEmitter implements Socket {
     super()
   }
 
-  open(opts: ConnectionOptions): Socket {
+  open(opts: ConnectionOptions): this {
+    if (this.socket) {
+      throw new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'trying to open a socket before closing existing socket'
+      )
+    }
+
     this.socket = new WebSocket(opts.url)
     this.socket.binaryType = 'nodebuffer'
 
     this.socket.on('open', () => this.emit('open'))
     this.socket.on('message', (data) => this.emit('message', data))
-    this.socket.on('error', (error) => this.emit('error', error))
+    this.socket.on('error', (_unusedError) =>
+      this.emit(
+        'error',
+        new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')
+      )
+    )
 
     return this
   }
 
-  write(data: string | Uint8Array | Buffer): Socket {
+  write(data: string | Uint8Array | Buffer): this {
     this.socket?.send(data)
     return this
   }
 
-  closeAndRemoveListeners(): Socket {
+  closeAndRemoveListeners(): this {
     this.removeAllListeners()
     this.socket?.removeAllListeners()
     this.socket?.close()
@@ -42,8 +55,8 @@ export class WebSocketNode extends EventEmitter implements Socket {
     this.on('message', cb)
   }
 
-  onError(cb: (error: Error) => void): void {
-    this.on('error', () => cb(new Error('socket error')))
+  onError(cb: (error: SatelliteError) => void): void {
+    this.on('error', cb)
   }
 
   onClose(cb: () => void): void {
@@ -54,7 +67,11 @@ export class WebSocketNode extends EventEmitter implements Socket {
     this.once('open', cb)
   }
 
-  onceError(cb: (error: Error) => void): void {
+  onceError(cb: (error: SatelliteError) => void): void {
     this.once('error', cb)
+  }
+
+  removeErrorListener(cb: (error: SatelliteError) => void): void {
+    this.removeListener('error', cb)
   }
 }

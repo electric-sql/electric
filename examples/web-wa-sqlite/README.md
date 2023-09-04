@@ -16,248 +16,75 @@
 
 This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
 
-## Install
+## Instructions
 
-Clone this repo and change directory into this folder:
+Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
 
 ```sh
 git clone https://github.com/electric-sql/electric
 cd electric/examples/web-wa-sqlite
 ```
 
+## Pre-reqs
+
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
+
+```shell
+npm -g install yarn
+```
+
+## Install
+
 Install the dependencies:
 
 ```sh
-pnpm install
+yarn
+```
+
+## Setup
+
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+
+```shell
+yarn backend:up
+# Or `yarn backend:start` to foreground
+```
+
+Note that, if useful, you can connect to Postgres using:
+
+```shell
+yarn db:psql
+```
+
+Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
+
+```shell
+yarn db:migrate
+```
+
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
+
+```shell
+yarn client:generate
+# or `yarn client:watch`` to re-generate whenever the DB schema changes
 ```
 
 ## Run
 
-First, setup and run the local stack:
+Start your app:
 
 ```sh
-cd ../../components/electric
-docker build -t electric:local-build .
-cd ../../local-stack
+yarn start
 ```
 
-Configure your environment to use the compiled image:
+Open [localhost:3001](http://localhost:3001) in your web browser.
 
-```sh
-vim .envrc
-export ELECTRIC_IMAGE=electric:local-build
-```
+## Develop
 
-Launch the local stack:
+`./src/Example.tsx` has the main example code. For more information see the:
 
-```sh
-source .envrc
-docker-compose up
-```
+- [Documentation](https://electric-sql.com/docs)
+- [Quickstart](https://electric-sql.com/docs/quickstart)
+- [Usage guide](https://electric-sql.com/docs/usage)
 
-Then, in another terminal, connect to Postgres and create the necessary tables:
-
-```sh
-docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
-electric=# CREATE TABLE IF NOT EXISTS "items" (
-  "value" TEXT NOT NULL,
-  CONSTRAINT "items_pkey" PRIMARY KEY ("value")
-);
-```
-
-Now, Electrify the table in order for it to be exposed to client applications:
-
-```
-electric=# CALL electric.electrify('items');
-```
-
-Then, build the typescript client and the generator:
-
-```sh
-cd clients/typescript
-pnpm build
-cd ../../generator
-pnpm build
-```
-
-Now, generate an Electric client for the app:
-
-```sh
-cd ../examples/web-wa-sqlite
-npx electric-sql generate
-```
-
-The `generate` command fetches the migrations from the backend and generates an Electric client in `src/generated/client/index.ts`.
-
-Now, let's build and run the app:
-
-```sh
-pnpm build
-pnpm start
-```
-
-## Sync
-
-The application is set up to work with the local stack.
-
-Run the local stack.
-Then open [localhost:3001](http://localhost:3001) in two different browsers (so they're backed by different databases) and try it out. You'll see data being replicated between the client applications.
-
-See [Running the Examples](https://electric-sql.com/docs/overview/examples) for information on how to:
-
-- [connect to your own sync service](https://electric-sql.com/docs/overview/examples#option-2--connect-to-your-own-sync-service)
-- [run the backend locally](https://electric-sql.com/docs/overview/examples#option-3--run-the-backend-locally)
-
-## Notes on the code
-
-In this example, Electric uses wa-sqlite in the browser with IndexedDB for persistence.
-
-The main code to look at is in [`./src/Example.tsx`](./src/Example.tsx):
-
-```tsx
-export const Example = () => {
-  const [ electric, setElectric ] = useState<Electric>()
-
-  useEffect(() => {
-    let isMounted = true
-
-    const init = async () => {
-      const config = {
-        auth: {
-          token: await localAuthToken()
-        }
-      }
-
-      const conn = await ElectricDatabase.init('electric.db', '')
-      const electric = await electrify(conn, schema, config)
-
-      if (!isMounted) {
-        return
-      }
-
-      setElectric(electric)
-    }
-
-    init()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  if (electric === undefined) {
-    return null
-  }
-
-  return (
-    <ElectricProvider db={electric}>
-      <ExampleComponent />
-    </ElectricProvider>
-  )
-}
-```
-
-This opens an electrified database client and passes it to the application using the React Context API. Components can then use the [`useElectric`](https://electric-sql.com/docs/integrations/frontend/react#useelectric) and [`useLiveQuery`](https://electric-sql.com/docs/integrations/frontend/react#uselivequery) hooks to access the database client and bind reactive queries to the component state.
-
-```tsx
-const ExampleComponent = () => {
-  const { db } = useElectric()!
-
-  // read all items
-  const { results } = useLiveQuery(
-    db.items.liveMany()
-  )
-
-  const addItem = async () => {
-    await db.items.create({
-      data: {
-        value: genUUID(),
-      }
-    })
-  }
-
-  const clearItems = async () => {
-    // delete all items
-    await db.items.deleteMany()
-  }
-
-  const items: Item[] = results !== undefined ? results : []
-
-  return (
-    <div>
-      <div className="controls">
-        <button className="button" onClick={addItem}>
-          Add
-        </button>
-        <button className="button" onClick={clearItems}>
-          Clear
-        </button>
-      </div>
-      {items.map((item: any, index: any) => (
-        <p key={ index } className="item">
-          <code>{ item.value }</code>
-        </p>
-      ))}
-    </div>
-  )
-}
-```
-
-## Migrating the app
-
-ElectricSQL supports migrating the back-end while the app is running.
-Migrations are additive-only.
-For example, while running the app we may connect to the Postgres backend and add a column `other_value` to the `items` table:
-
-```shell
-docker exec -it -e PGPASSWORD=password local-stack-postgres_1-1  psql -h 127.0.0.1 -U postgres -d electric
-electric=# ALTER TABLE items ADD other_value TEXT;
-WARNING:  assigning automatic migration version id: 20230529120539_974
-ALTER TABLE
-```
-
-This database migration will automatically be picked up by Electric and will be streamed to the application
-which will apply the migration on its local SQLite database.
-Since we only support additive migrations, the application continues to work.
-
-Then, remains to update the code of our application to do something with the new column.
-To this end, first run the `generate` script from within the top-level directory of this app:
-
-```shell
-npx electric-sql generate
-```
-
-The `generate` script updates the Electric client to incorporate the new column `other_value` on the `items` table.
-This new column is now also reflected in the type of the `items` table.
-If the application was offline when the backend was migrated,
-the missing migrations will automatically be fetched by the above script
-and will be applied the next time the application is started.
-
-Now, let's update the app. In `Example.tsx`, modify the `addItem` function to provide a value for the new column:
-
-```typescript
-const addItem = async () => {
-  await db.items.create({
-    data: {
-      value: genUUID(),
-      other_value: genUUID(), // <-- insert value in new row
-    }
-  })
-}
-```
-
-Also modify the returned HTML to display the value of the new column:
-
-```typescript jsx
-{items.map((item: any, index: any) => (
-  <p key={ index } className="item">
-    <code>{ item.value } - { item.other_value }</code>
-  </p>
-))}
-```
-
-You now successfully migrated your app, simply build it again and run the app 🚀
-
-## More information
-
-See the [documentation](https://electric-sql.com/docs) and [community guidelines](https://github.com/electric-sql/meta). If you need help [let us know on Discord](https://discord.electric-sql.com).
+If you need help [let us know on Discord](https://discord.electric-sql.com).

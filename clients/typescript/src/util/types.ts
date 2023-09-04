@@ -35,6 +35,7 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
+  CONNECTION_FAILED_AFTER_RETRY,
   INTERNAL,
   TIMEOUT,
   REPLICATION_NOT_STARTED,
@@ -43,10 +44,18 @@ export enum SatelliteErrorCode {
   UNEXPECTED_MESSAGE_TYPE,
   PROTOCOL_VIOLATION,
   UNKNOWN_DATA_TYPE,
-  AUTH_ERROR,
+  SOCKET_ERROR,
+  UNRECOGNIZED,
 
-  SUBSCRIPTION_ALREADY_EXISTS,
-  UNEXPECTED_SUBSCRIPTION_STATE,
+  // auth errors
+  AUTH_ERROR,
+  AUTH_FAILED,
+  AUTH_REQUIRED,
+
+  // server errors
+  INVALID_REQUEST,
+  PROTO_VSN_MISMATCH,
+  REPLICATION_FAILED,
 
   // start replication errors
   BEHIND_WINDOW,
@@ -59,6 +68,8 @@ export enum SatelliteErrorCode {
   // subscription errors
   SHAPE_REQUEST_ERROR,
   SUBSCRIPTION_ID_ALREADY_EXISTS,
+  SUBSCRIPTION_ALREADY_EXISTS,
+  UNEXPECTED_SUBSCRIPTION_STATE,
 
   // shape request errors
   TABLE_NOT_FOUND,
@@ -74,6 +85,14 @@ export enum SatelliteErrorCode {
 export type AuthResponse = {
   serverId?: string
   error?: Error
+}
+
+export type StartReplicationResponse = {
+  error?: SatelliteError
+}
+
+export type StopReplicationResponse = {
+  error?: SatelliteError
 }
 
 export type Transaction = {
@@ -128,17 +147,12 @@ export function isDataChange(change: Change): change is DataChange {
 
 export type Record = { [key: string]: string | number | undefined | null }
 
-export type Replication = {
+export type Replication<TransactionType> = {
   authenticated: boolean
   isReplicating: ReplicationStatus
   relations: Map<number, Relation>
-  ack_lsn?: LSN
-  enqueued_lsn?: LSN
-  transactions: Transaction[]
-}
-
-export type OutgoingReplication = Omit<Replication, 'transactions'> & {
-  transactions: DataTransaction[] // outgoing transactions cannot contain migrations
+  last_lsn: LSN | undefined
+  transactions: TransactionType[]
 }
 
 export type Relation = {
@@ -152,6 +166,7 @@ export type Relation = {
 export type RelationColumn = {
   name: string
   type: string
+  isNullable: boolean
   primaryKey?: boolean
 }
 
@@ -164,12 +179,7 @@ export enum ReplicationStatus {
   ACTIVE,
 }
 
-export enum AckType {
-  LOCAL_SEND,
-  REMOTE_COMMIT,
-}
-
-export type AckCallback = (lsn: LSN, type: AckType) => void
+export type ErrorCallback = (error: SatelliteError) => void
 
 export type ConnectivityState =
   | 'available'

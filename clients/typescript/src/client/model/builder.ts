@@ -11,7 +11,7 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import flow from 'lodash.flow'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import * as z from 'zod'
-import { shapeManager } from './shapes'
+import { IShapeManager } from './shapes'
 import Log from 'loglevel'
 
 const squelPostgres = squel.useFlavour('postgres')
@@ -19,7 +19,11 @@ const squelPostgres = squel.useFlavour('postgres')
 type AnyFindInput = FindInput<any, any, any, any, any>
 
 export class Builder {
-  constructor(private _tableName: string, private _fields: string[]) {}
+  constructor(
+    private _tableName: string,
+    private _fields: string[],
+    private shapeManager: IShapeManager
+  ) {}
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
@@ -130,8 +134,8 @@ export class Builder {
     const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
 
-    if (!shapeManager.hasBeenSubscribed(this._tableName))
-      Log.warn('Reading from unsynced table ' + this._tableName)
+    if (!this.shapeManager.hasBeenSubscribed(this._tableName))
+      Log.debug('Reading from unsynced table ' + this._tableName)
 
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`

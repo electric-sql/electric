@@ -18,6 +18,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
+  alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Replication.OffsetStorage
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
@@ -38,9 +39,7 @@ defmodule Electric.Satellite.Protocol do
               incomplete_trans: nil,
               demand: 0,
               sub_retry: nil,
-              queue: :queue.new(),
-              sync_counter: 0,
-              sync_batch_size: nil
+              queue: :queue.new()
 
     @typedoc """
     Incoming replication Satellite -> PG
@@ -61,10 +60,7 @@ defmodule Electric.Satellite.Protocol do
             },
             incomplete_trans: nil | Transaction.t(),
             demand: pos_integer(),
-            queue: :queue.queue(Transaction.t()),
-            # Parameters used to acknowledge received messages
-            sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer()
+            queue: :queue.queue(Transaction.t())
           }
   end
 
@@ -74,8 +70,6 @@ defmodule Electric.Satellite.Protocol do
               pid: nil,
               stage_sub: nil,
               relations: %{},
-              sync_counter: 0,
-              sync_batch_size: nil,
               last_seen_wal_pos: 0,
               subscription_pause_queue: {nil, :queue.new()},
               outgoing_ops_buffer: :queue.new(),
@@ -96,9 +90,6 @@ defmodule Electric.Satellite.Protocol do
             status: nil | :active | :paused,
             stage_sub: GenStage.subscription_tag() | nil,
             relations: %{Changes.relation() => PB.relation_id()},
-            # Parameters used to acknowledge received messages
-            sync_batch_size: nil | non_neg_integer,
-            sync_counter: nil | non_neg_integer,
             last_seen_wal_pos: non_neg_integer,
             # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
             subscription_pause_queue:
@@ -421,7 +412,17 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
-    columns = Enum.map(msg.columns, fn %SatRelationColumn{} = x -> x.name end)
+    # Look up the latest schema for the relation to assign correct column types.
+    #
+    # Even though the server may have applied migrations to the schema that the client hasn't seen yet,
+    # we can still look up column types on it due our migrations being additive-only and backwards-compatible.
+    %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
+    relation_columns = Map.new(columns, &{&1.name, &1.type})
+
+    columns =
+      Enum.map(msg.columns, fn %SatRelationColumn{name: name} = col ->
+        %{name: name, type: Map.fetch!(relation_columns, name), nullable?: col.is_nullable}
+      end)
 
     relations =
       Map.put(in_rep.relations, msg.relation_id, %{
@@ -443,7 +444,7 @@ defmodule Electric.Satellite.Protocol do
              msg,
              in_rep.incomplete_trans,
              in_rep.relations,
-             fn lsn -> report_lsn(state.client_id, self, in_rep.sync_batch_size, lsn) end
+             fn lsn -> report_lsn(state.client_id, self, lsn) end
            ) do
         {incomplete, []} ->
           {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
@@ -533,7 +534,7 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(lsn) do
       case restore_subscriptions(msg.subscription_ids, state) do
         {:ok, state} ->
-          state = subscribe_client_to_replication_stream(state, msg, lsn)
+          state = subscribe_client_to_replication_stream(lsn, state)
           {%SatInStartReplicationResp{}, state}
 
         {:error, bad_id} ->
@@ -561,14 +562,7 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp report_lsn(satellite, _pid, nil, lsn) do
-    Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
-    OffsetStorage.put_satellite_lsn(satellite, lsn)
-    # We are not operating in a sync mode, so no need to acknowledge lsn in
-    # this call
-  end
-
-  defp report_lsn(satellite, pid, 1, lsn) do
+  defp report_lsn(satellite, pid, lsn) do
     Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
     OffsetStorage.put_satellite_lsn(satellite, lsn)
     Process.send(pid, {__MODULE__, :lsn_report, lsn}, [])
@@ -638,31 +632,10 @@ defmodule Electric.Satellite.Protocol do
     {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
-  @spec subscribe_client_to_replication_stream(State.t(), %SatInStartReplicationReq{}, any()) ::
-          State.t()
-  def subscribe_client_to_replication_stream(state, msg, lsn) do
+  @spec subscribe_client_to_replication_stream(any(), State.t()) :: State.t()
+  def subscribe_client_to_replication_stream(lsn, %State{out_rep: out_rep} = state) do
     Metrics.satellite_replication_event(%{started: 1})
 
-    state
-    |> maybe_setup_batch_counter(msg)
-    |> initiate_subscription(lsn)
-  end
-
-  defp maybe_setup_batch_counter(
-         %State{out_rep: out_rep} = state,
-         %SatInStartReplicationReq{options: opts} = msg
-       ) do
-    if :SYNC_MODE in opts do
-      sync_batch_size = msg.sync_batch_size
-      true = sync_batch_size > 0
-      out_rep = %OutRep{out_rep | sync_batch_size: sync_batch_size, sync_counter: sync_batch_size}
-      %State{state | out_rep: out_rep}
-    else
-      state
-    end
-  end
-
-  defp initiate_subscription(%State{out_rep: out_rep} = state, lsn) do
     {:via, :gproc, producer} = CachedWal.Producer.name(state.client_id)
     {sub_pid, _} = :gproc.await(producer, @producer_timeout)
     sub_ref = Process.monitor(sub_pid)
@@ -818,7 +791,15 @@ defmodule Electric.Satellite.Protocol do
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
     opts = state.pg_connector_opts
-    context = %{user_id: Pathex.get(state, path(:auth / :user_id))}
+
+    context = %{
+      user_id: Pathex.get(state, path(:auth / :user_id)),
+      sent_tables:
+        Map.values(state.subscriptions)
+        |> List.flatten()
+        |> Enum.flat_map(fn %ShapeRequest{included_tables: tables} -> tables end)
+        |> MapSet.new()
+    }
 
     Task.start(fn ->
       # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.

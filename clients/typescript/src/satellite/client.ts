@@ -37,13 +37,13 @@ import {
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
   subsErrorToSatelliteError,
+  msgToString,
+  serverErrorToSatelliteError,
 } from '../util/proto'
 import { Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
-  AckCallback,
-  AckType,
   AuthResponse,
   DataChangeType,
   LSN,
@@ -56,19 +56,20 @@ import {
   Record,
   Relation,
   SchemaChange,
-  OutgoingReplication,
   Transaction,
+  StartReplicationResponse,
+  StopReplicationResponse,
+  ErrorCallback,
 } from '../util/types'
 import {
   base64,
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
-  emptyPromise,
+  bytesToNumber,
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
-import { backOff, IBackOffOptions } from 'exponential-backoff'
 import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
@@ -83,31 +84,38 @@ import {
   UnsubscribeResponse,
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
+import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 
 type IncomingHandler = {
   handle: (
     msg: any
-  ) => void | AuthResponse | SubscribeResponse | UnsubscribeResponse
+  ) =>
+    | void
+    | AuthResponse
+    | StartReplicationResponse
+    | StopReplicationResponse
+    | SubscribeResponse
+    | UnsubscribeResponse
   isRpc: boolean
 }
 
+const subscriptionError = [
+  SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
+  SatelliteErrorCode.SUBSCRIPTION_ERROR,
+  SatelliteErrorCode.SUBSCRIPTION_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_ID_ALREADY_EXISTS,
+  SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
+  SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
+]
+
 export class SatelliteClient extends EventEmitter implements Client {
   private opts: Required<SatelliteClientOpts>
-  private dbName: string
 
   private socketFactory: SocketFactory
   private socket?: Socket
 
-  private notifier: Notifier
-
-  private initializing?: {
-    promise: Promise<void>
-    resolve: () => void
-    reject: (e?: unknown) => void
-  }
-
-  private inbound: Replication
-  private outbound: OutgoingReplication
+  private inbound: Replication<Transaction>
+  private outbound: Replication<DataTransaction>
 
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
@@ -188,29 +196,16 @@ export class SatelliteClient extends EventEmitter implements Client {
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
-  connectionRetryPolicy: Partial<IBackOffOptions> = {
-    delayFirstAttempt: false,
-    startingDelay: 100,
-    jitter: 'none',
-    maxDelay: 100,
-    numOfAttempts: 10,
-    timeMultiple: 2,
-  }
-
   constructor(
-    dbName: string,
+    _dbName: string,
     socketFactory: SocketFactory,
-    notifier: Notifier,
+    _notifier: Notifier,
     opts: SatelliteClientOpts
   ) {
     super()
 
-    this.dbName = dbName
-
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
-
-    this.notifier = notifier
 
     this.inbound = this.resetReplication()
     this.outbound = this.resetReplication()
@@ -218,105 +213,85 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.subscriptionsDataCache = new SubscriptionsDataCache()
   }
 
-  private resetReplication(
-    enqueued?: LSN,
-    ack?: LSN,
+  private resetReplication<T = any>(
+    last_lsn?: LSN,
     isReplicating?: ReplicationStatus
-  ): OutgoingReplication {
+  ): Replication<T> {
     return {
       authenticated: false,
       isReplicating: isReplicating ? isReplicating : ReplicationStatus.STOPPED,
       relations: new Map(),
-      ack_lsn: ack,
-      enqueued_lsn: enqueued,
+      last_lsn: last_lsn,
       transactions: [],
     }
   }
 
-  connect(
-    retryHandler?: (error: any, attempt: number) => boolean
-  ): Promise<void> {
-    this.initializing = emptyPromise()
+  async connect(): Promise<void> {
+    if (!this.isClosed()) {
+      this.close()
+    }
 
-    const connectPromise = new Promise<void>((resolve, reject) => {
-      // TODO: ensure any previous socket is closed, or reject
-      if (this.socket) {
-        throw new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_STATE,
-          'a socket already exist. ensure it is closed before reconnecting.'
-        )
-      }
+    return new Promise<void>((resolve, reject) => {
       this.socket = this.socketFactory.create()
-      this.socket.onceConnect(() => {
+
+      const onceError = (error: Error) => {
+        this.close()
+        reject(error)
+      }
+
+      const onceConnect = () => {
         if (!this.socket)
           throw new SatelliteError(
             SatelliteErrorCode.UNEXPECTED_STATE,
             'socket got unassigned somehow'
           )
+
+        this.socket.removeErrorListener(onceError)
         this.socketHandler = (message) => this.handleIncoming(message)
-        this.notifier.connectivityStateChanged(this.dbName, 'connected')
+
         this.socket.onMessage(this.socketHandler)
-        this.socket.onError(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'error')
+        this.socket.onError((error) => {
+          if (this.listenerCount('error') === 0) {
+            this.close()
+            Log.error(
+              `socket error but no listener is attached: ${error.message}`
+            )
+          }
+          this.emit('error', error)
         })
         this.socket.onClose(() => {
-          this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+          this.close()
+          if (this.listenerCount('error') === 0) {
+            Log.error(`socket closed but no listener is attached`)
+          }
+          this.emit(
+            'error',
+            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
+          )
         })
-        resolve()
-      })
 
-      this.socket.onceError((error) => {
-        this.socket = undefined
-        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-        reject(error)
-      })
+        resolve()
+      }
+
+      this.socket.onceError(onceError)
+      this.socket.onceConnect(onceConnect)
 
       const { host, port, ssl } = this.opts
       const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
       this.socket.open({ url })
     })
-
-    const retryPolicy = { ...this.connectionRetryPolicy }
-    if (retryHandler) {
-      retryPolicy.retry = retryHandler
-    }
-
-    return backOff(() => connectPromise, retryPolicy).catch((e) => {
-      // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.initializing!.reject(e)
-      throw e
-    })
   }
 
-  close(): Promise<void> {
-    Log.info('closing client')
-
-    this.outbound = this.resetReplication(
-      this.outbound.enqueued_lsn,
-      this.outbound.ack_lsn
-    )
-    this.inbound = this.resetReplication(
-      this.inbound.enqueued_lsn,
-      this.inbound.ack_lsn
-    )
+  close() {
+    this.outbound = this.resetReplication(this.outbound.last_lsn)
+    this.inbound = this.resetReplication(this.inbound.last_lsn)
 
     this.socketHandler = undefined
-    this.removeAllListeners()
-    this.initializing?.promise.catch(() => void 0)
-    this.initializing?.reject(
-      new SatelliteError(
-        SatelliteErrorCode.INTERNAL,
-        'Socket is closed by the client while initializing'
-      )
-    )
-    this.initializing = undefined
-    if (this.socket != undefined) {
+
+    if (this.socket !== undefined) {
       this.socket!.closeAndRemoveListeners()
       this.socket = undefined
     }
-
-    return Promise.resolve()
   }
 
   isClosed(): boolean {
@@ -327,7 +302,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
-  ): Promise<void> {
+  ): Promise<StartReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
         new SatelliteError(
@@ -338,7 +313,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     // Perform validations and prepare the request
-    let request
+    let request: SatInStartReplicationReq
     if (!lsn || lsn.length == 0) {
       Log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
@@ -351,23 +326,20 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
       request = SatInStartReplicationReq.fromPartial({ schemaVersion })
     } else {
-      Log.info(`starting replication with lsn: ${base64.fromBytes(lsn)}`)
+      Log.info(
+        `starting replication with lsn: ${base64.fromBytes(
+          lsn
+        )} subscriptions: ${subscriptionIds}`
+      )
       request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
     }
 
     // Then set the replication state
-    const promise = this.rpc<void>(request)
-      .then(() => this.initializing?.resolve())
-      .catch((e) => {
-        this.initializing?.reject(e)
-        throw e
-      })
-    this.inbound = this.resetReplication(lsn, lsn, ReplicationStatus.STARTING)
-
-    return promise
+    this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
+    return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
   }
 
-  stopReplication(): Promise<void> {
+  stopReplication(): Promise<StopReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -394,10 +366,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       token: token,
       headers: headers,
     })
-    return this.rpc<AuthResponse>(request).catch((e) => {
-      this.initializing?.reject(e)
-      throw e
-    })
+    return this.rpc<AuthResponse>(request)
   }
 
   subscribeToTransactions(
@@ -423,11 +392,9 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     this.outbound.transactions.push(transaction)
-    this.outbound.enqueued_lsn = transaction.lsn
+    this.outbound.last_lsn = transaction.lsn
 
-    if (this.throttledPushTransaction) {
-      this.throttledPushTransaction()
-    }
+    this.throttledPushTransaction?.()
   }
 
   private pushTransactions() {
@@ -445,16 +412,15 @@ export class SatelliteClient extends EventEmitter implements Client {
       const satOpLog: SatOpLog = this.transactionToSatOpLog(next)
 
       this.sendMessage(satOpLog)
-      this.emit('ack_lsn', next.lsn, AckType.LOCAL_SEND)
     }
   }
 
-  subscribeToAck(callback: AckCallback): void {
-    this.on('ack_lsn', callback)
+  subscribeToError(callback: ErrorCallback): void {
+    this.on('error', callback)
   }
 
-  unsubscribeToAck(callback: AckCallback) {
-    this.removeListener('ack_lsn', callback)
+  unsubscribeToError(callback: ErrorCallback): void {
+    this.removeListener('error', callback)
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {
@@ -491,10 +457,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     subscriptionId: string,
     shapes: ShapeRequest[]
   ): Promise<SubscribeResponse> {
-    if (this.initializing) {
-      await this.initializing.promise
-    }
-
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -532,7 +494,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private sendMissingRelations(
     transaction: DataTransaction,
-    replication: Replication
+    replication: Replication<DataTransaction>
   ): void {
     transaction.changes.forEach((change) => {
       const relation = change.relation
@@ -550,7 +512,11 @@ export class SatelliteClient extends EventEmitter implements Client {
           tableName: relation.table,
           tableType: relation.tableType,
           columns: relation.columns.map((c) =>
-            SatRelationColumn.fromPartial({ name: c.name, type: c.type })
+            SatRelationColumn.fromPartial({
+              name: c.name,
+              type: c.type,
+              isNullable: c.isNullable,
+            })
           ),
         })
 
@@ -624,56 +590,56 @@ export class SatelliteClient extends EventEmitter implements Client {
     } else {
       error = new SatelliteError(
         SatelliteErrorCode.AUTH_ERROR,
-        `${message.errorType}`
+        `An internal error occurred during authentication`
       )
     }
     return { serverId, error }
   }
 
-  private handleStartResp(resp: SatInStartReplicationResp): void {
+  private handleStartResp(
+    resp: SatInStartReplicationResp
+  ): StartReplicationResponse {
     if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
-        this.emit('error', startReplicationErrorToSatelliteError(resp.err))
+        return { error: startReplicationErrorToSatelliteError(resp.err) }
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
       }
     } else {
-      this.emit(
-        'error',
-        new SatelliteError(
+      return {
+        error: new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
           `unexpected state ${this.inbound.isReplicating} handling 'start' response`
-        )
-      )
+        ),
+      }
     }
+    return {}
   }
 
   private handleStartReq(message: SatInStartReplicationReq) {
-    Log.info(`received replication request ${JSON.stringify(message)}`)
-    if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
-      const replication = {
-        ...this.outbound,
-        ack_lsn: DEFAULT_LOG_POS,
-        enqueued_lsn: DEFAULT_LOG_POS,
-      }
+    Log.info(
+      `Server sent a replication request to start from ${bytesToNumber(
+        message.lsn
+      )}, and options ${JSON.stringify(message.options)}`
+    )
 
+    if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
+      // Use server-sent LSN as the starting point for replication
       this.outbound = this.resetReplication(
-        replication.enqueued_lsn,
-        replication.ack_lsn,
+        message.lsn,
         ReplicationStatus.ACTIVE
       )
 
-      const throttleOpts = { leading: true, trailing: true }
       this.throttledPushTransaction = throttle(
         () => this.pushTransactions(),
         this.opts.pushPeriod,
-        throttleOpts
+        { leading: true, trailing: true }
       )
 
       const response = SatInStartReplicationResp.fromPartial({})
       this.sendMessage(response)
-      this.emit('outbound_started', replication.enqueued_lsn)
+      this.emit('outbound_started', message.lsn)
     } else {
       const response = SatErrorResp.fromPartial({
         errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
@@ -716,17 +682,17 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  private handleStopResp() {
+  private handleStopResp(): StopReplicationResponse {
     if (this.inbound.isReplicating == ReplicationStatus.STOPPING) {
       this.inbound.isReplicating = ReplicationStatus.STOPPED
-    } else {
-      this.emit(
-        'error',
-        new SatelliteError(
-          SatelliteErrorCode.UNEXPECTED_STATE,
-          `unexpected state ${this.inbound.isReplicating} handling 'stop' response`
-        )
-      )
+      return {}
+    }
+
+    return {
+      error: new SatelliteError(
+        SatelliteErrorCode.UNEXPECTED_STATE,
+        `unexpected state ${this.inbound.isReplicating} handling 'stop' response`
+      ),
     }
   }
 
@@ -750,6 +716,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       columns: message.columns.map((c) => ({
         name: c.name,
         type: c.type,
+        isNullable: c.isNullable,
         primaryKey: c.primaryKey,
       })),
     }
@@ -775,26 +742,22 @@ export class SatelliteClient extends EventEmitter implements Client {
   private handlePingReq() {
     Log.info(
       `respond to ping with last ack ${
-        this.inbound.ack_lsn ? base64.fromBytes(this.inbound.ack_lsn) : 'NULL'
+        this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
       }`
     )
-    const pong = SatPingResp.fromPartial({ lsn: this.inbound.ack_lsn })
+    const pong = SatPingResp.fromPartial({ lsn: this.inbound.last_lsn })
     this.sendMessage(pong)
   }
 
-  // TODO: emit ping request to clear oplog.
-  private handlePingResp(message: SatPingResp) {
-    if (message.lsn) {
-      this.outbound.ack_lsn = message.lsn
-      this.emit('ack_lsn', message.lsn, AckType.REMOTE_COMMIT)
-    }
+  private handlePingResp(_message: SatPingResp) {
+    // TODO: This message is not used in any way right now.
+    //       We might be dropping client-initiated pings completely.
+    //       However, the server sends these messages without any prompting,
+    //       so this handler cannot just throw an error
   }
 
   private handleError(error: SatErrorResp) {
-    this.emit(
-      'error',
-      new Error(`server replied with error code: ${error.errorType}`)
-    )
+    this.emit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
@@ -836,19 +799,32 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
-    const messageOrError = toMessage(data)
-    Log.info(`Received message ${JSON.stringify(messageOrError)}`)
-    if (messageOrError instanceof Error) {
-      this.emit('error', messageOrError)
-    } else {
-      const handler = this.handlerForMessageType[messageOrError.$type]
-      try {
-        const response = handler.handle(messageOrError)
-        if (handler.isRpc) {
-          this.emit('rpc_response', response)
+    let handleIsRpc = false
+    try {
+      const message = toMessage(data)
+
+      if (Log.getLevel() <= 1) {
+        Log.debug(`[proto] recv: ${msgToString(message)}`)
+      }
+
+      const handler = this.handlerForMessageType[message.$type]
+      const response = handler.handle(message)
+      if ((handleIsRpc = handler.isRpc)) {
+        this.emit('rpc_response', response)
+      }
+    } catch (error) {
+      if (error instanceof SatelliteError) {
+        if (handleIsRpc) {
+          this.emit('rpc_error', error)
+        } else {
+          // subscription errors are emitted through specific event
+          if (!subscriptionError.includes(error.code)) {
+            this.emit('error', error)
+          }
         }
-      } catch (error) {
-        Log.warn(`uncaught errors while processing incoming message: ${error}`)
+      } else {
+        // This is an unexpected runtime error
+        throw error
       }
     }
   }
@@ -879,7 +855,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.emit(
           'transaction',
           transaction,
-          () => (this.inbound.ack_lsn = transaction.lsn)
+          () => (this.inbound.last_lsn = transaction.lsn)
         )
         replication.transactions.splice(lastTxnIdx)
       }
@@ -969,11 +945,11 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMessage<T extends SatPbMsg>(request: T) {
-    Log.debug(`Sending message ${JSON.stringify(request)}`)
-    if (!this.socket) {
+    if (Log.getLevel() <= 1) Log.debug(`[proto] send: ${msgToString(request)}`)
+    if (!this.socket || this.isClosed()) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
-        'trying to send message, but no socket exists'
+        'trying to send message, but client is closed'
       )
     }
     const obj = getObjFromString(request.$type)
@@ -1009,15 +985,17 @@ export class SatelliteClient extends EventEmitter implements Client {
       }, this.opts.timeout)
 
       // reject on any error
-      this.once('error', (error: SatelliteError) => {
+      const errorListener = (error: any) => {
         return reject(error)
-      })
+      }
 
+      this.once('rpc_error', errorListener)
       if (distinguishOn) {
         const handleRpcResp = (resp: T) => {
           // TODO: remove this comment when RPC types are fixed
           // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
           if (resp[distinguishOn] === request[distinguishOn]) {
+            this.removeListener('rpc_error', errorListener)
             return resolve(resp)
           } else {
             // This WAS an RPC response, but not the one we were expecting, waiting more
@@ -1026,22 +1004,17 @@ export class SatelliteClient extends EventEmitter implements Client {
         }
         this.once('rpc_response', handleRpcResp)
       } else {
-        this.once('rpc_response', (resp: T) => resolve(resp))
+        this.once('rpc_response', (resp: T) => {
+          this.removeListener('rpc_error', errorListener)
+          resolve(resp)
+        })
       }
-
       this.sendMessage(request)
     }).finally(() => clearTimeout(waitingFor))
   }
 
-  resetOutboundLogPositions(sent: LSN, ack: LSN): void {
-    this.outbound = this.resetReplication(sent, ack)
-  }
-
-  getOutboundLogPositions(): { enqueued: LSN; ack: LSN } {
-    return {
-      ack: this.outbound.ack_lsn ?? DEFAULT_LOG_POS,
-      enqueued: this.outbound.enqueued_lsn ?? DEFAULT_LOG_POS,
-    }
+  getLastSentLsn(): LSN {
+    return this.outbound.last_lsn ?? DEFAULT_LOG_POS
   }
 }
 
@@ -1089,55 +1062,6 @@ export function deserializeRow(
   )
 }
 
-/**
- * Sets a bit in the mask. Modifies the mask in place.
- *
- * Mask is represented as a Uint8Array, which will be serialized element-by-element as a mask.
- * This means that `indexFromStart` enumerates all bits in the mask in the order they will be serialized:
- *
- * @example
- * setMaskBit(new Uint8Array([0b00000000, 0b00000000]), 0)
- * // => new Uint8Array([0b10000000, 0b00000000])
- *
- * @example
- * setMaskBit(new Uint8Array([0b00000000, 0b00000000]), 8)
- * // => new Uint8Array([0b00000000, 0b10000000])
- *
- * @param array Uint8Array mask
- * @param indexFromStart bit index in the mask
- */
-function setMaskBit(array: Uint8Array, indexFromStart: number): void {
-  const byteIndex = Math.floor(indexFromStart / 8)
-  const bitIndex = 7 - (indexFromStart % 8)
-
-  const mask = 0x01 << bitIndex
-  array[byteIndex] = array[byteIndex] | mask
-}
-
-/**
- * Reads a bit in the mask
- *
- * Mask is represented as a Uint8Array, which will be serialized element-by-element as a mask.
- * This means that `indexFromStart` enumerates all bits in the mask in the order they will be serialized:
- *
- * @example
- * getMaskBit(new Uint8Array([0b10000000, 0b00000000]), 0)
- * // => 1
- *
- * @example
- * getMaskBit(new Uint8Array([0b10000000, 0b00000000]), 8)
- * // => 0
- *
- * @param array Uint8Array mask
- * @param indexFromStart bit index in the mask
- */
-function getMaskBit(array: Uint8Array, indexFromStart: number): number {
-  const byteIndex = Math.floor(indexFromStart / 8)
-  const bitIndex = 7 - (indexFromStart % 8)
-
-  return (array[byteIndex] >>> bitIndex) & 0x01
-}
-
 function calculateNumBytes(column_num: number): number {
   const rem = column_num % 8
   if (rem == 0) {
@@ -1182,12 +1106,12 @@ function serializeNullData(): Uint8Array {
   return typeEncoder.text('')
 }
 
-export function toMessage(data: Uint8Array): SatPbMsg | Error {
+export function toMessage(data: Uint8Array): SatPbMsg {
   const code = data[0]
   const type = getTypeFromCode(code)
   const obj = getObjFromString(type)
   if (obj == undefined) {
-    return new SatelliteError(
+    throw new SatelliteError(
       SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
       `${code})`
     )

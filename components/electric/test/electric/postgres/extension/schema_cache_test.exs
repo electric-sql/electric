@@ -54,7 +54,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     Transaction
   }
 
-  @create_a "CREATE TABLE a (aid uuid NOT NULL PRIMARY KEY, avalue text);"
+  @create_a "CREATE TABLE a (aid text NOT NULL PRIMARY KEY, avalue text);"
   @create_b "CREATE TABLE b.b (bid1 int4, bid2 int4, bvalue text, PRIMARY KEY (bid1, bid2));"
   @sqls [
     @create_a,
@@ -65,7 +65,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   ]
 
   setup do
-    # we run the sql on the db which sets up a valid environment then simulate the 
+    # we run the sql on the db which sets up a valid environment then simulate the
     # same things here to avoid having to commit the transaction
     migrations = [
       {"20230620160340", [@create_a]},
@@ -188,13 +188,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: :text,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }
@@ -218,13 +220,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: :text,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }
@@ -250,25 +254,29 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
+                 nullable?: true,
                  type_modifier: 63,
                  part_of_identity?: true
                }
@@ -296,25 +304,29 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
                  type: :timestamptz,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
                  type: :varchar,
+                 nullable?: true,
                  type_modifier: 63,
                  part_of_identity?: true
                }
@@ -326,13 +338,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: :text,
+                 nullable?: false,
                  type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
                  type: :text,
+                 nullable?: true,
                  type_modifier: -1,
                  part_of_identity?: true
                }
@@ -352,18 +366,21 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  %Column{
                    name: "bid1",
                    type: :int4,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bid2",
                    type: :int4,
+                   nullable?: false,
                    type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bvalue",
                    type: :text,
+                   nullable?: true,
                    type_modifier: -1,
                    part_of_identity?: true
                  }

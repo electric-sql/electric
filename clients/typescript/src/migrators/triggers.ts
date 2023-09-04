@@ -111,6 +111,14 @@ export function generateOplogTriggers(
 
 /**
  * Generates triggers for compensations for all foreign keys in the provided table.
+ *
+ * Compensation is recorded as a specially-formatted update. It acts as a no-op, with
+ * previous value set to NULL, and it's on the server to figure out that this is a no-op
+ * compensation operation (usually `UPDATE` would have previous row state known). The entire
+ * reason for it existing is to maybe revive the row if it has been deleted, so we need correct tags.
+ *
+ * The compensation update contains _just_ the primary keys, no other columns are present.
+ *
  * @param tableFullName Full name of the table.
  * @param table The corresponding table.
  * @param tables Map of all tables (needed to look up the tables that are pointed at by FKs).
@@ -118,41 +126,46 @@ export function generateOplogTriggers(
  */
 function generateCompensationTriggers(
   tableFullName: TableFullName,
-  table: Table,
-  tables: Tables
+  table: Table
 ): Statement[] {
   const { tableName, namespace, foreignKeys } = table
 
   const makeTriggers = (foreignKey: ForeignKey) => {
     const { childKey } = foreignKey
-    const fkTable = tables.get(foreignKey.table)
-    if (fkTable === undefined)
-      throw new Error(`Table ${foreignKey.table} for foreign key not found.`)
-    const joinedFkPKs = joinColsForJSON(fkTable.primary)
-    const joinedFkCols = joinColsForJSON(fkTable.columns)
+
+    const fkTableNamespace = 'main' // currently, Electric always uses the 'main' namespace
+    const fkTableName = foreignKey.table
+    const fkTablePK = foreignKey.parentKey // primary key of the table pointed at by the FK.
+    const joinedFkPKs = joinColsForJSON([fkTablePK])
+
     return [
-      `DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
+      `-- Triggers for foreign key compensations
+      DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
+      // The compensation trigger inserts a row in `_electric_oplog` if the row pointed at by the FK exists
+      // The way how this works is that the values for the row are passed to the nested SELECT
+      // which will return those values for every record that matches the query
+      // which can be at most once since we filter on the foreign key which is also the primary key and thus is unique.
       `
       CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
         AFTER INSERT ON ${tableFullName}
-        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTable.namespace}.${fkTable.tableName}') AND
+        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTable.namespace}', '${fkTable.tableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkCols}), NULL, NULL
-        FROM ${fkTable.namespace}.${fkTable.tableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
+        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
       END;
       `,
       `DROP TRIGGER IF EXISTS compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog;`,
       `
       CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
          AFTER UPDATE ON ${namespace}.${tableName}
-         WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTable.namespace}.${fkTable.tableName}') AND
+         WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
               1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTable.namespace}', '${fkTable.tableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkCols}), NULL, NULL
-        FROM ${fkTable.namespace}.${fkTable.tableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
+        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
       END;
       `,
     ].map(mkStatement)
@@ -170,15 +183,10 @@ function generateCompensationTriggers(
  */
 export function generateTableTriggers(
   tableFullName: TableFullName,
-  tables: Tables
+  table: Table
 ): Statement[] {
-  const table = tables.get(tableFullName)
-  if (typeof table === 'undefined')
-    throw new Error(
-      `Could not generate triggers for ${tableFullName}. Table not found.`
-    )
   const oplogTriggers = generateOplogTriggers(tableFullName, table)
-  const fkTriggers = generateCompensationTriggers(tableFullName, table, tables)
+  const fkTriggers = generateCompensationTriggers(tableFullName, table) //, tables)
   return oplogTriggers.concat(fkTriggers)
 }
 
@@ -189,8 +197,8 @@ export function generateTableTriggers(
  */
 export function generateTriggers(tables: Tables): Statement[] {
   const tableTriggers: Statement[] = []
-  tables.forEach((_table, tableFullName) => {
-    const triggers = generateTableTriggers(tableFullName, tables)
+  tables.forEach((table, tableFullName) => {
+    const triggers = generateTableTriggers(tableFullName, table) //, tables)
     tableTriggers.push(...triggers)
   })
 

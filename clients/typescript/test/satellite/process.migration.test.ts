@@ -157,21 +157,25 @@ const addColumnRelation = {
     {
       name: 'id',
       type: 'INTEGER',
+      isNullable: false,
       primaryKey: true,
     },
     {
       name: 'value',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'other',
       type: 'INTEGER',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'baz',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
   ],
@@ -185,16 +189,19 @@ const newTableRelation = {
     {
       name: 'id',
       type: 'TEXT',
+      isNullable: false,
       primaryKey: true,
     },
     {
       name: 'foo',
       type: 'INTEGER',
+      isNullable: true,
       primaryKey: false,
     },
     {
       name: 'bar',
       type: 'TEXT',
+      isNullable: true,
       primaryKey: false,
     },
   ],
@@ -239,8 +246,22 @@ const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   })
 }
 
-const eqSet = <T>(xs: T[], ys: T[]): boolean =>
-  xs.length === ys.length && xs.every((x) => ys.some((y) => isequal(x, y)))
+const testSetEquality = <T>(t: ExecutionContext, xs: T[], ys: T[]): void => {
+  t.is(xs.length, ys.length, 'Expected array lengths to be equal')
+
+  const missing: T[] = []
+
+  for (const x of xs) {
+    if (ys.some((y) => isequal(x, y))) continue
+    else missing.push(x)
+  }
+
+  t.deepEqual(
+    missing,
+    [],
+    'Expected all elements from the first array to be present in the second, but some are missing'
+  )
+}
 
 test.serial('apply migration containing only DDL', async (t) => {
   const { satellite, adapter, txDate } = t.context
@@ -296,7 +317,7 @@ test.serial(
             Insert some rows in newly created table
      - Check that the migration was successfully applied on the local DB
      - Check the modifications (insert, update, delete) to the rows
- */
+    */
 
     const { satellite, adapter, txDate } = t.context
     const timestamp = txDate.getTime()
@@ -446,8 +467,7 @@ test.serial(
         } as Row
       })
       .concat([insertExtendedRow])
-
-    t.assert(eqSet(rowsAfterMigration, expectedRowsAfterMigration))
+    testSetEquality(t, rowsAfterMigration, expectedRowsAfterMigration)
 
     // Check the row that was inserted in the new table
     const newTableRows = await adapter.query({
@@ -536,16 +556,15 @@ test.serial('apply migration containing DDL and conflicting DML', async (t) => {
   )
   const conflictingRow = rowsAfterMigration.find((r) => r.id === deleteRow.id)
 
-  t.assert(
-    eqSet(
-      rowsBeforeMigrationExceptConflictingRow.map((r) => {
-        return {
-          baz: null,
-          ...r,
-        }
-      }),
-      newRowsExceptConflictingRow
-    )
+  testSetEquality(
+    t,
+    rowsBeforeMigrationExceptConflictingRow.map((r) => {
+      return {
+        baz: null,
+        ...r,
+      }
+    }),
+    newRowsExceptConflictingRow
   )
 
   t.deepEqual(conflictingRow, {
@@ -653,4 +672,72 @@ test.serial('apply migration and concurrent transaction', async (t) => {
     isequal(conflictingRow, extendRow(insertRowA)) ||
       isequal(conflictingRow, extendRow(insertRowB))
   )
+})
+
+const migrationWithFKs: SchemaChange[] = [
+  {
+    migrationType: SatOpMigrate_Type.CREATE_TABLE,
+    sql: `
+    CREATE TABLE "test_items" (
+      "id" TEXT NOT NULL,
+      CONSTRAINT "test_items_pkey" PRIMARY KEY ("id")
+    ) WITHOUT ROWID;
+    `,
+    table: {
+      name: 'test_items',
+      columns: [{ name: 'id' }],
+      fks: [],
+      pks: ['id'],
+    },
+  },
+  {
+    migrationType: SatOpMigrate_Type.CREATE_TABLE,
+    sql: `
+    CREATE TABLE "test_other_items" (
+      "id" TEXT NOT NULL,
+      "item_id" TEXT,
+      -- CONSTRAINT "test_other_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "test_items" ("id"),
+      CONSTRAINT "test_other_items_pkey" PRIMARY KEY ("id")
+    ) WITHOUT ROWID;
+    `,
+    table: {
+      name: 'test_other_items',
+      columns: [{ name: 'id' }, { name: 'item_id' }],
+      fks: [
+        {
+          $type: 'Electric.Satellite.v1_4.SatOpMigrate.ForeignKey',
+          fkCols: ['item_id'],
+          pkTable: 'test_items',
+          pkCols: ['id'],
+        },
+      ],
+      pks: ['id'],
+    },
+  },
+]
+
+test.serial('apply another migration', async (t) => {
+  const { satellite } = t.context
+
+  const migrationTx = {
+    origin: 'remote',
+    commit_timestamp: Long.fromNumber(new Date().getTime()),
+    changes: migrationWithFKs,
+    lsn: new Uint8Array(),
+    // starts at 3, because the app already defines 2 migrations
+    // (see test/support/migrations/migrations.js)
+    // which are loaded when Satellite is started
+    migrationVersion: '3',
+  }
+
+  // Apply the migration transaction
+  try {
+    await satellite._applyTransaction(migrationTx)
+  } catch (e) {
+    console.error(e)
+    throw e
+  }
+
+  await assertDbHasTables(t, 'test_items', 'test_other_items')
+  t.pass()
 })

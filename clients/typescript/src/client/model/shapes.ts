@@ -6,37 +6,36 @@ export type Shape = {
   tables: TableName[]
 }
 
-interface IShapeManager {
-  init(satellite: Satellite): void
+export interface IShapeManager {
   sync(shape: Shape): Promise<ShapeSubscription>
-  hasBeenSubscribed(shape: TableName): boolean
+  hasBeenSubscribed(table: TableName): boolean
 }
 
-export class ShapeManager implements IShapeManager {
+abstract class BaseShapeManager implements IShapeManager {
   protected tablesPreviouslySubscribed: Set<TableName>
-  protected satellite?: Satellite
 
   constructor() {
     this.tablesPreviouslySubscribed = new Set()
   }
 
-  init(satellite: Satellite) {
+  abstract sync(shape: Shape): Promise<ShapeSubscription>
+  public hasBeenSubscribed(table: TableName): boolean {
+    return this.tablesPreviouslySubscribed.has(table)
+  }
+}
+
+export class ShapeManager extends BaseShapeManager {
+  protected satellite: Satellite
+
+  constructor(satellite: Satellite) {
+    super()
     this.satellite = satellite
   }
 
   async sync(shape: Shape): Promise<ShapeSubscription> {
-    if (this.satellite === undefined)
-      throw new Error(
-        'Shape cannot be synced because the `ShapeManager` is not yet initialised.'
-      )
-
     // Convert the shape to the format expected by the Satellite process
     const shapeDef = {
-      selects: shape.tables.map((tbl) => {
-        return {
-          tablename: tbl,
-        }
-      }),
+      selects: shape.tables.map((tbl) => ({ tablename: tbl })),
     }
 
     const sub = await this.satellite.subscribe([shapeDef])
@@ -57,7 +56,7 @@ export class ShapeManager implements IShapeManager {
   }
 }
 
-export class ShapeManagerMock extends ShapeManager {
+export class ShapeManagerMock extends BaseShapeManager {
   constructor() {
     super()
   }
@@ -71,6 +70,3 @@ export class ShapeManagerMock extends ShapeManager {
     }
   }
 }
-
-// a shape manager singleton
-export const shapeManager = new ShapeManager()

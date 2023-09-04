@@ -1,8 +1,9 @@
 defmodule Electric.Postgres.OidDatabase do
-  @ets_table_name :oid_database
+  use GenServer
 
   import Electric.Postgres.OidDatabase.PgType
-  use GenServer
+
+  @ets_table_name :oid_database
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
