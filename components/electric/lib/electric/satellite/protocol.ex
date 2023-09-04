@@ -52,14 +52,14 @@ defmodule Electric.Satellite.Protocol do
             sub_retry: nil | reference(),
             stage_sub: GenStage.subscription_tag() | nil,
             relations: %{
-              PB.relation_id() => %{
+              optional(PB.relation_id()) => %{
                 :schema => String.t(),
                 :table => String.t(),
                 :columns => [String.t()]
               }
             },
             incomplete_trans: nil | Transaction.t(),
-            demand: pos_integer(),
+            demand: non_neg_integer(),
             queue: :queue.queue(Transaction.t())
           }
   end
@@ -152,13 +152,9 @@ defmodule Electric.Satellite.Protocol do
     defstruct auth_passed: false,
               auth: nil,
               last_msg_time: nil,
-              client: nil,
               client_id: nil,
               in_rep: %InRep{},
               out_rep: %OutRep{},
-              ping_tref: nil,
-              transport: nil,
-              socket: nil,
               auth_provider: nil,
               pg_connector_opts: [],
               subscriptions: %{},
@@ -168,11 +164,7 @@ defmodule Electric.Satellite.Protocol do
             auth_passed: boolean(),
             auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
-            client: String.t(),
             client_id: String.t() | nil,
-            ping_tref: reference() | nil,
-            transport: module(),
-            socket: :ranch_transport.socket(),
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
@@ -206,14 +198,14 @@ defmodule Electric.Satellite.Protocol do
     case msg do
       %SatAuthReq{id: client_id, token: token, headers: headers}
       when client_id !== "" and token !== "" ->
-        Logger.debug("Received auth request #{inspect(state.client)} for #{inspect(client_id)}")
+        Logger.debug("Received auth request for #{inspect(client_id)}")
 
         # NOTE: We treat successful registration with Electric.safe_reg as an
         # indication that at least the previously connected WS client is down.
         # However satellite_client_manager may not necessarily have reacted to that
         # yet. So as long as safe_reg succeeded call to ClientManager should
         # succeed as well
-        reg_name = Electric.Satellite.WsServer.reg_name(client_id)
+        reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
         with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
              :ok <- validate_headers(headers),

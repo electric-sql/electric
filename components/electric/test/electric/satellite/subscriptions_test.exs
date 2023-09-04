@@ -15,20 +15,18 @@ defmodule Electric.Satellite.SubscriptionsTest do
       user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
       client_id = "device-id-0000"
       port = 55133
-      auth_provider = Electric.Satellite.Auth.provider()
 
-      Electric.Satellite.WsServer.start_link(
-        name: :ws_test,
-        port: port,
-        auth_provider: auth_provider,
-        pg_connector_opts: ctx.pg_connector_opts
-      )
+      plug =
+        {Electric.Plug.SatelliteWebsocketPlug,
+         auth_provider: Electric.Satellite.Auth.provider(),
+         pg_connector_opts: ctx.pg_connector_opts}
+
+      start_link_supervised!({Bandit, port: port, plug: plug})
 
       token = Electric.Satellite.Auth.Secure.create_token(user_id)
 
       on_exit(fn ->
         drain_pids(active_clients())
-        :cowboy.stop_listener(:ws_test)
       end)
 
       {:ok, user_id: user_id, client_id: client_id, token: token, port: port}

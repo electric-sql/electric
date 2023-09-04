@@ -9,27 +9,21 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
   alias Electric.Test.SatelliteWsClient, as: MockClient
   alias Electric.Satellite.Auth
 
-  @ws_listener_name :ws_pg_to_satellite_test
-
   setup :setup_replicated_db
 
   setup ctx do
     port = 55133
 
-    {:ok, _sup_pid} =
-      Electric.Satellite.WsServer.start_link(
-        name: @ws_listener_name,
-        port: port,
-        auth_provider: Auth.provider(),
-        pg_connector_opts: ctx.pg_connector_opts
-      )
+    plug =
+      {Electric.Plug.SatelliteWebsocketPlug,
+       auth_provider: Electric.Satellite.Auth.provider(), pg_connector_opts: ctx.pg_connector_opts}
 
-    on_exit(fn -> :cowboy.stop_listener(@ws_listener_name) end)
+    pid = start_link_supervised!({Bandit, port: port, plug: plug})
 
     client_id = "ws_pg_to_satellite_client"
     auth = %{token: Auth.Secure.create_token(Electric.Utils.uuid4())}
 
-    %{db: ctx.conn, conn_opts: [port: port, auth: auth, id: client_id]}
+    %{db: ctx.conn, conn_opts: [port: port, auth: auth, id: client_id], server_pid: pid}
   end
 
   test "no migrations are delivered as part of initial sync if PG has no electrified tables",
@@ -57,7 +51,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
     with_connect(ctx.conn_opts, fn conn ->
       ref = make_ref()
-      send(server_pid(), {:pause_during_initial_sync, ref, self()})
+      send(current_connection_pid(ctx.server_pid), {:pause_during_initial_sync, ref, self()})
 
       assert_receive {^conn, %SatInStartReplicationReq{}}
 
@@ -119,8 +113,8 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     end)
   end
 
-  defp server_pid do
-    [pid] = :ranch.procs(@ws_listener_name, :connections)
+  defp current_connection_pid(server_pid) do
+    {:ok, [pid]} = ThousandIsland.connection_pids(server_pid)
     pid
   end
 end

@@ -139,7 +139,10 @@ defmodule Electric.Satellite.ClientManager do
 
     case Connectors.start_connector(
            SatelliteConnector,
-           %{name: client_name, producer: Electric.Satellite.WsServer.reg_name(client_name)}
+           %{
+             name: client_name,
+             producer: Electric.Satellite.WebsocketServer.reg_name(client_name)
+           }
          ) do
       {:ok, sup_pid1} ->
         resource_ref = Process.monitor(sup_pid)
