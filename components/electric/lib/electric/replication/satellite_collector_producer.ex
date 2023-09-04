@@ -58,7 +58,10 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
       Map.update!(tx, :changes, fn changes ->
         lsn_change = %NewRecord{
           relation: Extension.acked_client_lsn_relation(),
-          record: %{"client_id" => tx.origin, "lsn" => encode_binary_to_bytea(tx.lsn)}
+          record: %{
+            "client_id" => tx.origin,
+            "lsn" => Electric.Postgres.Bytea.to_postgres_hex(tx.lsn)
+          }
         }
 
         [lsn_change | changes]
@@ -124,16 +127,4 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
          %{state | demand: demand - fulfilled, starting_from: last_key}}
     end
   end
-
-  # Because we're using the text format for tuple values in the logical replication stream between Postgres and
-  # Electric, we have to encode the raw binary into one of Postgres' input encodings for BYTEA, of which the hex
-  # encoding is the simpler one.
-  #
-  # https://www.postgresql.org/docs/current/datatype-binary.html#id-1.5.7.12.9
-  defp encode_binary_to_bytea(bin) do
-    for <<bbbb::4 <- bin>>, into: "\\x", do: <<to_hex_digit(bbbb)>>
-  end
-
-  defp to_hex_digit(d) when d in 0..9, do: ?0 + d
-  defp to_hex_digit(d) when d in 10..15, do: ?a + d - 10
 end
