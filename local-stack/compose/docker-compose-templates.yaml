@@ -22,5 +22,3 @@ services:
   electric_template:
     image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
     init: true
-    environment:
-      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"

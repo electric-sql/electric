@@ -37,7 +37,6 @@ services:
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
       ELECTRIC_HOST: electric
       LOGICAL_PUBLISHER_HOST: electric
-      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
       AUTH_MODE: insecure
     ports:
       - 5133:5133
