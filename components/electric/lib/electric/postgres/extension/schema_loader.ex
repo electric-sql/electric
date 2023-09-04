@@ -45,12 +45,13 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
       module when is_atom(module) ->
         {module, []}
 
-      {module, opts} when is_atom(module) and is_list(opts) ->
+      {module, opts} when is_atom(module) ->
         {module, opts}
     end
   end
 
   def connect({module, opts}, conn_config) do
+
     with {:ok, state} <- module.connect(conn_config, opts) do
       {:ok, {module, state}}
     end

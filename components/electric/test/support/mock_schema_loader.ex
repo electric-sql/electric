@@ -42,6 +42,12 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Enum.reverse(versions)
   end
 
+  def start_link(opts, args \\ []) do
+    {module, spec} = agent_spec(opts, args)
+    {:ok, state} = connect([], spec) 
+    {module, state}
+  end
+
   @doc """
   Use this if you need a schema loader that's shared between multiple processes
   It replaces the loader state with an Agent instance and calls the various
@@ -49,9 +55,9 @@ defmodule Electric.Postgres.MockSchemaLoader do
   loader to be called via this registered name.
   """
   def agent_spec(opts, args \\ []) do
-    {module, opts} = backend_spec(opts)
+    {module, state} = backend_spec(opts)
 
-    {module, {:agent, opts, args}}
+    {module, {:agent, state, args}}
   end
 
   @doc """
@@ -109,9 +115,26 @@ defmodule Electric.Postgres.MockSchemaLoader do
   defp to_integer(i) when is_integer(i), do: i
   defp to_integer(s) when is_binary(s), do: String.to_integer(s)
 
+  def receive_tx({:agent, pid}, %{"txid" => _txid, "txts" => _txts} = tx, version) do
+    Agent.update(pid, &receive_tx(&1, tx, version))
+  end
+
+  def receive_tx({versions, opts}, %{"txid" => _txid, "txts" => _txts} = row, version) do
+    key = tx_key(row)
+    {versions, Map.update(opts, :txids, %{key => version}, &Map.put(&1, key, version))} 
+  end
+
+  defp tx_key(%{"txid" => txid, "txts" => txts}) do
+    {to_integer(txid), to_integer(txts)}
+  end
+
   @behaviour SchemaLoader
 
   @impl true
+  def connect(_conn_config, {:agent, pid}) do
+    {:ok, {:agent, pid}}
+  end
+
   def connect(conn_config, {:agent, opts, args}) do
     name = Keyword.get(args, :name)
     pid = name && GenServer.whereis(name)
@@ -333,22 +356,25 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Agent.get(pid, &tx_version(&1, row))
   end
 
-  def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts}) do
+  def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts} = row) do
     notify(opts, {:tx_version, txid, txts})
 
+
+    key = tx_key(row)
+
     # we may not explicitly configure the mock loader with txids
-    case Map.fetch(opts[:txids] || %{}, txid) do
+    case Map.fetch(opts[:txids] || %{}, key) do
       :error ->
         # we only use the txid which MUST be set to the version because
         # the mocking system has no way to propagate transaction ids through
         # -- the txid/txts stuff is an implementation detail of the proxy system
         # FIXME: re-factor the proxy impl to cache actions until it has a version
-        case Enum.find(versions, &(&1.txid == to_integer(txid))) do
+        case Enum.find(versions, &(to_integer(&1.txid) == to_integer(txid) && to_integer(&1.txts) == to_integer(txts))) do
           %Migration{version: version} ->
             {:ok, version}
 
           _other ->
-            {:error, "No migration matching #{txid}"}
+            {:error, "#{__MODULE__}: No migration matching #{txid}"}
         end
 
       {:ok, version} ->
