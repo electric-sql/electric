@@ -42,6 +42,19 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     transactions
     |> Stream.reject(&Enum.empty?(&1.changes))
     |> Stream.map(fn tx ->
+      # NOTE(alco): !!! Potential data race warning !!!
+      # Imagine a scenario when a client sends a transaction to the server and then immediately disconnects.
+      # If it reconnects soon afterwards, such that Postgres has not had time to commit the transaction yet,
+      # the client's LSN fetched from Postgres will not include the already submitted transaction, cuasing
+      # the client to send it once again.
+      #
+      # We deem it a non-issue because:
+      #
+      #    * if a repeat transaction is applied immediately after the first one, our conflict-resolution
+      #      logic makes it a no-op
+      #
+      #    * if a repeat transaction is applied after an intermediate transaction from a different client
+      #      has written to the same row(s), the repeat transaction is discarded by the LWW logic.
       Map.update!(tx, :changes, fn changes ->
         lsn_change = %NewRecord{
           relation: Extension.acked_client_lsn_relation(),
