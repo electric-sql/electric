@@ -88,10 +88,10 @@ You can connect to the databsae locally on port `54321`:
 yarn db:psql
 ```
 
-Another service is an Electric sync service running replication on port `5133` and a status API on post `5050`:
+Another service is an Electric sync service running replication on port `5133`:
 
 ```shell
-$ curl http://localhost:5050/api/status
+$ curl http://localhost:5133/api/status
 {"connectors":{"postgres_1":true}}
 ```
 

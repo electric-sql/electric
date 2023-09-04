@@ -10,7 +10,7 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     Optional argument providing the url to connect to Electric.
  *     If not provided, it uses the url set in the `ELECTRIC_URL`
  *     environment variable. If that variable is not set, it
- *     resorts to the default url which is `http://localhost:5050`.
+ *     resorts to the default url which is `http://localhost:5133`.
  *  - `--out <path>`
  *     Optional argument to specify where to write the generated client.
  *     If this argument is not provided the generated client is written

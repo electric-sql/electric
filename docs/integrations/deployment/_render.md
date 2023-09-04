@@ -28,7 +28,7 @@ If Render would [support external TCP connections](https://feedback.render.com/f
 
 Specifically, you would need:
 
-- HTTPS to ports 5050 (for the status API) and 5133 (for the Satellite replication protocol, actually web socket over http)
+- HTTPS to port 5133 (for the Satellite replication protocol, going over WebSockets)
 - TCP to port 5133 (for the logical replication publisher -- i.e.: the inbound replication stream into Postgres from Electric)
 
 :::caution
@@ -86,23 +86,11 @@ http {
         server ELECTRIC_INTERNAL_HOST:5133;
     }
 
-    upstream status {
-        server ELECTRIC_INTERNAL_HOST:5050;
-    }
-
     server {
         listen 10000 ssl;
 
-        location /satellite {
+        location / {
             proxy_pass http://satellite;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header Host $host;
-        }
-
-        location /status {
-            proxy_pass http://status;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection $connection_upgrade;
