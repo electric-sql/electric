@@ -1,0 +1,39 @@
+{
+  "name": "@examples/tauri-postgres",
+  "version": "0.1.0",
+  "private": true,
+  "main": "builder.js",
+  "author": "Iulian Birlica",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "node builder.js",
+    "build-prod": "NODE_ENV=production node builder.js",
+    "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
+    "prepare": "pnpm run prepare-wa-sqlite",
+    "start": "SERVE=true node builder.js"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "@prisma/client": "4.8.1",
+    "@tauri-apps/api": "^1.4.0",
+    "electric-sql": "workspace:*",
+    "fs-extra": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#breaking-changes",
+    "zod": "^3.20.2"
+  },
+  "devDependencies": {
+    "@electric-sql/prisma-generator": "workspace:*",
+    "@tauri-apps/cli": "^1.4.0",
+    "@types/node": "^16.9.1",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "esbuild": "^0.12.26",
+    "esbuild-plugin-inline-image": "^0.0.8",
+    "prisma": "4.8.1",
+    "typescript": "^4.4.3"
+  }
+}
