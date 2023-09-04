@@ -257,6 +257,13 @@ defmodule Electric.Postgres.Extension do
     ]
   end
 
+  def create_table_ddls do
+    for migration_module <- migrations(),
+        function_exported?(migration_module, :create_table_ddl, 0) do
+      migration_module.create_table_ddl()
+    end
+  end
+
   @spec migrate(conn()) :: {:ok, versions()} | {:error, term()}
   def migrate(conn) do
     migrate(conn, __MODULE__)

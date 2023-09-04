@@ -21,12 +21,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230829000000_Acknow
     table = Extension.acked_client_lsn_table()
 
     [
-      """
-      CREATE TABLE #{table} (
-        client_id TEXT PRIMARY KEY,
-        lsn BYTEA NOT NULL
-      )
-      """,
+      create_table_ddl(),
       @trigger_sql,
       Extension.add_table_to_publication_sql(table)
     ]
@@ -34,4 +29,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230829000000_Acknow
 
   @impl true
   def down(_), do: []
+
+  @impl true
+  def create_table_ddl do
+    """
+    CREATE TABLE #{Extension.acked_client_lsn_table()} (
+      client_id TEXT PRIMARY KEY,
+      lsn BYTEA NOT NULL
+    )
+    """
+  end
 end
