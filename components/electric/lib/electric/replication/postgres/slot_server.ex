@@ -1,13 +1,13 @@
 defmodule Electric.Replication.Postgres.SlotServer do
   @moduledoc """
-  Server to collect the upstream transaction and send them downstream to the subscriber
+  A GenStage consumer that receives a list of client transactions and invokes a user-provided function on each of them.
+  The intended user-provided function is `Electric.Replication.Postgres.TcpServer.tcp_send/2`.
 
-  This server keeps track of the latest LSN sent, and converts the incoming replication
+  This stage keeps track of the latest LSN sent, and converts the incoming replication
   changes to the Postgres logical replication messages, with correctly incrementing LSNs.
 
-  The `downstream` option should specify the module for a GenStage producer, which
-  should implement the `Electric.Replication.DownstreamProducer` behaviour. Consumes
-  the messages from the producer and sends the data to postgres.
+  The `producer_name` option should specify the module for a GenStage producer that emits transactions to be sent to
+  Postgres via the outgoing logical replication stream.
   """
 
   use GenStage
@@ -94,15 +94,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
     [min_demand: 10, max_demand: 50]
   end
 
-  #  @spec connected?(slot_name()) :: boolean()
-  def connected?(server) do
-    GenStage.call(server, :connected?)
-  end
-
-  def downstream_connected?(server) do
-    GenStage.call(server, :downstream_connected?)
-  end
-
   @spec stop(server) :: :ok
   def stop(server) do
     GenStage.stop(server)
@@ -183,16 +174,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   @impl true
   def handle_call(:get_current_lsn, _, state) do
     {:reply, state.current_lsn, [], state}
-  end
-
-  @impl true
-  def handle_call(:connected?, _, state) when replication_started?(state) do
-    {:reply, true, [], state}
-  end
-
-  @impl true
-  def handle_call(:connected?, _, state) do
-    {:reply, false, [], state}
   end
 
   @impl true
