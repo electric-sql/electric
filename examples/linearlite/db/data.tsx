@@ -23,7 +23,7 @@ const issuesObjs = JSON.parse(data);
 
 const issues = Object.values(issuesObjs);
 // for (let i = 0; i < issues.length; i++) {
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 10000; i++) {
   const issue = issues[i];
   db.query(
     sql`INSERT INTO issue(id, title, priority, status, modified, created, username, kanbanOrder, description) VALUES (\
