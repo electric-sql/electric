@@ -37,9 +37,9 @@ defmodule Electric.Satellite.ClientManager do
     GenServer.call(server, {:fetch_client, client_name})
   end
 
-  @spec get_clients(GenServer.server()) :: {:ok, [{String.t(), pid()}]}
+  @spec get_clients(GenServer.server()) :: [{String.t(), pid()}]
   def get_clients(server \\ __MODULE__) do
-    GenServer.call(server, {:get_clients})
+    GenServer.call(server, :get_clients)
   end
 
   @impl GenServer
@@ -60,13 +60,13 @@ defmodule Electric.Satellite.ClientManager do
     {:reply, res, state}
   end
 
-  def handle_call({:get_clients}, _, %State{} = state) do
+  def handle_call(:get_clients, _, %State{} = state) do
     res =
       for {client, {client_pid, _sup_pid}} <- state.reverse do
         {client, client_pid}
       end
 
-    {:reply, {:ok, res}, state}
+    {:reply, res, state}
   end
 
   def handle_call({:register, client_name, reg_name}, {client_pid, _}, %State{} = state) do
