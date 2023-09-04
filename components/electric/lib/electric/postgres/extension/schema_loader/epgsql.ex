@@ -188,13 +188,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def electrified_tables(pool) do
-    checkout!(pool, fn conn ->
-      Extension.electrified_tables(conn)
-    end)
-  end
-
-  @impl true
   def internal_schema(pool) do
     checkout!(pool, fn conn ->
       oid_loader = &Client.relation_oid(conn, &1, &2, &3)

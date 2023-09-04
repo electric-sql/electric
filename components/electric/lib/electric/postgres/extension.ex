@@ -3,13 +3,7 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{
-    Extension.Migration,
-    Replication,
-    Schema,
-    Schema.Proto
-  }
-
+  alias Electric.Postgres.{Extension.Migration, Schema, Schema.Proto}
   require Logger
 
   @type conn() :: :epgsql.connection()
@@ -196,26 +190,14 @@ defmodule Electric.Postgres.Extension do
     end)
   end
 
-  @electrifed_table_query "SELECT id, schema_name, table_name, oid FROM #{@electrified_tracking_table} ORDER BY id ASC"
-  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
-
-  def electrified_tables(conn) do
-    with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
-      {:ok,
-       Enum.map(rows, fn {_id, schema, name, oid} ->
-         %Replication.Table{schema: schema, name: name, oid: String.to_integer(oid)}
-       end)}
-    end
-  end
-
   @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
-
   @spec electrified?(conn(), String.t(), String.t()) :: boolean()
   def electrified?(conn, schema \\ "public", table) do
     {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
     count == 1
   end
 
+  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
   def electrified_indexes(conn) do
     with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
       {:ok, rows}

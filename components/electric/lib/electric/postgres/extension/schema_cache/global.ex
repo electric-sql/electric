@@ -96,9 +96,9 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
     end)
   end
 
-  def electrified_tables() do
+  def logical_publication_tables() do
     with_instance(fn pid ->
-      SchemaCache.electrified_tables(pid)
+      SchemaCache.logical_publication_tables(pid)
     end)
   end
 end
