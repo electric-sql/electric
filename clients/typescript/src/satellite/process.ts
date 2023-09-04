@@ -205,6 +205,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+    await this.adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
