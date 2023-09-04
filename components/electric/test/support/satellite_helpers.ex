@@ -56,7 +56,7 @@ defmodule ElectricTest.SatelliteHelpers do
 
   def with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
 
-  defp migrate(conn, version, sql, opts \\ []) do
+  def migrate(conn, version, sql, opts \\ []) do
     # we need to explicitly capture ddl statements affecting electrified tables
     # unless we're connecting via the proxy
     electrify =

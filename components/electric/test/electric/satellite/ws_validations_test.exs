@@ -38,8 +38,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, num INTEGER, t1 TEXT, t2 VARCHAR NOT NULL)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, num INTEGER, t1 TEXT, t2 VARCHAR NOT NULL)",
+        electrify: "public.foo"
       )
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -63,8 +63,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, num SMALLINT, t1 TEXT, t2 VARCHAR NOT NULL)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, num SMALLINT, t1 TEXT, t2 VARCHAR NOT NULL)",
+        electrify: "public.foo"
       )
 
     records = [
@@ -137,9 +137,9 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4)",
         # "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4, i8_1 BIGINT, i8_2 INT8)"
+        electrify: "public.foo"
       )
 
     valid_records = [
@@ -189,8 +189,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f8 DOUBLE PRECISION)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f8 DOUBLE PRECISION)",
+        electrify: "public.foo"
       )
 
     valid_records = [
@@ -236,7 +236,11 @@ defmodule Electric.Satellite.WsValidationsTest do
 
   test "validates uuid values", ctx do
     vsn = "2023072504"
-    :ok = migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id UUID PRIMARY KEY)")
+
+    :ok =
+      migrate(ctx.db, vsn, "CREATE TABLE public.foo (id UUID PRIMARY KEY)",
+        electrify: "public.foo"
+      )
 
     valid_records = [
       %{"id" => "00000000-0000-0000-0000-000000000000"},
