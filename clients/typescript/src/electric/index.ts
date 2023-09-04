@@ -38,6 +38,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
+  await adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
 
   const configWithDefaults = hydrateConfig(config)
   const migrator =
