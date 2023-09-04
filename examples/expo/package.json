@@ -36,7 +36,7 @@
     "@prisma/client": "4.8.1",
     "@tsconfig/react-native": "^2.0.2",
     "@types/react": "^18.0.18",
-    "@types/react-native": "^18.0.18",
+    "@types/react-native": "^0.72.2",
     "prisma": "4.8.1",
     "shelljs": "^0.8.5",
     "typescript": "^5.1.3"
