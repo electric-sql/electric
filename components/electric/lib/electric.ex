@@ -95,7 +95,7 @@ defmodule Electric do
     Application.fetch_env!(:electric, :instance_id)
   end
 
-  @current_vsn Application.spec(:electric, :vsn) |> to_string() |> Version.parse!()
+  @current_vsn Mix.Project.config()[:version] |> Version.parse!()
   def vsn do
     @current_vsn
   end

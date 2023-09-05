@@ -29,6 +29,8 @@ defmodule Electric.Test.SatelliteWsClient do
     connect(host, port)
   end
 
+  @satellite_vsn "satellite.#{Electric.vsn().major}.#{Electric.vsn().minor}"
+
   def connect(host, port) do
     host =
       case host do
@@ -38,7 +40,9 @@ defmodule Electric.Test.SatelliteWsClient do
 
     {:ok, conn} = :gun.open(host, port, %{:transport => :tcp})
     {:ok, _} = :gun.await_up(conn)
-    stream_ref = :gun.ws_upgrade(conn, "/ws", [])
+
+    stream_ref =
+      :gun.ws_upgrade(conn, "/ws", [{"sec-websocket-protocol", @satellite_vsn}])
 
     {:upgrade, [<<"websocket">>], _} = :gun.await(conn, stream_ref)
     {:ok, {conn, stream_ref}}
