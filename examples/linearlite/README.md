@@ -1,19 +1,19 @@
 # linearlite
 
-This is an example of a team collaboration app such as [linear](https://linear.app) built using electric-sql.
+This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL.
 
 This example is built on top of the excellent clone of the Linear UI built by
 Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
 [https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
-We have replaced the canned data with a local stack running electric in Docker.
+We have replaced the canned data with a local stack running Electric in Docker.
 
 ## Run example
 
-### Start a local electrified Postgres
+### Start a local Electrified Postgres
 
-Run the electric local-stack which is in `/local-stack`
+Run the Electric local-stack which is in `/local-stack`
 
-see here https://electric-sql.com/docs/overview/examples
+see here https://Electric-sql.com/docs/overview/examples
 
 ```bash
 cd ../../local-stack
@@ -26,7 +26,7 @@ This will start a local Postgres and the Electric service on your machine.
 
 You can then talk to the Postgres with psql using the password `password`:
 
-`psql -h 127.0.0.1 -U postgres -d electric `
+`psql -h 127.0.0.1 -U postgres -d Electric `
 
 ### Configure Node
 
@@ -39,36 +39,15 @@ npm install -g pnpm
 
 ### Install
 
-In the root of the electric folder install all the js dependencies for submodules and examples:
+In the root of the Electric folder install all the js dependencies for submodules and examples:
 
 ```
 pnpm install
 ```
 
-Then build the electric code generator and the typescript client:
+### Setup
 
-```
-cd generator
-pnpm build
-cd ../clients/typescript
-pnpm build
-cd ../..
-```
-
-### Apply migrations to Postgres
-
-This example uses a SQL file in `db/migration.sql` to manage the Postgres schema.
-You can apply it with:
-
-```bash
-pnpm migrate
-```
-
-This will create tables in Postgres and electrify them.
-
-## Setup
-
-Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+Start Postgres and Electric using Docker (see [running the examples](https://Electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
 pnpm backend:up
@@ -81,14 +60,14 @@ Note that, if useful, you can connect to Postgres using:
 pnpm db:psql
 ```
 
-The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+The [database schema](https://Electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
 You can apply it with:
 
 ```shell
 pnpm db:migrate
 ```
 
-Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
+Generate your [type-safe client](https://Electric-sql.com/docs/usage/data-access/client):
 
 ```shell
 pnpm client:generate

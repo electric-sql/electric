@@ -1,4 +1,4 @@
-const fs = require('fs')
+import fs from 'fs'
 
 // Read JSON data from file
 const data = fs.readFileSync('data.json')

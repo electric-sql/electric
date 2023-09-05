@@ -1,15 +1,14 @@
 import React, {
   memo,
-  MouseEventHandler,
   RefObject,
   useCallback,
   useRef,
+  type MouseEvent,
 } from 'react'
 import ReactDOM from 'react-dom'
 import classnames from 'classnames'
 
 import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
-import { useClickOutside } from '../hooks/useClickOutside'
 import useLockBodyScroll from '../hooks/useLockBodyScroll'
 import { Transition } from '@headlessui/react'
 
@@ -54,18 +53,18 @@ function Modal({
     sizeClasses[size],
     className
   )
-  const handleClick = useCallback((e) => {
-    e.stopPropagation()
-    e.preventDefault()
+  const handleClick = useCallback((event: MouseEvent) => {
+    event.stopPropagation()
+    event.preventDefault()
     if (!onDismiss) return
-    if (ref.current && !ref.current.contains(e.target)) {
+    if (ref.current && !ref.current.contains(event.target as Element)) {
       onDismiss()
     }
   }, [])
 
   useLockBodyScroll()
 
-  let modal = (
+  const modal = (
     <div ref={outerRef} onClick={handleClick}>
       <Transition
         show={isOpen}

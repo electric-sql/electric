@@ -2,7 +2,7 @@ import { toast } from 'react-toastify'
 
 export function showWarning(msg: string, title: string = '') {
   //TODO: make notification showing from bottom
-  let content = (
+  const content = (
     <div className="flex flex-col">
       {title !== '' && (
         <div
@@ -28,7 +28,7 @@ export function showWarning(msg: string, title: string = '') {
 
 export function showInfo(msg: string, title: string = '') {
   //TODO: make notification showing from bottom
-  let content = (
+  const content = (
     <div className="flex flex-col">
       {title !== '' && (
         <div

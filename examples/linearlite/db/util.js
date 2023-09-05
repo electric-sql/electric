@@ -1,6 +1,6 @@
-const fs = require('fs')
-const path = require('path')
-const shell = require('shelljs')
+import fs from 'fs'
+import path from 'path'
+import shell from 'shelljs'
 shell.config.silent = true // don't log output of child processes
 
 // If we are running the docker compose file

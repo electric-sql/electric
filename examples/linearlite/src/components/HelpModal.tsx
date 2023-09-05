@@ -1,10 +1,10 @@
 import Modal from '../components/Modal'
 import React from 'react'
-import { ReactComponent as GuideIcon } from '../assets/icons/guide.svg'
-import { ReactComponent as ShortcutIcon } from '../assets/icons/rounded-claim.svg'
-import { ReactComponent as SlackIcon } from '../assets/icons/slack.svg'
-import { ReactComponent as FeedbackIcon } from '../assets/icons/chat.svg'
-import { ReactComponent as QuestionIcon } from '../assets/icons/question.svg'
+import GuideIcon from '../assets/icons/guide.svg'
+import ShortcutIcon from '../assets/icons/rounded-claim.svg'
+import SlackIcon from '../assets/icons/slack.svg'
+import FeedbackIcon from '../assets/icons/chat.svg'
+import QuestionIcon from '../assets/icons/question.svg'
 
 interface Props {
   isOpen: boolean

@@ -2,7 +2,7 @@ import { makeElectricContext } from 'electric-sql/react'
 
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { Electric, schema } from './generated/client'
-export type { issue as Issue } from './generated/client'
+export type { Issue } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 

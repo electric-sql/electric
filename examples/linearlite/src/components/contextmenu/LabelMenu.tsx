@@ -1,7 +1,7 @@
 import { Portal } from '../Portal'
-import React, { ReactNode, useState } from 'react'
+import { ReactNode, useState } from 'react'
 import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
-import { DEFAULT_LABLES, Label } from '../../types/issue'
+import { DEFAULT_LABELS, Label } from '../../types/issue'
 import { Menu } from './menu'
 
 interface Props {
@@ -10,7 +10,6 @@ interface Props {
   className?: string
   onSelect?: (item: any) => void
 }
-const Labels = []
 
 export default function LabelMenu({ id, button, className, onSelect }: Props) {
   const [keyword, setKeyword] = useState('')
@@ -18,15 +17,15 @@ export default function LabelMenu({ id, button, className, onSelect }: Props) {
     if (onSelect) onSelect(label)
   }
 
-  let labels = DEFAULT_LABLES
+  let labels = DEFAULT_LABELS
   if (keyword !== '') {
-    let normalizedKeyword = keyword.toLowerCase().trim()
+    const normalizedKeyword = keyword.toLowerCase().trim()
     labels = labels.filter((l) =>
       l.name.toLowerCase().includes(normalizedKeyword)
     )
   }
 
-  let options = labels.map((label) => (
+  const options = labels.map((label) => (
     <Menu.Item key={label.id} onClick={() => handleSelect(label)}>
       {/* <input type='check' className='w-3.5 h-3.5 mr-3' /> */}
       <div

@@ -1,11 +1,10 @@
-import React, { ChangeEventHandler, useContext, useState } from 'react'
+import { ChangeEventHandler, useContext, useState } from 'react'
 import { ReactComponent as SearchIcon } from '../assets/icons/search.svg'
 import classnames from 'classnames'
 import { IssuesContext } from '../pages/Home'
 
 interface Props {
   placeholder: string
-  //onChange callback
   onChange?: ChangeEventHandler
   className?: string
 }

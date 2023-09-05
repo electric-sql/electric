@@ -9,14 +9,7 @@ import { ReactComponent as ViewIcon } from '../assets/icons/view.svg'
 import classnames from 'classnames'
 import SearchBox from '../components/SearchBox'
 import { useClickOutside } from '../hooks/useClickOutside'
-import React, {
-  memo,
-  ReactComponentElement,
-  RefObject,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
+import { memo, RefObject, useRef, useState } from 'react'
 import { FiCircle } from 'react-icons/fi'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
 import { Link } from 'react-router-dom'
@@ -31,9 +24,9 @@ interface Props {
   // Show menu (for small screen only)
   showMenu: boolean
   onCloseMenu?: () => void
-  onCreateIssue?: Function
-  onOpenHelp?: Function
-  onOpenInviteBox?: Function
+  onCreateIssue?: () => void
+  onOpenHelp?: () => void
+  onOpenInviteBox?: () => void
 }
 function LeftMenu({ showMenu, onCloseMenu }: Props) {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
@@ -42,7 +35,7 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
 
-  let classes = classnames(
+  const classes = classnames(
     'absolute lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
     {
       '-translate-x-full ease-out shadow-none': !showMenu,

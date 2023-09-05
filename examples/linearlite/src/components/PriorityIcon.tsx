@@ -4,7 +4,6 @@ import { ReactComponent as SignalMediumIcon } from '../assets/icons/signal-mediu
 import { ReactComponent as SignalStrongIcon } from '../assets/icons/signal-strong.svg'
 import { ReactComponent as SignalWeakIcon } from '../assets/icons/signal-weak.svg'
 import classNames from 'classnames'
-import React from 'react'
 import { Priority } from '../types/issue'
 
 interface Props {
@@ -21,9 +20,9 @@ const ICONS = {
 }
 
 export default function PriorityIcon({ priority, className }: Props) {
-  let classes = classNames('w-3.5 h-3.5 rounded', className)
+  const classes = classNames('w-3.5 h-3.5 rounded', className)
 
-  let Icon = ICONS[priority.toLowerCase()]
+  const Icon = ICONS[priority.toLowerCase()]
 
   return <Icon className={classes} />
 }

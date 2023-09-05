@@ -1,6 +1,6 @@
 import { ReactComponent as SearchIcon } from '../assets/icons/search.svg'
 import Modal from '../components/Modal'
-import React, { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface SearchOptionProps {
   name: string

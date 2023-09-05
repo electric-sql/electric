@@ -2,18 +2,15 @@ import { RefObject, useCallback, useEffect } from 'react'
 
 export const useClickOutside = (
   ref: RefObject<Element>,
-  callback: (event: MouseEvent) => void,
+  callback: (event: MouseEvent | TouchEvent) => void,
   outerRef?: RefObject<Element>
 ): void => {
   const handleClick = useCallback(
-    (event) => {
-      if (
-        outerRef &&
-        outerRef.current &&
-        !outerRef.current.contains(event.target)
-      )
+    (event: MouseEvent | TouchEvent) => {
+      if (!event.target || outerRef?.current?.contains(event.target as Node)) {
         return
-      if (ref.current && !ref.current.contains(event.target)) {
+      }
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         callback(event)
       }
     },

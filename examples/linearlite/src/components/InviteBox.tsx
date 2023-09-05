@@ -1,5 +1,4 @@
 import Modal from '../components/Modal'
-import React from 'react'
 
 interface Props {
   isOpen: boolean

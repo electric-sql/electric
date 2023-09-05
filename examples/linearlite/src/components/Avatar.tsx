@@ -1,4 +1,4 @@
-import React, { MouseEventHandler } from 'react'
+import { MouseEventHandler } from 'react'
 import AvatarImg from '../assets/icons/avatar.svg'
 
 interface Props {

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from 'react'
+import { useContext, useEffect } from 'react'
 import { connectMenu } from '@firefox-devtools/react-contextmenu'
 import IssueContextMenu from './IssueContextMenu'
 import IssueRow from './IssueRow'
@@ -64,7 +64,7 @@ function IssueList() {
     })
   }
 
-  var issueRows = issues.map((issue) => (
+  const issueRows = issues.map((issue) => (
     <IssueRow
       key={`issue-${issue.id}`}
       issue={issue}

@@ -2,13 +2,12 @@ import classNames from 'classnames'
 import Avatar from '../../components/Avatar'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import PriorityIcon from '../../components/PriorityIcon'
-import React, { memo } from 'react'
+import { memo } from 'react'
 import {
   Draggable,
   DraggableProvided,
   DraggableStateSnapshot,
 } from 'react-beautiful-dnd'
-// import { updateIssuePriority } from 'store/actions/issueActions';
 import { Issue } from '../../electric'
 
 interface IssueProps {
@@ -17,21 +16,21 @@ interface IssueProps {
 }
 
 const IssueItem = ({ issue, index }: IssueProps) => {
-  let priorityIcon = (
+  const priorityIcon = (
     <span className="inline-block m-0.5 rounded-sm border border-gray-100 hover:border-gray-200 p-0.5">
       <PriorityIcon priority={issue.priority} />
     </span>
   )
 
-  // const dispatch = useDispatch<AppDispatch>();
   const updatePriority = (priority: string) => {
-    // dispatch(updateIssuePriority(issue, priority));
+    console.log('update priority', priority)
+    // TODO: update priority
   }
 
   return (
     <Draggable draggableId={issue.id || 'id'} index={index} key={issue.id}>
       {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => {
-        let isDragging = snapshot.isDragging && !snapshot.isDropAnimating
+        const isDragging = snapshot.isDragging && !snapshot.isDropAnimating
         return (
           <div
             ref={provided.innerRef}

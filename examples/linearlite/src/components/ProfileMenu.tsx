@@ -1,15 +1,15 @@
 import { Transition } from '@headlessui/react'
 import classnames from 'classnames'
 import { useClickOutside } from '../hooks/useClickOutside'
-import React, { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 
 interface Props {
   isOpen: boolean
-  onDismiss?: Function
+  onDismiss?: () => void
   className?: string
 }
 export default function ProfileMenu({ isOpen, className, onDismiss }: Props) {
-  let classes = classnames(
+  const classes = classnames(
     'select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800',
     className
   )

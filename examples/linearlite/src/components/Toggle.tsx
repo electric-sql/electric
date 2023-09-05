@@ -1,8 +1,8 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import classnames from 'classnames'
 
 interface Props {
-  onChange?: Function
+  onChange?: (value: boolean) => void
   className?: string
 }
 export default function Toggle({ onChange, className }: Props) {
@@ -23,8 +23,12 @@ export default function Toggle({ onChange, className }: Props) {
     },
     className
   )
+  const onClick = () => {
+    setCheck(!check)
+    if (onChange) onChange(!check)
+  }
   return (
-    <div className={classes} onClick={() => setCheck(!check)}>
+    <div className={classes} onClick={onClick}>
       <label className={labelClasses}></label>
     </div>
   )

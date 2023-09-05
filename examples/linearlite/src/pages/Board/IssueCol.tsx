@@ -1,5 +1,5 @@
 import StatusIcon from '../../components/StatusIcon'
-import React, { memo } from 'react'
+import { memo } from 'react'
 import { Droppable, DroppableProvided } from 'react-beautiful-dnd'
 import { BsThreeDots as MoreIcon } from 'react-icons/bs'
 import { GoPlus as AddIcon } from 'react-icons/go'
@@ -13,8 +13,8 @@ interface Props {
 }
 
 function IssueCol({ title, status, issues }: Props) {
-  let statusIcon = <StatusIcon status={status} />
-  let issueItems = (issues || []).map((issue, idx) => (
+  const statusIcon = <StatusIcon status={status} />
+  const issueItems = (issues || []).map((issue, idx) => (
     <IssueItem key={issue.id} issue={issue} index={idx} />
   ))
 

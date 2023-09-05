@@ -1,17 +1,17 @@
 import { Transition } from '@headlessui/react'
 import { useClickOutside } from '../hooks/useClickOutside'
-import React, { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import Select from './Select'
 import Toggle from './Toggle'
 
 interface Props {
   isOpen: boolean
-  onDismiss?: Function
+  onDismiss?: () => void
 }
 export default function ({ isOpen, onDismiss }: Props) {
   const ref = useRef(null)
 
-  useClickOutside(ref, (e) => {
+  useClickOutside(ref, () => {
     if (isOpen && onDismiss) onDismiss()
   })
 

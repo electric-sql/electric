@@ -1,6 +1,6 @@
-const fs = require('fs')
-const path = require('path')
-const { DATABASE_URL } = require('./util.js')
+import fs from 'fs'
+import path from 'path'
+import { DATABASE_URL } from './util.js'
 
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')

@@ -1,12 +1,12 @@
-import DefaultAvatarIcon from '../../assets/icons/avatar.svg'
+// import DefaultAvatarIcon from '../../assets/icons/avatar.svg'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import StatusMenu from '../../components/contextmenu/StatusMenu'
 import PriorityIcon from '../../components/PriorityIcon'
 import StatusIcon from '../../components/StatusIcon'
-import React, { memo } from 'react'
+import { memo } from 'react'
 import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
 import { Issue } from '../../electric'
-import { formatDate } from '../../utils/date'
+// import { formatDate } from '../../utils/date' // Used in commented code below instead
 
 interface Props {
   issue: Issue
@@ -15,7 +15,7 @@ interface Props {
 }
 
 function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
-  let priorityIcon = <PriorityIcon priority={issue.priority} />
+  // let priorityIcon = <PriorityIcon priority={issue.priority} />
   const statusIcon = <StatusIcon status={issue.status} />
 
   /*
@@ -33,12 +33,12 @@ function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
     );
     */
 
-  let avatar = (
-    <img
-      src={DefaultAvatarIcon}
-      className="w-4.5 h-4.5 rounded-full overflow-hidden"
-    />
-  )
+  // let avatar = (
+  //   <img
+  //     src={DefaultAvatarIcon}
+  //     className="w-4.5 h-4.5 rounded-full overflow-hidden"
+  //   />
+  // )
 
   const handleChangePriority = (p: string) => {
     if (onChangePriority) onChangePriority(issue, p)

@@ -6,7 +6,7 @@ import { ReactComponent as LabelIcon } from '../assets/icons/label.svg'
 import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg'
 import Modal from '../components/Modal'
 import Toggle from '../components/Toggle'
-import React, { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 // import Editor from 'rich-markdown-editor'
 
 import { v4 as uuidv4 } from 'uuid'
@@ -19,7 +19,6 @@ import PriorityMenu from './contextmenu/PriorityMenu'
 import StatusMenu from './contextmenu/StatusMenu'
 import PriorityIcon from './PriorityIcon'
 import StatusIcon from './StatusIcon'
-import { uuid } from 'electric-sql/dist/util'
 
 interface Props {
   isOpen: boolean
@@ -51,7 +50,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   const handleSubmit = () => {
     if (title === '') {
-      showWarning('Please enter a title before submiting', 'Title required')
+      showWarning('Please enter a title before submitting', 'Title required')
       return
     }
 
@@ -103,7 +102,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
     }
   }, [isOpen])
 
-  let body = (
+  const body = (
     <div className="flex flex-col w-full py-4 overflow-hidden">
       {/* header */}
       <div className="flex items-center justify-between flex-shrink-0 px-4">

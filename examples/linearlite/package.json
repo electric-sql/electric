@@ -20,6 +20,7 @@
     "build": "npm run prepare-wa-sqlite && tsc && vite build",
     "build-only": "npm run prepare-wa-sqlite && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "type-check": "tsc --noEmit --skipLibCheck",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn .",
     "preview": "vite preview"
@@ -56,6 +57,7 @@
     "@types/react-beautiful-dnd": "^13.1.4",
     "@types/react-dom": "^18.2.7",
     "@types/react-router-dom": "^5.3.3",
+    "@types/uuid": "^9.0.3",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.0.3",

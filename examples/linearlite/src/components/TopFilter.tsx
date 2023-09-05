@@ -1,9 +1,9 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { BiSortUp } from 'react-icons/bi'
 import IssueFilterModal from './IssueFilterModal'
 import ViewOptionMenu from './ViewOptionMenu'
-import { Issue, useElectric } from '../electric'
+import { useElectric } from '../electric'
 import { useLiveQuery } from 'electric-sql/react'
 
 interface Props {
@@ -24,13 +24,6 @@ export default function ({ title, onOpenMenu }: Props) {
 
   // TODO
   // const issues = useSelector((state: RootState) => state.issues);
-
-  // const totalIssues =
-  //   issues.backlog.length +
-  //   issues.todo.length +
-  //   issues.done.length +
-  //   issues.inProgress.length +
-  //   issues.canceled.length;
 
   const totalIssues = issues.length
 

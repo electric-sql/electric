@@ -1,4 +1,3 @@
-import React from 'react'
 import { DragDropContext, DropResult } from 'react-beautiful-dnd'
 import { Status } from '../../types/issue'
 import IssueCol from './IssueCol'

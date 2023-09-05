@@ -35,7 +35,7 @@ export type Label = {
   color: string
 }
 
-export const DEFAULT_LABLES: Array<Label> = [
+export const DEFAULT_LABELS: Array<Label> = [
   { id: '1', name: 'Bug', color: '#eb5757' },
   { id: '2', name: 'Feature', color: '#bb87fc' },
   { id: '3', name: 'Improvement', color: '#4ea7fc' },

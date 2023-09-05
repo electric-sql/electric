@@ -10,7 +10,6 @@ import { ReactComponent as StatusIcon } from '../../assets/icons/half-circle.svg
 import { ReactComponent as AddLabelIcon } from '../../assets/icons/label.svg'
 import { ReactComponent as SetParentIcon } from '../../assets/icons/parent-issue.svg'
 import { ReactComponent as RelationshipIcon } from '../../assets/icons/relationship.svg'
-import React from 'react'
 import {
   ContextMenu,
   MenuItem,
@@ -50,7 +49,7 @@ const ItemIcons = {
   delete: DeleteIcon,
 }
 export function MenuItemEle({ icon, label }: MenuItemProp) {
-  let Icon = ItemIcons[icon]
+  const Icon = ItemIcons[icon]
   return (
     <MenuItem className="flex items-center px-2 py-1.5 w-60 focus:outline-none text-gray-500 active:outline-none hover:text-gray-700 cursor-pointer outline-none hover:bg-gray-100">
       {Icon ? (
@@ -63,7 +62,7 @@ export function MenuItemEle({ icon, label }: MenuItemProp) {
   )
 }
 export function MenuTitle({ icon, label }: MenuItemProp) {
-  let Icon = ItemIcons[icon]
+  const Icon = ItemIcons[icon]
   return (
     <div className="flex items-center px-2 py-1.5 w-60 focus:outline-none text-gray-500 active:outline-none hover:text-gray-700 cursor-pointer outline-none hover:bg-gray-100">
       {Icon ? (
