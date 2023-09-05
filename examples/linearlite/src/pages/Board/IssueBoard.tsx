@@ -33,7 +33,7 @@ export default function IssueBoard() {
           title={'Backlog'}
           status={Status.BACKLOG}
           issues={issues.filter(
-            (i) => i.status.toLowerCase() === Status.BACKLOG,
+            (i) => i.status.toLowerCase() === Status.BACKLOG
           )}
         />
         <IssueCol
@@ -45,7 +45,7 @@ export default function IssueBoard() {
           title={'In Progress'}
           status={Status.IN_PROGRESS}
           issues={issues.filter(
-            (i) => i.status.toLowerCase() == Status.IN_PROGRESS,
+            (i) => i.status.toLowerCase() == Status.IN_PROGRESS
           )}
         />
         <IssueCol
@@ -57,7 +57,7 @@ export default function IssueBoard() {
           title={'Canceled'}
           status={Status.CANCELED}
           issues={issues.filter(
-            (i) => i.status.toLowerCase() === Status.CANCELED,
+            (i) => i.status.toLowerCase() === Status.CANCELED
           )}
         />
       </div>

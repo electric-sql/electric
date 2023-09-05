@@ -1,5 +1,5 @@
-import dayjs from 'dayjs';
+import dayjs from 'dayjs'
 
 export function formatDate(date?: Date | undefined): string {
-  return dayjs(date).format('MMM DD');
+  return dayjs(date).format('MMM DD')
 }

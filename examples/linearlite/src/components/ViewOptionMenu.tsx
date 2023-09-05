@@ -1,19 +1,19 @@
-import { Transition } from '@headlessui/react';
-import { useClickOutside } from '../hooks/useClickOutside';
-import React, { useEffect, useRef } from 'react';
-import Select from './Select';
-import Toggle from './Toggle';
+import { Transition } from '@headlessui/react'
+import { useClickOutside } from '../hooks/useClickOutside'
+import React, { useEffect, useRef } from 'react'
+import Select from './Select'
+import Toggle from './Toggle'
 
 interface Props {
-  isOpen: boolean;
-  onDismiss?: Function;
+  isOpen: boolean
+  onDismiss?: Function
 }
 export default function ({ isOpen, onDismiss }: Props) {
-  const ref = useRef(null);
+  const ref = useRef(null)
 
   useClickOutside(ref, (e) => {
-    if (isOpen && onDismiss) onDismiss();
-  });
+    if (isOpen && onDismiss) onDismiss()
+  })
 
   return (
     <div ref={ref}>
@@ -109,5 +109,5 @@ export default function ({ isOpen, onDismiss }: Props) {
         </div>
       </Transition>
     </div>
-  );
+  )
 }

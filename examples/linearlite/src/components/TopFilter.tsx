@@ -1,15 +1,15 @@
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg';
-import React, { useState } from 'react';
-import { BiSortUp } from 'react-icons/bi';
-import IssueFilterModal from './IssueFilterModal';
-import ViewOptionMenu from './ViewOptionMenu';
-import { Issue, useElectric } from "../electric";
-import { useLiveQuery } from "electric-sql/react";
+import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
+import React, { useState } from 'react'
+import { BiSortUp } from 'react-icons/bi'
+import IssueFilterModal from './IssueFilterModal'
+import ViewOptionMenu from './ViewOptionMenu'
+import { Issue, useElectric } from '../electric'
+import { useLiveQuery } from 'electric-sql/react'
 
 interface Props {
   /* Top title */
-  title: string;
-  onOpenMenu?: () => void;
+  title: string
+  onOpenMenu?: () => void
 }
 
 export default function ({ title, onOpenMenu }: Props) {

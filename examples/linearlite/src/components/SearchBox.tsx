@@ -33,7 +33,7 @@ function SearchBox(props: Props) {
           'absolute w-3.5 h-3.5 text-gray-500 left-2 top-2',
           {
             'text-blue-700': focus,
-          },
+          }
         )}
       />
     </div>

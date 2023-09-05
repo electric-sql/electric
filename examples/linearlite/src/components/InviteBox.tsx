@@ -1,9 +1,9 @@
-import Modal from '../components/Modal';
-import React from 'react';
+import Modal from '../components/Modal'
+import React from 'react'
 
 interface Props {
-  isOpen: boolean;
-  onDismiss?: () => void;
+  isOpen: boolean
+  onDismiss?: () => void
 }
 
 export default function InviteBox({ isOpen, onDismiss }: Props) {
@@ -36,5 +36,5 @@ export default function InviteBox({ isOpen, onDismiss }: Props) {
         </div>
       </div>
     </Modal>
-  );
+  )
 }

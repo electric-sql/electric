@@ -1,5 +1,5 @@
-import React from 'react';
-import SearchBox from './SearchBox';
+import React from 'react'
+import SearchBox from './SearchBox'
 //import { Meta } from '@storybook/react';
 
 // export default {
@@ -7,4 +7,4 @@ import SearchBox from './SearchBox';
 //   title: 'SearchBox',
 // } as Meta;
 
-export const Default = () => <SearchBox placeholder="Search" />;
+export const Default = () => <SearchBox placeholder="Search" />

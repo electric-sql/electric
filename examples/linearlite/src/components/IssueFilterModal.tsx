@@ -1,14 +1,14 @@
-import { ReactComponent as SearchIcon} from '../assets/icons/search.svg';
-import Modal from '../components/Modal';
-import React, { useEffect, useRef } from 'react';
+import { ReactComponent as SearchIcon } from '../assets/icons/search.svg'
+import Modal from '../components/Modal'
+import React, { useEffect, useRef } from 'react'
 
 interface SearchOptionProps {
-  name: string;
+  name: string
 }
 
 interface Props {
-  isOpen: boolean;
-  onDismiss?: () => void;
+  isOpen: boolean
+  onDismiss?: () => void
 }
 
 function SearchOption({ name }: SearchOptionProps) {
@@ -17,18 +17,18 @@ function SearchOption({ name }: SearchOptionProps) {
       <SearchIcon className="w-4 h-4 mr-4 " />
       <div className="text-overflow-ellipsis flex-nowrap text-14">{name}</div>
     </div>
-  );
+  )
 }
 
 export default function IssueFilterModal({ isOpen, onDismiss }: Props) {
-  const ref = useRef<HTMLInputElement>(null);
+  const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
-        ref.current?.focus();
-      }, 250);
+        ref.current?.focus()
+      }, 250)
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   return (
     <Modal isOpen={isOpen} onDismiss={onDismiss} size="large" className="h-100">
@@ -60,5 +60,5 @@ export default function IssueFilterModal({ isOpen, onDismiss }: Props) {
         </div>
       </div>
     </Modal>
-  );
+  )
 }

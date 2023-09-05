@@ -1,17 +1,17 @@
-import DefaultAvatarIcon from '../../assets/icons/avatar.svg';
-import PriorityMenu from '../../components/contextmenu/PriorityMenu';
-import StatusMenu from '../../components/contextmenu/StatusMenu';
-import PriorityIcon from '../../components/PriorityIcon';
-import StatusIcon from '../../components/StatusIcon';
-import React, { memo } from 'react';
-import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu';
-import { Issue } from '../../electric';
-import { formatDate } from '../../utils/date';
+import DefaultAvatarIcon from '../../assets/icons/avatar.svg'
+import PriorityMenu from '../../components/contextmenu/PriorityMenu'
+import StatusMenu from '../../components/contextmenu/StatusMenu'
+import PriorityIcon from '../../components/PriorityIcon'
+import StatusIcon from '../../components/StatusIcon'
+import React, { memo } from 'react'
+import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
+import { Issue } from '../../electric'
+import { formatDate } from '../../utils/date'
 
 interface Props {
-  issue: Issue;
-  onChangePriority?: (issue: Issue, priority: string) => void;
-  onChangeStatus?: (issue: Issue, priority: string) => void;
+  issue: Issue
+  onChangePriority?: (issue: Issue, priority: string) => void
+  onChangeStatus?: (issue: Issue, priority: string) => void
 }
 
 function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
@@ -94,4 +94,4 @@ function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
   )
 }
 
-export default memo(IssueRow);
+export default memo(IssueRow)

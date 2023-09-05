@@ -1,15 +1,15 @@
-import StatusIcon from '../../components/StatusIcon';
-import React, { memo } from 'react';
-import { Droppable, DroppableProvided } from 'react-beautiful-dnd';
-import { BsThreeDots as MoreIcon } from 'react-icons/bs';
-import { GoPlus as AddIcon } from 'react-icons/go';
+import StatusIcon from '../../components/StatusIcon'
+import React, { memo } from 'react'
+import { Droppable, DroppableProvided } from 'react-beautiful-dnd'
+import { BsThreeDots as MoreIcon } from 'react-icons/bs'
+import { GoPlus as AddIcon } from 'react-icons/go'
 import { Issue } from '../../electric'
 import IssueItem from './IssueItem'
 
 interface Props {
-  status: string;
-  title: string;
-  issues: Array<Issue> | undefined;
+  status: string
+  title: string
+  issues: Array<Issue> | undefined
 }
 
 function IssueCol({ title, status, issues }: Props) {
@@ -55,10 +55,10 @@ function IssueCol({ title, status, issues }: Props) {
               {provided.placeholder}
             </div>
           </div>
-        );
+        )
       }}
     </Droppable>
-  );
+  )
 }
 
-export default memo(IssueCol);
+export default memo(IssueCol)

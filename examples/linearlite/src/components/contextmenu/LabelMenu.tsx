@@ -1,29 +1,29 @@
-import { Portal } from '../Portal';
-import React, { ReactNode, useState } from 'react';
-import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu';
-import { DEFAULT_LABLES, Label } from '../../types/issue';
-import { Menu } from './menu';
+import { Portal } from '../Portal'
+import React, { ReactNode, useState } from 'react'
+import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
+import { DEFAULT_LABLES, Label } from '../../types/issue'
+import { Menu } from './menu'
 
 interface Props {
-  id: string;
-  button: ReactNode;
-  className?: string;
-  onSelect?: (item: any) => void;
+  id: string
+  button: ReactNode
+  className?: string
+  onSelect?: (item: any) => void
 }
-const Labels = [];
+const Labels = []
 
 export default function LabelMenu({ id, button, className, onSelect }: Props) {
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState('')
   const handleSelect = (label: Label) => {
-    if (onSelect) onSelect(label);
-  };
+    if (onSelect) onSelect(label)
+  }
 
-  let labels = DEFAULT_LABLES;
+  let labels = DEFAULT_LABLES
   if (keyword !== '') {
-    let normalizedKeyword = keyword.toLowerCase().trim();
-    labels = labels.filter(
-      (l) => l.name.toLowerCase().includes(normalizedKeyword)
-    );
+    let normalizedKeyword = keyword.toLowerCase().trim()
+    labels = labels.filter((l) =>
+      l.name.toLowerCase().includes(normalizedKeyword)
+    )
   }
 
   let options = labels.map((label) => (
@@ -35,7 +35,7 @@ export default function LabelMenu({ id, button, className, onSelect }: Props) {
       ></div>
       <div className="flex-1 overflow-hidden">{label.name}</div>
     </Menu.Item>
-  ));
+  ))
 
   return (
     <>
@@ -56,5 +56,5 @@ export default function LabelMenu({ id, button, className, onSelect }: Props) {
         </Menu>
       </Portal>
     </>
-  );
+  )
 }

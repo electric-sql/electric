@@ -1,10 +1,10 @@
 export const Priority = {
-  NONE: "none",
-  URGENT: "urgent",
-  HIGH: "high",
-  LOW: "low",
-  MEDIUM: "medium",
-};
+  NONE: 'none',
+  URGENT: 'urgent',
+  HIGH: 'high',
+  LOW: 'low',
+  MEDIUM: 'medium',
+}
 
 export const Status = {
   BACKLOG: 'backlog',
@@ -12,7 +12,7 @@ export const Status = {
   IN_PROGRESS: 'in_progress',
   DONE: 'done',
   CANCELED: 'canceled',
-};
+}
 
 // export type User = {
 //   id?: string;
@@ -30,13 +30,13 @@ export const Status = {
 // };
 //
 export type Label = {
-  id: string;
-  name: string;
-  color: string;
-};
+  id: string
+  name: string
+  color: string
+}
 
 export const DEFAULT_LABLES: Array<Label> = [
   { id: '1', name: 'Bug', color: '#eb5757' },
   { id: '2', name: 'Feature', color: '#bb87fc' },
   { id: '3', name: 'Improvement', color: '#4ea7fc' },
-];
+]

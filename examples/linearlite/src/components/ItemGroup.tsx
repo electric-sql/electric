@@ -1,16 +1,16 @@
 // import { ArrowDropDown, ArrowRight } from '@material-ui/icons';
-import { MdArrowDropDown, MdArrowRight } from 'react-icons/md';
-import * as React from 'react';
-import { useState } from 'react';
+import { MdArrowDropDown, MdArrowRight } from 'react-icons/md'
+import * as React from 'react'
+import { useState } from 'react'
 
 interface Props {
-  title: string;
-  children: React.ReactNode;
+  title: string
+  children: React.ReactNode
 }
 function ItemGroup({ title, children }: Props) {
-  const [showItems, setshowItems] = useState(true);
+  const [showItems, setshowItems] = useState(true)
 
-  let Icon = showItems ? MdArrowDropDown : MdArrowRight;
+  let Icon = showItems ? MdArrowDropDown : MdArrowRight
   return (
     <div className="flex flex-col w-full text-sm">
       <div
@@ -22,7 +22,7 @@ function ItemGroup({ title, children }: Props) {
       </div>
       {showItems && children}
     </div>
-  );
+  )
 }
 
-export default ItemGroup;
+export default ItemGroup

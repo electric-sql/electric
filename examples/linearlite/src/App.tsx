@@ -1,19 +1,18 @@
-
-import 'animate.css/animate.min.css';
-import Board from './pages/Board';
+import 'animate.css/animate.min.css'
+import Board from './pages/Board'
 import React, { useEffect, useState } from 'react'
-import { Route, Routes,  BrowserRouter} from 'react-router-dom';
-import { cssTransition, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import Home from './pages/Home';
+import { Route, Routes, BrowserRouter } from 'react-router-dom'
+import { cssTransition, ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
+import Home from './pages/Home'
 
 import { ElectricProvider, initElectric } from './electric'
-import { Electric} from './generated/client'
+import { Electric } from './generated/client'
 
 const slideUp = cssTransition({
   enter: 'animate__animated animate__slideInUp',
   exit: 'animate__animated animate__slideOutDown',
-});
+})
 
 const App = () => {
   const [electric, setElectric] = useState<Electric>()
@@ -103,4 +102,3 @@ const App = () => {
 }
 
 export default App
-

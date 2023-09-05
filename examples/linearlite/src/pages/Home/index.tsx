@@ -1,5 +1,5 @@
-import LeftMenu from '../../components/LeftMenu';
-import TopFilter from '../../components/TopFilter';
+import LeftMenu from '../../components/LeftMenu'
+import TopFilter from '../../components/TopFilter'
 import { useState, createContext } from 'react'
 import IssueList from './IssueList'
 
@@ -20,7 +20,7 @@ export const IssuesContext = createContext<IssuesContext>({
 })
 
 function Home() {
-  const [showMenu, setShowMenu] = useState(false);
+  const [showMenu, setShowMenu] = useState(false)
   const [filter, setFilter] = useState<Filter>({
     title: '',
   })
@@ -41,4 +41,4 @@ function Home() {
   )
 }
 
-export default Home;
+export default Home

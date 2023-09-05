@@ -1,39 +1,46 @@
-import { ReactComponent as AddIcon } from '../assets/icons/add.svg';
-import { ReactComponent as ArchiveIcon } from '../assets/icons/archive.svg';
-import { ReactComponent as HelpIcon } from '../assets/icons/help.svg';
-import { ReactComponent as InboxIcon } from '../assets/icons/inbox.svg';
-import { ReactComponent as IssueIcon } from '../assets/icons/issue.svg';
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg';
-import { ReactComponent as ProjectIcon } from '../assets/icons/project.svg';
-import { ReactComponent as ViewIcon } from '../assets/icons/view.svg';
-import classnames from 'classnames';
-import SearchBox from '../components/SearchBox';
-import { useClickOutside } from '../hooks/useClickOutside';
-import React, {memo, ReactComponentElement, RefObject, useEffect, useRef, useState} from 'react';
-import { FiCircle } from 'react-icons/fi';
-import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md';
-import { Link } from 'react-router-dom';
-import Avatar from './Avatar';
-import HelpModal from './HelpModal';
-import InviteBox from './InviteBox';
-import IssueModal from './IssueModal';
-import ItemGroup from './ItemGroup';
-import ProfileMenu from './ProfileMenu';
+import { ReactComponent as AddIcon } from '../assets/icons/add.svg'
+import { ReactComponent as ArchiveIcon } from '../assets/icons/archive.svg'
+import { ReactComponent as HelpIcon } from '../assets/icons/help.svg'
+import { ReactComponent as InboxIcon } from '../assets/icons/inbox.svg'
+import { ReactComponent as IssueIcon } from '../assets/icons/issue.svg'
+import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
+import { ReactComponent as ProjectIcon } from '../assets/icons/project.svg'
+import { ReactComponent as ViewIcon } from '../assets/icons/view.svg'
+import classnames from 'classnames'
+import SearchBox from '../components/SearchBox'
+import { useClickOutside } from '../hooks/useClickOutside'
+import React, {
+  memo,
+  ReactComponentElement,
+  RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { FiCircle } from 'react-icons/fi'
+import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
+import { Link } from 'react-router-dom'
+import Avatar from './Avatar'
+import HelpModal from './HelpModal'
+import InviteBox from './InviteBox'
+import IssueModal from './IssueModal'
+import ItemGroup from './ItemGroup'
+import ProfileMenu from './ProfileMenu'
 
 interface Props {
   // Show menu (for small screen only)
-  showMenu: boolean;
-  onCloseMenu?: () => void;
-  onCreateIssue?: Function;
-  onOpenHelp?: Function;
-  onOpenInviteBox?: Function;
+  showMenu: boolean
+  onCloseMenu?: () => void
+  onCreateIssue?: Function
+  onOpenHelp?: Function
+  onOpenInviteBox?: Function
 }
 function LeftMenu({ showMenu, onCloseMenu }: Props) {
-  const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>;
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
-  const [showIssueModal, setShowIssueModal] = useState(false);
+  const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showHelpModal, setShowHelpModal] = useState(false)
+  const [showIssueModal, setShowIssueModal] = useState(false)
 
   let classes = classnames(
     'absolute lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
@@ -41,11 +48,11 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
       '-translate-x-full ease-out shadow-none': !showMenu,
       'translate-x-0 ease-in shadow-xl': showMenu,
     }
-  );
+  )
 
   useClickOutside(ref, () => {
-    if (showMenu && onCloseMenu) onCloseMenu();
-  });
+    if (showMenu && onCloseMenu) onCloseMenu()
+  })
 
   return (
     <>
@@ -213,4 +220,4 @@ function LeftMenu({ showMenu, onCloseMenu }: Props) {
   )
 }
 
-export default memo(LeftMenu);
+export default memo(LeftMenu)

@@ -1,11 +1,11 @@
-import { ReactComponent as AttachmentIcon } from '../assets/icons/attachment.svg';
-import { ReactComponent as OwnerIcon } from '../assets/icons/avatar.svg';
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg';
-import { ReactComponent as GitIssueIcon } from '../assets/icons/git-issue.svg';
-import { ReactComponent as LabelIcon } from '../assets/icons/label.svg';
-import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg';
-import Modal from '../components/Modal';
-import Toggle from '../components/Toggle';
+import { ReactComponent as AttachmentIcon } from '../assets/icons/attachment.svg'
+import { ReactComponent as OwnerIcon } from '../assets/icons/avatar.svg'
+import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
+import { ReactComponent as GitIssueIcon } from '../assets/icons/git-issue.svg'
+import { ReactComponent as LabelIcon } from '../assets/icons/label.svg'
+import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg'
+import Modal from '../components/Modal'
+import Toggle from '../components/Toggle'
 import React, { memo, useEffect, useRef, useState } from 'react'
 // import Editor from 'rich-markdown-editor'
 
@@ -213,4 +213,4 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   )
 }
 
-export default memo(IssueModal);
+export default memo(IssueModal)

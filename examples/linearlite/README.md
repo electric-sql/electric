@@ -2,11 +2,10 @@
 
 This is an example of a team collaboration app such as [linear](https://linear.app) built using electric-sql.
 
-This example is built on top of the excellent clone of the Linear UI built by 
-Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here 
-[https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone). 
+This example is built on top of the excellent clone of the Linear UI built by
+Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
+[https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
 We have replaced the canned data with a local stack running electric in Docker.
-
 
 ## Run example
 
@@ -27,7 +26,7 @@ This will start a local Postgres and the Electric service on your machine.
 
 You can then talk to the Postgres with psql using the password `password`:
 
-```psql -h 127.0.0.1 -U postgres -d electric ```
+`psql -h 127.0.0.1 -U postgres -d electric `
 
 ### Configure Node
 
@@ -38,7 +37,7 @@ nvm use v16.20.0
 npm install -g pnpm
 ```
 
-### Install 
+### Install
 
 In the root of the electric folder install all the js dependencies for submodules and examples:
 
@@ -58,7 +57,7 @@ cd ../..
 
 ### Apply migrations to Postgres
 
-This example uses a SQL file in `db/migration.sql` to manage the Postgres schema. 
+This example uses a SQL file in `db/migration.sql` to manage the Postgres schema.
 You can apply it with:
 
 ```bash
@@ -104,4 +103,5 @@ The app is a React application to install and run it:
 pnpm build
 pnpm start
 ```
-The app should be available on `localhost:8000`
+
+The app should be available on `localhost:5173`

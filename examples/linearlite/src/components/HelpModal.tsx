@@ -1,21 +1,21 @@
-import Modal from '../components/Modal';
-import React from 'react';
-import { ReactComponent as GuideIcon } from '../assets/icons/guide.svg';
-import { ReactComponent as ShortcutIcon } from '../assets/icons/rounded-claim.svg';
-import { ReactComponent as SlackIcon } from '../assets/icons/slack.svg';
-import { ReactComponent as FeedbackIcon } from '../assets/icons/chat.svg';
-import { ReactComponent as QuestionIcon } from '../assets/icons/question.svg';
+import Modal from '../components/Modal'
+import React from 'react'
+import { ReactComponent as GuideIcon } from '../assets/icons/guide.svg'
+import { ReactComponent as ShortcutIcon } from '../assets/icons/rounded-claim.svg'
+import { ReactComponent as SlackIcon } from '../assets/icons/slack.svg'
+import { ReactComponent as FeedbackIcon } from '../assets/icons/chat.svg'
+import { ReactComponent as QuestionIcon } from '../assets/icons/question.svg'
 
 interface Props {
-  isOpen: boolean;
-  onDismiss?: () => void;
+  isOpen: boolean
+  onDismiss?: () => void
 }
 
 interface HelpProps {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-  link: string;
+  icon: React.ReactNode
+  title: string
+  text: string
+  link: string
 }
 function HelpSection({ icon, title, text, link }: HelpProps) {
   return (
@@ -26,7 +26,7 @@ function HelpSection({ icon, title, text, link }: HelpProps) {
         <div className="text-sm font-normal text-gray-500">{text}</div>
       </div>
     </a>
-  );
+  )
 }
 export default function HelpModal({ isOpen, onDismiss }: Props) {
   return (
@@ -65,5 +65,5 @@ export default function HelpModal({ isOpen, onDismiss }: Props) {
         />
       </div>
     </Modal>
-  );
+  )
 }

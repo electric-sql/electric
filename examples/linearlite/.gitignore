@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+public/wa-sqlite-async.mjs
+public/wa-sqlite-async.wasm

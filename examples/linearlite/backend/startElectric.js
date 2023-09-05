@@ -6,24 +6,29 @@ if (process.argv.length === 4) {
   const command = process.argv[2]
 
   if (command !== '-db') {
-    console.error(`Unsupported option ${command}. Only '-db' option is supported.`)
+    console.error(
+      `Unsupported option ${command}. Only '-db' option is supported.`
+    )
 
     process.exit(1)
   }
 
   db = process.argv[3]
-}
-else if (process.argv.length !== 2) {
-  console.log('Wrong number of arguments provided. Only one optional argument `-db <Postgres connection url>` is supported.')
+} else if (process.argv.length !== 2) {
+  console.log(
+    'Wrong number of arguments provided. Only one optional argument `-db <Postgres connection url>` is supported.'
+  )
 }
 
 if (db === undefined) {
-  console.error(`Database URL is not provided. Please provide one using the DATABASE_URL environment variable.`)
+  console.error(
+    `Database URL is not provided. Please provide one using the DATABASE_URL environment variable.`
+  )
 
   process.exit(1)
 }
 
-const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
+const electric = process.env.ELECTRIC_IMAGE ?? 'electricsql/electric:latest'
 
 shell.exec(
   `docker run \

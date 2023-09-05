@@ -1,15 +1,15 @@
-import { ReactComponent as SignalUrgentIcon } from '../assets/icons/claim.svg';
-import { ReactComponent as SignalNoPriorityIcon } from '../assets/icons/dots.svg';
-import { ReactComponent as SignalMediumIcon } from '../assets/icons/signal-medium.svg';
-import { ReactComponent as SignalStrongIcon } from '../assets/icons/signal-strong.svg';
-import { ReactComponent as SignalWeakIcon } from '../assets/icons/signal-weak.svg';
-import classNames from 'classnames';
-import React from 'react';
-import { Priority } from '../types/issue';
+import { ReactComponent as SignalUrgentIcon } from '../assets/icons/claim.svg'
+import { ReactComponent as SignalNoPriorityIcon } from '../assets/icons/dots.svg'
+import { ReactComponent as SignalMediumIcon } from '../assets/icons/signal-medium.svg'
+import { ReactComponent as SignalStrongIcon } from '../assets/icons/signal-strong.svg'
+import { ReactComponent as SignalWeakIcon } from '../assets/icons/signal-weak.svg'
+import classNames from 'classnames'
+import React from 'react'
+import { Priority } from '../types/issue'
 
 interface Props {
-  priority: string;
-  className?: string;
+  priority: string
+  className?: string
 }
 
 const ICONS = {

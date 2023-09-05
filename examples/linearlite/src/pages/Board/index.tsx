@@ -1,10 +1,10 @@
-import LeftMenu from '../../components/LeftMenu';
-import TopFilter from '../../components/TopFilter';
-import { useState } from 'react';
-import IssueBoard from './IssueBoard';
+import LeftMenu from '../../components/LeftMenu'
+import TopFilter from '../../components/TopFilter'
+import { useState } from 'react'
+import IssueBoard from './IssueBoard'
 
 function Board() {
-  const [showMenu, setShowMenu] = useState(false);
+  const [showMenu, setShowMenu] = useState(false)
   return (
     <div className="flex w-screen h-screen overflow-y-hidden">
       <LeftMenu showMenu={showMenu} onCloseMenu={() => setShowMenu(false)} />
@@ -16,7 +16,7 @@ function Board() {
         <IssueBoard />
       </div>
     </div>
-  );
+  )
 }
 
-export default Board;
+export default Board

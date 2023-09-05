@@ -1,25 +1,25 @@
-import classnames from 'classnames';
-import React, { ReactNode, useEffect, useRef } from 'react';
-import { ContextMenu, MenuItem } from '@firefox-devtools/react-contextmenu';
+import classnames from 'classnames'
+import React, { ReactNode, useEffect, useRef } from 'react'
+import { ContextMenu, MenuItem } from '@firefox-devtools/react-contextmenu'
 
 const sizeClasses = {
   small: 'w-34',
   normal: 'w-72',
-};
+}
 
 export interface MenuProps {
-  id: string;
-  size: 'small' | 'normal';
-  className?: string;
-  onKeywordChange?: (kw: string) => void;
-  filterKeyword: boolean;
-  children: ReactNode;
-  searchPlaceholder?: string;
+  id: string
+  size: 'small' | 'normal'
+  className?: string
+  onKeywordChange?: (kw: string) => void
+  filterKeyword: boolean
+  children: ReactNode
+  searchPlaceholder?: string
 }
 
 interface MenuItemProps {
-  children: ReactNode;
-  onClick?: Function;
+  children: ReactNode
+  onClick?: Function
 }
 const Item = function ({ onClick, children }: MenuItemProps) {
   return (
@@ -31,8 +31,8 @@ const Item = function ({ onClick, children }: MenuItemProps) {
     >
       {children}
     </MenuItem>
-  );
-};
+  )
+}
 
 export const Menu = (props: MenuProps) => {
   let {
@@ -44,26 +44,26 @@ export const Menu = (props: MenuProps) => {
     filterKeyword,
     searchPlaceholder,
     ...restProps
-  } = props;
-  const ref = useRef<HTMLInputElement>(null);
+  } = props
+  const ref = useRef<HTMLInputElement>(null)
 
   const classes = classnames(
     'cursor-default bg-white rounded shadow-modal z-100',
     sizeClasses[size],
     className
-  );
+  )
 
   return (
     <ContextMenu
       id={id}
       className={classes}
       onShow={() => {
-        if (ref.current) ref.current.focus();
+        if (ref.current) ref.current.focus()
       }}
     >
       <div
         onClick={(e) => {
-          e.stopPropagation();
+          e.stopPropagation()
         }}
       >
         {filterKeyword && (
@@ -72,10 +72,10 @@ export const Menu = (props: MenuProps) => {
             ref={ref}
             onChange={(e) => {
               //TODO: use debounced call
-              if (onKeywordChange) onKeywordChange(e.target.value);
+              if (onKeywordChange) onKeywordChange(e.target.value)
             }}
             onClick={(e) => {
-              e.stopPropagation();
+              e.stopPropagation()
             }}
             placeholder={searchPlaceholder}
           />
@@ -83,10 +83,10 @@ export const Menu = (props: MenuProps) => {
         {children}
       </div>
     </ContextMenu>
-  );
-};
+  )
+}
 
-Menu.Item = Item;
+Menu.Item = Item
 Menu.defaultProps = {
   size: 'small',
-};
+}
