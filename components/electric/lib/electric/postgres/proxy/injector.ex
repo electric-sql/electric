@@ -233,4 +233,45 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   defp guess_framework(_msg, _table), do: :unknown
+
+  # Validates a ddl statement to ensure that it's doing something
+  # to an electrified table that we support.
+  def is_valid_migration(query) do
+    query
+    |> Electric.Postgres.parse!()
+    |> Enum.reduce_while(:ok, &check_migration_stmt(&1, &2, query))
+  end
+
+  defp check_migration_stmt(%PgQuery.AlterTableStmt{cmds: cmds}, :ok, query) do
+    Enum.reduce_while(cmds, :ok, fn
+      %{node: {:alter_table_cmd, %{subtype: :AT_AddColumn} = cmd}}, _acc ->
+        %{def: %{node: {:column_def, coldef}}} = cmd
+        check_valid_column(coldef, query)
+    end)
+    |> then(fn
+      :ok -> {:cont, :ok}
+      {:error, _} = error -> {:halt, error}
+    end)
+  end
+
+  @valid_types for t <- Electric.Satellite.Serialization.supported_pg_types(), do: to_string(t)
+
+  defp check_valid_column(%PgQuery.ColumnDef{} = coldef, query) do
+    %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)
+
+    if type in @valid_types do
+      {:cont, :ok}
+    else
+      {:halt,
+       {:error,
+        %M.ErrorResponse{
+          code: "00000",
+          severity: "ERROR",
+          message: "Cannot add column of type #{inspect(type)}",
+          detail:
+            "Electric only supports a subset of Postgres column types. Supported column types are: #{Enum.join(@valid_types, ", ")}",
+          query: query
+        }}}
+    end
+  end
 end

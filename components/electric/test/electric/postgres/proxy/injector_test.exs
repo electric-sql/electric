@@ -179,6 +179,18 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query)
         end
 
+        test "ALTER TABLE ADD invalid column type", cxt do
+          query = ~s[ALTER TABLE "truths" ADD COLUMN addr cidr]
+
+          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+            code: "00000",
+            message: "Cannot add column of type \"cidr\"",
+            detail:
+              "Electric only supports a subset of Postgres column types. Supported column types are: int2, int4, int8, float8, text, varchar",
+            query: query
+          )
+        end
+
         test "ELECTRIC REVOKE UPDATE", cxt do
           query = ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
 

@@ -139,13 +139,24 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
   defp handle_alter_table(msg, true, query, {schema, name} = table, state, send) do
     case Parser.is_additive_migration(query) do
       {:ok, true} ->
-        migration_state(
-          msg,
-          query,
-          table,
-          State.electrify(state, table),
-          Send.back(send, msg)
-        )
+        case Injector.is_valid_migration(query) do
+          :ok ->
+            migration_state(
+              msg,
+              query,
+              table,
+              State.electrify(state, table),
+              Send.back(send, msg)
+            )
+
+          {:error, error} ->
+            msgs = [
+              error,
+              %M.ReadyForQuery{status: :failed}
+            ]
+
+            {nil, state, error_response(send, msgs)}
+        end
 
       {:ok, false} ->
         error = [
@@ -171,14 +182,9 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
   end
 
   defp error_response(send, error) do
-    # back_msgs = [%M.Query{query: "ROLLBACK"}]
-    back_msgs = []
-    front_msgs = [error]
-
     # send the error messages and prevent any others being appended
     send
-    |> Send.back(back_msgs)
-    |> Send.front(front_msgs)
+    |> Send.front(error)
     |> Send.lock()
   end
 
