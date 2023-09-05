@@ -23,7 +23,11 @@ config :logger,
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
+  # We deliberately put :pid as the first list item below. Logger prints metadata in the same order as it is configured
+  # here, so having :pid sorted in the list alphabetically would make it get in the away of log output matching that we
+  # do in many of our E2E tests.
   metadata: [
+    :pid,
     :client_id,
     :component,
     :connection,
@@ -32,7 +36,6 @@ config :logger, :console,
     :pg_client,
     :pg_producer,
     :pg_slot,
-    :pid,
     :remote_ip,
     :request_id
     :sq_client,
