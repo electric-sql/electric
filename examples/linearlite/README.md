@@ -67,6 +67,34 @@ pnpm migrate
 
 This will create tables in Postgres and electrify them.
 
+## Setup
+
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+
+```shell
+pnpm backend:up
+# Or `yarn backend:start` to foreground
+```
+
+Note that, if useful, you can connect to Postgres using:
+
+```shell
+pnpm db:psql
+```
+
+The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+You can apply it with:
+
+```shell
+pnpm db:migrate
+```
+
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
+
+```shell
+pnpm client:generate
+# or `pnpm client:watch`` to re-generate whenever the DB schema changes
+```
 
 ### Run web app
 

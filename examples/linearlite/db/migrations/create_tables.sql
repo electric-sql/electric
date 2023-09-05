@@ -1,4 +1,4 @@
--- CreateTable
+-- Create the tables for the linearlite example
 CREATE TABLE IF NOT EXISTS "issue" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,    
@@ -18,17 +18,19 @@ CREATE TABLE IF NOT EXISTS "user" (
     CONSTRAINT "user_pkey" PRIMARY KEY ("username")
 );
 
-CREATE TABLE  IF NOT EXISTS "comment" (
-    "id" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
-    "issue_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP NOT NULL,
-    CONSTRAINT "comment_pkey" PRIMARY KEY ("id"),
-    FOREIGN KEY (username) REFERENCES "user"(username),
-    FOREIGN KEY (issue_id) REFERENCES issue(id)
-);
---
+-- CREATE TABLE  IF NOT EXISTS "comment" (
+--     "id" TEXT NOT NULL,
+--     "body" TEXT NOT NULL,
+--     "username" TEXT NOT NULL,
+--     "issue_id" TEXT NOT NULL,
+--     "created_at" TIMESTAMP NOT NULL,
+--     CONSTRAINT "comment_pkey" PRIMARY KEY ("id"),
+--     FOREIGN KEY (username) REFERENCES "user"(username),
+--     FOREIGN KEY (issue_id) REFERENCES issue(id)
+-- );
+
+-- ⚡
+-- Electrify the tables
 CALL electric.electrify('issue');
 CALL electric.electrify('user');
-CALL electric.electrify('comment');
+-- CALL electric.electrify('comment');
