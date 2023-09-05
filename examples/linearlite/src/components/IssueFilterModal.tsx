@@ -1,4 +1,4 @@
-import SearchIcon from '../assets/icons/search.svg';
+import { ReactComponent as SearchIcon} from '../assets/icons/search.svg';
 import Modal from '../components/Modal';
 import React, { useEffect, useRef } from 'react';
 

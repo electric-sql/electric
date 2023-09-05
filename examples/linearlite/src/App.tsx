@@ -2,7 +2,7 @@
 import 'animate.css/animate.min.css';
 import Board from './pages/Board';
 import React, { useEffect, useState } from 'react'
-import { Route, Switch,  BrowserRouter} from 'react-router-dom';
+import { Route, Routes,  BrowserRouter} from 'react-router-dom';
 import { cssTransition, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Home from './pages/Home';
@@ -35,10 +35,10 @@ const App = () => {
   // NOTE: there is a db.isConnected that might be helpful
 
   var router = (
-    <Switch>
-      <Route path="/" exact component={Home} />
-      <Route path="/board" exact component={Board} />
-    </Switch>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/board" element={<Board />} />
+    </Routes>
   )
 
   // return (

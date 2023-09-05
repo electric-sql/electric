@@ -1,6 +1,6 @@
 import { Portal } from '../Portal';
 import React, { ReactNode, useState } from 'react';
-import { ContextMenuTrigger } from 'react-contextmenu';
+import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu';
 import { DEFAULT_LABLES, Label } from '../../types/issue';
 import { Menu } from './menu';
 

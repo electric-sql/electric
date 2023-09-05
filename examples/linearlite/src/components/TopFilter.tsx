@@ -1,8 +1,6 @@
-import MenuIcon from '../assets/icons/menu.svg';
+import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg';
 import React, { useState } from 'react';
 import { BiSortUp } from 'react-icons/bi';
-import { useSelector } from 'react-redux';
-//import { RootState } from 'store';
 import IssueFilterModal from './IssueFilterModal';
 import ViewOptionMenu from './ViewOptionMenu';
 import { Issue, useElectric } from "../electric";

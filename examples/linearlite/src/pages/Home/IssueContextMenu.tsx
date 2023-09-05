@@ -1,17 +1,17 @@
-import AddSubIssueIcon from '../../assets/icons/add-subissue.svg';
-import AsigneeIcon from '../../assets/icons/assignee.svg';
-import TodoIcon from '../../assets/icons/circle-dot.svg';
-import BacklogIcon from '../../assets/icons/circle.svg';
-import DeleteIcon from '../../assets/icons/delete.svg';
-import DoneIcon from '../../assets/icons/done.svg';
-import SetDuedateIcon from '../../assets/icons/due-date.svg';
-import DupplicationIcon from '../../assets/icons/dupplication.svg';
-import StatusIcon from '../../assets/icons/half-circle.svg';
-import AddLabelIcon from '../../assets/icons/label.svg';
-import SetParentIcon from '../../assets/icons/parent-issue.svg';
-import RelationshipIcon from '../../assets/icons/relationship.svg';
+import { ReactComponent as AddSubIssueIcon } from '../../assets/icons/add-subissue.svg';
+import { ReactComponent as AsigneeIcon } from '../../assets/icons/assignee.svg';
+import { ReactComponent as TodoIcon } from '../../assets/icons/circle-dot.svg';
+import { ReactComponent as BacklogIcon } from '../../assets/icons/circle.svg';
+import { ReactComponent as DeleteIcon } from '../../assets/icons/delete.svg';
+import { ReactComponent as DoneIcon } from '../../assets/icons/done.svg';
+import { ReactComponent as SetDuedateIcon } from '../../assets/icons/due-date.svg';
+import { ReactComponent as DupplicationIcon } from '../../assets/icons/dupplication.svg';
+import { ReactComponent as StatusIcon } from '../../assets/icons/half-circle.svg';
+import { ReactComponent as AddLabelIcon } from '../../assets/icons/label.svg';
+import { ReactComponent as SetParentIcon } from '../../assets/icons/parent-issue.svg';
+import { ReactComponent as RelationshipIcon } from '../../assets/icons/relationship.svg';
 import React from 'react';
-import { ContextMenu, MenuItem, SubMenu } from 'react-contextmenu';
+import { ContextMenu, MenuItem, SubMenu } from '@firefox-devtools/react-contextmenu';
 
 interface MenuItemProp {
   icon:

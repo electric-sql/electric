@@ -1,5 +1,5 @@
 import React, { ChangeEventHandler, useContext, useState } from 'react'
-import SearchIcon from '../assets/icons/search.svg'
+import { ReactComponent as SearchIcon } from '../assets/icons/search.svg'
 import classnames from 'classnames'
 import { IssuesContext } from '../pages/Home'
 

@@ -1,8 +1,8 @@
-import CancelIcon from '../assets/icons/cancel.svg';
-import BacklogIcon from '../assets/icons/circle-dot.svg';
-import TodoIcon from '../assets/icons/circle.svg';
-import DoneIcon from '../assets/icons/done.svg';
-import InProgressIcon from '../assets/icons/half-circle.svg';
+import { ReactComponent as CancelIcon } from '../assets/icons/cancel.svg';
+import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg';
+import { ReactComponent as TodoIcon } from '../assets/icons/circle.svg';
+import { ReactComponent as DoneIcon } from '../assets/icons/done.svg';
+import { ReactComponent as InProgressIcon } from '../assets/icons/half-circle.svg';
 import classNames from 'classnames';
 import React from 'react';
 import { Status } from '../types/issue';

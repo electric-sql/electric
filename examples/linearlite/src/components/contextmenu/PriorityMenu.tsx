@@ -1,13 +1,13 @@
 import { Portal } from '../Portal';
 import React, { ReactNode, useRef, useState } from 'react';
-import { ContextMenu, ContextMenuTrigger, MenuItem } from 'react-contextmenu';
+import { ContextMenu, ContextMenuTrigger, MenuItem } from '@firefox-devtools/react-contextmenu';
 import { Menu } from './menu';
 
-import HighPriorityIcon from '../../assets/icons/signal-strong.svg';
-import LowPriorityIcon from '../../assets/icons/signal-weak.svg';
-import MediumPriorityIcon from '../../assets/icons/signal-medium.svg';
-import NoPriorityIcon from '../../assets/icons/dots.svg';
-import UrgentPriorityIcon from '../../assets/icons/rounded-claim.svg';
+import { ReactComponent as HighPriorityIcon } from '../../assets/icons/signal-strong.svg';
+import { ReactComponent as LowPriorityIcon } from '../../assets/icons/signal-weak.svg';
+import { ReactComponent as MediumPriorityIcon } from '../../assets/icons/signal-medium.svg';
+import { ReactComponent as NoPriorityIcon } from '../../assets/icons/dots.svg';
+import { ReactComponent as UrgentPriorityIcon } from '../../assets/icons/rounded-claim.svg';
  import { Priority } from '../../types/issue';
 
 interface Props {

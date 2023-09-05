@@ -4,7 +4,7 @@ import StatusMenu from '../../components/contextmenu/StatusMenu';
 import PriorityIcon from '../../components/PriorityIcon';
 import StatusIcon from '../../components/StatusIcon';
 import React, { memo } from 'react';
-import { ContextMenuTrigger } from 'react-contextmenu';
+import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu';
 import { Issue } from '../../electric';
 import { formatDate } from '../../utils/date';
 

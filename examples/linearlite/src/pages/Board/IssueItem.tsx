@@ -8,8 +8,6 @@ import {
   DraggableProvided,
   DraggableStateSnapshot,
 } from 'react-beautiful-dnd';
-import { useDispatch } from 'react-redux';
-// import { AppDispatch } from 'store';
 // import { updateIssuePriority } from 'store/actions/issueActions';
 import { Issue } from '../../electric';
 

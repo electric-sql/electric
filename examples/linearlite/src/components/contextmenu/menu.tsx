@@ -1,6 +1,6 @@
 import classnames from 'classnames';
 import React, { ReactNode, useEffect, useRef } from 'react';
-import { ContextMenu, MenuItem } from 'react-contextmenu';
+import { ContextMenu, MenuItem } from '@firefox-devtools/react-contextmenu';
 
 const sizeClasses = {
   small: 'w-34',

@@ -1,5 +1,5 @@
 import React, { useContext, useEffect } from "react";
-import { connectMenu } from "react-contextmenu";
+import { connectMenu } from "@firefox-devtools/react-contextmenu";
 import IssueContextMenu from "./IssueContextMenu";
 import IssueRow from "./IssueRow";
 import { Issue, useElectric } from "../../electric";

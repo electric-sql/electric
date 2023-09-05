@@ -1,13 +1,13 @@
-import AttachmentIcon from '../assets/icons/attachment.svg';
-import OwnerIcon from '../assets/icons/avatar.svg';
-import CloseIcon from '../assets/icons/close.svg';
-import GitIssueIcon from '../assets/icons/git-issue.svg';
-import LabelIcon from '../assets/icons/label.svg';
-import ZoomIcon from '../assets/icons/zoom.svg';
+import { ReactComponent as AttachmentIcon } from '../assets/icons/attachment.svg';
+import { ReactComponent as OwnerIcon } from '../assets/icons/avatar.svg';
+import { ReactComponent as CloseIcon } from '../assets/icons/close.svg';
+import { ReactComponent as GitIssueIcon } from '../assets/icons/git-issue.svg';
+import { ReactComponent as LabelIcon } from '../assets/icons/label.svg';
+import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg';
 import Modal from '../components/Modal';
 import Toggle from '../components/Toggle';
 import React, { memo, useEffect, useRef, useState } from 'react'
-import Editor from 'rich-markdown-editor'
+// import Editor from 'rich-markdown-editor'
 
 import { v4 as uuidv4 } from 'uuid'
 import { useElectric } from '../electric'
@@ -151,12 +151,12 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
         {/* Issue description editor */}
         <div className="flex w-full px-4">
-          <Editor
+          {/* <Editor
             // value={description}
             onChange={(val) => setDescription(val)}
             className="w-full mt-4 ml-5 font-normal border-none appearance-none min-h-12 text-md focus:outline-none editor"
             placeholder="Add description..."
-          />
+          /> */}
         </div>
       </div>
 
