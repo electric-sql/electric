@@ -77,8 +77,7 @@ defmodule Satellite.TestWsClient do
       {:ok, token} ->
         id = Map.get(opts, :id, "id")
 
-        headers = [%SatAuthHeaderPair{key: :PROTO_VERSION, value: PB.get_long_proto_vsn()}]
-        auth_req = serialize(%SatAuthReq{id: id, token: token, headers: headers})
+        auth_req = serialize(%SatAuthReq{id: id, token: token})
 
         {:ok, conn} = WebSocketClient.send_frames(conn, [auth_req])
         {:ok, conn, frames} = WebSocketClient.receive_next_frames!(conn)

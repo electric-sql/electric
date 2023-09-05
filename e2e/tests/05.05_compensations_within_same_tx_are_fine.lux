@@ -26,7 +26,7 @@
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
     
-    !alias Electric.Satellite.V14.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
+    !alias Electric.Satellite.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
 
     """!
     Satellite.TestWsClient.send_data(conn, %SatRelation{

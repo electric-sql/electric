@@ -2,9 +2,7 @@ defmodule Electric.Satellite.Protobuf do
   # This is a version provided in the corresponding protocol buffer file
   # Make sure to bump it here and in the using macro below.
 
-  import Electric.Satellite.V14
-
-  alias Electric.Satellite.V14.{
+  alias Electric.Satellite.{
     SatErrorResp,
     SatAuthReq,
     SatAuthResp,
@@ -84,7 +82,7 @@ defmodule Electric.Satellite.Protobuf do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
 
-      alias Electric.Satellite.V14.{
+      alias Electric.Satellite.{
         SatErrorResp,
         SatAuthReq,
         SatAuthHeaderPair,
@@ -176,56 +174,5 @@ defmodule Electric.Satellite.Protobuf do
   def encode_with_type(msg) do
     {:ok, type, iodata} = encode(msg)
     {:ok, [<<type::size(8)>> | iodata]}
-  end
-
-  @spec get_long_proto_vsn() :: String.t()
-  def get_long_proto_vsn() do
-    package()
-  end
-
-  @spec get_proto_vsn() :: {:ok, Version.t()} | {:error, term()}
-  def get_proto_vsn() do
-    parse_proto_vsn(package())
-  end
-
-  @doc """
-    Version is expected to be of the following format:
-    "Namespace.vMajor_Minor"
-    where:
-      - Namespace is one or multiple napespaces joined by dot
-      - MAJOR is a major version, integers only
-      - MINOR is a minor version, integers only
-  """
-  @spec parse_proto_vsn(String.t()) :: {:ok, Version.t()} | {:error, term()}
-  def parse_proto_vsn(version) do
-    try do
-      version =
-        version
-        |> String.split(".")
-        |> List.last()
-
-      parse = Regex.named_captures(~r/^v(?<major>\d*)_(?<minor>\d*)$/, version)
-
-      {:ok,
-       %Version{
-         major: String.to_integer(parse["major"]),
-         minor: String.to_integer(parse["minor"])
-       }}
-    rescue
-      _ ->
-        Logger.warning("failed to encode: #{inspect(version)}")
-        {:error, :bad_version}
-    end
-  end
-
-  @doc """
-    Check if client's version of protocol is compatible with current version
-  """
-  @spec is_compatible(Version.t(), Version.t()) :: boolean()
-  def is_compatible(
-        %Version{major: srv_maj, minor: srv_min},
-        %Version{major: cli_maj, minor: cli_min}
-      ) do
-    srv_maj == cli_maj and srv_min >= cli_min
   end
 end

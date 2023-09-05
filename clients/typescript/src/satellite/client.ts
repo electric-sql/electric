@@ -15,8 +15,6 @@ import {
   SatPingResp,
   SatRelation,
   SatRelationColumn,
-  SatAuthHeader,
-  SatAuthHeaderPair,
   SatSubsResp,
   SatSubsReq,
   SatSubsDataError,
@@ -32,7 +30,6 @@ import {
   getSizeBuf,
   getTypeFromCode,
   SatPbMsg,
-  getProtocolVersion,
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
@@ -355,16 +352,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
-    const headers = [
-      SatAuthHeaderPair.fromPartial({
-        key: SatAuthHeader.PROTO_VERSION,
-        value: getProtocolVersion(),
-      }),
-    ]
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,
-      headers: headers,
+      headers: [],
     })
     return this.rpc<AuthResponse>(request)
   }

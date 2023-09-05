@@ -79,34 +79,4 @@ defmodule Electric.Postgres.PBTest do
       assert original_msg == decoded_msg
     end
   end
-
-  describe "Check version parsing" do
-    test "current version of the protocol is parsed properly" do
-      version = PB.get_long_proto_vsn()
-      parsed = PB.parse_proto_vsn(version)
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert is_integer(major) == true
-      assert is_integer(minor) == true
-    end
-
-    test "expect properly formed version (Namespace.vMAJOR_MINOR) to be parsed" do
-      parsed = PB.parse_proto_vsn("Some.Namespace.v190_0979")
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert {major, minor} == {190, 979}
-    end
-
-    test "expect properly formed version (Namespace.vMAJOR_MINOR) to be parsed 2" do
-      parsed = PB.parse_proto_vsn("Some.Namespace.v190_0")
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert {major, minor} == {190, 0}
-    end
-
-    test "improperly formed version (Namespace.vMAJOR_MINOR) returns error" do
-      assert {:error, :bad_version} ==
-               PB.parse_proto_vsn("Some.Namespace.v190_0ba:90089")
-    end
-  end
 end

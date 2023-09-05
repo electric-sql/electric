@@ -27,7 +27,7 @@
 
 [shell electric]
     # We expect to recieve the transaction
-    ?user_id=1 \[debug\] ws data received: %Electric.Satellite.V\d+.SatOpLog\{(.*)op: \{:insert, %Electric.Satellite.V\d+.SatOpInsert\{(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    ?user_id=1 \[debug\] ws data received: %Electric.Satellite.SatOpLog\{(.*)op: \{:insert, %Electric.Satellite.SatOpInsert\{(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
     # Send it forward to Postgres
     ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
     ?pg_slot=postgres_1 \[debug\] Sending \d messages to the subscriber
@@ -46,7 +46,7 @@
 
 [shell user_1_ws1]
     # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
-    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
 
 [cleanup]
     [invoke teardown]

@@ -705,7 +705,7 @@ const migrationWithFKs: SchemaChange[] = [
       columns: [{ name: 'id' }, { name: 'item_id' }],
       fks: [
         {
-          $type: 'Electric.Satellite.v1_4.SatOpMigrate.ForeignKey',
+          $type: 'Electric.Satellite.SatOpMigrate.ForeignKey',
           fkCols: ['item_id'],
           pkTable: 'test_items',
           pkCols: ['id'],
