@@ -23,7 +23,7 @@ defmodule Electric.Application do
         unless Application.get_env(:electric, :disable_listeners, false) do
           [
             # Satellite websocket connections are served from this router
-            {Bandit, plug: Electric.Plug.Router, port: ws_server_port()}
+            {Bandit, plug: Electric.Plug.Router, port: http_port()}
           ]
         else
           []
@@ -53,11 +53,6 @@ defmodule Electric.Application do
     end
   end
 
-  defp ws_server_port,
-    do:
-      Application.fetch_env!(:electric, Electric.Satellite.WebsocketServer)
-      |> Keyword.fetch!(:port)
-
-  defp pg_server_port,
-    do: Application.fetch_env!(:electric, Electric.PostgresServer) |> Keyword.fetch!(:port)
+  defp http_port, do: Application.fetch_env!(:electric, :http_port)
+  defp pg_server_port, do: Application.fetch_env!(:electric, :pg_server_port)
 end

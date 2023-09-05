@@ -42,22 +42,19 @@ config :logger, :console,
     user_id
   ]a
 
+pg_server_port =
+  System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
+
 config :electric,
   # Used only to send server identification upon connection,
   # can stay default while we're not working on multi-instance setups
-  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", default_instance_id)
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", default_instance_id),
+  http_port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer(),
+  pg_server_port: pg_server_port
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
-
-config :electric, Electric.Satellite.WebsocketServer,
-  port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer()
-
-pg_server_port =
-  System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
-
-config :electric, Electric.PostgresServer, port: pg_server_port
 
 # The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
 # a release, and we want a single configuration file in our release.
