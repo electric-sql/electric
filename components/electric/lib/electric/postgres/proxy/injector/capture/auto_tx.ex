@@ -135,7 +135,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
         sink =
           %Sink{
             buffer: [%M.ReadyForQuery{status: :idle}] ++ msgs,
-            wait: [M.CommandComplete, M.ReadyForQuery],
             after_fun: fn state, send ->
               {nil, State.commit(state), send}
             end
@@ -155,7 +154,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.AutoTx do
         sink =
           %Sink{
             buffer: Enum.reverse(pending),
-            wait: [M.CommandComplete, M.ReadyForQuery],
             after_fun: fn state, send ->
               {nil, State.rollback(state), send}
             end

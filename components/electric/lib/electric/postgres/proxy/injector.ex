@@ -71,10 +71,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   def inject_ddl_query(query, state) do
     injector = Map.fetch!(state, :injector)
 
-    Capture.Inject.new({
-      [%M.Query{query: injector.capture_ddl_query(query)}],
-      [M.RowDescription, M.DataRow, M.CommandComplete, M.ReadyForQuery]
-    })
+    Capture.Inject.new([%M.Query{query: injector.capture_ddl_query(query)}])
   end
 
   def capture_ddl_query(query) do
@@ -85,10 +82,7 @@ defmodule Electric.Postgres.Proxy.Injector do
     Logger.debug("Assigning migration tx version '#{version}'")
     injector = Map.fetch!(state, :injector)
 
-    Capture.Inject.new({
-      [%M.Query{query: injector.capture_version_query(version)}],
-      [M.RowDescription, M.DataRow, M.CommandComplete, M.ReadyForQuery]
-    })
+    Capture.Inject.new([%M.Query{query: injector.capture_version_query(version)}])
   end
 
   def inject_version_query(state) do
@@ -218,7 +212,6 @@ defmodule Electric.Postgres.Proxy.Injector do
 
     {%Capture.Sink{
        buffer: msgs,
-       wait: inject.wait,
        direction: direction,
        after_fun: after_fun
      }, State.tx_version(state, version), Send.back(send, inject.inject)}

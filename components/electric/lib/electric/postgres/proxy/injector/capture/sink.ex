@@ -12,7 +12,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
 
   # TODO: remove the "wait" list. in favour of just handling the "ReadyForQuery"
   # message. This is because the current version doesn't handle errors
-  defstruct [:buffer, :wait, direction: :front, after_fun: nil]
+  defstruct [:buffer, direction: :front, after_fun: nil]
 
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
@@ -20,7 +20,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
   @type after_fun :: (State.t(), Send.t() -> {Capture.t(), State.t(), Send.t()})
   @type t() :: %__MODULE__{
           buffer: [M.t()],
-          wait: [module()],
           direction: :front | :back,
           after_fun: nil | after_fun()
         }
