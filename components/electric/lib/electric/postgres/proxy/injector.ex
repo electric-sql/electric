@@ -49,6 +49,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def recv_frontend(c, state, send, msgs) do
     Enum.reduce(List.wrap(msgs), {c, state, send}, fn msg, {c, state, send} ->
+      # dbg(front: msg)
       Capture.recv_frontend(c, msg, state, send)
     end)
   end
@@ -64,6 +65,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def recv_backend(c, state, send, msgs) do
     Enum.reduce(List.wrap(msgs), {c, state, send}, fn msg, {c, state, send} ->
+      # dbg(back: msg)
       Capture.recv_backend(c, msg, state, send)
     end)
   end
@@ -74,8 +76,8 @@ defmodule Electric.Postgres.Proxy.Injector do
     Capture.Inject.new([%M.Query{query: injector.capture_ddl_query(query)}])
   end
 
-  def capture_ddl_query(query) do
-    ~s|CALL electric.capture_ddl(#{quote_query(query)})|
+  def capture_ddl_query(query, quote \\ nil) do
+    ~s|CALL electric.capture_ddl(#{quote_query(query, quote)})|
   end
 
   def inject_version_query(version, state) do
@@ -91,13 +93,18 @@ defmodule Electric.Postgres.Proxy.Injector do
     {version, inject_version_query(version, state)}
   end
 
-  def capture_version_query(version) do
-    ~s|SELECT electric.migration_version(#{quote_query(version)})|
+  def capture_version_query(version, quote \\ nil) do
+    ~s|CALL electric.migration_version(#{quote_query(version, quote)})|
   end
 
-  defp quote_query(query) do
-    quote = "$__" <> (:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)) <> "__$"
-    quote <> query <> quote
+  defp quote_query(query, quote) do
+    quote = quote || random_quote()
+
+    quote <> to_string(query) <> quote
+  end
+
+  defp random_quote do
+    "$__" <> (:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)) <> "__$"
   end
 
   def migration_version do

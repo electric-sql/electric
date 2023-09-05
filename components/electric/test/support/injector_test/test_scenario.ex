@@ -6,14 +6,15 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   import ExUnit.Assertions
 
   defmodule MockInjector do
+    alias Electric.Postgres.Proxy.Injector
     @behaviour Electric.Postgres.Proxy.Injector
 
     def capture_ddl_query(query) do
-      ~s|CALL electric.capture_ddl($query$#{query}$query$)|
+      Injector.capture_ddl_query(query, "$query$")
     end
 
     def capture_version_query(version \\ migration_version()) do
-      ~s|CALL electric.assign_migration_version('#{version}')|
+      Injector.capture_version_query(version, "$query$")
     end
 
     def migration_version do
@@ -76,6 +77,11 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def parse_describe(sql, name \\ "") do
     [
+      # putting the close here makes the tests difficult -- 
+      # because we can only really respond to the parse message
+      # any close->closecomplete pair should just come through the system
+      # (client->server->client) untouched
+      # %M.Close{type: "S", name: name},
       %M.Parse{query: sql, name: name},
       %M.Describe{name: name},
       %M.Flush{}
@@ -84,6 +90,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def parse_describe_complete(params \\ []) do
     [
+      # %M.CloseComplete{},
       %M.ParseComplete{},
       struct(%M.ParameterDescription{}, params),
       %M.NoData{}
