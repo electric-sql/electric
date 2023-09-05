@@ -24,19 +24,19 @@ config :logger,
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [
+    :client_id,
+    :component,
     :connection,
+    :instance_id,
     :origin,
-    :pid,
     :pg_client,
     :pg_producer,
     :pg_slot,
+    :pid,
     :remote_ip,
-    :component,
-    :instance_id,
-    :client_id,
-    :user_id,
-    :metadata,
     :request_id
+    :sq_client,
+    :user_id
   ]
 
 config :electric,
