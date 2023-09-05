@@ -15,7 +15,6 @@ docker run \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
-    -p 5050:5050 \
     -p 5133:5133 \
     -p 5433:5433 \
     electricsql/electric
@@ -37,8 +36,7 @@ Everything in the table below that doesn't have a default value is required to r
 | `DATABASE_REQUIRE_SSL`<p>&nbsp;&nbsp;(`false`)</p>              | Set to `yes` or `true` to require SSL for the connection to the database. Alternatively configure SSL for the connection by adding `sslmode=require` to [the `DATABASE_URL` parameters](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). Values set in the `DATABASE_URL` will have precedence.                                                   |
 | `LOGICAL_PUBLISHER_HOST`                                        | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`.                                                                                                                                                                                                                    |
 | `LOGICAL_PUBLISHER_PORT`<p>&nbsp;&nbsp;(`5433`)</p>             | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                                                                         |
-| `HTTP_API_PORT`<p>&nbsp;&nbsp;(`5050`)</p>                      | Port to expose the HTTP API endpoint on.                                                                                                                                                                                                                                                                                                                                          |
-| `WEBSOCKET_PORT`<p>&nbsp;&nbsp;(`5133`)</p>                     | Port to expose the `/ws` path for the replication over the websocket.                                                                                                                                                                                                                                                                                                             |
+| `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>                     | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`                                                                                                                                                                                                                              |
 | `OFFSET_STORAGE_FILE`<p>&nbsp;&nbsp;(`offset_storage.dat`)</p>  | Path to the file storing the mapping between connected Postgres, Client instances, and an internal event log. Should be persisted between Electric restarts.                                                                                                                                                                                                                      |
 
 ### Authentication config

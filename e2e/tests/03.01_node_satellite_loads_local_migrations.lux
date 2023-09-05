@@ -23,6 +23,8 @@
 [invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations]
 
 [shell satellite_1]
+    # Disable fail pattern because electric is not running and thus cannot be reached
+    -
     [invoke log "Verifying that migrations have been loaded on satellite_1"]
     [invoke node_await_table "foo"]
     [invoke node_await_table "bar"]

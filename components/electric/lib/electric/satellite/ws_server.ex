@@ -1,194 +1,149 @@
-defmodule Electric.Satellite.WsServer do
-  require Pathex
-  alias Electric.Utils
-  alias Electric.Postgres.CachedWal
-  alias Electric.Replication.InitialSync
-  alias Electric.Satellite.Protocol
-  alias Electric.Satellite.Protocol.{State, InRep, OutRep}
-  alias Electric.Replication.OffsetStorage
+defmodule Electric.Satellite.WebsocketServer do
+  @moduledoc """
+  WebSock handler that speaks Satellite protocol.
 
-  use Pathex, default_mod: :map
-  use Electric.Satellite.Protobuf
+  This module is responsible for handling the replication going to Satellite
+  instances, and coming from them. Most of actual logic is in a separate module,
+  `Electric.Satellite.Protocol` (but this is still the same process as this server),
+  which actually forms responses for messages.
 
-  import Protocol, only: :macros
+  ## Replication from Electric to Satellites
+
+  The websocket server implements a GenStage consumer message interface, and when
+  Satellite connects to the server, the server connects to a GenStage producer to get
+  transactions to be sent to the client.
+
+  ## Replication from Satellite to Electric
+
+  When the connection is established with Satellite, a separate process is spawned, which
+  is a GenStage consumer. That consumer subscribes to this websocket server - the server
+  implements a GenStage producer message interface as well. As soon as that consumer is
+  subscribed, websocket server sends a request to Satellite telling it to start replication.
+  Anything coming from Satellite is then sent to the consumer, and any persistence concerns
+  are out of scope of this process.
+  """
+
+  @behaviour WebSock
 
   require Logger
+  use Pathex, default_mod: :map
+
+  use Electric.Satellite.Protobuf
+  import Electric.Satellite.Protocol, only: :macros
+
+  alias Electric.Utils
+  alias Electric.Postgres.CachedWal
+  alias Electric.Replication.OffsetStorage
+  alias Electric.Replication.InitialSync
+  alias Electric.Satellite.Protocol
+  alias Electric.Satellite.Protocol.State
+  alias Electric.Satellite.Protocol.OutRep
+  alias Electric.Satellite.Protocol.InRep
 
   # in milliseconds
   @ping_interval 5_000
-  @inactivity_timeout 10_000_000
-
-  def child_spec(opts) do
-    %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}}
-  end
-
-  @spec start_link(port: pos_integer()) :: {:ok, pid()} | {:error, any()}
-  def start_link(opts) do
-    port = Keyword.fetch!(opts, :port)
-    # cowboy requires a unique name. so allow for configuration for test servers
-    name = Keyword.get(opts, :name, :ws)
-    auth_provider = Keyword.fetch!(opts, :auth_provider)
-
-    opts = Keyword.put_new(opts, :subscription_data_fun, &InitialSync.query_subscription_data/2)
-
-    Logger.debug(
-      "Starting WS server #{inspect(name)} on port #{port} with auth provider: #{inspect(elem(auth_provider, 0))}"
-    )
-
-    dispatch =
-      :cowboy_router.compile([
-        {:_,
-         [
-           {"/ws", __MODULE__,
-            Keyword.take(opts, [:auth_provider, :pg_connector_opts, :subscription_data_fun])}
-         ]}
-      ])
-
-    :cowboy.start_clear(name, [port: port], %{
-      :env => %{dispatch: dispatch},
-      :idle_timeout => @inactivity_timeout
-    })
-  end
 
   def reg_name(name) do
     Electric.name(__MODULE__, name)
   end
 
-  def init(req, opts) do
-    # NOTE: If we intend to use headers to do authentification
-    # we should do it here. For now we purely rely on protobuf auth
-    # messages
-    {ip, port} = :cowboy_req.peer(req)
-    client = "#{:inet.ntoa(ip)}:#{port}"
-    auth_provider = Keyword.fetch!(opts, :auth_provider)
-    pg_connector_opts = Keyword.fetch!(opts, :pg_connector_opts)
-    subscription_data_fun = Keyword.fetch!(opts, :subscription_data_fun)
-
-    # Add the cluster id to the logger metadata to make filtering easier in the case of global log
-    # aggregation
-    Logger.metadata(instance_id: Electric.instance_id())
-
-    {:cowboy_websocket, req,
-     %State{
-       client: client,
+  @impl WebSock
+  def init(opts) do
+    {:ok,
+     schedule_ping(%State{
        last_msg_time: :erlang.timestamp(),
-       auth_provider: auth_provider,
-       pg_connector_opts: pg_connector_opts,
-       subscription_data_fun: subscription_data_fun
-     }}
+       auth_provider: Keyword.fetch!(opts, :auth_provider),
+       pg_connector_opts: Keyword.fetch!(opts, :pg_connector_opts),
+       subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun)
+     })}
   end
 
-  def websocket_init(%State{client: client} = state) do
-    # NOTE: Be careful with registration, init and websocket_init are called
-    # in different processes in cowboy 2.9
+  @impl WebSock
+  def handle_in({data, opcode: :binary}, state) do
+    with <<msg_type::8, msg_data::binary>> <- data,
+         {:ok, msg} <- PB.decode(msg_type, msg_data) do
+      Logger.debug("ws data received: #{inspect(msg)}")
+      process_message(msg, state)
+    else
+      error ->
+        Logger.error("Client sent corrupted WS data: #{inspect(error)} (data #{inspect(data)})")
 
-    Logger.metadata(sq_client: client)
-    Logger.debug("Satellite ws connection initialized by #{client}")
-
-    {[], schedule_ping(state)}
-  end
-
-  def websocket_handle({:binary, msg}, %State{} = state) do
-    last_msg_time = :os.timestamp()
-
-    case handle_data(msg) do
-      {:ok, request} ->
-        Logger.debug("ws data received: #{inspect(request)}")
-
-        try do
-          case Protocol.process_message(request, state) do
-            {nil, state1} ->
-              {[], %State{state1 | last_msg_time: last_msg_time}}
-
-            {:error, error} ->
-              frame = binary_frame(error)
-              {[frame, :close], state}
-
-            {:stop, state} ->
-              {[:close], state}
-
-            {reply, state1} ->
-              {binary_frames(reply), %State{state1 | last_msg_time: last_msg_time}}
-
-            {:force_unpause, reply, state} ->
-              %State{state | last_msg_time: last_msg_time}
-              |> then(&unpause_and_send_pending_events([reply], &1))
-              |> binary_frames()
-          end
-        rescue
-          e ->
-            Logger.error("""
-            #{Exception.format(:error, e, __STACKTRACE__)}
-            While handling message from the client:
-            #{String.replace(inspect(request, pretty: true), ~r/^/m, "  ")}"
-            """)
-
-            frame = binary_frame(%SatErrorResp{})
-            {[frame, :close], state}
-        end
-
-      {:error, error} ->
-        Logger.error("ws data corrupted: #{inspect(error)}")
-        {[binary_frame(%SatErrorResp{}), :close], state}
+        {:stop, :normal, {1007, "Message not formatted according to Electric protocol"},
+         binary_frame(%SatErrorResp{}), state}
     end
   end
 
-  def websocket_info({:"$gen_consumer", from, msg}, state) do
+  @spec process_message(PB.sq_pb_msg(), State.t()) :: WebSock.handle_result()
+  defp process_message(msg, %State{} = state) do
+    last_msg_time = :erlang.timestamp()
+
+    case Protocol.process_message(msg, %State{state | last_msg_time: last_msg_time}) do
+      {:stop, state} -> {:stop, :normal, state}
+      {:error, error} -> {:stop, :normal, 1007, binary_frames(error), state}
+      {nil, state} -> {:ok, state}
+      {reply, state} -> push({reply, state})
+      {:force_unpause, reply, state} -> push(unpause_and_send_pending_events([reply], state))
+    end
+  rescue
+    e ->
+      Logger.error("""
+      #{Exception.format(:error, e, __STACKTRACE__)}
+      While handling message from the client:
+      #{String.replace(inspect(msg, pretty: true), ~r/^/m, "  ")}"
+      """)
+
+      {:stop, e, {1011, "Failed to process message"}, binary_frame(%SatErrorResp{}), state}
+  end
+
+  @impl WebSock
+  # These four `handle_info` cases allow this websocket to act as a GenStage consumer and producer
+  def handle_info({:"$gen_consumer", from, msg}, state) do
     Logger.debug("msg from producer: #{inspect(msg)}")
     handle_producer_msg(from, msg, state)
   end
 
-  def websocket_info({:"$gen_producer", from, msg}, state) do
+  def handle_info({:"$gen_producer", from, msg}, state) do
     Logger.debug("msg from consumer: #{inspect(msg)}")
     handle_consumer_msg(from, msg, state)
   end
 
-  def websocket_info({:DOWN, _ref, :process, pid, _reason}, %State{in_rep: in_rep} = state)
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, %State{in_rep: in_rep} = state)
       when in_rep.pid == pid do
     handle_consumer_msg({in_rep.pid, in_rep.stage_sub}, {:cancel, :down}, state)
   end
 
-  def websocket_info({:DOWN, _ref, :process, pid, _reason}, %State{out_rep: out_rep} = state)
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, %State{out_rep: out_rep} = state)
       when out_rep.pid == pid do
     # FIXME: Check if it's the provider that failed, or consumer and
     # act accordingly
     handle_producer_msg({out_rep.pid, out_rep.stage_sub}, {:cancel, :down}, state)
   end
 
-  def websocket_info({:timeout, tref, :ping_timer}, %State{ping_tref: tref1} = state)
-      when tref == tref1 do
+  def handle_info({:timeout, :ping_timer}, %State{} = state) do
     case state.last_msg_time do
-      nil ->
-        {[binary_frame(%SatPingReq{})],
-         schedule_ping(%State{state | ping_tref: nil, last_msg_time: :ping_sent})}
-
       :ping_sent ->
         Logger.info("Client is not responding to ping, disconnecting")
-        {[:close], state}
+        {:stop, :normal, {1005, "Client not responding to pings"}, state}
 
       last_msg_time ->
-        case :timer.now_diff(:erlang.timestamp(), last_msg_time) >
-               @ping_interval * 1000 do
-          true ->
-            {[binary_frame(%SatPingReq{})],
-             schedule_ping(%State{state | ping_tref: nil, last_msg_time: :ping_sent})}
-
-          false ->
-            {[], schedule_ping(%State{state | ping_tref: nil})}
+        if :timer.now_diff(:erlang.timestamp(), last_msg_time) > @ping_interval * 1000 do
+          push({%SatPingReq{}, schedule_ping(%{state | last_msg_time: :ping_sent})})
+        else
+          {:ok, schedule_ping(state)}
         end
     end
   end
 
   # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully.
   # We need to report to Satellite.
-  def websocket_info({Protocol, :lsn_report, lsn}, %State{} = state) do
-    {[binary_frame(%SatPingResp{lsn: lsn})], state}
+  def handle_info({Protocol, :lsn_report, lsn}, %State{} = state) do
+    push({%SatPingResp{lsn: lsn}, state})
   end
 
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
-  def websocket_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
+  def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
     # Fetch the latest observed LSN from the cached WAL. We have to do it before fetching migrations.
     #
     # If we were to do it the other way around, we could miss a migration that is committed right after the call to
@@ -213,45 +168,46 @@ defmodule Electric.Satellite.WsServer do
       Protocol.subscribe_client_to_replication_stream(lsn, state)
       |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
-    {binary_frames(msgs), state}
+    push({msgs, state})
   end
 
-  def websocket_info({:subscription_data, subscription_id, _}, %State{} = state)
+  def handle_info({:subscription_data, subscription_id, _}, %State{} = state)
       when not is_map_key(state.subscriptions, subscription_id) do
     Logger.debug(
       "Received initial data for unknown subscription #{subscription_id}, likely it has been cancelled"
     )
 
-    {[], state}
+    {:ok, state}
   end
 
-  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state)
+  def handle_info({:subscription_data, subscription_id, data}, %State{} = state)
       when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) do
     Logger.debug(
       "Received initial data for subscription #{subscription_id} while paused waiting for it"
     )
 
-    send_subscription_data_and_unpause(subscription_id, data, state)
-    |> binary_frames()
+    push(send_subscription_data_and_unpause(subscription_id, data, state))
   end
 
-  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state)
+  def handle_info({:subscription_data, subscription_id, data}, %State{} = state)
       when is_out_rep_paused(state) do
     Logger.debug(
       "Received initial data for subscription #{subscription_id} while paused waiting for a different subscription"
     )
 
-    {[], %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
+    {:ok,
+     %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
-  def websocket_info({:subscription_data, subscription_id, data}, %State{} = state) do
+  def handle_info({:subscription_data, subscription_id, data}, %State{} = state) do
     Logger.debug("Saving the initial data until we reach insertion point")
 
     # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
-    {[], %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
+    {:ok,
+     %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
-  def websocket_info({:subscription_init_failed, subscription_id, reason}, state) do
+  def handle_info({:subscription_init_failed, subscription_id, reason}, state) do
     Logger.error(
       "Couldn't retrieve initial data for subscription #{subscription_id}, with reason #{inspect(reason)}"
     )
@@ -269,169 +225,139 @@ defmodule Electric.Satellite.WsServer do
         # We're paused on this, we want to send the error and unpause
         error
         |> send_subscription_data_error_and_unpause(state)
-        |> binary_frames()
+        |> push()
 
       state ->
         # We're either paused on smth else, or replication is stopped, or replication is ongoing
         # In any case, we just remove the "future" pause point and notify the client
         # We remove the pause point and notify the client
-        {binary_frames(error),
-         %{state | out_rep: OutRep.remove_pause_point(state.out_rep, subscription_id)}}
+
+        {error, %{state | out_rep: OutRep.remove_pause_point(state.out_rep, subscription_id)}}
+        |> push()
     end
   end
 
   if Mix.env() == :test do
-    def websocket_info({:pause_during_initial_sync, ref, client_pid}, state) do
+    def handle_info({:pause_during_initial_sync, ref, client_pid}, state) do
       Process.put(:pause_during_initial_sync, {ref, client_pid})
-      {[], state}
+      {:ok, state}
     end
   end
 
-  def websocket_info(msg, state) do
+  def handle_info(msg, state) do
     # There might be a race between DOWN message from consumer and following
     # attempt to subscribe, so it's ok to receive down messages here on some
     # occasion
     Logger.warning("Unhandled msg ws connection: #{inspect(msg)}")
-    {[], state}
+    {:ok, state}
   end
 
-  # -------------------------------------------------------------------------------
-
-  # Messages coming from producer
+  # Handlers for GenStage messages coming from Producer and Consumer
   @spec handle_producer_msg(
           GenStage.from(),
           {:cancel, term()} | [term()],
           State.t()
-        ) :: {list(), State.t()}
-  def handle_producer_msg(
-        {_pid, _sub_tag},
-        {:cancel, reason},
-        %State{out_rep: %OutRep{} = out_rep} = state
-      ) do
+        ) :: WebSock.handle_result()
+  defp handle_producer_msg(_, {:cancel, reason}, %State{out_rep: out_rep} = state) do
     Logger.debug("log producer canceled subscription: #{inspect(reason)}")
 
-    {[binary_frame(%SatErrorResp{})],
-     %State{state | out_rep: %OutRep{out_rep | pid: nil, stage_sub: nil}}}
+    push({%SatErrorResp{}, %State{state | out_rep: %OutRep{out_rep | pid: nil, stage_sub: nil}}})
   end
 
-  def handle_producer_msg(from, [_ | _], %State{out_rep: out_rep} = state)
-      when from != {out_rep.pid, out_rep.stage_sub} do
+  defp handle_producer_msg(from, _events, %State{out_rep: out_rep} = state)
+       when from != {out_rep.pid, out_rep.stage_sub} do
     # We're not subscribed to this, let's drop it
-    {[], state}
+    {:ok, state}
   end
 
-  def handle_producer_msg(from, [_ | _] = events, %State{} = state)
-      when is_out_rep_active(state) do
+  defp handle_producer_msg(from, events, %State{} = state)
+       when is_out_rep_active(state) do
     GenStage.ask(from, 1)
 
-    send_events_and_maybe_pause(events, state)
-    |> binary_frames()
+    push(send_events_and_maybe_pause(events, state))
   end
 
-  def handle_producer_msg(from, [_ | _] = events, %State{} = state)
-      when is_out_rep_paused(state) do
+  defp handle_producer_msg(from, events, %State{} = state)
+       when is_out_rep_paused(state) do
     GenStage.ask(from, 1)
-    {[], %{state | out_rep: OutRep.add_events_to_buffer(state.out_rep, events)}}
+    {:ok, %{state | out_rep: OutRep.add_events_to_buffer(state.out_rep, events)}}
   end
 
-  def handle_producer_msg(_from, _events, %State{out_rep: _out_rep} = state) do
+  defp handle_producer_msg(_from, _events, state) do
     # Ignore messages, as subscription is not active
-    {[], state}
+    {:ok, state}
   end
 
-  # Messages coming from consumer
   @spec handle_consumer_msg(
           {pid(), reference()},
           {:ask, pos_integer()} | {:cancel, any} | {:subscribe, any, any},
           State.t()
-        ) :: {[{:binary, iodata()}], State.t()}
-  def handle_consumer_msg(
-        {pid, sub_tag},
-        {:subscribe, _current, _options},
-        %State{in_rep: in_rep} = state
-      ) do
+        ) :: WebSock.handle_result()
+  defp handle_consumer_msg(
+         {pid, sub_tag},
+         {:subscribe, _current, _options},
+         %State{in_rep: in_rep} = state
+       ) do
     # Subscription is either initial subscription, or restart of the consumer
     case in_rep.pid do
       nil -> Process.monitor(pid)
       ^pid -> :ok
-      pid -> Process.monitor(pid)
+      _pid -> Process.monitor(pid)
     end
 
-    lsn =
-      case OffsetStorage.get_satellite_lsn(state.client_id) do
-        nil -> ""
-        lsn -> lsn
-      end
+    lsn = OffsetStorage.get_satellite_lsn(state.client_id) || <<>>
 
     msgs =
-      cond do
-        in_rep.status == nil or in_rep.status == :paused ->
-          [
-            %SatInStartReplicationReq{lsn: lsn}
-          ]
-
-        in_rep.status == :active ->
-          [
-            %SatInStopReplicationReq{},
-            %SatInStartReplicationReq{lsn: lsn}
-          ]
-
-        in_rep.status == :requested ->
-          []
+      case in_rep.status do
+        :requested -> []
+        :active -> [%SatInStopReplicationReq{}, %SatInStartReplicationReq{lsn: lsn}]
+        st when st in [nil, :paused] -> [%SatInStartReplicationReq{lsn: lsn}]
       end
 
     in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
-    {binary_frames(msgs), %State{state | in_rep: in_rep}}
+    push({msgs, %State{state | in_rep: in_rep}})
   end
 
-  # Gen consumer cancels subscription, may only happen for subscribed consumer
-  def handle_consumer_msg(
-        {pid, sub_tag},
-        {:cancel, _reason},
-        %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
-      ) do
+  defp handle_consumer_msg(
+         {pid, sub_tag},
+         {:cancel, _reason},
+         %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
+       ) do
     # status == :nil is not possible, as it is set to pause once we have consumer
     maybe_stop =
       case in_rep.status do
-        :active -> [binary_frame(%SatInStopReplicationReq{})]
+        :active -> [%SatInStopReplicationReq{}]
         :paused -> []
-        :requested -> [binary_frame(%SatInStopReplicationReq{})]
+        :requested -> [%SatInStopReplicationReq{}]
       end
 
     in_rep = %InRep{state.in_rep | queue: :queue.new(), pid: nil, stage_sub: nil, status: :paused}
-    {maybe_stop, %State{state | in_rep: in_rep}}
+    push({maybe_stop, %State{state | in_rep: in_rep}})
   end
 
-  # Gen consumer asks for another portion of data may only happen for subscribed consumer
-  def handle_consumer_msg(
-        {pid, sub_tag},
-        {:ask, demand},
-        %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
-      ) do
+  defp handle_consumer_msg(
+         {pid, sub_tag},
+         {:ask, demand},
+         %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
+       ) do
     case in_rep.status do
       :active ->
-        {[], %State{state | in_rep: Protocol.send_downstream(state.in_rep)}}
+        {:ok, %State{state | in_rep: Protocol.send_downstream(state.in_rep)}}
 
-      st
-      when st == :requested or
-             st == :paused ->
-        {[], %State{state | in_rep: %InRep{in_rep | demand: demand + in_rep.demand}}}
+      st when st in [:requested, :paused] ->
+        {:ok, %State{state | in_rep: %InRep{in_rep | demand: demand + in_rep.demand}}}
     end
   end
 
-  @spec handle_data(binary) :: {:error, term} | {:ok, PB.sq_pb_msg()}
-  defp handle_data(data) do
-    try do
-      <<msg_type::8, msg_data::binary>> = data
-      PB.decode(msg_type, msg_data)
-    catch
-      _ -> {:error, :unknown_msg_type}
-    end
-  end
+  @typep deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
+  @typep pushable :: {deep_msg_list(), State.t()}
 
-  defp binary_frames({pb_msg, %State{} = state}), do: {binary_frames(pb_msg), state}
+  @spec push(pushable()) :: WebSock.handle_result()
+  defp push({pb_msg, %State{} = state}), do: {:push, binary_frames(pb_msg), state}
+
+  @spec binary_frames(deep_msg_list()) :: [{:binary, iolist()}]
   defp binary_frames(pb_msg) when not is_list(pb_msg), do: [binary_frame(pb_msg)]
-  defp binary_frames(msgs), do: Utils.flatten_map(msgs, &binary_frame/1)
+  defp binary_frames(msgs) when is_list(msgs), do: Utils.flatten_map(msgs, &binary_frame/1)
 
   defp binary_frame(pb_msg) do
     Logger.debug("Responding with: #{inspect(pb_msg)}")
@@ -439,11 +365,13 @@ defmodule Electric.Satellite.WsServer do
     {:binary, iolist}
   end
 
-  defp schedule_ping(%State{ping_tref: nil} = state) do
-    tref = :erlang.start_timer(@ping_interval, self(), :ping_timer)
-    %State{state | ping_tref: tref}
+  @spec schedule_ping(State.t()) :: State.t()
+  defp schedule_ping(%State{} = state) do
+    Process.send_after(self(), {:timeout, :ping_timer}, @ping_interval)
+    state
   end
 
+  @spec send_events_and_maybe_pause([PB.sq_pb_msg()], State.t()) :: pushable()
   defp send_events_and_maybe_pause(events, %State{} = state)
        when no_pending_subscriptions(state) do
     Protocol.handle_outgoing_txs(events, state)
@@ -477,6 +405,7 @@ defmodule Electric.Satellite.WsServer do
     end
   end
 
+  @spec unpause_and_send_pending_events(deep_msg_list(), State.t()) :: pushable()
   defp unpause_and_send_pending_events(msgs, state) do
     buffer = state.out_rep.outgoing_ops_buffer
 
@@ -494,6 +423,8 @@ defmodule Electric.Satellite.WsServer do
     {[msgs, next_msgs], state}
   end
 
+  @spec send_subscription_data_and_unpause(deep_msg_list(), String.t(), any(), State.t()) ::
+          pushable()
   defp send_subscription_data_and_unpause(msgs \\ [], id, data, state) do
     state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
 
@@ -502,6 +433,7 @@ defmodule Electric.Satellite.WsServer do
     unpause_and_send_pending_events([msgs, more_msgs], state)
   end
 
+  @spec send_subscription_data_error_and_unpause(deep_msg_list(), State.t()) :: pushable()
   defp send_subscription_data_error_and_unpause(error, state) do
     unpause_and_send_pending_events(
       [error],
@@ -512,14 +444,14 @@ defmodule Electric.Satellite.WsServer do
   if Mix.env() == :test do
     defp maybe_pause(lsn) do
       with {client_ref, client_pid} <- Process.get(:pause_during_initial_sync) do
-        Logger.debug("WsServer pausing")
+        Logger.debug("WebsocketServer pausing")
         send(client_pid, {client_ref, :server_paused})
 
         {:ok, request_ref} = CachedWal.Api.request_notification(lsn)
 
         receive do
           {:cached_wal_notification, ^request_ref, :new_segments_available} ->
-            Logger.debug("WsServer unpaused")
+            Logger.debug("WebsocketServer unpaused")
             :ok
         after
           5_000 ->

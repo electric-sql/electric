@@ -65,7 +65,7 @@ npx electric-sql generate [--source <url>] [--out <path>]
 The command above supports 2 optional arguments:
 
 - `--source <url>` to specify the url to the Electric endpoint.
-  If not provided it uses the default url `http://localhost:5050`
+  If not provided it uses the default url `http://localhost:5133`
 - `--out <path>` to customise where the generated client is written.
   If not provided the default path is `./src/generated/models`
 

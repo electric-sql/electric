@@ -4,7 +4,7 @@
 [invoke setup]
 
 [newshell electric_curl]
-    !curl http://localhost:5050/api/status
+    !curl http://localhost:5133/api/status
     ?{"connectors":{"postgres_1":true}}
 
 [cleanup]

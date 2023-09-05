@@ -7,31 +7,27 @@ defmodule Electric.Application do
   use Application
 
   def start(_type, _args) do
-    auth_provider = Electric.Satellite.Auth.provider()
-
-    # NOTE(alco): Intentionally making the assumption here that there's only a single connector configured.
-    # With Vaxine and multi-master PG replication going away, this is going to become the new reality soon.
-    postgres_connector_opts =
-      case Application.get_env(:electric, Electric.Replication.Connectors, []) do
-        [{name, config}] -> Keyword.put(config, :origin, to_string(name))
-        [] -> []
-      end
-
     children = [
       Electric.Telemetry,
       Electric.Postgres.OidDatabase,
       Electric.Replication.OffsetStorage,
-      {Plug.Cowboy, scheme: :http, plug: Electric.Plug.Router, options: [port: http_api_port()]},
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
-      Electric.Satellite.WsServer.child_spec(
-        port: ws_server_port(),
-        auth_provider: auth_provider,
-        pg_connector_opts: postgres_connector_opts
-      ),
-      Electric.PostgresServer.child_spec(port: pg_server_port())
+      {ThousandIsland,
+       port: pg_server_port(), handler_module: Electric.Replication.Postgres.TcpServer}
     ]
+
+    children =
+      children ++
+        unless Application.get_env(:electric, :disable_listeners, false) do
+          [
+            # Satellite websocket connections are served from this router
+            {Bandit, plug: Electric.Plug.Router, port: ws_server_port()}
+          ]
+        else
+          []
+        end
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
     {:ok, supervisor} = Supervisor.start_link(children, opts)
@@ -47,11 +43,20 @@ defmodule Electric.Application do
     {:ok, supervisor}
   end
 
-  defp http_api_port,
-    do: Application.fetch_env!(:electric, :http_api_port)
+  def pg_connection_opts() do
+    # NOTE(alco): Intentionally making the assumption here that there's only a single connector configured.
+    # With Vaxine and multi-master PG replication going away, this is going to become the new reality soon.
+
+    case Application.get_env(:electric, Electric.Replication.Connectors, []) do
+      [{name, config}] -> Keyword.put(config, :origin, to_string(name))
+      [] -> raise "Electric isn't meant to be ran without a connection to PostgreSQL"
+    end
+  end
 
   defp ws_server_port,
-    do: Application.fetch_env!(:electric, Electric.Satellite.WsServer) |> Keyword.fetch!(:port)
+    do:
+      Application.fetch_env!(:electric, Electric.Satellite.WebsocketServer)
+      |> Keyword.fetch!(:port)
 
   defp pg_server_port,
     do: Application.fetch_env!(:electric, Electric.PostgresServer) |> Keyword.fetch!(:port)

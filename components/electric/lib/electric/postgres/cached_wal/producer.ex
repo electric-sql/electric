@@ -3,12 +3,12 @@ defmodule Electric.Postgres.CachedWal.Producer do
   Cached WAL GenStage producer.
 
   This producer is meant to be used as the producer for
-  `Electric.Satellite.WsServer` acting as a consumer. It is
+  `Electric.Satellite.WebsocketServer` acting as a consumer. It is
   meant to be used with at most one subscriber at a time, starting to read
   from the cached WAL storage only when the first subscription is established.
 
   The producer itself is a temporary solution as a holdover before we figure out
-  how better to organize the `WsServer` code to read from WAL within the same process.
+  how better to organize the `WebsocketServer` code to read from WAL within the same process.
   """
   use GenStage
   require Logger

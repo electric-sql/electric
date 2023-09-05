@@ -43,8 +43,6 @@ defmodule Electric.MixProject do
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},
       {:postgresql_uri, "~> 0.1.0"},
-      {:plug_cowboy, "~> 2.0"},
-      {:ranch, "~> 2.1", override: true},
       {:ssl_verify_fun, "~> 1.1.7", override: true},
       {:jason, "~> 1.4"},
       {:dialyxir, "~> 1.3", only: [:dev], runtime: false},
@@ -52,12 +50,10 @@ defmodule Electric.MixProject do
       {:gproc, "~> 0.9.0"},
       {:protox, "~> 1.7"},
       {:gun, "~> 2.0"},
-      {:cowboy, "~> 2.9"},
       {:gen_stage, "~> 1.2"},
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_metrics_prometheus, "~> 1.1.0"},
       {:joken, "~> 2.6"},
       {:ets, "~> 0.9.0"},
       {:libgraph, "~> 0.16.0"},
@@ -66,7 +62,9 @@ defmodule Electric.MixProject do
       {:exqlite, "~> 0.13.5", only: [:dev, :test]},
       {:tzdata, "~> 1.1", only: [:dev, :test]},
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
-      {:nimble_pool, "~> 1.0"}
+      {:nimble_pool, "~> 1.0"},
+      {:bandit, "~> 1.0-pre"},
+      {:thousand_island, "~> 1.0-pre"}
     ]
   end
 

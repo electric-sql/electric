@@ -1,6 +1,6 @@
 defmodule Electric.Replication.Postgres.TcpServer do
   @moduledoc """
-  Ranch protocol that speaks Postgres messaging. It supports a small subset of Postgres queries
+  ThousandIsland handler hat speaks Postgres messaging. It supports a small subset of Postgres queries
   required to establish an perform logical replication.
 
   ## Supported commands
@@ -108,8 +108,9 @@ defmodule Electric.Replication.Postgres.TcpServer do
     After the initial copy has been complete, the client drops the created transient replication slot.
   """
 
-  use GenServer
-  @behaviour :ranch_protocol
+  use ThousandIsland.Handler
+  alias ThousandIsland.Socket
+
   require Logger
 
   alias Electric.Postgres.Messaging
@@ -118,10 +119,12 @@ defmodule Electric.Replication.Postgres.TcpServer do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.Lsn
 
+  @pg_cancel_request_magic_sequence <<1234::16, 5678::16>>
+  @pg_ssl_upgrade_magic_sequence <<1234::16, 5679::16>>
+  @pg_gssapi_upgrade_magic_sequence <<1234::16, 5680::16>>
+
   defmodule State do
-    defstruct socket: nil,
-              transport: nil,
-              client: nil,
+    defstruct client: nil,
               settings: %{},
               accept_ssl: false,
               mode: :normal,
@@ -130,8 +133,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
               slot_proc_ref: nil
 
     @type t() :: %__MODULE__{
-            socket: :ranch_transport.socket(),
-            transport: module(),
             client: String.t() | nil,
             settings: %{},
             accept_ssl: boolean(),
@@ -142,174 +143,267 @@ defmodule Electric.Replication.Postgres.TcpServer do
           }
   end
 
-  @impl :ranch_protocol
-  def start_link(ref, transport, protocol_options) do
-    GenServer.start_link(__MODULE__, {ref, transport, protocol_options})
-  end
+  @type handler_result :: ThousandIsland.Handler.handler_result()
 
-  @impl GenServer
-  def init({ref, transport, _}) do
-    {:ok, %State{transport: transport}, {:continue, {:handshake, ref}}}
-  end
+  @impl ThousandIsland.Handler
+  def handle_connection(socket, _init) do
+    {:ok, {ip, port}} = Socket.peername(socket)
 
-  @impl GenServer
-  def handle_continue({:handshake, ref}, state) do
-    # Accept socket from Ranch and try to talk Postgres with it
-    {:ok, socket} = :ranch.handshake(ref)
-    {:ok, {ip, port}} = :inet.peername(socket)
     client = "#{:inet.ntoa(ip)}:#{port}"
     Logger.metadata(pg_client: client)
     Logger.debug("Connection initialized by #{client}")
 
-    {:noreply, %State{state | socket: socket, client: client}, {:continue, :establish_connection}}
+    handshake(socket, %State{client: client})
   end
 
-  def handle_continue(:establish_connection, state) do
-    with {:ok, <<length::32>>} <- state.transport.recv(state.socket, 4, 100),
-         {:ok, data} <- state.transport.recv(state.socket, length - 4, 100) do
+  @spec handshake(Socket.t(), State.t()) :: handler_result()
+  defp handshake(%Socket{} = socket, %State{} = state) do
+    with {:ok, <<length::32>>} <- Socket.recv(socket, 4, 100),
+         {:ok, data} <- Socket.recv(socket, length - 4, 100) do
       :telemetry.execute([:electric, :postgres_tcp_server, :connection], %{total: 1})
-      establish_connection(data, state)
+      establish_connection(data, socket, state)
     else
       {:error, :timeout} ->
         Logger.debug("Connection timeout")
-        {:stop, :timeout, state}
+        {:close, state}
 
       {:error, :closed} ->
         Logger.debug("Connection closed by client")
-        state.transport.close(state.socket)
-        {:stop, :normal, state}
+        {:close, state}
     end
   end
 
-  def handle_continue({:cancel, <<0::14, b::15, c::3>>, 0}, state) do
-    # Pid serialization & cancellation works under the assumption that the Postgres will
-    # always connect to the same node of Electric, so the process that's handling the
-    # ongoing query must be on the same node
+  @spec establish_connection(binary(), Socket.t(), State.t()) ::
+          handler_result()
+  defp establish_connection(@pg_ssl_upgrade_magic_sequence, socket, state) do
+    # SSL connection request
+    Logger.debug("SSL upgrade requested by the client")
+    tcp_send(Messaging.deny_upgrade_request(), socket)
+    Logger.debug("SSL upgrade denied")
+
+    handshake(socket, state)
+  end
+
+  defp establish_connection(@pg_gssapi_upgrade_magic_sequence, socket, state) do
+    # GSSAPI encrypted connection request
+    # Deny the request and continue establishing the connection
+    tcp_send(Messaging.deny_upgrade_request(), socket)
+    Logger.debug("GSSAPI encrypted connection upgrade denied")
+
+    handshake(socket, state)
+  end
+
+  defp establish_connection(
+         @pg_cancel_request_magic_sequence <> <<pid::binary-4, secret::32>>,
+         _,
+         state
+       ) do
+    # Cancellation request
+    cancel_query(pid, secret, state)
+  end
+
+  defp establish_connection(<<3::16, 0::16, data::binary>>, socket, state) do
+    settings = parse_client_startup_settings(data)
+
+    if authentication_required?(state.client, settings) do
+      # TODO: Authentication is not implemented
+      Logger.debug("Authentication required for the client")
+
+      Messaging.error(:fatal,
+        code: "08004",
+        message: "Authentication is required for this client, but Electric does not support it"
+      )
+      |> tcp_send(socket)
+
+      {:error, :auth_not_implemented, state}
+    else
+      initialize_connection(socket, state, settings)
+    end
+  end
+
+  defp establish_connection(data, socket, state) do
+    Logger.warning("Unexpected data from the client during initialization: #{inspect(data)}")
+
+    Messaging.error(:fatal,
+      code: "08P01",
+      message: "Unexpected message during connection establishment"
+    )
+    |> then(&Socket.send(socket, &1))
+
+    {:close, state}
+  end
+
+  @spec initialize_connection(Socket.t(), State.t(), map()) :: handler_result()
+  defp initialize_connection(socket, %State{} = state, %{"replication" => "database"} = settings) do
+    if SchemaCache.ready?(settings["application_name"]) do
+      # TODO: Verify the server settings, maybe make them dynamic?
+      Messaging.authentication_ok()
+      |> Messaging.parameter_status("application_name", settings["application_name"])
+      |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
+      |> Messaging.parameter_status("server_encoding", "UTF8")
+      |> Messaging.parameter_status(
+        "server_version",
+        "electric-#{Application.spec(:electric, :vsn)}"
+      )
+      |> Messaging.parameter_status("standard_conforming_strings", "on")
+      |> Messaging.parameter_status("TimeZone", "Etc/UTC")
+      |> Messaging.backend_key_data(serialize_pid(self()), 0)
+      |> Messaging.ready()
+      |> tcp_send(socket)
+
+      Logger.metadata(pg_client: state.client, origin: settings["application_name"])
+
+      Logger.debug(
+        "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
+      )
+
+      {:continue, %State{state | settings: settings}}
+    else
+      Messaging.error(:fatal,
+        code: "08004",
+        message:
+          "Electric replication is not ready, missing schema for #{settings["application_name"]}"
+      )
+      |> tcp_send(socket)
+
+      Logger.debug(
+        "Denied connection for client #{settings["application_name"]}, schema not ready"
+      )
+
+      {:close, state}
+    end
+  end
+
+  defp initialize_connection(socket, %State{} = state, _settings) do
+    Messaging.error(:fatal,
+      code: "08004",
+      message: "Electric mesh allows connection only in `replication=database` mode"
+    )
+    |> tcp_send(socket)
+
+    {:close, state}
+  end
+
+  @spec cancel_query(binary(), integer(), State.t()) :: handler_result()
+  defp cancel_query(<<0::14, b::15, c::3>>, 0, state) do
     pid = :c.pid(0, b, c)
     Logger.debug("Cancellation request issued for #{inspect(pid)}")
     send(pid, :cancel_operation)
-    state.transport.close(state.socket)
-    {:stop, :normal, state}
-  end
-
-  # TODO: maybe support SSL?
-  def handle_continue(:upgrade_connection_to_ssl, %{accept_ssl: false} = state) do
-    # Deny the upgrade request and continue establishing the connection
-    tcp_send(Messaging.deny_upgrade_request(), state)
-    Logger.debug("SSL upgrade denied")
-    {:noreply, state, {:continue, :establish_connection}}
+    {:close, state}
   end
 
   defp get_length_and_maybe_data(<<length::32, data::binary>>, _), do: {:ok, length, data}
 
-  defp get_length_and_maybe_data(partial_length, state) do
+  defp get_length_and_maybe_data(partial_length, %Socket{} = socket) do
     expected_size = 4 - byte_size(partial_length)
 
-    with {:ok, rest_of_length} <- state.transport.recv(state.socket, expected_size, 100),
+    with {:ok, rest_of_length} <- Socket.recv(socket, expected_size, 100),
          <<length::32>> <- <<partial_length::binary, rest_of_length::binary>> do
       {:ok, length, <<>>}
     end
   end
 
-  defp get_data_and_tail(length, data, _state) when byte_size(data) == length,
+  defp get_data_and_tail(length, data, _socket) when byte_size(data) == length,
     do: {:ok, data, <<>>}
 
-  defp get_data_and_tail(length, data, _state) when byte_size(data) > length,
+  defp get_data_and_tail(length, data, _socket) when byte_size(data) > length,
     do: {:ok, binary_part(data, 0, length), binary_part(data, length, byte_size(data) - length)}
 
-  defp get_data_and_tail(length, data, state) when byte_size(data) < length do
-    with {:ok, rest_of_data} <- state.transport.recv(state.socket, length - byte_size(data), 100) do
+  defp get_data_and_tail(length, data, %Socket{} = socket) when byte_size(data) < length do
+    with {:ok, rest_of_data} <- Socket.recv(socket, length - byte_size(data), 100) do
       {:ok, data <> rest_of_data, <<>>}
     end
   end
 
-  @impl true
-  def handle_info({:tcp, socket, <<tag::8, contents::binary>>}, state) do
-    with {:ok, length, data} <- get_length_and_maybe_data(contents, state),
-         {:ok, data, tail} <- get_data_and_tail(length - 4, data, state),
-         {:ok, new_state} <- handle_message(tag, data, state) do
+  @impl ThousandIsland.Handler
+  def handle_data(<<tag::8, contents::binary>>, socket, state) do
+    with {:ok, length, data} <- get_length_and_maybe_data(contents, socket),
+         {:ok, data, tail} <- get_data_and_tail(length - 4, data, socket),
+         {:ok, new_state} <- handle_message(tag, data, socket, state) do
       if tail != "" do
         # Beginning of the next message got into this TCP packet, handling the rest
-        handle_info({:tcp, socket, tail}, new_state)
+        handle_data(tail, socket, new_state)
       else
-        :ok = state.transport.setopts(socket, active: :once)
-        {:noreply, new_state}
+        {:continue, new_state}
       end
     else
-      {:stop, reason, new_state} ->
-        state.transport.close(socket)
-        {:stop, reason, new_state}
+      {:close, new_state} ->
+        {:close, new_state}
 
       {:error, reason} ->
         Logger.debug(
           "Error while handling a TCP message with tag #{inspect(<<tag::8>>)}: #{reason}"
         )
 
-        state.transport.close(socket)
-        reason = if reason == :closed, do: :normal, else: reason
-        {:stop, reason, state}
+        if reason == :closed do
+          {:close, state}
+        else
+          {:error, reason, state}
+        end
     end
   end
 
   @impl true
-  def handle_info(:cancel_operation, state) do
+  def handle_info(:cancel_operation, {socket, state}) do
     Messaging.error(:fatal, code: "57014", message: "Query has been cancelled by the client")
     |> Messaging.ready()
-    |> tcp_send(state)
+    |> tcp_send(socket)
 
-    {:noreply, state}
+    {:noreply, {socket, state}, socket.read_timeout}
   end
 
   @impl true
-  def handle_info({:DOWN, ref, :process, :_, reason}, %State{slot_proc_ref: ref} = state) do
+  def handle_info(
+        {:DOWN, ref, :process, :_, reason},
+        {socket, %State{slot_proc_ref: ref} = state}
+      ) do
     case reason do
       :normal ->
-        {:noreply, state}
+        {:noreply, {socket, state}, socket.read_timeout}
 
       {:shutdown, _} ->
-        {:noreply, state}
+        {:noreply, {socket, state}, socket.read_timeout}
 
       _ ->
-        Logger.warning("slot server terminate abnormally, close connection")
-        {:stop, :shutdown, state}
+        Logger.warning("slot server terminated abnormally, close connection")
+        {:stop, :shutdown, {socket, state}}
     end
   end
 
   @impl true
-  def handle_info(msg, state) do
-    state.transport.close(state.socket)
-    Logger.debug("Socket closed by client #{inspect(state.client)}: #{inspect(msg)}")
-    {:stop, :shutdown, state}
+  def handle_info(msg, {socket, state}) do
+    Logger.debug("Unexpected info message: #{inspect(msg)}")
+    {:noreply, {socket, state}, socket.read_timeout}
   end
 
-  @spec handle_message(tag :: char(), body :: binary(), state :: State.t()) ::
-          {:ok, State.t()} | {:stop, atom(), State.t()}
-  defp handle_message(?X, "", state) do
+  @spec handle_message(tag :: char(), body :: binary(), socket :: Socket.t(), state :: State.t()) ::
+          {:ok, State.t()} | {:close, State.t()}
+  defp handle_message(?X, "", _, state) do
     # Session termination command
     Logger.debug("Session terminated by the client")
-    {:stop, :normal, state}
+    {:close, state}
   end
 
-  defp handle_message(?Q, data, state) do
+  defp handle_message(?Q, data, socket, state) do
     data
     |> String.trim_trailing(<<0>>)
     |> String.trim_trailing(";")
     |> collapse_unquoted_spaces()
     |> tap(&Logger.debug("Query received: #{inspect(&1)}"))
     |> String.split(" ", parts: 2, trim: true)
-    |> handle_query(state)
+    |> handle_query({socket, state})
     |> case do
       message when is_binary(message) ->
-        tcp_send(message, state)
+        tcp_send(message, socket)
         {:ok, state}
 
       {message, new_state} ->
-        tcp_send(message, new_state)
+        tcp_send(message, socket)
         {:ok, new_state}
     end
   end
 
-  defp handle_message(?c, "", %{mode: :copy} = state) do
+  defp handle_message(?c, "", socket, %{mode: :copy} = state) do
     # End copy mode
 
     Logger.debug("#{__MODULE__}: <EndCopy>")
@@ -320,12 +414,12 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> Messaging.command_complete("COPY 0")
     |> Messaging.command_complete("START_REPLICATION")
     |> Messaging.ready()
-    |> tcp_send(state)
+    |> tcp_send(socket)
 
     {:ok, %{state | mode: :normal, slot: nil}}
   end
 
-  defp handle_message(?d, <<?r, data::binary>>, %State{mode: :copy} = state) do
+  defp handle_message(?d, <<?r, data::binary>>, _, %State{mode: :copy} = state) do
     # Copy mode client status report
     # TODO: Maybe pass this info on to the SlotServer? We don't really do any thing with it right now
     <<written_wal::64, flushed_wal::64, applied_wal::64, client_timestamp::64,
@@ -348,7 +442,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:ok, state}
   end
 
-  defp handle_message(tag, data, state) do
+  defp handle_message(tag, data, socket, state) do
     Logger.warning(
       "Received unexpected message in mode #{state.mode} (tag #{inspect(<<tag::8>>)}): #{inspect(data)}"
     )
@@ -357,105 +451,13 @@ defmodule Electric.Replication.Postgres.TcpServer do
       code: "08P01",
       message: "Unexpected message during connection"
     )
-    |> tcp_send(state)
+    |> tcp_send(socket)
 
-    {:stop, :normal, state}
+    {:close, state}
   end
 
-  defp establish_connection(<<1234::16, 5679::16>>, state) do
-    # SSL connection request
-    Logger.debug("SSL upgrade requested by the client")
-    {:noreply, state, {:continue, :upgrade_connection_to_ssl}}
-  end
-
-  defp establish_connection(<<1234::16, 5678::16, pid::binary-4, secret::32>>, state) do
-    # Cancellation request
-    {:noreply, state, {:continue, {:cancel, pid, secret}}}
-  end
-
-  defp establish_connection(<<1234::16, 5680::16>>, state) do
-    # GSSAPI encrypted connection request
-    # Deny the request and continue establishing the connection
-    tcp_send(Messaging.deny_upgrade_request(), state)
-    Logger.debug("GSSAPI encrypted connection upgrade denied")
-    {:noreply, state, {:continue, :establish_connection}}
-  end
-
-  defp establish_connection(<<3::16, 0::16, data::binary>>, state) do
-    settings = parse_client_startup_settings(data)
-
-    if authentication_required?(state.client, settings) do
-      # TODO: `handle_continue` for authentication is not implemented
-      Logger.debug("Authentication required for the client")
-      {:noreply, %{state | settings: settings}, {:continue, :request_authentication}}
-    else
-      initialize_connection(state, settings)
-    end
-  end
-
-  defp establish_connection(data, state) do
-    Logger.warning("Unexpected data from the client during initialization: #{inspect(data)}")
-
-    Messaging.error(:fatal,
-      code: "08P01",
-      message: "Unexpected message during connection establishment"
-    )
-    |> tcp_send(state)
-
-    state.transport.close(state.socket)
-    {:stop, :normal, :state}
-  end
-
-  defp initialize_connection(%State{} = state, %{"replication" => "database"} = settings) do
-    if SchemaCache.ready?(settings["application_name"]) do
-      # TODO: Verify the server settings, maybe make them dynamic?
-      Messaging.authentication_ok()
-      |> Messaging.parameter_status("application_name", settings["application_name"])
-      |> Messaging.parameter_status("client_encoding", settings["client_encoding"])
-      |> Messaging.parameter_status("server_encoding", "UTF8")
-      |> Messaging.parameter_status("server_version", "electric-0.0.1")
-      |> Messaging.parameter_status("standard_conforming_strings", "on")
-      |> Messaging.parameter_status("TimeZone", "Etc/UTC")
-      |> Messaging.backend_key_data(serialize_pid(self()), 0)
-      |> Messaging.ready()
-      |> tcp_send(state)
-
-      Logger.metadata(pg_client: state.client, origin: settings["application_name"])
-
-      Logger.debug(
-        "Connection established with #{inspect(state.client)}, client config: #{inspect(settings, pretty: true)}"
-      )
-
-      :ok = state.transport.setopts(state.socket, active: :once)
-      {:noreply, %State{state | settings: settings}}
-    else
-      Messaging.error(:fatal,
-        code: "08004",
-        message:
-          "Electric replication is not ready, missing schema for #{settings["application_name"]}"
-      )
-      |> tcp_send(state)
-
-      Logger.debug(
-        "Denied connection for client #{settings["application_name"]}, schema not ready"
-      )
-
-      state.transport.close(state.socket)
-      {:stop, :normal, state}
-    end
-  end
-
-  defp initialize_connection(%State{} = state, _settings) do
-    Messaging.error(:fatal,
-      code: "08004",
-      message: "Electric mesh allows connection only in `replication=database` mode"
-    )
-    |> tcp_send(state)
-
-    state.transport.close(state.socket)
-    {:stop, :normal, state}
-  end
-
+  @spec handle_query([String.t(), ...], {Socket.t(), State.t()}) ::
+          binary() | {binary(), State.t()}
   defp handle_query(["SELECT", "pg_catalog.set_config('search_path', '', false)"], _) do
     # Query to reset the search path, noop for us
     Messaging.row_description(set_config: [type: :text])
@@ -525,7 +527,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> Messaging.ready()
   end
 
-  defp handle_query(["IDENTIFY_SYSTEM"], state) do
+  defp handle_query(["IDENTIFY_SYSTEM"], {_, state}) do
     Logger.debug("#{__MODULE__}: IDENTIFY_SYSTEM")
     # Getting system information
     # TODO: we're sending over `0/1` lsn as a consistent point of the system since that's
@@ -560,7 +562,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     |> Messaging.ready()
   end
 
-  defp handle_query(["START_REPLICATION", args], state) do
+  defp handle_query(["START_REPLICATION", args], {socket, state}) do
     ["SLOT", slot_name, "LOGICAL", lsn_string | options] =
       String.split(args, " ", trim: true, parts: 5)
 
@@ -581,13 +583,13 @@ defmodule Electric.Replication.Postgres.TcpServer do
     )
 
     Messaging.start_copy_mode()
-    |> tcp_send(state)
+    |> tcp_send(socket)
 
     # FIXME: we should handle scenario when slot server is down at this moment
     :ok =
       SlotServer.start_replication(
         slot_server,
-        &tcp_send(&1, state),
+        &tcp_send(&1, socket),
         publication,
         target_lsn
       )
@@ -608,10 +610,11 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp authentication_required?("127.0.0.1" <> _, _settings), do: false
   defp authentication_required?(_, _settings), do: false
 
+  @spec tcp_send(binary() | nil, Socket.t()) :: :ok
   defp tcp_send(nil, _), do: :ok
 
-  defp tcp_send(data, %State{transport: transport, socket: socket}) when is_binary(data) do
-    :ok = transport.send(socket, data)
+  defp tcp_send(data, %Socket{} = socket) when is_binary(data) do
+    :ok = Socket.send(socket, data)
   end
 
   defp parse_client_startup_settings(data) when is_binary(data) do
