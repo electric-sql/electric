@@ -230,10 +230,12 @@ defmodule Electric.Postgres.Extension do
   end
 
   @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
-  @spec electrified?(conn(), String.t(), String.t()) :: boolean()
+
+  @spec electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
   def electrified?(conn, schema \\ "public", table) do
-    {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
-    count == 1
+    with {:ok, _, [{count}]} <- :epgsql.equery(conn, @table_is_electrifed_query, [schema, table]) do
+      {:ok, count == 1}
+    end
   end
 
   @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"

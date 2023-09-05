@@ -490,11 +490,11 @@ defmodule Electric.Postgres.ExtensionTest do
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
       end
 
-      assert Extension.electrified?(conn, "buttercup")
-      assert Extension.electrified?(conn, "public", "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
 
-      refute Extension.electrified?(conn, "daisy")
-      refute Extension.electrified?(conn, "public", "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
     end
 
     # TODO: reproduce this test, which relies on the event_triggers, using the
