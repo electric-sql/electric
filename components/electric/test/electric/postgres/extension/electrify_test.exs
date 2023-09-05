@@ -48,7 +48,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     assert row[:table] == "buttercup"
     assert row[:schema] == "public"
 
-    assert {:ok, [{_, _, _, query}]} = Extension.ddl_history(conn)
+    assert {:ok, [%{"query" => query}]} = Extension.ddl_history(conn)
 
     assert query =~ ~r/^CREATE TABLE buttercup/
   end

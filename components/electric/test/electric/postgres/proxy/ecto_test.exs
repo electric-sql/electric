@@ -44,18 +44,17 @@ defmodule Electric.Postgres.Proxy.EctoTest do
       Ecto.Migrator.run(repo, migration_path, :up, all: true)
     end)
 
-    assert {:ok, [{1, txid1, txts1, ddl1}, {2, txid2, txts2, ddl2}]} =
-             Extension.ddl_history(cxt.conn)
+    assert {:ok, [r1, r2]} = Extension.ddl_history(cxt.conn)
 
-    assert ddl1 ==
+    assert r1["query"] ==
              "CREATE TABLE table1 (\n    id text NOT NULL,\n    name text,\n    CONSTRAINT table1_pkey PRIMARY KEY (id)\n);\n\n\n"
 
-    assert ddl2 == "ALTER TABLE \"public\".\"table1\" ADD COLUMN \"value\" text"
+    assert r2["query"] == "ALTER TABLE \"public\".\"table1\" ADD COLUMN \"value\" text"
 
     assert {:ok, "20230904162657"} ==
-             Extension.tx_version(cxt.conn, %{"txid" => txid1, "txts" => txts1})
+             Extension.tx_version(cxt.conn, r1)
 
     assert {:ok, "20230905122033"} ==
-             Extension.tx_version(cxt.conn, %{"txid" => txid2, "txts" => txts2})
+             Extension.tx_version(cxt.conn, r2)
   end
 end

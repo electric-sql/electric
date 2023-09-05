@@ -38,8 +38,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     assert {:ok, [ddl1, ddl2]} = Extension.ddl_history(conn)
 
-    assert {1, _txid, _timestamp, "CREATE TABLE buttercup" <> _} = ddl1
-    assert {2, _txid, _timestamp, ^sql4} = ddl2
+    assert %{"id" => 1, "query" => "CREATE TABLE buttercup" <> _} = ddl1
+    assert %{"id" => 2, "query" => ^sql4} = ddl2
   end
 
   test_tx "CREATE INDEX on electrified table is captured", fn conn ->
@@ -55,8 +55,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     assert {:ok, [ddl1, ddl2]} = Extension.ddl_history(conn)
 
-    assert {1, _txid, _timestamp, "CREATE TABLE " <> _} = ddl1
-    assert {2, _txid, _timestamp, ^sql4} = ddl2
+    assert %{"id" => 1, "query" => "CREATE TABLE " <> _} = ddl1
+    assert %{"id" => 2, "query" => ^sql4} = ddl2
   end
 
   test_tx "DROP INDEX on electrified table is captured", fn conn ->
@@ -85,9 +85,9 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:ok, []} = Extension.electrified_indexes(conn)
     assert {:ok, [ddl1, ddl2, ddl3]} = Extension.ddl_history(conn)
 
-    assert {1, _txid, _timestamp, "CREATE TABLE " <> _} = ddl1
-    assert {2, _txid, _timestamp, ^sql4} = ddl2
-    assert {3, _txid, _timestamp, ^sql5} = ddl3
+    assert %{"id" => 1, "query" => "CREATE TABLE " <> _} = ddl1
+    assert %{"id" => 2, "query" => ^sql4} = ddl2
+    assert %{"id" => 3, "query" => ^sql5} = ddl3
   end
 
   test_tx "DROP electrified TABLE is rejected", fn conn ->

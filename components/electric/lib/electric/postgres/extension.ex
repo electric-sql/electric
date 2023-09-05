@@ -442,7 +442,11 @@ defmodule Electric.Postgres.Extension do
 
   def ddl_history(conn) do
     with {:ok, _cols, rows} <- :epgsql.equery(conn, @ddl_history_query, []) do
-      {:ok, rows}
+      {:ok,
+       for(
+         {id, txid, txts, query} <- rows,
+         do: %{"id" => id, "txid" => to_integer(txid), "txts" => txts, "query" => query}
+       )}
     end
   end
 
