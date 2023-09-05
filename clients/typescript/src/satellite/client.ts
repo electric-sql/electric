@@ -196,8 +196,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       }).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
+  private log: Log.Logger
+
   constructor(
-    _dbName: string,
+    dbName: string,
     socketFactory: SocketFactory,
     _notifier: Notifier,
     opts: SatelliteClientOpts
@@ -211,6 +213,14 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.outbound = this.resetReplication()
 
     this.subscriptionsDataCache = new SubscriptionsDataCache()
+
+    this.log = Log.getLogger('satellite/client:' + dbName)
+    const originalFactory = Log.methodFactory
+    this.log.methodFactory = (methodName, level, name) => {
+      const raw = originalFactory(methodName, level, name)
+      return (...msgs) =>
+        msgs.length ? raw('db[' + dbName + ']', ...msgs) : void 0
+    }
   }
 
   private resetReplication<T = any>(
@@ -253,7 +263,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.socket.onError((error) => {
           if (this.listenerCount('error') === 0) {
             this.close()
-            Log.error(
+            this.log.error(
               `socket error but no listener is attached: ${error.message}`
             )
           }
@@ -262,7 +272,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.socket.onClose(() => {
           this.close()
           if (this.listenerCount('error') === 0) {
-            Log.error(`socket closed but no listener is attached`)
+            this.log.error(`socket closed but no listener is attached`)
           }
           this.emit(
             'error',
@@ -315,7 +325,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     // Perform validations and prepare the request
     let request: SatInStartReplicationReq
     if (!lsn || lsn.length == 0) {
-      Log.info(`no previous LSN, start replication from scratch`)
+      this.log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
         return Promise.reject(
           new SatelliteError(
@@ -326,7 +336,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       }
       request = SatInStartReplicationReq.fromPartial({ schemaVersion })
     } else {
-      Log.info(
+      this.log.info(
         `starting replication with lsn: ${base64.fromBytes(
           lsn
         )} subscriptions: ${subscriptionIds}`
@@ -618,7 +628,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleStartReq(message: SatInStartReplicationReq) {
-    Log.info(
+    this.log.info(
       `Server sent a replication request to start from ${bytesToNumber(
         message.lsn
       )}, and options ${JSON.stringify(message.options)}`
@@ -732,7 +742,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       try {
         this.subscriptionsDataCache.transaction(message.ops)
       } catch (e) {
-        Log.info(
+        this.log.info(
           `Error applying transaction message for subs ${JSON.stringify(e)}`
         )
       }
@@ -740,7 +750,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handlePingReq() {
-    Log.info(
+    this.log.info(
       `respond to ping with last ack ${
         this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
       }`
@@ -803,8 +813,8 @@ export class SatelliteClient extends EventEmitter implements Client {
     try {
       const message = toMessage(data)
 
-      if (Log.getLevel() <= 1) {
-        Log.debug(`[proto] recv: ${msgToString(message)}`)
+      if (this.log.getLevel() <= 1) {
+        this.log.debug(`[proto] recv: ${msgToString(message)}`)
       }
 
       const handler = this.handlerForMessageType[message.$type]
@@ -945,7 +955,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private sendMessage<T extends SatPbMsg>(request: T) {
-    if (Log.getLevel() <= 1) Log.debug(`[proto] send: ${msgToString(request)}`)
+    if (this.log.getLevel() <= 1)
+      this.log.debug(`[proto] send: ${msgToString(request)}`)
     if (!this.socket || this.isClosed()) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
@@ -976,7 +987,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     let waitingFor: NodeJS.Timeout
     return new Promise<T>((resolve, reject) => {
       waitingFor = setTimeout(() => {
-        Log.error(`${request.$type}`)
+        this.log.error(`${request.$type}`)
         const error = new SatelliteError(
           SatelliteErrorCode.TIMEOUT,
           `${request.$type}`

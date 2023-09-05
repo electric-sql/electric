@@ -153,6 +153,7 @@ export class SatelliteProcess implements Satellite {
 
   private _connectRetryHandler: ConnectRetryHandler
   private initializing?: Waiter
+  private log: Log.Logger
 
   constructor(
     dbName: DbName,
@@ -190,6 +191,13 @@ export class SatelliteProcess implements Satellite {
     this._connectRetryHandler = connectRetryHandler
 
     this.setClientListeners()
+    this.log = Log.getLogger('satellite/process:' + this.dbName)
+    const originalFactory = Log.methodFactory
+    this.log.methodFactory = (methodName, level, name) => {
+      const raw = originalFactory(methodName, level, name)
+      return (...msgs) =>
+        msgs.length ? raw('db[' + dbName + ']', ...msgs) : void 0
+    }
   }
 
   /**
@@ -269,9 +277,9 @@ export class SatelliteProcess implements Satellite {
     const lsnBase64 = await this._getMeta('lsn')
     if (lsnBase64 && lsnBase64.length > 0) {
       this._lsn = base64.toBytes(lsnBase64)
-      Log.info(`retrieved lsn ${this._lsn}`)
+      this.log.info(`retrieved lsn ${this._lsn}`)
     } else {
-      Log.info(`no lsn retrieved from store`)
+      this.log.info(`no lsn retrieved from store`)
     }
 
     const subscriptionsState = await this._getMeta('subscriptions')
@@ -587,7 +595,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
-    Log.warn(`reconnecting to server`)
+    this.log.warn(`reconnecting to server`)
     await this._connectWithBackoff()
     await this._startReplication()
 
@@ -605,7 +613,9 @@ export class SatelliteProcess implements Satellite {
     satelliteError: SatelliteError,
     subscriptionId?: string
   ): Promise<void> {
-    Log.error('encountered a subscription error: ' + satelliteError.message)
+    this.log.error(
+      'encountered a subscription error: ' + satelliteError.message
+    )
 
     await this._resetClientState()
 
@@ -621,7 +631,7 @@ export class SatelliteProcess implements Satellite {
   _handleClientError(satelliteError: SatelliteError) {
     if (this.initializing && !this.initializing.finished()) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
-        Log.warn(
+        this.log.warn(
           `a socket error occurred while connecting to server: ${satelliteError.message}`
         )
         return
@@ -629,7 +639,7 @@ export class SatelliteProcess implements Satellite {
 
       if (satelliteError.code === SatelliteErrorCode.AUTH_REQUIRED) {
         // TODO: should stop retrying
-        Log.warn(
+        this.log.warn(
           `a fatal error occurred while initializing: ${satelliteError.message}`
         )
         return
@@ -647,16 +657,16 @@ export class SatelliteProcess implements Satellite {
 
   async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
     this.connectivityState = status
-    Log.debug(`connectivity state changed ${status}`)
+    this.log.debug(`connectivity state changed ${status}`)
     // TODO: no op if state is the same
     switch (status) {
       case 'available': {
-        Log.warn(`checking network availability and reconnecting`)
+        this.log.warn(`checking network availability and reconnecting`)
         return this._connectWithBackoff().then(() => this._startReplication())
       }
       case 'error':
       case 'disconnected': {
-        Log.warn(`client disconnected from server`)
+        this.log.warn(`client disconnected from server`)
         this.client.close()
         return
       }
@@ -695,7 +705,7 @@ export class SatelliteProcess implements Satellite {
 
   // NO DIRECT CALLS TO CONNECT
   private async _connect(): Promise<void> {
-    Log.info(`connecting to electric server`)
+    this.log.info(`connecting to electric server`)
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
@@ -710,7 +720,7 @@ export class SatelliteProcess implements Satellite {
         throw authResp.error
       }
     } catch (error: any) {
-      Log.debug(
+      this.log.debug(
         `server returned an error while establishing connection: ${error.message}`
       )
       throw error
@@ -739,7 +749,7 @@ export class SatelliteProcess implements Satellite {
             error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
           this.opts?.clearOnBehindWindow
         ) {
-          Log.warn(
+          this.log.warn(
             `server error: ${error.message}. resetting client state and retrying connection`
           )
           // restart reconnection loop
@@ -753,7 +763,7 @@ export class SatelliteProcess implements Satellite {
       this.initializing?.resolve()
     } catch (error: any) {
       if (error.code == SatelliteErrorCode.UNKNOWN_SCHEMA_VSN) {
-        Log.warn(SCHEMA_VSN_ERROR_MSG)
+        this.log.warn(SCHEMA_VSN_ERROR_MSG)
 
         // FIXME: I think at this point it's clear the client needs to be re-generated
         this.initializing?.reject(
@@ -771,7 +781,7 @@ export class SatelliteProcess implements Satellite {
           throw error
         }
 
-        Log.warn(
+        this.log.warn(
           `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
         )
         return this._resetClientStateAndReconnect()
@@ -942,7 +952,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _notifyChanges(results: OplogEntry[]): Promise<void> {
-    Log.info('notify changes')
+    this.log.info('notify changes')
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
@@ -1151,7 +1161,9 @@ export class SatelliteProcess implements Satellite {
       // This only needs to be done once, even if there are several DML chunks
       // because all those chunks are part of the same transaction.
       if (firstDMLChunk) {
-        Log.info(`apply incoming changes for LSN: ${base64.fromBytes(lsn)}`)
+        this.log.info(
+          `apply incoming changes for LSN: ${base64.fromBytes(lsn)}`
+        )
         // assign timestamp to pending operations before apply
         await this.mutexSnapshot()
         firstDMLChunk = false
