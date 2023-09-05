@@ -246,14 +246,14 @@ defmodule Electric.Postgres.Extension do
   end
 
   @index_electrified_query """
-  SELECT COUNT(ei.id) AS count
-    FROM #{@electrified_index_table} ei
-      INNER JOIN pg_class pc ON pc.oid = ei.id
-      INNER JOIN pg_namespace pn ON pc.relnamespace = pn.oid
-      INNER JOIN #{@electrified_tracking_table} et ON ei.table_id = et.id
-    WHERE 
-      pn.nspname  = $1 
-      AND pc.relname = $2;
+  SELECT COUNT(pci.oid)
+    FROM pg_class pc
+    INNER JOIN #{@electrified_tracking_table} et ON et.oid = pc.oid
+    INNER JOIN pg_index pi ON pi.indrelid = pc.oid
+    INNER JOIN pg_class pci ON pci.oid = pi.indexrelid
+  WHERE et.schema_name = $1
+    AND pi.indisprimary = false
+    AND pci.relname = $2
   """
 
   @spec index_electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
