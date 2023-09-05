@@ -80,7 +80,7 @@ defmodule Electric.Postgres.Proxy.Handler do
   def handle_data(data, socket, state) do
     {:ok, decoder, msgs} = PgProtocol.decode(state.decoder, data)
 
-    trace_recv(:client, msgs)
+    trace_recv(:client, state.session_id, msgs)
 
     Logger.debug("Frontend msgs: #{M.inspect(msgs)}")
 
@@ -89,13 +89,13 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   @impl GenServer
   def handle_info({:downstream, :msgs, msgs}, {socket, state}) do
-    trace_recv(:server, msgs)
+    trace_recv(:server,state.session_id,  msgs)
 
     {:ok, injector, upstream_msgs, downstream_msgs} =
       Injector.recv_backend(state.injector, msgs)
 
     :ok = upstream(upstream_msgs, state)
-    :ok = downstream(downstream_msgs, socket)
+    :ok = downstream(downstream_msgs, socket, state)
     {:noreply, {socket, %{state | injector: injector}}}
   end
 
@@ -111,7 +111,7 @@ defmodule Electric.Postgres.Proxy.Handler do
   end
 
   defp handle_message(%M.SSLRequest{}, return, socket, state) do
-    downstream("N", socket)
+    downstream("N", socket, state)
     {return, state}
   end
 
@@ -126,8 +126,7 @@ defmodule Electric.Postgres.Proxy.Handler do
           Logger.warning("Not validating user #{inspect(user)}")
           salt = M.AuthenticationMD5Password.salt()
           msg = M.AuthenticationMD5Password.new(salt: salt)
-          # downstream([%M.AuthenticationCleartextPassword{}], socket)
-          downstream([msg], socket)
+          downstream([msg], socket, state)
           %{state | authentication: {:md5, user, salt}}
       end
 
@@ -167,7 +166,8 @@ defmodule Electric.Postgres.Proxy.Handler do
                   code: "28P01"
                 }
               ],
-              socket
+              socket,
+              state
             )
 
           {return, state}
@@ -184,7 +184,7 @@ defmodule Electric.Postgres.Proxy.Handler do
       Injector.recv_frontend(state.injector, msg)
 
     :ok = upstream(upstream_msgs, state)
-    :ok = downstream(downstream_msgs, socket)
+    :ok = downstream(downstream_msgs, socket, state)
 
     {return, %{state | injector: injector}}
   end
@@ -203,7 +203,7 @@ defmodule Electric.Postgres.Proxy.Handler do
   end
 
   defp authenticated(socket, state) do
-    :ok = downstream([%M.AuthenticationOk{}], socket)
+    :ok = downstream([%M.AuthenticationOk{}], socket, state)
     Logger.debug("Starting upstream connection: #{inspect(state.upstream)}")
 
     {:ok, pid} =
@@ -216,13 +216,13 @@ defmodule Electric.Postgres.Proxy.Handler do
     %{state | connection: pid, authenticated?: true}
   end
 
-  defp downstream(msgs, socket) do
-    trace_send(:client, msgs)
+  defp downstream(msgs, socket, state) do
+    trace_send(:client, state.session_id, msgs)
     Socket.send(socket, PgProtocol.encode(msgs))
   end
 
   defp upstream(msgs, state) do
-    trace_send(:server, msgs)
+    trace_send(:server, state.session_id, msgs)
     GenServer.cast(state.connection, {:upstream, msgs})
   end
 end
