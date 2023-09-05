@@ -36,7 +36,6 @@ config :logger, :console,
     pg_client
     pg_producer
     pg_slot
-    remote_ip
     request_id
     sq_client
     user_id
