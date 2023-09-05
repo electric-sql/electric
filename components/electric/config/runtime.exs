@@ -26,21 +26,21 @@ config :logger, :console,
   # We deliberately put :pid as the first list item below. Logger prints metadata in the same order as it is configured
   # here, so having :pid sorted in the list alphabetically would make it get in the away of log output matching that we
   # do in many of our E2E tests.
-  metadata: [
-    :pid,
-    :client_id,
-    :component,
-    :connection,
-    :instance_id,
-    :origin,
-    :pg_client,
-    :pg_producer,
-    :pg_slot,
-    :remote_ip,
-    :request_id
-    :sq_client,
-    :user_id
-  ]
+  metadata: ~w[
+    pid
+    client_id
+    component
+    connection
+    instance_id
+    origin
+    pg_client
+    pg_producer
+    pg_slot
+    remote_ip
+    request_id
+    sq_client
+    user_id
+  ]a
 
 config :electric,
   # Used only to send server identification upon connection,
