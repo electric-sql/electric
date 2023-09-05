@@ -51,7 +51,7 @@ See <DocPageLink path="integrations/drivers" /> and <DocPageLink path="api/clien
 
 ## Using the client
 
-The client then provides a Prisma-inspired for syncing shapes, defining queries and making writes, as well as the ability to drop down to raw SQL when necessary.
+The client then provides a Prisma-inspired API for syncing shapes, defining queries and making writes, as well as the ability to drop down to raw SQL when necessary.
 
 For example:
 
