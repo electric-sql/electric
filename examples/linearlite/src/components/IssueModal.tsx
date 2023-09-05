@@ -7,7 +7,7 @@ import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg'
 import Modal from '../components/Modal'
 import Toggle from '../components/Toggle'
 import { memo, useEffect, useRef, useState } from 'react'
-// import Editor from 'rich-markdown-editor'
+import Editor from '../components/editor/Editor'
 
 import { v4 as uuidv4 } from 'uuid'
 import { useElectric } from '../electric'
@@ -43,7 +43,7 @@ function getPriorityString(priority: string) {
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState<string | undefined>()
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
   const { db } = useElectric()!
@@ -140,7 +140,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             }}
           />
           <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:outline-none"
+            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:outline-none focus:border-none"
             placeholder="Issue title"
             value={title}
             ref={ref}
@@ -149,13 +149,13 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         </div>
 
         {/* Issue description editor */}
-        <div className="flex w-full px-4">
-          {/* <Editor
-            // value={description}
+        <div className="w-full px-4">
+          <Editor
+            className="w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md focus:outline-none editor border border-transparent focus:border-blue-600"
+            value={description}
             onChange={(val) => setDescription(val)}
-            className="w-full mt-4 ml-5 font-normal border-none appearance-none min-h-12 text-md focus:outline-none editor"
             placeholder="Add description..."
-          /> */}
+          />
         </div>
       </div>
 
