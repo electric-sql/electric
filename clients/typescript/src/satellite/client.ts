@@ -40,7 +40,7 @@ import {
   msgToString,
   serverErrorToSatelliteError,
 } from '../util/proto'
-import { Socket, SocketFactory } from '../sockets/index'
+import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
@@ -232,7 +232,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     return new Promise<void>((resolve, reject) => {
-      this.socket = this.socketFactory.create()
+      this.socket = new this.socketFactory(PROTOCOL_VSN)
 
       const onceError = (error: Error) => {
         this.close()

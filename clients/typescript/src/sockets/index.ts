@@ -1,10 +1,15 @@
 import { SatelliteError } from '../util'
+import { LIB_VERSION } from '../version'
 
 export type Data = string | Uint8Array
 
 export interface ConnectionOptions {
   url: string
 }
+
+// Take major & minor version of the library
+export const PROTOCOL_VSN =
+  'satellite.' + LIB_VERSION.split('.').slice(0, 2).join('.')
 
 export interface Socket {
   open(opts: ConnectionOptions): this
@@ -21,6 +26,4 @@ export interface Socket {
   removeErrorListener(cb: (error: SatelliteError) => void): void
 }
 
-export interface SocketFactory {
-  create(): Socket
-}
+export type SocketFactory = new (protocolVersion: string) => Socket

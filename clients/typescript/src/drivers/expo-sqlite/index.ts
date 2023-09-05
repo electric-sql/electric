@@ -11,7 +11,6 @@ import {
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { Database } from './database'
-import { WebSocketReactNativeFactory } from '../../sockets/react-native'
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
@@ -30,6 +29,7 @@ import uuid from 'react-native-uuid'
 
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
+import { WebSocketReactNative } from '../../sockets/react-native'
 
 export { DatabaseAdapter }
 export type { Database }
@@ -42,7 +42,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db._name!
   const adapter = opts?.adapter || new DatabaseAdapter(db)
-  const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()
+  const socketFactory = opts?.socketFactory || WebSocketReactNative
 
   const namespace = await baseElectrify(
     dbName,

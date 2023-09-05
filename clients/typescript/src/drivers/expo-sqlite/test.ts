@@ -12,7 +12,7 @@ import { MockRegistry } from '../../satellite/mock'
 import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
 import { MockDatabase, MockWebSQLDatabase } from './mock'
-import { MockSocketFactory } from '../../sockets/mock'
+import { MockSocket } from '../../sockets/mock'
 import { ElectricConfig } from '../../config'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
@@ -70,7 +70,7 @@ export async function initTestable<
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator = opts?.migrator || new MockMigrator()
   const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
-  const socketFactory = opts?.socketFactory || new MockSocketFactory()
+  const socketFactory = opts?.socketFactory || MockSocket
   const registry = opts?.registry || new MockRegistry()
 
   const dal = await electrify(
