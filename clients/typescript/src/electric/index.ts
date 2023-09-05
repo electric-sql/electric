@@ -21,6 +21,11 @@ export interface ElectrifyOptions {
   notifier?: Notifier
   socketFactory?: SocketFactory
   registry?: Registry
+  prepare?: (connection: DatabaseAdapter) => Promise<void>
+}
+
+const defaultPrepare = async (connection: DatabaseAdapter) => {
+  await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
 }
 
 /**
@@ -38,7 +43,8 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
-  await adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
+  const prepare = opts?.prepare ?? defaultPrepare
+  await prepare(adapter)
 
   const configWithDefaults = hydrateConfig(config)
   const migrator =
