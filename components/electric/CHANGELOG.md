@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.5.3
+
+### Patch Changes
+
+- 30d7c38: Unified `HTTP_API_PORT` and `WEBSOCKET_PORT` into `HTTP_PORT` to serve both `/api` and `/ws` requests
+
 ## 0.5.2
 
 ### Patch Changes
