@@ -68,5 +68,15 @@ defmodule Electric.Postgres.ProxyTest do
     assert {:ok, true} = Extension.index_electrified?(cxt.conn, "meadow", "daisy_id_idx")
     assert {:ok, false} = Extension.index_electrified?(cxt.conn, "public", "daisy_id_idx")
     assert {:ok, false} = Extension.index_electrified?(cxt.conn, "public", "parsley_id_idx")
+
+    query = "DROP INDEX meadow.daisy_id_idx"
+
+    cxt.repo.transaction(fn ->
+      {:ok, _} = cxt.repo.query(query)
+    end)
+
+    assert {:ok, [_, _, _, _, %{"query" => ^query}]} = Extension.ddl_history(cxt.conn)
+
+    assert {:ok, false} = Extension.index_electrified?(cxt.conn, "meadow", "daisy_id_idx")
   end
 end
