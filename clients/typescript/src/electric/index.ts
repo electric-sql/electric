@@ -21,6 +21,18 @@ export interface ElectrifyOptions {
   notifier?: Notifier
   socketFactory?: SocketFactory
   registry?: Registry
+  /**
+   * Function that prepares the database connection.
+   * If not overridden, the default prepare function
+   * enables the `foreign_key` pragma on the DB connection.
+   * @param connection The database connection.
+   * @returns A promise that resolves when the database connection is prepared.
+   */
+  prepare?: (connection: DatabaseAdapter) => Promise<void>
+}
+
+const defaultPrepare = async (connection: DatabaseAdapter) => {
+  await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
 }
 
 /**
@@ -38,6 +50,8 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
+  const prepare = opts?.prepare ?? defaultPrepare
+  await prepare(adapter)
 
   const configWithDefaults = hydrateConfig(config)
   const migrator =
