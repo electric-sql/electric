@@ -36,7 +36,7 @@
   ??[proto] send: #SatInStartReplicationReq{lsn: , schema: $migration1_vsn
   ??[proto] recv: #SatInStartReplicationResp{}
 
-  # The client receives only the second migration. Since the client sends migrations in order, we're sure that we haven't seen migraiton 1
+  # The client receives only the second migration. Since the client sends migrations in order, we're sure that we haven't seen migration 1
   ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration2_vsn, for: bar
 
 [cleanup]
