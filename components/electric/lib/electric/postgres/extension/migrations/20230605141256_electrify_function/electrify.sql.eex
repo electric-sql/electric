@@ -128,7 +128,9 @@ BEGIN
 
         EXECUTE format('<%= publication_sql %>;', '<%= schema %>', ('shadow__' || _schema || '__' || _table)::name);
     ELSE
-        RAISE EXCEPTION 'table %.% is already electrified', _schema, _table;
+        -- rather than raising an error and aborting, let's make this
+        -- procedure more idempotent and just ignore double electrification
+        RAISE NOTICE 'table %.% is already electrified', _schema, _table;
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;
