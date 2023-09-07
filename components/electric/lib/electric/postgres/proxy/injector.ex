@@ -49,7 +49,6 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def recv_frontend(c, state, send, msgs) do
     Enum.reduce(List.wrap(msgs), {c, state, send}, fn msg, {c, state, send} ->
-      # dbg(front: msg)
       Capture.recv_frontend(c, msg, state, send)
     end)
   end
@@ -65,7 +64,6 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def recv_backend(c, state, send, msgs) do
     Enum.reduce(List.wrap(msgs), {c, state, send}, fn msg, {c, state, send} ->
-      # dbg(back: msg)
       Capture.recv_backend(c, msg, state, send)
     end)
   end
@@ -95,6 +93,15 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def capture_version_query(version, quote \\ nil) do
     ~s|CALL electric.migration_version(#{quote_query(version, quote)})|
+  end
+
+  def alter_shadow_table_query(schema, table, column_name, column_type, quote \\ nil) do
+    args =
+      [schema, table, column_name, column_type]
+      |> Enum.map(&quote_query(&1, quote))
+      |> Enum.join(", ")
+
+    ~s|CALL electric.alter_shadow_table(#{args})|
   end
 
   defp quote_query(query, quote) do

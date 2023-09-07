@@ -17,6 +17,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.capture_version_query(version, "$query$")
     end
 
+    def alter_shadow_table_query(schema, table, column_name, column_type) do
+      Injector.alter_shadow_table_query(schema, table, column_name, column_type, "$query$")
+    end
+
     def migration_version do
       "20230801111111_11"
     end
@@ -166,6 +170,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def capture_ddl_complete(status \\ :tx) do
+    electric_call_complete(status)
+  end
+
+  def alter_shadow_table_complete(status \\ :tx) do
     electric_call_complete(status)
   end
 
@@ -377,7 +385,15 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def execute_tx_sql(sql, injector, mode) when is_binary(sql) do
-    execute_tx_sql({:capture, sql}, injector, mode)
+    execute_tx_sql({:capture, {sql, []}}, injector, mode)
+  end
+
+  def execute_tx_sql({sql, opts}, injector, mode) when is_binary(sql) do
+    execute_tx_sql({:capture, {sql, opts}}, injector, mode)
+  end
+
+  def execute_tx_sql({:capture, sql}, injector, mode) when is_binary(sql) do
+    execute_tx_sql({:capture, {sql, []}}, injector, mode)
   end
 
   def execute_tx_sql({:passthrough, query}, injector, :simple) do
@@ -393,13 +409,13 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
   end
 
-  def execute_tx_sql({:capture, query}, injector, :simple) do
+  def execute_tx_sql({:capture, {query, opts}}, injector, :simple) do
     tag = random_tag()
 
     injector
     |> client(query(query))
     |> server(complete_ready(tag), server: capture_ddl_query(query))
-    |> server(capture_ddl_complete(), client: complete_ready(tag))
+    |> shadow_add_column(capture_ddl_complete(), opts, client: complete_ready(tag))
   end
 
   def execute_tx_sql({:passthrough, query}, injector, :extended) do
@@ -418,7 +434,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> electric(bind_execute(), command, bind_execute_complete(DDLX.Command.tag(command)))
   end
 
-  def execute_tx_sql({:capture, query}, injector, :extended) do
+  def execute_tx_sql({:capture, {query, opts}}, injector, :extended) do
     tag = random_tag()
 
     injector
@@ -426,7 +442,24 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> server(parse_describe_complete())
     |> client(bind_execute())
     |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
-    |> server(capture_ddl_complete(), client: bind_execute_complete(tag))
+    |> shadow_add_column(capture_ddl_complete(), opts, client: bind_execute_complete(tag))
+  end
+
+  defp shadow_add_column(injector, initial_msg, opts, final_msgs) when is_list(final_msgs) do
+    columns = Keyword.get(opts, :shadow_add_column, nil)
+
+    Enum.zip(
+      [initial_msg | Enum.map(columns, fn _ -> alter_shadow_table_complete() end)],
+      Enum.map(columns, fn c -> [server: alter_shadow_table_query(c)] end) ++ final_msgs
+    )
+    |> Enum.reduce(injector, fn {recv, resp}, injector ->
+      server(injector, recv, resp)
+    end)
+    |> dbg
+  end
+
+  def alter_shadow_table_query(%{table: {schema, table}, column: column, type: type}) do
+    query(MockInjector.alter_shadow_table_query(schema, table, column, type))
   end
 
   def capture_migration_queries(injector, initial_messages, queries, version) do

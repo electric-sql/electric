@@ -71,7 +71,15 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
 
         test "alter electrified table", cxt do
-          query = ~s[ALTER TABLE "truths" ADD COLUMN "another" int8]
+          query =
+            {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
+             shadow_add_column: [
+               %{
+                 table: {"public", "truths"},
+                 column: "another",
+                 type: "int8"
+               }
+             ]}
 
           cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
         end
@@ -85,7 +93,16 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         if s.tx?() do
           test "combined migration", cxt do
             query = [
-              capture: ~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
+              capture:
+                {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
+                 shadow_add_column: [
+                   %{
+                     table: {"public", "truths"},
+                     column: "another",
+                     type: "int8"
+                   }
+                 ]},
+              # capture: {:alter_table, "truths", [{:add, "another", "int8"}]},
               passthrough: ~s[ALTER TABLE "socks" ADD COLUMN "holes" int2]
             ]
 
