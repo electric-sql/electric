@@ -33,7 +33,7 @@
 
 [shell user_1_ws1]
     # And recieve it on Satellite 1. Assertion for the row missing on Satellite 2 is above
-    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)row_data: %Electric\.Satellite\.SatOpRow\{
     ?values: \["00000000-0000-0000-0000-000000000000", "1", "sentinel value"\]
     ?\}
     ?tags: \["postgres_1@\d{13,16}"\]

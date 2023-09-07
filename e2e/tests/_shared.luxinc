@@ -47,8 +47,8 @@
                         auto_ping: true)
     """
     ?+$eprompt
-    ?+rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationReq\{
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
+    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
 [endmacro]
 
 [macro client_session_continue user_id session_id position subscription_ids]
@@ -70,8 +70,8 @@
     ?Connection established with protocol vsn
     ?Auth passed
     ?Subscribed
-    ?+rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationReq\{
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
+    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
 [endmacro]
 
 [macro elixir_client_subscribe tables]
@@ -79,7 +79,7 @@
     TestWsClient.send_data(conn, ProtocolHelpers.subscription_request(request_1: [tables: ~w|$tables|]))
     """
     ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
 [endmacro]
 
 [macro elixir_client_subscribe_with_id id tables]
@@ -87,7 +87,7 @@
     TestWsClient.send_data(conn, ProtocolHelpers.subscription_request("$id", request_1: [tables: ~w|$tables|]))
     """
     ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
 [endmacro]
 
 

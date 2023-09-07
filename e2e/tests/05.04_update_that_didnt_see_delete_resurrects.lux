@@ -26,7 +26,7 @@
     ?$psql
 
 [shell user_1_ws1]
-    ?%Electric.Satellite.V\d+.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
+    ?%Electric.Satellite.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
     [my seen_tag=$1]
     # We do an update having "seen" only the insert
     """!
@@ -57,7 +57,7 @@
 
 [shell user_1_ws1]
     # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
-    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(.*)origin: "client_1_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated value", "new value"\]
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)origin: "client_1_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated value", "new value"\]
 
 [cleanup]
     [invoke teardown]

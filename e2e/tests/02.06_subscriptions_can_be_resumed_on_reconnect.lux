@@ -22,7 +22,7 @@
 
 [shell user_1_ws1]
     # We expect to receive the transaction on Satellite
-    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(?:.*)lsn: "(\d+)"(?:.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(?:.*)lsn: "(\d+)"(?:.*)row_data: %Electric\.Satellite\.SatOpRow\{
     [local lsn=$1]
     ?values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
     ?\}
@@ -39,7 +39,7 @@
 [shell user_1_ws1]
     [invoke client_session_continue $user_id_1 1 $lsn "00000000-0000-0000-0000-000000000000"]
     # We expect to receive the transaction on Satellite immediately after reconnect
-    ?rec \[\d+\]: %Electric.Satellite.V\d+.SatOpLog\{(?:.*)row_data: %Electric\.Satellite\.V\d+\.SatOpRow\{
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(?:.*)row_data: %Electric\.Satellite\.SatOpRow\{
     ?values: \["00000000-0000-0000-0000-000000000001", "sentinel value", ""\]
     ?\}
     ?tags: \["postgres_1@\d{13,16}"\]

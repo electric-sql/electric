@@ -21,7 +21,7 @@
 
 
 [shell user_1_ws1]
-    ?%Electric.Satellite.V\d+.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
+    ?%Electric.Satellite.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
     [my seen_tag=$1]
     # We do an update having "seen" only the insert
     """!
