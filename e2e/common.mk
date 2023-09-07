@@ -93,7 +93,10 @@ start_satellite_client_%:
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
-	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -U postgres -d electric
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -p ${PG_PORT} -U postgres -d electric
+
+docker-proxy:
+	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-${PG_HOST}-1 psql -h ${PROXY_HOST} -p ${PROXY_PORT} -U electric -d electric
 
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash

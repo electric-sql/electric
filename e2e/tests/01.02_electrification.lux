@@ -2,7 +2,7 @@
 [include _shared.luxinc]
 
 [invoke setup]
-[invoke electrify_table pg_1 entries]
+[invoke electrify_table entries]
 
 [shell pg_1]
     !\dt electric.*

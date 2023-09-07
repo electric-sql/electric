@@ -11,7 +11,7 @@
   !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000002', 'second entry');
   ?INSERT 0 1
 
-[invoke electrify_table pg_1 entries]
+[invoke electrify_table entries]
 
 # Create a new table, electrify it immediately, and then insert a few rows.
 [shell pg_1]

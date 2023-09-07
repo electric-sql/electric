@@ -12,7 +12,7 @@
         !make log_dev_env
 
     [newshell pg_1]
-        [invoke start_psql pg_1]
+        [invoke start_psql pg_1 5432]
         -$fail_pattern
         [timeout 2]
 
@@ -26,6 +26,12 @@
     [shell postgres_logs]
         ?logical replication apply worker for subscription "postgres_1" has started
         -$fail_pattern
+
+    [newshell proxy_1]
+        [invoke start_proxy pg_1 electric_1 65432]
+        -$fail_pattern
+        [timeout 2]
+
 [endmacro]
 
 [macro teardown]

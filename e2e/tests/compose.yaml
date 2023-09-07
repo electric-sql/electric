@@ -16,8 +16,11 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@pg_1:5432/electric
       LOGICAL_PUBLISHER_HOST: electric_1
+      PG_PROXY_LOG_LEVEL: info
     ports:
       - "5133:5133"
+      # proxy access
+      - "65432:65432"
     depends_on:
       - pg_1
 

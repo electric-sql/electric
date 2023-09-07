@@ -2,13 +2,15 @@
 [include _shared.luxinc]
 
 [invoke setup]
-[invoke electrify_table pg_1 entries]
+[invoke electrify_table entries]
 
-[shell pg_1]
+[shell proxy_1]
     !BEGIN;
     !ALTER TABLE entries ADD COLUMN new_column VARCHAR;
     !COMMIT;
     ?$psql
+
+[shell pg_1]
     # Verify column structure of the shadow table:
     !SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'electric' AND table_name = 'shadow__public__entries';
     ?+new_column\s+\| USER-DEFINED
