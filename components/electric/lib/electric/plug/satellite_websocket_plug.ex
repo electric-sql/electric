@@ -2,6 +2,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
   require Logger
   use Plug.Builder
 
+  @protocol_prefix "electric."
+
   def init(handler_opts), do: handler_opts
 
   defp build_websocket_opts(base_opts),
@@ -34,7 +36,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         Logger.debug("Upgrading connection for client with version #{protocol_vsn}")
 
         conn
-        |> put_resp_header("sec-websocket-protocol", "satellite.#{protocol_vsn}")
+        |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> "#{protocol_vsn}")
         |> upgrade_adapter(
           :websocket,
           {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
@@ -77,9 +79,9 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   defp get_satellite_subprotocol(%Plug.Conn{} = conn) do
     get_req_header(conn, "sec-websocket-protocol")
-    |> Enum.filter(&String.starts_with?(&1, "satellite."))
+    |> Enum.filter(&String.starts_with?(&1, @protocol_prefix))
     |> case do
-      ["satellite." <> version] when byte_size(version) < 20 ->
+      [@protocol_prefix <> version] when byte_size(version) < 20 ->
         Version.parse(version <> ".0")
 
       _ ->

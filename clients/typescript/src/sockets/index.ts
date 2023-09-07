@@ -9,7 +9,7 @@ export interface ConnectionOptions {
 
 // Take major & minor version of the library
 export const PROTOCOL_VSN =
-  'satellite.' + LIB_VERSION.split('.').slice(0, 2).join('.')
+  'electric.' + LIB_VERSION.split('.').slice(0, 2).join('.')
 
 export interface Socket {
   open(opts: ConnectionOptions): this
