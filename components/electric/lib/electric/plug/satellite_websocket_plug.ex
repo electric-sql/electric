@@ -1,4 +1,5 @@
 defmodule Electric.Plug.SatelliteWebsocketPlug do
+  require Logger
   use Plug.Builder
 
   def init(handler_opts), do: handler_opts
@@ -29,8 +30,12 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
           instance_id: Electric.instance_id()
         )
 
-        upgrade_adapter(
-          conn,
+        protocol_vsn = "#{conn.assigns.satellite_vsn.major}.#{conn.assigns.satellite_vsn.minor}"
+        Logger.debug("Upgrading connection for client with version #{protocol_vsn}")
+
+        conn
+        |> put_resp_header("sec-websocket-protocol", "satellite.#{protocol_vsn}")
+        |> upgrade_adapter(
           :websocket,
           {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
         )

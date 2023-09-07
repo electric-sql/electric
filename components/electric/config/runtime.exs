@@ -30,12 +30,13 @@ config :logger, :console,
     :pg_client,
     :pg_producer,
     :pg_slot,
-    :sq_client,
+    :remote_ip,
     :component,
     :instance_id,
     :client_id,
     :user_id,
-    :metadata
+    :metadata,
+    :request_id
   ]
 
 config :electric,
