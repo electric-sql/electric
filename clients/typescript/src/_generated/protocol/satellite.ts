@@ -32,22 +32,6 @@ export enum SatAuthHeader {
   UNRECOGNIZED = -1,
 }
 
-/** Ping request. Can be sent by any party. */
-export interface SatPingReq {
-  $type: "Electric.Satellite.SatPingReq";
-}
-
-/** Ping response. */
-export interface SatPingResp {
-  $type: "Electric.Satellite.SatPingResp";
-  /**
-   * If LSN is present, it conveys to producer the latest LSN position that
-   * was applied on the consumer side. If there is no active replication
-   * ongoing the field should be left empty.
-   */
-  lsn?: Uint8Array | undefined;
-}
-
 export interface SatAuthHeaderPair {
   $type: "Electric.Satellite.SatAuthHeaderPair";
   key: SatAuthHeader;
@@ -584,95 +568,6 @@ export interface SatShapeDataBegin {
 export interface SatShapeDataEnd {
   $type: "Electric.Satellite.SatShapeDataEnd";
 }
-
-function createBaseSatPingReq(): SatPingReq {
-  return { $type: "Electric.Satellite.SatPingReq" };
-}
-
-export const SatPingReq = {
-  $type: "Electric.Satellite.SatPingReq" as const,
-
-  encode(_: SatPingReq, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    return writer;
-  },
-
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatPingReq {
-    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
-    let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatPingReq();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skipType(tag & 7);
-    }
-    return message;
-  },
-
-  create<I extends Exact<DeepPartial<SatPingReq>, I>>(base?: I): SatPingReq {
-    return SatPingReq.fromPartial(base ?? {});
-  },
-
-  fromPartial<I extends Exact<DeepPartial<SatPingReq>, I>>(_: I): SatPingReq {
-    const message = createBaseSatPingReq();
-    return message;
-  },
-};
-
-messageTypeRegistry.set(SatPingReq.$type, SatPingReq);
-
-function createBaseSatPingResp(): SatPingResp {
-  return { $type: "Electric.Satellite.SatPingResp", lsn: undefined };
-}
-
-export const SatPingResp = {
-  $type: "Electric.Satellite.SatPingResp" as const,
-
-  encode(message: SatPingResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.lsn !== undefined) {
-      writer.uint32(10).bytes(message.lsn);
-    }
-    return writer;
-  },
-
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatPingResp {
-    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
-    let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatPingResp();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1:
-          if (tag !== 10) {
-            break;
-          }
-
-          message.lsn = reader.bytes();
-          continue;
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skipType(tag & 7);
-    }
-    return message;
-  },
-
-  create<I extends Exact<DeepPartial<SatPingResp>, I>>(base?: I): SatPingResp {
-    return SatPingResp.fromPartial(base ?? {});
-  },
-
-  fromPartial<I extends Exact<DeepPartial<SatPingResp>, I>>(object: I): SatPingResp {
-    const message = createBaseSatPingResp();
-    message.lsn = object.lsn ?? undefined;
-    return message;
-  },
-};
-
-messageTypeRegistry.set(SatPingResp.$type, SatPingResp);
 
 function createBaseSatAuthHeaderPair(): SatAuthHeaderPair {
   return { $type: "Electric.Satellite.SatAuthHeaderPair", key: 0, value: "" };

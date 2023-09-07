@@ -141,12 +141,6 @@ defmodule Electric.Satellite.WebsocketServer do
     end
   end
 
-  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully.
-  # We need to report to Satellite.
-  def handle_info({Protocol, :lsn_report, lsn}, %State{} = state) do
-    push({%SatPingResp{lsn: lsn}, state})
-  end
-
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.

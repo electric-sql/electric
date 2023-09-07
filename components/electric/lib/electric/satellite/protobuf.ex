@@ -6,8 +6,6 @@ defmodule Electric.Satellite.Protobuf do
     SatErrorResp,
     SatAuthReq,
     SatAuthResp,
-    SatPingReq,
-    SatPingResp,
     SatInStartReplicationReq,
     SatInStartReplicationResp,
     SatInStopReplicationReq,
@@ -28,14 +26,14 @@ defmodule Electric.Satellite.Protobuf do
 
   require Logger
 
+  @reserved [3, 4]
+
   # This mapping should be kept in sync with Satellite repo. Message is present
   # in the mapping ONLY if it could be send as an individual message.
   @mapping %{
     SatErrorResp => 0,
     SatAuthReq => 1,
     SatAuthResp => 2,
-    SatPingReq => 3,
-    SatPingResp => 4,
     SatInStartReplicationReq => 5,
     SatInStartReplicationResp => 6,
     SatInStopReplicationReq => 7,
@@ -54,13 +52,15 @@ defmodule Electric.Satellite.Protobuf do
     SatUnsubsResp => 20
   }
 
+  if Enum.any?(Map.values(@mapping), &(&1 in @reserved)) do
+    raise "Cannot use a reserved value as the message tag"
+  end
+
   @type relation_id() :: non_neg_integer()
   @type sq_pb_msg() ::
           %SatErrorResp{}
           | %SatAuthReq{}
           | %SatAuthResp{}
-          | %SatPingReq{}
-          | %SatPingResp{}
           | %SatInStartReplicationReq{}
           | %SatInStartReplicationResp{}
           | %SatInStopReplicationReq{}
@@ -87,8 +87,6 @@ defmodule Electric.Satellite.Protobuf do
         SatAuthReq,
         SatAuthHeaderPair,
         SatAuthResp,
-        SatPingReq,
-        SatPingResp,
         SatInStartReplicationReq,
         SatInStartReplicationResp,
         SatInStopReplicationReq,

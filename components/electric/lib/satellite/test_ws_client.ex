@@ -178,19 +178,12 @@ defmodule Satellite.TestWsClient do
     end
   end
 
-  defp store(state, %SatPingReq{}), do: state
-
   defp store(%{count: count} = state, msg) do
     :ets.insert(state.table, {count, msg})
     %{state | count: count + 1}
   end
 
-  defp log(_, %SatPingReq{} = msg), do: Logger.info("rec: #{inspect(msg)}")
   defp log(state, msg), do: Logger.info("rec [#{state.count}]: #{inspect(msg)}")
-
-  defp maybe_autorespond(%{opts: %{auto_ping: true}} = state, %SatPingReq{}) do
-    {:reply, serialize(%SatPingResp{lsn: nil}), state}
-  end
 
   defp maybe_autorespond(%{opts: %{auto_in_sub: true}} = state, %SatInStartReplicationReq{}) do
     {:reply, serialize(%SatInStartReplicationResp{}), state}

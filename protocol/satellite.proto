@@ -28,17 +28,6 @@ syntax = "proto3";
 //
 package Electric.Satellite;
 
-// Ping request. Can be sent by any party.
-message SatPingReq{
-}
-
-// Ping response.
-message SatPingResp{
-    // If LSN is present, it conveys to producer the latest LSN position that
-    // was applied on the consumer side. If there is no active replication
-    // ongoing the field should be left empty.
-    optional bytes lsn = 1;
-}
 
 enum SatAuthHeader {
     reserved 1;
