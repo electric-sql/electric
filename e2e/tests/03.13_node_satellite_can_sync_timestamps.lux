@@ -1,0 +1,85 @@
+[doc NodeJS Satellite correctly syncs TIMESTAMP and TIMESTAMPTZ values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.timestamps (
+            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CALL electric.electrify('public.timestamps');
+        """]
+    [invoke migrate_pg 20230823 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "timestamps"]
+    [invoke node_sync_table "timestamps"]
+
+[shell pg_1]
+    !INSERT INTO public.timestamps (id) VALUES ('00000000-0000-0000-0000-000000000001');
+    ??INSERT 0 1
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000001"]
+
+    !await client.get_rows(db, "timestamps")
+    ?created_at: '([0-9-]{10} [0-9:]{8}\.[0-9]+)'
+    [global created_at=$1]
+    ?updated_at: '([0-9-]{10} [0-9:]{8}\.[0-9]+)Z'
+    [global updated_at=$1]
+
+[shell pg_1]
+    !INSERT INTO public.timestamps (id, created_at, updated_at) VALUES (\
+        '00000000-0000-0000-0000-000000000002',\
+        '2023-08-23 09:10:11',\
+        '2023-08-23 09:10:11.001');
+    ??INSERT 0 1
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000002"]
+
+    !await client.get_rows(db, "timestamps")
+    ??created_at: '2023-08-23 09:10:11'
+    ??updated_at: '2023-08-23 09:10:11.001Z'
+
+    [invoke node_await_insert_extended_into "timestamps" "{id: '00000000-0000-0000-0000-000000000003', created_at: '1999-01-02 00:15:54.555', updated_at: '1999-02-01 23:59:59Z'}"]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.timestamps;" "00000000-0000-0000-0000-000000000003" 10 $psql]
+
+    !SELECT * FROM public.timestamps;
+    ??00000000-0000-0000-0000-000000000001 | $created_at | $updated_at+00
+    ?00000000-0000-0000-0000-000000000002 \| 2023-08-23 09:10:11\s+\| 2023-08-23 09:10:11\.001\+00
+    ?00000000-0000-0000-0000-000000000003 \| 1999-01-02 00:15:54\.555\s+\| 1999-02-01 23:59:59\+00
+
+# Start a new Satellite client and verify that it receives all timestamps
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "timestamps"]
+    [invoke node_sync_table "timestamps"]
+
+    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000003"]
+
+    !await client.get_rows(db, "timestamps")
+    ??id: '00000000-0000-0000-0000-000000000001'
+    ??created_at: '$created_at'
+    ??updated_at: '${updated_at}Z'
+
+    ??id: '00000000-0000-0000-0000-000000000002'
+    ??created_at: '2023-08-23 09:10:11'
+    ??updated_at: '2023-08-23 09:10:11.001Z'
+
+    ??id: '00000000-0000-0000-0000-000000000003'
+    ??created_at: '1999-01-02 00:15:54.555'
+    ??updated_at: '1999-02-01 23:59:59Z'
+
+[cleanup]
+  [invoke teardown]
