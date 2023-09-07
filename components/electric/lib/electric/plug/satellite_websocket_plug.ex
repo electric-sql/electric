@@ -18,63 +18,51 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       end)
 
   def call(conn, handler_opts) do
-    conn
-    |> check_if_valid_upgrade()
-    |> check_if_subprotocol_present()
-    |> check_if_vsn_compatible(with: "<= #{Electric.vsn()}")
-    |> case do
-      %Plug.Conn{state: :sent} = conn ->
-        conn
+    with {:ok, conn} <- check_if_valid_upgrade(conn),
+         {:ok, conn} <- check_if_subprotocol_present(conn),
+         {:ok, conn} <- check_if_vsn_compatible(conn, with: "<= #{Electric.vsn()}") do
+      Logger.metadata(
+        remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
+        instance_id: Electric.instance_id()
+      )
 
-      conn ->
-        Logger.metadata(
-          remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
-          instance_id: Electric.instance_id()
-        )
+      client_vsn = conn.assigns.satellite_vsn
+      protocol_vsn = "#{client_vsn.major}.#{client_vsn.minor}"
+      Logger.debug("Upgrading connection for client with protocol version #{protocol_vsn}")
 
-        client_vsn = conn.assigns.satellite_vsn
-        protocol_vsn = "#{client_vsn.major}.#{client_vsn.minor}"
-        Logger.debug("Upgrading connection for client with protocol version #{protocol_vsn}")
-
-        conn
-        |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> protocol_vsn)
-        |> upgrade_adapter(
-          :websocket,
-          {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
-        )
+      conn
+      |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> protocol_vsn)
+      |> upgrade_adapter(
+        :websocket,
+        {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
+      )
+    else
+      {:error, code, body} ->
+        send_resp(conn, code, body)
     end
   end
-
-  defp check_if_valid_upgrade(%Plug.Conn{state: :sent} = conn), do: conn
 
   defp check_if_valid_upgrade(%Plug.Conn{} = conn) do
     if Bandit.WebSocket.Handshake.valid_upgrade?(conn) do
-      conn
+      {:ok, conn}
     else
-      send_resp(conn, 400, "Bad request")
+      {:error, 400, "Bad request"}
     end
   end
-
-  defp check_if_subprotocol_present(%Plug.Conn{state: :sent} = conn), do: conn
 
   defp check_if_subprotocol_present(%Plug.Conn{} = conn) do
     case get_satellite_subprotocol(conn) do
-      {:ok, vsn} -> assign(conn, :satellite_vsn, vsn)
-      :error -> send_resp(conn, 400, "Missing satellite websocket subprotocol")
+      {:ok, vsn} -> {:ok, assign(conn, :satellite_vsn, vsn)}
+      :error -> {:error, 400, "Missing satellite websocket subprotocol"}
     end
   end
 
-  defp check_if_vsn_compatible(%Plug.Conn{state: :sent} = conn, _), do: conn
-
   defp check_if_vsn_compatible(%Plug.Conn{} = conn, with: requirements) do
     if Version.match?(conn.assigns.satellite_vsn, requirements) do
-      conn
+      {:ok, conn}
     else
-      send_resp(
-        conn,
-        400,
-        "Cannot connect satellite version #{conn.assigns.satellite_vsn}: this server requires #{requirements}"
-      )
+      {:error, 400,
+       "Cannot connect satellite version #{conn.assigns.satellite_vsn}: this server requires #{requirements}"}
     end
   end
 
