@@ -1,4 +1,4 @@
-import { SqlValue, Statement } from './types'
+import { SqliteValue, Statement } from './types'
 
 export function isInsertUpdateOrDeleteStatement(sql: string) {
   const tpe = sql.toLowerCase().trimStart()
@@ -26,7 +26,7 @@ export function isInsertUpdateOrDeleteStatement(sql: string) {
 export function prepareInsertBatchedStatements(
   baseSql: string,
   columns: string[],
-  records: Record<string, SqlValue>[],
+  records: Record<string, SqliteValue>[],
   maxParameters: number
 ): Statement[] {
   const stmts: Statement[] = []
@@ -44,7 +44,7 @@ export function prepareInsertBatchedStatements(
     const sql = baseSql + insertPattern.repeat(currentInsertCount).slice(0, -1)
     const args = records
       .slice(processed, processed + currentInsertCount)
-      .flatMap((record) => columns.map((col) => record[col] as SqlValue))
+      .flatMap((record) => columns.map((col) => record[col] as SqliteValue))
 
     processed += currentInsertCount
     stmts.push({ sql, args })

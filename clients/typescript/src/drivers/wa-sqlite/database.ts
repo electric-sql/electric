@@ -10,7 +10,7 @@ import * as SQLite from 'wa-sqlite'
 // see: https://github.com/rhashimoto/wa-sqlite/tree/master/src/examples
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
-import { SqlValue, Statement } from '../../util'
+import { SqliteValue, Statement } from '../../util'
 import { QueryExecResult } from '../util/results'
 
 import { Mutex } from 'async-mutex'
@@ -71,12 +71,12 @@ export class ElectricDatabase implements Database {
         )
       }
 
-      const rows: SqlValue[][] = []
+      const rows: SqliteValue[][] = []
       let cols: string[] = []
 
       while ((await this.sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
         cols = cols.length === 0 ? this.sqlite3.column_names(stmt) : cols
-        const row = this.sqlite3.row(stmt) as SqlValue[]
+        const row = this.sqlite3.row(stmt) as SqliteValue[]
         rows.push(row)
       }
 
