@@ -6,7 +6,7 @@ import {
   TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Row, SqlValue, Statement } from '../../util'
+import { Row, SqliteValue, Statement } from '../../util'
 import { ensurePromise } from '../util/promise'
 import { rowsFromResults } from '../util/results'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
@@ -117,7 +117,7 @@ export class DatabaseAdapter
   }
 }
 
-type PositionalStatement = { sql: string; args?: SqlValue[] }
+type PositionalStatement = { sql: string; args?: SqliteValue[] }
 function onlyPositionalArgs(
   statements: Statement[]
 ): statements is PositionalStatement[] {
