@@ -95,7 +95,7 @@ export class Table<
   ) {
     this._builder = new Builder(
       tableName,
-      this._dbDescription.getFields(tableName),
+      this._dbDescription.getFieldNames(tableName),
       shapeManager
     )
     this._executor = new Executor(adapter, notifier)

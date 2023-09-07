@@ -33,7 +33,7 @@ import {
   SatelliteError,
   SatelliteErrorCode,
   SchemaChange,
-  SqlValue,
+  SqliteValue,
   Statement,
   Transaction,
   isDataChange,
@@ -468,7 +468,7 @@ export class SatelliteProcess implements Satellite {
 
     const allArgsForShadowInsert: Record<
       'namespace' | 'tablename' | 'primaryKey' | 'tags',
-      SqlValue
+      SqliteValue
     >[] = []
 
     // Group all changes by table name to be able to insert them all together
@@ -509,7 +509,7 @@ export class SatelliteProcess implements Satellite {
         ...prepareInsertBatchedStatements(
           sqlBase,
           columns,
-          records as Record<string, SqlValue>[],
+          records as Record<string, SqliteValue>[],
           this.maxSqlParameters
         )
       )
@@ -1301,7 +1301,7 @@ export class SatelliteProcess implements Satellite {
     value: MetaEntries[K]
   ): Statement
   _setMetaStatement(key: Uuid, value: string | null): Statement
-  _setMetaStatement(key: string, value: SqlValue) {
+  _setMetaStatement(key: string, value: SqliteValue) {
     const meta = this.opts.metaTable.toString()
 
     const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
@@ -1466,7 +1466,7 @@ function _applyDeleteOperation(
       acc.values.push(value)
       return acc
     },
-    { where: [] as string[], values: [] as SqlValue[] }
+    { where: [] as string[], values: [] as SqliteValue[] }
   )
 
   return {
@@ -1493,7 +1493,7 @@ function _applyNonDeleteOperation(
         acc.values.push(fullRow[c])
         return acc
       },
-      { where: [] as string[], values: [] as SqlValue[] }
+      { where: [] as string[], values: [] as SqliteValue[] }
     )
 
   if (updateColumnStmts.values.length > 0) {
