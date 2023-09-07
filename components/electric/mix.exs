@@ -18,7 +18,7 @@ defmodule Electric.MixProject do
       releases: [
         electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
         ws_client: [
-          applications: [electric: :load, gun: :permanent],
+          applications: [electric: :load],
           include_executables_for: [:unix],
           runtime_config_path: false
         ]
@@ -49,7 +49,6 @@ defmodule Electric.MixProject do
       {:excoveralls, "~> 0.14", only: :test, runtime: false},
       {:gproc, "~> 0.9.0"},
       {:protox, "~> 1.7"},
-      {:gun, "~> 2.0"},
       {:gen_stage, "~> 1.2"},
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_poller, "~> 1.0"},
@@ -64,7 +63,9 @@ defmodule Electric.MixProject do
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
       {:nimble_pool, "~> 1.0"},
       {:bandit, "~> 1.0-pre"},
-      {:thousand_island, "~> 1.0-pre"}
+      {:thousand_island, "~> 1.0-pre"},
+      {:mint_web_socket, "~> 1.0"},
+      {:mint, "~> 1.5"}
     ]
   end
 

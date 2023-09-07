@@ -72,6 +72,7 @@
     ?$eprompt
     !Logger.configure(level: :debug)
     !Application.put_env(:elixir, :ansi_enabled, false)
+    !alias Satellite.{TestWsClient, ProtocolHelpers}
     ?$eprompt
 [endmacro]
 

@@ -144,6 +144,11 @@ defmodule Electric.Satellite.Protobuf do
     {:error, :unknown_msg_type}
   end
 
+  def decode!(tag, binary) do
+    {:ok, msg} = decode(tag, binary)
+    msg
+  end
+
   @spec json_decode(byte(), binary(), list()) :: {:ok, sq_pb_msg()} | {:error, any()}
   for {module, tag} <- @mapping do
     def json_decode(unquote(tag), binary, opts) do

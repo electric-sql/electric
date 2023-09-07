@@ -29,7 +29,7 @@
     !alias Electric.Satellite.V14.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
 
     """!
-    Electric.Test.SatelliteWsClient.send_data(conn, %SatRelation{
+    Satellite.TestWsClient.send_data(conn, %SatRelation{
       columns: [
         %SatRelationColumn{name: "id", type: "text", is_nullable: false},
         %SatRelationColumn{name: "content", type: "text", is_nullable: false},
@@ -42,7 +42,7 @@
     """
     ?$eprompt
     """!
-    Electric.Test.SatelliteWsClient.send_data(conn, %SatRelation{
+    Satellite.TestWsClient.send_data(conn, %SatRelation{
       columns: [
         %SatRelationColumn{name: "id", type: "text", is_nullable: false},
         %SatRelationColumn{name: "content", type: "text", is_nullable: false},
@@ -56,11 +56,11 @@
     """
     ?$eprompt
     """!
-    Electric.Test.SatelliteWsClient.send_tx_data(conn, "1", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
-      %SatOpInsert{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000000", "test_content"]}},
-      %SatOpUpdate{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0::1, 1::1, 0::6>>, values: ["00000000-0000-0000-0000-000000000000", ""]}},
-      %SatOpInsert{relation_id: 2, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000001", "child content", "00000000-0000-0000-0000-000000000000"]}},
-    ])
+    Satellite.TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
+        %SatOpInsert{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000000", "test_content"]}},
+        %SatOpUpdate{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0::1, 1::1, 0::6>>, values: ["00000000-0000-0000-0000-000000000000", ""]}},
+        %SatOpInsert{relation_id: 2, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["00000000-0000-0000-0000-000000000001", "child content", "00000000-0000-0000-0000-000000000000"]}},
+    ]))
     """
     ?$eprompt
 

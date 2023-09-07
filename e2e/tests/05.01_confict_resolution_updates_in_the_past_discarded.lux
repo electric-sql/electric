@@ -9,7 +9,7 @@
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
     [invoke elixir_client_subscribe "entries"]
-    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
 
@@ -22,14 +22,13 @@
 [shell user_1_ws1]
     # Send one update touching a single column
     """!
-    Electric.Test.SatelliteWsClient.entries_table_send_update(
-        conn,
-        "1", # lsn
-        1686009600000, # Unix timestamp of ~U[2023-06-06 00:00:00Z] |> DateTime.to_unix(:millisecond)
-        "00000000-0000-0000-0000-000000000000", # id
-        %{"content" => "original value", "content_b" => nil}, # old
-        %{"content" => "updated on client 1", "content_b" => nil} # new
-    )
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", ~U[2023-06-06 00:00:00Z], [
+        ProtocolHelpers.update("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000"}, # pk
+            %{"content" => "original value", "content_b" => nil}, # old
+            %{"content" => "updated on client 1", "content_b" => nil} # new
+        )
+    ]))
     """
     ?:ok
     ?$eprompt

@@ -21,7 +21,7 @@ defmodule ElectricTest.SetupHelpers do
   end
 
   @doc """
-  Asserts server sends all messages that it should to `Electric.Test.SatelliteWsClient` after
+  Asserts server sends all messages that it should to `Satellite.TestWsClient` after
   replication request has been sent.
 
   Assumes that the database has been migrated before the replication started, and that
@@ -49,7 +49,7 @@ defmodule ElectricTest.SetupHelpers do
   end
 
   @doc """
-  Wait for and receives subscription data response as sent back to the test process by `Electric.Test.SatelliteWsClient`.
+  Wait for and receives subscription data response as sent back to the test process by `Satellite.TestWsClient`.
 
   Waits for the `SatSubsDataBegin` message, then for each shape data, then for the end message,
   and verifies their order. Returns a map, where the shape request ids are keys, and the `SatOpInsert` operations are values.
