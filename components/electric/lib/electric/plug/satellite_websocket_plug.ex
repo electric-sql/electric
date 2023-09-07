@@ -32,11 +32,12 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
           instance_id: Electric.instance_id()
         )
 
-        protocol_vsn = "#{conn.assigns.satellite_vsn.major}.#{conn.assigns.satellite_vsn.minor}"
-        Logger.debug("Upgrading connection for client with version #{protocol_vsn}")
+        client_vsn = conn.assigns.satellite_vsn
+        protocol_vsn = "#{client_vsn.major}.#{client_vsn.minor}"
+        Logger.debug("Upgrading connection for client with protocol version #{protocol_vsn}")
 
         conn
-        |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> "#{protocol_vsn}")
+        |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> protocol_vsn)
         |> upgrade_adapter(
           :websocket,
           {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
