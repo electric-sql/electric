@@ -10,13 +10,6 @@ defmodule Electric.Postgres.PBTest do
       assert original_msg == decoded_msg
     end
 
-    test "message for SatPingReq is encoded and decoded" do
-      original_msg = %SatPingReq{}
-      {:ok, type, iodata} = PB.encode(original_msg)
-      {:ok, decoded_msg} = PB.decode(type, :erlang.iolist_to_binary(iodata))
-      assert original_msg == decoded_msg
-    end
-
     test "message for transaction" do
       begin = %SatOpBegin{
         commit_timestamp: :os.system_time(:millisecond),

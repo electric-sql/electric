@@ -12,7 +12,6 @@ import {
   SatTransOp,
   SatOpRow,
   SatOpLog,
-  SatPingResp,
   SatRelation,
   SatRelationColumn,
   SatSubsResp,
@@ -143,11 +142,6 @@ export class SatelliteClient extends EventEmitter implements Client {
         SatInStopReplicationResp: {
           handle: () => this.handleStopResp(),
           isRpc: true,
-        },
-        SatPingReq: { handle: () => this.handlePingReq(), isRpc: true },
-        SatPingResp: {
-          handle: (req: any) => this.handlePingResp(req),
-          isRpc: false,
         },
         SatRelation: {
           handle: (req: any) => this.handleRelation(req),
@@ -728,23 +722,6 @@ export class SatelliteClient extends EventEmitter implements Client {
         )
       }
     }
-  }
-
-  private handlePingReq() {
-    Log.info(
-      `respond to ping with last ack ${
-        this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
-      }`
-    )
-    const pong = SatPingResp.fromPartial({ lsn: this.inbound.last_lsn })
-    this.sendMessage(pong)
-  }
-
-  private handlePingResp(_message: SatPingResp) {
-    // TODO: This message is not used in any way right now.
-    //       We might be dropping client-initiated pings completely.
-    //       However, the server sends these messages without any prompting,
-    //       so this handler cannot just throw an error
   }
 
   private handleError(error: SatErrorResp) {

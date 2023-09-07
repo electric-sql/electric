@@ -152,7 +152,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     test "Server will respond with error on attempt to skip auth", ctx do
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatPingReq{})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
@@ -164,8 +164,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         server_id = ctx.server_id
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
-
-        ping_server(conn)
       end)
     end
 
@@ -173,7 +171,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       server_id = ctx.server_id
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatPingReq{})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
@@ -573,11 +571,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           assert tx.origin !== ""
 
-          assert_receive {^conn, %SatPingResp{lsn: ^lsn}}, @default_wait
-
-          # After restart we still get same lsn
+          # Wait for everything to be persisted
+          Process.sleep(200)
         end)
 
+        # After restart we still get same lsn
         with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
           lsn = "some_long_internal_lsn"
 

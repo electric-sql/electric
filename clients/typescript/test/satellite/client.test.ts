@@ -232,29 +232,6 @@ test.serial('replication stop failure', async (t) => {
   }
 })
 
-test.serial('server pings client', async (t) => {
-  await connectAndAuth(t.context)
-  const { client, server } = t.context
-
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
-  const ping = Proto.SatPingReq.fromPartial({})
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
-
-  return new Promise(async (resolve) => {
-    server.nextResponses([start, ping])
-    server.nextResponses([
-      () => {
-        t.pass()
-        resolve()
-      },
-    ])
-    server.nextResponses([stop])
-
-    await client.startReplication()
-    await client.stopReplication()
-  })
-})
-
 test.serial('receive transaction over multiple messages', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context

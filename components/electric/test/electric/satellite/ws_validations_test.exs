@@ -53,9 +53,6 @@ defmodule Electric.Satellite.WsValidationsTest do
       tx_op_log = serialize_trans(%{"id" => "3", "num" => "-1", "t1" => "", "t2" => "..."})
       MockClient.send_data(conn, tx_op_log)
 
-      # Wait long enough for the server to process our messages, thus confirming it has been accepted
-      ping_server(conn)
-
       refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
   end
@@ -113,9 +110,6 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      # Wait long enough for the server to process our messages, thus confirming it has been accepted
-      ping_server(conn)
-
       refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
 
@@ -168,9 +162,6 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      # Wait long enough for the server to process our messages, thus confirming it has been accepted
-      ping_server(conn)
-
       refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)
 
@@ -215,9 +206,6 @@ defmodule Electric.Satellite.WsValidationsTest do
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
       end)
-
-      # Wait long enough for the server to process our messages, thus confirming it has been accepted
-      ping_server(conn)
 
       refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end)

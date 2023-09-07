@@ -5,12 +5,6 @@ defmodule ElectricTest.SatelliteHelpers do
 
   alias Satellite.TestWsClient, as: MockClient
 
-  # Send a ping to WebsocketServer. Useful to make sure it is done with initial sync.
-  def ping_server(conn) do
-    MockClient.send_data(conn, %SatPingReq{})
-    assert_receive {^conn, %SatPingResp{lsn: ""}}
-  end
-
   def assert_receive_migration(conn, version, table_name) do
     assert_receive {^conn, %SatRelation{table_name: ^table_name}}
 

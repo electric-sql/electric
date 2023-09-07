@@ -111,8 +111,6 @@ const msgtypetuples: MappingTuples = {
   SatErrorResp: [0, Pb.SatErrorResp],
   SatAuthReq: [1, Pb.SatAuthReq],
   SatAuthResp: [2, Pb.SatAuthResp],
-  SatPingReq: [3, Pb.SatPingReq],
-  SatPingResp: [4, Pb.SatPingResp],
   SatInStartReplicationReq: [5, Pb.SatInStartReplicationReq],
   SatInStartReplicationResp: [6, Pb.SatInStartReplicationResp],
   SatInStopReplicationReq: [7, Pb.SatInStopReplicationReq],
@@ -143,8 +141,6 @@ export type SatPbMsg =
   | Pb.SatErrorResp
   | Pb.SatAuthReq
   | Pb.SatAuthResp
-  | Pb.SatPingReq
-  | Pb.SatPingResp
   | Pb.SatInStartReplicationReq
   | Pb.SatInStartReplicationResp
   | Pb.SatInStopReplicationReq
@@ -329,12 +325,6 @@ export function msgToString(message: SatPbMsg): string {
       return `#SatInStopReplicationResp{}`
     case 'Electric.Satellite.SatMigrationNotification':
       return `#SatMigrationNotification{to: ${message.newSchemaVersion}, from: ${message.newSchemaVersion}}`
-    case 'Electric.Satellite.SatPingReq':
-      return `#SatPingReq{}`
-    case 'Electric.Satellite.SatPingResp':
-      return `#SatPingResp{lsn: ${
-        message.lsn ? base64.fromBytes(message.lsn) : 'NULL'
-      }}`
     case 'Electric.Satellite.SatRelation': {
       const cols = message.columns
         .map((x) => `${x.name}: ${x.type}${x.primaryKey ? ' PK' : ''}`)

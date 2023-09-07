@@ -250,17 +250,6 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  def process_message(%SatPingReq{} = _msg, %State{in_rep: in_rep} = state) do
-    Logger.debug("Received ping request, sending lsn #{inspect(in_rep.lsn)}")
-    {%SatPingResp{lsn: in_rep.lsn}, state}
-  end
-
-  def process_message(%SatPingResp{lsn: confirmed_lsn}, %State{out_rep: out_rep} = state)
-      when confirmed_lsn !== "" do
-    Logger.debug("Received ping response, with clients lsn: #{inspect(confirmed_lsn)}")
-    {nil, %{state | out_rep: %OutRep{out_rep | lsn: confirmed_lsn}}}
-  end
-
   # Satellite client request replication
   def process_message(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
@@ -556,7 +545,6 @@ defmodule Electric.Satellite.Protocol do
   defp report_lsn(satellite, pid, lsn) do
     Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
     OffsetStorage.put_satellite_lsn(satellite, lsn)
-    Process.send(pid, {__MODULE__, :lsn_report, lsn}, [])
   end
 
   @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) ::
