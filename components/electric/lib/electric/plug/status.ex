@@ -5,25 +5,20 @@ defmodule Electric.Plug.Status do
   use Plug.Router
   import Plug.Conn
 
-  plug(:match)
-  plug(:dispatch)
+  plug :match
+  plug :dispatch
 
   get "/" do
-    origins =
-      PostgresConnector.connectors()
-      |> Enum.map(fn origin ->
-        case PostgresConnectorMng.status(origin) do
-          :ready -> {origin, true}
-          :migration -> {origin, :migration}
-          _ -> {origin, false}
-        end
-      end)
+    [origin] = PostgresConnector.connectors()
 
-    data = %{
-      connectors: Map.new(origins)
-    }
+    msg =
+      if :ready == PostgresConnectorMng.status(origin) do
+        "Connection to Postgres is up!"
+      else
+        "Initializing connection to Postgres..."
+      end
 
-    send_resp(conn, 200, Jason.encode!(data))
+    send_resp(conn, 200, msg)
   end
 
   match _ do
