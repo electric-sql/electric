@@ -8,7 +8,7 @@ import {
   serializeRow,
 } from '../../src/satellite/client'
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
-import { WebSocketNodeFactory } from '../../src/sockets/node'
+import { WebSocketNode } from '../../src/sockets/node'
 import { base64, bytesToNumber } from '../../src/util/common'
 import {
   getObjFromString,
@@ -42,7 +42,7 @@ test.beforeEach((t) => {
 
   const client = new SatelliteClient(
     dbName,
-    new WebSocketNodeFactory(),
+    WebSocketNode,
     new MockNotifier(dbName),
     {
       host: '127.0.0.1',

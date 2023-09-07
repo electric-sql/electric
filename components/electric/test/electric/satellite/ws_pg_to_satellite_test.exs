@@ -6,7 +6,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
   import Electric.Postgres.TestConnection
   import ElectricTest.SatelliteHelpers
 
-  alias Electric.Test.SatelliteWsClient, as: MockClient
+  alias Satellite.TestWsClient, as: MockClient
   alias Electric.Satellite.Auth
 
   setup :setup_replicated_db

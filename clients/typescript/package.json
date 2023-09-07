@@ -108,6 +108,7 @@
     }
   },
   "scripts": {
+    "prebuild": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "dev": "tsmodule dev",
     "build": "rm -rf ./dist && tsc && tsmodule build",
     "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",

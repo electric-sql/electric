@@ -9,7 +9,7 @@
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
     [invoke elixir_client_subscribe "entries"]
-    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
 
@@ -18,7 +18,7 @@
     [invoke start_elixir_test 2]
     [invoke client_session 2 1]
     [invoke elixir_client_subscribe "entries"]
-    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
 
@@ -32,15 +32,14 @@
     [my seen_tag=$1]
     # Send one update touching a single column
     """!
-    Electric.Test.SatelliteWsClient.entries_table_send_update(
-        conn,
-        "1", # lsn
-        DateTime.utc_now() |> DateTime.to_unix(:millisecond),
-        "00000000-0000-0000-0000-000000000000", # id
-        %{"content" => "original value", "content_b" => nil}, # old
-        %{"content" => "updated on client 1", "content_b" => nil}, # new
-        ["$seen_tag"]
-    )
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.utc_now(), [
+        ProtocolHelpers.update("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000"}, # pk
+            %{"content" => "original value", "content_b" => nil}, # old
+            %{"content" => "updated on client 1", "content_b" => nil}, # new
+            ["$seen_tag"]
+        )
+    ]))
     """
     ?:ok
     ?$eprompt
@@ -50,15 +49,14 @@
     [my seen_tag=$1]
     # Send one update touching a single column
     """!
-    Electric.Test.SatelliteWsClient.entries_table_send_update(
-        conn,
-        "1", # lsn
-        DateTime.utc_now() |> DateTime.to_unix(:millisecond),
-        "00000000-0000-0000-0000-000000000000", # id
-        %{"content" => "original value", "content_b" => nil}, # old
-        %{"content" => "original value", "content_b" => "updated on client 2"}, # new
-        ["$seen_tag"]
-    )
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.utc_now(), [
+        ProtocolHelpers.update("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000"}, # pk
+            %{"content" => "original value", "content_b" => nil}, # old
+            %{"content" => "original value", "content_b" => "updated on client 2"}, # new
+            ["$seen_tag"]
+        )
+    ]))
     """
     ?:ok
     ?$eprompt

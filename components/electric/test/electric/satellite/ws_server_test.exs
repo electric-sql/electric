@@ -9,7 +9,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
 
-  alias Electric.Test.SatelliteWsClient, as: MockClient
+  alias Satellite.TestWsClient, as: MockClient
 
   alias Electric.Replication.Changes
 
@@ -118,7 +118,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "sanity check", ctx do
       with_connect([port: ctx.port], fn conn ->
         Process.sleep(1000)
-        assert true == MockClient.is_alive(conn)
+        assert Process.alive?(conn)
       end)
     end
 
@@ -168,14 +168,14 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     test "Server will handle bad requests", ctx do
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_bin_data(conn, <<"rubbish">>)
+        MockClient.send_frames(conn, {:binary, "rubbish"})
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
 
     test "Server will handle bad requests after auth", ctx do
       with_connect([port: ctx.port, auth: ctx], fn conn ->
-        MockClient.send_bin_data(conn, <<"rubbish">>)
+        MockClient.send_frames(conn, {:binary, "rubbish"})
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
@@ -268,7 +268,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     test "Server will forbid two connections that use same id", ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn _conn ->
-        {:ok, pid} = MockClient.connect_and_spawn(auto_register: false, port: ctx.port)
+        {:ok, pid} = MockClient.connect(port: ctx.port)
 
         MockClient.send_data(pid, %SatAuthReq{
           id: ctx.client_id,
@@ -671,8 +671,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   def clean_connections() do
-    MockClient.disconnect()
-
     :ok = drain_pids(active_clients())
     :ok = drain_active_resources(connectors())
   end

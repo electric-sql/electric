@@ -1,12 +1,5 @@
-import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
+import { ConnectionOptions, Data, Socket } from '.'
 import { SatelliteError, SatelliteErrorCode } from '../util'
-
-// FIXME: This implementation is a bit contrived because it is not using EventEmitter
-export class WebSocketReactNativeFactory implements SocketFactory {
-  create(): WebSocketReactNative {
-    return new WebSocketReactNative()
-  }
-}
 
 export class WebSocketReactNative implements Socket {
   private socket?: WebSocket
@@ -16,6 +9,8 @@ export class WebSocketReactNative implements Socket {
   private onceErrorCallbacks: ((error: SatelliteError) => void)[] = []
   private messageCallbacks: ((data: any) => void)[] = []
 
+  constructor(private protocolVsn: string) {}
+
   open(opts: ConnectionOptions): this {
     if (this.socket) {
       throw new SatelliteError(
@@ -24,7 +19,7 @@ export class WebSocketReactNative implements Socket {
       )
     }
 
-    this.socket = new WebSocket(opts.url)
+    this.socket = new WebSocket(opts.url, [this.protocolVsn])
     this.socket.binaryType = 'arraybuffer'
 
     this.socket.onopen = () => {

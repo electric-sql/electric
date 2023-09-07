@@ -11,19 +11,15 @@
     [invoke client_session $user_id_1 1]
     [invoke elixir_client_subscribe "entries"]
 
-    !Electric.Test.SatelliteWsClient.send_test_relation(conn)
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
     """!
-    Electric.Test.SatelliteWsClient.entries_table_send_insert(
-        conn,
-        "1", # lsn
-        1686009600000, # Unix timestamp of ~U[2023-06-06 00:00:00Z] |> DateTime.to_unix(:millisecond)
-        %{
-            "id" => "00000000-0000-0000-0000-000000000000",
-            "content" => "sentinel value"
-        }
-    )
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", ~U[2023-06-06 00:00:00Z], [
+        ProtocolHelpers.insert("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000", "content" => "sentinel value"}
+        )
+    ]))
     """
     ?:ok
     ?$eprompt

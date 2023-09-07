@@ -28,7 +28,7 @@
     ?\}
     ?tags: \["postgres_1@\d{13,16}"\]
     ?\}
-    !:proc_lib.stop(conn)
+    !TestWsClient.disconnect(conn)
     ?$eprompt
 
 # New row inserted while client is "offline"

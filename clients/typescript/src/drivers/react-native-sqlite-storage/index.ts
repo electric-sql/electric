@@ -10,7 +10,7 @@ import {
 
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
-import { WebSocketReactNativeFactory } from '../../sockets/react-native'
+import { WebSocketReactNative } from '../../sockets/react-native'
 import { Database } from './database'
 import { ElectricClient } from '../../client/model/client'
 
@@ -42,7 +42,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db.dbName
   const adapter = opts?.adapter || new DatabaseAdapter(db, promisesEnabled)
-  const socketFactory = opts?.socketFactory || new WebSocketReactNativeFactory()
+  const socketFactory = opts?.socketFactory || WebSocketReactNative
 
   const namespace = await baseElectrify(
     dbName,
