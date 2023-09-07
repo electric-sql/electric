@@ -75,9 +75,20 @@ defmodule Electric.Postgres.MockSchemaLoader do
     parent = Keyword.get(opts, :parent, self())
     pks = Keyword.get(opts, :pks, nil)
     txids = Keyword.get(opts, :txids, %{})
+    # allow for having a shortcut to set electrified tables and indexes
+    indexes = Keyword.get(opts, :indexes, %{})
+    tables = Keyword.get(opts, :tables, %{})
 
     {__MODULE__,
-     [parent: parent, versions: versions, oid_loader: oid_loader, pks: pks, txids: txids]}
+     [
+       parent: parent,
+       versions: versions,
+       oid_loader: oid_loader,
+       pks: pks,
+       txids: txids,
+       indexes: indexes,
+       tables: tables
+     ]}
   end
 
   defp make_oid_loader(fun) when is_function(fun, 3) do
@@ -124,9 +135,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   def receive_tx({:agent, pid}, %{"txid" => _txid, "txts" => _txts} = tx, version) do
-    with :ok <- Agent.update(pid, &receive_tx(&1, tx, version)) do
-      {:agent, pid}
-    end
+    :ok = Agent.update(pid, &receive_tx(&1, tx, version))
+    {:agent, pid}
   end
 
   def receive_tx({versions, opts}, %{"txid" => _txid, "txts" => _txts} = row, version) do
@@ -137,6 +147,20 @@ defmodule Electric.Postgres.MockSchemaLoader do
   # ignore rows that don't define a txid, txts key
   def receive_tx({versions, opts}, _row, _version) do
     {versions, opts}
+  end
+
+  def electrify_table({__MODULE__, state}, {schema, table}) do
+    {__MODULE__, electrify_table(state, {schema, table})}
+  end
+
+  def electrify_table({:agent, pid}, {schema, table}) do
+    :ok = Agent.update(pid, &electrify_table(&1, {schema, table}))
+    {:agent, pid}
+  end
+
+  def electrify_table({versions, opts}, {schema, table}) do
+    {versions,
+     Map.update(opts, :tables, %{{schema, table} => true}, &Map.put(&1, {schema, table}, true))}
   end
 
   defp tx_key(%{"txid" => txid, "txts" => txts}) do
@@ -343,9 +367,13 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Agent.get(pid, &table_electrified?(&1, {schema, name}))
   end
 
-  def table_electrified?(state, {schema, name}) do
-    with {:ok, tables} <- electrified_tables(state) do
-      {:ok, Enum.any?(tables, &(&1.schema == schema && &1.name == name))}
+  def table_electrified?({_versions, opts} = state, {schema, name}) do
+    if Map.get(opts.tables, {schema, name}) do
+      {:ok, true}
+    else
+      with {:ok, tables} <- electrified_tables(state) do
+        {:ok, Enum.any?(tables, &(&1.schema == schema && &1.name == name))}
+      end
     end
   end
 
