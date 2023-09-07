@@ -71,7 +71,7 @@ defmodule Electric.Postgres.Proxy.Handler do
       |> Injector.new()
 
     session_id = Electric.Postgres.Proxy.session_id()
-    Logger.metadata(session_id: session_id)
+    Logger.metadata(proxy_session_id: session_id)
 
     {:continue, %{state | session_id: session_id, injector: injector}}
   end
@@ -89,7 +89,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   @impl GenServer
   def handle_info({:downstream, :msgs, msgs}, {socket, state}) do
-    trace_recv(:server,state.session_id,  msgs)
+    trace_recv(:server, state.session_id, msgs)
 
     {:ok, injector, upstream_msgs, downstream_msgs} =
       Injector.recv_backend(state.injector, msgs)

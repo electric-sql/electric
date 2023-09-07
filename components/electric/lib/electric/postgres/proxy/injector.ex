@@ -19,7 +19,7 @@ defmodule Electric.Postgres.Proxy.Injector do
       injector = Keyword.get(opts, :injector, __MODULE__)
       capture = Keyword.get(opts, :capture_mode, nil) |> default_capture_mode()
 
-      Logger.debug("Initialising injector in capture mode #{inspect(capture || "default")}")
+      debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
       {:ok, {capture, %State{loader: loader, injector: injector}}}
     end
@@ -81,7 +81,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def inject_version_query(version, state) do
-    Logger.debug("Assigning migration tx version '#{version}'")
+    debug("Assigning migration tx version '#{version}'")
     injector = Map.fetch!(state, :injector)
 
     Capture.Inject.new([%M.Query{query: injector.capture_version_query(version)}])
@@ -228,7 +228,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   defp message_query(%{query: query}) when is_binary(query), do: query
 
   defp guess_framework(%M.Parse{name: "ecto_" <> _}, _table) do
-    Logger.debug("Detected framework: ecto")
+    debug("Detected framework: ecto")
     :ecto
   end
 
@@ -273,5 +273,9 @@ defmodule Electric.Postgres.Proxy.Injector do
           query: query
         }}}
     end
+  end
+
+  def debug(msg) do
+    Logger.debug(msg, component: Electric.Postgres.Proxy)
   end
 end

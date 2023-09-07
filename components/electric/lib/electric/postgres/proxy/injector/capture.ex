@@ -84,6 +84,8 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
         )
 
       {{{:drop, "table"}, true, _query, {schema, name}}, _} ->
+        Injector.debug("Attempt to drop electrified table #{schema}.#{name}")
+
         error = [
           %M.ErrorResponse{
             severity: "ERROR",
@@ -101,10 +103,11 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
       {{{:drop, "index"}, true, query, index}, _table} ->
         migration_state(msg, query, index, State.electrify(state), Send.back(send, msg))
 
-      {{{:electric, command}, _electrified?, _query, table_name}, _} ->
+      {{{:electric, command}, _electrified?, query, table_name}, _} ->
         # TODO: have the command parser correctly parse names into {schema, name}
         {:ok, {_schema, _name} = table} = Electric.Postgres.Proxy.NameParser.parse(table_name)
 
+        Injector.debug("Got an electric command: #{inspect(query)}")
         # we capture a version for any DDLX because it creates a new schema version
         Capture.Electrify.new(command, msg, State.electrify(state, table), send)
 
@@ -116,6 +119,8 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
       {false, true} ->
         case Injector.migration_version_query?(msg, state) do
           {true, version, framework, table, columns} ->
+            Injector.debug("Got a #{framework} migration version query")
+
             capture = %Version{
               version: version,
               framework: framework,

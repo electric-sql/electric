@@ -15,6 +15,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
   defstruct [:buffer, direction: :front, after_fun: nil]
 
   alias PgProtocol.Message, as: M
+  alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
 
   @type after_fun :: (State.t(), Send.t() -> {Capture.t(), State.t(), Send.t()})
@@ -44,6 +45,8 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Sink do
 
     # we're done - send the buffer to the front/backend
     def recv_backend(sink, %M.ReadyForQuery{} = _msg, state, send) do
+      Injector.debug("Sink complete, forwarding #{inspect(sink.buffer)} to #{sink.direction}")
+
       send =
         apply(Send, sink.direction, [send, Enum.reverse(sink.buffer)])
 

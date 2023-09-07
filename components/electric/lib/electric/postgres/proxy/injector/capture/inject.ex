@@ -9,8 +9,10 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Inject do
   defstruct [:inject, buffer: []]
 
   alias PgProtocol.Message, as: M
-  alias Electric.Postgres.Proxy.Injector.Capture.Sink
-  alias Electric.Postgres.Proxy.Injector.Send
+  alias Electric.Postgres.Proxy.Injector
+  alias Electric.Postgres.Proxy.Injector.{Capture.Sink, Send}
+
+  require Logger
 
   @type t() :: %__MODULE__{
           inject: [M.t()],
@@ -38,6 +40,8 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Inject do
     end
 
     def recv_backend(i, %M.ReadyForQuery{} = msg, state, send) do
+      Injector.debug("Injecting SQL queries: #{inspect(i.inject)}")
+
       {%Sink{
          buffer: [msg | i.buffer]
        }, state, Send.back(send, i.inject)}

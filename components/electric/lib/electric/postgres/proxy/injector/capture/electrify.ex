@@ -19,6 +19,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electrify do
   defstruct [:queries, :command, :protocol]
 
   alias PgProtocol.Message, as: M
+  alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.Injector.Send
   alias Electric.DDLX
 
@@ -35,6 +36,8 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electrify do
       %M.ReadyForQuery{status: :failed}
     ]
 
+    Injector.debug("Received invalid ELECTRIC command: #{error.message} [#{error.sql}]")
+
     # lock the send so that any following messages from the client are ignored/dropped
     {nil, state, send |> Send.clear(:back) |> Send.front(msgs) |> Send.lock()}
   end
@@ -43,6 +46,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electrify do
   # command query to the backend
   def new(commands, %M.Query{}, state, send) do
     [query | queries] = DDLX.Command.pg_sql(commands)
+    Injector.debug("Rewritten ELECTRIC command: #{inspect([query | queries])}")
     capture = %__MODULE__{queries: queries, command: commands, protocol: :simple}
     {capture, state, Send.back(send, %M.Query{query: query})}
   end
@@ -51,6 +55,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electrify do
   # sequence of pipelined commands before injecting the electric query
   def new(commands, %M.Parse{}, state, send) do
     queries = DDLX.Command.pg_sql(commands)
+    Injector.debug("Rewritten ELECTRIC command: #{inspect(queries)}")
     capture = %__MODULE__{queries: queries, command: commands, protocol: :extended}
     {capture, state, send}
   end
