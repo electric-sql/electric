@@ -175,7 +175,7 @@ defmodule Mint.WebSocketClient do
           end
 
         Logger.warning(
-          "#{__MODULE__} #{inspect(proc)} received unexpected message in do_handle_info/2: #{inspect(msg)}"
+          "#{inspect(__MODULE__)} #{inspect(proc)} received unexpected message in do_handle_info/2: #{inspect(msg)}"
         )
 
         {:noreply, state}
@@ -293,7 +293,7 @@ defmodule Mint.WebSocketClient do
     )
 
     with {:ok, conn} <- Mint.HTTP.connect(http_protocol, host, port, log: true),
-         {:ok, conn, ref} <- Mint.WebSocket.upgrade(protocol, conn, "/ws", ws_headers),
+         {:ok, conn, ref} <- Mint.WebSocket.upgrade(protocol, conn, path, ws_headers),
          http_reply_message = receive(do: (message -> message)),
          {:ok, conn, [{:status, ^ref, status}, {:headers, ^ref, resp_headers}, {:done, ^ref}]} <-
            Mint.WebSocket.stream(conn, http_reply_message),
