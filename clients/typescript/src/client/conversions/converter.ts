@@ -35,9 +35,11 @@ export type PgType = PgBasicTypes | PgDateTypes
 //       values on the protocol (bc PG representation of e.g. timetz and timestamptz != SQLite representation)
 //       see alco's useful table on the PG and SQLite values
 
+// TODO: Move date serialisation functions to its own file
+
 //export function toSql(v: PgValue): SqliteValue {
-export function toSql(v: Date, pgType: PgDateTypes): string
-export function toSql(v: any, pgType: any): any {
+export function toSqlite(v: Date, pgType: PgDateTypes): string
+export function toSqlite(v: any, pgType: any): any {
   if (v instanceof Date) {
     return serialiseDate(v, pgType)
   }
@@ -47,8 +49,8 @@ export function toSql(v: any, pgType: any): any {
 }
 
 //export function fromSql(v: SqliteValue): PgValue {
-export function fromSql(v: string, pgType: PgDateTypes): Date
-export function fromSql(v: any, pgType: any): any {
+export function fromSqlite(v: string, pgType: PgDateTypes): Date
+export function fromSqlite(v: any, pgType: any): any {
   if (Object.values(PgDateTypes).includes(pgType)) {
     // it's a serialised date
     return deserialiseDate(v, pgType)
