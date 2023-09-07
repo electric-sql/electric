@@ -10,7 +10,10 @@ import { globalRegistry } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
 
+let dbName: string
+
 export const make_db = (name: string): any => {
+  dbName = name
   return new Database(name)
 }
 
@@ -51,12 +54,13 @@ export const set_subscribers = (db: Electric) => {
   })
 }
 
-export const syncTable = async (electric: Electric, table: 'items' | 'other_items') => {
-  if (table === 'items') {
-    const { synced } = await electric.db.items.sync()
-    return await synced
-  } else if (table === 'other_items') {
+export const syncTable = async (electric: Electric, table: string) => {
+  if (table === 'other_items') {
     const { synced } = await electric.db.other_items.sync({ include: { items: true } })
+    return await synced
+  } else {
+    const satellite = globalRegistry.satellites[dbName]
+    const { synced } = await satellite.subscribe([{selects: [{tablename: table}]}])
     return await synced
   }
 }
@@ -67,6 +71,10 @@ export const get_tables = async (electric: Electric) => {
 
 export const get_columns = async (electric: Electric, table: string) => {
   return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+}
+
+export const get_rows = async (electric: Electric, table: string) => {
+  return await electric.db.raw({sql: `SELECT * FROM ${table};`})
 }
 
 export const get_items = async (electric: Electric) => {
@@ -99,14 +107,20 @@ export const insert_item = async (electric: Electric, keys: [string]) => {
 }
 
 export const insert_extended_item = async (electric: Electric, values: { string: string }) => {
-  const fixedColumns = { 'id': uuidv4 }
-  const columns = Object.keys(fixedColumns).concat(Object.keys(values))
+  await insert_extended_into(electric, "items", values)
+}
+
+export const insert_extended_into = async (electric: Electric, table: string, values: { string: string }) => {
+  if (!values['id']) {
+    values['id'] = uuidv4()
+  }
+  const columns = Object.keys(values)
   const columnNames = columns.join(", ")
   const placeHolders = Array(columns.length).fill("?")
-  const args = Object.values(fixedColumns).map(f => f()).concat(Object.values(values))
+  const args = Object.values(values)
 
   await electric.db.raw({
-    sql: `INSERT INTO items (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
+    sql: `INSERT INTO ${table} (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
     args: args,
   })
 }
