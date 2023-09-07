@@ -542,7 +542,7 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp report_lsn(satellite, pid, lsn) do
+  defp report_lsn(satellite, _pid, lsn) do
     Logger.info("report lsn: #{inspect(lsn)} for #{satellite}")
     OffsetStorage.put_satellite_lsn(satellite, lsn)
   end
