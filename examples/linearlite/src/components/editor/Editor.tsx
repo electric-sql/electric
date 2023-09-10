@@ -1,8 +1,10 @@
-import { EditorProvider, BubbleMenu } from '@tiptap/react'
+import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import type { Editor as TipTapEditor, Extensions } from '@tiptap/core'
+import { Markdown } from 'tiptap-markdown'
+import type { Extensions } from '@tiptap/core'
 import EditorMenu from './EditorMenu'
+import { useEffect, useRef } from 'react'
 
 interface EditorProps {
   value: string
@@ -22,8 +24,25 @@ const Editor = ({
       class: className,
     },
   }
+  const markdownValue = useRef<string | null>(null)
 
-  const extensions: Extensions = [StarterKit]
+  const extensions: Extensions = [StarterKit, Markdown]
+
+  const editor = useEditor({
+    extensions,
+    editorProps,
+    content: value || undefined,
+    onUpdate: ({ editor }) => {
+      markdownValue.current = editor.storage.markdown.getMarkdown()
+      onChange(markdownValue.current || '')
+    },
+  })
+
+  useEffect(() => {
+    if (editor && markdownValue.current !== value) {
+      editor.commands.setContent(value)
+    }
+  }, [value])
 
   if (placeholder) {
     extensions.push(
@@ -33,22 +52,15 @@ const Editor = ({
     )
   }
 
-  const onUpdate = ({ editor }: { editor: TipTapEditor }) => {
-    const json = editor.getJSON()
-    onChange(JSON.stringify(json))
-  }
-
   return (
-    <EditorProvider
-      extensions={extensions}
-      content={value ? JSON.parse(value) : undefined}
-      editorProps={editorProps}
-      onUpdate={onUpdate}
-    >
-      <BubbleMenu>
-        <EditorMenu />
-      </BubbleMenu>
-    </EditorProvider>
+    <>
+      <EditorContent editor={editor} />
+      {editor && (
+        <BubbleMenu editor={editor}>
+          <EditorMenu editor={editor} />
+        </BubbleMenu>
+      )}
+    </>
   )
 }
 

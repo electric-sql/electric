@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'],
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     screens: {
       sm: '640px',

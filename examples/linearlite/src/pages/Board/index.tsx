@@ -1,20 +1,23 @@
-import LeftMenu from '../../components/LeftMenu'
 import TopFilter from '../../components/TopFilter'
-import { useState } from 'react'
 import IssueBoard from './IssueBoard'
+import { Issue, useElectric } from '../../electric'
+import { useLiveQuery } from 'electric-sql/react'
 
 function Board() {
-  const [showMenu, setShowMenu] = useState(false)
+  const { db } = useElectric()!
+  const { results } = useLiveQuery(
+    db.issue.liveMany({
+      orderBy: {
+        kanbanorder: 'asc',
+      },
+    })
+  )
+  const issues: Issue[] = results !== undefined ? [...results] : []
+
   return (
-    <div className="flex w-screen h-screen overflow-y-hidden">
-      <LeftMenu showMenu={showMenu} onCloseMenu={() => setShowMenu(false)} />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <TopFilter
-          onOpenMenu={() => setShowMenu(!showMenu)}
-          title="All issues"
-        />
-        <IssueBoard />
-      </div>
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <TopFilter title="Board" issues={issues} hideSort={true} />
+      <IssueBoard issues={issues} />
     </div>
   )
 }

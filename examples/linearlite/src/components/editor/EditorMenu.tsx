@@ -1,4 +1,4 @@
-import { useCurrentEditor } from '@tiptap/react'
+import type { Editor as TipTapEditor } from '@tiptap/core'
 import classNames from 'classnames'
 
 import { BsTypeBold as BoldIcon } from 'react-icons/bs'
@@ -10,20 +10,18 @@ import { BsListOl as OrderedListIcon } from 'react-icons/bs'
 import { BsCodeSlash as CodeBlockIcon } from 'react-icons/bs'
 import { BsChatQuote as BlockquoteIcon } from 'react-icons/bs'
 
-const EditorMenu = () => {
-  const { editor } = useCurrentEditor()
+export interface EditorMenuProps {
+  editor: TipTapEditor
+}
 
-  if (!editor) {
-    return null
-  }
-
+const EditorMenu = ({ editor }: EditorMenuProps) => {
   return (
     <div className="bg-white flex shadow-md rounded border p-1">
       <button
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={!editor.can().chain().focus().toggleBold().run()}
         className={classNames(
-          'me-1 px-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('bold'),
           }
@@ -35,7 +33,7 @@ const EditorMenu = () => {
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={!editor.can().chain().focus().toggleItalic().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('italic'),
           }
@@ -47,7 +45,7 @@ const EditorMenu = () => {
         onClick={() => editor.chain().focus().toggleStrike().run()}
         disabled={!editor.can().chain().focus().toggleStrike().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('strike'),
           }
@@ -59,7 +57,7 @@ const EditorMenu = () => {
         onClick={() => editor.chain().focus().toggleCode().run()}
         disabled={!editor.can().chain().focus().toggleCode().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('code'),
           }
@@ -71,7 +69,7 @@ const EditorMenu = () => {
       <button
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('bulletList'),
           }
@@ -82,7 +80,7 @@ const EditorMenu = () => {
       <button
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('orderedList'),
           }
@@ -93,7 +91,7 @@ const EditorMenu = () => {
       <button
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('codeBlock'),
           }
@@ -104,7 +102,7 @@ const EditorMenu = () => {
       <button
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         className={classNames(
-          'px-1 py-1 rounded color text-gray-500 hover:text-black focus:outline-none',
+          'px-1 py-1 rounded color text-gray-500 hover:text-black',
           {
             'bg-gray-100': editor.isActive('blockquote'),
           }

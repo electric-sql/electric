@@ -1,21 +1,16 @@
-import { useContext, useEffect } from 'react'
-import { connectMenu } from '@firefox-devtools/react-contextmenu'
-import IssueContextMenu from './IssueContextMenu'
+import { useContext } from 'react'
 import IssueRow from './IssueRow'
 import { Issue, useElectric } from '../../electric'
 import { IssuesContext } from '.'
-import { useLiveQuery } from 'electric-sql/react'
 
-const ConnectedMenu = connectMenu('ISSUE_CONTEXT_MENU')(IssueContextMenu)
+export interface IssueListProps {
+  issues: Issue[]
+}
 
-function IssueList() {
+function IssueList({ issues }: IssueListProps) {
   const { filter }: IssuesContext = useContext(IssuesContext)
 
   const { db } = useElectric()!
-
-  useEffect(() => void db.issue.sync(), [])
-
-  // TODO: i think we need a way to reuse a live query across components
 
   // TODO: sync is not really working with large database. Manipulate the
   // size of the imported dataset in db/data.tsx
@@ -25,22 +20,6 @@ function IssueList() {
 
   // TODO: would be nice to have client-provided query execution time.
   // we could use it as part of our debug console
-
-  console.log(filter.title)
-
-  const { results } = useLiveQuery(
-    db.issue.liveMany({
-      where: {
-        title: {
-          // TODO: not working
-          contains: filter?.title ?? '',
-        },
-      },
-      orderBy: { created: 'desc' },
-    })
-  )
-
-  const issues = results !== undefined ? [...results] : []
 
   const handleIssueStatusChange = (issue: Issue, status: string) => {
     db.issue.update({
@@ -73,12 +52,7 @@ function IssueList() {
     />
   ))
 
-  return (
-    <div className="flex flex-col overflow-auto">
-      {issueRows}
-      <ConnectedMenu />
-    </div>
-  )
+  return <div className="flex flex-col overflow-auto">{issueRows}</div>
 }
 
 export default IssueList

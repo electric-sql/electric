@@ -1,9 +1,13 @@
 import fs from 'fs'
 import path from 'path'
+import * as url from 'url'
 import { DATABASE_URL } from './util.js'
 
-const createPool = require('@databases/pg')
-const { sql } = require('@databases/pg')
+import createPool from '@databases/pg'
+import { sql } from '@databases/pg'
+
+// The __dirname variable is not available in ES modules.
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 const MIGRATIONS_DIR =
   process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')

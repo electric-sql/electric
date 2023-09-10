@@ -28,5 +28,7 @@ export const initElectric = async () => {
   console.log(schema)
   console.log(config)
 
-  return electrify(conn, schema, config)
+  const elecConn = await electrify(conn, schema, config)
+  console.log('clientId', await (elecConn as any)._satellite._getClientId())
+  return elecConn
 }

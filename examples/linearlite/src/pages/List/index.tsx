@@ -1,7 +1,8 @@
-import LeftMenu from '../../components/LeftMenu'
 import TopFilter from '../../components/TopFilter'
 import { useState, createContext } from 'react'
 import IssueList from './IssueList'
+import { Issue, useElectric } from '../../electric'
+import { useLiveQuery } from 'electric-sql/react'
 
 export type Filter = {
   title: string
@@ -19,26 +20,30 @@ export const IssuesContext = createContext<IssuesContext>({
   setFilter: () => undefined,
 })
 
-function Home() {
-  const [showMenu, setShowMenu] = useState(false)
+export interface ListProps {
+  title?: string
+}
+
+function List({ title = 'All Issues' }: ListProps) {
+  const { db } = useElectric()!
+  const { results } = useLiveQuery(
+    db.issue.liveMany({
+      orderBy: { created: 'desc' },
+    })
+  )
+  const issues: Issue[] = results !== undefined ? [...results] : []
   const [filter, setFilter] = useState<Filter>({
     title: '',
   })
 
   return (
     <IssuesContext.Provider value={{ filter: filter, setFilter: setFilter }}>
-      <div className="flex w-full h-screen overflow-y-hidden">
-        <LeftMenu showMenu={showMenu} onCloseMenu={() => setShowMenu(false)} />
-        <div className="flex flex-col flex-grow">
-          <TopFilter
-            onOpenMenu={() => setShowMenu(!showMenu)}
-            title="All issues"
-          />
-          <IssueList />
-        </div>
+      <div className="flex flex-col flex-grow">
+        <TopFilter title={title} issues={issues} />
+        <IssueList issues={issues} />
       </div>
     </IssuesContext.Provider>
   )
 }
 
-export default Home
+export default List

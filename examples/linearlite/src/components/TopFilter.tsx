@@ -1,29 +1,21 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { BiSortUp } from 'react-icons/bi'
 import IssueFilterModal from './IssueFilterModal'
 import ViewOptionMenu from './ViewOptionMenu'
-import { useElectric } from '../electric'
-import { useLiveQuery } from 'electric-sql/react'
+import { Issue } from '../electric'
+import { MenuContext } from '../App'
 
 interface Props {
-  /* Top title */
   title: string
-  onOpenMenu?: () => void
+  issues: Issue[]
+  hideSort?: boolean
 }
 
-export default function ({ title, onOpenMenu }: Props) {
+export default function ({ title, issues, hideSort }: Props) {
   const [showFilter, setShowFilter] = useState(false)
   const [showViewOption, setShowViewOption] = useState(false)
-
-  // de-duplicate query?
-  const { db } = useElectric()!
-  const { results } = useLiveQuery(db.issue.liveMany({}))
-
-  const issues = results !== undefined ? [...results] : []
-
-  // TODO
-  // const issues = useSelector((state: RootState) => state.issues);
+  const { showMenu, setShowMenu } = useContext(MenuContext)!
 
   const totalIssues = issues.length
 
@@ -33,32 +25,31 @@ export default function ({ title, onOpenMenu }: Props) {
         {/* left section */}
         <div className="flex items-center">
           <button
-            className="flex-shrink-0 h-full px-5 focus:outline-none lg:hidden"
-            onClick={onOpenMenu}
+            className="flex-shrink-0 h-full px-5 lg:hidden"
+            onClick={() => setShowMenu(!showMenu)}
           >
             <MenuIcon className="w-3.5 text-gray-500 hover:text-gray-800" />
           </button>
 
-          <div className="p-1 font-semibold cursor-default hover:bg-gray-100">
-            {title}
-          </div>
+          <div className="p-1 font-semibold me-1">{title}</div>
           <span>{totalIssues}</span>
           <button
-            className="px-1 py-0.5 ml-3 border border-gray-300 border-dashed rounded text-gray-500 hover:border-gray-400 focus:outline-none hover:text-gray-800"
+            className="px-1 py-0.5 ml-3 border border-gray-300 border-dashed rounded text-gray-500 hover:border-gray-400 hover:text-gray-800"
             onClick={() => setShowFilter(!showFilter)}
           >
             + Filter
           </button>
         </div>
 
-        {/* right section */}
         <div className="flex items-center">
-          <div
-            className="p-2 rounded hover:bg-gray-100"
-            onClick={() => setShowViewOption(true)}
-          >
-            <BiSortUp size={14} />
-          </div>
+          {!hideSort && (
+            <button
+              className="p-2 rounded hover:bg-gray-100"
+              onClick={() => setShowViewOption(true)}
+            >
+              <BiSortUp size={14} />
+            </button>
+          )}
         </div>
       </div>
       <ViewOptionMenu

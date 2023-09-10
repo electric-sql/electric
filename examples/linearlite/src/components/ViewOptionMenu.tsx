@@ -79,31 +79,31 @@ export default function ({ isOpen, onDismiss }: Props) {
 
         {/* Filter fields */}
         <div className="px-4.5 py-2 flex flex-wrap border-b text-gray-800 border-gray-200 w-70">
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Priority
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             ID
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Status
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Labels
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Projects
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Due date
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Created
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Updated
           </button>
-          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 focus:outline-none">
+          <button className="h-6 px-2 mb-1 mr-1 font-medium bg-gray-100 border border-transparent rounded hover:border-gray-300 ">
             Assignee
           </button>
         </div>

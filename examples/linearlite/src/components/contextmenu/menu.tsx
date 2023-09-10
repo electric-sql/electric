@@ -28,7 +28,7 @@ interface MenuItemProps {
 const Item = function ({ onClick, children }: MenuItemProps) {
   return (
     <MenuItem
-      className="flex items-center h-8 px-3 text-gray-500 focus:outline-none hover:text-gray-800 hover:bg-gray-100"
+      className="flex items-center h-8 px-3 text-gray-500 hover:text-gray-800 hover:bg-gray-100"
       onClick={onClick}
     >
       {children}
@@ -69,7 +69,7 @@ export const Menu = (props: MenuProps) => {
       >
         {filterKeyword && (
           <input
-            className="text-sm font-normal flex-0 w-full placeholder-gray-400 px-3.5 py-2.5 rounded border border-gray-200 focus:outline-none"
+            className="text-sm font-normal flex-0 w-full placeholder-gray-400 px-3.5 py-2.5 rounded border border-gray-200 "
             ref={ref}
             onChange={(e) => {
               //TODO: use debounced call

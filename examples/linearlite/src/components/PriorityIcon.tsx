@@ -1,5 +1,5 @@
 import { ReactComponent as SignalUrgentIcon } from '../assets/icons/claim.svg'
-import { ReactComponent as SignalNoPriorityIcon } from '../assets/icons/dots.svg'
+import { BsThreeDots as SignalNoPriorityIcon } from 'react-icons/bs'
 import { ReactComponent as SignalMediumIcon } from '../assets/icons/signal-medium.svg'
 import { ReactComponent as SignalStrongIcon } from '../assets/icons/signal-strong.svg'
 import { ReactComponent as SignalWeakIcon } from '../assets/icons/signal-weak.svg'
@@ -20,7 +20,7 @@ const ICONS = {
 }
 
 export default function PriorityIcon({ priority, className }: Props) {
-  const classes = classNames('w-3.5 h-3.5 rounded', className)
+  const classes = classNames('w-3.5 h-3.5', className)
 
   const Icon = ICONS[priority.toLowerCase()]
 

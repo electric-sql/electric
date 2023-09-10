@@ -40,3 +40,20 @@ export const DEFAULT_LABELS: Array<Label> = [
   { id: '2', name: 'Feature', color: '#bb87fc' },
   { id: '3', name: 'Improvement', color: '#4ea7fc' },
 ]
+
+export function getPriorityString(priority: string) {
+  switch (priority) {
+    case Priority.NONE:
+      return 'Priority'
+    case Priority.HIGH:
+      return 'High'
+    case Priority.MEDIUM:
+      return 'Medium'
+    case Priority.LOW:
+      return 'Low'
+    case Priority.URGENT:
+      return 'Urgent'
+    default:
+      return 'Priority'
+  }
+}

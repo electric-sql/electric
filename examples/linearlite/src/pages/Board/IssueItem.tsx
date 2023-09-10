@@ -1,4 +1,5 @@
 import classNames from 'classnames'
+import { useNavigate } from 'react-router-dom'
 import Avatar from '../../components/Avatar'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import PriorityIcon from '../../components/PriorityIcon'
@@ -8,7 +9,7 @@ import {
   DraggableProvided,
   DraggableStateSnapshot,
 } from 'react-beautiful-dnd'
-import { Issue } from '../../electric'
+import { Issue, useElectric } from '../../electric'
 
 interface IssueProps {
   issue: Issue
@@ -16,6 +17,8 @@ interface IssueProps {
 }
 
 const IssueItem = ({ issue, index }: IssueProps) => {
+  const { db } = useElectric()!
+  const navigate = useNavigate()
   const priorityIcon = (
     <span className="inline-block m-0.5 rounded-sm border border-gray-100 hover:border-gray-200 p-0.5">
       <PriorityIcon priority={issue.priority} />
@@ -23,8 +26,14 @@ const IssueItem = ({ issue, index }: IssueProps) => {
   )
 
   const updatePriority = (priority: string) => {
-    console.log('update priority', priority)
-    // TODO: update priority
+    db.issue.update({
+      data: {
+        priority: priority,
+      },
+      where: {
+        id: issue.id,
+      },
+    })
   }
 
   return (
@@ -40,14 +49,12 @@ const IssueItem = ({ issue, index }: IssueProps) => {
                 'shadow-modal': isDragging,
               }
             )}
+            onClick={() => navigate(`/issue/${issue.id}`)}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
           >
             <div className="flex justify-between w-full cursor-default">
               <div className="flex flex-col">
-                <span className="text-xs font-normal text-gray-500 uppercase">
-                  {issue.id}
-                </span>
                 <span className="mt-1 text-sm font-medium text-gray-700 line-clamp-2 overflow-ellipsis">
                   {issue.title}
                 </span>

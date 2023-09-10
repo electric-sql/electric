@@ -1,58 +1,47 @@
-import { ReactComponent as AttachmentIcon } from '../assets/icons/attachment.svg'
-import { ReactComponent as OwnerIcon } from '../assets/icons/avatar.svg'
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
-import { ReactComponent as GitIssueIcon } from '../assets/icons/git-issue.svg'
-import { ReactComponent as LabelIcon } from '../assets/icons/label.svg'
-import { ReactComponent as ZoomIcon } from '../assets/icons/zoom.svg'
-import Modal from '../components/Modal'
-import Toggle from '../components/Toggle'
 import { memo, useEffect, useRef, useState } from 'react'
-import Editor from '../components/editor/Editor'
-
 import { v4 as uuidv4 } from 'uuid'
+import { generateKeyBetween } from 'fractional-indexing'
 import { useElectric } from '../electric'
 
-import { Priority, Status } from '../types/issue'
-import { showInfo, showWarning } from '../utils/notification'
-import LabelMenu from './contextmenu/LabelMenu'
-import PriorityMenu from './contextmenu/PriorityMenu'
-import StatusMenu from './contextmenu/StatusMenu'
+import { BsChevronRight as ChevronRight } from 'react-icons/bs'
+import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
+import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
+
+import Modal from '../components/Modal'
+import Editor from '../components/editor/Editor'
 import PriorityIcon from './PriorityIcon'
 import StatusIcon from './StatusIcon'
+import PriorityMenu from './contextmenu/PriorityMenu'
+import StatusMenu from './contextmenu/StatusMenu'
+
+import { Priority, Status, getPriorityString } from '../types/issue'
+import { showInfo, showWarning } from '../utils/notification'
 
 interface Props {
   isOpen: boolean
   onDismiss?: () => void
 }
-function getPriorityString(priority: string) {
-  switch (priority) {
-    case Priority.NONE:
-      return 'Priority'
-    case Priority.HIGH:
-      return 'High'
-    case Priority.MEDIUM:
-      return 'Medium'
-    case Priority.LOW:
-      return 'Low'
-    case Priority.URGENT:
-      return 'Urgent'
-    default:
-      return 'Priority'
-  }
-}
+
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState<string | undefined>()
+  const [description, setDescription] = useState<string>()
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
   const { db } = useElectric()!
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (title === '') {
       showWarning('Please enter a title before submitting', 'Title required')
       return
     }
+
+    const lastIssue = await db.issue.findFirst({
+      orderBy: {
+        kanbanorder: 'desc',
+      },
+    })
+    const kanbanorder = generateKeyBetween(lastIssue?.kanbanorder, null)
 
     const date = new Date().toISOString()
     db.issue.create({
@@ -62,36 +51,30 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         username: 'testuser',
         priority: priority,
         status: status,
-        description: description,
-        created: date,
+        description: description || '',
         modified: date,
-        kanbanorder: '',
+        created: date,
+        kanbanorder: kanbanorder,
       },
     })
 
-    // TODO
-    // dispatch(
-    //   createIssue({
-    //     title: title,
-    //     id: undefined,
-    //     priority: priority,
-    //     status: status,
-    //     description: description,
-    //   })
-    // );
-
-    // clear state
-    // close modal
     if (onDismiss) onDismiss()
-    setTitle('')
-    setDescription('')
-    setPriority(Priority.NONE)
-    setStatus(Status.BACKLOG)
+    reset()
     showInfo('You created new issue.', 'Issue created')
   }
 
   const handleClickCloseBtn = () => {
     if (onDismiss) onDismiss()
+    reset()
+  }
+
+  const reset = () => {
+    setTimeout(() => {
+      setTitle('')
+      setDescription('')
+      setPriority(Priority.NONE)
+      setStatus(Status.BACKLOG)
+    }, 250)
   }
 
   useEffect(() => {
@@ -107,22 +90,20 @@ function IssueModal({ isOpen, onDismiss }: Props) {
       {/* header */}
       <div className="flex items-center justify-between flex-shrink-0 px-4">
         <div className="flex items-center">
-          <span className="inline-flex items-center p-1 text-gray-400 bg-gray-100 rounded">
-            <GitIssueIcon className="w-3 mr-1" />
-            <span>GIT</span>
+          <span className="inline-flex items-center p-1 px-2 text-gray-400 bg-gray-100 rounded">
+            <ElectricIcon className="w-3 h-3 scale-150 mr-1" />
+            <span>electric</span>
           </span>
-          <span className="ml-2 font-normal text-gray-700">› New Issue</span>
+          <ChevronRight className="ml-1" />
+          <span className="ml-1 font-normal text-gray-700">New Issue</span>
         </div>
         <div className="flex items-center">
-          <div className="inline-flex items-center justify-center text-gray-500 rounded h-7 w-7 hover:bg-gray-100 hover:text-gray-700">
-            <ZoomIcon className="w-3" />
-          </div>
-          <div
-            className="inline-flex items-center justify-center ml-2 text-gray-500 h-7 w-7 hover:bg-gray-100 rouned hover:text-gray-700"
+          <button
+            className="inline-flex rounded items-center justify-center ml-2 text-gray-500 h-7 w-7 hover:bg-gray-100 rouned hover:text-gray-700"
             onClick={handleClickCloseBtn}
           >
             <CloseIcon className="w-4" />
-          </div>
+          </button>
         </div>
       </div>
       <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
@@ -131,7 +112,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
           <StatusMenu
             id="status-menu"
             button={
-              <button className="flex items-center justify-center w-6 h-6 border-none rounded focus:outline-none hover:bg-gray-100">
+              <button className="flex items-center justify-center w-6 h-6 border-none rounded hover:bg-gray-100">
                 <StatusIcon status={status} />
               </button>
             }
@@ -140,7 +121,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             }}
           />
           <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:outline-none focus:border-none"
+            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
             placeholder="Issue title"
             value={title}
             ref={ref}
@@ -151,8 +132,8 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         {/* Issue description editor */}
         <div className="w-full px-4">
           <Editor
-            className="w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md focus:outline-none editor border border-transparent focus:border-blue-600"
-            value={description}
+            className="w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
+            value={description || ''}
             onChange={(val) => setDescription(val)}
             placeholder="Add description..."
           />
@@ -164,43 +145,25 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         <PriorityMenu
           id="priority-menu"
           button={
-            <button className="inline-flex items-center h-6 px-2 text-gray-500 bg-gray-200 border-none rounded focus:outline-none hover:bg-gray-100 hover:text-gray-700">
-              <PriorityIcon priority={priority} className="mr-0.5" />
+            <button className="inline-flex items-center h-6 px-2 text-gray-500 bg-gray-200 border-none rounded hover:bg-gray-100 hover:text-gray-700">
+              <PriorityIcon priority={priority} className="mr-1" />
               <span>{getPriorityString(priority)}</span>
             </button>
           }
-          onSelect={(val) => setPriority(val)}
-        />
-        <button className="inline-flex items-center h-6 px-2 ml-2 text-gray-500 bg-gray-200 border-none rounded focus:outline-none hover:bg-gray-100 hover:text-gray-700">
-          <OwnerIcon className="w-3.5 h-3.5 ml-2 mr-0.5" />
-          &nbsp;<span>Assignee</span>
-        </button>
-        <LabelMenu
-          id="label-menu"
-          button={
-            <button className="inline-flex items-center h-6 px-2 ml-2 text-gray-500 bg-gray-200 border-none rounded focus:outline-none hover:bg-gray-100 hover:text-gray-700">
-              <LabelIcon className="w-3.5 h-3.5 ml-2 mr-0.5" />
-              <span>Label</span>
-            </button>
-          }
+          onSelect={(val) => {
+            console.log(val)
+            setPriority(val)
+          }}
         />
       </div>
       {/* Footer */}
-      <div className="flex items-center justify-between flex-shrink-0 px-4 pt-3">
-        <button className="focus:outline-none">
-          <AttachmentIcon />
+      <div className="flex items-center flex-shrink-0 px-4 pt-3">
+        <button
+          className="px-3 ml-auto text-white bg-indigo-600 rounded hover:bg-indigo-700 h-7"
+          onClick={handleSubmit}
+        >
+          Save Issue
         </button>
-        <div className="flex items-center">
-          {/* <input type='checkbox' /> */}
-          <Toggle />
-          <span className="ml-2 font-normal">Create more</span>
-          <button
-            className="px-3 ml-2 text-white bg-indigo-600 rounded hover:bg-indigo-700 h-7 focus:outline-none"
-            onClick={handleSubmit}
-          >
-            Save Issue
-          </button>
-        </div>
       </div>
     </div>
   )
