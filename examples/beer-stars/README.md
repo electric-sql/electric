@@ -92,7 +92,7 @@ Another service is an Electric sync service running replication on port `5133`:
 
 ```shell
 $ curl http://localhost:5133/api/status
-{"connectors":{"postgres_1":true}}
+Connection to Postgres is up!
 ```
 
 Finally, the app backend that talks to GitHub's GraphQL API runs on port `40001`:
