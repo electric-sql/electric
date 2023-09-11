@@ -390,7 +390,8 @@ export const opLogEntryToChange = (
   }
 }
 
-const uint8arrayToBase64 = (array: Uint8Array) => btoa(array.reduce((acc, byte) => acc + String.fromCharCode(byte), ""))
+const uint8arrayToBase64 = (array: Uint8Array) =>
+  btoa(array.reduce((acc, byte) => acc + String.fromCharCode(byte), ''))
 
 /**
  * Convert a primary key to a string the same way our triggers do when generating oplog entries.

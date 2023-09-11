@@ -145,7 +145,9 @@ export function isDataChange(change: Change): change is DataChange {
   return 'relation' in change
 }
 
-export type Record = { [key: string]: string | number | Uint8Array | undefined | null }
+export type Record = {
+  [key: string]: string | number | Uint8Array | undefined | null
+}
 
 export type Replication<TransactionType> = {
   authenticated: boolean
