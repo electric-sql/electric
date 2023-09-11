@@ -1,0 +1,76 @@
+[doc NodeJS Satellite correctly syncs BYTEA values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.bytes (
+            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            bytes BYTEA NOT NULL
+        );
+        CALL electric.electrify('public.bytes');
+        """]
+    [invoke migrate_pg 20230911 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "bytes"]
+    [invoke node_sync_table "bytes"]
+
+[shell pg_1]
+    !INSERT INTO public.bytes VALUES ('001', '\x010203'), ('002', '\x020408');
+    ??INSERT 0 2
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "bytes" "002"]
+
+    !await client.get_rows(db, "bytes")
+    ??id: '001'
+    ??bytes: <Buffer 01 02 03>
+
+    ??id: '002'
+    ??bytes: <Buffer 02 04 08>
+
+    # FIXME(alco): The line below currently does not work. It fails with the following error:
+    #
+    # Uncaught SqliteError: JSON cannot hold BLOB values
+    #     at S.query (file:///app/node_modules/.pnpm/file+clients+typescript_react-dom@18.2.0_react@18.2.0/node_modules/electric-sql/dist/drivers/better-sqlite3/adapter.js:1:512)
+    #     at K (file:///app/node_modules/.pnpm/file+clients+typescript_react-dom@18.2.0_react@18.2.0/node_modules/electric-sql/dist/client/model/table.js:3:2231)
+    #     at Module.u (file:///app/dist/client.js:1:1817)
+    #     at REPL12:1:46 {
+    #   code: 'SQLITE_ERROR'
+    [invoke node_await_insert_extended_into "bytes" "{id: '003', bytes: new Uint8Array([0x3, 0x9, 0x1B])}"]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.bytes;" "003" 10 $psql]
+
+    !SELECT * FROM public.bytes;
+    ??001 | \x010203
+    ??002 | \x020408
+    ??003 | \x03091b
+
+# Start a new Satellite client and verify that it receives all bytes
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "bytes"]
+    [invoke node_sync_table "bytes"]
+
+    [invoke node_await_get_from_table "bytes" "003"]
+
+    !await client.get_rows(db, "bytes")
+    ??id: '001'
+    ??bytes: <Buffer 01 02 03>
+
+    ??id: '002'
+    ??bytes: <Buffer 02 04 08>
+
+    ??id: '003'
+    ??bytes: <Buffer 03 09 27>
+
+[cleanup]
+  [invoke teardown]
