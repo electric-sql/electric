@@ -23,23 +23,42 @@ config :logger,
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  # We deliberately put :pid as the first list item below. Logger prints metadata in the same order as it is configured
-  # here, so having :pid sorted in the list alphabetically would make it get in the away of log output matching that we
-  # do in many of our E2E tests.
-  metadata: ~w[
-    pid
-    client_id
-    component
-    connection
-    instance_id
-    origin
-    pg_client
-    pg_producer
-    pg_slot
-    request_id
-    sq_client
-    user_id
-  ]a
+  metadata: [
+    # :pid is intentionally put as the first list item below. Logger prints metadata in the same order as it is configured
+    # here, so having :pid sorted in the list alphabetically would make it get in the away of log output matching that we
+    # do in many of our E2E tests.
+    :pid,
+    :client_id,
+    :component,
+    :connection,
+    :instance_id,
+    :origin,
+    :pg_client,
+    :pg_producer,
+    :pg_slot,
+    # :remote_ip is intentionally commented out below.
+    #
+    # IP addresses are user-identifiable information protected under GDPR. Our
+    # customers might not like it when they use client IP addresses in the
+    # logs of their on-premises installation of Electric.
+    #
+    # Although it appears the consensus is thta logging IP addresses is fine
+    # (see https://law.stackexchange.com/a/28609), there are caveats.
+    #
+    # I think that adding IP addresses to logs should be made as part of the
+    # same decision that determines the log retention policy. Since we're not
+    # tying the logged IP addresses to users' personal information managed by
+    # customer apps, we cannot clean them up as part of the "delete all user
+    # data" procedure that app developers have in place to conform to GDPR
+    # requirements. Therefore, logging IP addresses by default is better
+    # avoided in production builds of Electric.
+    #
+    # We may introduce it as a configurable option for better DX at some point.
+    # :remote_ip,
+    :request_id,
+    :sq_client,
+    :user_id
+  ]
 
 pg_server_port =
   System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
