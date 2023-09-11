@@ -390,6 +390,8 @@ export const opLogEntryToChange = (
   }
 }
 
+const uint8arrayToBase64 = (array: Uint8Array) => btoa(array.reduce((acc, byte) => acc + String.fromCharCode(byte), ""))
+
 /**
  * Convert a primary key to a string the same way our triggers do when generating oplog entries.
  *
@@ -400,14 +402,18 @@ export const opLogEntryToChange = (
  * @returns a stringified JSON with stable sorting on column names
  */
 export const primaryKeyToStr = (primaryKeyObj: {
-  [key: string]: string | number
+  [key: string]: string | number | Uint8Array
 }): string => {
   const keys = Object.keys(primaryKeyObj).sort()
   if (keys.length === 0) return '{}'
 
   let json = '{'
   for (const key of keys) {
-    json += JSON.stringify(key) + ':' + JSON.stringify(primaryKeyObj[key]) + ','
+    let val = primaryKeyObj[key]
+    if (val instanceof Uint8Array) {
+      val = uint8arrayToBase64(val)
+    }
+    json += JSON.stringify(key) + ':' + JSON.stringify(val) + ','
   }
 
   // Remove the last appended comma and close the object

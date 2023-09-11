@@ -1042,9 +1042,11 @@ function calculateNumBytes(column_num: number): number {
 function deserializeColumnData(
   column: Uint8Array,
   columnInfo: RelationColumn
-): string | number {
+): string | number | Uint8Array {
   const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
+    case 'BYTEA':
+      return typeDecoder.bytes(column)
     case 'CHAR':
     case 'TEXT':
     case 'TIMESTAMP':
@@ -1068,7 +1070,7 @@ function deserializeColumnData(
 }
 
 // All values serialized as textual representation
-function serializeColumnData(column: string | number): Uint8Array {
+function serializeColumnData(column: string | number | Uint8Array): Uint8Array {
   return typeEncoder.text(column as string)
 }
 

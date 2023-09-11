@@ -18,11 +18,13 @@ setGlobalUUID(
 )
 
 export const typeDecoder = {
+  bytes: (bytes: Uint8Array) => bytes,
   number: bytesToNumber,
   text: bytesToString,
 }
 
 export const typeEncoder = {
+  bytes: (bytes: Uint8Array) => bytes,
   number: numberToBytes,
   text: (string: string) => new TextEncoder().encode(string),
 }
