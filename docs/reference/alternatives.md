@@ -55,6 +55,7 @@ Other local-first projects:
 - [ShareDB](https://share.github.io/sharedb)
 - [Socket](https://socketsupply.co)
 - [sqlite_crdt](https://github.com/cachapa/sqlite_crdt)
+- [SQLSync](https://github.com/orbitinghail/sqlsync)
 - [Synql](https://github.com/coast-team/synql)
 - [Triplit](https://www.triplit.dev)
 - [Verdant](https://github.com/a-type/verdant)
