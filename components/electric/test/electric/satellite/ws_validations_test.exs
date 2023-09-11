@@ -52,7 +52,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       tx_op_log = serialize_trans(%{"id" => "3", "num" => "-1", "t1" => "", "t2" => "..."})
       MockClient.send_data(conn, tx_op_log)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
   end
 
@@ -109,7 +109,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -161,7 +161,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -206,7 +206,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -239,7 +239,7 @@ defmodule Electric.Satellite.WsValidationsTest do
 
     valid_records = [
       %{"id" => "1", "t1" => "2023-08-07 21:28:35.111", "t2" => "2023-08-07 21:28:35.421Z"},
-      %{"id" => "2", "t2" => "2023-08-07 00:00:00"}
+      %{"id" => "2", "t2" => "2023-08-07 00:00:00Z"}
     ]
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -248,7 +248,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -259,7 +259,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "13", "t2" => "2023-08-07 21:28:35+03:00"},
       %{"id" => "14", "t2" => ""},
       %{"id" => "15", "t2" => "+"},
-      %{"id" => "16", "t2" => "2023-08-07 24:28:35"}
+      %{"id" => "16", "t2" => "2023-08-07 24:28:35"},
+      %{"id" => "16", "t2" => "2023-08-07 24:28:35+00"}
     ]
 
     Enum.each(invalid_records, fn record ->
