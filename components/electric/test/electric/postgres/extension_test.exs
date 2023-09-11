@@ -437,7 +437,9 @@ defmodule Electric.Postgres.ExtensionTest do
                  num8a INT8,
                  num8b BIGINT,
                  real8a FLOAT8,
-                 real8b DOUBLE PRECISION
+                 real8b DOUBLE PRECISION,
+                 ts TIMESTAMP,
+                 tstz TIMESTAMPTZ
                );
                CALL electric.electrify('public.t1');
                """)
