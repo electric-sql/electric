@@ -19,7 +19,8 @@ defmodule Electric.Satellite.SerializationTest do
         "var" => "...",
         "real" => "-3.14",
         "id" => uuid,
-        "date" => "2024-12-24"
+        "date" => "2024-12-24",
+        "time" => "12:01:00.123"
       }
 
       columns = [
@@ -30,12 +31,13 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "int", type: :int4},
         %{name: "var", type: :varchar},
         %{name: "real", type: :float8},
-        %{name: "date", type: :date}
+        %{name: "date", type: :date},
+        %{name: "time", type: :time}
       ]
 
       assert %SatOpRow{
-               values: ["", "", "4", uuid, "13", "...", "-3.14", "2024-12-24"],
-               nulls_bitmask: <<0b11000000>>
+               values: ["", "", "4", uuid, "13", "...", "-3.14", "2024-12-24", "12:01:00.123"],
+               nulls_bitmask: <<0b11000000, 0>>
              } == Serialization.map_to_row(data, columns)
     end
 
@@ -76,7 +78,8 @@ defmodule Electric.Satellite.SerializationTest do
           "2023-08-15 17:20:31",
           "2023-08-15 17:20:31Z",
           "",
-          "0400-02-29"
+          "0400-02-29",
+          "03:59:59"
         ]
       }
 
@@ -89,7 +92,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "t", type: :timestamp},
         %{name: "tz", type: :timestamptz},
         %{name: "x", type: :float4, nullable?: true},
-        %{name: "date", type: :date}
+        %{name: "date", type: :date},
+        %{name: "time", type: :time}
       ]
 
       assert %{
@@ -101,7 +105,8 @@ defmodule Electric.Satellite.SerializationTest do
                "t" => "2023-08-15 17:20:31",
                "tz" => "2023-08-15 17:20:31Z",
                "x" => nil,
-               "date" => "0400-02-29"
+               "date" => "0400-02-29",
+               "time" => "03:59:59"
              } == Serialization.decode_record!(row, columns)
     end
 
@@ -132,7 +137,17 @@ defmodule Electric.Satellite.SerializationTest do
         {"1999-31-12", :date},
         {"20230815", :date},
         {"-2023-08-15", :date},
-        {"12-12-12", :date}
+        {"12-12-12", :date},
+        {"24:00:00", :time},
+        {"-12:00:00", :time},
+        {"22:01", :time},
+        {"02:60:00", :time},
+        {"02:00:60", :time},
+        {"1:2:3", :time},
+        {"010203", :time},
+        {"016003", :time},
+        {"00:00:00.", :time},
+        {"00:00:00.1234567", :time}
       ]
 
       Enum.each(test_data, fn {val, type} ->

@@ -440,7 +440,8 @@ defmodule Electric.Postgres.ExtensionTest do
                  real8b DOUBLE PRECISION,
                  ts TIMESTAMP,
                  tstz TIMESTAMPTZ,
-                 d DATE
+                 d DATE,
+                 t TIME
                );
                CALL electric.electrify('public.t1');
                """)
