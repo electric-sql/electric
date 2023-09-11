@@ -194,61 +194,52 @@ defmodule Electric.Satellite.Protocol do
           {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:force_unpause, PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
           | {:error, PB.sq_pb_msg()}
-  def process_message(msg, %State{} = state) when not auth_passed?(state) do
-    case msg do
-      %SatAuthReq{id: client_id, token: token}
-      when client_id !== "" and token !== "" ->
-        Logger.debug("Received auth request for #{inspect(client_id)}")
+  def process_message(%SatAuthReq{id: client_id, token: token}, state)
+      when not auth_passed?(state) and client_id != "" and token != "" do
+    Logger.metadata(client_id: client_id)
+    Logger.debug("Received auth request")
 
-        # NOTE: We treat successful registration with Electric.safe_reg as an
-        # indication that at least the previously connected WS client is down.
-        # However satellite_client_manager may not necessarily have reacted to that
-        # yet. So as long as safe_reg succeeded call to ClientManager should
-        # succeed as well
-        reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
+    # NOTE: We treat successful registration with Electric.safe_reg as an
+    # indication that at least the previously connected WS client is down.
+    # However satellite_client_manager may not necessarily have reacted to that
+    # yet. So as long as safe_reg succeeded call to ClientManager should
+    # succeed as well
+    reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
-        with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
-             true <- Electric.safe_reg(reg_name, 1000),
-             :ok <- ClientManager.register_client(client_id, reg_name) do
-          Logger.metadata(client_id: client_id, user_id: auth.user_id)
-          Logger.info("authenticated client #{client_id} as user #{auth.user_id}")
-          Metrics.satellite_connection_event(%{authorized_connection: 1})
+    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+         true <- Electric.safe_reg(reg_name, 1000),
+         :ok <- ClientManager.register_client(client_id, reg_name) do
+      Logger.metadata(user_id: auth.user_id)
+      Logger.info("Successfully authenticated the client")
+      Metrics.satellite_connection_event(%{authorized_connection: 1})
 
-          {%SatAuthResp{id: Electric.instance_id()},
-           %State{state | auth: auth, auth_passed: true, client_id: client_id}}
-        else
-          {:error, %SatErrorResp{}} = error ->
-            error
+      {
+        %SatAuthResp{id: Electric.instance_id()},
+        %State{state | auth: auth, auth_passed: true, client_id: client_id}
+      }
+    else
+      {:error, %SatErrorResp{}} = error ->
+        error
 
-          {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
-            Logger.warning("client authorization failed",
-              metadata: [client_id: client_id, error: message]
-            )
-
-            {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
-
-          {:error, :already_registered} ->
-            Logger.info(
-              "attempted multiple connections from the client with same id: #{inspect(client_id)}"
-            )
-
-            {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
-
-          {:error, reason} ->
-            Logger.error(
-              "authorization failed for client: #{client_id} with reason: #{inspect(reason)}"
-            )
-
-            {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
-        end
-
-      %SatAuthReq{} ->
+      {:error, :already_registered} ->
+        Logger.info("attempted multiple connections from the same client")
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
-      _ ->
+      {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
+        Logger.warning("Client authentication failed: #{message}")
+        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
+      {:error, reason} ->
+        Logger.error("Client authentication failed: #{inspect(reason)}")
         {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
     end
   end
+
+  def process_message(%SatAuthReq{}, state) when not auth_passed?(state),
+    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+  def process_message(_, state) when not auth_passed?(state),
+    do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
 
   # Satellite client request replication
   def process_message(
