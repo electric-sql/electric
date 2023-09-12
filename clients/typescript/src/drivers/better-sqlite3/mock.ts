@@ -1,4 +1,4 @@
-import { BindParams, DbName, Row, SqliteValue } from '../../util/types'
+import { BindParams, DbName, Row, SqlValue } from '../../util/types'
 import { Database, Statement, Transaction } from './database'
 
 type MockStatement<T extends BindParams = []> = Pick<
@@ -27,7 +27,7 @@ export class MockDatabase implements Database {
       source: _sql,
       run: () => ({ changes: 0, lastInsertRowid: 1234 }),
       get: () => ({ foo: 'bar' }),
-      all: (...params: SqliteValue[] | [Row]) => {
+      all: (...params: SqlValue[] | [Row]) => {
         if (
           typeof params[0] == 'object' &&
           params[0] &&

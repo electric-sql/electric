@@ -1,4 +1,4 @@
-import { Row, SqliteValue } from '../../util/types'
+import { Row, SqlValue } from '../../util/types'
 
 export interface Results {
   rows: {
@@ -12,7 +12,7 @@ export interface Results {
 
 export interface QueryExecResult {
   columns: string[]
-  values: SqliteValue[][]
+  values: SqlValue[][]
 }
 
 export const rowsFromResults = (results: Results): Row[] => {
@@ -36,10 +36,10 @@ export const resultToRows = (result: QueryExecResult[]): Row[] => {
 
   for (const res of result) {
     const cols = res.columns
-    res.values.map((values: SqliteValue[]) => {
+    res.values.map((values: SqlValue[]) => {
       const row: Row = {}
 
-      values.map((val: SqliteValue, i: number) => {
+      values.map((val: SqlValue, i: number) => {
         const col = cols[i]
 
         row[col] = val

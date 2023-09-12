@@ -3232,7 +3232,7 @@ interface ProfileGetPayload extends HKT {
 
 export const tableSchemas = {
   Items: {
-    fields: ['value', 'nbr'],
+    fields: new Map([['value', 'TEXT'], ['nbr', 'INT4']]),
     relations: [],
     modelSchema: (ItemsCreateInputSchema as any)
       .partial()
@@ -3259,7 +3259,7 @@ export const tableSchemas = {
     ItemsGetPayload
   >,
   User: {
-    fields: ['id', 'name'],
+    fields: new Map([['id', 'TEXT'], ['name', 'TEXT']]),
     relations: [
       new Relation('posts', '', '', 'Post', 'PostToUser', 'many'),
       new Relation('profile', '', '', 'Profile', 'ProfileToUser', 'one'),
@@ -3289,7 +3289,13 @@ export const tableSchemas = {
     UserGetPayload
   >,
   Post: {
-    fields: ['id', 'title', 'contents', 'nbr', 'authorId'],
+    fields: new Map([
+      ['id', 'TEXT'],
+      ['title', 'TEXT'],
+      ['contents', 'TEXT'],
+      ['nbr', 'INT4'],
+      ['authorId', 'TEXT']
+    ]),
     relations: [
       new Relation('author', 'authorId', 'id', 'User', 'PostToUser', 'one'),
     ],
@@ -3318,7 +3324,11 @@ export const tableSchemas = {
     PostGetPayload
   >,
   Profile: {
-    fields: ['id', 'bio', 'userId'],
+    fields: new Map([
+      ['id', 'TEXT'],
+      ['bio', 'TEXT'],
+      ['userId', 'TEXT']
+    ]),
     relations: [
       new Relation('user', 'userId', 'id', 'User', 'ProfileToUser', 'one'),
     ],

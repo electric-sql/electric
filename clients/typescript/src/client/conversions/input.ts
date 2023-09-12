@@ -1,0 +1,419 @@
+import mapValues from 'lodash.mapvalues'
+import { FieldName, Fields } from "../model/schema"
+import { PgDateType, PgType, toSqlite } from "./sqlite"
+import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+
+type UpdateInput = { data: object, where: object }
+type UpdateManyInput = { data: object, where?: object }
+type CreateInput = { data: object }
+type CreateManyInput = { data: Array<object> }
+type UpsertInput = { update: object, create: object, where: object }
+type WhereUniqueInput = { where: object }
+type WhereInput = { where?: object }
+
+type Swap<T, Input, Props extends keyof Input> = Omit<T, Props> & Pick<Input, Props>
+
+/**
+ * Transforms the values of an input object to SQLite values.
+ * @param i The input object.
+ * @param fields Type information about the table's fields.
+ * @param op The type of operation that received this input.
+ * @returns The transformed input object.
+ */
+/*
+export function transform(i: CreateInput, fields: Fields, op: DALOp.CREATE): CreateInput
+export function transform(i: CreateManyInput, fields: Fields, op: DALOp.CREATE_MANY): CreateManyInput
+export function transform(i: UpdateInput, fields: Fields, op: DALOp.UPDATE): UpdateInput
+export function transform(i: UpdateManyInput, fields: Fields, op: DALOp.UPDATE_MANY): UpdateManyInput
+export function transform(i: UpsertInput, fields: Fields, op: DALOp.UPSERT): UpsertInput
+export function transform(i: DeleteInput, fields: Fields, op: DALOp.DELETE): DeleteInput
+export function transform(i: DeleteManyInput, fields: Fields, op: DALOp.DELETE_MANY): DeleteManyInput
+export function transform(i: object, fields: Fields, op: DALOp): object {
+  switch (op) {
+    case DALOp.CREATE:
+      return transformCreate(i as CreateInput, fields)
+    case DALOp.CREATE_MANY:
+      return transformCreateMany(i as CreateManyInput, fields)
+    case DALOp.UPDATE:
+      return transformUpdate(i as UpdateInput, fields)
+    case DALOp.UPDATE_MANY:
+      return transformUpdateMany(i as UpdateManyInput, fields)
+    case DALOp.UPSERT:
+      return transformUpsert(i as UpsertInput, fields)
+    case DALOp.DELETE:
+      return transformDelete(i as DeleteInput, fields)
+    case DALOp.DELETE_MANY:
+      return transformDeleteMany(i as DeleteManyInput, fields)
+  }
+}
+*/
+
+/**
+ * Takes a schema for a `create` operation and adds a transformation
+ * that converts the JS values to their corresponding SQLite values.
+ * e.g. JS `Date` objects are converted into strings.
+ * @param schema The schema of the `create` operation
+ * @param fields The table's fields.
+ */
+/*
+export function transformCreateSchema<Data extends object, Select, Include>(schema: z.ZodType<CreateInput<Data, Select, Include>>, fields: Map<FieldName, PgType>) {
+  return schema.transform((createInput) => {
+    const transformedData = transformFields(createInput.data, fields)
+    return {
+      ...createInput,
+      data: transformedData,
+    }
+  })
+}
+*/
+
+/**
+ * Takes the data input of a `create` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * e.g. JS `Date` objects are converted into strings.
+ * @param i The validated input of the `create` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export function transformCreate<T extends CreateInput>(
+  i: T,
+  fields: Fields
+): Swap<T, CreateInput, 'data'> {
+  return {
+    ...i,
+    data: transformFields(i.data, fields),
+  }
+}
+
+/**
+ * Takes the data input of a `createMany` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * e.g. JS `Date` objects are converted into strings.
+ * @param i The validated input of the `createMany` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export function transformCreateMany<T extends CreateManyInput>(
+  i: T,
+  fields: Fields
+): Swap<T, CreateManyInput, 'data'> {
+  return {
+    ...i,
+    data: i.data.map(o => transformFields(o, fields)),
+  }
+}
+
+/**
+ * Takes the data input of an `update` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * e.g. JS `Date` objects are converted into strings.
+ * @param i The validated input of the `update` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export function transformUpdate<T extends UpdateInput>(
+  i: T,
+  fields: Fields
+): Swap<T, UpdateInput, 'data' | 'where'> {
+  return {
+    ...i,
+    data: transformFields(i.data, fields),
+    where: transformWhere(i.where, fields),
+  }
+}
+
+/**
+ * Takes the data input of an `updateMany` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * @param i The validated input of the `updateMany` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export function transformUpdateMany<T extends UpdateManyInput>(
+  i: T,
+  fields: Fields
+): UpdateManyInput {
+  const whereObj = transformWhereInput(i, fields)
+  return {
+    ...whereObj,
+    data: transformFields(i.data, fields),
+  }
+}
+
+/**
+ * Takes the data input of an `upsert` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * @param i The validated input of the `upsert` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export function transformUpsert<T extends UpsertInput>(
+  i: T,
+  fields: Fields
+): Swap<T, UpsertInput, 'update' | 'create' | 'where'> {
+  return {
+    ...i,
+    update: transformFields(i.update, fields),
+    create: transformFields(i.create, fields),
+    where: transformWhere(i.where, fields),
+  }
+}
+
+/**
+ * Takes the data input of a `delete` operation and
+ * converts the JS values to their corresponding SQLite values.
+ */
+export const transformDelete = transformWhereUniqueInput
+
+/**
+ * Takes the data input of a `deleteMany` operation and
+ * converts the JS values to their corresponding SQLite values.
+ * @param i The validated input of the `deleteMany` operation.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+export const transformDeleteMany = transformWhereInput
+
+/**
+ * Takes the data input of a `findUnique` operation and
+ * converts the JS values to their corresponding SQLite values.
+ */
+export const transformFindUnique = transformWhereUniqueInput
+
+/**
+ * Takes the data input of a `findFirst` or `findMany` operation and
+ * converts the JS values to their corresponding SQLite values.
+ */
+export const transformFindNonUnique = transformWhereInput
+
+/**
+ * Takes the data input of an operation containing a required `where` clause and
+ * converts the JS values of the `where` clause to their corresponding SQLite values.
+ * @param i The validated input of the `where` clause.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+function transformWhereUniqueInput<T extends WhereUniqueInput>(
+  i: T,
+  fields: Fields
+): Swap<T, WhereUniqueInput, 'where'> {
+  return {
+    ...i,
+    where: transformWhere(i.where, fields),
+  }
+}
+
+/**
+ * Takes the data input of an operation containing an optional `where` clause and
+ * converts the JS values of the `where` clause to their corresponding SQLite values.
+ * @param i The validated input of the `where` clause.
+ * @param fields The table's fields.
+ * @returns The transformed input.
+ */
+function transformWhereInput<T extends WhereInput>(
+  i: T,
+  fields: Fields
+): Swap<T, WhereInput, 'where'> {
+  const whereObj = i.where ? { where: transformWhere(i.where, fields) } : {}
+  return {
+    ...i,
+    ...whereObj,
+  }
+}
+
+/**
+ * Iterates over the properties of the object `o`
+ * in order to transform their values to SQLite compatible values
+ * based on additional type information about the fields.
+ * @param o The object to transform.
+ * @param fields Type information about the fields.
+ * @returns An object with the values converted to SQLite.
+ */
+function transformFields(o: object, fields: Fields): object {
+  // only transform fields that are part of this table and not related fields
+  // as those will be transformed later when the query on the related field is processed.
+  const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
+  const fieldsAndTransformedValues = fieldsAndValues.map(entry => {
+    const [field, value] = entry
+    return transformField(field, value, o, fields)
+  })
+  return {
+    ...o,
+    ...Object.fromEntries(fieldsAndTransformedValues)
+  }
+}
+
+/**
+ * Transforms the provided value into a SQLite compatible value
+ * based on the type of this field.
+ * @param field The name of the field.
+ * @param value The value of the field.
+ * @param o The object to which the field belongs.
+ * @param fields Type information about the object's fields.
+ * @returns The transformed field.
+ */
+function transformField(field: FieldName, value: any, o: object, fields: Fields): any {
+  const pgType = fields.get(field)
+    
+  if (!pgType)
+    throw new InvalidArgumentError(`Unknown field ${field} in object ${JSON.stringify(o)}`)
+  
+  const sqliteValue = toSqlite(value, pgType)
+  return [ field, sqliteValue ]
+}
+
+function transformWhere(o: object, fields: Fields): object {
+  // for fields of type DateTime
+  //   --> can be the value itself --> transform it
+  //   --> can be equals, in, notIn, lt, lte, gt, gte, not
+  //         --> traverse and call transform
+  const filteredObj = keepTableFieldsOnly(o, fields)
+  const transformedFields = transformWhereFields(filteredObj, fields) // still doesn't handle lt, lte, etc.
+  const transformedBooleanConnectors = transformBooleanConnectors(o, fields)
+  return {
+    ...o,
+    ...transformedFields,
+    ...transformedBooleanConnectors,
+  }
+}
+
+function transformBooleanConnectors(o: { AND?: object | object[], OR?: object | object[], NOT?: object | object[] }, fields: Fields): object {
+  // Within a `where` object, boolean connectors AND/OR/NOT will contain
+  // a nested `where` object or an array of nested `where` objects
+  // if it is a single `where` object we wrap it in an array
+  // and we map `transformWhere` to recursively handle all nested objects
+  const makeArray = (v: any) => Array.isArray(v) ? v : [v]
+  const andObj = o.AND ? { AND: makeArray(o.AND).map(x => transformWhere(x, fields)) } : {}
+  const orObj = o.OR ? { OR: makeArray(o.OR).map(x => transformWhere(x, fields)) } : {}
+  const notObj = o.NOT ? { NOT: makeArray(o.NOT).map(x => transformWhere(x, fields)) } : {}
+
+  // we use spread syntax such that the filter is not included if it is undefined
+  // we cannot set it to undefined because then it appears in `hasOwnProperty`
+  // and the query builder will try to write `undefined` to the database.
+  return {
+    ...(andObj),
+    ...(orObj),
+    ...(notObj),
+  }
+}
+
+/**
+ * Iterates over the properties of a `where` object
+ * in order to transform the values to SQLite compatible values
+ * based on additional type information about the fields.
+ * @param o The `where` object to transform.
+ * @param fields Type information about the fields.
+ * @returns A `where` object with the values converted to SQLite.
+ */
+function transformWhereFields(o: object, fields: Fields): object {
+  // only transform fields that are part of this table and not related fields
+  // as those will be transformed later when the query on the related field is processed.
+  const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
+  // each field can be the value itself or an object containing filters like `lt`, `gt`, etc.
+  const fieldsAndTransformedValues = fieldsAndValues.map(entry => {
+    const [field, value] = entry
+    return transformFieldsAllowingFilters(field, value, fields)
+  })
+  return Object.fromEntries(fieldsAndTransformedValues)
+}
+
+/**
+ * Transforms a value that may contain filters.
+ * e.g. `where` clauses of a query allow to pass a value directly or an object containing filters.
+ *      If it is an object of filters, we need to transform the values that are nested in those filters.
+ * @param field The name of the field we are transforming.
+ * @param value The value for that field.
+ * @param fields Type information about the fields of this table.
+ * @returns The transformed value.
+ */
+function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fields): any {
+  const pgType = fields.get(field)
+    
+  if (!pgType)
+    throw new InvalidArgumentError(`Unknown field ${field}}`)
+  
+  switch (pgType) {
+    // Types that require transformations
+    case PgDateType.PG_DATE:
+    case PgDateType.PG_TIME:
+    case PgDateType.PG_TIMESTAMP:
+    case PgDateType.PG_TIMESTAMPTZ:
+    case PgDateType.PG_TIMETZ:
+      if (value instanceof Date) {
+        // transform it
+        return [ field, toSqlite(value, pgType) ]
+      }
+      else {
+        // it must be an object containing filters
+        // transform the values that are nested in those filters
+        return [ field, transformFilterObject(field, value, pgType, fields) ]
+      }
+    // other types that don't require transformations
+    default:
+      return [ field, value ]
+  }
+}
+
+/**
+ * Transforms an object containing filters
+ * @example For example:
+ * ```
+ * {
+ *   lt: Date('2023-09-12'),
+ *   notIn: [ Date('2023-09-09'), Date('2023-09-01') ],
+ *   not: {
+ *     lt: Date('2022-09-01')
+ *   }
+ * }
+ * ```
+ * @param field The name of the field we are transforming.
+ * @param o The object containing the filters.
+ * @param pgType Type of this field.
+ * @param fields Type information about the fields of this table.
+ * @returns A transformed filter object.
+ */
+function transformFilterObject(field: FieldName, o: any, pgType: PgType, fields: Fields) {
+  const simpleFilters = new Set([ 'equals', 'lt', 'lte', 'gt', 'gte' ]) // filters whose value is an optional value of type `pgType`
+  const arrayFilters = new Set(['in', 'notIn']) // filters whose value is an optional array of values of type `pgType`
+
+  // Handle the simple filters
+  const simpleFilterObj = filterKeys(o, simpleFilters)
+  const transformedSimpleFilterObj = mapValues(simpleFilterObj, (v: any) => toSqlite(v, pgType))
+
+  // Handle the array filters
+  const arrayFilterObj = filterKeys(o, arrayFilters)
+  const transformedArrayFilterObj = mapValues(arrayFilterObj, arr => arr.map((v: any) => toSqlite(v, pgType)))
+
+  // Handle `not` filter
+  // `not` is a special one as it accepts a value or a nested object of filters
+  // hence it is just like the properties of a `where` object which accept values or filters
+  const notFilterObj = filterKeys(o, new Set(['not']))
+  const transformedNotFilterObj = mapValues(notFilterObj, v => transformFieldsAllowingFilters(field, v, fields))
+
+  return {
+    ...transformedSimpleFilterObj,
+    ...transformedArrayFilterObj,
+    ...transformedNotFilterObj
+  }
+}
+
+/**
+ * Filters out all properties that are not fields (i.e. columns) of this table.
+ * e.g. it removes related fields or filters like `lt`, `equals`, etc.
+ * @param o The object to filter.
+ * @param fields The fields of the table to which this object belongs.
+ * @returns A filtered object.
+ */
+function keepTableFieldsOnly(o: object, fields: Fields) {
+  return filterKeys(o, new Set(fields.keys()))
+}
+
+/**
+ * Filters the object to retain only keys that are in `keys`.
+ * @param o The object to filter.
+ * @param keys The keys to keep.
+ * @returns A filtered object.
+ */
+function filterKeys(o: object, keys: Set<string>) {
+  return Object.fromEntries(Object.entries(o).filter(entry => keys.has(entry[0])))
+}
