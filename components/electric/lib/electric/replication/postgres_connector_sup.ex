@@ -44,7 +44,17 @@ defmodule Electric.Replication.PostgresConnectorSup do
        conn_config: conn_config, producer: SatelliteCollectorProducer.name()},
       # Uses a globally registered name
       {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]},
-      {Proxy, conn_config: conn_config}
+      {Proxy, conn_config: conn_config},
+      # FIXME: this proxy doesn't need an upstream connection -- so we should
+      # make the connection handling a configurable thing. this should include
+      # the connection stuff and the sending of packets, so replace
+      # `conn_config` with something like `{upstream: {Postgres, conn_config}}`
+      {Proxy,
+       conn_config: conn_config,
+       proxy: [port: 7654],
+       handler_config: [
+         injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
+       ]}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

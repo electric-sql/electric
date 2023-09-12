@@ -51,7 +51,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   end
 
   def connect({module, opts}, conn_config) do
-
     with {:ok, state} <- module.connect(conn_config, opts) do
       {:ok, {module, state}}
     end
