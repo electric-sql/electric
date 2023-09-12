@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.Dialect.Builder do
   alias Electric.Postgres.Schema.Proto
+  alias PgQuery, as: Pg
 
   @type stmt() :: [binary() | sql() | nil]
   @type sql() :: Dialect.sql()
@@ -73,5 +74,18 @@ defmodule Electric.Postgres.Dialect.Builder do
 
   def quote_name(name) when is_binary(name) do
     ~s("#{name}")
+  end
+
+  @spec unquoted_name(Dialect.name()) :: sql()
+  def unquoted_name(%Proto.RangeVar{name: name}) do
+    unquoted_name(name)
+  end
+
+  def unquoted_name(%Pg.RangeVar{relname: name}) do
+    unquoted_name(name)
+  end
+
+  def unquoted_name(name) when is_binary(name) do
+    name
   end
 end

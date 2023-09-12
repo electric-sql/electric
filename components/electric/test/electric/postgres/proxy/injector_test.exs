@@ -21,7 +21,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       module.connect([], opts)
 
     {:ok, injector} =
-      Injector.new(loader: {module, conn}, injector: TestScenario.MockInjector)
+      Injector.new(loader: {module, conn}, query_generator: TestScenario.MockInjector)
 
     version = System.system_time(:microsecond)
     timestamp = DateTime.utc_now()

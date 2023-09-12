@@ -28,6 +28,8 @@ defmodule Electric.Postgres.Proxy.Handler do
               decoder: nil,
               session_id: nil,
               authenticated?: false,
+              username: nil,
+              database: nil,
               authentication: nil
 
     @type username() :: String.t()
@@ -44,36 +46,40 @@ defmodule Electric.Postgres.Proxy.Handler do
             decoder: PgProtocol.Decoder.t(),
             session_id: nil | integer(),
             authenticated?: boolean(),
+            username: nil | username(),
+            database: nil | String.t(),
             authentication: nil | auth_type()
           }
   end
 
   @spec initial_state(Electric.Replication.Connectors.config(), options()) :: S.t()
   def initial_state(conn_config, proxy_opts) do
-    {loader_module, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
+    {loader, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
+    # injector_mode =
+    #   case Keyword.get(proxy_opts, :injector, {%{}, {SchemaCache, []}}) do
+    #     {loader_module, loader_opts} ->
+    #       {%{}, {loader_module, loader_opts}}
+    #
+    #     {user_loader_map, {loader_module, loader_opts}} when is_map(user_loader_map) ->
+    #       {user_loader_map, {loader_module, loader_opts}}
+    #   end
 
     %S{
       conn_config: conn_config,
-      loader: {loader_module, loader_opts},
+      loader: {loader, loader_opts},
       decoder: PgProtocol.Decoder.frontend(),
-      injector_opts: Keyword.get(proxy_opts, :injector, [])
+      injector_opts: Keyword.get(proxy_opts, :injector, []),
+      username: nil,
+      database: nil
     }
   end
 
   @impl ThousandIsland.Handler
   def handle_connection(_socket, state) do
-    %{loader: {loader_module, loader_opts}, conn_config: conn_config} = state
-
-    {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
-
-    {:ok, injector} =
-      Keyword.merge(state.injector_opts, loader: {loader_module, loader_conn})
-      |> Injector.new()
-
     session_id = Electric.Postgres.Proxy.session_id()
     Logger.metadata(proxy_session_id: session_id)
 
-    {:continue, %{state | session_id: session_id, injector: injector}}
+    {:continue, %{state | session_id: session_id}}
   end
 
   @impl ThousandIsland.Handler
@@ -81,8 +87,6 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:ok, decoder, msgs} = PgProtocol.decode(state.decoder, data)
 
     trace_recv(:client, state.session_id, msgs)
-
-    Logger.debug("Frontend msgs: #{M.inspect(msgs)}")
 
     handle_messages(msgs, socket, %{state | decoder: decoder})
   end
@@ -117,17 +121,17 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   defp handle_message(%M.StartupMessage{} = msg, return, socket, state) do
     state =
-      case msg.params do
-        %{"user" => user, "password" => _password} ->
+      case msg.params |> dbg do
+        %{"user" => user, "database" => database, "password" => _password} ->
           Logger.warning("Not validating credentials #{inspect(user)}:<password>")
-          authenticated(socket, state)
+          authenticated(socket, %{state | username: user, database: database})
 
-        %{"user" => user} ->
+        %{"user" => user, "database" => database} ->
           Logger.warning("Not validating user #{inspect(user)}")
           salt = M.AuthenticationMD5Password.salt()
           msg = M.AuthenticationMD5Password.new(salt: salt)
           downstream([msg], socket, state)
-          %{state | authentication: {:md5, user, salt}}
+          %{state | username: user, database: database, authentication: {:md5, user, salt}}
       end
 
     {return, state}
@@ -179,7 +183,7 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:close, state}
   end
 
-  defp handle_message(msg, return, socket, state) do
+  defp handle_message(msg, return, socket, %{authenticated?: true} = state) do
     {:ok, injector, upstream_msgs, downstream_msgs} =
       Injector.recv_frontend(state.injector, msg)
 
@@ -203,8 +207,15 @@ defmodule Electric.Postgres.Proxy.Handler do
   end
 
   defp authenticated(socket, state) do
-    :ok = downstream([%M.AuthenticationOk{}], socket, state)
     Logger.debug("Starting upstream connection: #{inspect(state.upstream)}")
+
+    %{loader: {loader_module, loader_opts}, conn_config: conn_config} = state
+
+    {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
+
+    {:ok, injector} =
+      Keyword.merge(state.injector_opts, loader: {loader_module, loader_conn})
+      |> Injector.new(state.username, state.database)
 
     {:ok, pid} =
       UpstreamConnection.start_link(
@@ -213,7 +224,9 @@ defmodule Electric.Postgres.Proxy.Handler do
         conn_config: state.conn_config
       )
 
-    %{state | connection: pid, authenticated?: true}
+    :ok = downstream([%M.AuthenticationOk{}], socket, state)
+
+    %{state | connection: pid, authenticated?: true, injector: injector}
   end
 
   defp downstream(msgs, socket, state) do

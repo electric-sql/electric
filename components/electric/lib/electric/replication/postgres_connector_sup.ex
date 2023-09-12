@@ -53,7 +53,14 @@ defmodule Electric.Replication.PostgresConnectorSup do
        conn_config: conn_config,
        proxy: [port: 7654],
        handler_config: [
-         injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
+         injector: [
+           capture_mode: [
+             default: Electric.Postgres.Proxy.Injector.Capture.Transparent,
+             per_user: %{
+               "prisma" => Electric.Postgres.Proxy.Injector.Capture.Prisma
+             }
+           ]
+         ]
        ]}
     ]
 

@@ -16,15 +16,19 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     end
   end
 
+  alias Electric.Postgres.Proxy.Injector
+
   defstruct loader: nil,
-            injector: nil,
+            query_generator: nil,
+            default_capture: nil,
             tx: nil
 
   @type loader() :: {module(), term()}
-  @type injector() :: {module(), term()}
+  @type query_generator() :: {module(), term()}
   @type t() :: %__MODULE__{
           loader: loader(),
-          injector: injector(),
+          query_generator: query_generator(),
+          default_capture: Injector.Capture.t(),
           tx: nil | Tx.t()
         }
 

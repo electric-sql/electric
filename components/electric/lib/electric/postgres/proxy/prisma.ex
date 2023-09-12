@@ -5,7 +5,7 @@ defmodule Electric.Postgres.Proxy.Prisma do
 
   alias Electric.Postgres.Proxy.Injector
 
-  def parse_query("SELECT version()") do
+  def parse_query("SELECT version()" <> _rest) do
     {:ok, Electric.Postgres.Proxy.Prisma.Query.VersionV5_2}
   end
 
@@ -170,6 +170,6 @@ defmodule Electric.Postgres.Proxy.Prisma do
 
   def injector(config, opts \\ []) do
     capture = {Injector.Capture.Prisma, config: config}
-    Injector.new(Keyword.merge(opts, capture_mode: capture))
+    Injector.new(Keyword.merge(opts, capture_mode: [default: capture]), "username", "database")
   end
 end

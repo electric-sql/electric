@@ -162,19 +162,6 @@ defmodule Electric.Postgres.Dialect.SQLite do
     end
   end
 
-  @spec unquoted_name(Dialect.name()) :: sql()
-  defp unquoted_name(%Proto.RangeVar{name: name}) do
-    unquoted_name(name)
-  end
-
-  defp unquoted_name(%Pg.RangeVar{relname: name}) do
-    unquoted_name(name)
-  end
-
-  defp unquoted_name(name) when is_binary(name) do
-    name
-  end
-
   defp map_column(%Proto.Column{} = col, mode) do
     stmt([
       quote_name(col.name),

@@ -14,28 +14,62 @@ defmodule Electric.Postgres.Proxy.Injector do
   @type msgs() :: [M.t()]
   @type response() :: {:ok, state(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
 
-  def new(opts \\ []) do
+  # FIXME: replace `nil` with some default capture mode module
+  @default_mode nil
+
+  # FIXME: add in the username and the db to this, so we can pass them onto the 
+  #        capture modes
+  def new(opts \\ [], username, database) do
+    dbg(injector: {username, database, opts})
+
     with {:ok, loader} <- Keyword.fetch(opts, :loader) do
-      injector = Keyword.get(opts, :injector, __MODULE__)
-      capture = Keyword.get(opts, :capture_mode, nil) |> default_capture_mode()
+      query_generator = Keyword.get(opts, :query_generator, __MODULE__)
+
+      capture_mode_opts = Keyword.get(opts, :capture_mode, [])
+
+      default = Keyword.get(capture_mode_opts, :default, @default_mode)
+      per_user = Keyword.get(capture_mode_opts, :per_user, %{})
+
+      mode = Map.get(per_user, username, default) |> dbg
+
+      capture =
+        mode
+        |> default_capture_mode()
+        |> initialise_capture_mode()
+        |> dbg
 
       debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
-      {:ok, {capture, %State{loader: loader, injector: injector}}}
+      {:ok, {capture, %State{loader: loader, query_generator: query_generator}}}
     end
   end
 
+  # FIXME: default mode should be some module, like Capture.Migration
+  #        and we save this default mode and if a capture module
+  #        returns `nil` as the mode, we replace it with this default mode
   defp default_capture_mode(nil) do
     nil
   end
 
   defp default_capture_mode(module) when is_atom(module) do
-    struct(module)
+    {module, []}
   end
 
   defp default_capture_mode({module, params})
        when is_atom(module) and (is_list(params) or is_map(params)) do
-    struct(module, params)
+    {module, params}
+  end
+
+  defp initialise_capture_mode(nil) do
+    nil
+  end
+
+  defp initialise_capture_mode({module, opts}) do
+    if function_exported?(module, :new, 1) do
+      module.new(opts)
+    else
+      struct(module, opts)
+    end
   end
 
   @spec recv_frontend(state(), M.t() | [M.t()]) :: response()
@@ -69,9 +103,9 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def inject_ddl_query(query, state) do
-    injector = Map.fetch!(state, :injector)
+    query_generator = Map.fetch!(state, :query_generator)
 
-    Capture.Inject.new([%M.Query{query: injector.capture_ddl_query(query)}])
+    Capture.Inject.new([%M.Query{query: query_generator.capture_ddl_query(query)}])
   end
 
   def capture_ddl_query(query, quote \\ nil) do
@@ -80,14 +114,14 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def inject_version_query(version, state) do
     debug("Assigning migration tx version '#{version}'")
-    injector = Map.fetch!(state, :injector)
+    query_generator = Map.fetch!(state, :query_generator)
 
-    Capture.Inject.new([%M.Query{query: injector.capture_version_query(version)}])
+    Capture.Inject.new([%M.Query{query: query_generator.capture_version_query(version)}])
   end
 
   def inject_version_query(state) do
-    injector = Map.fetch!(state, :injector)
-    version = injector.migration_version()
+    query_generator = Map.fetch!(state, :query_generator)
+    version = query_generator.migration_version()
     {version, inject_version_query(version, state)}
   end
 

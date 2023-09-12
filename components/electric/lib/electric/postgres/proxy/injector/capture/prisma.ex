@@ -7,6 +7,19 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Prisma do
 
   @type t() :: %__MODULE__{}
 
+  def new(opts) do
+    dbg(prisma: opts)
+    struct(__MODULE__, opts) |> ensure_config()
+  end
+
+  defp ensure_config(%{config: %Prisma{}} = capture) do
+    capture
+  end
+
+  defp ensure_config(capture) do
+    %{capture | config: %Prisma{}}
+  end
+
   defimpl Capture do
     alias Electric.Postgres.Extension.SchemaLoader
 

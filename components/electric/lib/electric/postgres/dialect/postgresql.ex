@@ -15,17 +15,12 @@ defmodule Electric.Postgres.Dialect.Postgresql do
 
   @int_types Postgres.integer_types()
   @float_types Postgres.float_types()
-  @text_types Postgres.text_types()
-  @binary_types Postgres.binary_types()
-  @datetime_types Postgres.datetime_types()
-  @json_types Postgres.json_types()
-  @bool_types Postgres.bool_types()
-  @uuid_types Postgres.uuid_types()
 
   @behaviour Electric.Postgres.Dialect
 
   @type sql() :: Dialect.sql()
 
+  @impl true
   def to_sql(stmt, opts \\ [])
 
   def to_sql(%Constraint{constraint: {_, %Constraint.Check{} = chk}}, opts) do
@@ -143,4 +138,18 @@ defmodule Electric.Postgres.Dialect.Postgresql do
 
   defp sized(s),
     do: IO.iodata_to_binary(["(", s |> Enum.map(&to_string/1) |> Enum.intersperse(", "), ")"])
+
+  @impl true
+  def type_name(%Proto.Column.Type{} = type, _opts \\ []) do
+    map_type(type)
+  end
+
+  @impl true
+  def table_name(name, opts \\ []) do
+    if Keyword.get(opts, :quote, false) do
+      quote_name(name)
+    else
+      unquoted_name(name)
+    end
+  end
 end

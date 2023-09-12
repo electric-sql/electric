@@ -86,8 +86,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.VersionV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
-
   import Electric.Postgres.Proxy.Prisma.Query
 
   def parameter_description(config)
@@ -114,8 +112,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceVersionV5_2 do
     current_setting('server_version_num')::integer as numeric_version;
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
-
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -148,8 +144,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceV5_2 do
   Honestly baffled as to the point of this query...
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
-
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -195,8 +189,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TableV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
-
   import Electric.Postgres.Proxy.Prisma.Query
 
   def parameter_description(config)
@@ -216,12 +208,14 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TableV5_2 do
     ]
   end
 
-  def data_rows(_binds, schema, _config) do
-    Enum.map(schema.tables, &table_description/1)
+  def data_rows([nspname_array], schema, _config) do
+    nspname_array
+    |> tables_in_schema(schema)
+    |> Enum.flat_map(&table_description/1)
   end
 
   defp table_description(table) do
-    [table.name.name, table.name.schema, bool(false), bool(false), bool(false), nil, nil]
+    [[table.name.name, table.name.schema, bool(false), bool(false), bool(false), nil, nil]]
   end
 end
 
@@ -258,7 +252,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ConstraintV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
   alias Electric.Postgres.Dialect
 
   import Electric.Postgres.Proxy.Prisma.Query
@@ -320,8 +313,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ViewV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
-
   import Electric.Postgres.Proxy.Prisma.Query
 
   def parameter_description(config)
@@ -339,7 +330,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ViewV5_2 do
   end
 
   # we don't support views
-  def data_rows([_nspname], schema, config) do
+  def data_rows([_nspname], _schema, _config) do
     []
   end
 end
@@ -359,8 +350,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
-
   import Electric.Postgres.Proxy.Prisma.Query
 
   def parameter_description(config)
@@ -378,7 +367,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV5_2 do
   end
 
   # we don't support custom types
-  def data_rows([nspname], schema, config) do
+  def data_rows([_nspname], _schema, _config) do
     []
   end
 end
@@ -419,7 +408,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV5_2 do
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
   alias Electric.Postgres.Dialect
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -654,7 +642,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
   alias Electric.Postgres.Schema
 
   import Electric.Postgres.Proxy.Prisma.Query
@@ -683,7 +670,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, config) do
+  def data_rows([nspname_array], schema, _config) do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_fks(&1, schema))
@@ -793,8 +780,6 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias PgProtocol.Message, as: M
-
   import Electric.Postgres.Proxy.Prisma.Query
 
   def parameter_description(config)
@@ -821,7 +806,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, config) do
+  def data_rows([nspname_array], schema, _config) do
     # ["public", "items_pkey", "items", "id", <<1>>, <<1>>, <<0, 0, 0, 0>>, "text_ops", <<1>>, "btree", "ASC", <<0>>, <<0>>, <<0>>]
     nspname_array
     |> tables_in_schema(schema)
@@ -902,9 +887,17 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
 end
 
 defmodule Electric.Postgres.Proxy.Prisma.Query.FunctionV5_2 do
+  @moduledoc """
+  SELECT p.proname AS name, n.nspname as namespace,
+  CASE WHEN l.lanname = 'internal' THEN p.prosrc
+  ELSE pg_get_functiondef(p.oid)
+  END as definition
+  FROM pg_proc p
+  LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
+  LEFT JOIN pg_language l ON p.prolang = l.oid
+  WHERE n.nspname = ANY ( $1 )
+  """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
-
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -928,9 +921,17 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.FunctionV5_2 do
 end
 
 defmodule Electric.Postgres.Proxy.Prisma.Query.ExtensionV5_2 do
+  @moduledoc """
+  SELECT
+  ext.extname AS extension_name,
+  ext.extversion AS extension_version,
+  ext.extrelocatable AS extension_relocatable,
+  pn.nspname AS extension_schema
+  FROM pg_extension ext
+  INNER JOIN pg_namespace pn ON ext.extnamespace = pn.oid
+  ORDER BY ext.extname ASC
+  """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
-
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -955,9 +956,21 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ExtensionV5_2 do
 end
 
 defmodule Electric.Postgres.Proxy.Prisma.Query.SequenceV5_2 do
+  @moduledoc """
+   SELECT
+   sequence_name,
+   sequence_schema AS namespace,
+   start_value::INT8,
+   minimum_value::INT8 AS min_value,
+   maximum_value::INT8 AS max_value,
+   increment::INT8 AS increment_by,
+   (CASE cycle_option WHEN 'yes' THEN TRUE ELSE FALSE END) AS cycle,
+   0::INT8 AS cache_size
+   FROM information_schema.sequences
+   WHERE sequence_schema = ANY ( $1 )
+   ORDER BY sequence_name
+  """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
-
-  alias PgProtocol.Message, as: M
 
   import Electric.Postgres.Proxy.Prisma.Query
 

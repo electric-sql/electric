@@ -14,6 +14,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
     ForeignKeyV5_2,
     FunctionV5_2,
     SequenceV5_2,
+    TableV5_2,
     TypeV5_2,
     ViewV5_2
   }
@@ -25,57 +26,17 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
     %Prisma{}
   end
 
+  @migration_dir Path.expand("../../../../support/prisma", __DIR__)
+
   setup do
     migrations = [
       {"001",
        [
-         "CREATE TABLE public.with_constraint (id text PRIMARY KEY, value TEXT NOT NULL, limited int4 CONSTRAINT limited_check CHECK (limited < 100));",
-         "CREATE INDEX with_constraint_idx ON with_constraint (value)"
+         File.read!(Path.join(@migration_dir, "001_query_test.sql"))
        ]},
       {"002",
        [
-         """
-         CREATE TABLE public.checked (
-            id text PRIMARY KEY,
-            value TEXT NOT NULL,
-            count int4 CONSTRAINT count_check CHECK ((count < 100) AND (count > 10)),
-            number int4,
-            CONSTRAINT combined CHECK (number + count < 200)
-         );
-         """,
-         "CREATE TABLE other.with_constraint (id text PRIMARY KEY, value TEXT NOT NULL, limited int4 CHECK (limited < 100))",
-         """
-         CREATE TABLE public.interesting (
-            id uuid PRIMARY KEY,
-            value varchar(255) DEFAULT 'something',
-            iii int8[][3] NOT NULL,
-            big int8, 
-            small int2, 
-            nn numeric(12, 6),
-            ts timestamptz DEFAULT now(),
-            updated timestamptz(3)
-         );
-         """,
-         "CREATE UNIQUE INDEX interesting_idx ON public.interesting USING gist (value DESC NULLS LAST, ts)",
-         """
-         CREATE TABLE public.pointy (
-            id text PRIMARY KEY,
-            checked_id text NOT NULL REFERENCES public.checked (id)
-         )
-         """,
-         #  # fake an unique constraint on the fk cols
-         "CREATE UNIQUE INDEX checked_fk_idx ON public.checked (id, value)",
-         """
-         CREATE TABLE public.pointy2 (
-            id text PRIMARY KEY,
-            checked_id text NOT NULL,
-            checked_value text NOT NULL,
-            amount smallint,
-            code smallint,
-            FOREIGN KEY (checked_id, checked_value) REFERENCES public.checked (id, value),
-            UNIQUE NULLS DISTINCT (amount, code)
-         );
-         """
+         File.read!(Path.join(@migration_dir, "002_query_test.sql"))
        ]}
     ]
 
@@ -83,6 +44,19 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
     {:ok, loader} = SchemaLoader.connect(loader_spec, [])
     {:ok, version, schema} = SchemaLoader.load(loader)
     {:ok, version: version, schema: schema, loader: loader}
+  end
+
+  test "TableV5_2", cxt do
+    data_rows = TableV5_2.data_rows([@public], cxt.schema, config())
+
+    assert Enum.sort(data_rows) ==
+             Enum.sort([
+               ["with_constraint", "public", <<0>>, <<0>>, <<0>>, nil, nil],
+               ["checked", "public", <<0>>, <<0>>, <<0>>, nil, nil],
+               ["interesting", "public", <<0>>, <<0>>, <<0>>, nil, nil],
+               ["pointy", "public", <<0>>, <<0>>, <<0>>, nil, nil],
+               ["pointy2", "public", <<0>>, <<0>>, <<0>>, nil, nil]
+             ])
   end
 
   test "ConstraintV5_2", cxt do
