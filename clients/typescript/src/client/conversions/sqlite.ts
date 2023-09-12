@@ -1,59 +1,57 @@
 //import { SqlValue } from "../../util"
 
+import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+
 //type SqliteValue = string | number | null 
 //type PgValue = string | number | null
 
 /**
  * This module takes care of converting TypeScript values for Postgres-specific types to a SQLite storeable value and back.
+ * These conversions are needed when the developer uses the DAL such that we can convert those JS values to SQLite values
+ * and such that values that are read from the SQLite DB can be converted into JS values.
  * For example, a `Date` value representing a Postgres timestamp can be converted to a string that can be stored in SQLite.
  * When reading from the SQLite database, the string can be parsed back into a `Date` object.
  */
 
-export enum PgBasicTypes {
-  PG_BOOL = "PG_BOOL",
-  PG_SMALLINT = "PG_SMALLINT",
-  PG_INT = "PG_INT",
-  PG_FLOAT = "PG_FLOAT",
-  PG_TEXT = "PG_TEXT",
+export enum PgBasicType {
+  PG_BOOL = "BOOLEAN",
+  PG_SMALLINT = "INT2",
+  PG_INT = "INT4",
+  PG_FLOAT = "FLOAT8",
+  PG_TEXT = "TEXT",
 }
 
 /**
  * Union type of all Pg types that are represented by a `Date` in JS/TS.
  */
-export enum PgDateTypes {
-  PG_TIMESTAMP = "PG_TIMESTAMP",
-  PG_TIMESTAMPTZ = "PG_TIMESTAMPTZ",
-  PG_DATE = "PG_DATE",
-  PG_TIME = "PG_TIME",
-  PG_TIMETZ = "PG_TIMETZ",
+export enum PgDateType {
+  PG_TIMESTAMP = "TIMESTAMP",
+  PG_TIMESTAMPTZ = "TIMESTAMPTZ",
+  PG_DATE = "DATE",
+  PG_TIME = "TIME",
+  PG_TIMETZ = "TIMETZ",
 }
 
-export type PgType = PgBasicTypes | PgDateTypes
+export type PgType = PgBasicType | PgDateType
 
-// TODO: currently we define `toSql` and `fromSql` to convert TS -> Sqlite and Sqlite -> TS
-//       But we will also need PG -> SQLite and SQLite -> PG when receiving, resp., sending
-//       values on the protocol (bc PG representation of e.g. timetz and timestamptz != SQLite representation)
-//       see alco's useful table on the PG and SQLite values
-
-// TODO: Move date serialisation functions to its own file
-
-//export function toSql(v: PgValue): SqliteValue {
-export function toSqlite(v: Date, pgType: PgDateTypes): string
-export function toSqlite(v: any, pgType: any): any {
-  if (v instanceof Date) {
-    return serialiseDate(v, pgType)
+//export function toSqlite(v: Date, pgType: PgDateType): string
+export function toSqlite(v: any, pgType: PgType): any {
+  if (isPgDateType(pgType)) {
+    if (!(v instanceof Date))
+      throw new InvalidArgumentError(`Unexpected value ${v}. Expected a Date object.`)
+    
+    return serialiseDate(v, pgType as PgDateType)
   }
   else {
     return v
   }
 }
 
-//export function fromSql(v: SqliteValue): PgValue {
-export function fromSqlite(v: string, pgType: PgDateTypes): Date
-export function fromSqlite(v: any, pgType: any): any {
-  if (Object.values(PgDateTypes).includes(pgType)) {
+//export function fromSqlite(v: string, pgType: PgDateType): Date
+export function fromSqlite(v: any, pgType: PgType): any {
+  if (isPgDateType(pgType)) {
     // it's a serialised date
-    return deserialiseDate(v, pgType)
+    return deserialiseDate(v, pgType as PgDateType)
   }
   else {
     return v
@@ -61,32 +59,32 @@ export function fromSqlite(v: any, pgType: any): any {
 }
 
 // Serialises a `Date` object into a SQLite compatible date string
-function serialiseDate(v: Date, pgType: PgDateTypes): string {
+function serialiseDate(v: Date, pgType: PgDateType): string {
   switch (pgType) {
-    case PgDateTypes.PG_TIMESTAMP:
+    case PgDateType.PG_TIMESTAMP:
       // Returns local timestamp
       return ignoreTimeZone(v).toISOString().replace('T', ' ').replace('Z', '')
     
-    case PgDateTypes.PG_TIMESTAMPTZ:
+    case PgDateType.PG_TIMESTAMPTZ:
       // Returns UTC timestamp
       return v.toISOString().replace('T', ' ')
     
-    case PgDateTypes.PG_DATE:
+    case PgDateType.PG_DATE:
       // Returns the local date
       return extractDateAndTime(ignoreTimeZone(v)).date
     
-    case PgDateTypes.PG_TIME:
+    case PgDateType.PG_TIME:
       // Returns the local time
       return extractDateAndTime(ignoreTimeZone(v)).time
     
-    case PgDateTypes.PG_TIMETZ:
+    case PgDateType.PG_TIMETZ:
       // Returns UTC time
       return extractDateAndTime(v).time
   }
 }
 
 // Deserialises a SQLite compatible date string into a `Date` object
-function deserialiseDate(v: string, pgType: PgDateTypes): Date {
+function deserialiseDate(v: string, pgType: PgDateType): Date {
   const parse = (v: any) => {
     const millis = Date.parse(v)
     if (isNaN(millis))
@@ -96,17 +94,17 @@ function deserialiseDate(v: string, pgType: PgDateTypes): Date {
   }
 
   switch (pgType) {
-    case PgDateTypes.PG_TIMESTAMP:
-    case PgDateTypes.PG_TIMESTAMPTZ:
-    case PgDateTypes.PG_DATE:
+    case PgDateType.PG_TIMESTAMP:
+    case PgDateType.PG_TIMESTAMPTZ:
+    case PgDateType.PG_DATE:
       return parse(v)
     
-    case PgDateTypes.PG_TIME:
+    case PgDateType.PG_TIME:
       // interpret as local time
       const timestamp = `1970-01-01 ${v}`
       return parse(timestamp)
     
-    case PgDateTypes.PG_TIMETZ:
+    case PgDateType.PG_TIMETZ:
       // interpret as UTC time
       const ts = `1970-01-01 ${v}+00`
       return parse(ts)
@@ -132,4 +130,8 @@ function extractDateAndTime(v: Date): ExtractedDateTime {
   const regex = /([0-9-]*)T([0-9:.]*)Z/g
   const [_, date, time] = regex.exec(v.toISOString())! as unknown as [string, string, string]
   return { date, time }
+}
+
+function isPgDateType(pgType: PgType): boolean {
+  return (Object.values(PgDateType) as Array<string>).includes(pgType)
 }
