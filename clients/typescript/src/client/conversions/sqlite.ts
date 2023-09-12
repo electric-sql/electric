@@ -36,7 +36,11 @@ export type PgType = PgBasicType | PgDateType
 
 //export function toSqlite(v: Date, pgType: PgDateType): string
 export function toSqlite(v: any, pgType: PgType): any {
-  if (isPgDateType(pgType)) {
+  if (v === null) {
+    // don't transform null values
+    return v
+  }
+  else if (isPgDateType(pgType)) {
     if (!(v instanceof Date))
       throw new InvalidArgumentError(`Unexpected value ${v}. Expected a Date object.`)
     
@@ -49,7 +53,11 @@ export function toSqlite(v: any, pgType: PgType): any {
 
 //export function fromSqlite(v: string, pgType: PgDateType): Date
 export function fromSqlite(v: any, pgType: PgType): any {
-  if (isPgDateType(pgType)) {
+  if (v === null) {
+    // don't transform null values
+    return v
+  }
+  else if (isPgDateType(pgType)) {
     // it's a serialised date
     return deserialiseDate(v, pgType as PgDateType)
   }

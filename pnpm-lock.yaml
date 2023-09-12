@@ -120,6 +120,9 @@ importers:
         specifier: ^3.20.2
         version: 3.21.4
     devDependencies:
+      '@electric-sql/prisma-generator':
+        specifier: workspace:*
+        version: link:../../generator
       '@ikscodes/browser-env':
         specifier: ^1.0.0
         version: 1.0.0

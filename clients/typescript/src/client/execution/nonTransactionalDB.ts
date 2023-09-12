@@ -47,8 +47,9 @@ export class NonTransactionalDB implements DB {
       .then((rows) => {
         try {
           const objects = rows.map((row) => {
-            // convert SQLite value back to JS value and
-            // parse it with the Zod schema to validate it
+            // convert SQLite values back to JS values
+            // and then parse the transformed object
+            // with the Zod schema to validate it
             const transformedRow = transformFields(row, this._fields, Transformation.Sqlite2Js)
             return schema.parse(transformedRow)
           })
