@@ -10,7 +10,7 @@
   [invoke migrate_items_table 20230504114018]
 
 [shell satellite_1]
-  ??[proto] recv: #SatInStartReplicationResp
+  ??[rpc] recv: #SatInStartReplicationResp
   [invoke node_await_table "items"]
 
   # First write gets propagated
@@ -58,10 +58,9 @@
 
   -no previous LSN
 
-  # Server requests replication. The `AAAAAQ==` here is [0, 0, 0, 1] UInt8Array, representing the integer 1
-  ?+\[proto\] recv: #SatInStartReplicationReq\{lsn: AAAAAQ==,
-  ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
-  ??[proto] recv: #SatInStartReplicationResp
+  ?+Server sent a replication request to start from 1,
+  ?\[rpc\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ??[rpc] recv: #SatInStartReplicationResp
 
   # Second write gets propagated
   [invoke node_await_insert "['hello from satellite - second']"]

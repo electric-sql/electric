@@ -33,8 +33,8 @@
   # The client starts replication from scratch.
   ?no previous LSN, start replication from scratch
   # It passes its schema version to the server.
-  ??[proto] send: #SatInStartReplicationReq{lsn: , schema: $migration1_vsn
-  ??[proto] recv: #SatInStartReplicationResp{}
+  ??[rpc] send: #SatInStartReplicationReq{lsn: , schema: $migration1_vsn
+  ??[rpc] recv: #SatInStartReplicationResp{}
 
   # The client receives only the second migration. Since the client sends migrations in order, we're sure that we haven't seen migration 1
   ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration2_vsn, for: bar
