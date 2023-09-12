@@ -1,12 +1,7 @@
-import { ReactComponent as CancelIcon } from '../../assets/icons/cancel.svg'
-import { ReactComponent as BacklogIcon } from '../../assets/icons/circle-dot.svg'
-import { ReactComponent as TodoIcon } from '../../assets/icons/circle.svg'
-import { ReactComponent as DoneIcon } from '../../assets/icons/done.svg'
-import { ReactComponent as InProgressIcon } from '../../assets/icons/half-circle.svg'
 import { Portal } from '../Portal'
 import { ReactNode, useState } from 'react'
 import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
-import { Status } from '../../types/issue'
+import { StatusOptions } from '../../types/issue'
 import { Menu } from './menu'
 
 interface Props {
@@ -21,17 +16,7 @@ export default function StatusMenu({ id, button, className, onSelect }: Props) {
     if (onSelect) onSelect(status)
   }
 
-  let statuses: [
-    React.FunctionComponent<React.SVGProps<SVGSVGElement>>,
-    (typeof Status)[keyof typeof Status],
-    string
-  ][] = [
-    [BacklogIcon, Status.BACKLOG, 'Backlog'],
-    [TodoIcon, Status.TODO, 'Todo'],
-    [InProgressIcon, Status.IN_PROGRESS, 'In Progress'],
-    [DoneIcon, Status.DONE, 'Done'],
-    [CancelIcon, Status.CANCELED, 'Canceled'],
-  ]
+  let statuses = [...StatusOptions]
   if (keyword !== '') {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statuses = statuses.filter(

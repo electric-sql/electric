@@ -1,15 +1,11 @@
-import { useContext } from 'react'
 import IssueRow from './IssueRow'
 import { Issue, useElectric } from '../../electric'
-import { IssuesContext } from '.'
 
 export interface IssueListProps {
   issues: Issue[]
 }
 
 function IssueList({ issues }: IssueListProps) {
-  const { filter }: IssuesContext = useContext(IssuesContext)
-
   const { db } = useElectric()!
 
   // TODO: sync is not really working with large database. Manipulate the

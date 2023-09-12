@@ -1,23 +1,42 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { useState, useContext } from 'react'
-import { BiSortUp } from 'react-icons/bi'
-import IssueFilterModal from './IssueFilterModal'
+import { BsSortUp, BsPlus, BsX } from 'react-icons/bs'
 import ViewOptionMenu from './ViewOptionMenu'
 import { Issue } from '../electric'
 import { MenuContext } from '../App'
+import FilterMenu from './contextmenu/FilterMenu'
+import { useFilterState } from '../utils/filterState'
+import { PriorityDisplay, StatusDisplay } from '../types/issue'
 
 interface Props {
-  title: string
   issues: Issue[]
   hideSort?: boolean
 }
 
-export default function ({ title, issues, hideSort }: Props) {
-  const [showFilter, setShowFilter] = useState(false)
+export default function ({ issues, hideSort }: Props) {
+  const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
 
   const totalIssues = issues.length
+
+  let title = 'All issues'
+
+  const eqStatuses = (statuses: string[]) => {
+    const statusSet = new Set(statuses)
+    return (
+      filterState.status?.length === statusSet.size &&
+      filterState.status.every((x) => statusSet.has(x))
+    )
+  }
+
+  if (filterState.status?.length) {
+    if (eqStatuses(['backlog'])) {
+      title = 'Backlog'
+    } else if (eqStatuses(['todo', 'in_progress'])) {
+      title = 'Active'
+    }
+  }
 
   return (
     <>
@@ -33,12 +52,15 @@ export default function ({ title, issues, hideSort }: Props) {
 
           <div className="p-1 font-semibold me-1">{title}</div>
           <span>{totalIssues}</span>
-          <button
-            className="px-1 py-0.5 ml-3 border border-gray-300 border-dashed rounded text-gray-500 hover:border-gray-400 hover:text-gray-800"
-            onClick={() => setShowFilter(!showFilter)}
-          >
-            + Filter
-          </button>
+          <FilterMenu
+            button={
+              <button className="px-1 py-0.5 ml-3 border border-gray-300 border-dashed rounded text-gray-500 hover:border-gray-400 hover:text-gray-800 flex items-center">
+                <BsPlus className="inline" size="16" />
+                Filter
+              </button>
+            }
+            id={'filter-menu'}
+          />
         </div>
 
         <div className="flex items-center">
@@ -47,18 +69,62 @@ export default function ({ title, issues, hideSort }: Props) {
               className="p-2 rounded hover:bg-gray-100"
               onClick={() => setShowViewOption(true)}
             >
-              <BiSortUp size={14} />
+              <BsSortUp size="16" className="inline" />
             </button>
           )}
         </div>
       </div>
+
+      {(!!filterState.status?.length || !!filterState.priority?.length) && (
+        <div className="flex justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
+          {!!filterState.priority?.length && (
+            <div className="flex pr-4 space-x-[1px]">
+              <span className="px-1 bg-gray-300 rounded-l">Priority is</span>
+              <span className="px-1 bg-gray-300 ">
+                {filterState.priority
+                  ?.map((priority) => PriorityDisplay[priority])
+                  .join(', ')}
+              </span>
+              <span
+                className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"
+                onClick={() => {
+                  setFilterState({
+                    ...filterState,
+                    priority: undefined,
+                  })
+                }}
+              >
+                <BsX size={16} />
+              </span>
+            </div>
+          )}
+          {!!filterState.status?.length && (
+            <div className="flex pr-4 space-x-[1px]">
+              <span className="px-1 bg-gray-300 rounded-l">Status is</span>
+              <span className="px-1 bg-gray-300 ">
+                {filterState.status
+                  ?.map((status) => StatusDisplay[status])
+                  .join(', ')}
+              </span>
+              <span
+                className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"
+                onClick={() => {
+                  setFilterState({
+                    ...filterState,
+                    status: undefined,
+                  })
+                }}
+              >
+                <BsX size={16} />
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <ViewOptionMenu
         isOpen={showViewOption}
         onDismiss={() => setShowViewOption(false)}
-      />
-      <IssueFilterModal
-        isOpen={showFilter}
-        onDismiss={() => setShowFilter(false)}
       />
     </>
   )

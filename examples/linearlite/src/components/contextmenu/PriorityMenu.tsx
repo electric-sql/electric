@@ -2,13 +2,7 @@ import { Portal } from '../Portal'
 import { ReactNode, useState } from 'react'
 import { ContextMenuTrigger } from '@firefox-devtools/react-contextmenu'
 import { Menu } from './menu'
-
-import { ReactComponent as HighPriorityIcon } from '../../assets/icons/signal-strong.svg'
-import { ReactComponent as LowPriorityIcon } from '../../assets/icons/signal-weak.svg'
-import { ReactComponent as MediumPriorityIcon } from '../../assets/icons/signal-medium.svg'
-import { ReactComponent as NoPriorityIcon } from '../../assets/icons/dots.svg'
-import { ReactComponent as UrgentPriorityIcon } from '../../assets/icons/rounded-claim.svg'
-import { Priority } from '../../types/issue'
+import { PriorityOptions } from '../../types/issue'
 
 interface Props {
   id: string
@@ -31,26 +25,16 @@ function PriorityMenu({
     setKeyword('')
     if (onSelect) onSelect(priority)
   }
-  let statusOpts: [
-    React.FunctionComponent<React.SVGProps<SVGSVGElement>>,
-    string,
-    (typeof Priority)[keyof typeof Priority]
-  ][] = [
-    [NoPriorityIcon, 'None', Priority.NONE],
-    [UrgentPriorityIcon, 'Urgent', Priority.URGENT],
-    [HighPriorityIcon, 'High', Priority.HIGH],
-    [MediumPriorityIcon, 'Medium', Priority.MEDIUM],
-    [LowPriorityIcon, 'Low', Priority.LOW],
-  ]
+  let statusOpts = [...PriorityOptions]
   if (keyword !== '') {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statusOpts = statusOpts.filter(
-      ([_Icon, label, _priority]) =>
+      ([_Icon, _priority, label]) =>
         (label as string).toLowerCase().indexOf(normalizedKeyword) !== -1
     )
   }
 
-  const options = statusOpts.map(([Icon, label, priority], idx) => {
+  const options = statusOpts.map(([Icon, priority, label], idx) => {
     return (
       <Menu.Item
         key={`priority-${idx}`}

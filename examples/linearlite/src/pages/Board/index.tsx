@@ -2,14 +2,17 @@ import TopFilter from '../../components/TopFilter'
 import IssueBoard from './IssueBoard'
 import { Issue, useElectric } from '../../electric'
 import { useLiveQuery } from 'electric-sql/react'
+import { useFilterState, filterStateToWhere } from '../../utils/filterState'
 
 function Board() {
+  const [filterState] = useFilterState()
   const { db } = useElectric()!
   const { results } = useLiveQuery(
     db.issue.liveMany({
       orderBy: {
         kanbanorder: 'asc',
       },
+      where: filterStateToWhere(filterState),
     })
   )
   const issues: Issue[] = results !== undefined ? [...results] : []

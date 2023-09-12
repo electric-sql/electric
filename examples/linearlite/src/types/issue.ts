@@ -1,3 +1,17 @@
+import type React from 'react'
+
+import { ReactComponent as CancelIcon } from '../assets/icons/cancel.svg'
+import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
+import { ReactComponent as TodoIcon } from '../assets/icons/circle.svg'
+import { ReactComponent as DoneIcon } from '../assets/icons/done.svg'
+import { ReactComponent as InProgressIcon } from '../assets/icons/half-circle.svg'
+
+import { ReactComponent as HighPriorityIcon } from '../assets/icons/signal-strong.svg'
+import { ReactComponent as LowPriorityIcon } from '../assets/icons/signal-weak.svg'
+import { ReactComponent as MediumPriorityIcon } from '../assets/icons/signal-medium.svg'
+import { ReactComponent as NoPriorityIcon } from '../assets/icons/dots.svg'
+import { ReactComponent as UrgentPriorityIcon } from '../assets/icons/rounded-claim.svg'
+
 export const Priority = {
   NONE: 'none',
   URGENT: 'urgent',
@@ -5,6 +19,34 @@ export const Priority = {
   LOW: 'low',
   MEDIUM: 'medium',
 }
+
+export const PriorityDisplay = {
+  [Priority.NONE]: 'None',
+  [Priority.URGENT]: 'Urgent',
+  [Priority.HIGH]: 'High',
+  [Priority.LOW]: 'Low',
+  [Priority.MEDIUM]: 'Medium',
+}
+
+export const PriorityIcons = {
+  [Priority.NONE]: NoPriorityIcon,
+  [Priority.URGENT]: UrgentPriorityIcon,
+  [Priority.HIGH]: HighPriorityIcon,
+  [Priority.MEDIUM]: MediumPriorityIcon,
+  [Priority.LOW]: LowPriorityIcon,
+}
+
+export const PriorityOptions: [
+  React.FunctionComponent<React.SVGProps<SVGSVGElement>>,
+  string,
+  (typeof Priority)[keyof typeof Priority]
+][] = [
+  [PriorityIcons[Priority.NONE], Priority.NONE, 'None'],
+  [PriorityIcons[Priority.URGENT], Priority.URGENT, 'Urgent'],
+  [PriorityIcons[Priority.HIGH], Priority.HIGH, 'High'],
+  [PriorityIcons[Priority.MEDIUM], Priority.MEDIUM, 'Medium'],
+  [PriorityIcons[Priority.LOW], Priority.LOW, 'Low'],
+]
 
 export const Status = {
   BACKLOG: 'backlog',
@@ -14,46 +56,38 @@ export const Status = {
   CANCELED: 'canceled',
 }
 
-// export type User = {
-//   id?: string;
-//   name?: string;
-//   avatar?: string;
-// };
-// export type Issue = {
-//   priority: string;
-//   id: string | undefined;
-//   title: string;
-//   description: string;
-//   status: string;
-//   createdAt?: Date;
-//   owner?: User;
-// };
-//
-export type Label = {
-  id: string
-  name: string
-  color: string
+export const StatusDisplay = {
+  [Status.BACKLOG]: 'Backlog',
+  [Status.TODO]: 'To Do',
+  [Status.IN_PROGRESS]: 'In Progress',
+  [Status.DONE]: 'Done',
+  [Status.CANCELED]: 'Canceled',
 }
 
-export const DEFAULT_LABELS: Array<Label> = [
-  { id: '1', name: 'Bug', color: '#eb5757' },
-  { id: '2', name: 'Feature', color: '#bb87fc' },
-  { id: '3', name: 'Improvement', color: '#4ea7fc' },
+export const StatusIcons = {
+  [Status.BACKLOG]: BacklogIcon,
+  [Status.TODO]: TodoIcon,
+  [Status.IN_PROGRESS]: InProgressIcon,
+  [Status.DONE]: DoneIcon,
+  [Status.CANCELED]: CancelIcon,
+}
+
+export const StatusOptions: [
+  React.FunctionComponent<React.SVGProps<SVGSVGElement>>,
+  (typeof Status)[keyof typeof Status],
+  string
+][] = [
+  [StatusIcons[Status.BACKLOG], Status.BACKLOG, StatusDisplay[Status.BACKLOG]],
+  [StatusIcons[Status.TODO], Status.TODO, StatusDisplay[Status.TODO]],
+  [
+    StatusIcons[Status.IN_PROGRESS],
+    Status.IN_PROGRESS,
+    StatusDisplay[Status.IN_PROGRESS],
+  ],
+  [StatusIcons[Status.DONE], Status.DONE, StatusDisplay[Status.DONE]],
+  [
+    StatusIcons[Status.CANCELED],
+    Status.CANCELED,
+    StatusDisplay[Status.CANCELED],
+  ],
 ]
-
-export function getPriorityString(priority: string) {
-  switch (priority) {
-    case Priority.NONE:
-      return 'Priority'
-    case Priority.HIGH:
-      return 'High'
-    case Priority.MEDIUM:
-      return 'Medium'
-    case Priority.LOW:
-      return 'Low'
-    case Priority.URGENT:
-      return 'Urgent'
-    default:
-      return 'Priority'
-  }
-}

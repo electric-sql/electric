@@ -2,7 +2,7 @@ import { DragDropContext, DropResult } from 'react-beautiful-dnd'
 import { useMemo, useState, useEffect } from 'react'
 import { generateKeyBetween } from 'fractional-indexing'
 import { Issue, useElectric } from '../../electric'
-import { Status } from '../../types/issue'
+import { Status, StatusDisplay } from '../../types/issue'
 import IssueCol from './IssueCol'
 
 export interface IssueBoardProps {
@@ -153,27 +153,27 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
         <IssueCol
-          title={'Backlog'}
+          title={StatusDisplay[Status.BACKLOG]}
           status={Status.BACKLOG}
           issues={issuesByStatus[Status.BACKLOG]}
         />
         <IssueCol
-          title={'Todo'}
+          title={StatusDisplay[Status.TODO]}
           status={Status.TODO}
           issues={issuesByStatus[Status.TODO]}
         />
         <IssueCol
-          title={'In Progress'}
+          title={StatusDisplay[Status.IN_PROGRESS]}
           status={Status.IN_PROGRESS}
           issues={issuesByStatus[Status.IN_PROGRESS]}
         />
         <IssueCol
-          title={'Done'}
+          title={StatusDisplay[Status.DONE]}
           status={Status.DONE}
           issues={issuesByStatus[Status.DONE]}
         />
         <IssueCol
-          title={'Canceled'}
+          title={StatusDisplay[Status.CANCELED]}
           status={Status.CANCELED}
           issues={issuesByStatus[Status.CANCELED]}
         />

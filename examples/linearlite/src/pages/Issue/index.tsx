@@ -8,7 +8,7 @@ import StatusMenu from '../../components/contextmenu/StatusMenu'
 import PriorityIcon from '../../components/PriorityIcon'
 import StatusIcon from '../../components/StatusIcon'
 import { useElectric } from '../../electric'
-import { getPriorityString } from '../../types/issue'
+import { PriorityDisplay } from '../../types/issue'
 import Editor from '../../components/editor/Editor'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
@@ -211,7 +211,7 @@ function IssuePage() {
                           priority={issue.priority}
                           className="mr-1"
                         />
-                        <span>{getPriorityString(issue.priority)}</span>
+                        <span>{PriorityDisplay[issue.priority]}</span>
                       </button>
                     }
                     onSelect={handlePriorityChange}

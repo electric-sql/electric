@@ -100,13 +100,13 @@ function LeftMenu() {
               <span>All Issues</span>
             </Link>
             <Link
-              to="/active"
+              to="/?status=todo,in_progress"
               className="flex items-center pl-8 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <span>Active</span>
             </Link>
             <Link
-              to="/backlog"
+              to="/?status=backlog"
               className="flex items-center pl-8 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <span>Backlog</span>

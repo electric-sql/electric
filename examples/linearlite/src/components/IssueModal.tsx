@@ -14,7 +14,7 @@ import StatusIcon from './StatusIcon'
 import PriorityMenu from './contextmenu/PriorityMenu'
 import StatusMenu from './contextmenu/StatusMenu'
 
-import { Priority, Status, getPriorityString } from '../types/issue'
+import { Priority, Status, PriorityDisplay } from '../types/issue'
 import { showInfo, showWarning } from '../utils/notification'
 
 interface Props {
@@ -147,7 +147,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
           button={
             <button className="inline-flex items-center h-6 px-2 text-gray-500 bg-gray-200 border-none rounded hover:bg-gray-100 hover:text-gray-700">
               <PriorityIcon priority={priority} className="mr-1" />
-              <span>{getPriorityString(priority)}</span>
+              <span>{PriorityDisplay[priority]}</span>
             </button>
           }
           onSelect={(val) => {

@@ -36,6 +36,18 @@ const Item = function ({ onClick, children }: MenuItemProps) {
   )
 }
 
+const Divider = function () {
+  return <MenuItem divider className="border-t border-gray-200" />
+}
+
+const Header = function ({ children }: MenuItemProps) {
+  return (
+    <MenuItem className="flex items-center h-8 px-3 text-gray-400 " disabled>
+      {children}
+    </MenuItem>
+  )
+}
+
 export const Menu = (props: MenuProps) => {
   const {
     id,
@@ -88,6 +100,8 @@ export const Menu = (props: MenuProps) => {
 }
 
 Menu.Item = Item
+Menu.Divider = Divider
+Menu.Header = Header
 Menu.defaultProps = {
   size: 'small',
 }

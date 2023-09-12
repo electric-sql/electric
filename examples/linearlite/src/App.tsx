@@ -49,8 +49,6 @@ const App = () => {
   const router = (
     <Routes>
       <Route path="/" element={<List />} />
-      <Route path="/active" element={<List title="Active Issues" />} />
-      <Route path="/backlog" element={<List title="Backlog" />} />
       <Route path="/board" element={<Board />} />
       <Route path="/issue/:id" element={<Issue />} />
     </Routes>
