@@ -65,7 +65,9 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   defp initialise_capture_mode({module, opts}) do
-    if function_exported?(module, :new, 1) do
+    {:module, ^module} = Code.ensure_loaded(module)
+
+    if function_exported?(module, :new, 1) |> dbg do
       module.new(opts)
     else
       struct(module, opts)

@@ -158,11 +158,14 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], _schema, _config) do
+  def data_rows([nspname_array], schema, _config) do
     # see above re questions over purpose of this..
+    # exists = namespace_exists?(schema, nspname)
     nspname_array
     |> parse_name_array()
+    |> Enum.filter(&namespace_exists?(schema, &1))
     |> Enum.map(&[&1])
+    |> Enum.sort()
   end
 end
 
@@ -212,6 +215,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TableV5_2 do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_description/1)
+    |> Enum.sort_by(fn [t, s | _] -> [t, s] end)
   end
 
   defp table_description(table) do
@@ -277,6 +281,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ConstraintV5_2 do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_check_constraints/1)
+    |> Enum.sort_by(fn [ns, tn, cn, ct | _] -> [ns, tn, cn, ct] end)
   end
 
   defp table_check_constraints(table) do
@@ -442,13 +447,20 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV5_2 do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_columns/1)
+    |> Enum.sort_by(fn [op, ns, tn | _] -> [ns, tn, op] end)
+    |> Enum.map(fn [_ | rest] -> rest end)
   end
 
   defp table_columns(table) do
-    Enum.map(table.columns, fn column ->
+    table.columns
+    |> Enum.with_index()
+    |> Enum.map(fn {column, i} ->
       {precision, scale, radix} = numeric_precision_scale(column)
 
       [
+        # the index maps to the `ordinal_position` in the query
+        # and is used for sorting the columns before being stripped out
+        i,
         table.name.schema,
         table.name.name,
         column.name,
@@ -674,6 +686,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_fks(&1, schema))
+    |> Enum.sort_by(fn [colidx, ci, _, _, _, _, _, _, cn, _, _, tn, ns, _, _] ->
+      [ns, tn, cn, ci, colidx]
+    end)
+    |> Enum.map(fn [_ | rest] -> rest end)
   end
 
   defp table_fks(table, schema) do
@@ -682,7 +698,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
     |> Enum.flat_map(fn %{constraint: {:foreign, fk}} ->
       fk.pk_cols
       |> Enum.zip(fk.fk_cols)
-      |> Enum.map(fn {parent_column, child_column} ->
+      |> Enum.with_index()
+      |> Enum.map(fn {{parent_column, child_column}, i} ->
         {:ok, parent_table} = Schema.fetch_table(schema, fk.pk_table)
 
         parent_idx =
@@ -694,6 +711,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
             raise "column #{child_column} not found in table #{table.name}"
 
         [
+          # index for ordering only and will be stripped
+          i,
           # make up an oid that we're unlikely to hit in real life
           i32(table.oid + 2_000_000),
           child_column,
@@ -811,6 +830,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
     nspname_array
     |> tables_in_schema(schema)
     |> Enum.flat_map(&table_indexes(&1, schema))
+    |> Enum.sort_by(fn [ns, idn, tn, _, _, _, idx | _] -> [ns, tn, idn, idx] end)
   end
 
   defp table_indexes(table, schema) do

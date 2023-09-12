@@ -1,7 +1,6 @@
 defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   use ExUnit.Case, async: true
 
-  alias Hex.Solver.Constraint
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.MockSchemaLoader
   alias Electric.Postgres.Proxy.Prisma
