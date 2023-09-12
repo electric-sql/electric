@@ -102,7 +102,7 @@ export class Table<
       fieldNames,
       shapeManager
     )
-    this._executor = new Executor(adapter, notifier)
+    this._executor = new Executor(adapter, notifier, this._fields)
     this._shapeManager = shapeManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()

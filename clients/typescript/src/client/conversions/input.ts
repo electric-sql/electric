@@ -1,7 +1,12 @@
 import mapValues from 'lodash.mapvalues'
 import { FieldName, Fields } from "../model/schema"
-import { PgDateType, PgType, toSqlite } from "./sqlite"
+import { PgDateType, PgType, fromSqlite, toSqlite } from "./sqlite"
 import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+
+export enum Transformation {
+  Js2Sqlite,
+  Sqlite2Js
+}
 
 type UpdateInput = { data: object, where: object }
 type UpdateManyInput = { data: object, where?: object }
@@ -227,15 +232,16 @@ function transformWhereInput<T extends WhereInput>(
  * based on additional type information about the fields.
  * @param o The object to transform.
  * @param fields Type information about the fields.
+ * @param transformation Which transformation to execute.
  * @returns An object with the values converted to SQLite.
  */
-function transformFields(o: object, fields: Fields): object {
+export function transformFields(o: object, fields: Fields, transformation: Transformation = Transformation.Js2Sqlite): object {
   // only transform fields that are part of this table and not related fields
   // as those will be transformed later when the query on the related field is processed.
   const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
   const fieldsAndTransformedValues = fieldsAndValues.map(entry => {
     const [field, value] = entry
-    return transformField(field, value, o, fields)
+    return transformField(field, value, o, fields, transformation)
   })
   return {
     ...o,
@@ -250,16 +256,21 @@ function transformFields(o: object, fields: Fields): object {
  * @param value The value of the field.
  * @param o The object to which the field belongs.
  * @param fields Type information about the object's fields.
+ * @param transformation Which transformation to execute.
  * @returns The transformed field.
  */
-function transformField(field: FieldName, value: any, o: object, fields: Fields): any {
+function transformField(field: FieldName, value: any, o: object, fields: Fields, transformation: Transformation = Transformation.Js2Sqlite): any {
   const pgType = fields.get(field)
     
   if (!pgType)
     throw new InvalidArgumentError(`Unknown field ${field} in object ${JSON.stringify(o)}`)
   
-  const sqliteValue = toSqlite(value, pgType)
-  return [ field, sqliteValue ]
+  const transformedValue =
+    transformation === Transformation.Js2Sqlite
+      ? toSqlite(value, pgType)
+      : fromSqlite(value, pgType)
+  
+  return [ field, transformedValue ]
 }
 
 function transformWhere(o: object, fields: Fields): object {

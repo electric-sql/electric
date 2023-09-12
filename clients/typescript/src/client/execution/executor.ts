@@ -4,9 +4,10 @@ import { DB } from './db'
 import { TransactionalDB } from './transactionalDB'
 import { NonTransactionalDB } from './nonTransactionalDB'
 import { Notifier } from '../../notifiers'
+import { Fields } from '../model/schema'
 
 export class Executor {
-  constructor(private _adapter: DatabaseAdapter, private _notifier: Notifier) {}
+  constructor(private _adapter: DatabaseAdapter, private _notifier: Notifier, private _fields: Fields) {}
 
   async runInTransaction(
     qs: QueryBuilder[],
@@ -42,7 +43,7 @@ export class Executor {
     // and thus the promise will always be resolved with the value that was passed to `setResult` which is of type `A`
     return (await this._adapter.transaction((tx, setResult) =>
       f(
-        new TransactionalDB(tx),
+        new TransactionalDB(tx, this._fields),
         (res) => {
           if (notify) {
             this._notifier.potentiallyChanged() // inform the notifier that the data may have changed
@@ -68,7 +69,7 @@ export class Executor {
   ): Promise<A> {
     return new Promise((resolve, reject) => {
       f(
-        new NonTransactionalDB(this._adapter),
+        new NonTransactionalDB(this._adapter, this._fields),
         (res) => {
           if (notify) {
             this._notifier.potentiallyChanged() // inform the notifier that the data may have changed
