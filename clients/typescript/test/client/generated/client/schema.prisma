@@ -4,7 +4,7 @@ datasource db {
 }
 
 generator electric {
-  provider                 = "electric-sql-prisma-generator"
+  provider                 = "../../node_modules/@electric-sql/prisma-generator/dist/bin.js"
   output                   = "../generated"
   relationModel            = true
   writeNullishInModelTypes = true
@@ -41,4 +41,9 @@ model Profile {
   bio    String
   userId Int    @unique
   user   User?  @relation(fields: [userId], references: [id])
+}
+
+model DataTypes {
+  id Int @id
+  timestamptz DateTime? @db.Timestamptz(3)
 }
