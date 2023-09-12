@@ -39,6 +39,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query do
     if b, do: <<1>>, else: <<0>>
   end
 
+  def bool(nil), do: nil
+
   def i16(v) when is_integer(v) do
     <<v::integer-signed-big-16>>
   end
@@ -653,6 +655,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
   alias PgProtocol.Message, as: M
+  alias Electric.Postgres.Schema
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -683,18 +686,26 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
   def data_rows([nspname_array], schema, config) do
     nspname_array
     |> tables_in_schema(schema)
-    |> Enum.flat_map(&table_fks/1)
+    |> Enum.flat_map(&table_fks(&1, schema))
   end
 
-  defp table_fks(table) do
+  defp table_fks(table, schema) do
     table.constraints
     |> Enum.filter(&is_fk/1)
     |> Enum.flat_map(fn %{constraint: {:foreign, fk}} ->
-      dbg(fk)
-
       fk.pk_cols
       |> Enum.zip(fk.fk_cols)
       |> Enum.map(fn {parent_column, child_column} ->
+        {:ok, parent_table} = Schema.fetch_table(schema, fk.pk_table)
+
+        parent_idx =
+          Enum.find_index(parent_table.columns, &(&1.name == parent_column)) ||
+            raise "column #{child_column} not found in table #{table.name}"
+
+        child_idx =
+          Enum.find_index(table.columns, &(&1.name == child_column)) ||
+            raise "column #{child_column} not found in table #{table.name}"
+
         [
           # make up an oid that we're unlikely to hit in real life
           i32(table.oid + 2_000_000),
@@ -705,10 +716,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
           action(fk.on_update),
           fk.pk_table.schema,
           fk.name,
-          # find the index of the parent_column in the referenced table
-          "child",
-          # find the index of the child_column in the table
-          "parent",
+          # I think they have these values the wrong way around, in that the
+          # col index of the referenced column is named as the "child"
+          i16(parent_idx + 1),
+          i16(child_idx + 1),
           table.name.name,
           table.name.schema,
           bool(fk.deferrable),
@@ -729,6 +740,57 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
 end
 
 defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
+  @moduledoc """
+  WITH rawindex AS (
+   SELECT
+   indrelid,
+   indexrelid,
+   indisunique,
+   indisprimary,
+   unnest(indkey) AS indkeyid,
+   generate_subscripts(indkey, 1) AS indkeyidx,
+   unnest(indclass) AS indclass,
+   unnest(indoption) AS indoption
+   FROM pg_index -- https://www.postgresql.org/docs/current/catalog-pg-index.html
+   WHERE
+   indpred IS NULL -- filter out partial indexes
+   AND NOT indisexclusion -- filter out exclusion constraints
+  )
+  SELECT
+   schemainfo.nspname AS namespace,
+   indexinfo.relname AS index_name,
+   tableinfo.relname AS table_name,
+   columninfo.attname AS column_name,
+   rawindex.indisunique AS is_unique,
+   rawindex.indisprimary AS is_primary_key,
+   rawindex.indkeyidx AS column_index,
+   opclass.opcname AS opclass,
+   opclass.opcdefault AS opcdefault,
+   indexaccess.amname AS index_algo,
+   CASE rawindex.indoption & 1
+   WHEN 1 THEN 'DESC'
+   ELSE 'ASC' END
+   AS column_order,
+   CASE rawindex.indoption & 2
+   WHEN 2 THEN true
+   ELSE false END
+   AS nulls_first,
+   pc.condeferrable AS condeferrable,
+   pc.condeferred AS condeferred
+  FROM
+   rawindex
+   INNER JOIN pg_class AS tableinfo ON tableinfo.oid = rawindex.indrelid
+   INNER JOIN pg_class AS indexinfo ON indexinfo.oid = rawindex.indexrelid
+   INNER JOIN pg_namespace AS schemainfo ON schemainfo.oid = tableinfo.relnamespace
+   LEFT JOIN pg_attribute AS columninfo
+   ON columninfo.attrelid = tableinfo.oid AND columninfo.attnum = rawindex.indkeyid
+   INNER JOIN pg_am AS indexaccess ON indexaccess.oid = indexinfo.relam
+   LEFT JOIN pg_opclass AS opclass -- left join because crdb has no opclasses
+   ON opclass.oid = rawindex.indclass
+   LEFT JOIN pg_constraint pc ON rawindex.indexrelid = pc.conindid AND pc.contype <> 'f'
+  WHERE schemainfo.nspname = ANY ( $1 )
+  ORDER BY namespace, table_name, index_name, column_index;
+  """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
   alias PgProtocol.Message, as: M
@@ -759,9 +821,83 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
     ]
   end
 
-  def data_rows([nspname], schema, config) do
+  def data_rows([nspname_array], schema, config) do
     # ["public", "items_pkey", "items", "id", <<1>>, <<1>>, <<0, 0, 0, 0>>, "text_ops", <<1>>, "btree", "ASC", <<0>>, <<0>>, <<0>>]
-    []
+    nspname_array
+    |> tables_in_schema(schema)
+    |> Enum.flat_map(&table_indexes(&1, schema))
+  end
+
+  defp table_indexes(table, schema) do
+    Enum.flat_map(table.indexes, fn index ->
+      index.columns
+      |> Enum.with_index()
+      |> Enum.map(fn {column, i} ->
+        column_def = column_def(table, column.name)
+
+        [
+          table.name.schema,
+          index.name,
+          table.name.name,
+          column.name,
+          bool(index.unique),
+          bool(false),
+          i32(i),
+          opclass(column_def),
+          bool(true),
+          "btree",
+          to_string(column.ordering),
+          bool(column.nulls_ordering == :FIRST),
+          bool(nil),
+          bool(nil)
+        ]
+      end)
+    end) ++ table_constraints(table, schema)
+  end
+
+  defp table_constraints(table, _schema) do
+    Enum.flat_map(table.constraints, fn
+      %{constraint: {type, constraint}} when type in [:primary, :unique] ->
+        constraint.keys
+        |> Enum.with_index()
+        |> Enum.map(fn {column_name, i} ->
+          column_def = column_def(table, column_name)
+
+          [
+            table.name.schema,
+            constraint.name,
+            table.name.name,
+            column_name,
+            bool(true),
+            bool(type == :primary),
+            i32(i),
+            opclass(column_def),
+            bool(true),
+            "btree",
+            "ASC",
+            bool(false),
+            bool(constraint.deferrable),
+            bool(constraint.initdeferred)
+          ]
+        end)
+
+      _ ->
+        []
+    end)
+  end
+
+  defp column_def(table, column_name) do
+    Enum.find(table.columns, &(&1.name == column_name)) ||
+      raise "column #{column_name} not found in table #{table.name}"
+  end
+
+  @text_types Electric.Postgres.text_types()
+
+  defp opclass(%{type: %{name: typename}}) do
+    case typename do
+      t when t in @text_types -> "text_ops"
+      t -> "#{t}_ops"
+    end
   end
 end
 

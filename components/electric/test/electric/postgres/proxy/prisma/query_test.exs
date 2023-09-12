@@ -9,7 +9,11 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   alias Electric.Postgres.Proxy.Prisma.Query.{
     ColumnV5_2,
     ConstraintV5_2,
+    IndexV5_2,
+    ExtensionV5_2,
     ForeignKeyV5_2,
+    FunctionV5_2,
+    SequenceV5_2,
     TypeV5_2,
     ViewV5_2
   }
@@ -66,7 +70,10 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
             id text PRIMARY KEY,
             checked_id text NOT NULL,
             checked_value text NOT NULL,
-            FOREIGN KEY (checked_id, checked_value) REFERENCES public.checked (id, value)
+            amount smallint,
+            code smallint,
+            FOREIGN KEY (checked_id, checked_value) REFERENCES public.checked (id, value),
+            UNIQUE NULLS DISTINCT (amount, code)
          );
          """
        ]}
@@ -437,6 +444,96 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  "NO",
                  nil,
                  nil
+               ],
+               [
+                 "public",
+                 "pointy2",
+                 "checked_id",
+                 "text",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "text",
+                 "pg_catalog",
+                 "text",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "pointy2",
+                 "checked_value",
+                 "text",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "text",
+                 "pg_catalog",
+                 "text",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "pointy2",
+                 "id",
+                 "text",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "text",
+                 "pg_catalog",
+                 "text",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "pointy2",
+                 "amount",
+                 "smallint",
+                 <<0, 0, 0, 16>>,
+                 <<0, 0, 0, 0>>,
+                 <<0, 0, 0, 2>>,
+                 nil,
+                 "smallint",
+                 "pg_catalog",
+                 "int2",
+                 nil,
+                 "YES",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "pointy2",
+                 "code",
+                 "smallint",
+                 <<0, 0, 0, 16>>,
+                 <<0, 0, 0, 0>>,
+                 <<0, 0, 0, 2>>,
+                 nil,
+                 "smallint",
+                 "pg_catalog",
+                 "int2",
+                 nil,
+                 "YES",
+                 "NO",
+                 nil,
+                 nil
                ]
              ])
   end
@@ -444,10 +541,11 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   test "ForeignKeyV5_2", cxt do
     data_rows = ForeignKeyV5_2.data_rows([@public], cxt.schema, config())
 
+    # can't do an equality check as the actual oids 
     assert Enum.sort(data_rows) ==
              Enum.sort([
                [
-                 <<0, 0, 65, 240>>,
+                 <<0, 30, 174, 92>>,
                  "checked_id",
                  "checked",
                  "id",
@@ -463,7 +561,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<0>>
                ],
                [
-                 <<0, 0, 66, 17>>,
+                 <<0, 30, 211, 77>>,
                  "checked_id",
                  "checked",
                  "id",
@@ -479,7 +577,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<0>>
                ],
                [
-                 <<0, 0, 66, 17>>,
+                 <<0, 30, 211, 77>>,
                  "checked_value",
                  "checked",
                  "value",
@@ -495,5 +593,218 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<0>>
                ]
              ])
+  end
+
+  test "IndexV5_2", cxt do
+    data_rows = IndexV5_2.data_rows([@public], cxt.schema, config())
+
+    # can't do an equality check as the actual oids 
+    assert Enum.sort(data_rows) ==
+             Enum.sort([
+               [
+                 "public",
+                 "checked_fk_idx",
+                 "checked",
+                 "id",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "checked_fk_idx",
+                 "checked",
+                 "value",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 1>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "checked_pkey",
+                 "checked",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "interesting_idx",
+                 "interesting",
+                 "value",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "DESC",
+                 <<0>>,
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "interesting_idx",
+                 "interesting",
+                 "ts",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 1>>,
+                 "timestamptz_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "interesting_pkey",
+                 "interesting",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "uuid_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "pointy_pkey",
+                 "pointy",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "pointy2_amount_code_key",
+                 "pointy2",
+                 "amount",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 0>>,
+                 "int2_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "pointy2_amount_code_key",
+                 "pointy2",
+                 "code",
+                 <<1>>,
+                 <<0>>,
+                 <<0, 0, 0, 1>>,
+                 "int2_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "pointy2_pkey",
+                 "pointy2",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "with_constraint_idx",
+                 "with_constraint",
+                 "value",
+                 <<0>>,
+                 <<0>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "with_constraint_pkey",
+                 "with_constraint",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ]
+             ])
+  end
+
+  test "FunctionV5_2", cxt do
+    [] = FunctionV5_2.data_rows([@public], cxt.schema, config())
+  end
+
+  test "ExtensionV5_2", cxt do
+    [] = ExtensionV5_2.data_rows([@public], cxt.schema, config())
+  end
+
+  test "SequenceV5_2", cxt do
+    [] = SequenceV5_2.data_rows([@public], cxt.schema, config())
   end
 end

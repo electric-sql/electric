@@ -315,8 +315,8 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
          ]}
       ]
 
-      {module, opts} = MockSchemaLoader.backend_spec(migrations: migrations) |> dbg
-      {:ok, conn} = module.connect([], opts) |> dbg
+      {module, opts} = MockSchemaLoader.backend_spec(migrations: migrations)
+      {:ok, conn} = module.connect([], opts)
       {:ok, injector} = Prisma.injector(config(), loader: {module, conn})
       {:ok, injector: injector}
     end
