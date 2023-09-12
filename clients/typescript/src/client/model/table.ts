@@ -22,7 +22,7 @@ import { LiveResult, LiveResultContext, Model } from './model'
 import { QualifiedTablename } from '../../util/tablename'
 import { Notifier } from '../../notifiers'
 import { forEach } from '../util/continuationHelpers'
-import { Arity, DbSchema, Relation, TableName } from './schema'
+import { Arity, DbSchema, Fields, Relation, TableName } from './schema'
 import { HKT, Kind } from '../util/hkt'
 import { notNullNotUndefined } from '../util/functions'
 import pick from 'lodash.pick'
@@ -33,16 +33,17 @@ import { parseTableNames, Row, Statement } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
+import { transformCreate, transformCreateMany, transformDelete, transformDeleteMany, transformFindNonUnique, transformFindUnique, transformUpdate, transformUpdateMany, transformUpsert } from '../conversions/input'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
 export class Table<
   T extends Record<string, any>,
   CreateData extends object,
-  UpdateData,
+  UpdateData extends object,
   Select,
-  Where,
-  WhereUnique,
+  Where extends object | undefined,
+  WhereUnique extends object,
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
@@ -65,6 +66,7 @@ export class Table<
   private _shapeManager: IShapeManager
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
+  private _fields: Fields
 
   private _schema: z.ZodType<Partial<T>>
   private createSchema: z.ZodType<CreateInput<CreateData, Select, Include>>
@@ -93,9 +95,11 @@ export class Table<
     shapeManager: IShapeManager,
     private _dbDescription: DbSchema<any>
   ) {
+    this._fields = this._dbDescription.getFields(tableName)
+    const fieldNames = this._dbDescription.getFieldNames(tableName)
     this._builder = new Builder(
       tableName,
-      this._dbDescription.getFieldNames(tableName),
+      fieldNames,
       shapeManager
     )
     this._executor = new Executor(adapter, notifier)
@@ -104,9 +108,10 @@ export class Table<
     this._tables = new Map()
     const tableDescription = this._dbDescription.getTableDescription(tableName)
     this._schema = tableDescription.modelSchema
-    this.createSchema = omitCountFromSelectAndIncludeSchema(
+    this.createSchema = //transformCreateSchema(
+      omitCountFromSelectAndIncludeSchema(
       tableDescription.createSchema
-    )
+    )//, fields)
     this.createManySchema = tableDescription.createManySchema
     this.findUniqueSchema = tableDescription.findUniqueSchema
     this.findSchema = tableDescription.findSchema
@@ -355,7 +360,7 @@ export class Table<
     continuation: (record: Kind<GetPayload, T> & Record<string, any>) => void,
     onError: (err: any) => void
   ) {
-    const validatedInput = validate(i, this.createSchema)
+    const validatedInput = transformCreate(validate(i, this.createSchema), this._fields)
     const data = validatedInput.data as Record<string, any>
 
     /*
@@ -508,7 +513,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.createManySchema)
+    const data = transformCreateMany(validate(i, this.createManySchema), this._fields)
     const sql = this._builder.createMany(data)
     db.run(
       sql,
@@ -525,7 +530,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T> | null) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.findUniqueSchema)
+    const data = transformFindUnique(validate(i, this.findUniqueSchema), this._fields)
     const sql = this._builder.findUnique(data)
     db.query(
       sql,
@@ -561,7 +566,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T> | null) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i ?? {}, this.findSchema)
+    const data = transformFindNonUnique(validate(i ?? {}, this.findSchema), this._fields)
     const sql = this._builder.findFirst(data)
     db.query(
       sql,
@@ -798,7 +803,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>[]) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i ?? {}, this.findSchema)
+    const data = transformFindNonUnique(validate(i ?? {}, this.findSchema), this._fields)
     const sql = this._builder.findMany(data)
     db.query(
       sql,
@@ -1221,7 +1226,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.updateSchema)
+    const data = transformUpdate(validate(i, this.updateSchema), this._fields)
 
     // Find the record and make sure it is unique
     this._findUnique(
@@ -1236,7 +1241,7 @@ export class Table<
         // we need to remove all relation fields from `data.data`
         // because they don't exist on this table
         // and those related object(s) will be updated afterwards
-        const fields = this._dbDescription.getFields(this.tableName)
+        const fields = this._dbDescription.getFieldNames(this.tableName)
         const nonRelationalData: Record<string, any> = pick(data.data, fields)
         const nonRelationalFields: string[] = Object.keys(nonRelationalData)
         const nonRelationalObject = {
@@ -1252,7 +1257,7 @@ export class Table<
           this.updateFKs(originalObject, updatedObj, db, onError, () => {
             // Also update any related objects that are provided in the query
             this.updateRelatedObjects(
-              data,
+              data as unknown as UpdateInput<UpdateData, Select, WhereUnique, Include>,
               ogObject,
               db,
               nonRelationalData,
@@ -1378,7 +1383,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.updateManySchema)
+    const data = transformUpdateMany(validate(i, this.updateManySchema), this._fields)
     const sql = this._builder.updateMany(data)
     db.run(
       sql,
@@ -1400,7 +1405,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.upsertSchema)
+    const data = transformUpsert(validate(i, this.upsertSchema), this._fields)
     // Check if the record exists
     this._findUnique(
       { where: i.where } as any,
@@ -1447,7 +1452,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i, this.deleteSchema)
+    const data = transformDelete(validate(i, this.deleteSchema), this._fields)
     // Check that the record exists
     this._findUniqueWithoutAutoSelect(
       data as any,
@@ -1472,7 +1477,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = validate(i ?? {}, this.deleteManySchema)
+    const data = transformDeleteMany(validate(i ?? {}, this.deleteManySchema), this._fields)
     const sql = this._builder.deleteMany(data)
     db.run(
       sql,

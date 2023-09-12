@@ -4,7 +4,7 @@ import {
   DataChangeType,
   RelationsCache,
   Row,
-  SqliteValue,
+  SqlValue,
   DataTransaction,
   DataChange,
 } from '../util/types'
@@ -57,7 +57,7 @@ export interface ShadowEntryChanges {
 
 export interface OplogColumnChanges {
   [columnName: string]: {
-    value: SqliteValue
+    value: SqlValue
     timestamp: number // ms since epoch
   }
 }

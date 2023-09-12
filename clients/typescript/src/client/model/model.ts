@@ -15,10 +15,10 @@ import { ShapeSubscription } from '../../satellite/process'
  */
 export interface Model<
   CreateData extends object,
-  UpdateData,
+  UpdateData extends object,
   Select,
-  Where,
-  WhereUnique,
+  Where extends object | undefined,
+  WhereUnique extends object,
   Include,
   OrderBy,
   ScalarFieldEnum,

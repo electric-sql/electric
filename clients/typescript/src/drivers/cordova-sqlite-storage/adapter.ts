@@ -4,7 +4,7 @@ import {
   TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Row, SqliteValue, Statement } from '../../util'
+import { Row, SqlValue, Statement } from '../../util'
 import { rowsFromResults } from '../util/results'
 import { Database } from './database'
 
@@ -51,7 +51,7 @@ export class DatabaseAdapter
       this.db.transaction(
         (tx) => {
           for (const { sql, args } of statements) {
-            tx.executeSql(sql, args as SqliteValue[] | undefined, (_, res) => {
+            tx.executeSql(sql, args as SqlValue[] | undefined, (_, res) => {
               rowsAffected += res.rowsAffected
             })
           }

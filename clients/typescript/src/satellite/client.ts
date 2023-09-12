@@ -975,7 +975,7 @@ export function serializeRow(rec: Record, relation: Relation): SatOpRow {
   const recordValues = relation!.columns.reduce(
     (acc: Uint8Array[], c: RelationColumn) => {
       if (rec[c.name] != null) {
-        acc.push(serializeColumnData(rec[c.name]!, c.type))
+        acc.push(serializeColumnData(rec[c.name]!, c))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -1029,11 +1029,11 @@ function deserializeColumnData(
     case 'CHAR':
     case 'DATE':
     case 'TEXT':
-    case 'TIME':
-    case 'TIMESTAMP':
-    case 'TIMESTAMPTZ':
     case 'UUID':
     case 'VARCHAR':
+    case 'DATE':
+    case 'TIME':
+    case 'TIMESTAMP':
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
@@ -1045,6 +1045,10 @@ function deserializeColumnData(
     case 'INT8':
     case 'INTEGER':
       return Number(typeDecoder.text(column))
+    case 'TIMETZ':
+      return typeDecoder.timetz(column)
+    case 'TIMESTAMPTZ':
+      return typeDecoder.timestamptz(column)
   }
   throw new SatelliteError(
     SatelliteErrorCode.UNKNOWN_DATA_TYPE,
@@ -1054,14 +1058,19 @@ function deserializeColumnData(
 
 // All values serialized as textual representation
 function serializeColumnData(
-  col_val: string | number,
-  col_type: string
+  columnValue: string | number,
+  columnInfo: RelationColumn
 ): Uint8Array {
-  switch (col_type.toUpperCase()) {
+  const columnType = columnInfo.type.toUpperCase()
+  switch (columnType) {
     case 'BOOL':
-      return typeEncoder.bool(col_val as number)
+      return typeEncoder.bool(columnValue as number)
+    case 'TIMETZ':
+      return typeEncoder.timetz(columnValue as string)
+    case 'TIMESTAMPTZ':
+      return typeEncoder.timestamptz(columnValue as string)
     default:
-      return typeEncoder.text(col_val as string)
+      return typeEncoder.text(columnValue as string)
   }
 }
 
