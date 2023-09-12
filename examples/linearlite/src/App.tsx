@@ -49,6 +49,7 @@ const App = () => {
   const router = (
     <Routes>
       <Route path="/" element={<List />} />
+      <Route path="/search" element={<List showSearch={true} />} />
       <Route path="/board" element={<Board />} />
       <Route path="/issue/:id" element={<Issue />} />
     </Routes>

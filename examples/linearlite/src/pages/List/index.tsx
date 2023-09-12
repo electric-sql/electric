@@ -4,11 +4,7 @@ import { Issue, useElectric } from '../../electric'
 import { useLiveQuery } from 'electric-sql/react'
 import { useFilterState, filterStateToWhere } from '../../utils/filterState'
 
-export interface ListProps {
-  title?: string
-}
-
-function List({ title = 'All Issues' }: ListProps) {
+function List({ showSearch = false }) {
   const [filterState] = useFilterState()
   const { db } = useElectric()!
   const { results } = useLiveQuery(
@@ -21,7 +17,7 @@ function List({ title = 'All Issues' }: ListProps) {
 
   return (
     <div className="flex flex-col flex-grow">
-      <TopFilter title={title} issues={issues} />
+      <TopFilter issues={issues} showSearch={showSearch} />
       <IssueList issues={issues} />
     </div>
   )

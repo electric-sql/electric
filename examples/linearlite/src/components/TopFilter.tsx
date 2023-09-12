@@ -1,6 +1,7 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { useState, useContext } from 'react'
-import { BsSortUp, BsPlus, BsX } from 'react-icons/bs'
+import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
+import debounce from 'lodash.debounce'
 import ViewOptionMenu from './ViewOptionMenu'
 import { Issue } from '../electric'
 import { MenuContext } from '../App'
@@ -11,16 +12,30 @@ import { PriorityDisplay, StatusDisplay } from '../types/issue'
 interface Props {
   issues: Issue[]
   hideSort?: boolean
+  showSearch?: boolean
 }
 
-export default function ({ issues, hideSort }: Props) {
+export default function ({ issues, hideSort, showSearch }: Props) {
   const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
+  const [searchQuery, setSearchQuery] = useState('')
 
   const totalIssues = issues.length
 
   let title = 'All issues'
+
+  const handleSearchInner = debounce((query: string) => {
+    setFilterState({
+      ...filterState,
+      query: query,
+    })
+  }, 500)
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    handleSearchInner(query)
+  }
 
   const eqStatuses = (statuses: string[]) => {
     const statusSet = new Set(statuses)
@@ -119,6 +134,18 @@ export default function ({ issues, hideSort }: Props) {
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {showSearch && (
+        <div className="flex items-center justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2 relative">
+          <SearchIcon className="w-3.5 h-3.5 ms-3 absolute" />
+          <input
+            type="search"
+            className="w-full bg-gray-100 border border-0 rounded px-2 py-1.5 ps-9"
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
         </div>
       )}
 

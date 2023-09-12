@@ -85,9 +85,12 @@ function LeftMenu() {
             >
               <AddIcon className="mr-2.5 w-3.5 h-3.5" /> New Issue
             </button>
-            <button className="inline-flex ms-2 items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 h-7">
+            <Link
+              to="/search"
+              className="inline-flex ms-2 items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 h-7"
+            >
               <SearchIcon className="w-3.5 h-3.5" />
-            </button>
+            </Link>
           </div>
         </div>
 
