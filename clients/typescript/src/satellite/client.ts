@@ -23,10 +23,13 @@ import {
   SatShapeDataEnd,
   SatUnsubsReq,
   SatUnsubsResp,
+  Root,
+  RootClientImpl,
+  SatRpcRequest,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
-  getSizeBuf,
+  getBufWithMsgTag,
   getTypeFromCode,
   SatPbMsg,
   getFullTypeName,
@@ -35,6 +38,8 @@ import {
   subsErrorToSatelliteError,
   msgToString,
   serverErrorToSatelliteError,
+  HandlerMapping,
+  RpcResponder,
 } from '../util/proto'
 import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
@@ -81,19 +86,9 @@ import {
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
 import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
+import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 
-type IncomingHandler = {
-  handle: (
-    msg: any
-  ) =>
-    | void
-    | AuthResponse
-    | StartReplicationResponse
-    | StopReplicationResponse
-    | SubscribeResponse
-    | UnsubscribeResponse
-  isRpc: boolean
-}
+type IncomingHandler = (msg: any) => void
 
 const subscriptionError = [
   SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -119,73 +114,29 @@ export class SatelliteClient extends EventEmitter implements Client {
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
 
+  private rpcClient: RPC
+  private service: Root
+
   private handlerForMessageType: { [k: string]: IncomingHandler } =
     Object.fromEntries(
       Object.entries({
-        SatAuthResp: {
-          handle: (resp: any) => this.handleAuthResp(resp),
-          isRpc: true,
-        },
-        SatInStartReplicationResp: {
-          handle: (resp: SatInStartReplicationResp) =>
-            this.handleStartResp(resp),
-          isRpc: true,
-        },
-        SatInStartReplicationReq: {
-          handle: (req: any) => this.handleStartReq(req),
-          isRpc: false,
-        },
-        SatInStopReplicationReq: {
-          handle: () => this.handleStopReq(),
-          isRpc: false,
-        },
-        SatInStopReplicationResp: {
-          handle: () => this.handleStopResp(),
-          isRpc: true,
-        },
-        SatRelation: {
-          handle: (req: any) => this.handleRelation(req),
-          isRpc: false,
-        },
-        SatOpLog: {
-          handle: (req: any) => this.handleTransaction(req),
-          isRpc: false,
-        },
-        SatErrorResp: {
-          handle: (error: SatErrorResp) => this.handleError(error),
-          isRpc: false,
-        },
-        SatSubsResp: {
-          handle: (sub: SatSubsResp) => this.handleSubscription(sub),
-          isRpc: true,
-        },
-        SatSubsDataError: {
-          handle: (msg: SatSubsDataError) => this.handleSubscriptionError(msg),
-          isRpc: false,
-        },
-        SatSubsDataBegin: {
-          handle: (msg: SatSubsDataBegin) =>
-            this.handleSubscriptionDataBegin(msg),
-          isRpc: false,
-        },
-        SatSubsDataEnd: {
-          handle: (msg: SatSubsDataEnd) => this.handleSubscriptionDataEnd(msg),
-          isRpc: false,
-        },
-        SatShapeDataBegin: {
-          handle: (msg: SatShapeDataBegin) => this.handleShapeDataBegin(msg),
-          isRpc: false,
-        },
-        SatShapeDataEnd: {
-          handle: (msg: SatShapeDataEnd) => this.handleShapeDataEnd(msg),
-          isRpc: false,
-        },
-        SatUnsubsResp: {
-          handle: (msg: SatUnsubsResp) => this.handleUnsubscribeResponse(msg),
-          isRpc: true,
-        },
-      }).map((e) => [getFullTypeName(e[0]), e[1]])
+        SatRelation: (msg) => this.handleRelation(msg),
+        SatOpLog: (msg) => this.handleTransaction(msg),
+        SatErrorResp: (error) => this.handleError(error),
+        SatSubsDataError: (msg) => this.handleSubscriptionError(msg),
+        SatSubsDataBegin: (msg) => this.handleSubscriptionDataBegin(msg),
+        SatSubsDataEnd: (msg) => this.handleSubscriptionDataEnd(msg),
+        SatShapeDataBegin: (msg) => this.handleShapeDataBegin(msg),
+        SatShapeDataEnd: (msg) => this.handleShapeDataEnd(msg),
+        SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
+        SatRpcRequest: (msg) => this.handleRpcRequest(msg),
+      } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
+
+  private handlerForRpcRequests: RpcResponder = {
+    startReplication: this.handleStartReq.bind(this),
+    stopReplication: this.handleStopReq.bind(this),
+  }
 
   constructor(
     _dbName: string,
@@ -202,6 +153,16 @@ export class SatelliteClient extends EventEmitter implements Client {
     this.outbound = this.resetReplication()
 
     this.subscriptionsDataCache = new SubscriptionsDataCache()
+    this.rpcClient = new RPC(
+      this.sendMessage.bind(this),
+      this.opts.timeout,
+      Log
+    )
+
+    this.service = withRpcRequestLogging(
+      new RootClientImpl(this.rpcClient),
+      Log
+    )
   }
 
   private resetReplication<T = any>(
@@ -289,7 +250,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     return !this.socketHandler
   }
 
-  startReplication(
+  async startReplication(
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
@@ -327,7 +288,9 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     // Then set the replication state
     this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
-    return this.rpc<StartReplicationResponse, SatInStartReplicationReq>(request)
+
+    const resp = await this.service.startReplication(request)
+    return this.handleStartResp(resp)
   }
 
   stopReplication(): Promise<StopReplicationResponse> {
@@ -342,7 +305,9 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound.isReplicating = ReplicationStatus.STOPPING
     const request = SatInStopReplicationReq.fromPartial({})
-    return this.rpc(request)
+    return this.service
+      .stopReplication(request)
+      .then(this.handleStopResp.bind(this))
   }
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
@@ -351,7 +316,9 @@ export class SatelliteClient extends EventEmitter implements Client {
       token: token,
       headers: [],
     })
-    return this.rpc<AuthResponse>(request)
+    return this.service
+      .authenticate(request)
+      .then(this.handleAuthResp.bind(this))
   }
 
   subscribeToTransactions(
@@ -457,10 +424,13 @@ export class SatelliteClient extends EventEmitter implements Client {
     })
 
     this.subscriptionsDataCache.subscriptionRequest(request)
-    return this.rpc<SubscribeResponse, SatSubsReq>(request, 'subscriptionId')
+
+    return this.service
+      .subscribe(request)
+      .then(this.handleSubscription.bind(this))
   }
 
-  unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
+  unsubscribe(subscriptionIds: string[]): Promise<UnsubscribeResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
       return Promise.reject(
         new SatelliteError(
@@ -470,11 +440,11 @@ export class SatelliteClient extends EventEmitter implements Client {
       )
     }
 
-    const request = SatUnsubsReq.fromPartial({
-      subscriptionIds: subIds,
-    })
+    const request = SatUnsubsReq.create({ subscriptionIds })
 
-    return this.rpc(request)
+    return this.service
+      .unsubscribe(request)
+      .then(this.handleUnsubscribeResponse.bind(this))
   }
 
   private sendMissingRelations(
@@ -602,7 +572,41 @@ export class SatelliteClient extends EventEmitter implements Client {
     return {}
   }
 
-  private handleStartReq(message: SatInStartReplicationReq) {
+  /**
+   * Server may issue RPC requests to the client, and we're handling them here.
+   */
+  private async handleRpcRequest(message: SatRpcRequest) {
+    const responder = rpcRespond(this.sendMessage.bind(this))
+
+    if (message.method === 'startReplication') {
+      const decoded = SatInStartReplicationReq.decode(message.message)
+      responder(
+        message,
+        await this.handlerForRpcRequests[message.method](decoded)
+      )
+    } else if (message.method === 'stopReplication') {
+      const decoded = SatInStopReplicationReq.decode(message.message)
+      responder(
+        message,
+        await this.handlerForRpcRequests[message.method](decoded)
+      )
+    } else {
+      Log.warn(
+        `Server has sent an RPC request with a method client does not support: ${message.method}`
+      )
+
+      responder(
+        message,
+        SatErrorResp.create({
+          errorType: SatErrorResp_ErrorCode.INVALID_REQUEST,
+        })
+      )
+    }
+  }
+
+  private async handleStartReq(
+    message: SatInStartReplicationReq
+  ): Promise<SatErrorResp | SatInStartReplicationResp> {
     Log.info(
       `Server sent a replication request to start from ${bytesToNumber(
         message.lsn
@@ -622,15 +626,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         { leading: true, trailing: true }
       )
 
-      const response = SatInStartReplicationResp.fromPartial({})
-      this.sendMessage(response)
       this.emit('outbound_started', message.lsn)
+      return SatInStartReplicationResp.create()
     } else {
-      const response = SatErrorResp.fromPartial({
-        errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
-      })
-      this.sendMessage(response)
-
       this.emit(
         'error',
         new SatelliteError(
@@ -638,10 +636,15 @@ export class SatelliteClient extends EventEmitter implements Client {
           `unexpected state ${this.outbound.isReplicating} handling 'start' request`
         )
       )
+      return SatErrorResp.create({
+        errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
+      })
     }
   }
 
-  private handleStopReq() {
+  private async handleStopReq(
+    _message: SatInStopReplicationReq
+  ): Promise<SatErrorResp | SatInStopReplicationResp> {
     if (this.outbound.isReplicating == ReplicationStatus.ACTIVE) {
       this.outbound.isReplicating = ReplicationStatus.STOPPED
 
@@ -649,14 +652,8 @@ export class SatelliteClient extends EventEmitter implements Client {
         this.throttledPushTransaction = undefined
       }
 
-      const response = SatInStopReplicationResp.fromPartial({})
-      this.sendMessage(response)
+      return SatInStopReplicationResp.create()
     } else {
-      const response = SatErrorResp.fromPartial({
-        errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
-      })
-      this.sendMessage(response)
-
       this.emit(
         'error',
         new SatelliteError(
@@ -664,6 +661,10 @@ export class SatelliteClient extends EventEmitter implements Client {
           `unexpected state ${this.inbound.isReplicating} handling 'stop' request`
         )
       )
+
+      return SatErrorResp.create({
+        errorType: SatErrorResp_ErrorCode.REPLICATION_FAILED,
+      })
     }
   }
 
@@ -687,7 +688,9 @@ export class SatelliteClient extends EventEmitter implements Client {
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
-          `unexpected state ${this.inbound.isReplicating} handling 'relation' message`
+          `unexpected state ${
+            ReplicationStatus[this.inbound.isReplicating]
+          } handling 'relation' message`
         )
       )
       return
@@ -767,28 +770,18 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   // TODO: properly handle socket errors; update connectivity state
   private handleIncoming(data: Buffer) {
-    let handleIsRpc = false
     try {
       const message = toMessage(data)
 
       if (Log.getLevel() <= 1) {
         Log.debug(`[proto] recv: ${msgToString(message)}`)
       }
-
-      const handler = this.handlerForMessageType[message.$type]
-      const response = handler.handle(message)
-      if ((handleIsRpc = handler.isRpc)) {
-        this.emit('rpc_response', response)
-      }
+      this.handlerForMessageType[message.$type]?.(message)
     } catch (error) {
       if (error instanceof SatelliteError) {
-        if (handleIsRpc) {
-          this.emit('rpc_error', error)
-        } else {
-          // subscription errors are emitted through specific event
-          if (!subscriptionError.includes(error.code)) {
-            this.emit('error', error)
-          }
+        // subscription errors are emitted through specific event
+        if (!subscriptionError.includes(error.code)) {
+          this.emit('error', error)
         }
       } else {
         // This is an unexpected runtime error
@@ -928,57 +921,13 @@ export class SatelliteClient extends EventEmitter implements Client {
       )
     }
 
-    const type = getSizeBuf(request)
+    const type = getBufWithMsgTag(request)
     const msg = obj.encode(request, _m0.Writer.create()).finish()
     const buffer = new Uint8Array(type.length + msg.length)
     buffer.set(type, 0)
     buffer.set(msg, 1)
 
     this.socket.write(buffer)
-  }
-
-  private async rpc<T, Msg extends SatPbMsg = SatPbMsg>(
-    request: Msg,
-    distinguishOn?: keyof Msg & keyof T
-  ): Promise<T> {
-    let waitingFor: NodeJS.Timeout
-    return new Promise<T>((resolve, reject) => {
-      waitingFor = setTimeout(() => {
-        Log.error(`${request.$type}`)
-        const error = new SatelliteError(
-          SatelliteErrorCode.TIMEOUT,
-          `${request.$type}`
-        )
-        return reject(error)
-      }, this.opts.timeout)
-
-      // reject on any error
-      const errorListener = (error: any) => {
-        return reject(error)
-      }
-
-      this.once('rpc_error', errorListener)
-      if (distinguishOn) {
-        const handleRpcResp = (resp: T) => {
-          // TODO: remove this comment when RPC types are fixed
-          // @ts-ignore this comparison is valid because we expect the same field to be present on both request and response, but it's too much work at the moment to rewrite typings for it
-          if (resp[distinguishOn] === request[distinguishOn]) {
-            this.removeListener('rpc_error', errorListener)
-            return resolve(resp)
-          } else {
-            // This WAS an RPC response, but not the one we were expecting, waiting more
-            this.once('rpc_response', handleRpcResp)
-          }
-        }
-        this.once('rpc_response', handleRpcResp)
-      } else {
-        this.once('rpc_response', (resp: T) => {
-          this.removeListener('rpc_error', errorListener)
-          resolve(resp)
-        })
-      }
-      this.sendMessage(request)
-    }).finally(() => clearTimeout(waitingFor))
   }
 
   getLastSentLsn(): LSN {
