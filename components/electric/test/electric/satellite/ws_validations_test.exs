@@ -28,7 +28,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     client_id = "ws_pg_to_satellite_client"
     auth = %{token: Auth.Secure.create_token(Electric.Utils.uuid4())}
 
-    %{db: ctx.conn, conn_opts: [port: port, auth: auth, id: client_id]}
+    %{db: ctx.conn, conn_opts: [port: port, auth: auth, id: client_id, auto_in_sub: true]}
   end
 
   test "accepts records with valid values", ctx do
@@ -407,11 +407,7 @@ defmodule Electric.Satellite.WsValidationsTest do
   defp within_replication_context(ctx, vsn, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony
-      assert_receive {^conn, %SatInStartReplicationReq{}}
-      MockClient.send_data(conn, %SatInStartReplicationResp{})
-
-      MockClient.send_data(conn, %SatInStartReplicationReq{})
-      assert_receive {^conn, %SatInStartReplicationResp{}}
+      start_replication_and_assert_response(conn, 0)
 
       # Confirm the server has sent the migration to the client
       assert_receive {^conn, %SatRelation{table_name: @table_name} = relation}

@@ -2,88 +2,101 @@ defmodule Electric.Satellite.Protobuf do
   # This is a version provided in the corresponding protocol buffer file
   # Make sure to bump it here and in the using macro below.
 
+  alias Electric.Satellite
+
   alias Electric.Satellite.{
     SatErrorResp,
-    SatAuthReq,
-    SatAuthResp,
-    SatInStartReplicationReq,
-    SatInStartReplicationResp,
-    SatInStopReplicationReq,
-    SatInStopReplicationResp,
     SatOpLog,
     SatRelation,
-    SatMigrationNotification,
-    SatSubsReq,
-    SatSubsResp,
     SatSubsDataError,
     SatSubsDataBegin,
     SatSubsDataEnd,
     SatShapeDataBegin,
     SatShapeDataEnd,
-    SatUnsubsReq,
-    SatUnsubsResp
+    SatRpcRequest,
+    SatRpcResponse
   }
 
   require Logger
 
-  @reserved [3, 4]
+  @reserved [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 19, 20]
 
   # This mapping should be kept in sync with Satellite repo. Message is present
   # in the mapping ONLY if it could be send as an individual message.
   @mapping %{
     SatErrorResp => 0,
-    SatAuthReq => 1,
-    SatAuthResp => 2,
-    SatInStartReplicationReq => 5,
-    SatInStartReplicationResp => 6,
-    SatInStopReplicationReq => 7,
-    SatInStopReplicationResp => 8,
     SatOpLog => 9,
     SatRelation => 10,
-    SatMigrationNotification => 11,
-    SatSubsReq => 12,
-    SatSubsResp => 13,
     SatSubsDataError => 14,
     SatSubsDataBegin => 15,
     SatSubsDataEnd => 16,
     SatShapeDataBegin => 17,
     SatShapeDataEnd => 18,
-    SatUnsubsReq => 19,
-    SatUnsubsResp => 20
+    SatRpcRequest => 21,
+    SatRpcResponse => 22
   }
 
   if Enum.any?(Map.values(@mapping), &(&1 in @reserved)) do
     raise "Cannot use a reserved value as the message tag"
   end
 
+  if elem =
+       Enum.find(Enum.frequencies(Map.values(@mapping)), &match?({_, count} when count > 1, &1)) do
+    {key, count} = elem
+    raise "Cannot have duplicating value tags: #{key} is used #{count} times"
+  end
+
+  # Our generator doesn't generate this mapping, so we're doing this.
+  @rpc_calls %{
+    "authenticate" => {Satellite.SatAuthReq, Satellite.SatAuthResp},
+    "startReplication" => {
+      Satellite.SatInStartReplicationReq,
+      Satellite.SatInStartReplicationResp
+    },
+    "stopReplication" => {Satellite.SatInStopReplicationReq, Satellite.SatInStopReplicationResp},
+    "subscribe" => {Satellite.SatSubsReq, Satellite.SatSubsResp},
+    "unsubscribe" => {Satellite.SatUnsubsReq, Satellite.SatUnsubsResp}
+  }
+  @allowed_rpc_methods Map.keys(@rpc_calls)
+
+  defguard allowed_rpc_method(method) when method in @allowed_rpc_methods
+
   @type relation_id() :: non_neg_integer()
   @type sq_pb_msg() ::
           %SatErrorResp{}
-          | %SatAuthReq{}
-          | %SatAuthResp{}
-          | %SatInStartReplicationReq{}
-          | %SatInStartReplicationResp{}
-          | %SatInStopReplicationReq{}
-          | %SatInStopReplicationResp{}
           | %SatOpLog{}
           | %SatRelation{}
-          | %SatMigrationNotification{}
-          | %SatSubsReq{}
-          | %SatSubsResp{}
           | %SatSubsDataError{}
           | %SatSubsDataBegin{}
           | %SatSubsDataEnd{}
           | %SatShapeDataBegin{}
           | %SatShapeDataEnd{}
-          | %SatUnsubsReq{}
-          | %SatUnsubsResp{}
+          | %SatRpcRequest{}
+          | %SatRpcResponse{}
+
+  @type rpc_req() ::
+          %Satellite.SatAuthReq{}
+          | %Satellite.SatInStartReplicationReq{}
+          | %Satellite.SatInStopReplicationReq{}
+          | %Satellite.SatSubsReq{}
+          | %Satellite.SatUnsubsReq{}
+
+  @type rpc_resp() ::
+          %Satellite.SatAuthResp{}
+          | %Satellite.SatInStartReplicationResp{}
+          | %Satellite.SatInStopReplicationResp{}
+          | %Satellite.SatSubsResp{}
+          | %Satellite.SatUnsubsResp{}
 
   defmacro __using__(_opts) do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
+      SatInStartReplicationResp
 
       alias Electric.Satellite.{
         SatErrorResp,
+        SatRpcRequest,
+        SatRpcResponse,
         SatAuthReq,
         SatAuthHeaderPair,
         SatAuthResp,
@@ -102,11 +115,8 @@ defmodule Electric.Satellite.Protobuf do
         SatTransOp,
         SatRelation,
         SatRelationColumn,
-        SatMigrationNotification,
         SatSubsReq,
         SatSubsResp,
-        SatUnsubsReq,
-        SatUnsubsResp,
         SatSubsDataBegin,
         SatSubsDataEnd,
         SatSubsDataError,
@@ -172,5 +182,13 @@ defmodule Electric.Satellite.Protobuf do
   def encode_with_type(msg) do
     {:ok, type, iodata} = encode(msg)
     {:ok, [<<type::size(8)>> | iodata]}
+  end
+
+  for {method, {request, _}} <- @rpc_calls do
+    def decode_rpc_request(unquote(method), message), do: unquote(request).decode(message)
+  end
+
+  for {method, {_, response}} <- @rpc_calls do
+    def decode_rpc_response(unquote(method), message), do: unquote(response).decode(message)
   end
 end

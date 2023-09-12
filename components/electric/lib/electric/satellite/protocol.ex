@@ -3,6 +3,8 @@ defmodule Electric.Satellite.Protocol do
   Protocol for communication with Satellite
   """
   use Electric.Satellite.Protobuf
+  import Electric.Satellite.Protobuf, only: [allowed_rpc_method: 1]
+
   use Pathex
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
@@ -92,7 +94,8 @@ defmodule Electric.Satellite.Protocol do
               incomplete_trans: nil,
               demand: 0,
               sub_retry: nil,
-              queue: :queue.new()
+              queue: :queue.new(),
+              rpc_request_id: 0
 
     @typedoc """
     Incoming replication Satellite -> PG
@@ -113,8 +116,13 @@ defmodule Electric.Satellite.Protocol do
             },
             incomplete_trans: nil | Transaction.t(),
             demand: non_neg_integer(),
-            queue: :queue.queue(Transaction.t())
+            queue: :queue.queue(Transaction.t()),
+            rpc_request_id: non_neg_integer()
           }
+
+    @spec add_to_queue(t(), [Transaction.t()]) :: t()
+    def add_to_queue(%__MODULE__{queue: queue} = rep, events),
+      do: %__MODULE__{rep | queue: Utils.add_events_to_queue(events, queue)}
   end
 
   defmodule OutRep do
@@ -241,11 +249,11 @@ defmodule Electric.Satellite.Protocol do
   defguard no_pending_subscriptions(state)
            when is_nil(elem(state.out_rep.subscription_pause_queue, 0))
 
-  @spec process_message(PB.sq_pb_msg(), State.t()) ::
-          {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
-          | {:force_unpause, PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
-          | {:error, PB.sq_pb_msg()}
-  def process_message(%SatAuthReq{id: client_id, token: token}, state)
+  @spec handle_rpc_request(PB.rpc_req(), State.t()) ::
+          {:error, %SatErrorResp{} | PB.rpc_resp()}
+          | {:reply, PB.rpc_resp(), State.t()}
+          | {:force_unpause, PB.rpc_resp(), State.t()}
+  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
       when not auth_passed?(state) and client_id != "" and token != "" do
     Logger.metadata(client_id: client_id)
     Logger.debug("Received auth request")
@@ -265,6 +273,7 @@ defmodule Electric.Satellite.Protocol do
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
       {
+        :reply,
         %SatAuthResp{id: Electric.instance_id()},
         %State{state | auth: auth, auth_passed: true, client_id: client_id}
       }
@@ -286,14 +295,14 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  def process_message(%SatAuthReq{}, state) when not auth_passed?(state),
+  def handle_rpc_request(%SatAuthReq{}, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
-  def process_message(_, state) when not auth_passed?(state),
+  def handle_rpc_request(_, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
 
   # Satellite client request replication
-  def process_message(
+  def handle_rpc_request(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
         %State{} = state
       ) do
@@ -331,22 +340,8 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  # Satellite client confirms replication start
-  def process_message(%SatInStartReplicationResp{} = _msg, %State{} = state) do
-    Logger.debug("Received start replication response")
-
-    case state.in_rep.status do
-      :requested ->
-        {nil, %State{state | in_rep: %InRep{state.in_rep | status: :active}}}
-
-      :paused ->
-        # Could be when consumer is temporary unavailable
-        {%SatInStopReplicationReq{}, state}
-    end
-  end
-
   # Satellite requests to stop replication
-  def process_message(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
+  def handle_rpc_request(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
       when is_out_rep_active(state) do
     Logger.debug("Received stop replication request")
     Metrics.satellite_replication_event(%{stopped: 1})
@@ -354,21 +349,14 @@ defmodule Electric.Satellite.Protocol do
     # optional lsn, so we should just restart producer if the client would
     # request different LSN than we are about to send.
     out_rep = terminate_subscription(out_rep)
-    {%SatInStopReplicationResp{}, %State{state | out_rep: out_rep}}
-  end
-
-  # Satellite confirms replication stop
-  def process_message(%SatInStopReplicationResp{} = _msg, state) do
-    Logger.debug("Received stop replication response")
-
-    in_rep = %InRep{state.in_rep | status: :paused}
-    {nil, %State{state | in_rep: in_rep}}
+    {:reply, %SatInStopReplicationResp{}, %State{state | out_rep: out_rep}}
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def process_message(%SatSubsReq{subscription_id: id}, state)
+  def handle_rpc_request(%SatSubsReq{subscription_id: id}, state)
       when byte_size(id) > 128 do
-    {%SatSubsResp{
+    {:reply,
+     %SatSubsResp{
        subscription_id: String.slice(id, 1..128) <> "...",
        err: %SatSubsError{
          message: "ID too long"
@@ -376,9 +364,10 @@ defmodule Electric.Satellite.Protocol do
      }, state}
   end
 
-  def process_message(%SatSubsReq{subscription_id: id}, state)
+  def handle_rpc_request(%SatSubsReq{subscription_id: id}, state)
       when is_map_key(state.subscriptions, id) do
-    {%SatSubsResp{
+    {:reply,
+     %SatSubsResp{
        subscription_id: id,
        err: %SatSubsError{
          message:
@@ -387,8 +376,9 @@ defmodule Electric.Satellite.Protocol do
      }, state}
   end
 
-  def process_message(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
-    {%SatSubsResp{
+  def handle_rpc_request(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
+    {:reply,
+     %SatSubsResp{
        subscription_id: id,
        err: %SatSubsError{
          message: "Subscription must include at least one shape request"
@@ -396,19 +386,21 @@ defmodule Electric.Satellite.Protocol do
      }, state}
   end
 
-  def process_message(
+  def handle_rpc_request(
         %SatSubsReq{subscription_id: id, shape_requests: requests},
         %State{} = state
       ) do
     cond do
       Utils.validate_uuid(id) != {:ok, id} ->
-        {%SatSubsResp{
+        {:reply,
+         %SatSubsResp{
            subscription_id: id,
            err: %SatSubsError{message: "Subscription ID should be a valid UUID"}
          }, state}
 
       Utils.has_duplicates_by?(requests, & &1.request_id) ->
-        {%SatSubsResp{
+        {:reply,
+         %SatSubsResp{
            subscription_id: id,
            err: %SatSubsError{message: "Duplicated request ids are not allowed"}
          }, state}
@@ -419,7 +411,8 @@ defmodule Electric.Satellite.Protocol do
             query_subscription_data(id, requests, state)
 
           {:error, errors} ->
-            {%SatSubsResp{
+            {:reply,
+             %SatSubsResp{
                subscription_id: id,
                err: %SatSubsError{
                  shape_request_error:
@@ -431,6 +424,104 @@ defmodule Electric.Satellite.Protocol do
              }, state}
         end
     end
+  end
+
+  def handle_rpc_request(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
+    needs_unpausing? =
+      is_out_rep_paused(state) and Enum.any?(ids, &is_pending_subscription(state, &1))
+
+    out_rep =
+      ids
+      |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, &1))
+      |> Map.update!(:subscription_data_to_send, &Map.drop(&1, ids))
+
+    state =
+      state
+      |> Map.put(:out_rep, out_rep)
+      |> Map.update!(:subscriptions, &Map.drop(&1, ids))
+
+    for id <- ids, do: SubscriptionManager.delete_subscription(state.client_id, id)
+
+    if needs_unpausing? do
+      {:force_unpause, %SatUnsubsResp{}, state}
+    else
+      {:reply, %SatUnsubsResp{}, state}
+    end
+  end
+
+  @spec process_message(PB.sq_pb_msg(), State.t()) ::
+          {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
+          | {:force_unpause, PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
+          | {:error, PB.sq_pb_msg()}
+  # RPC request handling
+  def process_message(%SatRpcRequest{method: method} = req, %State{} = state)
+      when allowed_rpc_method(method) do
+    Logger.debug("Received RPC request #{method}/#{req.request_id}")
+
+    resp = %SatRpcResponse{method: method, request_id: req.request_id}
+
+    case PB.decode_rpc_request(method, req.message) do
+      {:ok, decoded} ->
+        case handle_rpc_request(decoded, state) do
+          {:reply, result, state} ->
+            {%{resp | result: {:message, rpc_encode(result)}}, state}
+
+          {:force_unpause, result, state} ->
+            {:force_unpause, %{resp | result: {:message, result}}, state}
+
+          {:error, %SatErrorResp{} = error} ->
+            {:error, %{resp | result: {:error, error}}}
+
+          {:error, result_with_error} ->
+            {:error, %{resp | result: {:message, rpc_encode(result_with_error)}}}
+        end
+
+      {:error, _} ->
+        # Malformed message, close the connection just in case
+        {:error, %{resp | result: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}}}
+    end
+  end
+
+  def process_message(%SatRpcRequest{method: method} = req, _) do
+    Logger.info("Invalid RPC request: unknown method #{method}")
+
+    # Unknown RPC message should not really happen, so close the connection just in case
+    {:error,
+     %SatRpcResponse{
+       method: method,
+       request_id: req.request_id,
+       result: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+     }}
+  end
+
+  def process_message(
+        %SatRpcResponse{method: "startReplication", result: {:message, msg}},
+        state
+      ) do
+    # Decode the message just to validate
+    _ = SatInStartReplicationResp.decode!(msg)
+    Logger.debug("Received start replication response")
+
+    case state.in_rep.status do
+      :requested ->
+        {nil, %State{state | in_rep: %InRep{state.in_rep | status: :active}}}
+
+      :paused ->
+        # Could be when consumer is temporary unavailable
+        rpc("stopReplication", %SatInStopReplicationReq{}, state)
+    end
+  end
+
+  def process_message(
+        %SatRpcResponse{method: "stopReplication", result: {:message, msg}},
+        state
+      ) do
+    # Decode the message just to validate
+    _ = SatInStartReplicationResp.decode!(msg)
+    Logger.debug("Received stop replication response")
+
+    in_rep = %InRep{state.in_rep | status: :paused}
+    {nil, %State{state | in_rep: in_rep}}
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
@@ -477,15 +568,9 @@ defmodule Electric.Satellite.Protocol do
           end
 
           in_rep =
-            send_downstream(%InRep{
-              in_rep
-              | incomplete_trans: incomplete,
-                queue:
-                  Utils.add_events_to_queue(
-                    complete,
-                    in_rep.queue
-                  )
-            })
+            %InRep{in_rep | incomplete_trans: incomplete}
+            |> InRep.add_to_queue(complete)
+            |> send_downstream()
 
           {nil, %State{state | in_rep: in_rep}}
       end
@@ -495,29 +580,6 @@ defmodule Electric.Satellite.Protocol do
 
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
-    end
-  end
-
-  def process_message(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
-    needs_unpausing? =
-      is_out_rep_paused(state) and Enum.any?(ids, &is_pending_subscription(state, &1))
-
-    out_rep =
-      ids
-      |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, &1))
-      |> Map.update!(:subscription_data_to_send, &Map.drop(&1, ids))
-
-    state =
-      state
-      |> Map.put(:out_rep, out_rep)
-      |> Map.update!(:subscriptions, &Map.drop(&1, ids))
-
-    for id <- ids, do: SubscriptionManager.delete_subscription(state.client_id, id)
-
-    if needs_unpausing? do
-      {:force_unpause, %SatUnsubsResp{}, state}
-    else
-      {%SatUnsubsResp{}, state}
     end
   end
 
@@ -538,6 +600,13 @@ defmodule Electric.Satellite.Protocol do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
   end
 
+  @spec handle_start_replication_request(
+          %SatInStartReplicationReq{},
+          binary() | :initial_sync,
+          State.t()
+        ) ::
+          {:error, %SatErrorResp{} | PB.rpc_resp()}
+          | {:reply, PB.rpc_resp(), State.t()}
   defp handle_start_replication_request(
          %{subscription_ids: []} = msg,
          :initial_sync,
@@ -550,7 +619,7 @@ defmodule Electric.Satellite.Protocol do
     # client first, followed by the initial migrations.
     send(self(), {:perform_initial_sync_and_subscribe, msg})
 
-    {%SatInStartReplicationResp{}, start_replication_telemetry(state, :initial_sync)}
+    {:reply, %SatInStartReplicationResp{}, start_replication_telemetry(state, :initial_sync)}
   end
 
   defp handle_start_replication_request(_msg, :initial_sync, _state) do
@@ -570,7 +639,7 @@ defmodule Electric.Satellite.Protocol do
             |> start_replication_telemetry(subscriptions: length(msg.subscription_ids))
             |> subscribe_client_to_replication_stream(lsn)
 
-          {%SatInStartReplicationResp{}, state}
+          {:reply, %SatInStartReplicationResp{}, state}
 
         {:error, bad_id} ->
           {:error,
@@ -757,6 +826,25 @@ defmodule Electric.Satellite.Protocol do
     }
   end
 
+  @spec start_replication_from_client(binary(), State.t()) :: {[PB.sq_pb_msg()], State.t()}
+  def start_replication_from_client(lsn, state) do
+    {msg, state} = rpc("startReplication", %SatInStartReplicationReq{lsn: lsn}, state)
+    {[msg], state}
+  end
+
+  @spec stop_replication_from_client(State.t()) :: {[PB.sq_pb_msg()], State.t()}
+  def stop_replication_from_client(state) do
+    {msg, state} = rpc("stopReplication", %SatInStopReplicationReq{}, state)
+    {[msg], state}
+  end
+
+  @spec restart_replication_from_client(binary(), State.t()) :: {[PB.sq_pb_msg()], State.t()}
+  def restart_replication_from_client(lsn, state) do
+    {stop_msgs, state} = stop_replication_from_client(state)
+    {start_msgs, state} = start_replication_from_client(lsn, state)
+    {stop_msgs ++ start_msgs, state}
+  end
+
   defp validate_schema_version(version) do
     if is_nil(version) or SchemaCache.Global.known_migration_version?(version) do
       :ok
@@ -781,7 +869,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec query_subscription_data(String.t(), [ShapeRequest.t(), ...], State.t()) ::
-          {%SatSubsResp{}, State.t()}
+          {:reply, %SatSubsResp{}, State.t()}
   defp query_subscription_data(id, requests, %State{} = state) do
     ref = make_ref()
     parent = self()
@@ -825,10 +913,11 @@ defmodule Electric.Satellite.Protocol do
           |> Pathex.force_set!(path(:subscriptions / id), requests)
           |> Pathex.over!(path(:out_rep), &OutRep.add_pause_point(&1, {xmin, id}))
 
-        {%SatSubsResp{subscription_id: id}, state}
+        {:reply, %SatSubsResp{subscription_id: id}, state}
     after
       1_000 ->
-        {%SatSubsResp{
+        {:reply,
+         %SatSubsResp{
            subscription_id: id,
            err: %SatSubsError{message: "Internal error while checking data availability"}
          }, state}
@@ -917,4 +1006,18 @@ defmodule Electric.Satellite.Protocol do
   defp common_metadata(%State{} = state) do
     %{client_id: state.client_id, user_id: state.auth && state.auth.user_id}
   end
+
+  @spec rpc(String.t(), PB.rpc_req(), State.t()) :: {%SatRpcRequest{}, State.t()}
+  defp rpc(method, message, %State{} = state)
+       when allowed_rpc_method(method) do
+    {request_id, in_rep} = Map.get_and_update!(state.in_rep, :rpc_request_id, &{&1, &1 + 1})
+
+    {%SatRpcRequest{
+       method: method,
+       request_id: request_id,
+       message: rpc_encode(message)
+     }, %{state | in_rep: in_rep}}
+  end
+
+  defp rpc_encode(%module{} = message), do: IO.iodata_to_binary(module.encode!(message))
 end
