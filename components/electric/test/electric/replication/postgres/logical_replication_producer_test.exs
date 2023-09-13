@@ -16,7 +16,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
      [
        connect: fn _ -> {:ok, :conn} end,
        start_replication: fn :conn, _, _, _ -> :ok end,
-       create_slot: fn :conn, name -> {:ok, name} end
+       create_slot: fn :conn, name -> {:ok, name} end,
+       set_display_settings_for_replication: fn _ -> :ok end
      ]},
     {Connectors, [:passthrough],
      [
