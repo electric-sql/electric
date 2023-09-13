@@ -81,6 +81,18 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       """,
       ##################
       """
+      CREATE OR REPLACE FUNCTION #{schema}.tx_has_assigned_version() RETURNS bool SECURITY DEFINER AS $function$
+      DECLARE
+        _txid #{@txid_type};
+        _txts #{@txts_type};
+      BEGIN
+        SELECT txid, txts INTO _txid, _txts FROM #{schema}.current_transaction_id();
+        RETURN EXISTS (SELECT version FROM #{version_table} WHERE txid = _txid AND txts = _txts);
+      END;
+      $function$ LANGUAGE PLPGSQL;
+      """,
+      ##################
+      """
       CREATE OR REPLACE PROCEDURE #{schema}.assign_migration_version(_version text) SECURITY DEFINER AS $function$
       BEGIN
           INSERT INTO #{version_table} (version) VALUES (_version);
@@ -91,7 +103,9 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       """
       CREATE OR REPLACE PROCEDURE #{schema}.migration_version(_version text) SECURITY DEFINER AS $function$
       BEGIN
-          CALL #{schema}.assign_migration_version(_version);
+          IF NOT (SELECT #{schema}.tx_has_assigned_version()) THEN
+            CALL #{schema}.assign_migration_version(_version);
+          END IF;
       END;
       $function$ LANGUAGE PLPGSQL;
       """,

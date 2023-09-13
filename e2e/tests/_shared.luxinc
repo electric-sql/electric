@@ -107,7 +107,7 @@
     [invoke log "run migration ${version} on postgres"]
     """!
     BEGIN;
-    SELECT electric.migration_version('$version');
+    CALL electric.migration_version('$version');
     ${ddl}
     COMMIT;
     """
@@ -129,7 +129,8 @@
             intvalue_null integer,
             intvalue_null_default integer DEFAULT 10
         );
-        CALL electric.electrify('public.items');
+        -- CALL electric.electrify('public.items');
+        ALTER TABLE public.items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]
