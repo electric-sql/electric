@@ -68,10 +68,30 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
     return { issuesByStatus }
   }, [issues, movedIssues])
 
-  const adjacentIssues = (column: string, index: number) => {
+  const adjacentIssues = (
+    column: string,
+    index: number,
+    sameColumn = true,
+    currentIndex: number
+  ) => {
     const columnIssues = issuesByStatus[column] || []
-    const prevIssue = columnIssues[index - 1]
-    const nextIssue = columnIssues[index + 1]
+    let prevIssue: Issue | undefined
+    let nextIssue: Issue | undefined
+    if (sameColumn) {
+      if (currentIndex < index) {
+        prevIssue = columnIssues[index]
+        nextIssue = columnIssues[index + 1]
+      } else {
+        prevIssue = columnIssues[index - 1]
+        nextIssue = columnIssues[index]
+      }
+    } else {
+      prevIssue = columnIssues[index - 1]
+      nextIssue = columnIssues[index]
+    }
+    console.log('sameColumn', sameColumn)
+    console.log('prevIssue', prevIssue)
+    console.log('nextIssue', nextIssue)
     return { prevIssue, nextIssue }
   }
 
@@ -146,11 +166,14 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
     return generateKeyBetween(prevKanbanOrder, nextKanbanOrder)
   }
 
-  const onDragEnd = ({ /*source,*/ destination, draggableId }: DropResult) => {
+  const onDragEnd = ({ source, destination, draggableId }: DropResult) => {
+    console.log(source, destination, draggableId)
     if (destination && destination.droppableId) {
       const { prevIssue, nextIssue } = adjacentIssues(
         destination.droppableId,
-        destination.index
+        destination.index,
+        destination.droppableId === source.droppableId,
+        source.index
       )
       // Get a new kanbanorder between the previous and next issues
       const kanbanorder = getNewKanbanOrder(prevIssue, nextIssue)

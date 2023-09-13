@@ -41,7 +41,7 @@ function IssueRow({ issue, style }: Props) {
       },
     })
   }
-  
+
   return (
     <div
       key={issue.id}

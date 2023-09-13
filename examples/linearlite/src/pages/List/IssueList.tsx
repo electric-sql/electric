@@ -26,23 +26,20 @@ function IssueList({ issues }: IssueListProps) {
   )
 }
 
-const VirtualIssueRow = memo(({
-  data: issues,
-  index,
-  style,
-}: {
-  data: Issue[]
-  index: number
-  style: CSSProperties
-}) => {
-  const issue = issues[index]
-  return (
-    <IssueRow
-      key={`issue-${issue.id}`}
-      issue={issue}
-      style={style}
-    />
-  )
-}, areEqual)
+const VirtualIssueRow = memo(
+  ({
+    data: issues,
+    index,
+    style,
+  }: {
+    data: Issue[]
+    index: number
+    style: CSSProperties
+  }) => {
+    const issue = issues[index]
+    return <IssueRow key={`issue-${issue.id}`} issue={issue} style={style} />
+  },
+  areEqual
+)
 
 export default IssueList
