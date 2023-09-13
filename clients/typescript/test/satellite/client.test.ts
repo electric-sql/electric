@@ -673,7 +673,7 @@ test.serial('listen to subscription events: error', async (t) => {
     message: 'FAKE ERROR',
     subscriptionId,
   })
-  server.nextRpcResponse('subscribe', [subsResp, subsData, subsError])
+  server.nextRpcResponse('subscribe', [subsResp, '50ms', subsData, subsError])
 
   const success = () => t.fail()
   const error = () => t.pass()
@@ -748,21 +748,29 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   })
 
   const testCases: RpcResponse<'subscribe'>[] = [
-    [subsResp, beginShape],
-    [subsResp, endShape],
-    [subsResp, endSub],
-    [subsResp, beginSub, endShape],
-    [subsResp, beginSub, beginShape, endSub],
-    [subsResp, beginSub, endShape],
-    [subsResp, beginSub, satOpLog],
-    [subsResp, beginSub, beginShape, endShape, satOpLog],
-    [subsResp, beginSub, beginShape, satOpLog, endSub],
-    [subsResp, beginSub, beginShape, wrongSatOpLog1],
-    [subsResp, beginSub, beginShape, wrongSatOpLog2],
-    [subsResp, beginSub, beginShape, wrongSatOpLog3],
-    [subsResp, beginSub, beginShape, wrongSatOpLog4],
-    [subsResp, beginSub, beginShape, validSatOpLog, endShape, validSatOpLog],
-    [subsRespWithErr, beginSub],
+    [subsResp, '10ms', beginShape],
+    [subsResp, '10ms', endShape],
+    [subsResp, '10ms', endSub],
+    [subsResp, '10ms', beginSub, endShape],
+    [subsResp, '10ms', beginSub, beginShape, endSub],
+    [subsResp, '10ms', beginSub, endShape],
+    [subsResp, '10ms', beginSub, satOpLog],
+    [subsResp, '10ms', beginSub, beginShape, endShape, satOpLog],
+    [subsResp, '10ms', beginSub, beginShape, satOpLog, endSub],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog1],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog2],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog3],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog4],
+    [
+      subsResp,
+      '10ms',
+      beginSub,
+      beginShape,
+      validSatOpLog,
+      endShape,
+      validSatOpLog,
+    ],
+    [subsRespWithErr, '10ms', beginSub],
   ]
   t.plan(testCases.length) // Expect exactly this amount of assertions
   for (const next of testCases) {
@@ -862,6 +870,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
 
   server.nextRpcResponse('subscribe', [
     subsResp,
+    '10ms',
     beginSub,
     beginShape1,
     satOpLog1,

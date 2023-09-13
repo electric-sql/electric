@@ -87,6 +87,7 @@ import {
 import { SubscriptionsDataCache } from './shapes/cache'
 import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
+import { Mutex } from 'async-mutex'
 
 type IncomingHandler = (msg: any) => void
 
@@ -116,6 +117,8 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private rpcClient: RPC
   private service: Root
+  private incomingMutex: Mutex = new Mutex()
+  private allowedMutexedRpcResponses: Array<keyof Root> = []
 
   private handlerForMessageType: { [k: string]: IncomingHandler } =
     Object.fromEntries(
@@ -289,8 +292,13 @@ export class SatelliteClient extends EventEmitter implements Client {
     // Then set the replication state
     this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
 
-    const resp = await this.service.startReplication(request)
-    return this.handleStartResp(resp)
+    return this.delayIncomingMessages(
+      async () => {
+        const resp = await this.service.startReplication(request)
+        return this.handleStartResp(resp)
+      },
+      { allowedRpcResponses: ['startReplication'] }
+    )
   }
 
   stopReplication(): Promise<StopReplicationResponse> {
@@ -768,10 +776,34 @@ export class SatelliteClient extends EventEmitter implements Client {
     return {}
   }
 
+  private delayIncomingMessages<T>(
+    fn: () => Promise<T>,
+    opts: { allowedRpcResponses: Array<keyof Root> }
+  ): Promise<T> {
+    return this.incomingMutex.runExclusive(async () => {
+      this.allowedMutexedRpcResponses = opts.allowedRpcResponses
+      try {
+        return await fn()
+      } finally {
+        this.allowedMutexedRpcResponses = []
+      }
+    })
+  }
+
   // TODO: properly handle socket errors; update connectivity state
-  private handleIncoming(data: Buffer) {
+  private async handleIncoming(data: Buffer) {
     try {
       const message = toMessage(data)
+
+      if (
+        this.incomingMutex.isLocked() &&
+        !(
+          message.$type === 'Electric.Satellite.SatRpcResponse' &&
+          this.allowedMutexedRpcResponses.includes(message.method as keyof Root)
+        )
+      ) {
+        await this.incomingMutex.waitForUnlock()
+      }
 
       if (Log.getLevel() <= 1) {
         Log.debug(`[proto] recv: ${msgToString(message)}`)

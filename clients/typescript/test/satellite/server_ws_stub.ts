@@ -27,7 +27,7 @@ type RegularResponse<T extends NonRpcMessage> =
   | ((msg: T) => SatPbMsg[] | void)
 export type RpcResponse<K extends keyof Root> = [
   Awaited<ReturnType<Root[K]>> | SatErrorResp,
-  ...SatPbMsg[]
+  ...(SatPbMsg | `${number}ms`)[]
 ]
 type RpcResponseOrMatch<K extends keyof Root> =
   | RpcResponse<K>
@@ -96,10 +96,9 @@ export class SatelliteWSServerStub {
 
       this.socket.send(writeMsg(wrapRpcResponse(request, rpcBody)))
 
-      await sleepAsync(50)
-
       for (const message of messages) {
-        this.socket.send(writeMsg(message))
+        if (typeof message === 'string') await sleepAsync(parseInt(message))
+        else this.socket.send(writeMsg(message))
       }
     } else {
       // Regular message handlers
