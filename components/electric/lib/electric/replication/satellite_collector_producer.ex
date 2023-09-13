@@ -42,11 +42,12 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     transactions
     |> Stream.reject(&Enum.empty?(&1.changes))
     |> Stream.map(fn tx ->
-      # NOTE(alco): !!! Potential data race warning !!!
-      # Imagine a scenario when a client sends a transaction to the server and then immediately disconnects.
-      # If it reconnects soon afterwards, such that Postgres has not had time to commit the transaction yet,
-      # the client's LSN fetched from Postgres will not include the already submitted transaction, cuasing
-      # the client to send it once again.
+      # NOTE(alco):
+      #
+      # Potential data race scenario: a client sends a transaction to the server and then immediately disconnects.
+      # If it reconnects soon afterwards, such that Postgres has not had time to commit the transaction yet, the
+      # client's LSN fetched from Postgres will not include the already submitted transaction, cuasing the client to
+      # send it once again.
       #
       # We deem it a non-issue because:
       #
