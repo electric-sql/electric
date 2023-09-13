@@ -30,7 +30,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'relatedId' int);"
   )
 }
 
@@ -50,6 +50,26 @@ test.serial('support date type', async (t) => {
     data: {
       id: 1,
       date: d,
+    }
+  })
+
+  t.deepEqual(res.date, new Date(date))
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1
+    }
+  })
+
+  t.deepEqual(fetchRes?.date, new Date(date))
+})
+
+test.serial('support date type passed as string', async (t) => {
+  const date = '2023-08-07'
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      date: date,
     }
   })
 

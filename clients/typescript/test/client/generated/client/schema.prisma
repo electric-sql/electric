@@ -50,4 +50,12 @@ model DataTypes {
   timetz      DateTime? @db.Timetz(3)
   timestamp   DateTime? @db.Timestamp(3)
   timestamptz DateTime? @db.Timestamptz(3)
+  relatedId   Int?
+  related     Dummy?    @relation(fields: [relatedId], references: [id])
+}
+
+model Dummy {
+  id          Int        @id
+  timestamp   DateTime?  @db.Timestamp(3)
+  datatype    DataTypes[]
 }
