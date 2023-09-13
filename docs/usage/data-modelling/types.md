@@ -21,21 +21,29 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 
 ## Supported data types
 
+**Numeric**:
+
+- `smallint` / `int2`
+- `integer` / `int`/ `int4`
+- `double precision` / `float8`
+
 **Strings**:
 
+- `character varying` / `varchar` (without length specifier)
 - `text`
-- non-length-limited `varchar`
 
-**Numbers**:
+**Date and time**:
 
-- `smallint`
-- `integer`
-- `bigint`
-- `double precision`
+- `date`
+- `time` (without precision specifier)
+- `timestamp`, `timestamptz` (without precision specifier)
+
+**Other**:
+
+- `boolean`
+- `uuid`
 
 The authoritative list of supported data types is maintained in the [`supported_pg_types/0` function](https://github.com/search?q=repo%3Aelectric-sql%2Felectric+symbol%3Asupported_pg_types&type=code).
-
-<hr className="doc-divider" />
 
 :::caution Work in progress
 We are actively working on building out data type support. If you need a type we don't yet support, please [let us know on Discord](https://discord.electric-sql.com).
