@@ -15,7 +15,7 @@ defmodule Electric.Postgres.Proxy do
 
     {log_level, default_proxy_config} = Keyword.pop(default_proxy_config, :log_level)
 
-    if log_level |> dbg do
+    if log_level do
       ThousandIsland.Logger.attach_logger(log_level)
     end
 

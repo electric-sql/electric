@@ -121,7 +121,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   defp handle_message(%M.StartupMessage{} = msg, return, socket, state) do
     state =
-      case msg.params |> dbg do
+      case msg.params do
         %{"user" => user, "database" => database, "password" => _password} ->
           Logger.warning("Not validating credentials #{inspect(user)}:<password>")
           authenticated(socket, %{state | username: user, database: database})
