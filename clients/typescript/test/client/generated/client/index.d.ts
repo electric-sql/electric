@@ -58,6 +58,10 @@ export type Profile = {
  */
 export type DataTypes = {
   id: number
+  date: Date | null
+  time: Date | null
+  timetz: Date | null
+  timestamp: Date | null
   timestamptz: Date | null
 }
 
@@ -4722,16 +4726,28 @@ export namespace Prisma {
 
   export type DataTypesMinAggregateOutputType = {
     id: number | null
+    date: Date | null
+    time: Date | null
+    timetz: Date | null
+    timestamp: Date | null
     timestamptz: Date | null
   }
 
   export type DataTypesMaxAggregateOutputType = {
     id: number | null
+    date: Date | null
+    time: Date | null
+    timetz: Date | null
+    timestamp: Date | null
     timestamptz: Date | null
   }
 
   export type DataTypesCountAggregateOutputType = {
     id: number
+    date: number
+    time: number
+    timetz: number
+    timestamp: number
     timestamptz: number
     _all: number
   }
@@ -4747,16 +4763,28 @@ export namespace Prisma {
 
   export type DataTypesMinAggregateInputType = {
     id?: true
+    date?: true
+    time?: true
+    timetz?: true
+    timestamp?: true
     timestamptz?: true
   }
 
   export type DataTypesMaxAggregateInputType = {
     id?: true
+    date?: true
+    time?: true
+    timetz?: true
+    timestamp?: true
     timestamptz?: true
   }
 
   export type DataTypesCountAggregateInputType = {
     id?: true
+    date?: true
+    time?: true
+    timetz?: true
+    timestamp?: true
     timestamptz?: true
     _all?: true
   }
@@ -4850,6 +4878,10 @@ export namespace Prisma {
 
   export type DataTypesGroupByOutputType = {
     id: number
+    date: Date | null
+    time: Date | null
+    timetz: Date | null
+    timestamp: Date | null
     timestamptz: Date | null
     _count: DataTypesCountAggregateOutputType | null
     _avg: DataTypesAvgAggregateOutputType | null
@@ -4874,6 +4906,10 @@ export namespace Prisma {
 
   export type DataTypesSelect = {
     id?: boolean
+    date?: boolean
+    time?: boolean
+    timetz?: boolean
+    timestamp?: boolean
     timestamptz?: boolean
   }
 
@@ -5597,6 +5633,10 @@ export namespace Prisma {
 
   export const DataTypesScalarFieldEnum: {
     id: 'id',
+    date: 'date',
+    time: 'time',
+    timetz: 'timetz',
+    timestamp: 'timestamp',
     timestamptz: 'timestamptz'
   };
 
@@ -5841,11 +5881,19 @@ export namespace Prisma {
     OR?: Enumerable<DataTypesWhereInput>
     NOT?: Enumerable<DataTypesWhereInput>
     id?: IntFilter | number
+    date?: DateTimeNullableFilter | Date | string | null
+    time?: DateTimeNullableFilter | Date | string | null
+    timetz?: DateTimeNullableFilter | Date | string | null
+    timestamp?: DateTimeNullableFilter | Date | string | null
     timestamptz?: DateTimeNullableFilter | Date | string | null
   }
 
   export type DataTypesOrderByWithRelationInput = {
     id?: SortOrder
+    date?: SortOrder
+    time?: SortOrder
+    timetz?: SortOrder
+    timestamp?: SortOrder
     timestamptz?: SortOrder
   }
 
@@ -5855,6 +5903,10 @@ export namespace Prisma {
 
   export type DataTypesOrderByWithAggregationInput = {
     id?: SortOrder
+    date?: SortOrder
+    time?: SortOrder
+    timetz?: SortOrder
+    timestamp?: SortOrder
     timestamptz?: SortOrder
     _count?: DataTypesCountOrderByAggregateInput
     _avg?: DataTypesAvgOrderByAggregateInput
@@ -5868,6 +5920,10 @@ export namespace Prisma {
     OR?: Enumerable<DataTypesScalarWhereWithAggregatesInput>
     NOT?: Enumerable<DataTypesScalarWhereWithAggregatesInput>
     id?: IntWithAggregatesFilter | number
+    date?: DateTimeNullableWithAggregatesFilter | Date | string | null
+    time?: DateTimeNullableWithAggregatesFilter | Date | string | null
+    timetz?: DateTimeNullableWithAggregatesFilter | Date | string | null
+    timestamp?: DateTimeNullableWithAggregatesFilter | Date | string | null
     timestamptz?: DateTimeNullableWithAggregatesFilter | Date | string | null
   }
 
@@ -6047,36 +6103,64 @@ export namespace Prisma {
 
   export type DataTypesCreateInput = {
     id: number
+    date?: Date | string | null
+    time?: Date | string | null
+    timetz?: Date | string | null
+    timestamp?: Date | string | null
     timestamptz?: Date | string | null
   }
 
   export type DataTypesUncheckedCreateInput = {
     id: number
+    date?: Date | string | null
+    time?: Date | string | null
+    timetz?: Date | string | null
+    timestamp?: Date | string | null
     timestamptz?: Date | string | null
   }
 
   export type DataTypesUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
+    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    time?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timetz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type DataTypesUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
+    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    time?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timetz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type DataTypesCreateManyInput = {
     id: number
+    date?: Date | string | null
+    time?: Date | string | null
+    timetz?: Date | string | null
+    timestamp?: Date | string | null
     timestamptz?: Date | string | null
   }
 
   export type DataTypesUpdateManyMutationInput = {
     id?: IntFieldUpdateOperationsInput | number
+    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    time?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timetz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type DataTypesUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
+    date?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    time?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timetz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    timestamp?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
@@ -6343,6 +6427,10 @@ export namespace Prisma {
 
   export type DataTypesCountOrderByAggregateInput = {
     id?: SortOrder
+    date?: SortOrder
+    time?: SortOrder
+    timetz?: SortOrder
+    timestamp?: SortOrder
     timestamptz?: SortOrder
   }
 
@@ -6352,11 +6440,19 @@ export namespace Prisma {
 
   export type DataTypesMaxOrderByAggregateInput = {
     id?: SortOrder
+    date?: SortOrder
+    time?: SortOrder
+    timetz?: SortOrder
+    timestamp?: SortOrder
     timestamptz?: SortOrder
   }
 
   export type DataTypesMinOrderByAggregateInput = {
     id?: SortOrder
+    date?: SortOrder
+    time?: SortOrder
+    timetz?: SortOrder
+    timestamp?: SortOrder
     timestamptz?: SortOrder
   }
 

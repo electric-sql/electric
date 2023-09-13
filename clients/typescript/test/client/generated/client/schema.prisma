@@ -44,6 +44,10 @@ model Profile {
 }
 
 model DataTypes {
-  id Int @id
+  id          Int       @id
+  date        DateTime? @db.Date
+  time        DateTime? @db.Time(3)
+  timetz      DateTime? @db.Timetz(3)
+  timestamp   DateTime? @db.Timestamp(3)
   timestamptz DateTime? @db.Timestamptz(3)
 }
