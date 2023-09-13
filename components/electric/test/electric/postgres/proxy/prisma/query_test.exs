@@ -4,19 +4,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.MockSchemaLoader
   alias Electric.Postgres.Proxy.Prisma
-
-  alias Electric.Postgres.Proxy.Prisma.Query.{
-    ColumnV5_2,
-    ConstraintV5_2,
-    IndexV5_2,
-    ExtensionV5_2,
-    ForeignKeyV5_2,
-    FunctionV5_2,
-    SequenceV5_2,
-    TableV5_2,
-    TypeV5_2,
-    ViewV5_2
-  }
+  alias Electric.Postgres.Proxy.Prisma.Query
 
   # '{public}'
   @public <<0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 6, 112, 117, 98,
@@ -28,15 +16,11 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   @migration_dir Path.expand("../../../../support/prisma", __DIR__)
 
   setup do
+    # the migrations are in files to make it easier to reproduce the schema
+    # on a real db e.g. `psql database < test/support/prisma/001_query_test.sql`
     migrations = [
-      {"001",
-       [
-         File.read!(Path.join(@migration_dir, "001_query_test.sql"))
-       ]},
-      {"002",
-       [
-         File.read!(Path.join(@migration_dir, "002_query_test.sql"))
-       ]}
+      {"001", [File.read!(Path.join(@migration_dir, "001_query_test.sql"))]},
+      {"002", [File.read!(Path.join(@migration_dir, "002_query_test.sql"))]}
     ]
 
     loader_spec = MockSchemaLoader.backend_spec(migrations: migrations)
@@ -46,7 +30,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "TableV5_2", cxt do
-    data_rows = TableV5_2.data_rows([@public], cxt.schema, config())
+    data_rows = Query.TableV5_2.data_rows([@public], cxt.schema, config())
 
     assert Enum.sort(data_rows) ==
              Enum.sort([
@@ -59,7 +43,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "ConstraintV5_2", cxt do
-    data_rows = ConstraintV5_2.data_rows([@public], cxt.schema, config())
+    data_rows = Query.ConstraintV5_2.data_rows([@public], cxt.schema, config())
 
     assert Enum.sort(data_rows) ==
              Enum.sort([
@@ -94,15 +78,15 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "ViewV5_2", cxt do
-    [] = ViewV5_2.data_rows([@public], cxt.schema, config())
+    [] = Query.ViewV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "TypeV5_2", cxt do
-    [] = TypeV5_2.data_rows([@public], cxt.schema, config())
+    [] = Query.TypeV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "ColumnV5_2", cxt do
-    columns = ColumnV5_2.data_rows([@public], cxt.schema, config())
+    columns = Query.ColumnV5_2.data_rows([@public], cxt.schema, config())
 
     # get these values from pg by creating the public tables above ^ then
     # setting the proxy mode to transparent and run prisma against the db via
@@ -512,7 +496,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "ForeignKeyV5_2", cxt do
-    data_rows = ForeignKeyV5_2.data_rows([@public], cxt.schema, config())
+    data_rows = Query.ForeignKeyV5_2.data_rows([@public], cxt.schema, config())
 
     # can't do an equality check as the actual oids 
     assert Enum.sort(data_rows) ==
@@ -569,7 +553,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "IndexV5_2", cxt do
-    data_rows = IndexV5_2.data_rows([@public], cxt.schema, config())
+    data_rows = Query.IndexV5_2.data_rows([@public], cxt.schema, config())
 
     # can't do an equality check as the actual oids 
     assert Enum.sort(data_rows) ==
@@ -770,14 +754,14 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "FunctionV5_2", cxt do
-    [] = FunctionV5_2.data_rows([@public], cxt.schema, config())
+    [] = Query.FunctionV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "ExtensionV5_2", cxt do
-    [] = ExtensionV5_2.data_rows([@public], cxt.schema, config())
+    [] = Query.ExtensionV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "SequenceV5_2", cxt do
-    [] = SequenceV5_2.data_rows([@public], cxt.schema, config())
+    [] = Query.SequenceV5_2.data_rows([@public], cxt.schema, config())
   end
 end
