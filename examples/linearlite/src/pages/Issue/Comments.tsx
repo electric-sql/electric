@@ -4,6 +4,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useElectric, type Issue } from '../../electric'
 import Editor from '../../components/editor/Editor'
+import Avatar from '../../components/Avatar'
 import { formatDate } from '../../utils/date'
 import { showWarning } from '../../utils/notification'
 
@@ -25,8 +26,6 @@ function Comments({ issue }: CommentsProps) {
     })
   )
 
-  console.log(comments)
-
   const commentList = () => {
     if (comments && comments.length > 0) {
       return comments.map((comment) => (
@@ -34,13 +33,16 @@ function Comments({ issue }: CommentsProps) {
           key={comment.id}
           className="flex flex-col w-full p-3 mb-3 bg-white rounded shadow-sm border"
         >
-          <div className="flex mb-2">
-            <span className="text-sm text-gray-400">{comment.username}</span>
+          <div className="flex items-center mb-2">
+            <Avatar name={comment.username} />
+            <span className="ms-2 text-sm text-gray-400">
+              {comment.username}
+            </span>
             <span className=" ms-auto text-sm text-gray-400 ml-2">
               {formatDate(comment.created_at)}
             </span>
           </div>
-          <div className="mt-2 text-md">
+          <div className="mt-2 text-md prose w-full max-w-full">
             <ReactMarkdown>{comment.body}</ReactMarkdown>
           </div>
         </div>

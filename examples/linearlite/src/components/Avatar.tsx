@@ -10,8 +10,27 @@ interface Props {
   onClick?: MouseEventHandler | undefined
 }
 
-function getAcronym(name?: string) {
-  return ((name || '').match(/\b(\w)/g) || []).join('').substr(0, 2)
+//bg-blue-500
+
+function stringToHslColor(str: string, s, l) {
+  var hash = 0
+  for (var i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  }
+
+  var h = hash % 360
+  return 'hsl(' + h + ', ' + s + '%, ' + l + '%)'
+}
+
+function getAcronym(name: string) {
+  let acr = ((name || '').match(/\b(\w)/g) || [])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+  if (acr.length === 1) {
+    acr = acr + name.slice(1, 2).toLowerCase()
+  }
+  return acr
 }
 function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
   let avatar, status
@@ -24,7 +43,10 @@ function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
   else if (name !== undefined) {
     // use name as avatar
     avatar = (
-      <div className="flex items-center justify-center w-4.5 text-xxs h-4.5 bg-blue-500 text-white rounded-full">
+      <div
+        className="flex items-center justify-center w-4.5 text-xxs h-4.5 text-white rounded-full"
+        style={{ backgroundColor: stringToHslColor(name, 50, 50) }}
+      >
         {getAcronym(name)}
       </div>
     )

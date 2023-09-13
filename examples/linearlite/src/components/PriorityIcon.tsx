@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function PriorityIcon({ priority, className }: Props) {
-  const classes = classNames('w-3.5 h-3.5', className)
+  const classes = classNames('w-4 h-4', className)
   const Icon = PriorityIcons[priority.toLowerCase()]
   return <Icon className={classes} />
 }

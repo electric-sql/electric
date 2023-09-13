@@ -7,8 +7,9 @@ import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import StatusMenu from '../../components/contextmenu/StatusMenu'
 import PriorityIcon from '../../components/PriorityIcon'
 import StatusIcon from '../../components/StatusIcon'
+import Avatar from '../../components/Avatar'
 import { useElectric } from '../../electric'
-import { PriorityDisplay } from '../../types/issue'
+import { PriorityDisplay, StatusDisplay } from '../../types/issue'
 import Editor from '../../components/editor/Editor'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
@@ -142,6 +143,14 @@ function IssuePage() {
     navigate('/')
   }
 
+  const shortId = () => {
+    if (issue.id.includes('-')) {
+      return issue.id.slice(0, 8)
+    } else {
+      return issue.id
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -150,7 +159,7 @@ function IssuePage() {
             <div className="flex items-center">
               <span className="font-semibold me-2">Issue</span>
               <span className="text-gray-500" title={issue.id}>
-                {issue.id.slice(0, 8)}
+                {shortId()}
               </span>
             </div>
 
@@ -177,11 +186,12 @@ function IssuePage() {
             <div className="max-w-4xl flex flex-row md:flex-col">
               <div className="flex flex-1 mb-3 mr-5 md-mr-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
-                  Assignee
+                  Opened by
                 </div>
                 <div className="flex flex-[3_0_0]">
-                  <button className="inline-flex items-center h-6 px-2 text-gray-500border-none rounded hover:bg-gray-100">
-                    <span>{issue.username}</span>
+                  <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                    <Avatar name={issue.username} />
+                    <span className="ml-1">{issue.username}</span>
                   </button>
                 </div>
               </div>
@@ -195,7 +205,7 @@ function IssuePage() {
                     button={
                       <button className="inline-flex items-center h-6 px-2 text-gray-500border-none rounded hover:bg-gray-100">
                         <StatusIcon status={issue.status} className="mr-1" />
-                        <span>{issue.status}</span>
+                        <span>{StatusDisplay[issue.status]}</span>
                       </button>
                     }
                     onSelect={handleStatusChange}
