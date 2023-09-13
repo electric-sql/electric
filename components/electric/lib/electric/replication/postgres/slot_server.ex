@@ -22,7 +22,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Replication.Changes
   alias Electric.Postgres.ShadowTableTransformation
 
-  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+  import Electric.Postgres.Extension,
+    only: [is_acked_client_lsn_relation: 1, is_extension_relation: 1]
 
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
@@ -298,7 +299,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
     filtered_changes =
       Enum.reject(changes, fn %{relation: relation} ->
-        is_extension_relation(relation) and relation != Extension.acked_client_lsn_relation()
+        is_extension_relation(relation) and not is_acked_client_lsn_relation(relation)
       end)
 
     %{tx | changes: filtered_changes}

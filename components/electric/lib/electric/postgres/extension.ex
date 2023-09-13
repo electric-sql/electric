@@ -102,14 +102,15 @@ defmodule Electric.Postgres.Extension do
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
 
-  defguard is_migration_relation(relation)
-           when elem(relation, 0) == @schema and
-                  elem(relation, 1) in [@version_relation, @ddl_relation]
-
-  defguard is_ddl_relation(relation)
-           when elem(relation, 0) == @schema and elem(relation, 1) == @ddl_relation
-
   defguard is_extension_relation(relation) when elem(relation, 0) == @schema
+
+  defguard is_migration_relation(relation)
+           when relation in [{@schema, @version_relation}, {@schema, @ddl_relation}]
+
+  defguard is_ddl_relation(relation) when relation == {@schema, @ddl_relation}
+
+  defguard is_acked_client_lsn_relation(relation)
+           when relation == {@schema, @acked_client_lsn_relation}
 
   def extract_ddl_version(%{"txid" => _, "txts" => _, "version" => version, "query" => query}) do
     {:ok, version, query}
