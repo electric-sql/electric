@@ -2,8 +2,9 @@ import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { useState, useContext } from 'react'
 import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
 import debounce from 'lodash.debounce'
+import { useLiveQuery } from 'electric-sql/react'
 import ViewOptionMenu from './ViewOptionMenu'
-import { Issue } from '../electric'
+import { Issue, useElectric } from '../electric'
 import { MenuContext } from '../App'
 import FilterMenu from './contextmenu/FilterMenu'
 import { useFilterState } from '../utils/filterState'
@@ -22,12 +23,18 @@ export default function ({
   showSearch,
   title = 'All issues',
 }: Props) {
+  const { db } = useElectric()!
   const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const [searchQuery, setSearchQuery] = useState('')
 
-  const totalIssues = issues.length
+  // We don't yet have a DAL for counts, so we use raw SQL
+  const totalIssuesCount: number =
+    useLiveQuery(db.liveRaw({ sql: 'SELECT COUNT(*) FROM issue' }))
+      .results?.[0]?.['COUNT(*)'] || 0
+
+  const filteredIssuesCount = issues.length
 
   const handleSearchInner = debounce((query: string) => {
     setFilterState({
@@ -70,7 +77,13 @@ export default function ({
           </button>
 
           <div className="p-1 font-semibold me-1">{title}</div>
-          <span>{totalIssues}</span>
+          {/* <span>{filteredIssuesCount}</span> */}
+          <span>
+            {filteredIssuesCount}
+            {filteredIssuesCount !== totalIssuesCount
+              ? ` of ${totalIssuesCount}`
+              : ''}
+          </span>
           <FilterMenu
             button={
               <button className="px-1 py-0.5 ml-3 border border-gray-300 border-dashed rounded text-gray-500 hover:border-gray-400 hover:text-gray-800 flex items-center">
