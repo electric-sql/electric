@@ -214,8 +214,9 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
 
     {:ok, injector} =
-      Keyword.merge(state.injector_opts, loader: {loader_module, loader_conn})
-      |> Injector.new(state.username, state.database)
+      state.injector_opts
+      |> Keyword.merge(loader: {loader_module, loader_conn})
+      |> Injector.new(username: state.username, database: state.database)
 
     {:ok, pid} =
       UpstreamConnection.start_link(

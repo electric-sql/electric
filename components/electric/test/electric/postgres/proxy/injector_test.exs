@@ -3,6 +3,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.TestScenario
+  alias Electric.Postgres.MockSchemaLoader
 
   @moduletag capture_log: true
 
@@ -15,18 +16,64 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
        ]}
     ]
 
-    {module, opts} = Electric.Postgres.MockSchemaLoader.backend_spec(migrations: migrations)
+    {module, opts} = MockSchemaLoader.backend_spec(migrations: migrations)
 
     {:ok, conn} =
       module.connect([], opts)
 
     {:ok, injector} =
-      Injector.new(loader: {module, conn}, query_generator: TestScenario.MockInjector)
+      Injector.new(
+        [loader: {module, conn}, query_generator: TestScenario.MockInjector],
+        username: "electric",
+        database: "electric"
+      )
 
     version = System.system_time(:microsecond)
     timestamp = DateTime.utc_now()
 
     {:ok, injector: injector, version: version, timestamp: timestamp}
+  end
+
+  defmodule FakeCapture do
+    defstruct [:database, :version]
+
+    def new(args) do
+      struct(__MODULE__, args)
+    end
+  end
+
+  describe "new/3" do
+    test "without configured loader" do
+      assert :error = Injector.new([], username: "username", database: "database")
+    end
+
+    test "default capture mode configuration" do
+      opts = [
+        loader: {MockSchemaLoader, something: :here},
+        capture_mode: [
+          default: {FakeCapture, version: :default},
+          per_user: %{"fake" => {FakeCapture, version: :user}}
+        ]
+      ]
+
+      assert {:ok,
+              {%FakeCapture{database: "important", version: :default},
+               %{loader: {MockSchemaLoader, something: :here}}}} =
+               Injector.new(opts, username: "simon", database: "important")
+    end
+
+    test "per-user configuration" do
+      opts = [
+        loader: MockSchemaLoader,
+        capture_mode: [
+          default: nil,
+          per_user: %{"fake" => {FakeCapture, version: :fake}}
+        ]
+      ]
+
+      assert {:ok, {%FakeCapture{database: "important", version: :fake}, _state}} =
+               Injector.new(opts, username: "fake", database: "important")
+    end
   end
 
   @scenarios [
@@ -74,11 +121,19 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           query =
             {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
              shadow_add_column: [
-               %{
-                 table: {"public", "truths"},
-                 column: "another",
-                 type: "int8"
-               }
+               %{table: {"public", "truths"}, column: "another", type: "int8"}
+             ]}
+
+          cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
+        end
+
+        test "add multiple columns to electrified table", cxt do
+          query =
+            {~s[ALTER TABLE "truths" ADD COLUMN "another" int8, ADD colour text, ADD COLUMN "finally" int2],
+             shadow_add_column: [
+               %{table: {"public", "truths"}, column: "another", type: "int8"},
+               %{table: {"public", "truths"}, column: "colour", type: "text"},
+               %{table: {"public", "truths"}, column: "finally", type: "int2"}
              ]}
 
           cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
@@ -96,11 +151,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               capture:
                 {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
                  shadow_add_column: [
-                   %{
-                     table: {"public", "truths"},
-                     column: "another",
-                     type: "int8"
-                   }
+                   %{table: {"public", "truths"}, column: "another", type: "int8"}
                  ]},
               # capture: {:alter_table, "truths", [{:add, "another", "int8"}]},
               passthrough: ~s[ALTER TABLE "socks" ADD COLUMN "holes" int2]

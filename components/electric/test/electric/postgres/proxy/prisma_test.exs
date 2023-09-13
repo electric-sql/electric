@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Proxy.PrismaTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Postgres.Extension.SchemaLoader
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Prisma
   alias Electric.Postgres.MockSchemaLoader
@@ -318,10 +319,12 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       {module, opts} = MockSchemaLoader.backend_spec(migrations: migrations)
       {:ok, conn} = module.connect([], opts)
       {:ok, injector} = Prisma.injector(config(), loader: {module, conn})
-      {:ok, injector: injector}
+      {:ok, injector: injector, loader: {module, conn}}
     end
 
     test "client server session", cxt do
+      {:ok, _version, schema} = SchemaLoader.load(cxt.loader)
+
       Enum.reduce(@queries, {cxt.injector, 0}, fn {module, sql}, {injector, n} ->
         m = n + 1
         name = "s#{m}"
@@ -344,7 +347,7 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
               ]
           end
 
-        data_rows = module.data_rows(binds, config())
+        data_rows = module.data_rows(binds, schema, config())
 
         injector =
           injector

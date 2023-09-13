@@ -25,13 +25,16 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
   end
 
   def assert_electrified_migration(injector, _framework, query) do
-    query =
+    {query, opts} =
       case query do
         sql when is_binary(sql) ->
-          sql
+          {sql, []}
 
         [sql] when is_binary(sql) ->
-          sql
+          {sql, []}
+
+        {sql, opts} when is_binary(sql) ->
+          {sql, opts}
 
         [_ | _] ->
           raise ArgumentError, message: "Manual migration does not support multiple queries"
@@ -43,7 +46,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> client(query(query), server: begin())
     |> server(complete_ready("BEGIN", :tx), server: query(query))
     |> server(complete_ready(tag, :tx), server: capture_ddl_query(query))
-    |> server(capture_ddl_complete(), server: capture_version_query())
+    |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
     |> idle!()

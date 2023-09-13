@@ -445,17 +445,16 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> shadow_add_column(capture_ddl_complete(), opts, client: bind_execute_complete(tag))
   end
 
-  defp shadow_add_column(injector, initial_msg, opts, final_msgs) when is_list(final_msgs) do
-    columns = Keyword.get(opts, :shadow_add_column, nil)
+  def shadow_add_column(injector, initial_msg, opts, final_msgs) when is_list(final_msgs) do
+    columns = Keyword.get(opts, :shadow_add_column, [])
 
     Enum.zip(
       [initial_msg | Enum.map(columns, fn _ -> alter_shadow_table_complete() end)],
-      Enum.map(columns, fn c -> [server: alter_shadow_table_query(c)] end) ++ final_msgs
+      Enum.map(columns, fn c -> [server: alter_shadow_table_query(c)] end) ++ [final_msgs]
     )
     |> Enum.reduce(injector, fn {recv, resp}, injector ->
       server(injector, recv, resp)
     end)
-    |> dbg
   end
 
   def alter_shadow_table_query(%{table: {schema, table}, column: column, type: type}) do

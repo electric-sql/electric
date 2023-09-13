@@ -8,7 +8,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Prisma do
   @type t() :: %__MODULE__{}
 
   def new(opts) do
-    dbg(prisma: opts)
     struct(__MODULE__, opts) |> ensure_config()
   end
 
@@ -62,12 +61,12 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Prisma do
     end
 
     def recv_frontend(p, %M.Bind{portal: portal, source: name, parameters: params}, state, send) do
-      {%{p | binds: Map.put(p.binds, portal, {name, params}) |> dbg}, state,
+      {%{p | binds: Map.put(p.binds, portal, {name, params})}, state,
        Send.front(send, %M.BindComplete{})}
     end
 
     def recv_frontend(p, %M.Execute{portal: portal}, state, send) do
-      case Map.fetch(p.binds, portal) |> dbg do
+      case Map.fetch(p.binds, portal) do
         {:ok, {ps, binds}} ->
           {:ok, query} = Map.fetch(p.prepared_statements, ps)
           # TODO: allow for introspecing a specific version of the schema
@@ -76,7 +75,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Prisma do
           data_rows =
             query.data_rows(binds, schema, p.config) |> Enum.map(&%M.DataRow{fields: &1})
 
-          {%{p | binds: Map.delete(p.binds, portal) |> dbg}, state,
+          {%{p | binds: Map.delete(p.binds, portal)}, state,
            send
            |> Send.front(data_rows)
            |> Send.front([

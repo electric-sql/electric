@@ -40,13 +40,6 @@ defmodule Electric.Postgres.Proxy.TestScenario.Framework do
       |> client(query("BEGIN"))
       |> server(complete_ready("BEGIN"))
 
-    # queries
-    # |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :extended))
-    # |> framework.assign_migration_version(version)
-    # |> capture_migration_queries([client: commit()], queries, version)
-    # |> server(complete_ready("COMMIT", :idle))
-    # |> idle!()
-
     queries
     |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :extended))
     |> framework.capture_migration_version(version)

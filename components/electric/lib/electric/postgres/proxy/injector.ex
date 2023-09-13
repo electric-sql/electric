@@ -19,9 +19,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   # FIXME: add in the username and the db to this, so we can pass them onto the 
   #        capture modes
-  def new(opts \\ [], username, database) do
-    dbg(injector: {username, database, opts})
-
+  def new(opts \\ [], connection) do
     with {:ok, loader} <- Keyword.fetch(opts, :loader) do
       query_generator = Keyword.get(opts, :query_generator, __MODULE__)
 
@@ -30,13 +28,17 @@ defmodule Electric.Postgres.Proxy.Injector do
       default = Keyword.get(capture_mode_opts, :default, @default_mode)
       per_user = Keyword.get(capture_mode_opts, :per_user, %{})
 
-      mode = Map.get(per_user, username, default) |> dbg
+      mode =
+        if username = connection[:username] do
+          Map.get(per_user, username, default)
+        else
+          nil
+        end
 
       capture =
         mode
         |> default_capture_mode()
-        |> initialise_capture_mode()
-        |> dbg
+        |> initialise_capture_mode(connection)
 
       debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
@@ -60,15 +62,15 @@ defmodule Electric.Postgres.Proxy.Injector do
     {module, params}
   end
 
-  defp initialise_capture_mode(nil) do
+  defp initialise_capture_mode(nil, _) do
     nil
   end
 
-  defp initialise_capture_mode({module, opts}) do
+  defp initialise_capture_mode({module, opts}, args) do
     {:module, ^module} = Code.ensure_loaded(module)
 
-    if function_exported?(module, :new, 1) |> dbg do
-      module.new(opts)
+    if function_exported?(module, :new, 1) do
+      module.new(Keyword.merge(opts, args))
     else
       struct(module, opts)
     end

@@ -170,6 +170,10 @@ defmodule Electric.Postgres.Proxy.Prisma do
 
   def injector(config, opts \\ []) do
     capture = {Injector.Capture.Prisma, config: config}
-    Injector.new(Keyword.merge(opts, capture_mode: [default: capture]), "username", "database")
+
+    Injector.new(Keyword.merge(opts, capture_mode: [default: capture]),
+      username: "username",
+      database: "database"
+    )
   end
 end
