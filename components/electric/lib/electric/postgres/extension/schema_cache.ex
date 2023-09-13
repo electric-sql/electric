@@ -305,7 +305,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   # Prevent deadlocks:
-  # the list of tables added to Electirc's publication is cached and this refresh_subscription call
+  # the list of tables added to Electric's publication is cached and this refresh_subscription call
   # is done via an async Task because otherwise we get into a deadlock in the
   # refresh-tables process:
   #
