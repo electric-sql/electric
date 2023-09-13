@@ -2,6 +2,7 @@ import mapValues from 'lodash.mapvalues'
 import { FieldName, Fields } from "../model/schema"
 import { PgDateType, PgType, fromSqlite, toSqlite } from "./sqlite"
 import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+import { mapObject } from '../util/functions'
 
 export enum Transformation {
   Js2Sqlite,
@@ -261,15 +262,15 @@ export function transformFields(o: object, fields: Fields, transformation: Trans
  */
 function transformField(field: FieldName, value: any, o: object, fields: Fields, transformation: Transformation = Transformation.Js2Sqlite): any {
   const pgType = fields.get(field)
-    
+
   if (!pgType)
     throw new InvalidArgumentError(`Unknown field ${field} in object ${JSON.stringify(o)}`)
-  
+
   const transformedValue =
     transformation === Transformation.Js2Sqlite
       ? toSqlite(value, pgType)
       : fromSqlite(value, pgType)
-  
+
   return [ field, transformedValue ]
 }
 
@@ -278,8 +279,8 @@ function transformWhere(o: object, fields: Fields): object {
   //   --> can be the value itself --> transform it
   //   --> can be equals, in, notIn, lt, lte, gt, gte, not
   //         --> traverse and call transform
-  const filteredObj = keepTableFieldsOnly(o, fields)
-  const transformedFields = transformWhereFields(filteredObj, fields) // still doesn't handle lt, lte, etc.
+  //const filteredObj = keepTableFieldsOnly(o, fields)
+  const transformedFields = transformWhereFields(o, fields) // still doesn't handle lt, lte, etc.
   const transformedBooleanConnectors = transformBooleanConnectors(o, fields)
   return {
     ...o,
@@ -319,13 +320,16 @@ function transformBooleanConnectors(o: { AND?: object | object[], OR?: object | 
 function transformWhereFields(o: object, fields: Fields): object {
   // only transform fields that are part of this table and not related fields
   // as those will be transformed later when the query on the related field is processed.
-  const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
-  // each field can be the value itself or an object containing filters like `lt`, `gt`, etc.
-  const fieldsAndTransformedValues = fieldsAndValues.map(entry => {
-    const [field, value] = entry
+  const objWithoutRelatedFields = keepTableFieldsOnly(o, fields)
+  const transformedObj = mapObject(objWithoutRelatedFields, (field, value) => {
+    // each field can be the value itself or an object containing filters like `lt`, `gt`, etc.
     return transformFieldsAllowingFilters(field, value, fields)
   })
-  return Object.fromEntries(fieldsAndTransformedValues)
+
+  return {
+    ...o,
+    ...transformedObj
+  }
 }
 
 /**
@@ -339,10 +343,10 @@ function transformWhereFields(o: object, fields: Fields): object {
  */
 function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fields): any {
   const pgType = fields.get(field)
-    
+
   if (!pgType)
-    throw new InvalidArgumentError(`Unknown field ${field}}`)
-  
+    throw new InvalidArgumentError(`Unknown field ${field}`)
+
   switch (pgType) {
     // Types that require transformations
     case PgDateType.PG_DATE:
@@ -352,16 +356,16 @@ function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fi
     case PgDateType.PG_TIMETZ:
       if (value instanceof Date) {
         // transform it
-        return [ field, toSqlite(value, pgType) ]
+        return toSqlite(value, pgType)
       }
       else {
         // it must be an object containing filters
         // transform the values that are nested in those filters
-        return [ field, transformFilterObject(field, value, pgType, fields) ]
+        return transformFilterObject(field, value, pgType, fields)
       }
     // other types that don't require transformations
     default:
-      return [ field, value ]
+      return value
   }
 }
 
@@ -399,7 +403,10 @@ function transformFilterObject(field: FieldName, o: any, pgType: PgType, fields:
   // `not` is a special one as it accepts a value or a nested object of filters
   // hence it is just like the properties of a `where` object which accept values or filters
   const notFilterObj = filterKeys(o, new Set(['not']))
-  const transformedNotFilterObj = mapValues(notFilterObj, v => transformFieldsAllowingFilters(field, v, fields))
+  const transformedNotFilterObj = mapValues(notFilterObj, (v) => {
+    // each field can be the value itself or an object containing filters like `lt`, `gt`, etc.
+    return transformFieldsAllowingFilters(field, v, fields)
+  })
 
   return {
     ...transformedSimpleFilterObj,

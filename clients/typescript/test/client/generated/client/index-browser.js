@@ -92,7 +92,13 @@ exports.Prisma.DataTypesScalarFieldEnum = {
   time: 'time',
   timetz: 'timetz',
   timestamp: 'timestamp',
-  timestamptz: 'timestamptz'
+  timestamptz: 'timestamptz',
+  relatedId: 'relatedId'
+};
+
+exports.Prisma.DummyScalarFieldEnum = {
+  id: 'id',
+  timestamp: 'timestamp'
 };
 
 exports.Prisma.ItemsScalarFieldEnum = {
@@ -142,7 +148,8 @@ exports.Prisma.ModelName = {
   User: 'User',
   Post: 'Post',
   Profile: 'Profile',
-  DataTypes: 'DataTypes'
+  DataTypes: 'DataTypes',
+  Dummy: 'Dummy'
 };
 
 /**
