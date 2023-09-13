@@ -600,7 +600,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       )
     } else {
       Log.warn(
-        `Server has sent an RPC request with a method client does not support: ${message.method}`
+        `Server has sent an RPC request with a method that the client does not support: ${message.method}`
       )
 
       responder(
