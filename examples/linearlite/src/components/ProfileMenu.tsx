@@ -1,4 +1,5 @@
 import { Transition } from '@headlessui/react'
+import { useConnectivityState } from 'electric-sql/react'
 import classnames from 'classnames'
 import { useClickOutside } from '../hooks/useClickOutside'
 import Toggle from './Toggle'
@@ -16,11 +17,16 @@ export default function ProfileMenu({
   onDismiss,
   setShowAboutModal,
 }: Props) {
+  const { connectivityState, toggleConnectivityState } = useConnectivityState()
   const classes = classnames(
     'select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800',
     className
   )
   const ref = useRef(null)
+
+  const connectivityConnected = connectivityState === 'connected'
+  const connectivityStateDisplay =
+    connectivityState[0].toUpperCase() + connectivityState.slice(1)
 
   useClickOutside(ref, () => {
     if (isOpen && onDismiss) {
@@ -68,8 +74,15 @@ export default function ProfileMenu({
           GitHub
         </a>
         <div className="border-t flex items-center h-8 px-3">
-          <span className="text-gray-500 me-auto">Online</span>
-          <Toggle />
+          <span className="text-gray-500 me-auto">
+            {connectivityStateDisplay}
+          </span>
+          <Toggle
+            value={connectivityConnected}
+            onChange={toggleConnectivityState}
+            activeClass="bg-green-500 hover:bg-green-700"
+            activeLabelClass="border-green-500"
+          />
         </div>
       </Transition>
     </div>

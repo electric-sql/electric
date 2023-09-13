@@ -1,8 +1,10 @@
 import { MouseEventHandler } from 'react'
+import classnames from 'classnames'
 import AvatarImg from '../assets/icons/avatar.svg'
 
 interface Props {
   online?: boolean
+  showOffline?: boolean
   name?: string
   avatarUrl?: string
   onClick?: MouseEventHandler | undefined
@@ -11,7 +13,7 @@ interface Props {
 function getAcronym(name?: string) {
   return ((name || '').match(/\b(\w)/g) || []).join('').substr(0, 2)
 }
-function Avatar({ online, name, onClick, avatarUrl }: Props) {
+function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
   let avatar, status
 
   // create avatar image icon
@@ -34,9 +36,18 @@ function Avatar({ online, name, onClick, avatarUrl }: Props) {
   }
 
   //status icon
-  if (online)
+  if (online || showOffline)
     status = (
-      <span className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full bg-green-500 border border-white"></span>
+      // <span className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full bg-green-500 border border-white"></span>
+      <span
+        className={classnames(
+          'absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border border-white',
+          {
+            'bg-green-500': online,
+            'bg-red-500': !online,
+          }
+        )}
+      ></span>
     )
   else status = null
 

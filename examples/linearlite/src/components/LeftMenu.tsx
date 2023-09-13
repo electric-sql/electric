@@ -4,6 +4,7 @@ import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.sv
 import { MenuContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
+import { useConnectivityState } from 'electric-sql/react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
@@ -20,6 +21,7 @@ function LeftMenu() {
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
+  const { connectivityState } = useConnectivityState()
 
   const classes = classnames(
     'absolute lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
@@ -63,7 +65,11 @@ function LeftMenu() {
                 className="flex items-center justify-center p-2 rounded cursor-pointer hover:bg-gray-100"
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
               >
-                <Avatar name="Electric" online={true} />
+                <Avatar
+                  name="Electric"
+                  online={connectivityState == 'connected'}
+                  showOffline={true}
+                />
                 <ExpandMore size={13} className="ml-2" />
               </button>
               <ProfileMenu
