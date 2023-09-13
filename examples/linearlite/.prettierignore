@@ -8,4 +8,5 @@ build/
 .tool-versions
 .github/
 src/generated/
+db/data/
 wa-sqlite-async.mjs

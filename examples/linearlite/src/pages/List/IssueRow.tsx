@@ -1,4 +1,4 @@
-// import DefaultAvatarIcon from '../../assets/icons/avatar.svg'
+import type { CSSProperties } from 'react'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import StatusMenu from '../../components/contextmenu/StatusMenu'
 import PriorityIcon from '../../components/PriorityIcon'
@@ -6,33 +6,49 @@ import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Issue } from '../../electric'
+import { Issue, useElectric } from '../../electric'
 import { formatDate } from '../../utils/date'
 
 interface Props {
   issue: Issue
-  onChangePriority?: (issue: Issue, priority: string) => void
-  onChangeStatus?: (issue: Issue, priority: string) => void
+  style: CSSProperties
 }
 
-function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
+function IssueRow({ issue, style }: Props) {
+  const { db } = useElectric()!
   const navigate = useNavigate()
-  // let priorityIcon = <PriorityIcon priority={issue.priority} />
-  const statusIcon = <StatusIcon status={issue.status} />
-
-  const handleChangePriority = (p: string) => {
-    if (onChangePriority) onChangePriority(issue, p)
-  }
 
   const handleChangeStatus = (status: string) => {
-    if (onChangeStatus) onChangeStatus(issue, status)
+    db.issue.update({
+      data: {
+        status: status,
+        modified: new Date().toISOString(),
+      },
+      where: {
+        id: issue.id,
+      },
+    })
   }
+
+  const handleChangePriority = (priority: string) => {
+    db.issue.update({
+      data: {
+        priority: priority,
+        modified: new Date().toISOString(),
+      },
+      where: {
+        id: issue.id,
+      },
+    })
+  }
+  
   return (
     <div
       key={issue.id}
       className="flex items-center flex-grow w-full min-w-0 pl-2 pr-8 text-sm border-b border-gray-100 hover:bg-gray-100 h-11 shrink-0"
       id={issue.id}
       onClick={() => navigate(`/issue/${issue.id}`)}
+      style={style}
     >
       <div className="flex-shrink-0 ml-4">
         <PriorityMenu
@@ -44,7 +60,7 @@ function IssueRow({ issue, onChangePriority, onChangeStatus }: Props) {
       <div className="flex-shrink-0 ml-3">
         <StatusMenu
           id={'r-status-' + issue.id}
-          button={statusIcon}
+          button={<StatusIcon status={issue.status} />}
           onSelect={handleChangeStatus}
         />
       </div>

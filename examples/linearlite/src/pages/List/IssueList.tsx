@@ -1,56 +1,48 @@
+import { FixedSizeList as List, areEqual } from 'react-window'
+import { memo, type CSSProperties } from 'react'
+import AutoSizer from 'react-virtualized-auto-sizer'
 import IssueRow from './IssueRow'
-import { Issue, useElectric } from '../../electric'
+import { Issue } from '../../electric'
 
 export interface IssueListProps {
   issues: Issue[]
 }
 
 function IssueList({ issues }: IssueListProps) {
-  const { db } = useElectric()!
+  return (
+    <AutoSizer>
+      {({ height, width }) => (
+        <List
+          height={height}
+          itemCount={issues.length}
+          itemSize={36}
+          itemData={issues}
+          width={width}
+        >
+          {VirtualIssueRow}
+        </List>
+      )}
+    </AutoSizer>
+  )
+}
 
-  // TODO: sync is not really working with large database. Manipulate the
-  // size of the imported dataset in db/data.tsx
-
-  // TODO: to understand if the bottleneck is the WASM sqlite, or sqlite
-  // in general, may be good to try to run queries on the data with better-sqlite
-
-  // TODO: would be nice to have client-provided query execution time.
-  // we could use it as part of our debug console
-
-  const handleIssueStatusChange = (issue: Issue, status: string) => {
-    db.issue.update({
-      data: {
-        status: status,
-        modified: new Date().toISOString(),
-      },
-      where: {
-        id: issue.id,
-      },
-    })
-  }
-
-  const handleIssuePriorityChange = (issue: Issue, priority: string) => {
-    db.issue.update({
-      data: {
-        priority: priority,
-        modified: new Date().toISOString(),
-      },
-      where: {
-        id: issue.id,
-      },
-    })
-  }
-
-  const issueRows = issues.map((issue) => (
+const VirtualIssueRow = memo(({
+  data: issues,
+  index,
+  style,
+}: {
+  data: Issue[]
+  index: number
+  style: CSSProperties
+}) => {
+  const issue = issues[index]
+  return (
     <IssueRow
       key={`issue-${issue.id}`}
       issue={issue}
-      onChangePriority={handleIssuePriorityChange}
-      onChangeStatus={handleIssueStatusChange}
+      style={style}
     />
-  ))
-
-  return <div className="flex flex-col overflow-auto">{issueRows}</div>
-}
+  )
+}, areEqual)
 
 export default IssueList

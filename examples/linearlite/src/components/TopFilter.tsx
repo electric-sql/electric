@@ -95,7 +95,7 @@ export default function ({
       </div>
 
       {(!!filterState.status?.length || !!filterState.priority?.length) && (
-        <div className="flex justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
+        <div className="flex flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
           {!!filterState.priority?.length && (
             <div className="flex pr-4 space-x-[1px]">
               <span className="px-1 bg-gray-300 rounded-l">Priority is</span>
