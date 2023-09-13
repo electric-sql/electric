@@ -399,7 +399,7 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp op_to_change(%SatOpInsert{row_data: row_data, tags: tags}, columns) do
-    %NewRecord{record: decode_record(row_data, columns), tags: tags}
+    %NewRecord{record: decode_record!(row_data, columns), tags: tags}
   end
 
   defp op_to_change(
@@ -407,7 +407,7 @@ defmodule Electric.Satellite.Serialization do
          columns
        ) do
     %UpdatedRecord{
-      record: decode_record(row_data, columns, :allow_nulls),
+      record: decode_record!(row_data, columns, :allow_nulls),
       old_record: nil,
       tags: tags
     }
@@ -418,8 +418,8 @@ defmodule Electric.Satellite.Serialization do
          columns
        ) do
     %UpdatedRecord{
-      record: decode_record(row_data, columns),
-      old_record: decode_record(old_row_data, columns),
+      record: decode_record!(row_data, columns),
+      old_record: decode_record!(old_row_data, columns),
       tags: tags
     }
   end
@@ -430,22 +430,22 @@ defmodule Electric.Satellite.Serialization do
 
   defp op_to_change(%SatOpDelete{old_row_data: old_row_data, tags: tags}, columns) do
     %DeletedRecord{
-      old_record: decode_record(old_row_data, columns),
+      old_record: decode_record!(old_row_data, columns),
       tags: tags
     }
   end
 
-  @spec decode_record(%SatOpRow{}, [String.t()], :allow_nulls | nil) ::
+  @spec decode_record!(%SatOpRow{}, [String.t()], :allow_nulls | nil) ::
           %{String.t() => nil | String.t()} | nil
-  def decode_record(row, columns) do
-    decode_record(row, columns, nil)
+  def decode_record!(row, columns) do
+    decode_record!(row, columns, nil)
   end
 
-  defp decode_record(nil, _columns, _opt) do
+  defp decode_record!(nil, _columns, _opt) do
     raise "protocol violation, empty row"
   end
 
-  defp decode_record(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, opt) do
+  defp decode_record!(%SatOpRow{nulls_bitmask: bitmask, values: values}, columns, opt) do
     decode_values(values, bitmask, columns, opt)
     |> Map.new()
   end
@@ -455,7 +455,7 @@ defmodule Electric.Satellite.Serialization do
   defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns], opt)
        when is_binary(val) do
     [
-      {col.name, decode_column_value(val, col.type)}
+      {col.name, decode_column_value!(val, col.type)}
       | decode_values(values, bitmask, columns, opt)
     ]
   end
@@ -473,13 +473,13 @@ defmodule Electric.Satellite.Serialization do
   Given a column value received from a Satellite client, transcode it into the format that can be fed into Postgres'
   logical replication stream (aka "server-native format").
   """
-  @spec decode_column_value(binary, atom) :: binary
+  @spec decode_column_value!(binary, atom) :: binary
 
-  def decode_column_value(val, type) when type in [:bytea, :text, :varchar] do
+  def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
     val
   end
 
-  def decode_column_value(val, type) when type in [:int2, :int4, :int8] do
+  def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
     :ok =
       val
       |> String.to_integer()
@@ -488,12 +488,12 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
-  def decode_column_value(val, :float8) do
+  def decode_column_value!(val, :float8) do
     _ = String.to_float(val)
     val
   end
 
-  def decode_column_value(val, :timestamp) do
+  def decode_column_value!(val, :timestamp) do
     # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
     # because values of type `timestamp` must not have an offset.
     {:error, :missing_offset} = DateTime.from_iso8601(val)
@@ -504,7 +504,7 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
-  def decode_column_value(val, :timestamptz) do
+  def decode_column_value!(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
     true = String.ends_with?(val, "Z")
 
@@ -514,7 +514,7 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
-  def decode_column_value(val, :uuid) do
+  def decode_column_value!(val, :uuid) do
     {:ok, uuid} = Electric.Utils.validate_uuid(val)
     uuid
   end

@@ -61,7 +61,7 @@ defmodule Electric.Satellite.SerializationTest do
     end
   end
 
-  describe "decode_record" do
+  describe "decode_record!" do
     test "decodes a SatOpRow struct into a map" do
       row = %SatOpRow{
         nulls_bitmask: <<0b00100001>>,
@@ -97,7 +97,7 @@ defmodule Electric.Satellite.SerializationTest do
                "t" => "2023-08-15 17:20:31",
                "tz" => "2023-08-15 17:20:31Z",
                "x" => nil
-             } == Serialization.decode_record(row, columns)
+             } == Serialization.decode_record!(row, columns)
     end
 
     test "raises when the row contains an invalid value for its type" do
@@ -124,11 +124,11 @@ defmodule Electric.Satellite.SerializationTest do
         columns = [%{name: "val", type: type}]
 
         try do
-          Serialization.decode_record(row, columns)
+          Serialization.decode_record!(row, columns)
         rescue
           _ -> :ok
         else
-          val -> flunk("Expected decode_record() to raise but it returned #{inspect(val)}")
+          val -> flunk("Expected decode_record!() to raise but it returned #{inspect(val)}")
         end
       end)
     end
@@ -138,8 +138,27 @@ defmodule Electric.Satellite.SerializationTest do
       columns = [%{name: "val", type: :timestamp, nullable?: false}]
 
       assert_raise RuntimeError, "protocol violation, null value for a not null column", fn ->
-        Serialization.decode_record(row, columns)
+        Serialization.decode_record!(row, columns)
       end
+    end
+
+    # This is a regression test
+    test "decodes a SatOpRow struct with a long bitmask" do
+      bitmask = <<0b1101000010000000::16>>
+      row = %SatOpRow{nulls_bitmask: bitmask, values: Enum.map(0..8, fn _ -> "" end)}
+      columns = for i <- 0..8, do: %{name: "bit#{i}", type: :text}
+
+      assert %{
+               "bit0" => nil,
+               "bit1" => nil,
+               "bit2" => "",
+               "bit3" => nil,
+               "bit4" => "",
+               "bit5" => "",
+               "bit6" => "",
+               "bit7" => "",
+               "bit8" => nil
+             } == Serialization.decode_record!(row, columns)
     end
   end
 
