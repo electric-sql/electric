@@ -6,13 +6,21 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   require Logger
 
-  @callback capture_ddl_query(query :: binary()) :: binary()
-  @callback capture_version_query(version :: binary()) :: binary()
-  @callback migration_version() :: binary()
-
+  @type table_modification() :: %{
+          table: {String.t(), String.t()},
+          action: :add,
+          column: String.t(),
+          type: String.t()
+        }
   @type state() :: {Capture.t(), State.t()}
   @type msgs() :: [M.t()]
   @type response() :: {:ok, state(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
+  @type quote_mark() :: String.t()
+
+  @callback capture_ddl_query(query :: binary()) :: binary()
+  @callback capture_version_query(version :: binary()) :: binary()
+  @callback alter_shadow_table_query(table_modification()) :: binary()
+  @callback migration_version() :: binary()
 
   # FIXME: replace `nil` with some default capture mode module
   @default_mode nil
@@ -109,7 +117,16 @@ defmodule Electric.Postgres.Proxy.Injector do
   def inject_ddl_query(query, state) do
     query_generator = Map.fetch!(state, :query_generator)
 
-    Capture.Inject.new([%M.Query{query: query_generator.capture_ddl_query(query)}])
+    shadow_table_queries =
+      query
+      |> Parser.table_modifications()
+      |> Enum.map(&query_generator.alter_shadow_table_query(&1))
+
+    msgs =
+      [query_generator.capture_ddl_query(query) | shadow_table_queries]
+      |> Enum.map(&%M.Query{query: &1})
+
+    Capture.Inject.new(msgs)
   end
 
   def capture_ddl_query(query, quote \\ nil) do
@@ -133,9 +150,15 @@ defmodule Electric.Postgres.Proxy.Injector do
     ~s|CALL electric.migration_version(#{quote_query(version, quote)})|
   end
 
-  def alter_shadow_table_query(schema, table, column_name, column_type, quote \\ nil) do
+  def alter_shadow_table_query(alteration) do
+    alter_shadow_table_query(alteration, nil)
+  end
+
+  def alter_shadow_table_query(alteration, quote) do
+    %{table: {schema, table}, action: action, column: column, type: type} = alteration
+
     args =
-      [schema, table, column_name, column_type]
+      [schema, table, action, column, type]
       |> Enum.map(&quote_query(&1, quote))
       |> Enum.join(", ")
 

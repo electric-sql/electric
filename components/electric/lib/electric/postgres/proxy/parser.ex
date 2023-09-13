@@ -347,4 +347,29 @@ defmodule Electric.Postgres.Proxy.Parser do
     [type, _rest] = :binary.split(other, @split_ws)
     String.downcase(type)
   end
+
+  def table_modifications(sql) when is_binary(sql) do
+    sql
+    |> Electric.Postgres.parse!()
+    |> Enum.flat_map(&analyse_modifications_query/1)
+  end
+
+  defp analyse_modifications_query(%PgQuery.AlterTableStmt{} = stmt) do
+    {:ok, {_schema, _name} = table} = table_name(stmt)
+
+    Enum.map(stmt.cmds, fn %{node: {:alter_table_cmd, cmd}} ->
+      Map.new([{:action, modification_action(cmd)}, {:table, table} | column_definition(cmd.def)])
+    end)
+  end
+
+  # we're currently only interested in alter table statements
+  defp analyse_modifications_query(_stmt) do
+    []
+  end
+
+  defp modification_action(%{subtype: :AT_AddColumn}), do: :add
+
+  defp column_definition(%{node: {:column_def, def}}) do
+    [column: def.colname, type: Electric.Postgres.Dialect.Postgresql.map_type(def.type_name)]
+  end
 end

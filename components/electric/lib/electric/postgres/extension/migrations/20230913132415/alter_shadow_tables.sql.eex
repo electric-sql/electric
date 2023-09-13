@@ -1,0 +1,119 @@
+-- vim: ft=sql
+
+CREATE OR REPLACE FUNCTION <%= schema %>.__resolve_table_from_names(
+    name1 text,
+    name2 text,
+    OUT schema_name name,
+    OUT table_name name,
+    OUT table_oid regclass
+) SECURITY DEFINER AS $function$
+DECLARE
+    _ident text[];
+BEGIN
+    IF name1 IS NULL AND name2 IS NULL THEN
+        RAISE EXCEPTION 'no valid table name given';
+    ELSIF name2 IS NULL THEN
+        -- handle table passed as 'schema.table'
+        IF strpos(name1, '.') > 0 THEN
+            _ident := parse_ident(name1);
+            IF array_length(_ident, 1) = 1 THEN
+                table_name := _ident[1];
+                table_oid := (SELECT quote_ident(table_name)::regclass);
+                schema_name := <%= schema %>.__table_schema(table_oid);
+            ELSIF array_length(_ident, 1) = 2 THEN
+                schema_name := _ident[1];
+                table_name := _ident[2];
+                table_oid := (SELECT format('%I.%I', schema_name, table_name)::regclass);
+            ELSE
+                RAISE EXCEPTION 'invalid table name given %', name1;
+            END IF;
+        ELSE
+            table_name := name1;
+            table_oid := (SELECT quote_ident(table_name)::regclass);
+            schema_name := <%= schema %>.__table_schema(table_oid);
+        END IF;
+    ELSIF name1 IS NOT NULL AND name2 IS NOT NULL THEN
+        table_name := name2;
+        schema_name := name1;
+        table_oid := (SELECT format('%I.%I', schema_name, table_name)::regclass);
+    ELSE
+        RAISE EXCEPTION 'no valid table name given';
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL STABLE;
+
+
+
+CREATE OR REPLACE FUNCTION <%= schema %>.__primary_key_list(target_oid oid)
+    RETURNS text[]
+    SECURITY DEFINER
+    LANGUAGE SQL AS
+$function$
+    SELECT array_agg(attname ORDER BY array_position(indkey, attnum)) AS primary_key_list
+        FROM pg_index
+        JOIN pg_attribute
+            ON attrelid = indrelid
+            AND attnum = ANY(indkey)
+            AND indisprimary
+        WHERE indrelid = target_oid;
+$function$;
+
+
+
+CREATE OR REPLACE PROCEDURE <%= schema %>.alter_shadow_table(
+    schema_name name,
+    table_name name,
+    action text,
+    col_name name,
+    col_type text
+)
+SECURITY DEFINER
+LANGUAGE PLPGSQL
+AS $function$
+DECLARE
+    reordered_column_definition text := '';
+    shadow_column_definition text := '';
+    tombstone_column_definition text := '';
+    shadow_table_name name;
+    tombstone_table_name name;
+    table_oid oid;
+    primary_key_list text[];
+    non_pk_column_list text[] := array[]::text[];
+BEGIN
+    RAISE DEBUG 'alter_shadow_table %.% % % %', schema_name, table_name, action, col_name, col_type;
+    shadow_table_name := 'shadow__' || schema_name || '__' || table_name;
+    tombstone_table_name := 'tombstone__' || schema_name || '__' || table_name;
+
+    reordered_column_definition := format(E'    ADD COLUMN %I %s,\n', '__reordered_' || col_name, col_type);
+    shadow_column_definition := format(E'    ADD COLUMN %I <%= schema %>.tag', '_tag_' || col_name);
+    tombstone_column_definition := format(E'    ADD COLUMN %I %s\n', col_name, col_type);
+
+    EXECUTE format(
+        E'ALTER TABLE <%= schema %>.%I\n%s;',
+        shadow_table_name,
+        reordered_column_definition || shadow_column_definition
+    );
+    EXECUTE format(
+        E'ALTER TABLE <%= schema %>.%I\n%s;',
+        tombstone_table_name,
+        tombstone_column_definition
+    );
+
+    SELECT r.table_oid INTO table_oid FROM <%= schema %>.__resolve_table_from_names(schema_name, table_name) r;
+    SELECT <%= schema %>.__primary_key_list(table_oid) INTO primary_key_list;
+
+    SELECT array_agg(c.col_name) INTO non_pk_column_list
+        FROM electric.lookup_columns(table_oid) c WHERE NOT col_primary;
+
+    /*
+    We regenerate column-dependent functions, but not the triggers themselves
+    since one of the triggers is `CREATE CONSTRAINT TRIGGER` which cannot be
+    `CREATE OR REPLACE`-ed. This is a little less flexible (if trigger logic
+    gets altered, `install_functions_and_triggers` will need to be reran
+    explicitly) but safer since `DROP` + `CREATE` can have some unexpected
+    effects.
+    */
+    PERFORM <%= schema %>.install_conflict_resolution_functions(schema_name, table_name, primary_key_list, non_pk_column_list);
+END;
+$function$;
+

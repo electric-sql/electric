@@ -6,7 +6,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Inject do
   absorb the responses.
   """
 
-  defstruct [:inject, buffer: []]
+  defstruct [:inject, mode: :waiting, buffer: []]
 
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
@@ -15,6 +15,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Inject do
   require Logger
 
   @type t() :: %__MODULE__{
+          mode: :waiting | :injecting,
           inject: [M.t()],
           buffer: [M.t()]
         }
@@ -39,16 +40,33 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Inject do
       {inject, state, Send.front(send, msg)}
     end
 
-    def recv_backend(i, %M.ReadyForQuery{} = msg, state, send) do
-      Injector.debug("Injecting SQL queries: #{inspect(i.inject)}")
-
-      {%Sink{
-         buffer: [msg | i.buffer]
-       }, state, Send.back(send, i.inject)}
+    def recv_backend(%{mode: :waiting} = i, %M.ReadyForQuery{} = msg, state, send) do
+      inject(%{i | buffer: [msg | i.buffer], mode: :injecting}, state, send)
     end
 
-    def recv_backend(i, msg, state, send) do
+    def recv_backend(%{mode: :injecting} = i, %M.ReadyForQuery{}, state, send) do
+      inject(i, state, send)
+    end
+
+    def recv_backend(%{mode: :waiting} = i, msg, state, send) do
       {%{i | buffer: [msg | i.buffer]}, state, send}
+    end
+
+    def recv_backend(%{mode: :injecting} = i, _msg, state, send) do
+      {i, state, send}
+    end
+
+    defp inject(%{inject: [msg]} = i, state, send) do
+      Logger.debug("Injecting final message: #{inspect(msg)}")
+
+      {%Sink{
+         buffer: i.buffer
+       }, state, Send.back(send, msg)}
+    end
+
+    defp inject(%{inject: [msg | rest]} = i, state, send) do
+      Injector.debug("Injecting SQL query: #{inspect(msg)}")
+      {%{i | inject: rest}, state, Send.back(send, msg)}
     end
   end
 end

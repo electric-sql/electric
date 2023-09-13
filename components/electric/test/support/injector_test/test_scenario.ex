@@ -17,8 +17,8 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.capture_version_query(version, "$query$")
     end
 
-    def alter_shadow_table_query(schema, table, column_name, column_type) do
-      Injector.alter_shadow_table_query(schema, table, column_name, column_type, "$query$")
+    def alter_shadow_table_query(alteration) do
+      Injector.alter_shadow_table_query(alteration, "$query$")
     end
 
     def migration_version do
@@ -457,8 +457,16 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     end)
   end
 
-  def alter_shadow_table_query(%{table: {schema, table}, column: column, type: type}) do
-    query(MockInjector.alter_shadow_table_query(schema, table, column, type))
+  def alter_shadow_table_query(
+        %{
+          table: {_schema, _table},
+          action: _action,
+          column: _column,
+          type: _type
+        } = alteration
+      ) do
+    # TODO: support 
+    query(MockInjector.alter_shadow_table_query(alteration))
   end
 
   def capture_migration_queries(injector, initial_messages, queries, version) do

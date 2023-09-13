@@ -53,6 +53,7 @@ BEGIN
             ELSIF array_length(_ident, 1) = 2 THEN
                 schema_name := _ident[1];
                 table_name := _ident[2];
+                table_oid := (SELECT format('%I.%I', schema_name, table_name)::regclass);
             ELSE
                 RAISE EXCEPTION 'invalid table name given %', name1;
             END IF;
@@ -64,6 +65,7 @@ BEGIN
     ELSIF name1 IS NOT NULL AND name2 IS NOT NULL THEN
         table_name := name2;
         schema_name := name1;
+        table_oid := (SELECT format('%I.%I', schema_name, table_name)::regclass);
     ELSE
         RAISE EXCEPTION 'no valid table name given';
     END IF;
