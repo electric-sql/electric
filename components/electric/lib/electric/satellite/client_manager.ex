@@ -90,8 +90,7 @@ defmodule Electric.Satellite.ClientManager do
       nil ->
         {:ok, sup_pid} =
           Connectors.start_connector(
-            SatelliteConnector,
-            %{name: client_name, producer: reg_name}
+            {SatelliteConnector, %{name: client_name, producer: reg_name}}
           )
 
         client_ref = Process.monitor(client_pid)
@@ -165,11 +164,11 @@ defmodule Electric.Satellite.ClientManager do
     {{client_pid, ^sup_pid}, reverse} = Map.pop(state.reverse, client_name)
 
     case Connectors.start_connector(
-           SatelliteConnector,
-           %{
-             name: client_name,
-             producer: Electric.Satellite.WebsocketServer.reg_name(client_name)
-           }
+           {SatelliteConnector,
+            %{
+              name: client_name,
+              producer: Electric.Satellite.WebsocketServer.reg_name(client_name)
+            }}
          ) do
       {:ok, sup_pid1} ->
         resource_ref = Process.monitor(sup_pid)

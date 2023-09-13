@@ -1,10 +1,9 @@
 defmodule Electric.Application do
   @moduledoc false
 
-  alias Electric.Replication.Connectors
-  alias Electric.Replication.PostgresConnector
-
   use Application
+
+  alias Electric.Replication.PostgresConnector
 
   def start(_type, _args) do
     children = [
@@ -12,7 +11,7 @@ defmodule Electric.Application do
       Electric.Postgres.OidDatabase,
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
-      Electric.Replication.Connectors,
+      {Electric.Replication.Connectors, pg_connectors()},
       {ThousandIsland,
        port: pg_server_port(), handler_module: Electric.Replication.Postgres.TcpServer}
     ]
@@ -28,30 +27,15 @@ defmodule Electric.Application do
           []
         end
 
-    opts = [strategy: :one_for_one, name: Electric.Supervisor]
-    {:ok, supervisor} = Supervisor.start_link(children, opts)
-
-    Application.get_env(:electric, Electric.Replication.Connectors, [])
-    |> Enum.each(fn {name, config} ->
-      Connectors.start_connector(
-        PostgresConnector,
-        Keyword.put(config, :origin, to_string(name))
-      )
-    end)
-
-    {:ok, supervisor}
-  end
-
-  def pg_connection_opts() do
-    # NOTE(alco): Intentionally making the assumption here that there's only a single connector configured.
-    # With Vaxine and multi-master PG replication going away, this is going to become the new reality soon.
-
-    case Application.get_env(:electric, Electric.Replication.Connectors, []) do
-      [{name, config}] -> Keyword.put(config, :origin, to_string(name))
-      [] -> raise "Electric isn't meant to be ran without a connection to PostgreSQL"
-    end
+    Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
   end
 
   defp http_port, do: Application.fetch_env!(:electric, :http_port)
   defp pg_server_port, do: Application.fetch_env!(:electric, :pg_server_port)
+
+  defp pg_connectors do
+    for {name, config} <- Application.get_env(:electric, Electric.Replication.Connectors, []) do
+      {PostgresConnector, Keyword.put(config, :origin, to_string(name))}
+    end
+  end
 end

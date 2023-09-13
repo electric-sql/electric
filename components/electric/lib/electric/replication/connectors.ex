@@ -37,18 +37,20 @@ defmodule Electric.Replication.Connectors do
 
   alias Electric.Postgres.Extension
 
-  def start_link(extra_args) do
-    DynamicSupervisor.start_link(__MODULE__, extra_args, name: __MODULE__)
+  def start_link(initial_connectors) do
+    {:ok, pid} = DynamicSupervisor.start_link(__MODULE__, nil, name: __MODULE__)
+    Enum.each(initial_connectors, fn spec -> {:ok, _pid} = start_connector(spec) end)
+    {:ok, pid}
   end
 
   @impl DynamicSupervisor
-  def init(_extra_args) do
+  def init(nil) do
     DynamicSupervisor.init(strategy: :one_for_one, max_restarts: 0)
   end
 
-  @spec start_connector(module(), term()) :: Supervisor.on_start()
-  def start_connector(module, args) do
-    DynamicSupervisor.start_child(__MODULE__, {module, args})
+  @spec start_connector(module() | {module, term()}) :: Supervisor.on_start()
+  def start_connector(child_spec) do
+    DynamicSupervisor.start_child(__MODULE__, child_spec)
   end
 
   @spec stop_connector(pid()) :: :ok | {:error, term()}
