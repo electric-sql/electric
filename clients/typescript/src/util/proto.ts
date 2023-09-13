@@ -363,11 +363,11 @@ export function msgToString(message: SatPbMsg): string {
               Pb.SatSubsResp_SatSubsError_ShapeReqError_Code[x.code]
             } (${x.message})`
         )
-        return `#SatSubsReq{id: ${message.subscriptionId}, err: ${
+        return `#SatSubsResp{id: ${message.subscriptionId}, err: ${
           Pb.SatSubsResp_SatSubsError_Code[message.err.code]
         } (${message.err.message}), shapes: [${shapeErrors}]}`
       } else {
-        return `#SatSubsReq{id: ${message.subscriptionId}}`
+        return `#SatSubsResp{id: ${message.subscriptionId}}`
       }
     }
     case 'Electric.Satellite.SatUnsubsReq':
