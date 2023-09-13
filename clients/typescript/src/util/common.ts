@@ -40,8 +40,8 @@ export const base64 = {
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
 
-const trueByte = 116 // the character 't'
-const falseByte = 102 // the character 'f'
+const trueByte = 't'.charCodeAt(0)
+const falseByte = 'f'.charCodeAt(0)
 
 export function boolToBytes(b: number) {
   if (b !== 0 && b !== 1) {
