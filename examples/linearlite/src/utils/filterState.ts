@@ -73,6 +73,7 @@ interface FilterStateWhere {
   status?: { in: string[] }
   priority?: { in: string[] }
   title?: { contains: string }
+  OR?: [{ title: { contains: string } }, { description: { contains: string } }]
 }
 
 export function filterStateToWhere(filterState: FilterState) {
@@ -85,7 +86,11 @@ export function filterStateToWhere(filterState: FilterState) {
     where.priority = { in: priority }
   }
   if (query) {
-    where.title = { contains: query }
+    // where.title = { contains: query }
+    where.OR = [
+      { title: { contains: query } },
+      { description: { contains: query } },
+    ]
   }
   return where
 }
