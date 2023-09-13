@@ -8,9 +8,12 @@ import { Database as WASQLiteDatabase } from './wa-sqlite/database'
 
 import { Database as ReactNativeSQLiteStorageDatabase } from './react-native-sqlite-storage/database'
 
+import { Database as PostgresDatabase } from './postgres/database'
+
 export type AnyDatabase =
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
   | ExpoSQLiteDatabase
   | ReactNativeSQLiteStorageDatabase
   | WASQLiteDatabase
+  | PostgresDatabase

@@ -12,6 +12,46 @@ import { data as baseMigration } from './schema'
 import Log from 'loglevel'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
+const tableExistsSqlite = `
+SELECT 1 FROM sqlite_master
+  WHERE type = 'table'
+    AND name = ?
+`
+const tableExistsPg = `
+SELECT 1 FROM information_schema.tables
+  WHERE table_name = $1
+`
+
+const existingRecordsSqlite = `
+SELECT version FROM XXX
+  ORDER BY id ASC
+`
+const existingRecordsPg = `
+SELECT version FROM XXX
+  ORDER BY id ASC
+`
+
+const schemaVersionSqlite = `
+SELECT version FROM XXX
+  WHERE version != '0'
+  ORDER BY version DESC
+  LIMIT 1
+`
+const schemaVersionPostgres = `
+SELECT version FROM XXX
+  WHERE version != '0'
+  ORDER BY version DESC
+  LIMIT 1
+`
+
+const appliedSqlite = `INSERT INTO XXX
+('version', 'applied_at') VALUES (?, ?)
+`
+const appliedPostgres = `INSERT INTO XXX
+('version', 'applied_at') VALUES ($1, $2)
+`
+
+
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
 const DEFAULTS: MigratorOptions = {
@@ -41,8 +81,8 @@ export class BundleMigrator implements Migrator {
     this.tableName = opts.tableName
   }
 
-  async up(): Promise<number> {
-    const existing = await this.queryApplied()
+  async up(pg: boolean = false): Promise<number> {
+    const existing = await this.queryApplied(pg)
     const unapplied = await this.validateApplied(this.migrations, existing)
 
     let migration: StmtMigration
@@ -55,14 +95,10 @@ export class BundleMigrator implements Migrator {
     return unapplied.length
   }
 
-  async migrationsTableExists(): Promise<boolean> {
+  async migrationsTableExists(pg: boolean = false): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = `
-      SELECT 1 FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-    `
+    let tableExists = pg ? tableExistsPg : tableExistsSqlite
     const tables = await this.adapter.query({
       sql: tableExists,
       args: [this.tableName],
@@ -71,33 +107,26 @@ export class BundleMigrator implements Migrator {
     return tables.length > 0
   }
 
-  async queryApplied(): Promise<MigrationRecord[]> {
-    if (!(await this.migrationsTableExists())) {
+  async queryApplied(pg: boolean = false): Promise<MigrationRecord[]> {
+    if (!(await this.migrationsTableExists(pg))) {
       return []
     }
 
-    const existingRecords = `
-      SELECT version FROM ${this.tableName}
-        ORDER BY id ASC
-    `
+    const existingRecords = pg ? existingRecordsPg.replace("XXX", this.tableName) : existingRecordsSqlite.replace("XXX", this.tableName)
+
     const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
   }
 
   // Returns the version of the most recently applied migration
-  async querySchemaVersion(): Promise<string | undefined> {
-    if (!(await this.migrationsTableExists())) {
+  async querySchemaVersion(pg: boolean = false): Promise<string | undefined> {
+    if (!(await this.migrationsTableExists(pg))) {
       return
     }
 
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
-    const schemaVersion = `
-      SELECT version FROM ${this.tableName}
-        WHERE version != '0'
-        ORDER BY version DESC
-        LIMIT 1
-    `
+    const schemaVersion = pg ? schemaVersionPostgres.replace("XXX", this.tableName) : schemaVersionSqlite.replace("XXX", this.tableName)
     const rows = await this.adapter.query({ sql: schemaVersion })
     if (rows.length === 0) {
       return
@@ -106,9 +135,10 @@ export class BundleMigrator implements Migrator {
     return (rows[0] as MigrationRecord).version
   }
 
+  // TODO: does this need to be converted to PG?
   async validateApplied(
     migrations: StmtMigration[],
-    existing: MigrationRecord[]
+    existing: MigrationRecord[],
   ) {
     // We validate that the existing records are the first migrations.
     existing.forEach(({ version }, i) => {
@@ -126,16 +156,14 @@ export class BundleMigrator implements Migrator {
     return migrations.slice(existing.length)
   }
 
-  async apply({ statements, version }: StmtMigration): Promise<void> {
+  async apply({ statements, version }: StmtMigration, pg: boolean = false): Promise<void> {
     if (!VALID_VERSION_EXP.test(version)) {
       throw new Error(
         `Invalid migration version, must match ${VALID_VERSION_EXP}`
       )
     }
 
-    const applied = `INSERT INTO ${this.tableName}
-        ('version', 'applied_at') VALUES (?, ?)
-        `
+    const applied = pg ? appliedPostgres.replace("XXX", this.tableName) : appliedSqlite.replace("XXX", this.tableName)
 
     await this.adapter.runInTransaction(...statements, {
       sql: applied,
