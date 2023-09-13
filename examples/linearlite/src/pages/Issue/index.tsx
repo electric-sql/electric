@@ -54,6 +54,7 @@ function IssuePage() {
     db.issue.update({
       data: {
         status: status,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,
@@ -65,6 +66,7 @@ function IssuePage() {
     db.issue.update({
       data: {
         priority: priority,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,
@@ -76,6 +78,7 @@ function IssuePage() {
     await db.issue.update({
       data: {
         title: title,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,
@@ -97,6 +100,7 @@ function IssuePage() {
       await db.issue.update({
         data: {
           description: description,
+          modified: new Date().toISOString(),
         },
         where: {
           id: issue.id,
@@ -229,7 +233,7 @@ function IssuePage() {
             />
 
             <Editor
-              className="w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
+              className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
               value={
                 descriptionIsDirty.current
                   ? dirtyDescription || ''

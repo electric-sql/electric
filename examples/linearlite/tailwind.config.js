@@ -84,5 +84,5 @@ export default {
       borderColor: ['checked'],
     },
   },
-  plugins: [require('@tailwindcss/forms')],
+  plugins: [require('@tailwindcss/forms'), require('@tailwindcss/typography')],
 }

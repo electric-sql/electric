@@ -330,6 +330,18 @@ importers:
       '@tiptap/extension-placeholder':
         specifier: ^2.1.8
         version: 2.1.8(@tiptap/core@2.1.8)(@tiptap/pm@2.1.8)
+      '@tiptap/extension-table':
+        specifier: ^2.1.8
+        version: 2.1.8(@tiptap/core@2.1.8)(@tiptap/pm@2.1.8)
+      '@tiptap/extension-table-cell':
+        specifier: ^2.1.8
+        version: 2.1.8(@tiptap/core@2.1.8)
+      '@tiptap/extension-table-header':
+        specifier: ^2.1.8
+        version: 2.1.8(@tiptap/core@2.1.8)
+      '@tiptap/extension-table-row':
+        specifier: ^2.1.8
+        version: 2.1.8(@tiptap/core@2.1.8)
       '@tiptap/pm':
         specifier: ^2.1.8
         version: 2.1.8
@@ -406,6 +418,9 @@ importers:
       '@electric-sql/prisma-generator':
         specifier: 1.0.2
         version: link:../../generator
+      '@tailwindcss/typography':
+        specifier: ^0.5.10
+        version: 0.5.10(tailwindcss@3.3.3)
       '@types/jest':
         specifier: ^29.5.4
         version: 29.5.4
@@ -5015,6 +5030,18 @@ packages:
       tailwindcss: 3.3.3
     dev: false
 
+  /@tailwindcss/typography@0.5.10(tailwindcss@3.3.3):
+    resolution: {integrity: sha512-Pe8BuPJQJd3FfRnm6H0ulKIGoMEQS+Vq01R6M5aCrFB/ccR/shT+0kXLjouGC1gFLm9hopTFN+DMP0pfwRWzPw==}
+    peerDependencies:
+      tailwindcss: '>=3.0.0 || insiders'
+    dependencies:
+      lodash.castarray: 4.4.0
+      lodash.isplainobject: 4.0.6
+      lodash.merge: 4.6.2
+      postcss-selector-parser: 6.0.10
+      tailwindcss: 3.3.3
+    dev: true
+
   /@testing-library/dom@8.20.0:
     resolution: {integrity: sha512-d9ULIT+a4EXLX3UU8FBjauG9NnsZHkHztXoIcTsOKoOw030fyjheN9svkTULjJxtYag9DZz5Jz5qkWZDPxTFwA==}
     engines: {node: '>=12'}
@@ -5227,6 +5254,40 @@ packages:
       '@tiptap/core': ^2.0.0
     dependencies:
       '@tiptap/core': 2.1.8(@tiptap/pm@2.1.8)
+    dev: false
+
+  /@tiptap/extension-table-cell@2.1.8(@tiptap/core@2.1.8):
+    resolution: {integrity: sha512-cUI3vMfRZ6Utmjsu+aAF8BsH3r3YzWaLJWW5SuH8784K6ImclCwGTyi/HJqsRDHM7ujvtjjc+vmFtSD/eqF15Q==}
+    peerDependencies:
+      '@tiptap/core': ^2.0.0
+    dependencies:
+      '@tiptap/core': 2.1.8(@tiptap/pm@2.1.8)
+    dev: false
+
+  /@tiptap/extension-table-header@2.1.8(@tiptap/core@2.1.8):
+    resolution: {integrity: sha512-oUYaQaAowbVLYyeYmAwqoe0ZHZS1XP6qV4EyOig/mOElASwBB6xAfydMncRKTxsT9Zq6z/CC6qnH0xlld/KAfQ==}
+    peerDependencies:
+      '@tiptap/core': ^2.0.0
+    dependencies:
+      '@tiptap/core': 2.1.8(@tiptap/pm@2.1.8)
+    dev: false
+
+  /@tiptap/extension-table-row@2.1.8(@tiptap/core@2.1.8):
+    resolution: {integrity: sha512-rjMCZjaemC3x4T3fUExi8J8ffo1I29u9e8rSHRIna2ObTRq4PeI48uVTET5EREBD5/CbfX6zHFgkZfUZeR0g+A==}
+    peerDependencies:
+      '@tiptap/core': ^2.0.0
+    dependencies:
+      '@tiptap/core': 2.1.8(@tiptap/pm@2.1.8)
+    dev: false
+
+  /@tiptap/extension-table@2.1.8(@tiptap/core@2.1.8)(@tiptap/pm@2.1.8):
+    resolution: {integrity: sha512-n+89XGTYmZgKFrvZrqgCG2SbRbIi8xX61KLptLD2DF/w4y0bR4Cr2pJBep/MMEZh3N2CIDQ3mS7eIfASJHk5hQ==}
+    peerDependencies:
+      '@tiptap/core': ^2.0.0
+      '@tiptap/pm': ^2.0.0
+    dependencies:
+      '@tiptap/core': 2.1.8(@tiptap/pm@2.1.8)
+      '@tiptap/pm': 2.1.8
     dev: false
 
   /@tiptap/extension-text@2.1.8(@tiptap/core@2.1.8):
@@ -11920,6 +11981,10 @@ packages:
     resolution: {integrity: sha512-kZzYOKspf8XVX5AvmQF94gQW0lejFVgb80G85bU4ZWzoJ6C03PQg3coYAUpSTpQWelrZELd3XWgHzw4Ck5kaIw==}
     dev: true
 
+  /lodash.castarray@4.4.0:
+    resolution: {integrity: sha512-aVx8ztPv7/2ULbArGJ2Y42bG1mEQ5mGjpdvrbJcJFU3TbYybe+QlLS4pst9zV52ymy2in1KpFPiZnAOATxD4+Q==}
+    dev: true
+
   /lodash.debounce@4.0.8:
     resolution: {integrity: sha512-FT1yDzDYEoYWhnSGnpE/4Kj1fLZkDFyqRb7fNt6FdYOSxlUWAtp42Eh6Wb0rGIv/m9Bgo7x4GhQbm5Ys4SG5ow==}
 
@@ -14223,6 +14288,14 @@ packages:
     dependencies:
       postcss: 8.4.29
       postcss-selector-parser: 6.0.13
+
+  /postcss-selector-parser@6.0.10:
+    resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
+    engines: {node: '>=4'}
+    dependencies:
+      cssesc: 3.0.0
+      util-deprecate: 1.0.2
+    dev: true
 
   /postcss-selector-parser@6.0.13:
     resolution: {integrity: sha512-EaV1Gl4mUEV4ddhDnv/xtj7sxwrwxdetHdWUGnT4VJQf+4d05v6lHYZr8N573k5Z0BViss7BDhfWtKS3+sfAqQ==}

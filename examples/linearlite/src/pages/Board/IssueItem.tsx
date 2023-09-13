@@ -29,6 +29,7 @@ const IssueItem = ({ issue, index }: IssueProps) => {
     db.issue.update({
       data: {
         priority: priority,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,

@@ -33,6 +33,10 @@
     "@svgr/plugin-svgo": "^8.1.0",
     "@tailwindcss/forms": "^0.5.6",
     "@tiptap/extension-placeholder": "^2.1.8",
+    "@tiptap/extension-table": "^2.1.8",
+    "@tiptap/extension-table-cell": "^2.1.8",
+    "@tiptap/extension-table-header": "^2.1.8",
+    "@tiptap/extension-table-row": "^2.1.8",
     "@tiptap/pm": "^2.1.8",
     "@tiptap/react": "^2.1.8",
     "@tiptap/starter-kit": "^2.1.8",
@@ -60,6 +64,7 @@
   "devDependencies": {
     "@databases/pg": "^5.4.1",
     "@electric-sql/prisma-generator": "1.0.2",
+    "@tailwindcss/typography": "^0.5.10",
     "@types/jest": "^29.5.4",
     "@types/lodash.debounce": "^4.0.7",
     "@types/node": "^20.5.9",

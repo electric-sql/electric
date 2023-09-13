@@ -132,7 +132,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         {/* Issue description editor */}
         <div className="w-full px-4">
           <Editor
-            className="w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
+            className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
             value={description || ''}
             onChange={(val) => setDescription(val)}
             placeholder="Add description..."

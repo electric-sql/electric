@@ -13,17 +13,21 @@ interface Props {
   issues: Issue[]
   hideSort?: boolean
   showSearch?: boolean
+  title?: string
 }
 
-export default function ({ issues, hideSort, showSearch }: Props) {
+export default function ({
+  issues,
+  hideSort,
+  showSearch,
+  title = 'All issues',
+}: Props) {
   const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const [searchQuery, setSearchQuery] = useState('')
 
   const totalIssues = issues.length
-
-  let title = 'All issues'
 
   const handleSearchInner = debounce((query: string) => {
     setFilterState({
@@ -138,11 +142,11 @@ export default function ({ issues, hideSort, showSearch }: Props) {
       )}
 
       {showSearch && (
-        <div className="flex items-center justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2 relative">
+        <div className="flex items-center justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
           <SearchIcon className="w-3.5 h-3.5 ms-3 absolute" />
           <input
             type="search"
-            className="w-full bg-gray-100 border border-0 rounded px-2 py-1.5 ps-9"
+            className="w-full bg-gray-100 border-0 rounded px-2 py-1.5 ps-9"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
           />

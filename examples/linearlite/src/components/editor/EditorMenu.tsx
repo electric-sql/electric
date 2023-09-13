@@ -1,4 +1,4 @@
-import type { Editor as TipTapEditor } from '@tiptap/core'
+import type { Editor as TipTapEditor } from '@tiptap/react'
 import classNames from 'classnames'
 
 import { BsTypeBold as BoldIcon } from 'react-icons/bs'

@@ -73,7 +73,7 @@ function Comments({ issue }: CommentsProps) {
     <>
       {commentList()}
       <Editor
-        className="w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md shadow-sm rounded border border-gray-200 editor"
+        className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md shadow-sm rounded border border-gray-200 editor"
         value={newCommentBody}
         onChange={(val) => setNewCommentBody(val)}
         placeholder="Add a comment..."

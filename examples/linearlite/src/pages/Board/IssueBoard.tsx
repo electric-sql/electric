@@ -161,6 +161,7 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
         [draggableId]: {
           status: destination.droppableId,
           kanbanorder: kanbanorder,
+          modified: new Date().toISOString(),
         },
       }))
       // Update the issue in the database
@@ -168,6 +169,7 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
         data: {
           status: destination.droppableId,
           kanbanorder: kanbanorder,
+          modified: new Date().toISOString(),
         },
         where: {
           id: draggableId,

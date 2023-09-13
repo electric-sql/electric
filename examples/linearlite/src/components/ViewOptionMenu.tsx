@@ -71,7 +71,8 @@ export default function ({ isOpen, onDismiss }: Props) {
               >
                 <option value="priority">Priority</option>
                 <option value="status">Status</option>
-                <option value="created">Last created</option>
+                <option value="created">Created</option>
+                <option value="modified">Updated</option>
               </Select>
             </div>
             <div className="flex ml-1">

@@ -21,6 +21,7 @@ function IssueList({ issues }: IssueListProps) {
     db.issue.update({
       data: {
         status: status,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,
@@ -32,6 +33,7 @@ function IssueList({ issues }: IssueListProps) {
     db.issue.update({
       data: {
         priority: priority,
+        modified: new Date().toISOString(),
       },
       where: {
         id: issue.id,
