@@ -497,14 +497,20 @@ defmodule Electric.Satellite.Serialization do
     # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
     # because values of type `timestamp` must not have an offset.
     {:error, :missing_offset} = DateTime.from_iso8601(val)
-    _ = NaiveDateTime.from_iso8601!(val)
+
+    dt = NaiveDateTime.from_iso8601!(val)
+    :ok = assert_year_in_range(dt.year)
+
     val
   end
 
   def decode_column_value(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
     true = String.ends_with?(val, "Z")
-    {:ok, _, 0} = DateTime.from_iso8601(val)
+
+    {:ok, dt, 0} = DateTime.from_iso8601(val)
+    :ok = assert_year_in_range(dt.year)
+
     val
   end
 
@@ -520,4 +526,18 @@ defmodule Electric.Satellite.Serialization do
   defp assert_integer_in_range!(int, :int2) when int in @int2_range, do: :ok
   defp assert_integer_in_range!(int, :int4) when int in @int4_range, do: :ok
   defp assert_integer_in_range!(int, :int8) when int in @int8_range, do: :ok
+
+  # Postgres[1] uses BC/AD suffixes to indicate whether the date is in the Common Era or precedes it. Postgres assumes year
+  # 0 did not exist, so in its worldview '0001-12-31 BC' is immediately followed by '0001-01-01'.
+  #
+  # In SQLite[2], the builtin functions for working with dates and times only work for dates between '0001-01-01 00:00:00'
+  # and '9999-12-31 23:59:59'.
+  #
+  # To be conservative in our validations and not let invalid values slip through by accident, we're limiting the range
+  # of supported dates to start on '0001-01-01` and end on '9999-12-31'. This applies to :date, :timestamp, and
+  # :timestamptz types.
+  #
+  #   [1]: https://www.postgresql.org/docs/current/datatype-datetime.html
+  #   [2]: https://www.sqlite.org/lang_datefunc.html
+  defp assert_year_in_range(year) when year in 1..9999, do: :ok
 end
