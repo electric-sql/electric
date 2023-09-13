@@ -119,12 +119,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def internal_schema(_origin) do
-    raise "Not implemented"
+  def internal_schema(origin) do
+    call(origin, :internal_schema)
   end
 
-  def logical_publication_tables(origin) do
-    call(origin, :logical_publication_tables)
+  def electrified_tables(origin) do
+    call(origin, :electrified_tables)
   end
 
   def relation(origin, oid) when is_integer(oid) do
@@ -260,10 +260,14 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
-  def handle_call(:logical_publication_tables, _from, state) do
+  def handle_call(:internal_schema, _from, state) do
+    {:reply, state.internal_schema, state}
+  end
+
+  def handle_call(:electrified_tables, _from, state) do
     {result, state} =
       with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {{:ok, Schema.table_info(schema) ++ Schema.table_info(state.internal_schema)}, state}
+        {{:ok, Schema.table_info(schema)}, state}
       else
         error -> {error, state}
       end
@@ -305,19 +309,19 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   # Prevent deadlocks:
-  # the list of tables added to Electric's publication is cached and this refresh_subscription call
+  # the list of electrified tables is cached and this refresh_subscription call
   # is done via an async Task because otherwise we get into a deadlock in the
   # refresh-tables process:
   #
   # 1. we call refresh tables
   # 2. pg **synchronously** queries the replication publication (electric)
   #    for the list of replicated tables
-  # 3. the TcpServer calls this process to get the list of published tables
+  # 3. the TcpServer calls this process to get the list of electrified tables
   # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
   # 5. deadlock
   #
   # So this call to the SchemaLoader is done via a task so that this SchemaCache process
-  # is free to handle the `logical_publication_tables/1` call coming in from the `TcpServer`.
+  # is free to handle the `electrified_tables/1` call coming in from the `TcpServer`.
   def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
     task =
       Task.async(fn ->

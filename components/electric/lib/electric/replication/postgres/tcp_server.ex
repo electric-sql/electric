@@ -113,11 +113,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   require Logger
 
-  alias Electric.Postgres.Messaging
-  alias Electric.Postgres.OidDatabase
+  alias Electric.Postgres.{Lsn, Messaging, OidDatabase, Schema, Extension.SchemaCache}
   alias Electric.Replication.Postgres.SlotServer
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.Lsn
 
   @pg_cancel_request_magic_sequence <<1234::16, 5678::16>>
   @pg_ssl_upgrade_magic_sequence <<1234::16, 5679::16>>
@@ -474,11 +471,15 @@ defmodule Electric.Replication.Postgres.TcpServer do
          ],
          _
        ) do
+    # Tables that need to be added to the publication that we're exposing to Postgres. Otherwise, Postgres will
+    # ignore any rows from those tables we send it.
     with [_pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
-         {:ok, tables} <- SchemaCache.Global.logical_publication_tables() do
+         {:ok, electrified_tables} <- SchemaCache.Global.electrified_tables(),
+         replicated_tables =
+           electrified_tables ++ Schema.table_info(SchemaCache.Global.internal_schema()) do
       Messaging.row_description(schemaname: :name, tablename: :name)
-      |> Messaging.data_rows(Enum.map(tables, &{&1.schema, &1.name}))
-      |> Messaging.command_complete("SELECT #{length(tables)}")
+      |> Messaging.data_rows(Enum.map(replicated_tables, &{&1.schema, &1.name}))
+      |> Messaging.command_complete("SELECT #{length(replicated_tables)}")
       |> Messaging.ready()
     end
   end
