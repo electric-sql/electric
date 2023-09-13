@@ -88,6 +88,10 @@ Prisma.NullTypes = {
 
 exports.Prisma.DataTypesScalarFieldEnum = {
   id: 'id',
+  date: 'date',
+  time: 'time',
+  timetz: 'timetz',
+  timestamp: 'timestamp',
   timestamptz: 'timestamptz'
 };
 

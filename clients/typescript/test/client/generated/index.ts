@@ -17,7 +17,7 @@ import {
 // ENUMS
 /////////////////////////////////////////
 
-export const DataTypesScalarFieldEnumSchema = z.enum(['id','timestamptz']);
+export const DataTypesScalarFieldEnumSchema = z.enum(['id','date','time','timetz','timestamp','timestamptz']);
 
 export const ItemsScalarFieldEnumSchema = z.enum(['value','nbr']);
 
@@ -90,6 +90,10 @@ export type Profile = z.infer<typeof ProfileSchema>
 
 export const DataTypesSchema = z.object({
   id: z.number().int(),
+  date: z.coerce.date().nullish(),
+  time: z.coerce.date().nullish(),
+  timetz: z.coerce.date().nullish(),
+  timestamp: z.coerce.date().nullish(),
   timestamptz: z.coerce.date().nullish(),
 })
 
@@ -182,6 +186,10 @@ export const ProfileSelectSchema: z.ZodType<Prisma.ProfileSelect> = z.object({
 
 export const DataTypesSelectSchema: z.ZodType<Prisma.DataTypesSelect> = z.object({
   id: z.boolean().optional(),
+  date: z.boolean().optional(),
+  time: z.boolean().optional(),
+  timetz: z.boolean().optional(),
+  timestamp: z.boolean().optional(),
   timestamptz: z.boolean().optional(),
 }).strict()
 
@@ -361,11 +369,19 @@ export const DataTypesWhereInputSchema: z.ZodType<Prisma.DataTypesWhereInput> = 
   OR: z.lazy(() => DataTypesWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => DataTypesWhereInputSchema),z.lazy(() => DataTypesWhereInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
+  date: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
+  time: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
+  timetz: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
+  timestamp: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
   timestamptz: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
 }).strict();
 
 export const DataTypesOrderByWithRelationInputSchema: z.ZodType<Prisma.DataTypesOrderByWithRelationInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  date: z.lazy(() => SortOrderSchema).optional(),
+  time: z.lazy(() => SortOrderSchema).optional(),
+  timetz: z.lazy(() => SortOrderSchema).optional(),
+  timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -375,6 +391,10 @@ export const DataTypesWhereUniqueInputSchema: z.ZodType<Prisma.DataTypesWhereUni
 
 export const DataTypesOrderByWithAggregationInputSchema: z.ZodType<Prisma.DataTypesOrderByWithAggregationInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  date: z.lazy(() => SortOrderSchema).optional(),
+  time: z.lazy(() => SortOrderSchema).optional(),
+  timetz: z.lazy(() => SortOrderSchema).optional(),
+  timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => DataTypesCountOrderByAggregateInputSchema).optional(),
   _avg: z.lazy(() => DataTypesAvgOrderByAggregateInputSchema).optional(),
@@ -388,6 +408,10 @@ export const DataTypesScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Dat
   OR: z.lazy(() => DataTypesScalarWhereWithAggregatesInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => DataTypesScalarWhereWithAggregatesInputSchema),z.lazy(() => DataTypesScalarWhereWithAggregatesInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
+  date: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
+  time: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
+  timetz: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
+  timestamp: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
   timestamptz: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
 }).strict();
 
@@ -567,36 +591,64 @@ export const ProfileUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ProfileUnch
 
 export const DataTypesCreateInputSchema: z.ZodType<Prisma.DataTypesCreateInput> = z.object({
   id: z.number().int(),
+  date: z.coerce.date().optional().nullable(),
+  time: z.coerce.date().optional().nullable(),
+  timetz: z.coerce.date().optional().nullable(),
+  timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable()
 }).strict();
 
 export const DataTypesUncheckedCreateInputSchema: z.ZodType<Prisma.DataTypesUncheckedCreateInput> = z.object({
   id: z.number().int(),
+  date: z.coerce.date().optional().nullable(),
+  time: z.coerce.date().optional().nullable(),
+  timetz: z.coerce.date().optional().nullable(),
+  timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable()
 }).strict();
 
 export const DataTypesUpdateInputSchema: z.ZodType<Prisma.DataTypesUpdateInput> = z.object({
   id: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  date: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  time: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timetz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesUncheckedUpdateInputSchema: z.ZodType<Prisma.DataTypesUncheckedUpdateInput> = z.object({
   id: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  date: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  time: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timetz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesCreateManyInputSchema: z.ZodType<Prisma.DataTypesCreateManyInput> = z.object({
   id: z.number().int(),
+  date: z.coerce.date().optional().nullable(),
+  time: z.coerce.date().optional().nullable(),
+  timetz: z.coerce.date().optional().nullable(),
+  timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable()
 }).strict();
 
 export const DataTypesUpdateManyMutationInputSchema: z.ZodType<Prisma.DataTypesUpdateManyMutationInput> = z.object({
   id: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  date: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  time: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timetz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesUncheckedUpdateManyInputSchema: z.ZodType<Prisma.DataTypesUncheckedUpdateManyInput> = z.object({
   id: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  date: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  time: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timetz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
@@ -863,6 +915,10 @@ export const DateTimeNullableFilterSchema: z.ZodType<Prisma.DateTimeNullableFilt
 
 export const DataTypesCountOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypesCountOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  date: z.lazy(() => SortOrderSchema).optional(),
+  time: z.lazy(() => SortOrderSchema).optional(),
+  timetz: z.lazy(() => SortOrderSchema).optional(),
+  timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -872,11 +928,19 @@ export const DataTypesAvgOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypes
 
 export const DataTypesMaxOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypesMaxOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  date: z.lazy(() => SortOrderSchema).optional(),
+  time: z.lazy(() => SortOrderSchema).optional(),
+  timetz: z.lazy(() => SortOrderSchema).optional(),
+  timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const DataTypesMinOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypesMinOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  date: z.lazy(() => SortOrderSchema).optional(),
+  time: z.lazy(() => SortOrderSchema).optional(),
+  timetz: z.lazy(() => SortOrderSchema).optional(),
+  timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -2036,35 +2100,42 @@ export const tableSchemas = {
     Prisma.ProfileFindFirstArgs['orderBy'],
     Prisma.ProfileScalarFieldEnum,
     ProfileGetPayload
-    >,
-    DataTypes: {
-      fields: new Map([['id', 'TEXT'],['timestamptz', 'TIMESTAMPTZ']]),
-      relations: [
-      ],
-      modelSchema: (DataTypesCreateInputSchema as any)
-        .partial()
-        .or((DataTypesUncheckedCreateInputSchema as any).partial()),
-      createSchema: DataTypesCreateArgsSchema,
-      createManySchema: DataTypesCreateManyArgsSchema,
-      findUniqueSchema: DataTypesFindUniqueArgsSchema,
-      findSchema: DataTypesFindFirstArgsSchema,
-      updateSchema: DataTypesUpdateArgsSchema,
-      updateManySchema: DataTypesUpdateManyArgsSchema,
-      upsertSchema: DataTypesUpsertArgsSchema,
-      deleteSchema: DataTypesDeleteArgsSchema,
-      deleteManySchema: DataTypesDeleteManyArgsSchema
-    } as TableSchema<
-      z.infer<typeof DataTypesCreateInputSchema>,
-      Prisma.DataTypesCreateArgs['data'],
-      Prisma.DataTypesUpdateArgs['data'],
-      Prisma.DataTypesFindFirstArgs['select'],
-      Prisma.DataTypesFindFirstArgs['where'],
-      Prisma.DataTypesFindUniqueArgs['where'],
-      never,
-      Prisma.DataTypesFindFirstArgs['orderBy'],
-      Prisma.DataTypesScalarFieldEnum,
-      DataTypesGetPayload
-    >,
+  >,
+  DataTypes: {
+    fields: new Map([
+      ['id', 'TEXT'],
+      ['date', 'DATE'],
+      ['time', 'TIME'],
+      ['timetz', 'TIMETZ'],
+      ['timestamp', 'TIMESTAMP'],
+      ['timestamptz', 'TIMESTAMPTZ'],
+    ]),
+    relations: [
+    ],
+    modelSchema: (DataTypesCreateInputSchema as any)
+      .partial()
+      .or((DataTypesUncheckedCreateInputSchema as any).partial()),
+    createSchema: DataTypesCreateArgsSchema,
+    createManySchema: DataTypesCreateManyArgsSchema,
+    findUniqueSchema: DataTypesFindUniqueArgsSchema,
+    findSchema: DataTypesFindFirstArgsSchema,
+    updateSchema: DataTypesUpdateArgsSchema,
+    updateManySchema: DataTypesUpdateManyArgsSchema,
+    upsertSchema: DataTypesUpsertArgsSchema,
+    deleteSchema: DataTypesDeleteArgsSchema,
+    deleteManySchema: DataTypesDeleteManyArgsSchema
+  } as TableSchema<
+    z.infer<typeof DataTypesCreateInputSchema>,
+    Prisma.DataTypesCreateArgs['data'],
+    Prisma.DataTypesUpdateArgs['data'],
+    Prisma.DataTypesFindFirstArgs['select'],
+    Prisma.DataTypesFindFirstArgs['where'],
+    Prisma.DataTypesFindUniqueArgs['where'],
+    never,
+    Prisma.DataTypesFindFirstArgs['orderBy'],
+    Prisma.DataTypesScalarFieldEnum,
+    DataTypesGetPayload
+  >,
 }
 
 export const schema = new DbSchema(tableSchemas, [])
