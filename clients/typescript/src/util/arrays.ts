@@ -22,7 +22,8 @@ export function chunkBy<T, K>(
 
       for (let idx = 1; idx < arr.length; ++idx) {
         newChunkValue = mapper(arr[idx], idx, arr)
-        if (idx === 0 || currentChunkValue! === newChunkValue) {
+        if (currentChunkValue === newChunkValue) {
+          // Still the same chunk, expand it
           currentChunk.push(arr[idx])
           currentChunkValue = newChunkValue
         } else {
