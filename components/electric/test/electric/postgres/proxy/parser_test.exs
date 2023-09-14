@@ -154,6 +154,20 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  default_schema: "other"
                )
     end
+
+    test "CALL electric.electrify(..)" do
+      assert {:ok, {"public", "fish"}} =
+               Parser.table_name("CALL electric.electrify('public.fish')")
+
+      assert {:ok, {"public", "fish"}} =
+               Parser.table_name("CALL electric.electrify('fish')")
+
+      assert {:ok, {"other", "fish"}} =
+               Parser.table_name("CALL electric.electrify('other.fish')")
+
+      assert {:ok, {"other", "fish"}} =
+               Parser.table_name("CALL electric.electrify('other', 'fish')")
+    end
   end
 
   describe "column_map/1" do

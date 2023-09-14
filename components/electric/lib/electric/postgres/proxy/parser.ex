@@ -36,6 +36,8 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
 end
 
 defmodule Electric.Postgres.Proxy.Parser do
+  alias Electric.Postgres.Proxy.NameParser
+
   import __MODULE__.Macros
 
   @default_schema "public"
@@ -97,9 +99,35 @@ defmodule Electric.Postgres.Proxy.Parser do
     {:ok, name}
   end
 
+  def table_name(
+        %PgQuery.CallStmt{funccall: %{funcname: [func_schema, func_name]} = funccall},
+        opts
+      ) do
+    case {string_node_val(func_schema), string_node_val(func_name)} do
+      {"electric", "electrify"} ->
+        case Enum.map(funccall.args, &string_node_val/1) do
+          [a1, a2] ->
+            {:ok, {a1, a2}}
+
+          [a1] ->
+            NameParser.parse(a1, opts)
+        end
+
+      _ ->
+        {:ok, {blank(nil, opts), nil}}
+    end
+  end
+
   def table_name(_stmt, opts) do
     {:ok, {blank(nil, opts), nil}}
   end
+
+  defp string_node_val(%PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}}), do: sval
+
+  defp string_node_val(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
+    do: string_node_val(sval)
+
+  defp string_node_val(%PgQuery.String{sval: sval}), do: sval
 
   #   enum AlterTableType
   # {
@@ -322,6 +350,10 @@ defmodule Electric.Postgres.Proxy.Parser do
     {true, {:electric, command}}
   end
 
+  defkeyword :capture?, "CALL" do
+    {true, {:call, "electrify"}}
+  end
+
   def capture?(_stmt) do
     false
   end
@@ -341,6 +373,13 @@ defmodule Electric.Postgres.Proxy.Parser do
   defkeyword :object, "INDEX" do
     "index"
   end
+
+  def electric_electrify(<<w::8, rest::binary>>) when w in @wspc do
+    electric_electrify(rest)
+  end
+
+  def electric_electrify("electric.electrify(" <> _rest), do: true
+  def electric_electrify(_), do: false
 
   @split_ws Enum.map(@wspc, &IO.iodata_to_binary([&1]))
   def object(other) do

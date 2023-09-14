@@ -111,6 +111,9 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
         # we capture a version for any DDLX because it creates a new schema version
         Capture.Electrify.new(command, msg, State.electrify(state, table), send)
 
+      {{{:call, "electrify"}, _electrified?, _query, table_name}, _} ->
+        {nil, State.electrify(state, table_name), Send.back(send, msg)}
+
       # migration affecting non-electrified table
       {{_action, false, _query, _table}, _} ->
         {nil, state, Send.back(send, msg)}

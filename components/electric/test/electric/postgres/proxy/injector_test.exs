@@ -119,6 +119,20 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
             cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, queries)
           end
+
+          test "create, electrify via function and alter table is captured", cxt do
+            queries = [
+              passthrough: ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)],
+              passthrough: ~s[CALL electric.electrify('socks')],
+              capture:
+                {~s[ALTER TABLE "socks" ADD COLUMN size int2],
+                 shadow_add_column: [
+                   %{table: {"public", "socks"}, action: :add, column: "size", type: "int2"}
+                 ]}
+            ]
+
+            cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, queries)
+          end
         end
 
         test "alter electrified table", cxt do
