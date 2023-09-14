@@ -106,7 +106,7 @@ defmodule Electric.Extension.Case do
 
         if unquote(proxy?) do
           pg_config = Electric.Postgres.TestConnection.config()
-          conn_config = [origin: origin, connection: pg_config]
+          conn_config = [origin: origin, connection: pg_config, proxy: unquote(proxy_opts)]
 
           handler_config = Keyword.get(unquote(proxy_opts), :handler_config, [])
 
@@ -115,7 +115,6 @@ defmodule Electric.Extension.Case do
               {Electric.Postgres.Proxy,
                [
                  conn_config: conn_config,
-                 proxy: Keyword.take(unquote(proxy_opts), [:port]),
                  handler_config: handler_config
                ]}
             )

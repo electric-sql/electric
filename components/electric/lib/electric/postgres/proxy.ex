@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.Proxy do
   alias Electric.Postgres.Proxy.Handler
+  alias Electric.Replication.Connectors
 
   require Logger
 
@@ -10,32 +11,30 @@ defmodule Electric.Postgres.Proxy do
 
   @spec child_spec(options()) :: Supervisor.child_spec()
   def child_spec(args) do
-    default_proxy_config =
-      Application.fetch_env!(:electric, Electric.Postgres.Proxy)
+    {:ok, conn_config} = Keyword.fetch(args, :conn_config)
+    handler_config = Keyword.get(args, :handler_config, [])
 
-    {log_level, default_proxy_config} = Keyword.pop(default_proxy_config, :log_level)
+    proxy_opts = Connectors.get_proxy_opts(conn_config)
 
-    if log_level do
+    {:ok, listen_opts} = Map.fetch(proxy_opts, :listen)
+
+    if !is_integer(listen_opts[:port]),
+      do:
+        raise(ArgumentError,
+          message: "Proxy configuration should include `[listen: [port: 1..65535]]`"
+        )
+
+    if log_level = proxy_opts[:log_level] do
       ThousandIsland.Logger.attach_logger(log_level)
     end
 
-    proxy_config = Keyword.merge(default_proxy_config, Keyword.get(args, :proxy, []))
-
-    handler_defaults =
-      Application.get_env(:electric, Electric.Postgres.Proxy.Handler, [])
-
-    # config for the handler
-    handler_config = Keyword.get(args, :handler_config, [])
-
-    {:ok, conn_config} = Keyword.fetch(args, :conn_config)
-
     handler_state =
-      Handler.initial_state(conn_config, Keyword.merge(handler_defaults, handler_config))
+      Handler.initial_state(conn_config, handler_config)
 
-    Logger.info("Starting Proxy server listening at port #{proxy_config[:port]}")
+    Logger.info("Starting Proxy server listening at port #{listen_opts[:port]}")
 
     ThousandIsland.child_spec(
-      Keyword.merge(proxy_config, handler_module: Handler, handler_options: handler_state)
+      Keyword.merge(listen_opts, handler_module: Handler, handler_options: handler_state)
     )
   end
 

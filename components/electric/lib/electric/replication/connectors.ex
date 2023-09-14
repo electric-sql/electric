@@ -27,12 +27,18 @@ defmodule Electric.Replication.Connectors do
         }
   @type connection_opts() :: %{
           host: charlist(),
-          port: pos_integer(),
+          port: :inet.port_number(),
           database: charlist(),
           username: charlist(),
           password: charlist(),
           replication: charlist(),
           ssl: boolean()
+        }
+
+  @type proxy_listen_opts() :: ThousandIsland.options()
+  @type proxy_opts() :: %{
+          listen: proxy_listen_opts(),
+          log_level: Logger.level()
         }
 
   alias Electric.Postgres.Extension
@@ -104,6 +110,13 @@ defmodule Electric.Replication.Connectors do
     |> Keyword.fetch!(:connection)
     |> new_map_with_charlists()
     |> set_replication(replication?)
+  end
+
+  @spec get_proxy_opts(config()) :: proxy_opts()
+  def get_proxy_opts(config) do
+    config
+    |> Keyword.fetch!(:proxy)
+    |> Map.new()
   end
 
   defp new_map_with_charlists(list) do

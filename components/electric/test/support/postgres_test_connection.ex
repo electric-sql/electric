@@ -250,6 +250,9 @@ defmodule Electric.Postgres.TestConnection do
           port: 5433,
           dbname: "test"
         ]
+      ],
+      proxy: [
+        listen: [port: 65432]
       ]
     ]
   end

@@ -5,7 +5,9 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   use Electric.Extension.Case,
     async: false,
     proxy: [
-      port: 65432,
+      listen: [
+        port: 65432
+      ],
       handler_config: [
         # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
         loader: MockSchemaLoader.agent_spec([], name: __MODULE__.Loader)

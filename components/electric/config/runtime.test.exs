@@ -18,5 +18,3 @@ auth_config =
 config :electric, Electric.Satellite.Auth, provider: {Auth.Secure, auth_config}
 
 config :electric, disable_listeners: true
-
-config :electric, Electric.Postgres.Proxy, port: 65431

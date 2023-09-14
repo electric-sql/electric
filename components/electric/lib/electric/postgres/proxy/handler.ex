@@ -55,14 +55,6 @@ defmodule Electric.Postgres.Proxy.Handler do
   @spec initial_state(Electric.Replication.Connectors.config(), options()) :: S.t()
   def initial_state(conn_config, proxy_opts) do
     {loader, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
-    # injector_mode =
-    #   case Keyword.get(proxy_opts, :injector, {%{}, {SchemaCache, []}}) do
-    #     {loader_module, loader_opts} ->
-    #       {%{}, {loader_module, loader_opts}}
-    #
-    #     {user_loader_map, {loader_module, loader_opts}} when is_map(user_loader_map) ->
-    #       {user_loader_map, {loader_module, loader_opts}}
-    #   end
 
     %S{
       conn_config: conn_config,
