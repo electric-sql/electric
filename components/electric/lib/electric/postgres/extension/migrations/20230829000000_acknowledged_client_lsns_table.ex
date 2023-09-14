@@ -20,23 +20,25 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230829000000_Acknow
   def up(_) do
     table = Extension.acked_client_lsn_table()
 
-    [
-      create_table_ddl(),
-      @trigger_sql,
-      Extension.add_table_to_publication_sql(table)
-    ]
+    replicated_table_ddls() ++
+      [
+        @trigger_sql,
+        Extension.add_table_to_publication_sql(table)
+      ]
   end
 
   @impl true
   def down(_), do: []
 
   @impl true
-  def create_table_ddl do
-    """
-    CREATE TABLE #{Extension.acked_client_lsn_table()} (
-      client_id TEXT PRIMARY KEY,
-      lsn BYTEA NOT NULL
-    )
-    """
+  def replicated_table_ddls do
+    [
+      """
+      CREATE TABLE #{Extension.acked_client_lsn_table()} (
+        client_id TEXT PRIMARY KEY,
+        lsn BYTEA NOT NULL
+      )
+      """
+    ]
   end
 end

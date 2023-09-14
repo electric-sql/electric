@@ -192,7 +192,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     checkout!(pool, fn conn ->
       oid_loader = &Client.relation_oid(conn, &1, &2, &3)
 
-      Enum.reduce(Extension.create_table_ddls(), Schema.new(), fn ddl, schema ->
+      Enum.reduce(Extension.replicated_table_ddls(), Schema.new(), fn ddl, schema ->
         Schema.update(schema, ddl, oid_loader: oid_loader)
       end)
     end)
