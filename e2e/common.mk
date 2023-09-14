@@ -11,6 +11,8 @@ export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
 export ELIXIR_VERSION=1.15.4
 export OTP_VERSION=25.3.2.4
 export DEBIAN_VERSION=bullseye-20230612-slim
+export PG_PROXY_PASSWORD?="49_G1JYY0BXWldjnA2EFxhWl"
+export PG_PROXY_PORT?="65432"
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
@@ -96,7 +98,7 @@ docker-psql-%:
 	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -p ${PG_PORT} -U postgres -d electric
 
 docker-proxy:
-	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-${PG_HOST}-1 psql -h ${PROXY_HOST} -p ${PROXY_PORT} -U electric -d electric
+	docker exec -it -e PGPASSWORD=${PG_PROXY_PASSWORD} ${DOCKER_PREFIX}-${PG_HOST}-1 psql -h ${PROXY_HOST} -p ${PG_PROXY_PORT} -U electric -d electric
 
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash

@@ -6,6 +6,10 @@ services:
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: integration-tests-signing-key-example
       ELECTRIC_TELEMETRY: disabled
+      # using a realistic password for the proxy to prevent accidentally working tests 
+      # with some default "password"
+      PG_PROXY_PASSWORD: "49_G1JYY0BXWldjnA2EFxhWl"
+      PG_PROXY_PORT: "65432"
     init: true
     privileged: true
 

@@ -28,7 +28,7 @@
         -$fail_pattern
 
     [newshell proxy_1]
-        [invoke start_proxy pg_1 electric_1 65432]
+        [invoke start_proxy pg_1 electric_1 ${PG_PROXY_PORT}]
         -$fail_pattern
         [timeout 2]
 

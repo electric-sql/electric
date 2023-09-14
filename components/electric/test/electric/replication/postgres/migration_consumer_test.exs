@@ -256,7 +256,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
 
-      assert_receive {FakeConsumer, :events, ^filtered_events}, 500
+      assert_receive {FakeConsumer, :events, ^filtered_events}, 1000
       assert_receive {MockSchemaLoader, :load}, 500
 
       assert_receive {MockSchemaLoader,

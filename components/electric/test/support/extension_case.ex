@@ -90,7 +90,9 @@ defmodule Electric.Extension.Case do
     extension_opts = Keyword.take(opts, [:proxy])
     proxy_opts = Keyword.get(extension_opts, :proxy, false)
     proxy? = proxy_opts not in [false, nil]
-    proxy_opts = if(is_list(proxy_opts), do: proxy_opts, else: [])
+
+    proxy_opts =
+      Keyword.put_new(if(is_list(proxy_opts), do: proxy_opts, else: []), :password, "password")
 
     quote do
       use ExUnit.Case, unquote(case_opts)

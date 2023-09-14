@@ -30,6 +30,7 @@ defmodule Electric.Postgres.Proxy.Handler do
               authenticated?: false,
               username: nil,
               database: nil,
+              password: nil,
               authentication: nil
 
     @type username() :: String.t()
@@ -37,33 +38,45 @@ defmodule Electric.Postgres.Proxy.Handler do
     @type auth_type() :: {:md5, username(), salt()}
 
     @type t() :: %__MODULE__{
-            upstream: [PgProtocol.Message.t()],
+            authenticated?: boolean(),
+            authentication: nil | auth_type(),
+            conn_config: Connectors.config(),
+            connection: nil | pid(),
+            database: nil | String.t(),
+            decoder: PgProtocol.Decoder.t(),
             injector: nil | Injector.t(),
             injector_opts: Keyword.t(),
             loader: SchemaLoader.t(),
-            conn_config: Connectors.config(),
-            connection: nil | pid(),
-            decoder: PgProtocol.Decoder.t(),
+            password: String.t(),
             session_id: nil | integer(),
-            authenticated?: boolean(),
-            username: nil | username(),
-            database: nil | String.t(),
-            authentication: nil | auth_type()
+            upstream: [PgProtocol.Message.t()],
+            username: nil | username()
           }
   end
 
   @spec initial_state(Electric.Replication.Connectors.config(), options()) :: S.t()
   def initial_state(conn_config, proxy_opts) do
     {loader, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
+    password = conn_config |> get_in([:proxy, :password]) |> validate_password()
 
     %S{
       conn_config: conn_config,
       loader: {loader, loader_opts},
       decoder: PgProtocol.Decoder.frontend(),
       injector_opts: Keyword.get(proxy_opts, :injector, []),
+      password: password,
       username: nil,
       database: nil
     }
+  end
+
+  defp validate_password(empty) when empty in [nil, ""] do
+    raise ArgumentError,
+      message: "Proxy password (PG_PROXY_PASSWORD) is not set or set to an empty value"
+  end
+
+  defp validate_password(password) do
+    password
   end
 
   @impl ThousandIsland.Handler
@@ -112,21 +125,23 @@ defmodule Electric.Postgres.Proxy.Handler do
   end
 
   defp handle_message(%M.StartupMessage{} = msg, return, socket, state) do
-    state =
-      case msg.params do
-        %{"user" => user, "database" => database, "password" => _password} ->
-          Logger.warning("Not validating credentials #{inspect(user)}:<password>")
-          authenticated(socket, %{state | username: user, database: database})
+    case msg.params do
+      %{"user" => username, "database" => database, "password" => password} ->
+        if password == state.password do
+          {return, authenticated(socket, %{state | username: username, database: database})}
+        else
+          authentication_failed(username, socket, state)
+        end
 
-        %{"user" => user, "database" => database} ->
-          Logger.warning("Not validating user #{inspect(user)}")
-          salt = M.AuthenticationMD5Password.salt()
-          msg = M.AuthenticationMD5Password.new(salt: salt)
-          downstream([msg], socket, state)
-          %{state | username: user, database: database, authentication: {:md5, user, salt}}
-      end
+      %{"user" => username, "database" => database} ->
+        Logger.warning("Not validating user #{inspect(username)}")
+        salt = M.AuthenticationMD5Password.salt()
+        msg = M.AuthenticationMD5Password.new(salt: salt)
+        downstream([msg], socket, state)
 
-    {return, state}
+        {return,
+         %{state | username: username, database: database, authentication: {:md5, username, salt}}}
+    end
   end
 
   defp handle_message(%M.GSSResponse{} = msg, return, socket, state) do
@@ -138,35 +153,11 @@ defmodule Electric.Postgres.Proxy.Handler do
 
       {:md5, username, salt} ->
         <<"md5", hash::binary-32, 0>> = msg.data
-        # FIXME: we need some kind of authentication configuration
-        #        for the moment accept a bunch of passwords for quick dev
-        passwords = ["p", "pass", "password"]
 
-        if Enum.any?(passwords, &md5_auth_valid?(&1, username, salt, hash)) do
-          state = authenticated(socket, state)
-          {return, state}
+        if md5_auth_valid?(state.password, username, salt, hash) do
+          {return, authenticated(socket, state)}
         else
-          # This response is wrong somehow -- psql doesn't respond in the way 
-          # it does when you enter the wrong password against a real db
-          # Docs say that options are the various auth messages or an ErrorResponse
-          # so maybe it's something about my ErrorResponse that's wrong?
-          Logger.warning("Password authentication for user '#{username}' failed")
-
-          :ok =
-            downstream(
-              [
-                %M.ErrorResponse{
-                  severity: "FATAL",
-                  message: "Password authentication failed for user \"#{username}\"",
-                  # copied from psql `libpq/auth.c`
-                  code: "28P01"
-                }
-              ],
-              socket,
-              state
-            )
-
-          {return, state}
+          authentication_failed(username, socket, state)
         end
     end
   end
@@ -220,6 +211,31 @@ defmodule Electric.Postgres.Proxy.Handler do
     :ok = downstream([%M.AuthenticationOk{}], socket, state)
 
     %{state | connection: pid, authenticated?: true, injector: injector}
+  end
+
+  defp authentication_failed(username, socket, state) do
+    # This response is wrong somehow -- psql doesn't respond in the way 
+    # it does when you enter the wrong password against a real db
+    # Docs say that options are the various auth messages or an ErrorResponse
+    # so maybe it's something about my ErrorResponse that's wrong?
+    # https://www.postgresql.org/docs/current/errcodes-appendix.html
+
+    Logger.warning("Password authentication for user '#{username}' failed")
+
+    :ok =
+      downstream(
+        [
+          %M.ErrorResponse{
+            severity: "FATAL",
+            message: "Password authentication failed for user \"#{username}\"",
+            code: "28P01"
+          }
+        ],
+        socket,
+        state
+      )
+
+    {:close, state}
   end
 
   defp downstream(msgs, socket, state) do

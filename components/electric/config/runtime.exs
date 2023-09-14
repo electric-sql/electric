@@ -11,6 +11,7 @@ default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
+default_pg_proxy_port = "65432"
 
 ###
 
@@ -98,9 +99,13 @@ if config_env() == :prod do
 
   pg_server_host =
     System.get_env("LOGICAL_PUBLISHER_HOST") ||
-      raise("Env variable LOGICAL_PUBLISHER_HOST is not set")
+      raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
 
-  proxy_port = System.get_env("PG_PROXY_PORT", "65432") |> String.to_integer()
+  proxy_port = System.get_env("PG_PROXY_PORT", default_pg_proxy_port) |> String.to_integer()
+
+  proxy_password =
+    System.get_env("PG_PROXY_PASSWORD") ||
+      raise("Required environment variable PG_PROXY_PASSWORD is not set")
 
   connectors = [
     {"postgres_1",
@@ -120,6 +125,7 @@ if config_env() == :prod do
        listen: [
          port: proxy_port
        ],
+       password: proxy_password,
        log_level: log_level
      ]}
   ]

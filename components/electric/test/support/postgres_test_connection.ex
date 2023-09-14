@@ -252,7 +252,8 @@ defmodule Electric.Postgres.TestConnection do
         ]
       ],
       proxy: [
-        listen: [port: 65432]
+        listen: [port: 65432],
+        password: "password"
       ]
     ]
   end
