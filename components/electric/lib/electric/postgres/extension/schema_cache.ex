@@ -127,6 +127,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     call(origin, :electrified_tables)
   end
 
+  def replicated_internal_tables(origin) do
+    origin
+    |> internal_schema()
+    |> Schema.table_info()
+  end
+
   def relation(origin, oid) when is_integer(oid) do
     call(origin, {:relation, oid})
   end

@@ -102,9 +102,9 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
     end)
   end
 
-  def internal_schema() do
+  def replicated_internal_tables() do
     with_instance(fn pid ->
-      SchemaCache.internal_schema(pid)
+      SchemaCache.replicated_internal_tables(pid)
     end)
   end
 end
