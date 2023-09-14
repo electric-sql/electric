@@ -223,6 +223,49 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates date values", ctx do
+    vsn = "2023082201"
+
+    :ok =
+      migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY, d date)")
+
+    valid_records = [
+      %{"id" => "1", "d" => "2023-08-07"},
+      %{"id" => "2", "d" => "5697-02-28"},
+      %{"id" => "3", "d" => "6000-02-29"},
+      %{"id" => "4", "d" => "0001-01-01"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+    end)
+
+    refute_receive {_, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+
+    invalid_records = [
+      %{"id" => "10", "d" => "now"},
+      %{"id" => "11", "d" => "today"},
+      %{"id" => "12", "d" => "20230822"},
+      %{"id" => "13", "d" => "22-08-2023"},
+      %{"id" => "14", "d" => "2023-22-08"},
+      %{"id" => "15", "d" => "-1999-01-01"},
+      %{"id" => "16", "d" => "001-01-01"},
+      %{"id" => "17", "d" => "2000-13-13"},
+      %{"id" => "18", "d" => "5697-02-29"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   test "validates timestamp values", ctx do
     vsn = "2023072505"
 

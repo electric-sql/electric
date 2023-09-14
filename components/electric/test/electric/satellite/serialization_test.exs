@@ -18,7 +18,8 @@ defmodule Electric.Satellite.SerializationTest do
         "int" => "13",
         "var" => "...",
         "real" => "-3.14",
-        "id" => uuid
+        "id" => uuid,
+        "date" => "2024-12-24"
       }
 
       columns = [
@@ -28,11 +29,12 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "id", type: :uuid},
         %{name: "int", type: :int4},
         %{name: "var", type: :varchar},
-        %{name: "real", type: :float8}
+        %{name: "real", type: :float8},
+        %{name: "date", type: :date}
       ]
 
       assert %SatOpRow{
-               values: ["", "", "4", uuid, "13", "...", "-3.14"],
+               values: ["", "", "4", uuid, "13", "...", "-3.14", "2024-12-24"],
                nulls_bitmask: <<0b11000000>>
              } == Serialization.map_to_row(data, columns)
     end
@@ -64,7 +66,7 @@ defmodule Electric.Satellite.SerializationTest do
   describe "decode_record!" do
     test "decodes a SatOpRow struct into a map" do
       row = %SatOpRow{
-        nulls_bitmask: <<0b00100001>>,
+        nulls_bitmask: <<0b00100001, 0>>,
         values: [
           "256",
           "hello",
@@ -73,7 +75,8 @@ defmodule Electric.Satellite.SerializationTest do
           "-1.0e124",
           "2023-08-15 17:20:31",
           "2023-08-15 17:20:31Z",
-          ""
+          "",
+          "0400-02-29"
         ]
       }
 
@@ -85,7 +88,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "real2", type: :float8},
         %{name: "t", type: :timestamp},
         %{name: "tz", type: :timestamptz},
-        %{name: "x", type: :float4, nullable?: true}
+        %{name: "x", type: :float4, nullable?: true},
+        %{name: "date", type: :date}
       ]
 
       assert %{
@@ -96,7 +100,8 @@ defmodule Electric.Satellite.SerializationTest do
                "real2" => "-1.0e124",
                "t" => "2023-08-15 17:20:31",
                "tz" => "2023-08-15 17:20:31Z",
-               "x" => nil
+               "x" => nil,
+               "date" => "0400-02-29"
              } == Serialization.decode_record!(row, columns)
     end
 
@@ -117,8 +122,17 @@ defmodule Electric.Satellite.SerializationTest do
         {"2023-08-15 11:12:13+01", :timestamptz},
         {"2023-08-15 11:12:13+99:98", :timestamptz},
         {"2023-08-15 11:12:13+00", :timestamptz},
+        {"2023-08-15 11:12:13", :timestamptz},
         {"0000-08-15 23:00:00Z", :timestamptz},
-        {"-2000-08-15 23:00:00Z", :timestamptz}
+        {"-2000-08-15 23:00:00Z", :timestamptz},
+        {"0000-01-01", :date},
+        {"005-01-01", :date},
+        {"05-01-01", :date},
+        {"9-01-01", :date},
+        {"1999-31-12", :date},
+        {"20230815", :date},
+        {"-2023-08-15", :date},
+        {"12-12-12", :date}
       ]
 
       Enum.each(test_data, fn {val, type} ->
