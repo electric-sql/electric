@@ -527,8 +527,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
             map = %{"satellite-column-1" => a, "satellite-column-2" => b}
 
             Electric.Satellite.Serialization.map_to_row(map, [
-              "satellite-column-1",
-              "satellite-column-2"
+              %{name: "satellite-column-1", type: :text},
+              %{name: "satellite-column-2", type: :text}
             ])
           end
 

@@ -35,6 +35,10 @@
     [invoke wait-for "await client.get_items(db)" "${match}" 10 $node]
 [endmacro]
 
+[macro node_await_get_from_table table match]
+    [invoke wait-for "await client.get_rows(db, '${table}')" "${match}" 10 $node]
+[endmacro]
+
 [macro node_await_table match]
     [invoke wait-for "await client.get_tables(db)" "${match}" 10 $node]
 [endmacro]
@@ -54,6 +58,11 @@
 
 [macro node_await_insert_extended keys]
     !await client.insert_extended_item(db, ${keys})
+    ?$node
+[endmacro]
+
+[macro node_await_insert_extended_into table keys]
+    !await client.insert_extended_into(db, '${table}', ${keys})
     ?$node
 [endmacro]
 

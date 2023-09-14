@@ -55,15 +55,14 @@ defmodule Satellite.ProtocolHelpers do
 
   def insert(table, data) when is_map(data) do
     schema = schema(table)
-    columns = Enum.map(schema.columns, & &1.name)
-
+    columns = schema.columns
     %SatOpInsert{relation_id: schema.oid, row_data: Serialization.map_to_row(data, columns)}
   end
 
   def update(table, pk, old_data, new_data, tags \\ [])
       when is_list(tags) and is_map(pk) and is_map(old_data) and is_map(new_data) do
     schema = schema(table)
-    columns = Enum.map(schema.columns, & &1.name)
+    columns = schema.columns
 
     %SatOpUpdate{
       relation_id: schema.oid,
@@ -75,7 +74,7 @@ defmodule Satellite.ProtocolHelpers do
 
   def delete(table, old_data, tags \\ []) when is_list(tags) and is_map(old_data) do
     schema = schema(table)
-    columns = Enum.map(schema.columns, & &1.name)
+    columns = schema.columns
 
     %SatOpDelete{
       relation_id: schema.oid,

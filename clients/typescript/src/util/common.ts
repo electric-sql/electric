@@ -19,7 +19,7 @@ setGlobalUUID(
 
 export const typeDecoder = {
   number: bytesToNumber,
-  text: (bytes: Uint8Array) => new TextDecoder().decode(bytes),
+  text: bytesToString,
 }
 
 export const typeEncoder = {
@@ -47,12 +47,16 @@ export function numberToBytes(i: number) {
   )
 }
 
-export function bytesToNumber(bs: Uint8Array) {
+export function bytesToNumber(bytes: Uint8Array) {
   let n = 0
-  for (const byte of bs.values()) {
+  for (const byte of bytes.values()) {
     n = (n << 8) | byte
   }
   return n
+}
+
+export function bytesToString(bytes: Uint8Array) {
+  return new TextDecoder().decode(bytes)
 }
 
 export function uuid() {
