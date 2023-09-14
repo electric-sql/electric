@@ -9,7 +9,7 @@
     """!
     BEGIN;
     SELECT electric.migration_version('$migration_version_1');
-    CREATE TABLE mtable1 (id text PRIMARY KEY);
+    CREATE TABLE mtable1 (id uuid PRIMARY KEY);
     CALL electric.electrify('mtable1');
     COMMIT;
     """
@@ -21,7 +21,7 @@
     """!
     BEGIN;
     SELECT electric.migration_version('$migration_version_2');
-    CREATE TABLE mtable2 (id text PRIMARY KEY);
+    CREATE TABLE mtable2 (id uuid PRIMARY KEY);
     CALL electric.electrify('mtable2');
     COMMIT;
     """
