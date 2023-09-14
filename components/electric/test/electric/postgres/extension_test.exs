@@ -441,7 +441,8 @@ defmodule Electric.Postgres.ExtensionTest do
                  ts TIMESTAMP,
                  tstz TIMESTAMPTZ,
                  d DATE,
-                 t TIME
+                 t TIME,
+                 flag BOOLEAN
                );
                CALL electric.electrify('public.t1');
                """)

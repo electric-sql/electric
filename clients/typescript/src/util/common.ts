@@ -18,11 +18,13 @@ setGlobalUUID(
 )
 
 export const typeDecoder = {
+  bool: bytesToBool,
   number: bytesToNumber,
   text: bytesToString,
 }
 
 export const typeEncoder = {
+  bool: boolToBytes,
   number: numberToBytes,
   text: (string: string) => new TextEncoder().encode(string),
 }
@@ -37,6 +39,23 @@ export const base64 = {
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
+
+const trueByte = 't'.charCodeAt(0)
+const falseByte = 'f'.charCodeAt(0)
+
+export function boolToBytes(b: number) {
+  if (b !== 0 && b !== 1) {
+    throw new Error(`Invalid boolean value: ${b}`)
+  }
+  return new Uint8Array([b === 1 ? trueByte : falseByte])
+}
+export function bytesToBool(bs: Uint8Array) {
+  if (bs.length === 1 && (bs[0] === trueByte || bs[0] === falseByte)) {
+    return bs[0] === trueByte ? 1 : 0
+  }
+
+  throw new Error(`Invalid binary-encoded boolean value: ${bs}`)
+}
 
 export function numberToBytes(i: number) {
   return Uint8Array.of(
