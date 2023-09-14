@@ -24,9 +24,11 @@ defmodule Electric.Postgres.Proxy do
           message: "Proxy configuration should include `[listen: [port: 1..65535]]`"
         )
 
-    if log_level = proxy_opts[:log_level] do
-      ThousandIsland.Logger.attach_logger(log_level)
-    end
+    # TODO: enabling logging of tcp connections to the proxy triggers failures in the e2e
+    # tests because thousandisland reports broken connections with an "error" string
+    # if log_level = proxy_opts[:log_level] do
+    #   ThousandIsland.Logger.attach_logger(log_level)
+    # end
 
     handler_state =
       Handler.initial_state(conn_config, handler_config)

@@ -67,10 +67,10 @@
     !\pset pager off
 [endmacro]
 
-[macro start_proxy pg_host proxy_host port]
+[macro start_proxy pg_host proxy_host]
     [loop iter 1..10]
         @electric=#
-        !make docker-proxy PROXY_PORT=${port} PROXY_HOST=${proxy_host} PG_HOST=${pg_host}
+        !make docker-proxy PROXY_HOST=${proxy_host} PG_HOST=${pg_host}
         ?SH-PROMPT:
         [sleep 1]
     [endloop]

@@ -103,6 +103,9 @@ docker-proxy:
 docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
 
+docker-prisma:
+	docker compose -f ${DOCKER_COMPOSE_FILE} run prisma_example_1 prisma db pull
+
 DOCKER_WORKDIR?=${E2E_ROOT}
 
 docker-start-clean-%:

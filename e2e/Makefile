@@ -3,6 +3,7 @@ include common.mk
 deps: lux
 	make -C satellite_client build
 	make -C elixir_client build
+	make -C prisma_example build
 
 test_only:
 	${LUX} --junit tests

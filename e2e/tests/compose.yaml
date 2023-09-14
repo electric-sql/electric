@@ -53,3 +53,10 @@ services:
     extends:
       file: ../services_templates.yaml
       service: satellite_client
+
+  prisma_example_1:
+    image: "prisma_example:local"
+    environment:
+      DATABASE_URL: "postgresql://prisma:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
+    volumes:
+      - ../prisma_example/prisma:/app/prisma
