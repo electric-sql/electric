@@ -1048,6 +1048,7 @@ function deserializeColumnData(
     case 'CHAR':
     case 'DATE':
     case 'TEXT':
+    case 'TIME':
     case 'TIMESTAMP':
     case 'TIMESTAMPTZ':
     case 'UUID':

@@ -28,6 +28,7 @@ defmodule Electric.Satellite.Serialization do
       float8
       int2 int4 int8
       text
+      time
       timestamp timestamptz
       uuid
       varchar
@@ -512,6 +513,25 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
+  def decode_column_value!(val, :time) do
+    <<hh::binary-2, ?:, mm::binary-2, ?:, ss::binary-2>> <> frac = val
+
+    hours = String.to_integer(hh)
+    true = hours in 0..23
+
+    minutes = String.to_integer(mm)
+    true = minutes in 0..59
+
+    seconds = String.to_integer(ss)
+    true = seconds in 0..59
+
+    :ok = validate_fractional_seconds(frac)
+
+    _ = Time.from_iso8601!(val)
+
+    val
+  end
+
   def decode_column_value!(val, :timestamp) do
     # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
     # because values of type `timestamp` must not have an offset.
@@ -559,4 +579,13 @@ defmodule Electric.Satellite.Serialization do
   #   [1]: https://www.postgresql.org/docs/current/datatype-datetime.html
   #   [2]: https://www.sqlite.org/lang_datefunc.html
   defp assert_year_in_range(year) when year in 1..9999, do: :ok
+
+  defp validate_fractional_seconds(""), do: :ok
+
+  defp validate_fractional_seconds("." <> fs_str) do
+    # Fractional seconds must not exceed 6 decimal digits, otherwise Postgres will round the last digit up or down.
+    true = byte_size(fs_str) <= 6
+    _ = String.to_integer(fs_str)
+    :ok
+  end
 end
