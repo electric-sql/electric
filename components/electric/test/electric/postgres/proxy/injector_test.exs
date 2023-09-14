@@ -77,11 +77,11 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   end
 
   @scenarios [
-    TestScenario.Framework
-    # TestScenario.FrameworkSimple,
-    # TestScenario.Manual,
-    # TestScenario.AdHoc,
-    # TestScenario.ManualTx
+    TestScenario.Framework,
+    TestScenario.FrameworkSimple,
+    TestScenario.Manual,
+    TestScenario.AdHoc,
+    TestScenario.ManualTx
   ]
 
   @frameworks [

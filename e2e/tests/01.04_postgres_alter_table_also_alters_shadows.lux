@@ -6,7 +6,9 @@
 
 [shell proxy_1]
     !BEGIN;
+    ?$psql
     !ALTER TABLE entries ADD COLUMN new_column VARCHAR;
+    ?$psql
     !COMMIT;
     ?$psql
 

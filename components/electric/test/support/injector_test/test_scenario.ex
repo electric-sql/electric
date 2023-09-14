@@ -1,4 +1,5 @@
 defmodule Electric.Postgres.Proxy.TestScenario do
+  alias Electric.Postgres.Proxy.Parser
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
   alias Electric.DDLX
@@ -77,6 +78,19 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def complete_ready(tag, status \\ :tx) do
     [complete(tag), ready(status)]
+  end
+
+  def capture_notice(query) do
+    {:ok, {sname, tname}} = Parser.table_name(query)
+
+    struct(M.NoticeResponse,
+      severity: "NOTICE",
+      code: "00000",
+      message: "Migration affecting electrified table #{inspect(sname)}.#{inspect(tname)}",
+      detail: "Capturing migration: #{query}",
+      schema: sname,
+      table: tname
+    )
   end
 
   def parse_describe(sql, name \\ "") do
@@ -413,7 +427,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tag = random_tag()
 
     injector
-    |> client(query(query))
+    |> client(query(query), server: query(query), client: [capture_notice(query)])
     |> server(complete_ready(tag), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, client: complete_ready(tag))
   end
@@ -438,7 +452,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tag = random_tag()
 
     injector
-    |> client(parse_describe(query))
+    |> client(parse_describe(query),
+      server: parse_describe(query),
+      client: [capture_notice(query)]
+    )
     |> server(parse_describe_complete())
     |> client(bind_execute())
     |> server(bind_execute_complete(tag), server: capture_ddl_query(query))

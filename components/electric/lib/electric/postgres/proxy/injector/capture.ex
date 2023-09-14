@@ -202,6 +202,8 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
   # actual injection.
 
   defp migration_state(%M.Parse{}, query, table, state, send) do
+    send = send_migration_capture_notice(send, query, table)
+
     {
       %Migration{ddl: query, table: table},
       state,
@@ -209,10 +211,25 @@ defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do
     }
   end
 
-  defp migration_state(%M.Query{}, query, _table, state, send) do
+  defp migration_state(%M.Query{}, query, table, state, send) do
     inject = Injector.inject_ddl_query(query, state)
 
+    send = send_migration_capture_notice(send, query, table)
+
     {inject, state, send}
+  end
+
+  defp send_migration_capture_notice(send, query, {sname, tname}) do
+    Send.front(send, [
+      %M.NoticeResponse{
+        code: "00000",
+        severity: "NOTICE",
+        message: "Migration affecting electrified table #{inspect(sname)}.#{inspect(tname)}",
+        detail: "Capturing migration: #{query}",
+        schema: sname,
+        table: tname
+      }
+    ])
   end
 
   defp version_state(%M.Parse{}, version, state, send) do

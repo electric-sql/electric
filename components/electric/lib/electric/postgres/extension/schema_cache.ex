@@ -302,20 +302,15 @@ defnitmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call({:table_electrified?, sname, tname}, _from, state) do
-    load_and_reply(state, fn schema ->
-      {:ok, Enum.any?(schema.tables, &(&1.name.schema == sname && &1.name.name == tname))}
-    end)
+    # delegate this call directly to the extension metadata tables to avoid race conditions
+    # that can happen between an 'electrify table' call and the receipt of the
+    # migration via the replication stream - it's important that this function 
+    # be consistent with the state of the db, not our slightly laggy view on it
+    {:reply, SchemaLoader.table_electrified?(state.backend, {sname, tname}), state}
   end
 
   def handle_call({:index_electrified?, sname, iname}, _from, state) do
-    load_and_reply(state, fn schema ->
-      electrified? =
-        schema
-        |> Schema.indexes(include_constraints: false)
-        |> Enum.any?(&(&1.table.schema == sname && &1.name == iname))
-
-      {:ok, electrified?}
-    end)
+    {:reply, SchemaLoader.index_electrified?(state.backend, {sname, iname}), state}
   end
 
   def handle_call({:tx_version, %{"txid" => txid, "txts" => txts} = row}, _from, state) do
