@@ -98,11 +98,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_cast(_, state) do
-    {:noreply, state}
-  end
-
-  @impl GenServer
   def handle_info({:timeout, tref, :init}, %State{backoff: {_, tref}} = state) do
     handle_continue(:init, state)
   end
