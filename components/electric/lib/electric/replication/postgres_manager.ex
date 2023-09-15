@@ -10,7 +10,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
   require Logger
 
   defmodule State do
-    defstruct [:state, :conn_config, :repl_config, :backoff, :origin, :config]
+    defstruct [
+      :state,
+      :conn_config,
+      :repl_config,
+      :backoff,
+      :origin,
+      :config,
+      :pg_connector_sup_monitor
+    ]
 
     @type t() :: %__MODULE__{
             config: Connectors.config(),
@@ -23,7 +31,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
               subscription: String.t(),
               electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
             },
-            state: :init | :subscribe | :ready
+            state: :init | :subscribe | :ready,
+            pg_connector_sup_monitor: reference | nil
           }
   end
 
@@ -56,25 +65,36 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
-    {:ok,
-     %State{
-       config: conn_config,
-       backoff: {:backoff.init(1000, 10_000), nil},
-       conn_config: Connectors.get_connection_opts(conn_config),
-       origin: origin,
-       repl_config: Connectors.get_replication_opts(conn_config),
-       state: :init
-     }, {:continue, :init}}
+    state =
+      reset_state(%State{
+        config: conn_config,
+        conn_config: Connectors.get_connection_opts(conn_config),
+        origin: origin,
+        repl_config: Connectors.get_replication_opts(conn_config)
+      })
+
+    {:ok, state, {:continue, :init}}
+  end
+
+  defp reset_state(%State{} = state) do
+    %State{
+      state
+      | backoff: {:backoff.init(1000, 10_000), nil},
+        state: :init,
+        pg_connector_sup_monitor: nil
+    }
   end
 
   @impl GenServer
   def handle_continue(:init, %State{origin: origin} = state) do
     case initialize_postgres(state) do
-      {:ok, state1} ->
-        :ok = PostgresConnector.start_children(state.config)
+      :ok ->
+        {:ok, sup_pid} = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
 
-        {:noreply, %State{state1 | state: :subscribe}, {:continue, :subscribe}}
+        ref = Process.monitor(sup_pid)
+        state = %State{state | state: :subscribe, pg_connector_sup_monitor: ref}
+        {:noreply, state, {:continue, :subscribe}}
 
       error ->
         Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
@@ -104,6 +124,17 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   def handle_info({:timeout, tref, :subscribe}, %State{backoff: {_, tref}} = state) do
     handle_continue(:subscribe, state)
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, pid, reason},
+        %State{pg_connector_sup_monitor: ref} = state
+      ) do
+    Logger.warning(
+      "PostgresConnectorSup #{inspect(pid)} has exited with reason: #{inspect(reason)}"
+    )
+
+    {:noreply, schedule_retry(:init, reset_state(state))}
   end
 
   def handle_info(msg, %State{} = state) do
@@ -137,14 +168,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def initialize_postgres(%State{origin: origin, repl_config: repl_config} = state) do
+  def initialize_postgres(%State{origin: origin, repl_config: repl_config, config: config}) do
     publication = Map.fetch!(repl_config, :publication)
     subscription = Map.fetch!(repl_config, :subscription)
     electric_connection = Map.fetch!(repl_config, :electric_connection)
 
     # get a config configuration without the replication parameter set
     # so that we can use extended query syntax
-    conn_config = Connectors.get_connection_opts(state.config, replication: false)
+    conn_config = Connectors.get_connection_opts(config, replication: false)
 
     Logger.debug(
       "Attempting to initialize #{origin}: #{conn_config.username}@#{conn_config.host}:#{conn_config.port}"
@@ -160,7 +191,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
           "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
         )
 
-        {:ok, state}
+        :ok
       end
     end)
   end
