@@ -107,7 +107,7 @@
     ?$psql
     [my old=$LUX_SHELLNAME]
     [shell electric]
-        ??[info] Applying migration $version
+        ??[info] Saved schema version $version
     [shell $old]
 [endmacro]
 
