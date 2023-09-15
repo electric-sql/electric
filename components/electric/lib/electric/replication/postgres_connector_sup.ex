@@ -22,6 +22,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
   def init(conn_config) do
     origin = Connectors.origin(conn_config)
     Electric.reg(name(origin))
+
     postgres_producer = Postgres.LogicalReplicationProducer.get_name(origin)
     postgres_producer_consumer = Postgres.MigrationConsumer.name(origin)
 

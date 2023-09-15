@@ -1,4 +1,12 @@
 defmodule Electric.Replication.PostgresConnectorMng do
+  @moduledoc """
+  This module defines a permanent gen server under `Electric.Replication.PostgresConnector`'s supervision.
+
+  Its job is to initiate a replication connection to Postgres, monitor it, and establish a new connection whenever the
+  current one shuts down. Initiating a new connection results in starting a sub-supervision tree under
+  `PostgresConnector` rooted at `PostgresConnectorSup`.
+  """
+
   use GenServer
 
   alias Electric.Postgres.Extension
@@ -89,7 +97,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def handle_continue(:init, %State{origin: origin} = state) do
     case initialize_postgres(state) do
       :ok ->
-        {:ok, sup_pid} = PostgresConnector.start_children(state.config)
+        {:ok, sup_pid} = PostgresConnector.start_main_supervisor(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
 
         ref = Process.monitor(sup_pid)
@@ -188,7 +196,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
            {:ok, oids} <- Client.query_oids(conn),
            :ok <- OidDatabase.save_oids(oids) do
         Logger.info(
-          "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
+          "Successfully initialized origin #{origin} at extension version #{List.last(versions) || "<latest>"}"
         )
 
         :ok

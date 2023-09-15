@@ -1,4 +1,12 @@
 defmodule Electric.Replication.PostgresConnector do
+  @moduledoc """
+  Root supervisor for a Postgres connector.
+
+  A Postgres connector defines a supervision tree of processes that together orchestrate a connection to Postgres'
+  outgoing logical replication stream, processing of incoming replication messages, updating the memory-only SchemaCache
+  and emitting new transactions as GenStage events that are consumed by processes like
+  `Electric.Satellite.WebsocketServer`.
+  """
   use Supervisor
 
   require Logger
@@ -14,37 +22,18 @@ defmodule Electric.Replication.PostgresConnector do
 
   @impl Supervisor
   def init(conn_config) do
-    origin = Connectors.origin(conn_config)
-    Electric.reg(name(origin))
+    conn_config
+    |> name_from_conn_config()
+    |> Electric.reg()
 
-    children = [
-      # %{id: :sup, start: {PostgresConnectorSup, :start_link, [origin]}, type: :supervisor},
-      %{id: :mng, start: {PostgresConnectorMng, :start_link, [conn_config]}}
-    ]
-
-    Supervisor.init(children, strategy: :one_for_all)
+    [{PostgresConnectorMng, conn_config}]
+    |> Supervisor.init(strategy: :one_for_all)
   end
 
-  @spec start_children(Connectors.config()) :: Supervisor.on_start_child()
-  def start_children(conn_config) do
-    origin = Connectors.origin(conn_config)
-    connector = name(origin)
-
-    Supervisor.start_child(
-      connector,
-      %{
-        id: :sup,
-        start: {PostgresConnectorSup, :start_link, [conn_config]},
-        type: :supervisor,
-        restart: :temporary
-      }
-    )
-  end
-
-  @spec stop_children(Connectors.origin()) :: :ok | {:error, :not_found}
-  def stop_children(origin) do
-    connector = name(origin)
-    Supervisor.terminate_child(connector, :sup)
+  @spec start_main_supervisor(Connectors.config()) :: Supervisor.on_start_child()
+  def start_main_supervisor(conn_config) do
+    connector = name_from_conn_config(conn_config)
+    Supervisor.start_child(connector, {PostgresConnectorSup, conn_config})
   end
 
   @doc """
@@ -55,8 +44,12 @@ defmodule Electric.Replication.PostgresConnector do
     Electric.reg_names(__MODULE__)
   end
 
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
+  @spec name_from_origin(Connectors.origin()) :: Electric.reg_name()
+  def name_from_origin(origin) when is_binary(origin) do
     Electric.name(__MODULE__, origin)
+  end
+
+  def name_from_conn_config(conn_config) do
+    conn_config |> Connectors.origin() |> name_from_origin()
   end
 end
