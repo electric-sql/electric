@@ -20,19 +20,13 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
     event_triggers = Extension.event_triggers()
     event_trigger_tags = ["'ALTER TABLE'", "'DROP TABLE'", "'DROP INDEX'", "'DROP VIEW'"]
 
-    supported_types_sql =
-      Electric.Satellite.Serialization.supported_pg_types()
-      |> Enum.map(&"'#{&1}'")
-      |> Enum.join(",")
-
     electrify_function =
       electrify_function_sql(
         schema,
         electrified_tracking_table,
         Extension.electrified_index_table(),
         publication,
-        Extension.add_table_to_publication_sql("%I.%I"),
-        supported_types_sql
+        Extension.add_table_to_publication_sql("%I.%I")
       )
 
     [
@@ -77,7 +71,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
     :electrified_tracking_table,
     :electrified_index_table,
     :publication_name,
-    :publication_sql,
-    :valid_column_types
+    :publication_sql
   ])
 end
