@@ -54,6 +54,8 @@ defmodule Electric.Satellite.WebsocketServer do
      schedule_ping(%State{
        last_msg_time: :erlang.timestamp(),
        auth_provider: Keyword.fetch!(opts, :auth_provider),
+       # WebsocketServer is designed to work with a PostgresConnector. So it needs to access its connection options that
+       # include the origin field to be able to execute statements and run queries against the DB.
        pg_connector_opts: Keyword.fetch!(opts, :pg_connector_opts),
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        telemetry: %Telemetry{

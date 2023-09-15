@@ -15,9 +15,14 @@ defmodule Electric.Replication.PostgresConnector do
   alias Electric.Replication.PostgresConnectorMng
   alias Electric.Replication.PostgresConnectorSup
 
+  @ets_table :postgres_connector_table
+  @conn_config_key :config
+
   @spec start_link(Connectors.config()) :: Supervisor.on_start()
   def start_link(conn_config) do
-    Supervisor.start_link(__MODULE__, conn_config)
+    # We can only have a single PostgresConnector alive at any time, so registering it under a static name is perfectly
+    # reasonable.
+    Supervisor.start_link(__MODULE__, conn_config, name: __MODULE__)
   end
 
   @impl Supervisor
@@ -25,6 +30,9 @@ defmodule Electric.Replication.PostgresConnector do
     conn_config
     |> name_from_conn_config()
     |> Electric.reg()
+
+    :ets.new(@ets_table, [:named_table])
+    store_config(conn_config)
 
     [{PostgresConnectorMng, conn_config}]
     |> Supervisor.init(strategy: :one_for_all)
@@ -51,5 +59,13 @@ defmodule Electric.Replication.PostgresConnector do
 
   def name_from_conn_config(conn_config) do
     conn_config |> Connectors.origin() |> name_from_origin()
+  end
+
+  defp store_config(config) do
+    :ets.insert(@ets_table, {@conn_config_key, config})
+  end
+
+  def config do
+    :ets.lookup_element(@ets_table, @conn_config_key, 2)
   end
 end

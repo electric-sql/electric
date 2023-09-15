@@ -43,19 +43,16 @@ defmodule Electric.Satellite.WebsocketServerTest do
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
 
-    port = 55133
-
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
        pg_connector_opts: [origin: "fake_origin"],
        subscription_data_fun: ctx.subscription_data_fun}
 
+    port = 55133
     start_link_supervised!({Bandit, port: port, plug: plug})
 
-    server_id = Electric.instance_id()
-
-    {:ok, port: port, server_id: server_id}
+    {:ok, port: port, server_id: Electric.instance_id()}
   end
 
   setup_with_mocks([
@@ -101,12 +98,9 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   describe "resource related check" do
     test "Check that resources are create and removed accordingly", ctx do
-      with_connect(
-        [auth: ctx, port: ctx.port],
-        fn _conn ->
-          [{Electric.Replication.SatelliteConnector, _pid}] = connectors()
-        end
-      )
+      with_connect([auth: ctx, port: ctx.port], fn _conn ->
+        [{SatelliteConnector, _pid}] = connectors()
+      end)
 
       drain_active_resources(connectors())
       assert [] = connectors()
@@ -641,7 +635,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     :ok
   end
 
-  defp drain_active_resources([{Electric.Replication.SatelliteConnector, _} | _] = list) do
+  defp drain_active_resources([{SatelliteConnector, _} | _] = list) do
     drain_pids(list)
   end
 

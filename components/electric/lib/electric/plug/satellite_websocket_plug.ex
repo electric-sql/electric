@@ -12,10 +12,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
   defp build_websocket_opts(base_opts, client_version) do
     base_opts
     |> Keyword.put(:client_version, client_version)
-    |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
-    |> Keyword.put_new_lazy(:pg_connector_opts, fn ->
-      Electric.Application.pg_connection_opts()
-    end)
+    |> Keyword.put_new_lazy(:auth_provider, &Electric.Satellite.Auth.provider/0)
+    |> Keyword.put_new_lazy(:pg_connector_opts, &Electric.Replication.PostgresConnector.config/0)
     |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
       &Electric.Replication.InitialSync.query_subscription_data/2
     end)
