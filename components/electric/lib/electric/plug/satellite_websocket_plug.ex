@@ -6,17 +6,20 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   def init(handler_opts), do: handler_opts
 
-  defp build_websocket_opts(base_opts, client_version),
-    do:
-      base_opts
-      |> Keyword.put(:client_version, client_version)
-      |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
-      |> Keyword.put_new_lazy(:pg_connector_opts, fn ->
-        Electric.Application.pg_connection_opts()
-      end)
-      |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
-        &Electric.Replication.InitialSync.query_subscription_data/2
-      end)
+  # These options that are passed to WebsocketServer.init() eventually. We fetch them here because in the test env we
+  # start a dedicated Bandit listener intead of the standard one defined in the Application module. Passing test-only
+  # overrides as options to this Plug is the most straightforward approach with that setup.
+  defp build_websocket_opts(base_opts, client_version) do
+    base_opts
+    |> Keyword.put(:client_version, client_version)
+    |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
+    |> Keyword.put_new_lazy(:pg_connector_opts, fn ->
+      Electric.Application.pg_connection_opts()
+    end)
+    |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
+      &Electric.Replication.InitialSync.query_subscription_data/2
+    end)
+  end
 
   @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
 
