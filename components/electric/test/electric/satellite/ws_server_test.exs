@@ -9,7 +9,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
 
-  alias Electric.Test.SatelliteWsClient, as: MockClient
+  alias Satellite.TestWsClient, as: MockClient
 
   alias Electric.Replication.Changes
 
@@ -90,10 +90,9 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
     client_id = "device-id-0000"
-    headers = build_headers(PB.get_long_proto_vsn())
     token = Auth.Secure.create_token(user_id)
 
-    {:ok, user_id: user_id, client_id: client_id, token: token, headers: headers}
+    {:ok, user_id: user_id, client_id: client_id, token: token}
   end
 
   setup ctx do
@@ -118,7 +117,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "sanity check", ctx do
       with_connect([port: ctx.port], fn conn ->
         Process.sleep(1000)
-        assert true == MockClient.is_alive(conn)
+        assert Process.alive?(conn)
       end)
     end
 
@@ -128,8 +127,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         fn conn ->
           MockClient.send_data(conn, %SatAuthReq{
             id: ctx.client_id,
-            token: ctx.token,
-            headers: ctx.headers
+            token: ctx.token
           })
 
           server_id = ctx.server_id
@@ -138,65 +136,34 @@ defmodule Electric.Satellite.WebsocketServerTest do
       )
     end
 
-    test "Server will respond with error to auth request without headers", ctx do
-      with_connect(
-        [port: ctx.port],
-        fn conn ->
-          MockClient.send_data(conn, %SatAuthReq{id: ctx.client_id, token: ctx.token})
-          assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @default_wait
-        end
-      )
-    end
-
-    test "Server with error to auth request with wrong headers headers", ctx do
-      with_connect(
-        [port: ctx.port],
-        fn conn ->
-          MockClient.send_data(
-            conn,
-            %SatAuthReq{
-              id: ctx.client_id,
-              token: ctx.token,
-              headers: build_headers("not_a_version_9_3")
-            }
-          )
-
-          assert_receive {^conn, %SatErrorResp{error_type: :PROTO_VSN_MISMATCH}}, @default_wait
-        end
-      )
-    end
-
     test "Server will handle bad requests", ctx do
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_bin_data(conn, <<"rubbish">>)
+        MockClient.send_frames(conn, {:binary, "rubbish"})
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
 
     test "Server will handle bad requests after auth", ctx do
       with_connect([port: ctx.port, auth: ctx], fn conn ->
-        MockClient.send_bin_data(conn, <<"rubbish">>)
+        MockClient.send_frames(conn, {:binary, "rubbish"})
         assert_receive {^conn, %SatErrorResp{}}, @default_wait
       end)
     end
 
     test "Server will respond with error on attempt to skip auth", ctx do
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatPingReq{})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: ctx.client_id,
-          token: ctx.token,
-          headers: ctx.headers
+          token: ctx.token
         })
 
         server_id = ctx.server_id
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
-
-        ping_server(conn)
       end)
     end
 
@@ -204,15 +171,14 @@ defmodule Electric.Satellite.WebsocketServerTest do
       server_id = ctx.server_id
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatPingReq{})
+        MockClient.send_data(conn, %SatInStartReplicationReq{})
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
       end)
 
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: ctx.client_id,
-          token: ctx.token,
-          headers: ctx.headers
+          token: ctx.token
         })
 
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
@@ -221,8 +187,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: ctx.client_id,
-          token: "invalid_token",
-          headers: ctx.headers
+          token: "invalid_token"
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
@@ -234,8 +199,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: ctx.client_id,
-          token: expired_token,
-          headers: ctx.headers
+          token: expired_token
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
@@ -244,8 +208,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: ctx.client_id,
-          token: ctx.token,
-          headers: ctx.headers
+          token: ctx.token
         })
 
         assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
@@ -258,8 +221,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port], fn conn ->
         MockClient.send_data(conn, %SatAuthReq{
           id: "client_id",
-          token: invalid_token,
-          headers: ctx.headers
+          token: invalid_token
         })
 
         assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
@@ -268,12 +230,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     test "Server will forbid two connections that use same id", ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn _conn ->
-        {:ok, pid} = MockClient.connect_and_spawn(auto_register: false, port: ctx.port)
+        {:ok, pid} = MockClient.connect(port: ctx.port)
 
         MockClient.send_data(pid, %SatAuthReq{
           id: ctx.client_id,
-          token: ctx.token,
-          headers: ctx.headers
+          token: ctx.token
         })
 
         assert_receive {^pid, %SatErrorResp{}}, @default_wait
@@ -610,11 +571,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           assert tx.origin !== ""
 
-          assert_receive {^conn, %SatPingResp{lsn: ^lsn}}, @default_wait
-
-          # After restart we still get same lsn
+          # Wait for everything to be persisted
+          Process.sleep(200)
         end)
 
+        # After restart we still get same lsn
         with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
           lsn = "some_long_internal_lsn"
 
@@ -671,8 +632,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   def clean_connections() do
-    MockClient.disconnect()
-
     :ok = drain_pids(active_clients())
     :ok = drain_active_resources(connectors())
   end
@@ -787,9 +746,5 @@ defmodule Electric.Satellite.WebsocketServerTest do
   defp build_op_log(changes) do
     ops = Enum.map(changes, fn change -> build_changes(change) end)
     %SatOpLog{ops: ops}
-  end
-
-  defp build_headers(proto_version) do
-    [%SatAuthHeaderPair{key: :PROTO_VERSION, value: proto_version}]
   end
 end

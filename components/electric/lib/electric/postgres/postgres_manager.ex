@@ -23,7 +23,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
               subscription: String.t(),
               electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
             },
-            state: :reinit | :init | :subscribe | :ready | :migration
+            state: :init | :subscribe | :ready
           }
   end
 
@@ -44,9 +44,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec status(Connectors.origin()) :: :init | :subscribe | :ready | :migration
+  @spec status(Connectors.origin()) :: :init | :subscribe | :ready
   def status(origin) do
-    GenServer.call(name(origin), {:status})
+    GenServer.call(name(origin), :status)
   end
 
   @impl GenServer
@@ -68,8 +68,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_continue(init, %State{origin: origin} = state)
-      when init == :init or init == :reinit do
+  def handle_continue(:init, %State{origin: origin} = state) do
     case initialize_postgres(state) do
       {:ok, state1} ->
         :ok = PostgresConnector.start_children(state.config)
@@ -79,7 +78,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
       error ->
         Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
-        {:noreply, schedule_retry(init, state)}
+        {:noreply, schedule_retry(:init, state)}
     end
   end
 
@@ -94,7 +93,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_call({:status}, _from, state) do
+  def handle_call(:status, _from, state) do
     {:reply, state.state, state}
   end
 

@@ -14,7 +14,7 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import path from 'path'
 import { DbSchema } from '../../src/client/model'
-import { MockSocketFactory } from '../../src/sockets/mock'
+import { MockSocket } from '../../src/sockets/mock'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
@@ -89,7 +89,7 @@ const migrationMetaData = {
       })
     ),
   ],
-  protocol_version: 'Electric.Satellite.v1_4',
+  protocol_version: 'Electric.Satellite',
   version: '20230613112725_814',
 }
 
@@ -132,7 +132,7 @@ test('load migration from meta data', async (t) => {
         token: 'test-token',
       },
     },
-    { socketFactory: new MockSocketFactory() }
+    { socketFactory: MockSocket }
   )
 
   // Check that the DB is initialized with the stars table

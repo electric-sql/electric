@@ -26,28 +26,13 @@ syntax = "proto3";
 //   - MINOR version is incremented when new API or bugfixes are introduced
 //     in a backwards-compatible manner
 //
-package Electric.Satellite.v1_4;
+package Electric.Satellite;
 
-// Ping request. Can be sent by any party.
-message SatPingReq{
-}
-
-// Ping response.
-message SatPingResp{
-    // If LSN is present, it conveys to producer the latest LSN position that
-    // was applied on the consumer side. If there is no active replication
-    // ongoing the field should be left empty.
-    optional bytes lsn = 1;
-}
 
 enum SatAuthHeader {
+    reserved 1;
     // Required by the Protobuf spec.
     UNSPECIFIED = 0;
-
-    // required header
-    // protobuf protocol version, this version is picked from
-    // the package statement of this protobuf file, for example "Electric.Satellite.v10_13"
-    PROTO_VERSION = 1;
 }
 
 message SatAuthHeaderPair {

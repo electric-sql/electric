@@ -7,8 +7,6 @@ import {
   SatInStartReplicationResp,
   SatInStopReplicationResp,
   SatOpLog,
-  SatPingReq,
-  SatPingResp,
   SatRelation,
   SatShapeDataBegin,
   SatShapeDataEnd,
@@ -114,24 +112,6 @@ export class SatelliteWSServerStub {
                 Buffer.concat([
                   getSizeBuf(msg),
                   SatOpLog.encode(msg as SatOpLog).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatPingReq.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatPingReq.encode(msg as SatPingReq).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatPingResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatPingResp.encode(msg as SatPingResp).finish(),
                 ])
               )
             }

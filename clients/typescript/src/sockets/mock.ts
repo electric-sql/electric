@@ -1,14 +1,12 @@
 import { EventEmitter } from 'events'
-import { ConnectionOptions, Data, Socket, SocketFactory } from './index'
+import { ConnectionOptions, Data, Socket } from './index'
 import { SatelliteError } from '../util'
 
-export class MockSocketFactory implements SocketFactory {
-  create(): MockSocket {
-    return new MockSocket()
-  }
-}
-
 export class MockSocket extends EventEmitter implements Socket {
+  constructor() {
+    super()
+  }
+
   open(_opts: ConnectionOptions): this {
     return this
   }

@@ -5,7 +5,7 @@
 
 [newshell electric_curl]
     !curl http://localhost:5133/api/status
-    ?{"connectors":{"postgres_1":true}}
+    ??Connection to Postgres is up!
 
 [cleanup]
     [invoke teardown]

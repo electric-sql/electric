@@ -1,11 +1,5 @@
-import { ConnectionOptions, Data, Socket, SocketFactory } from '.'
+import { ConnectionOptions, Data, Socket } from '.'
 import { SatelliteError, SatelliteErrorCode } from '../util'
-
-export class WebSocketWebFactory implements SocketFactory {
-  create(): WebSocketWeb {
-    return new WebSocketWeb()
-  }
-}
 
 // FIXME: This implementation is a bit contrived because it is not using EventEmitter
 export class WebSocketWeb implements Socket {
@@ -40,6 +34,8 @@ export class WebSocketWeb implements Socket {
   private messageListener?: (event: MessageEvent<any>) => void
   private closeListener?: () => void
 
+  constructor(private protocolVsn: string) {}
+
   open(opts: ConnectionOptions): this {
     if (this.socket) {
       throw new SatelliteError(
@@ -48,7 +44,7 @@ export class WebSocketWeb implements Socket {
       )
     }
 
-    this.socket = new WebSocket(opts.url)
+    this.socket = new WebSocket(opts.url, [this.protocolVsn])
     this.socket.binaryType = 'arraybuffer'
 
     this.socket.addEventListener('open', this.connectListener)

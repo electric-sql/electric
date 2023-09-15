@@ -38,19 +38,17 @@
                      alg: "HS256", key: "integration-tests-signing-key-example" \
                    )
     ?$eprompt
-    """!{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn(
+    """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},
                         id: "$client_id",
-                        debug: true,
                         sub: "",
                         auto_in_sub: true,
-                        format: :term,
                         host: "electric_1",
                         auto_ping: true)
     """
     ?+$eprompt
-    ?+sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
+    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
 [endmacro]
 
 [macro client_session_continue user_id session_id position subscription_ids]
@@ -60,38 +58,36 @@
                      alg: "HS256", key: "integration-tests-signing-key-example" \
                    )
     ?$eprompt
-    """!{:ok, conn} = Electric.Test.SatelliteWsClient.connect_and_spawn(
+    """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},
                         id: "$client_id",
-                        debug: true,
                         sub: "$position",
                         subscription_ids: ~w|$subscription_ids|,
                         auto_in_sub: true,
-                        format: :term,
                         host: "electric_1",
                         auto_ping: true)
     """
-    ?started #PID
+    ?Connection established with protocol vsn
     ?Auth passed
     ?Subscribed
-    ?sending to: (.*)%Electric.Satellite.V\d+.SatInStartReplicationReq\{(.*)lsn: "", ([^\}]*)\}
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
+    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
 [endmacro]
 
 [macro elixir_client_subscribe tables]
     """!
-    Electric.Test.SatelliteWsClient.send_data(conn, Electric.Test.SatelliteWsClient.build_subscription_request(request_1: [tables: ~w|$tables|]))
+    TestWsClient.send_data(conn, ProtocolHelpers.subscription_request(request_1: [tables: ~w|$tables|]))
     """
     ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
 [endmacro]
 
 [macro elixir_client_subscribe_with_id id tables]
     """!
-    Electric.Test.SatelliteWsClient.send_data(conn, Electric.Test.SatelliteWsClient.build_subscription_request("$id", request_1: [tables: ~w|$tables|]))
+    TestWsClient.send_data(conn, ProtocolHelpers.subscription_request("$id", request_1: [tables: ~w|$tables|]))
     """
     ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.V\d+.SatSubsResp\{[^\}]+err: nil
+    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
 [endmacro]
 
 

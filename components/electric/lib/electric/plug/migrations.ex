@@ -91,7 +91,7 @@ defmodule Electric.Plug.Migrations do
               version: version,
               ops: &1,
               format: "SatOpMigrate",
-              protocol_version: PB.get_long_proto_vsn()
+              protocol_version: "Electric.Satellite"
             }
           )
           |> Jason.encode!()

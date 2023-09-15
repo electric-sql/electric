@@ -11,7 +11,7 @@ import {
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { Database } from './database'
-import { MockSocketFactory } from '../../sockets/mock'
+import { MockSocket } from '../../sockets/mock'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
 
@@ -26,7 +26,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db.dbname!
   const adapter = opts?.adapter || new DatabaseAdapter(db)
-  const socketFactory = opts?.socketFactory || new MockSocketFactory()
+  const socketFactory = opts?.socketFactory || MockSocket
 
   const namespace = await baseElectrify(
     dbName,

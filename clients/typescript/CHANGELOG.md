@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.5.3
+
+### Patch Changes
+
+- 8f901a2: Enable foreign_keys pragma on startup.
+
 ## 0.5.2
 
 ### Patch Changes
