@@ -72,28 +72,28 @@ defmodule Electric.PlugTest do
 
       assert file_list == [
                {~c"0001/migration.sql",
-                "CREATE TABLE \"a\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE TABLE \"b\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n"},
+                "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n"},
                {
                  ~c"0001/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWESEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImEiICgKICAiaWQiIEJMT0IgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImFfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"GjIKAWISEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImIiICgKICAiaWQiIEJMT0IgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImJfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"CgQwMDAxEi8IARIrQ1JFQVRFIElOREVYICJhX2lkeCIgT04gImEiICgidmFsdWUiIEFTQyk7Cg==\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0001\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWESEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImEiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImFfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"GjIKAWISEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImIiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImJfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"CgQwMDAxEi8IARIrQ1JFQVRFIElOREVYICJhX2lkeCIgT04gImEiICgidmFsdWUiIEFTQyk7Cg==\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0001\"}"
                },
                {~c"0002/migration.sql",
-                "CREATE TABLE \"c\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"c\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
                {
                  ~c"0002/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWMSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMhJ+EnxDUkVBVEUgVEFCTEUgImMiICgKICAiaWQiIEJMT0IgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImNfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0002\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWMSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMhJ+EnxDUkVBVEUgVEFCTEUgImMiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImNfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0002\"}"
                },
                {~c"0003/migration.sql",
-                "CREATE TABLE \"d\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
+                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
                {
                  ~c"0003/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgQkxPQiBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgVEVYVCBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
                },
                {~c"0004/migration.sql",
-                "CREATE TABLE \"e\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
                {
                  ~c"0004/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIEJMT0IgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
                }
              ]
 
@@ -113,7 +113,7 @@ defmodule Electric.PlugTest do
                   %SatOpMigrate.Stmt{
                     type: :CREATE_TABLE,
                     sql:
-                      "CREATE TABLE \"a\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                      "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
                   }
                 ],
                 table: %SatOpMigrate.Table{
@@ -121,7 +121,7 @@ defmodule Electric.PlugTest do
                   columns: [
                     %SatOpMigrate.Column{
                       name: "id",
-                      sqlite_type: "BLOB",
+                      sqlite_type: "TEXT",
                       pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
                     },
                     %SatOpMigrate.Column{
@@ -165,16 +165,16 @@ defmodule Electric.PlugTest do
 
       assert file_list == [
                {~c"0003/migration.sql",
-                "CREATE TABLE \"d\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
+                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
                {
                  ~c"0003/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgQkxPQiBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgVEVYVCBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
                },
                {~c"0004/migration.sql",
-                "CREATE TABLE \"e\" (\n  \"id\" BLOB NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
                {
                  ~c"0004/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBEJMT0IaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIEJMT0IgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
+                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
                }
              ]
     end

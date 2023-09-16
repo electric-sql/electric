@@ -81,7 +81,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
       {map_type.(Postgres.bool_types()), "INTEGER"},
       {map_array_type.(Postgres.bool_types()), "TEXT_JSON"},
       # UUID
-      {map_type.(Postgres.uuid_types()), "BLOB"},
+      {map_type.(Postgres.uuid_types()), "TEXT"},
       {map_array_type.(Postgres.bool_types()), "TEXT_JSON"},
       # JSON
       {map_type.(Postgres.json_types()), "TEXT_JSON"}
@@ -116,7 +116,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "id" INTEGER NOT NULL,
                "i1" INTEGER,
                "i2" TEXT_JSON,
-               "i3" BLOB,
+               "i3" TEXT,
                "i4" TEXT,
                "i5" TEXT_JSON,
                "i6" INTEGER,
@@ -148,7 +148,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                  ~s["id" INTEGER NOT NULL,],
                  ~s["i1" INTEGER,],
                  ~s["i2" TEXT_JSON,],
-                 ~s["i3" BLOB,],
+                 ~s["i3" TEXT,],
                  ~s["i4" TEXT,],
                  ~s["i5" TEXT_JSON,],
                  ~s["i6" INTEGER,],

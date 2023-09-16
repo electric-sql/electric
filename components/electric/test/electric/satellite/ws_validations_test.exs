@@ -10,7 +10,6 @@ defmodule Electric.Satellite.WsValidationsTest do
   alias Electric.Satellite.Auth
 
   alias Electric.Satellite.Serialization
-  alias Electric.Replication.Changes.{Transaction, NewRecord}
 
   @table_name "foo"
   @receive_timeout 500
@@ -85,6 +84,52 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates boolean values", ctx do
+    vsn = "2023072502"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "public.foo",
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, b BOOLEAN)"
+      )
+
+    valid_records = [
+      %{"id" => "1", "b" => "t"},
+      %{"id" => "2", "b" => "f"},
+      %{"id" => "3", "b" => ""}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "b" => "1"},
+      %{"id" => "11", "b" => "0"},
+      %{"id" => "12", "b" => "True"},
+      %{"id" => "13", "b" => "false"},
+      %{"id" => "14", "b" => "+"},
+      %{"id" => "15", "b" => "-"},
+      %{"id" => "16", "b" => "yes"},
+      %{"id" => "17", "b" => "no"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   test "validates integer values", ctx do
     vsn = "2023072502"
 
@@ -110,7 +155,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -162,7 +207,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -188,9 +233,6 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
-  # Support for UUID is already implemented on the server but not in DAL on the client. Once the latter is ready, we can
-  # add `:uuid` to the list of supported types in `Electric.Satellite.Serialization` and re-enable this test.
-  @tag :skip
   test "validates uuid values", ctx do
     vsn = "2023072504"
     :ok = migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id UUID PRIMARY KEY)")
@@ -207,7 +249,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [
@@ -216,6 +258,140 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "two"},
       %{"id" => "00000000000000000000000000000000"},
       %{"id" => "abcdefgh-ijkl-mnop-qrst-uvwxyz012345"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
+  test "validates date values", ctx do
+    vsn = "2023082201"
+
+    :ok =
+      migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY, d date)")
+
+    valid_records = [
+      %{"id" => "1", "d" => "2023-08-07"},
+      %{"id" => "2", "d" => "5697-02-28"},
+      %{"id" => "3", "d" => "6000-02-29"},
+      %{"id" => "4", "d" => "0001-01-01"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+    end)
+
+    refute_receive {_, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+
+    invalid_records = [
+      %{"id" => "10", "d" => "now"},
+      %{"id" => "11", "d" => "today"},
+      %{"id" => "12", "d" => "20230822"},
+      %{"id" => "13", "d" => "22-08-2023"},
+      %{"id" => "14", "d" => "2023-22-08"},
+      %{"id" => "15", "d" => "-1999-01-01"},
+      %{"id" => "16", "d" => "001-01-01"},
+      %{"id" => "17", "d" => "2000-13-13"},
+      %{"id" => "18", "d" => "5697-02-29"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
+  test "validates time values", ctx do
+    vsn = "2023091101"
+
+    :ok =
+      migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t time)")
+
+    valid_records = [
+      %{"id" => "1", "t" => "00:00:00"},
+      %{"id" => "2", "t" => "23:59:59"},
+      %{"id" => "3", "t" => "00:00:00.332211"},
+      %{"id" => "4", "t" => "11:11:11.11"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+    end)
+
+    refute_receive {_, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+
+    invalid_records = [
+      %{"id" => "10", "t" => "now"},
+      %{"id" => "11", "t" => "::"},
+      %{"id" => "12", "t" => "20:12"},
+      %{"id" => "13", "t" => "T18:00"},
+      %{"id" => "14", "t" => "l2:o6:t0"},
+      %{"id" => "15", "t" => "1:20:23"},
+      %{"id" => "16", "t" => "02:02:03-08:00"},
+      %{"id" => "17", "t" => "01:00:00+0"},
+      %{"id" => "18", "t" => "99:99:99"},
+      %{"id" => "19", "t" => "12:1:0"},
+      %{"id" => "20", "t" => ""}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
+  test "validates timestamp values", ctx do
+    vsn = "2023072505"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "public.foo",
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t1 timestamp, t2 timestamptz)"
+      )
+
+    valid_records = [
+      %{"id" => "1", "t1" => "2023-08-07 21:28:35.111", "t2" => "2023-08-07 21:28:35.421Z"},
+      %{"id" => "2", "t2" => "2023-08-07 00:00:00Z"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "t1" => "now"},
+      %{"id" => "11", "t1" => "12345678901234567890"},
+      %{"id" => "12", "t1" => "20230832T000000"},
+      %{"id" => "13", "t1" => "2023-08-07 21:28:35+03:00"},
+      %{"id" => "13", "t2" => "2023-08-07 21:28:35+03:00"},
+      %{"id" => "14", "t2" => ""},
+      %{"id" => "15", "t2" => "+"},
+      %{"id" => "16", "t2" => "2023-08-07 24:28:35"},
+      %{"id" => "16", "t2" => "2023-08-07 24:28:35+00"}
     ]
 
     Enum.each(invalid_records, fn record ->
@@ -256,12 +432,19 @@ defmodule Electric.Satellite.WsValidationsTest do
   end
 
   defp serialize_trans(record) do
-    {[op_log], _relations, _relation_mappings} =
-      %Transaction{
-        changes: [%NewRecord{relation: {"public", @table_name}, record: record, tags: []}],
-        commit_timestamp: DateTime.utc_now()
-      }
-      |> Serialization.serialize_trans(1, %{})
+    %{oid: relation_id, columns: columns} =
+      Electric.Postgres.Extension.SchemaCache.Global.relation!({"public", @table_name})
+
+    row_data = Serialization.map_to_row(record, columns, skip_value_encoding?: true)
+    commit_timestamp = DateTime.to_unix(DateTime.utc_now(), :millisecond)
+
+    op_log = %SatOpLog{
+      ops: [
+        %SatTransOp{op: {:begin, %SatOpBegin{lsn: "1", commit_timestamp: commit_timestamp}}},
+        %SatTransOp{op: {:insert, %SatOpInsert{relation_id: relation_id, row_data: row_data}}},
+        %SatTransOp{op: {:commit, %SatOpCommit{}}}
+      ]
+    }
 
     op_log
   end

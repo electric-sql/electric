@@ -107,7 +107,7 @@
     ?$psql
     [my old=$LUX_SHELLNAME]
     [shell electric]
-        ??[info] Applying migration $version
+        ??[info] Saved schema version $version
     [shell $old]
 [endmacro]
 
@@ -115,7 +115,7 @@
     [local sql=
         """
         CREATE TABLE public.items (
-            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             content VARCHAR NOT NULL,
             content_text_null VARCHAR,
             content_text_null_default VARCHAR DEFAULT '',

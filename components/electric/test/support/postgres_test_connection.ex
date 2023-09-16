@@ -142,7 +142,7 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.users (
-        id TEXT PRIMARY KEY,
+        id UUID PRIMARY KEY,
         name TEXT NOT NULL
       )
       """)
@@ -150,16 +150,16 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.documents (
-        id TEXT PRIMARY KEY,
+        id UUID PRIMARY KEY,
         title TEXT NOT NULL,
-        electric_user_id TEXT REFERENCES users(id)
+        electric_user_id UUID REFERENCES users(id)
       )
       """)
 
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.my_entries (
-        id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         content VARCHAR NOT NULL,
         content_b TEXT
       );
