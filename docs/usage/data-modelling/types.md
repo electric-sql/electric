@@ -24,7 +24,7 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 **Numeric**:
 
 - `smallint` / `int2`
-- `integer` / `int`/ `int4`
+- `integer` / `int` / `int4`
 - `double precision` / `float8`
 
 **Strings**:
