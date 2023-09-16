@@ -1,14 +1,13 @@
 import test from 'ava'
-import Database from 'better-sqlite3'
+
+import { ElectricDatabase as Database } from '../../src/drivers/postgres/database'
+import { DatabaseAdapter } from '../../src/drivers/postgres/adapter'
 
 import { rm as removeFile } from 'node:fs/promises'
 import { AnyDatabase } from '../../src/drivers'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { satelliteDefaults } from '../../src/satellite/config'
-
-import { randomValue } from '../../src/util/random'
 
 import migrations from '../support/migrations/migrations.js'
 
@@ -18,9 +17,9 @@ type Context = {
   db: AnyDatabase
 }
 
-test.beforeEach((t) => {
-  const dbName = `schema-migrations-${randomValue()}.db`
-  const db = new Database(dbName)
+test.beforeEach(async (t) => {
+  const dbName = "./data/db"
+  const db = await Database.init(dbName)
   const adapter = new DatabaseAdapter(db)
 
   t.context = {
@@ -30,14 +29,14 @@ test.beforeEach((t) => {
 })
 
 test.afterEach.always(async (t) => {
-  const { dbName } = t.context as Context
+  const { dbName, adapter  } = t.context as Context
 
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
+  await adapter.stop()
+  await removeFile(dbName, { force: true, recursive: true });
 })
 
 test('check schema keys are unique', async (t) => {
-  const { adapter } = t.context as Context
+  const { adapter, dbName } = t.context as Context
 
   const migrator = new BundleMigrator(adapter, migrations)
   await migrator.up()
@@ -52,6 +51,7 @@ test('check schema keys are unique', async (t) => {
     t.fail()
   } catch (err) {
     const castError = err as { code: string }
-    t.is(castError.code, 'SQLITE_CONSTRAINT_PRIMARYKEY')
+    // https://www.postgresql.org/docs/current/errcodes-appendix.html
+    t.is(castError.code, '23505')
   }
 })
