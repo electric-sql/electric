@@ -8,12 +8,13 @@ export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter) {}
 
   run(
-    statement: string | QueryBuilder,
+    statement: QueryBuilder,
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
-      .run({ sql: statement.toString() })
+      .run({ sql: text, args: values })
       .then((res) => {
         if (typeof successCallback !== 'undefined') {
           try {
@@ -33,13 +34,14 @@ export class NonTransactionalDB implements DB {
   }
 
   query<Z>(
-    statement: string | QueryBuilder,
+    statement: QueryBuilder,
     schema: z.ZodType<Z>,
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
-      .query({ sql: statement.toString() })
+      .query({ sql: text, args: values })
       .then((rows) => {
         try {
           const objects = rows.map((row) => schema.parse(row))
