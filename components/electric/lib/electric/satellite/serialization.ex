@@ -27,7 +27,7 @@ defmodule Electric.Satellite.Serialization do
       bool
       date
       float8
-      int2 int4 int8
+      int2 int4
       text
       time
       timestamp timestamptz

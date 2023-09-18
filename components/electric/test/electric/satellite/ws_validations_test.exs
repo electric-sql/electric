@@ -138,15 +138,16 @@ defmodule Electric.Satellite.WsValidationsTest do
         ctx.db,
         vsn,
         "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4, i8_1 BIGINT, i8_2 INT8)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4)"
+        # "CREATE TABLE public.foo (id TEXT PRIMARY KEY, i2_1 SMALLINT, i2_2 INT2, i4_1 INTEGER, i4_2 INT4, i8_1 BIGINT, i8_2 INT8)"
       )
 
     valid_records = [
       %{"id" => "1", "i2_1" => "1", "i2_2" => "-1"},
       %{"id" => "2", "i2_1" => "32767", "i2_2" => "-32768"},
       %{"id" => "3", "i4_1" => "+0", "i4_2" => "-0"},
-      %{"id" => "4", "i4_1" => "2147483647", "i4_2" => "-2147483648"},
-      %{"id" => "5", "i8_1" => "-9223372036854775808", "i8_2" => "+9223372036854775807"}
+      %{"id" => "4", "i4_1" => "2147483647", "i4_2" => "-2147483648"}
+      # %{"id" => "5", "i8_1" => "-9223372036854775808", "i8_2" => "+9223372036854775807"}
     ]
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -163,9 +164,9 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "11", "i2_2" => "five"},
       %{"id" => "12", "i4_1" => "."},
       %{"id" => "13", "i4_2" => "-"},
-      %{"id" => "14", "i8_1" => "+"},
-      %{"id" => "15", "i8_2" => "0.0"},
-      %{"id" => "16", "i8_1" => "1_000"},
+      # %{"id" => "14", "i8_1" => "+"},
+      # %{"id" => "15", "i8_2" => "0.0"},
+      # %{"id" => "16", "i8_1" => "1_000"},
       %{"id" => "17", "i4_2" => "-1+5"},
       %{"id" => "18", "i4_1" => "0x33"},
       %{"id" => "19", "i2_2" => "0b101011"},
