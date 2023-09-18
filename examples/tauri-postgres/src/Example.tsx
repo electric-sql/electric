@@ -1,26 +1,18 @@
 import React, { useEffect, useState } from 'react'
 
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
+import { genUUID, uniqueTabId } from 'electric-sql/util'
 // import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { ElectricDatabase, electrify } from 'electric-sql/sqlx'
-
 import { invoke } from '@tauri-apps/api'
 
-import { authToken } from 'electric-sql/auth'
-import { genUUID } from 'electric-sql/util'
-
-import { Electric, Item, schema } from './generated/client'
+import { authToken } from './auth'
+import { DEBUG_MODE, ELECTRIC_URL } from './config'
+import { Electric, Items as Item, schema } from './generated/client'
 
 import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
-const localAuthToken = (): Promise<string> => {
-  const issuer = 'local-development'
-  const signingKey = 'local-development-key-minimum-32-symbols'
-
-  return authToken(issuer, signingKey)
-}
 
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
@@ -31,11 +23,16 @@ export const Example = () => {
     const init = async () => {
       const config = {
         auth: {
-          token: await localAuthToken()
-        }
+          token: authToken()
+        },
+        debug: DEBUG_MODE,
+        url: ELECTRIC_URL
       }
 
-      const conn = await ElectricDatabase.init('electric.db', '', invoke)
+      const { tabId } = uniqueTabId()
+      const tabScopedDbName = `electric-${tabId}.db`
+
+      const conn = await ElectricDatabase.init(tabScopedDbName, '', invoke) // TODO: pass sqlx config
       const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {
@@ -65,64 +62,75 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-
-  useEffect(() => void db.items.sync(), [])
-
   const { results } = useLiveQuery(
     db.items.liveMany()
   )
+
+  useEffect(() => {
+    const syncItems = async () => {
+      // Resolves when the shape subscription has been established.
+      const shape = await db.items.sync()
+
+      // Resolves when the data has been synced into the local database.
+      await shape.synced
+    }
+
+    syncItems()
+  }, [])
 
   const addItem = async () => {
     await db.items.create({
       data: {
         value: genUUID(),
-        // uncomment the line below after migration
-        //other_value: genUUID(),
       }
     })
   }
 
   const clearItems = async () => {
-    await db.items.deleteMany() // delete all items
+    await db.items.deleteMany()
+  }
+
+  const startPg = async () => {
+    console.log("Start Postgres")
+    invoke("tauri_start_postgres", {} );
+  }
+
+  const stopPg = async () => {
+    console.log("Stop Postgres")
+    invoke("tauri_stop_postgres", {} );
+  }
+
+  const testPg = async () => {
+    console.log("Test Postgres")
+    invoke("tauri_test_postgres", {} );
   }
 
   const items: Item[] = results ?? []
 
-  // After the migration, comment out this code and uncomment code block below
   return (
     <div>
       <div className="controls">
-        <button className="button" onClick={addItem}>
+        <button className="button" onClick={ addItem }>
           Add
         </button>
-        <button className="button" onClick={clearItems}>
+        <button className="button" onClick={ clearItems }>
           Clear
         </button>
+        <button className="button" onClick={ startPg }>
+          Start Postgres
+        </button>
+        <button className="button" onClick={ stopPg }>
+          Stop Postgres
+        </button>
+        <button className="button" onClick={ testPg }>
+          Test Postgres
+        </button>
       </div>
-      {items.map((item: any, index: any) => (
+      {items.map((item: Item, index: number) => (
         <p key={ index } className="item">
           <code>{ item.value }</code>
         </p>
       ))}
     </div>
   )
-
-  // Uncomment after migration
-  //return (
-  //  <div>
-  //    <div className="controls">
-  //      <button className="button" onClick={addItem}>
-  //        Add
-  //      </button>
-  //      <button className="button" onClick={clearItems}>
-  //        Clear
-  //      </button>
-  //    </div>
-  //    {items.map((item: any, index: any) => (
-  //      <p key={ index } className="item">
-  //        <code>{ item.value } - { item.other_value }</code>
-  //      </p>
-  //    ))}
-  //  </div>
-  //)
 }

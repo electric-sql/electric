@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "pnpm build",
-    "beforeDevCommand": "pnpm start",
+    "beforeBuildCommand": "yarn build",
+    "beforeDevCommand": "SERVE=true npm run build",
     "devPath": "http://localhost:3001",
     "distDir": "../dist"
   },
   "package": {
-    "productName": "tauri-postgres",
+    "productName": "tauri-example",
     "version": "0.1.0"
   },
   "tauri": {
@@ -58,7 +58,7 @@
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "@examples/tauri-postgres",
+        "title": "tauri-example",
         "width": 800
       }
     ]
