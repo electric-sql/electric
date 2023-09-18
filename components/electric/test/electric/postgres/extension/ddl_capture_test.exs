@@ -144,6 +144,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, sql3)
 
-    assert {:ok, [_, _]} = Extension.ddl_history(conn)
+    assert {:ok, [_, {_, _, _, ^sql3}]} = Extension.ddl_history(conn)
   end
 end
