@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Dialect.Builder do
   alias Electric.Postgres.Schema.Proto
   alias PgQuery, as: Pg
+  alias Electric.Postgres.Dialect
 
   @type stmt() :: [binary() | sql() | nil]
   @type sql() :: Dialect.sql()

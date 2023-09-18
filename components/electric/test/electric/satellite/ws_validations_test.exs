@@ -91,8 +91,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, b BOOLEAN)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, b BOOLEAN)",
+        electrify: "public.foo"
       )
 
     valid_records = [
@@ -369,8 +369,8 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "public.foo",
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t1 timestamp, t2 timestamptz)"
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t1 timestamp, t2 timestamptz)",
+        electrify: "public.foo"
       )
 
     valid_records = [

@@ -16,6 +16,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   @type msgs() :: [M.t()]
   @type response() :: {:ok, state(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
   @type quote_mark() :: String.t()
+  @type t :: module()
 
   @callback capture_ddl_query(query :: binary()) :: binary()
   @callback capture_version_query(version :: binary()) :: binary()

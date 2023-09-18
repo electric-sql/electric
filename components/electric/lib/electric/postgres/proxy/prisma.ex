@@ -5,17 +5,19 @@ defmodule Electric.Postgres.Proxy.Prisma do
 
   alias Electric.Postgres.Proxy.Injector
 
+  require Logger
+
   def parse_query("SELECT version()" <> _rest) do
     {:ok, Electric.Postgres.Proxy.Prisma.Query.VersionV5_2}
   end
 
   def parse_query(sql) do
     with [stmt] <- Electric.Postgres.parse!(sql) do
-      analyse_stmt(stmt)
+      analyse_stmt(stmt, sql)
     end
   end
 
-  defp analyse_stmt(%PgQuery.SelectStmt{} = stmt) do
+  defp analyse_stmt(%PgQuery.SelectStmt{} = stmt, sql) do
     case target_list_names(stmt) do
       ["", "", "numeric_version"] ->
         {:ok, Electric.Postgres.Proxy.Prisma.Query.NamespaceVersionV5_2}
@@ -124,6 +126,13 @@ defmodule Electric.Postgres.Proxy.Prisma do
         "cache_size"
       ] ->
         {:ok, Electric.Postgres.Proxy.Prisma.Query.SequenceV5_2}
+
+      columns ->
+        Logger.error(
+          "Received unknown prisma introspection query: #{inspect(sql)} with columns #{inspect(columns)}"
+        )
+
+        :error
     end
   end
 

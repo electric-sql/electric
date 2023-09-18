@@ -1,12 +1,12 @@
 defmodule Electric.Postgres.Proxy.Prisma.Query do
   alias Electric.Postgres.Proxy.Prisma
-  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Schema
   alias PgProtocol.Message, as: M
 
   @type data_row() :: [binary()]
   @callback parameter_description(Prisma.t()) :: [integer()]
   @callback row_description(Prisma.t()) :: [M.RowDescription.Field.t()]
-  @callback data_rows([term()], SchemaLoader.t(), Prisma.t()) :: [data_row()]
+  @callback data_rows([term()], Schema.t(), Prisma.t()) :: [data_row()]
 
   # PG_VERSION_NUM => sprintf("%d%04d", $majorver, $minorver)
   defguard is_major_version(config, v)
@@ -99,7 +99,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.VersionV5_2 do
     ]
   end
 
-  def data_rows(_binds, _loader, config) do
+  def data_rows(_binds, _schema, config) do
     [[server_version_string(config)]]
   end
 end
