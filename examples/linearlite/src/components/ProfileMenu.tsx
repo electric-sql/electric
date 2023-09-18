@@ -24,7 +24,7 @@ export default function ProfileMenu({
   )
   const ref = useRef(null)
 
-  const connectivityConnected = connectivityState === 'connected'
+  const connectivityConnected = connectivityState !== 'disconnected'
   const connectivityStateDisplay =
     connectivityState[0].toUpperCase() + connectivityState.slice(1)
 

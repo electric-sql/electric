@@ -80,7 +80,6 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
           filterKeyword={true}
           onSelect={(p) => updatePriority(p)}
         />
-        {issue.kanbanorder}
       </div>
     </div>
   )
