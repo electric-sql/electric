@@ -6,7 +6,7 @@ export type { Issue } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
-const discriminator = 'prod-15'
+const discriminator = 'linearlite'
 const distPath = '/'
 
 const config = {
@@ -17,7 +17,7 @@ const config = {
   debug: true,
 }
 
-const dbName = `${discriminator}.db`
+export const dbName = `${discriminator}.db`
 
 console.log(dbName)
 

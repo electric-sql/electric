@@ -8,7 +8,7 @@ import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
 
-import { ElectricProvider, initElectric } from './electric'
+import { ElectricProvider, initElectric, dbName } from './electric'
 import { Electric } from './generated/client'
 
 interface MenuContextInterface {
@@ -23,13 +23,39 @@ const slideUp = cssTransition({
   exit: 'animate__animated animate__slideOutDown',
 })
 
+function deleteDB() {
+  console.log("Deleting DB as schema doesn't match server's")
+  const DBDeleteRequest = window.indexedDB.deleteDatabase(dbName)
+  DBDeleteRequest.onsuccess = function () {
+    console.log('Database deleted successfully')
+  }
+  // the indexedDB cannot be deleted if the database connection is still open,
+  // so we need to reload the page to close any open connections.
+  // On reload, the database will be recreated.
+  window.location.reload()
+}
+
 const App = () => {
   const [electric, setElectric] = useState<Electric>()
   const [showMenu, setShowMenu] = useState(false)
 
   useEffect(() => {
     const init = async () => {
-      const client = await initElectric()
+      let client
+      try {
+        client = await initElectric()
+      } catch (error) {
+        console.log('here')
+        console.log((error as Error).message)
+        if (
+          (error as Error).message.startsWith(
+            "Local schema doesn't match server's"
+          )
+        ) {
+          deleteDB()
+        }
+        throw error
+      }
       setElectric(client)
       const { synced } = await client.db.issue.sync({
         include: {
