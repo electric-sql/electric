@@ -145,7 +145,7 @@ test.serial('findMany transforms JS objects in `in` filter to SQLite', async (t)
 
 test.serial('create transforms nested JS objects to SQLite', async (t) => {
   const date1 = new Date('2023-09-13 23:33:04.271')
-  const date2 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
 
   const record = {
     id: 1,
@@ -187,3 +187,51 @@ test.serial('create transforms nested JS objects to SQLite', async (t) => {
 
 // TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
 // TODO: write tests for createMany, update, updateMany, upsert, delete, deleteMany
+test.serial('createMany transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+
+  const record1 = {
+    id: 1,
+    timestamp: date1,
+  }
+
+  const record2 = {
+    id: 2,
+    timestamp: date2
+  }
+
+  const res = await tbl.createMany({
+    data: [record1, record2]
+  })
+
+  t.is(res.count, 2)
+
+  const fetchRes = await tbl.findMany({
+    where: {
+      id: {
+        in: [1, 2]
+      }
+    }
+  })
+
+  const nulls = {
+    date: null,
+    time: null,
+    timetz: null,
+    timestamp: null,
+    timestamptz: null,
+    relatedId: null,
+  }
+
+  t.deepEqual(fetchRes, [
+    {
+      ...nulls,
+      ...record1
+    },
+    {
+      ...nulls,
+      ...record2
+    },
+  ])
+})
