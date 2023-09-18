@@ -13,8 +13,8 @@ export OTP_VERSION=25.3.2.4
 export DEBIAN_VERSION=bullseye-20230612-slim
 # using a realistic password for the proxy to prevent accidentally working tests 
 # with some default "password"
-export PG_PROXY_PASSWORD?="49_G1JYY0BXWldjnA2EFxhWl"
-export PG_PROXY_PORT?="65432"
+export PG_PROXY_PASSWORD?=49_G1JYY0BXWldjnA2EFxhWl
+export PG_PROXY_PORT?=65432
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
