@@ -30,11 +30,10 @@ You can then talk to the Postgres with psql using the password `password`:
 
 ### Configure Node
 
-This project is using Node v16.20.0 and pnpm to manage dependencies
+This project is using Node v16
 
 ```
-nvm use v16.20.0
-npm install -g pnpm
+nvm use v16
 ```
 
 ### Install
@@ -42,7 +41,7 @@ npm install -g pnpm
 In the root of the Electric folder install all the js dependencies for submodules and examples:
 
 ```
-pnpm install
+npm install
 ```
 
 ### Setup
@@ -50,28 +49,28 @@ pnpm install
 Start Postgres and Electric using Docker (see [running the examples](https://Electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-pnpm backend:up
+npm backend:up
 # Or `yarn backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-pnpm db:psql
+npm db:psql
 ```
 
 The [database schema](https://Electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
 You can apply it with:
 
 ```shell
-pnpm db:migrate
+npm db:migrate
 ```
 
 Generate your [type-safe client](https://Electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-pnpm client:generate
-# or `pnpm client:watch`` to re-generate whenever the DB schema changes
+npm client:generate
+# or `npm client:watch`` to re-generate whenever the DB schema changes
 ```
 
 ### Run web app
@@ -79,8 +78,8 @@ pnpm client:generate
 The app is a React application to install and run it:
 
 ```bash
-pnpm build
-pnpm start
+npm build
+npm start
 ```
 
 The app should be available on `localhost:5173`
