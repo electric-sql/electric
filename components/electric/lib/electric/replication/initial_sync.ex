@@ -6,6 +6,7 @@ defmodule Electric.Replication.InitialSync do
   history, etc.
   """
 
+  alias Electric.Telemetry.Metrics
   alias Electric.Replication.Shapes
   alias Electric.Postgres.{CachedWal, Extension}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
@@ -94,7 +95,8 @@ defmodule Electric.Replication.InitialSync do
   """
   def query_subscription_data({subscription_id, requests, context},
         reply_to: {ref, parent},
-        connection: opts
+        connection: opts,
+        telemetry_span: span
       ) do
     Client.with_conn(Connectors.get_connection_opts(opts, replication: false), fn conn ->
       origin = Connectors.origin(opts)
@@ -118,9 +120,21 @@ defmodule Electric.Replication.InitialSync do
           send(parent, {:subscription_insertion_point, ref, String.to_integer(xmin)})
 
           Enum.reduce_while(requests, [], fn request, results ->
+            start = System.monotonic_time()
+
             case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin, context) do
-              {:ok, data} -> {:cont, [{request.id, data} | results]}
-              {:error, reason} -> {:halt, {:error, reason}}
+              {:ok, num_records, data} ->
+                Metrics.span_event(
+                  span,
+                  :shape_data,
+                  %{duration: System.monotonic_time() - start, row_count: num_records},
+                  %{shape_hash: Shapes.ShapeRequest.hash(request)}
+                )
+
+                {:cont, [{request.id, data} | results]}
+
+              {:error, reason} ->
+                {:halt, {:error, reason}}
             end
           end)
           |> case do

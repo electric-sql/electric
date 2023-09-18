@@ -605,7 +605,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   # -------------------------------------------------------------------------------
   def mock_data_function(
         {id, requests, _context},
-        [reply_to: {ref, pid}, connection: _],
+        [reply_to: {ref, pid}, connection: _, telemetry_span: _],
         opts \\ []
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)

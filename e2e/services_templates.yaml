@@ -5,6 +5,7 @@ services:
       LOG_LEVEL: debug
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: integration-tests-signing-key-example
+      ELECTRIC_TELEMETRY: disabled
     init: true
     privileged: true
 

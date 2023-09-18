@@ -31,7 +31,7 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :os_mon]
     ]
   end
 
@@ -65,7 +65,8 @@ defmodule Electric.MixProject do
       {:bandit, "~> 1.0-pre"},
       {:thousand_island, "~> 1.0-pre"},
       {:mint_web_socket, "~> 1.0"},
-      {:mint, "~> 1.5"}
+      {:mint, "~> 1.5"},
+      {:req, "~> 0.4"}
     ]
   end
 

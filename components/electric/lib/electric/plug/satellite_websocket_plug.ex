@@ -6,9 +6,10 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   def init(handler_opts), do: handler_opts
 
-  defp build_websocket_opts(base_opts),
+  defp build_websocket_opts(base_opts, client_version),
     do:
       base_opts
+      |> Keyword.put(:client_version, client_version)
       |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
       |> Keyword.put_new_lazy(:pg_connector_opts, fn ->
         Electric.Application.pg_connection_opts()
@@ -34,7 +35,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> protocol_vsn)
       |> upgrade_adapter(
         :websocket,
-        {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
+        {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts, client_vsn), []}
       )
     else
       {:error, code, body} ->

@@ -2,6 +2,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   use ExUnit.Case, async: false
   import Mock
 
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.Postgres.LogicalReplicationProducer
 
   alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction, Relation}
@@ -17,12 +18,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
        connect: fn _ -> {:ok, :conn} end,
        start_replication: fn :conn, _, _, _ -> :ok end,
        create_slot: fn :conn, name -> {:ok, name} end,
-       set_display_settings_for_replication: fn _ -> :ok end
+       set_display_settings_for_replication: fn _ -> :ok end,
+       get_server_versions: fn :conn -> {:ok, {"", "", ""}} end
      ]},
     {Connectors, [:passthrough],
      [
        get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
        get_connection_opts: fn _ -> %{} end
+     ]},
+    {SchemaLoader, [:passthrough],
+     [
+       count_electrified_tables: fn _ -> {:ok, 0} end
      ]}
   ]) do
     {:ok, %{}}

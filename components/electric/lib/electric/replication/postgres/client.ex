@@ -5,6 +5,7 @@ defmodule Electric.Replication.Postgres.Client do
   Uses `:epgsql` for it's `start_replication` function. Note that epgsql
   doesn't support connecting via a unix socket.
   """
+  alias Electric.Postgres.Extension
   require Logger
 
   @type connection :: pid
@@ -233,6 +234,20 @@ defmodule Electric.Replication.Postgres.Client do
         )
 
         {:error, :relation_missing}
+    end
+  end
+
+  @doc """
+  Retrieve PostgreSQL server version, long and short form
+  """
+  @spec get_server_versions(connection()) ::
+          {:ok, {short :: String.t(), long :: String.t(), cluster_id :: String.t()}}
+          | {:error, term()}
+  def get_server_versions(conn) do
+    with {:ok, _, [{short}]} <- :epgsql.squery(conn, "SHOW SERVER_VERSION"),
+         {:ok, _, [{long}]} <- :epgsql.squery(conn, "SELECT VERSION()"),
+         {:ok, _, _, [{cluster_id}]} <- Extension.save_and_get_cluster_id(conn) do
+      {:ok, {short, long, cluster_id}}
     end
   end
 end
