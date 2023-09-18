@@ -185,8 +185,19 @@ test.serial('create transforms nested JS objects to SQLite', async (t) => {
   t.deepEqual(fetchRes.related.timestamp, date2)
 })
 
-// TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
-// TODO: write tests for createMany, update, updateMany, upsert, delete, deleteMany
+const dateNulls = {
+  date: null,
+  time: null,
+  timetz: null,
+  timestamp: null,
+  timestamptz: null,
+}
+
+const nulls = {
+  ...dateNulls,
+  relatedId: null,
+}
+
 test.serial('createMany transforms JS objects to SQLite', async (t) => {
   const date1 = new Date('2023-09-13 23:33:04.271')
   const date2 = new Date('2023-09-12 23:33:04.271')
@@ -215,15 +226,6 @@ test.serial('createMany transforms JS objects to SQLite', async (t) => {
     }
   })
 
-  const nulls = {
-    date: null,
-    time: null,
-    timetz: null,
-    timestamp: null,
-    timestamptz: null,
-    relatedId: null,
-  }
-
   t.deepEqual(fetchRes, [
     {
       ...nulls,
@@ -235,3 +237,65 @@ test.serial('createMany transforms JS objects to SQLite', async (t) => {
     },
   ])
 })
+
+test.serial('update transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+
+  await tbl.create({
+    data: {
+      id: 1,
+      timestamp: date1,
+      related: {
+        create: {
+          id: 2,
+          timestamp: date2
+        }
+      }
+    }
+  })
+
+  const updateRes = await tbl.update({
+    data: {
+      timestamp: date2,
+      related: {
+        update: {
+          timestamp: date1,
+        }
+      }
+    },
+    where: {
+      id: 1,
+    },
+    include: {
+      related: true,
+    }
+  })
+
+  const expected = {
+    ...dateNulls,
+    id: 1,
+    timestamp: date2,
+    relatedId: 2,
+    related: {
+      id: 2,
+      timestamp: date1,
+    }
+  }
+
+  t.deepEqual(updateRes, expected)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1
+    },
+    include: {
+      related: true
+    }
+  })
+
+  t.deepEqual(fetchRes, expected)
+})
+
+// TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
+// TODO: write tests for updateMany, upsert, delete, deleteMany
