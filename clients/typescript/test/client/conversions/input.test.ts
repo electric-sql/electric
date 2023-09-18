@@ -297,5 +297,128 @@ test.serial('update transforms JS objects to SQLite', async (t) => {
   t.deepEqual(fetchRes, expected)
 })
 
+test.serial('updateMany transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+  const date3 = new Date('2023-09-11 23:33:04.271')
+
+  await tbl.create({
+    data: {
+      id: 1,
+      timestamp: date1,
+    }
+  })
+
+  await tbl.create({
+    data: {
+      id: 2,
+      timestamp: date2,
+    }
+  })
+
+  const { count } = await tbl.updateMany({
+    data: {
+      timestamp: date3,
+    },
+    where: {
+      timestamp: date1
+    }
+  })
+
+  t.is(count, 1)
+
+  const fetchRes = await tbl.findMany({
+    select: {
+      timestamp: true,
+    }
+  })
+
+  t.deepEqual(fetchRes, [ { timestamp: date3 }, { timestamp: date2 } ])
+})
+
+test.serial('upsert transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+  const date3 = new Date('2023-09-11 23:33:04.271')
+
+  const row1 = {
+    id: 1,
+    timestamp: date1,
+    related: {
+      create: {
+        id: 2,
+        timestamp: date2
+      }
+    }
+  }
+
+  // upsert will create row1
+  const createRes = await tbl.upsert({
+    create: row1,
+    update: {
+      timestamp: date1
+    },
+    where: {
+      id: 1
+    },
+    include: {
+      related: true
+    }
+  })
+
+  t.deepEqual(createRes, {
+    ...dateNulls,
+    id: 1,
+    timestamp: date1,
+    related: {
+      id: 2,
+      timestamp: date2
+    },
+    relatedId: 2,
+  })
+
+  const updateRes = await tbl.upsert({
+    create: row1,
+    update: {
+      timestamp: date3,
+      related: {
+        update: {
+          timestamp: date3
+        }
+      }
+    },
+    where: {
+      id: 1
+    },
+    include: {
+      related: true
+    }
+  })
+
+  const expected = {
+    ...dateNulls,
+    id: 1,
+    timestamp: date3,
+    related: {
+      id: 2,
+      timestamp: date3
+    },
+    relatedId: 2,
+  }
+
+  t.deepEqual(updateRes, expected)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1
+    },
+    include: {
+      related: true
+    }
+  })
+
+  t.deepEqual(fetchRes, expected)
+})
+
 // TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
-// TODO: write tests for updateMany, upsert, delete, deleteMany
+// TODO: write tests for delete, deleteMany
