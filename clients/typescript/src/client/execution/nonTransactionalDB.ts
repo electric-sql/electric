@@ -1,5 +1,5 @@
 import { DatabaseAdapter, RunResult } from '../../electric/adapter'
-import { QueryBuilder, ToParamOptions } from 'squel'
+import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
@@ -12,9 +12,7 @@ export class NonTransactionalDB implements DB {
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({
-      numberedParameters: false,
-    } as unknown as ToParamOptions)
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
       .run({ sql: text, args: values })
       .then((res) => {
@@ -41,9 +39,7 @@ export class NonTransactionalDB implements DB {
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({
-      numberedParameters: false,
-    } as unknown as ToParamOptions)
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
       .query({ sql: text, args: values })
       .then((rows) => {

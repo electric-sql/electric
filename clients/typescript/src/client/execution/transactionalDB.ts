@@ -1,5 +1,5 @@
 import { RunResult, Transaction } from '../../electric/adapter'
-import { QueryBuilder, ToParamOptions } from 'squel'
+import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
@@ -11,9 +11,7 @@ export class TransactionalDB implements DB {
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({
-      numberedParameters: false,
-    } as unknown as ToParamOptions)
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._tx.run(
       { sql: text, args: values },
       (tx, res) => {
@@ -30,9 +28,7 @@ export class TransactionalDB implements DB {
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({
-      numberedParameters: false,
-    } as unknown as ToParamOptions)
+    const { text, values } = statement.toParam({ numberedParameters: false })
     this._tx.query(
       { sql: text, args: values },
       (tx, rows) => {
