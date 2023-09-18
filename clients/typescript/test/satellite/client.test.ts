@@ -8,7 +8,7 @@ import {
   serializeRow,
 } from '../../src/satellite/client'
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
-import { WebSocketNodeFactory } from '../../src/sockets/node'
+import { WebSocketNode } from '../../src/sockets/node'
 import { base64, bytesToNumber } from '../../src/util/common'
 import {
   getObjFromString,
@@ -42,7 +42,7 @@ test.beforeEach((t) => {
 
   const client = new SatelliteClient(
     dbName,
-    new WebSocketNodeFactory(),
+    WebSocketNode,
     new MockNotifier(dbName),
     {
       host: '127.0.0.1',
@@ -230,29 +230,6 @@ test.serial('replication stop failure', async (t) => {
   } catch (error) {
     t.is((error as any).code, SatelliteErrorCode.REPLICATION_NOT_STARTED)
   }
-})
-
-test.serial('server pings client', async (t) => {
-  await connectAndAuth(t.context)
-  const { client, server } = t.context
-
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
-  const ping = Proto.SatPingReq.fromPartial({})
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
-
-  return new Promise(async (resolve) => {
-    server.nextResponses([start, ping])
-    server.nextResponses([
-      () => {
-        t.pass()
-        resolve()
-      },
-    ])
-    server.nextResponses([stop])
-
-    await client.startReplication()
-    await client.stopReplication()
-  })
 })
 
 test.serial('receive transaction over multiple messages', async (t) => {
@@ -582,7 +559,7 @@ test.serial('default and null test', async (t) => {
   })
 
   const serializedRow: Proto.SatOpRow = {
-    $type: 'Electric.Satellite.v1_4.SatOpRow',
+    $type: 'Electric.Satellite.SatOpRow',
     nullsBitmask: new Uint8Array([40]),
     values: [
       new Uint8Array([

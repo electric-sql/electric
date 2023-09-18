@@ -5,7 +5,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
   import Electric.Postgres.TestConnection
   import Electric.Utils, only: [uuid4: 0]
   import ElectricTest.SetupHelpers
-  alias Electric.Test.SatelliteWsClient, as: MockClient
+  alias Satellite.TestWsClient, as: MockClient
   alias Electric.Postgres.CachedWal
 
   describe "Handling of real subscriptions" do

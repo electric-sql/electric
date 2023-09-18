@@ -96,6 +96,13 @@ defmodule Electric.Satellite.WebsocketServer do
   end
 
   @impl WebSock
+  # Either a `:ping` or a `:pong` message are enough to keep the connection open
+  def handle_control(_, %State{} = state) do
+    last_msg_time = :erlang.timestamp()
+    {:ok, %State{state | last_msg_time: last_msg_time}}
+  end
+
+  @impl WebSock
   # These four `handle_info` cases allow this websocket to act as a GenStage consumer and producer
   def handle_info({:"$gen_consumer", from, msg}, state) do
     Logger.debug("msg from producer: #{inspect(msg)}")
@@ -127,17 +134,11 @@ defmodule Electric.Satellite.WebsocketServer do
 
       last_msg_time ->
         if :timer.now_diff(:erlang.timestamp(), last_msg_time) > @ping_interval * 1000 do
-          push({%SatPingReq{}, schedule_ping(%{state | last_msg_time: :ping_sent})})
+          {:push, {:ping, ""}, schedule_ping(%{state | last_msg_time: :ping_sent})}
         else
           {:ok, schedule_ping(state)}
         end
     end
-  end
-
-  # Consumer (SatelliteCollectorConsumer) has reported that this lsn has been stored successfully.
-  # We need to report to Satellite.
-  def handle_info({Protocol, :lsn_report, lsn}, %State{} = state) do
-    push({%SatPingResp{lsn: lsn}, state})
   end
 
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new

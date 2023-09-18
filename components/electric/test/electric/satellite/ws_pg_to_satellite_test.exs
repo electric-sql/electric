@@ -6,7 +6,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
   import Electric.Postgres.TestConnection
   import ElectricTest.SatelliteHelpers
 
-  alias Electric.Test.SatelliteWsClient, as: MockClient
+  alias Satellite.TestWsClient, as: MockClient
   alias Electric.Satellite.Auth
 
   setup :setup_replicated_db
@@ -37,7 +37,6 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       MockClient.send_data(conn, %SatInStartReplicationReq{})
       assert_receive {^conn, %SatInStartReplicationResp{}}
 
-      ping_server(conn)
       refute_receive {^conn, _}
     end)
   end
@@ -65,14 +64,12 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       assert_receive_migration(conn, vsn1, "foo")
       assert_receive_migration(conn, vsn2, "bar")
 
-      ping_server(conn)
       refute_receive {^conn, _}
 
       # Make sure the server keeps streaming migrations to the client after the initial sync is done.
       :ok = migrate(ctx.db, vsn3, "ALTER TABLE foo ADD COLUMN bar TEXT DEFAULT 'quux'")
       assert_receive_migration(conn, vsn3, "foo")
 
-      ping_server(conn)
       refute_receive {^conn, _}
     end)
   end
@@ -94,7 +91,6 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       assert_receive_migration(conn, vsn1, "foo")
       assert_receive_migration(conn, vsn2, "bar")
 
-      ping_server(conn)
       refute_receive {^conn, _}
     end)
 
@@ -108,7 +104,6 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
       assert_receive_migration(conn, vsn2, "bar")
 
-      ping_server(conn)
       refute_receive {^conn, _}
     end)
   end

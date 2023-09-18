@@ -1,18 +1,12 @@
 import EventEmitter from 'events'
-import { ConnectionOptions, Data, Socket, SocketFactory } from './index'
+import { ConnectionOptions, Data, Socket } from './index'
 import { WebSocket } from 'ws'
 import { SatelliteError, SatelliteErrorCode } from '../util'
-
-export class WebSocketNodeFactory implements SocketFactory {
-  create(): WebSocketNode {
-    return new WebSocketNode()
-  }
-}
 
 export class WebSocketNode extends EventEmitter implements Socket {
   private socket?: WebSocket
 
-  constructor() {
+  constructor(private protocolVsn: string) {
     super()
   }
 
@@ -24,7 +18,7 @@ export class WebSocketNode extends EventEmitter implements Socket {
       )
     }
 
-    this.socket = new WebSocket(opts.url)
+    this.socket = new WebSocket(opts.url, [this.protocolVsn])
     this.socket.binaryType = 'nodebuffer'
 
     this.socket.on('open', () => this.emit('open'))

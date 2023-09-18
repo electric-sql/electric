@@ -1,0 +1,72 @@
+[doc NodeJS Satellite correctly syncs BOOL values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.bools (
+            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            b BOOLEAN
+        );
+        CALL electric.electrify('public.bools');
+        """]
+    [invoke migrate_pg 20230908 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "bools"]
+    [invoke node_sync_table "bools"]
+
+[shell pg_1]
+    !INSERT INTO public.bools (id, b) VALUES ('001', true), ('002', false), ('003', NULL);
+    ??INSERT 0 3
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "bools" "003"]
+
+    ??id: '001'
+    ??b: 1
+
+    ??id: '002'
+    ??b: 0
+
+    ??id: '003'
+    ??b: null
+
+    [invoke node_await_insert_extended_into "bools" "{id: '004', b: 1}"]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.bools;" "004" 10 $psql]
+
+    !SELECT * FROM public.bools;
+    ??001 | t
+    ??002 | f
+    ??003 | <NULL>
+    ??004 | t
+
+# Start a new Satellite client and verify that it receives all rows
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "bools"]
+    [invoke node_sync_table "bools"]
+
+    [invoke node_await_get_from_table "bools" "004"]
+    ??id: '001'
+    ??b: 1
+
+    ??id: '002'
+    ??b: 0
+
+    ??id: '003'
+    ??b: null
+
+    ??id: '004'
+    ??b: 1
+
+[cleanup]
+  [invoke teardown]

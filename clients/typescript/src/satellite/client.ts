@@ -12,11 +12,8 @@ import {
   SatTransOp,
   SatOpRow,
   SatOpLog,
-  SatPingResp,
   SatRelation,
   SatRelationColumn,
-  SatAuthHeader,
-  SatAuthHeaderPair,
   SatSubsResp,
   SatSubsReq,
   SatSubsDataError,
@@ -32,7 +29,6 @@ import {
   getSizeBuf,
   getTypeFromCode,
   SatPbMsg,
-  getProtocolVersion,
   getFullTypeName,
   startReplicationErrorToSatelliteError,
   shapeRequestToSatShapeReq,
@@ -40,7 +36,7 @@ import {
   msgToString,
   serverErrorToSatelliteError,
 } from '../util/proto'
-import { Socket, SocketFactory } from '../sockets/index'
+import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
@@ -147,11 +143,6 @@ export class SatelliteClient extends EventEmitter implements Client {
           handle: () => this.handleStopResp(),
           isRpc: true,
         },
-        SatPingReq: { handle: () => this.handlePingReq(), isRpc: true },
-        SatPingResp: {
-          handle: (req: any) => this.handlePingResp(req),
-          isRpc: false,
-        },
         SatRelation: {
           handle: (req: any) => this.handleRelation(req),
           isRpc: false,
@@ -232,7 +223,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     return new Promise<void>((resolve, reject) => {
-      this.socket = this.socketFactory.create()
+      this.socket = new this.socketFactory(PROTOCOL_VSN)
 
       const onceError = (error: Error) => {
         this.close()
@@ -355,16 +346,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
-    const headers = [
-      SatAuthHeaderPair.fromPartial({
-        key: SatAuthHeader.PROTO_VERSION,
-        value: getProtocolVersion(),
-      }),
-    ]
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,
-      headers: headers,
+      headers: [],
     })
     return this.rpc<AuthResponse>(request)
   }
@@ -739,23 +724,6 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
   }
 
-  private handlePingReq() {
-    Log.info(
-      `respond to ping with last ack ${
-        this.inbound.last_lsn ? base64.fromBytes(this.inbound.last_lsn) : 'NULL'
-      }`
-    )
-    const pong = SatPingResp.fromPartial({ lsn: this.inbound.last_lsn })
-    this.sendMessage(pong)
-  }
-
-  private handlePingResp(_message: SatPingResp) {
-    // TODO: This message is not used in any way right now.
-    //       We might be dropping client-initiated pings completely.
-    //       However, the server sends these messages without any prompting,
-    //       so this handler cannot just throw an error
-  }
-
   private handleError(error: SatErrorResp) {
     this.emit('error', serverErrorToSatelliteError(error))
   }
@@ -1026,7 +994,7 @@ export function serializeRow(rec: Record, relation: Relation): SatOpRow {
   const recordValues = relation!.columns.reduce(
     (acc: Uint8Array[], c: RelationColumn) => {
       if (rec[c.name] != null) {
-        acc.push(serializeColumnData(rec[c.name]!))
+        acc.push(serializeColumnData(rec[c.name]!, c.type))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -1078,10 +1046,16 @@ function deserializeColumnData(
   const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
     case 'CHAR':
+    case 'DATE':
     case 'TEXT':
+    case 'TIME':
+    case 'TIMESTAMP':
+    case 'TIMESTAMPTZ':
     case 'UUID':
     case 'VARCHAR':
       return typeDecoder.text(column)
+    case 'BOOL':
+      return typeDecoder.bool(column)
     case 'FLOAT4':
     case 'FLOAT8':
     case 'INT':
@@ -1098,8 +1072,16 @@ function deserializeColumnData(
 }
 
 // All values serialized as textual representation
-function serializeColumnData(column: string | number): Uint8Array {
-  return typeEncoder.text(column as string)
+function serializeColumnData(
+  col_val: string | number,
+  col_type: string
+): Uint8Array {
+  switch (col_type.toUpperCase()) {
+    case 'BOOL':
+      return typeEncoder.bool(col_val as number)
+    default:
+      return typeEncoder.text(col_val as string)
+  }
 }
 
 function serializeNullData(): Uint8Array {

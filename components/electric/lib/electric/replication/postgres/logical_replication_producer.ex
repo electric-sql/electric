@@ -88,6 +88,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     with {:ok, conn} <- Client.connect(conn_opts),
          {:ok, _} <- Client.create_slot(conn, slot),
+         :ok <- Client.set_display_settings_for_replication(conn),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
       Logger.metadata(pg_producer: origin)
       Logger.info("Starting replication from #{origin}")

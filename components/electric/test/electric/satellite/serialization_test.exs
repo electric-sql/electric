@@ -1,94 +1,217 @@
 defmodule Electric.Satellite.SerializationTest do
-  alias Electric.Satellite.Serialization
-
-  use Electric.Satellite.Protobuf
   use ExUnit.Case, async: true
 
-  alias Electric.Replication.Changes.Transaction
+  use Electric.Satellite.Protobuf
 
   alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Satellite.Serialization
 
-  test "test row serialization" do
-    data = %{"not_null" => <<"4">>, "null" => nil, "not_present" => <<"some other value">>}
-    columns = ["null", "this_columns_is_empty", "not_null"]
+  describe "map_to_row" do
+    test "encodes a map into a SatOpRow struct" do
+      uuid = Electric.Utils.uuid4()
 
-    serialized_data = Serialization.map_to_row(data, columns)
+      data = %{
+        "not_null" => "4",
+        "null" => nil,
+        "not_present" => "some other value",
+        "int" => "13",
+        "var" => "...",
+        "real" => "-3.14",
+        "id" => uuid,
+        "date" => "2024-12-24",
+        "time" => "12:01:00.123",
+        "bool" => "t"
+      }
 
-    expected = %SatOpRow{
-      nulls_bitmask: <<1::1, 1::1, 0::1, 0::5>>,
-      values: [<<>>, <<>>, <<"4">>]
-    }
+      columns = [
+        %{name: "null", type: :text},
+        %{name: "this_columns_is_empty", type: :text},
+        %{name: "not_null", type: :text},
+        %{name: "id", type: :uuid},
+        %{name: "int", type: :int4},
+        %{name: "var", type: :varchar},
+        %{name: "real", type: :float8},
+        %{name: "date", type: :date},
+        %{name: "time", type: :time},
+        %{name: "bool", type: :bool}
+      ]
 
-    assert serialized_data == expected
+      assert %SatOpRow{
+               values: [
+                 "",
+                 "",
+                 "4",
+                 uuid,
+                 "13",
+                 "...",
+                 "-3.14",
+                 "2024-12-24",
+                 "12:01:00.123",
+                 "t"
+               ],
+               nulls_bitmask: <<0b11000000, 0>>
+             } == Serialization.map_to_row(data, columns)
+    end
+
+    test "converts the +00 offset to Z in timestamptz values" do
+      data = %{
+        "t1" => "2023-08-14 14:01:28.848242+00",
+        "t2" => "2023-08-14 10:01:28+00",
+        "t3" => "2023-08-13 18:30:00.123+00"
+      }
+
+      columns = [
+        %{name: "t1", type: :timestamptz},
+        %{name: "t2", type: :timestamptz},
+        %{name: "t3", type: :timestamptz}
+      ]
+
+      assert %SatOpRow{
+               values: [
+                 "2023-08-14 14:01:28.848242Z",
+                 "2023-08-14 10:01:28Z",
+                 "2023-08-13 18:30:00.123Z"
+               ],
+               nulls_bitmask: <<0>>
+             } == Serialization.map_to_row(data, columns)
+    end
   end
 
-  test "test row deserialization" do
-    deserialized_data =
-      Serialization.decode_record(
-        %SatOpRow{nulls_bitmask: <<1::1, 1::1, 0::1, 0::5>>, values: [<<>>, <<>>, <<"4">>]},
-        [
-          %{name: "null", type: :text},
-          %{name: "this_columns_is_empty", type: :text},
-          %{name: "not_null", type: :int4}
+  describe "decode_record!" do
+    test "decodes a SatOpRow struct into a map" do
+      row = %SatOpRow{
+        nulls_bitmask: <<0b00100001, 0>>,
+        values: [
+          "256",
+          "hello",
+          "",
+          "5.4",
+          "-1.0e124",
+          "2023-08-15 17:20:31",
+          "2023-08-15 17:20:31Z",
+          "",
+          "0400-02-29",
+          "03:59:59",
+          "f"
         ]
-      )
+      }
 
-    expected = %{"not_null" => <<"4">>, "null" => nil, "this_columns_is_empty" => nil}
+      columns = [
+        %{name: "int", type: :int2},
+        %{name: "text", type: :text},
+        %{name: "null", type: :bytea},
+        %{name: "real1", type: :float8},
+        %{name: "real2", type: :float8},
+        %{name: "t", type: :timestamp},
+        %{name: "tz", type: :timestamptz},
+        %{name: "x", type: :float4, nullable?: true},
+        %{name: "date", type: :date},
+        %{name: "time", type: :time},
+        %{name: "bool", type: :bool}
+      ]
 
-    assert deserialized_data == expected
-  end
+      assert %{
+               "int" => "256",
+               "text" => "hello",
+               "null" => nil,
+               "real1" => "5.4",
+               "real2" => "-1.0e124",
+               "t" => "2023-08-15 17:20:31",
+               "tz" => "2023-08-15 17:20:31Z",
+               "x" => nil,
+               "date" => "0400-02-29",
+               "time" => "03:59:59",
+               "bool" => "f"
+             } == Serialization.decode_record!(row, columns)
+    end
 
-  test "test row deserialization with long bitmask" do
-    mask = <<0b1101000010000000::16>>
+    test "raises when the row contains an invalid value for its type" do
+      test_data = [
+        {"1.0", :int4},
+        {"33", :float8},
+        {"1000000", :int2},
+        {"-1000000000000000", :int4},
+        {"...", :uuid},
+        {"00000000-0000-0000-0000-00000000000g", :uuid},
+        {"00000000-0000-0000-0000_000000000001", :uuid},
+        {"20230815", :timestamp},
+        {"0000-08-15 23:00:00", :timestamp},
+        {"-1000-08-15 23:00:00", :timestamp},
+        {"2023-08-15 11:12:13+04:00", :timestamp},
+        {"2023-08-15 11:12:13Z", :timestamp},
+        {"2023-08-15 11:12:13+01", :timestamptz},
+        {"2023-08-15 11:12:13+99:98", :timestamptz},
+        {"2023-08-15 11:12:13+00", :timestamptz},
+        {"2023-08-15 11:12:13", :timestamptz},
+        {"0000-08-15 23:00:00Z", :timestamptz},
+        {"-2000-08-15 23:00:00Z", :timestamptz},
+        {"0000-01-01", :date},
+        {"005-01-01", :date},
+        {"05-01-01", :date},
+        {"9-01-01", :date},
+        {"1999-31-12", :date},
+        {"20230815", :date},
+        {"-2023-08-15", :date},
+        {"12-12-12", :date},
+        {"24:00:00", :time},
+        {"-12:00:00", :time},
+        {"22:01", :time},
+        {"02:60:00", :time},
+        {"02:00:60", :time},
+        {"1:2:3", :time},
+        {"010203", :time},
+        {"016003", :time},
+        {"00:00:00.", :time},
+        {"00:00:00.1234567", :time},
+        {"true", :bool},
+        {"false", :bool},
+        {"yes", :bool},
+        {"no", :bool},
+        {"-1", :bool}
+      ]
 
-    deserialized_data =
-      Serialization.decode_record(
-        %SatOpRow{nulls_bitmask: mask, values: Enum.map(0..8, fn _ -> "" end)},
-        Enum.map(0..8, &%{name: "bit#{&1}", type: :text})
-      )
+      Enum.each(test_data, fn {val, type} ->
+        row = %SatOpRow{nulls_bitmask: <<0>>, values: [val]}
+        columns = [%{name: "val", type: type}]
 
-    expected = %{
-      "bit0" => nil,
-      "bit1" => nil,
-      "bit2" => "",
-      "bit3" => nil,
-      "bit4" => "",
-      "bit5" => "",
-      "bit6" => "",
-      "bit7" => "",
-      "bit8" => nil
-    }
+        try do
+          Serialization.decode_record!(row, columns)
+        rescue
+          _ -> :ok
+        else
+          val -> flunk("Expected decode_record!() to raise but it returned #{inspect(val)}")
+        end
+      end)
+    end
 
-    assert deserialized_data == expected
-  end
+    test "raises when the row contains null values for non-null columns" do
+      row = %SatOpRow{nulls_bitmask: <<0b10000000>>, values: [""]}
+      columns = [%{name: "val", type: :timestamp, nullable?: false}]
 
-  test "test row serialization 2" do
-    data = %{
-      "content" => "hello from pg_1",
-      "content_text_null" => nil,
-      "content_text_null_default" => "",
-      "id" => "f989b58b-980d-4d3c-b178-adb6ae8222f1",
-      "intvalue_null" => nil,
-      "intvalue_null_default" => "10"
-    }
+      assert_raise RuntimeError, "protocol violation, null value for a not null column", fn ->
+        Serialization.decode_record!(row, columns)
+      end
+    end
 
-    columns = [
-      "id",
-      "content",
-      "content_text_null",
-      "content_text_null_default",
-      "intvalue_null",
-      "intvalue_null_default"
-    ]
+    # This is a regression test
+    test "decodes a SatOpRow struct with a long bitmask" do
+      bitmask = <<0b1101000010000000::16>>
+      row = %SatOpRow{nulls_bitmask: bitmask, values: Enum.map(0..8, fn _ -> "" end)}
+      columns = for i <- 0..8, do: %{name: "bit#{i}", type: :text}
 
-    serialized_data = Serialization.map_to_row(data, columns)
-
-    expected = %SatOpRow{
-      nulls_bitmask: <<0::1, 0::1, 1::1, 0::1, 1::1, 0::3>>,
-      values: ["f989b58b-980d-4d3c-b178-adb6ae8222f1", "hello from pg_1", "", "", "", "10"]
-    }
-
-    assert serialized_data == expected
+      assert %{
+               "bit0" => nil,
+               "bit1" => nil,
+               "bit2" => "",
+               "bit3" => nil,
+               "bit4" => "",
+               "bit5" => "",
+               "bit6" => "",
+               "bit7" => "",
+               "bit8" => nil
+             } == Serialization.decode_record!(row, columns)
+    end
   end
 
   describe "relations" do
@@ -267,7 +390,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "something_else",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }
@@ -281,7 +404,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "other_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }
@@ -295,7 +418,7 @@ defmodule Electric.Satellite.SerializationTest do
                ],
                table: %SatOpMigrate.Table{
                  name: "yet_another_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "BLOB"}],
+                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
                  fks: [],
                  pks: ["id"]
                }

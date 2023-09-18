@@ -23,7 +23,6 @@ import {
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
-  Change as Chg,
   ConnectivityState,
   DataChange,
   DbName,
@@ -72,6 +71,7 @@ import {
 } from './shapes/types'
 import { IBackOffOptions, backOff } from 'exponential-backoff'
 import { SCHEMA_VSN_ERROR_MSG } from '../migrators/bundle'
+import { chunkBy } from '../util'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -1205,52 +1205,15 @@ export class SatelliteProcess implements Satellite {
     // Start with garbage collection, because if this a transaction after round-trip, then we don't want it in conflict resolution
     await this.maybeGarbageCollect(origin, commitTimestamp)
 
-    // Now process all changes per chunk.
-    // We basically take a prefix of changes of the same type
-    // which we call a `dmlChunk` or `ddlChunk` if the changes
-    // are DML statements, respectively, DDL statements.
-    // We process chunk per chunk in-order.
-    let dmlChunk: DataChange[] = []
-    let ddlChunk: SchemaChange[] = []
-
-    const changes = transaction.changes
-    for (let idx = 0; idx < changes.length; idx++) {
-      const change = changes[idx]
-      const changeType = (change: Chg): 'DML' | 'DDL' => {
-        return isDataChange(change) ? 'DML' : 'DDL'
-      }
-      const sameChangeTypeAsPrevious = (): boolean => {
-        return (
-          idx == 0 || changeType(changes[idx]) === changeType(changes[idx - 1])
-        )
-      }
-      const addToChunk = (change: Chg) => {
-        if (isDataChange(change)) dmlChunk.push(change)
-        else ddlChunk.push(change)
-      }
-      const processChunk = async (type: 'DML' | 'DDL') => {
-        if (type === 'DML') {
-          await processDML(dmlChunk)
-          dmlChunk = []
-        } else {
-          await processDDL(ddlChunk)
-          ddlChunk = []
-        }
-      }
-
-      addToChunk(change) // add the change in the right chunk
-      if (!sameChangeTypeAsPrevious()) {
-        // We're starting a new chunk
-        // process the previous chunk and clear it
-        const previousChange = changes[idx - 1]
-        await processChunk(changeType(previousChange))
-      }
-
-      if (idx === changes.length - 1) {
-        // we're at the last change
-        // process this chunk
-        const thisChange = changes[idx]
-        await processChunk(changeType(thisChange))
+    // Chunk incoming changes by their types, and process each chunk one by one
+    for (const [dataChange, chunk] of chunkBy(
+      transaction.changes,
+      isDataChange
+    )) {
+      if (dataChange) {
+        await processDML(chunk as DataChange[])
+      } else {
+        await processDDL(chunk as SchemaChange[])
       }
     }
 

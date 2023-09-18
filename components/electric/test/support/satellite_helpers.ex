@@ -3,13 +3,7 @@ defmodule ElectricTest.SatelliteHelpers do
 
   import ExUnit.Assertions
 
-  alias Electric.Test.SatelliteWsClient, as: MockClient
-
-  # Send a ping to WebsocketServer. Useful to make sure it is done with initial sync.
-  def ping_server(conn) do
-    MockClient.send_data(conn, %SatPingReq{})
-    assert_receive {^conn, %SatPingResp{lsn: ""}}
-  end
+  alias Satellite.TestWsClient, as: MockClient
 
   def assert_receive_migration(conn, version, table_name) do
     assert_receive {^conn, %SatRelation{table_name: ^table_name}}
@@ -27,7 +21,7 @@ defmodule ElectricTest.SatelliteHelpers do
     assert lsn > 0
   end
 
-  def with_connect(opts, fun), do: Electric.Test.SatelliteWsClient.with_connect(opts, fun)
+  def with_connect(opts, fun), do: MockClient.with_connect(opts, fun)
 
   def migrate(conn, version, table \\ nil, sql) do
     results =

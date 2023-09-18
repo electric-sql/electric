@@ -166,6 +166,34 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   @doc """
+  Explicitly set those configuration parameters that affect formatting of values of certain types.
+
+  By setting those parameters for the current session we're safe-guarding against non-standard configuration being used
+  in the Postgres database cluster or even the specific database Electric is configured to replicate from.
+
+  The parameters we're interested in are:
+
+    * `bytea_output` - determines how Postgres encodes bytea values. It can use either Hex- or Escape-based encoding.
+    * `DateStyle` - determines how Postgres interprets date values.
+    * `TimeZone` - affects the time zone offset Postgres uses for timestamptz and timetz values.
+    * `extra_float_digits` - determines whether floating-point values are rounded or are encoded precisely.
+  """
+  def set_display_settings_for_replication(conn) do
+    results =
+      :epgsql.squery(
+        conn,
+        """
+        SET bytea_output = 'hex';
+        SET DateStyle = 'ISO, DMY';
+        SET TimeZone = 'UTC';
+        SET extra_float_digits = 1;
+        """
+      )
+
+    :ok = Enum.each(results, &({:ok, [], []} = &1))
+  end
+
+  @doc """
   Confirm successful processing of a WAL segment.
 
   Returns `:ok` on success.

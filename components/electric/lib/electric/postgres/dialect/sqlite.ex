@@ -387,13 +387,8 @@ defmodule Electric.Postgres.Dialect.SQLite do
     @types[:integer] <> sized(size)
   end
 
-  # UUID
-  # binary or string? no right answer unless db filesize is your only metric,
-  # in which case binary wins hands down
-  # https://stackoverflow.com/questions/11337324/how-to-efficient-insert-and-fetch-uuid-in-core-data/11337522#11337522
-  # TODO: allow for some override map pg_type => choice of sqlite type
   def do_map_type(t, size) when t in @uuid_types do
-    @types[:blob] <> sized(size)
+    @types[:text] <> sized(size)
   end
 
   defp sized([]), do: ""

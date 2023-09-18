@@ -10,13 +10,6 @@ defmodule Electric.Postgres.PBTest do
       assert original_msg == decoded_msg
     end
 
-    test "message for SatPingReq is encoded and decoded" do
-      original_msg = %SatPingReq{}
-      {:ok, type, iodata} = PB.encode(original_msg)
-      {:ok, decoded_msg} = PB.decode(type, :erlang.iolist_to_binary(iodata))
-      assert original_msg == decoded_msg
-    end
-
     test "message for transaction" do
       begin = %SatOpBegin{
         commit_timestamp: :os.system_time(:millisecond),
@@ -77,36 +70,6 @@ defmodule Electric.Postgres.PBTest do
         )
 
       assert original_msg == decoded_msg
-    end
-  end
-
-  describe "Check version parsing" do
-    test "current version of the protocol is parsed properly" do
-      version = PB.get_long_proto_vsn()
-      parsed = PB.parse_proto_vsn(version)
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert is_integer(major) == true
-      assert is_integer(minor) == true
-    end
-
-    test "expect properly formed version (Namespace.vMAJOR_MINOR) to be parsed" do
-      parsed = PB.parse_proto_vsn("Some.Namespace.v190_0979")
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert {major, minor} == {190, 979}
-    end
-
-    test "expect properly formed version (Namespace.vMAJOR_MINOR) to be parsed 2" do
-      parsed = PB.parse_proto_vsn("Some.Namespace.v190_0")
-
-      {:ok, %PB.Version{major: major, minor: minor}} = parsed
-      assert {major, minor} == {190, 0}
-    end
-
-    test "improperly formed version (Namespace.vMAJOR_MINOR) returns error" do
-      assert {:error, :bad_version} ==
-               PB.parse_proto_vsn("Some.Namespace.v190_0ba:90089")
     end
   end
 end

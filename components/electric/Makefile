@@ -101,13 +101,10 @@ rm_offset_storage:
 	rm offset_storage_*
 
 update_protobuf: deps
-	mix electric.gen.proto.package \
-		--output-path=./lib/electric/satellite/protobuf_package.ex \
-		${PROTO_FILE}
 	mix protox.generate \
 		--output-path=./lib/electric/satellite/protobuf_messages.ex \
+		--keep-unknown-fields=false \
 		${PROTO_FILE}
-	sed -E -i "s/Electric.Satellite.V[0-9]+/$$(cat lib/electric/satellite/protobuf_package.ex | tail -n +2 | head -n 1 | sed -E 's/defmodule (.*) do/\1/')/" ./lib/electric/satellite/protobuf.ex
 	mix protox.generate \
 		--output-path=./lib/electric/postgres/schema/proto/messages.ex \
 		--namespace Electric.Postgres.Schema.Proto \
