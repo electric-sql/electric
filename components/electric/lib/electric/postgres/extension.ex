@@ -247,7 +247,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230424154425_DDLX,
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
-      Migrations.Migration_20230715000000_UtilitiesTable
+      Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
     ]
   end
 
