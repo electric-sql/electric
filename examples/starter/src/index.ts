@@ -1,4 +1,4 @@
-#!/usr/bin/env node --no-warnings
+#!/usr/bin/env node
 
 // Usage: npx create-electric-app my-app
 
@@ -41,10 +41,14 @@ await fs.rename(
   envrcFile
 )
 
-// import package.json and deep copy it
-// otherwise we can't edit it because
-// the JSON object is not extensible
-const projectPackageJson = (await import(path.join(projectDir, 'package.json'), { assert: { type: "json" } })).default
+// read package.json file and parse it as JSON
+// we could import it but then we get a warning
+// that importing JSON is an experimental feature
+// we can hide that warning using the --no-warnings flag
+// with nodeJS but the parsing of that flag
+// leads to problems on certain env implementations
+const packageJsonFile = path.join(projectDir, 'package.json')
+const projectPackageJson = JSON.parse(await fs.readFile(packageJsonFile, 'utf8'))
 
 // Update the project's package.json with the new project name
 projectPackageJson.name = projectName
