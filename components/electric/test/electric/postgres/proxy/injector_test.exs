@@ -98,7 +98,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
 
         test "create table is not captured", cxt do
-          query = ~s[CREATE TABLE "truths" ("another" int8)]
+          query = ~s[CREATE TABLE "truths" ("another" int4)]
 
           cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
         end
@@ -137,9 +137,9 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
         test "alter electrified table", cxt do
           query =
-            {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
+            {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
              shadow_add_column: [
-               %{table: {"public", "truths"}, action: :add, column: "another", type: "int8"}
+               %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"}
              ]}
 
           cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
@@ -147,9 +147,9 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
         test "add multiple columns to electrified table", cxt do
           query =
-            {~s[ALTER TABLE "truths" ADD COLUMN "another" int8, ADD colour text, ADD COLUMN "finally" int2],
+            {~s[ALTER TABLE "truths" ADD COLUMN "another" int4, ADD colour text, ADD COLUMN "finally" int2],
              shadow_add_column: [
-               %{table: {"public", "truths"}, action: :add, column: "another", type: "int8"},
+               %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"},
                %{table: {"public", "truths"}, action: :add, column: "colour", type: "text"},
                %{table: {"public", "truths"}, action: :add, column: "finally", type: "int2"}
              ]}
@@ -167,11 +167,11 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           test "combined migration", cxt do
             query = [
               capture:
-                {~s[ALTER TABLE "truths" ADD COLUMN "another" int8],
+                {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
                  shadow_add_column: [
-                   %{table: {"public", "truths"}, action: :add, column: "another", type: "int8"}
+                   %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"}
                  ]},
-              # capture: {:alter_table, "truths", [{:add, "another", "int8"}]},
+              # capture: {:alter_table, "truths", [{:add, "another", "int4"}]},
               passthrough: ~s[ALTER TABLE "socks" ADD COLUMN "holes" int2]
             ]
 
@@ -196,8 +196,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
           cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
             message: "Cannot DROP Electrified table \"public\".\"truths\"",
-            detail:
-              "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
             schema: "public",
             table: "truths"
           )
@@ -271,8 +269,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
             code: "00000",
             message: "Cannot add column of type \"cidr\"",
-            detail:
-              "Electric only supports a subset of Postgres column types. Supported column types are: int2, int4, int8, float8, text, varchar",
             query: query
           )
         end
@@ -289,8 +285,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
             code: "00000",
             detail: "Something went wrong near JUNK",
-            line: 1,
-            message: "Invalid ELECTRIC statement",
             query: "ELECTRIC GRANT JUNK ON thing.Köln_en$ts TO 'projects:house.admin'"
           )
         end

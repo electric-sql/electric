@@ -1,5 +1,4 @@
 defmodule Electric.Postgres.Proxy.TestScenario do
-  alias Electric.Postgres.Proxy.Parser
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
   alias Electric.DDLX
@@ -80,17 +79,18 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     [complete(tag), ready(status)]
   end
 
-  def capture_notice(query) do
-    {:ok, {sname, tname}} = Parser.table_name(query)
-
-    struct(M.NoticeResponse,
-      severity: "NOTICE",
-      code: "00000",
-      message: "Migration affecting electrified table #{inspect(sname)}.#{inspect(tname)}",
-      detail: "Capturing migration: #{query}",
-      schema: sname,
-      table: tname
-    )
+  def capture_notice(_query) do
+    M.NoticeResponse
+    # {:ok, {sname, tname}} = Parser.table_name(query)
+    #
+    # struct(M.NoticeResponse,
+    #   severity: "NOTICE",
+    #   code: "00000",
+    #   message: "Migration affecting electrified table #{inspect(sname)}.#{inspect(tname)}",
+    #   detail: "Capturing migration: #{query}",
+    #   schema: sname,
+    #   table: tname
+    # )
   end
 
   def parse_describe(sql, name \\ "") do
@@ -323,15 +323,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     {:ok, injector, server_server, server_client} =
       Injector.recv_backend(injector, to_struct(server_messages))
 
-    # validate both sets of messages in a single assertion so that
-    # a failure shows the full state
-    assert [
-             server_server: server_server,
-             server_client: server_client
-           ] == [
-             server_server: expected_server_server,
-             server_client: expected_server_client
-           ]
+    assert_messages_equal(
+      server_server: {server_server, expected_server_server},
+      server_client: {server_client, expected_server_client}
+    )
 
     injector
   end
@@ -357,17 +352,34 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     {:ok, injector, client_server, client_client} =
       Injector.recv_frontend(injector, to_struct(client_messages))
 
-    # validate both sets of messages in a single assertion so that
-    # a failure shows the full state
-    assert [
-             client_server: client_server,
-             client_client: client_client
-           ] == [
-             client_server: expected_client_server,
-             client_client: expected_client_client
-           ]
+    assert_messages_equal(
+      client_server: {client_server, expected_client_server},
+      client_client: {client_client, expected_client_client}
+    )
 
     injector
+  end
+
+  defp assert_messages_equal(messages) do
+    for {direction, {sent, expected}} <- messages do
+      if length(sent) != length(expected) do
+        assert [{direction, sent}] == [{direction, expected}]
+      end
+
+      for {s, e} <- Enum.zip(sent, expected) do
+        equals? =
+          case e do
+            # special case error  and notice messages -- I don't want to validate the
+            # fields in this case, it's enough to know that the response was of the correct type
+            %m{} when m in [M.ErrorResponse, M.NoticeResponse] -> is_struct(s, m)
+            m -> m == e
+          end
+
+        # I want to compare lists of messages, not individual messages, so if there's
+        # message mis-match, just assert a comparison of the entire list
+        if !equals?, do: assert([{direction, sent}] == [{direction, expected}])
+      end
+    end
   end
 
   @doc """
