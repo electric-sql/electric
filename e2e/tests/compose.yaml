@@ -57,6 +57,8 @@ services:
   prisma_example_1:
     image: "prisma_example:local"
     environment:
+      PG_PROXY_PASSWORD:
+      PG_PROXY_PORT:
       DATABASE_URL: "postgresql://prisma:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
     volumes:
       - ../prisma_example/prisma:/app/prisma
