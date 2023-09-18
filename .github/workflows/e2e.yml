@@ -6,12 +6,12 @@ on:
   pull_request:
     paths-ignore:
       # Root files
-      - '*'
-      - '!pnpm-lock.yaml'
+      - "*"
+      - "!pnpm-lock.yaml"
       # CI files not related to GH actions
-      - '.buildkite/**'
-      - '**/README.md'
-      - 'docs/**'
+      - ".buildkite/**"
+      - "**/README.md"
+      - "docs/**"
 
 env:
   OTP_VERSION: "25.3"
@@ -22,14 +22,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e_tests:
-    name: E2E tests
+  #  env:
+  #    BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+  # - name: Upload test results to Buildkite analytics
+  #        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && env.BUILDKITE_ANALYTICS_TOKEN != '' }}
+  #        working-directory: e2e/lux_logs/latest_run
+  #        run: |
+  #          curl \
+  #            -X POST \
+  #            --fail-with-body \
+  #            -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
+  #            -F "data=@lux_junit.xml" \
+  #            -F "format=junit" \
+  #            -F "run_env[CI]=github_actions" \
+  #            -F "run_env[key]=$GITHUB_ACTION-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT" \
+  #            -F "run_env[number]=$GITHUB_RUN_NUMBER" \
+  #            -F "run_env[branch]=$GITHUB_REF" \
+  #            -F "run_env[commit_sha]=$GITHUB_SHA" \
+  #            -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+  #            https://analytics-api.buildkite.com/v1/uploads
+  build_deps:
+    name: Build runtime dependencencies
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
-    env:
-      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -64,7 +78,6 @@ jobs:
         env:
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
         working-directory: components/electric
-
       - name: Cache built lux
         uses: actions/cache@v3
         with:
@@ -76,7 +89,29 @@ jobs:
 
       - run: make lux
       - run: make deps pull
-      - run: make test_only
+  _1_sanity_checks:
+    name: Sanity checks, startup, and electric-PG interaction
+    needs: build_deps
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make test_1
         id: tests
         env:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
@@ -89,20 +124,143 @@ jobs:
         with:
           name: lux_logs
           path: e2e/lux_logs/run_*
-      - name: Upload test results to Buildkite analytics
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && env.BUILDKITE_ANALYTICS_TOKEN != '' }}
-        working-directory: e2e/lux_logs/latest_run
-        run: |
-          curl \
-            -X POST \
-            --fail-with-body \
-            -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
-            -F "data=@lux_junit.xml" \
-            -F "format=junit" \
-            -F "run_env[CI]=github_actions" \
-            -F "run_env[key]=$GITHUB_ACTION-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT" \
-            -F "run_env[number]=$GITHUB_RUN_NUMBER" \
-            -F "run_env[branch]=$GITHUB_REF" \
-            -F "run_env[commit_sha]=$GITHUB_SHA" \
-            -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            https://analytics-api.buildkite.com/v1/uploads
+  _2_replication_between_electric_and_test_client:
+    name: Replication verification between PG and Satellites, without actual clients
+    needs: build_deps
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make test_1
+        id: tests
+        env:
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
+          ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
+          ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        with:
+          name: lux_logs
+          path: e2e/lux_logs/run_*
+  _3_replication_between_electric_and_typescript_client:
+    name: Replication using an actual typescript client in Node
+    needs: build_deps
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make test_1
+        id: tests
+        env:
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
+          ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
+          ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        with:
+          name: lux_logs
+          path: e2e/lux_logs/run_*
+  _4_auxillary_electric_functions:
+    name: Auxillary Electric functions not immediately related to replication
+    needs: build_deps
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make test_1
+        id: tests
+        env:
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
+          ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
+          ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        with:
+          name: lux_logs
+          path: e2e/lux_logs/run_*
+  _5_conflict_resolution_semantics:
+    name: Conflict resolution semantics tests
+    needs: build_deps
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    env:
+      BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - run: |
+          echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
+        working-directory: components/electric
+      - run: make test_1
+        id: tests
+        env:
+          ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
+          ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
+          ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
+
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        with:
+          name: lux_logs
+          path: e2e/lux_logs/run_*
