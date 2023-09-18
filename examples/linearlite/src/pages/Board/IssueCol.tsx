@@ -23,9 +23,6 @@ const itemSpacing = 10
 
 function IssueCol({ title, status, issues = [] }: Props) {
   const statusIcon = <StatusIcon status={status} />
-  // const issueItems = (issues || []).map((issue, idx) => (
-  //   <IssueItem key={issue.id} issue={issue} index={idx} />
-  // ))
 
   return (
     <div className="flex flex-col flex-shrink-0 mr-3 select-none w-90">
@@ -68,23 +65,25 @@ function IssueCol({ title, status, issues = [] }: Props) {
             : issues.length
 
           return (
-            <AutoSizer className="grow">
-              {({ height, width }) => (
-                <List
-                  height={height}
-                  itemCount={itemCount}
-                  itemSize={itemHeight + itemSpacing}
-                  width={width}
-                  outerRef={droppableProvided.innerRef}
-                  itemData={issues}
-                  className="w-full border-gray-200 pt-0.5"
-                  // ref={provided.innerRef}
-                  // {...provided.droppableProps}
-                >
-                  {Row}
-                </List>
-              )}
-            </AutoSizer>
+            <div className="grow">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    height={height}
+                    itemCount={itemCount}
+                    itemSize={itemHeight + itemSpacing}
+                    width={width}
+                    outerRef={droppableProvided.innerRef}
+                    itemData={issues}
+                    className="w-full border-gray-200 pt-0.5"
+                    // ref={provided.innerRef}
+                    // {...provided.droppableProps}
+                  >
+                    {Row}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
           )
         }}
       </Droppable>

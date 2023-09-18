@@ -10,19 +10,21 @@ export interface IssueListProps {
 
 function IssueList({ issues }: IssueListProps) {
   return (
-    <AutoSizer>
-      {({ height, width }) => (
-        <List
-          height={height}
-          itemCount={issues.length}
-          itemSize={36}
-          itemData={issues}
-          width={width}
-        >
-          {VirtualIssueRow}
-        </List>
-      )}
-    </AutoSizer>
+    <div className='grow'>
+      <AutoSizer>
+        {({ height, width }) => (
+          <List
+            height={height}
+            itemCount={issues.length}
+            itemSize={36}
+            itemData={issues}
+            width={width}
+          >
+            {VirtualIssueRow}
+          </List>
+        )}
+      </AutoSizer>
+    </div>
   )
 }
 
