@@ -126,4 +126,24 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     assert {:error, _error} = :epgsql.squery(conn, sql4)
   end
+
+  test_tx "ADD column; CREATE INDEX only adds a single migration", fn conn ->
+    sql1 =
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
+
+    sql2 = "CALL electric.electrify('public.buttercup')"
+
+    for sql <- [sql1, sql2] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [_]} = Extension.ddl_history(conn)
+
+    sql3 =
+      "ALTER TABLE public.buttercup ADD COLUMN amount int4; CREATE INDEX buttercup_amount_idx ON public.buttercup (amount); "
+
+    [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, sql3)
+
+    assert {:ok, [_, _]} = Extension.ddl_history(conn)
+  end
 end
