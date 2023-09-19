@@ -45,8 +45,6 @@ const App = () => {
       try {
         client = await initElectric()
       } catch (error) {
-        console.log('here')
-        console.log((error as Error).message)
         if (
           (error as Error).message.startsWith(
             "Local schema doesn't match server's"
@@ -63,6 +61,8 @@ const App = () => {
         },
       })
       await synced
+      const timeToSync = performance.now();
+      console.log(`Synced in ${timeToSync}ms from page load`)
     }
 
     init()
