@@ -3,7 +3,7 @@ defmodule Electric.Satellite.Protocol do
   Protocol for communication with Satellite
   """
   use Electric.Satellite.Protobuf
-  import Electric.Satellite.Protobuf, only: [allowed_rpc_method: 1]
+  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
 
   use Pathex
 
@@ -455,7 +455,7 @@ defmodule Electric.Satellite.Protocol do
           | {:error, PB.sq_pb_msg()}
   # RPC request handling
   def process_message(%SatRpcRequest{method: method} = req, %State{} = state)
-      when allowed_rpc_method(method) do
+      when is_allowed_rpc_method(method) do
     Logger.debug("Received RPC request #{method}/#{req.request_id}")
 
     resp = %SatRpcResponse{method: method, request_id: req.request_id}
@@ -467,7 +467,7 @@ defmodule Electric.Satellite.Protocol do
             {%{resp | result: {:message, rpc_encode(result)}}, state}
 
           {:force_unpause, result, state} ->
-            {:force_unpause, %{resp | result: {:message, result}}, state}
+            {:force_unpause, %{resp | result: {:message, rpc_encode(result)}}, state}
 
           {:error, %SatErrorResp{} = error} ->
             {:error, %{resp | result: {:error, error}}}
@@ -1009,7 +1009,7 @@ defmodule Electric.Satellite.Protocol do
 
   @spec rpc(String.t(), PB.rpc_req(), State.t()) :: {%SatRpcRequest{}, State.t()}
   defp rpc(method, message, %State{} = state)
-       when allowed_rpc_method(method) do
+       when is_allowed_rpc_method(method) do
     {request_id, in_rep} = Map.get_and_update!(state.in_rep, :rpc_request_id, &{&1, &1 + 1})
 
     {%SatRpcRequest{

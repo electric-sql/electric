@@ -1,7 +1,4 @@
 defmodule Electric.Satellite.Protobuf do
-  # This is a version provided in the corresponding protocol buffer file
-  # Make sure to bump it here and in the using macro below.
-
   alias Electric.Satellite
 
   alias Electric.Satellite.{
@@ -40,9 +37,8 @@ defmodule Electric.Satellite.Protobuf do
     raise "Cannot use a reserved value as the message tag"
   end
 
-  if elem =
-       Enum.find(Enum.frequencies(Map.values(@mapping)), &match?({_, count} when count > 1, &1)) do
-    {key, count} = elem
+  with {key, count} <-
+         Enum.find(Enum.frequencies(Map.values(@mapping)), &match?({_, count} when count > 1, &1)) do
     raise "Cannot have duplicating value tags: #{key} is used #{count} times"
   end
 
@@ -59,7 +55,7 @@ defmodule Electric.Satellite.Protobuf do
   }
   @allowed_rpc_methods Map.keys(@rpc_calls)
 
-  defguard allowed_rpc_method(method) when method in @allowed_rpc_methods
+  defguard is_allowed_rpc_method(method) when method in @allowed_rpc_methods
 
   @type relation_id() :: non_neg_integer()
   @type sq_pb_msg() ::
@@ -91,7 +87,6 @@ defmodule Electric.Satellite.Protobuf do
   defmacro __using__(_opts) do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
-      SatInStartReplicationResp
 
       alias Electric.Satellite.{
         SatErrorResp,

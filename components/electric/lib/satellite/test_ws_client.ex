@@ -4,7 +4,7 @@ defmodule Satellite.TestWsClient do
   alias Electric.Satellite.Auth
 
   use Electric.Satellite.Protobuf
-  import Electric.Satellite.Protobuf, only: [allowed_rpc_method: 1]
+  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
 
   # Public API
 
@@ -58,13 +58,13 @@ defmodule Satellite.TestWsClient do
   @doc """
   Send Satellite RPC call to the server.
   """
-  def send_rpc(pid, method, message) when allowed_rpc_method(method),
+  def send_rpc(pid, method, message) when is_allowed_rpc_method(method),
     do: GenServer.call(pid, {:send_rpc, method, message})
 
   @doc """
   Make Satellite RPC call to the server receiving the response
   """
-  def make_rpc_call(pid, method, message) when allowed_rpc_method(method),
+  def make_rpc_call(pid, method, message) when is_allowed_rpc_method(method),
     do: GenServer.call(pid, {:make_rpc_call, method, message})
 
   # Implementation
