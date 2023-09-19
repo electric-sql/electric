@@ -29,7 +29,7 @@
     # We expect to recieve the transaction
     ?user_id=1 \[debug\] ws data received: %Electric.Satellite.SatOpLog\{(.*)op: \{:insert, %Electric.Satellite.SatOpInsert\{(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
     # Send it forward to Postgres
-    ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
+    ??pg_slot=postgres_1 [debug] Will send 2 to subscriber:
     ?pg_slot=postgres_1 \[debug\] Sending \d messages to the subscriber
 
 [shell pg_1]

@@ -10,7 +10,6 @@ defmodule Electric.Application do
     children = [
       Electric.Telemetry,
       Electric.Postgres.OidDatabase,
-      Electric.Replication.OffsetStorage,
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,

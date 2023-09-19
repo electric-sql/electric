@@ -5,11 +5,4 @@ else
   Logger.configure(level: :info)
 end
 
-File.rm(
-  Keyword.fetch!(
-    Application.get_env(:electric, Electric.Replication.OffsetStorage),
-    :file
-  )
-)
-
 ExUnit.start()

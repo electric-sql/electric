@@ -48,7 +48,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
-       pg_connector_opts: [origin: "fake_origin", replication: []],
+       pg_connector_opts: [origin: "fake_origin"],
        subscription_data_fun: ctx.subscription_data_fun}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
@@ -500,6 +500,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
          ]
     test "common replication", ctx do
       self = self()
+      client_lsn = <<0, 1, 2, 3>>
 
       with_mock Electric.DummyConsumer, [:passthrough],
         notify: fn _, ws_pid, events -> send(self, {:dummy_consumer, ws_pid, events}) end do
@@ -536,11 +537,10 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           dt = DateTime.truncate(DateTime.utc_now(), :millisecond)
           ct = DateTime.to_unix(dt, :millisecond)
-          lsn = "some_long_internal_lsn"
 
           op_log1 =
             build_op_log([
-              %SatOpBegin{commit_timestamp: ct, lsn: lsn},
+              %SatOpBegin{commit_timestamp: ct, lsn: client_lsn},
               %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"a">>, <<"b">>])}
             ])
 
@@ -555,7 +555,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           assert_receive {:dummy_consumer, _, [%Transaction{} = tx]}
 
-          assert tx.lsn == lsn
+          assert tx.lsn == client_lsn
           assert tx.commit_timestamp == dt
 
           assert tx.changes == [
@@ -570,18 +570,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
                  ]
 
           assert tx.origin !== ""
-
-          # Wait for everything to be persisted
-          Process.sleep(200)
-        end)
-
-        # After restart we still get same lsn
-        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          lsn = "some_long_internal_lsn"
-
-          MockClient.send_data(conn, %SatInStartReplicationReq{})
-          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-          assert_receive {^conn, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
         end)
       end
     end
@@ -697,12 +685,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   defp active_clients() do
-    {:ok, clients} = Electric.Satellite.ClientManager.get_clients()
-
-    Enum.reduce(clients, [], fn {client_name, client_pid}, acc ->
-      case Process.alive?(client_pid) do
-        true -> [{client_name, client_pid} | acc]
-        false -> acc
+    Electric.Satellite.ClientManager.get_clients()
+    |> Enum.flat_map(fn {client_name, client_pid} ->
+      if Process.alive?(client_pid) do
+        [{client_name, client_pid}]
+      else
+        []
       end
     end)
   end

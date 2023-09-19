@@ -25,5 +25,3 @@ config :electric, Electric.Replication.Connectors,
       ]
     ]
   ]
-
-config :electric, Electric.Replication.OffsetStorage, file: "./offset_storage_data.dev.dat"

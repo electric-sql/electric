@@ -1,4 +1,4 @@
-[doc When client resumes, server correctly requests stream continuation]
+[doc When client resumes, server correctly requests stream continuation from the point following the last acknowledged client LSN]
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
@@ -19,19 +19,46 @@
 [shell pg_1]
   [invoke wait-for "SELECT * FROM public.items;" "hello from satellite - first" 10 $psql]
 
+  # Confirm that PG has the record of client's acknowledged LSN after Electric has synced client's transaction.
+  !SELECT * FROM electric.acknowledged_client_lsns;
+  ?([0-9a-f-]+) \| \\x00000001
+  [global client1_id=$1]
+
+
+[invoke setup_client 2 "electric_1" 5133]
+
+[shell satellite_2]
+  ??[proto] recv: #SatInStartReplicationResp
+  [invoke node_await_table "items"]
+
+  # Perform multiple writes to bump the LSN repeatedly
+  [invoke node_await_insert "['hello from satellite - client 2 - a']"]
+  [invoke node_await_insert "['hello from satellite - client 2 - b']"]
+  [invoke node_await_insert "['hello from satellite - client 2 - c']"]
+
+[shell pg_1]
+  [invoke wait-for "SELECT * FROM public.items;" "hello from satellite - client 2 - c" 10 $psql]
+
+  # Confirm that PG has the record of client's acknowledged LSN after Electric has synced client's transaction.
+  !SELECT * FROM electric.acknowledged_client_lsns ORDER BY lsn;
+  ??$client1_id | \x00000001
+  ?([0-9a-f-]+) \| \\x00000003
+  [global client2_id=$1]
+
+
 [shell satellite_1]
-  [progress stopping client]
+  [progress stopping client 1]
   !await client.stop(db)
   ?$node
 
   # Verify that the client retrieves previously stored LSN when it reestablishes the replication connection.
-  [progress resuming client]
+  [progress resuming client 1]
   [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
   ?$node
 
   -no previous LSN
 
-  # Server requests replication. The `AAAAAQ==` here is [0, 0, 0, 1] UInt8Array, representing an integer 1 - the one rowid
+  # Server requests replication. The `AAAAAQ==` here is [0, 0, 0, 1] UInt8Array, representing the integer 1
   ?+\[proto\] recv: #SatInStartReplicationReq\{lsn: AAAAAQ==,
   ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
   ??[proto] recv: #SatInStartReplicationResp
@@ -41,6 +68,38 @@
 
 [shell pg_1]
   [invoke wait-for "SELECT * FROM public.items;" "hello from satellite - second" 10 $psql]
+
+  !SELECT * FROM electric.acknowledged_client_lsns ORDER BY lsn;
+  ??$client1_id | \x00000002
+  ??$client2_id | \x00000003
+
+
+[shell satellite_2]
+  [progress stopping client 2]
+  !await client.stop(db)
+  ?$node
+
+  # Verify that the client retrieves previously stored LSN when it reestablishes the replication connection.
+  [progress resuming client 2]
+  [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
+  ?$node
+
+  -no previous LSN
+
+  # Server requests replication. The `AAAAAw==` here is [0, 0, 0, 3] UInt8Array, representing the integer 3
+  ?+\[proto\] recv: #SatInStartReplicationReq\{lsn: AAAAAw==,
+  ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ??[proto] recv: #SatInStartReplicationResp
+
+  # Another write gets propagated
+  [invoke node_await_insert "['hello from satellite - client 2 - once again']"]
+
+[shell pg_1]
+  [invoke wait-for "SELECT * FROM public.items;" "hello from satellite - client 2 - once again" 10 $psql]
+
+  !SELECT * FROM electric.acknowledged_client_lsns ORDER BY lsn;
+  ??$client1_id | \x00000002
+  ??$client2_id | \x00000004
 
 [cleanup]
   [invoke teardown]

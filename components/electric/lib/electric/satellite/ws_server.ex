@@ -33,7 +33,6 @@ defmodule Electric.Satellite.WebsocketServer do
 
   alias Electric.Utils
   alias Electric.Postgres.CachedWal
-  alias Electric.Replication.OffsetStorage
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.State
@@ -306,7 +305,7 @@ defmodule Electric.Satellite.WebsocketServer do
       _pid -> Process.monitor(pid)
     end
 
-    lsn = OffsetStorage.get_satellite_lsn(state.client_id) || <<>>
+    lsn = fetch_last_acked_client_lsn(state) || ""
 
     msgs =
       case in_rep.status do
@@ -460,7 +459,17 @@ defmodule Electric.Satellite.WebsocketServer do
         end
       end
     end
+
+    defp fetch_last_acked_client_lsn(_state), do: nil
   else
     defp maybe_pause(_), do: :ok
+
+    def fetch_last_acked_client_lsn(state) do
+      state.pg_connector_opts
+      |> Electric.Replication.Connectors.get_connection_opts(replication: false)
+      |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
+        Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)
+      end)
+    end
   end
 end

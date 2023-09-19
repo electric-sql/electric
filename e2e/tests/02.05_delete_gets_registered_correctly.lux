@@ -37,7 +37,7 @@
 
 [shell electric]
     # Wait for it to be sent to PG
-    ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
+    ??pg_slot=postgres_1 [debug] Will send 2 to subscriber:
 
 [shell pg_1]
     # We expect for the row to be deleted

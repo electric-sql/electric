@@ -57,7 +57,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end
   end
 
-  alias Electric.Postgres.{Extension, Extension.SchemaLoader}
+  alias Electric.Postgres.{Extension, Extension.SchemaLoader, Schema}
   alias Electric.Replication.{Connectors, Postgres.Client}
 
   require Logger
@@ -188,9 +188,13 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def electrified_tables(pool) do
+  def internal_schema(pool) do
     checkout!(pool, fn conn ->
-      Extension.electrified_tables(conn)
+      oid_loader = &Client.relation_oid(conn, &1, &2, &3)
+
+      Enum.reduce(Extension.replicated_table_ddls(), Schema.new(), fn ddl, schema ->
+        Schema.update(schema, ddl, oid_loader: oid_loader)
+      end)
     end)
   end
 end

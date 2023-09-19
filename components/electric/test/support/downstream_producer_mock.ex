@@ -2,8 +2,6 @@ defmodule DownstreamProducerMock do
   use GenStage
   require Logger
 
-  @behaviour Electric.Replication.DownstreamProducer
-
   defmodule State do
     defstruct events: [],
               status: nil,
@@ -11,7 +9,6 @@ defmodule DownstreamProducerMock do
               demand: 0
   end
 
-  @impl true
   def start_link(name, _opts \\ %{}) do
     GenStage.start_link(__MODULE__, [], name: name)
   end
@@ -21,32 +18,12 @@ defmodule DownstreamProducerMock do
     {:producer, %State{}, buffer_size: 1}
   end
 
-  @impl true
-  def start_replication(producer, offset) do
-    GenStage.call(producer, {:start_replication, offset})
-  end
-
-  @impl true
-  def connected?(producer) do
-    GenStage.call(producer, :connected?)
-  end
-
   def set_expected_producer_connected(producer, status) do
     GenStage.call(producer, {:set_expected_producer_connected, status})
   end
 
   def produce(producer, events) do
     GenStage.call(producer, {:produce, events})
-  end
-
-  @impl true
-  def handle_call({:start_replication, _offset}, _from, connected?) do
-    {:reply, :ok, [], connected?}
-  end
-
-  @impl true
-  def handle_call(:connected?, _from, state) do
-    {:reply, state.status, [], state}
   end
 
   @impl true

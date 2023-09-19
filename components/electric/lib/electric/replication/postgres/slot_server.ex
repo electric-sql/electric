@@ -1,13 +1,13 @@
 defmodule Electric.Replication.Postgres.SlotServer do
   @moduledoc """
-  Server to collect the upstream transaction and send them downstream to the subscriber
+  A GenStage consumer that receives a list of client transactions and invokes a user-provided function on each of them.
+  The intended user-provided function is `Electric.Replication.Postgres.TcpServer.tcp_send/2`.
 
-  This server keeps track of the latest LSN sent, and converts the incoming replication
+  This stage keeps track of the latest LSN sent, and converts the incoming replication
   changes to the Postgres logical replication messages, with correctly incrementing LSNs.
 
-  The `downstream` option should specify the module for a GenStage producer, which
-  should implement the `Electric.Replication.DownstreamProducer` behaviour. Consumes
-  the messages from the producer and sends the data to postgres.
+  The `producer_name` option should specify the module for a GenStage producer that emits transactions to be sent to
+  Postgres via the outgoing logical replication stream.
   """
 
   use GenStage
@@ -17,13 +17,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
   alias Electric.Postgres.Messaging
-  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes
-  alias Electric.Replication.OffsetStorage
   alias Electric.Postgres.ShadowTableTransformation
 
-  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+  import Electric.Postgres.Extension,
+    only: [is_acked_client_lsn_relation: 1, is_extension_relation: 1]
 
   defmodule State do
     defstruct current_lsn: %Lsn{segment: 0, offset: 1},
@@ -93,15 +93,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   defp subscription_opts() do
     [min_demand: 10, max_demand: 50]
-  end
-
-  #  @spec connected?(slot_name()) :: boolean()
-  def connected?(server) do
-    GenStage.call(server, :connected?)
-  end
-
-  def downstream_connected?(server) do
-    GenStage.call(server, :downstream_connected?)
   end
 
   @spec stop(server) :: :ok
@@ -187,16 +178,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_call(:connected?, _, state) when replication_started?(state) do
-    {:reply, true, [], state}
-  end
-
-  @impl true
-  def handle_call(:connected?, _, state) do
-    {:reply, false, [], state}
-  end
-
-  @impl true
   def handle_call({:start_replication, _, _, _}, _, state) when replication_started?(state) do
     Logger.warning("Replication already started #{state.slot_name}")
     {:reply, {:error, :replication_already_started}, [], state}
@@ -220,8 +201,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     :gproc.await(state.producer_name, 1_000)
 
-    # TODO: We're currently not using this position in a the `SatelliteCollectorProducer`, but we should
-    position = get_pg_position(state.slot_name, start_lsn)
+    {position, state} = logical_publisher_position_from_lsn(state, start_lsn)
     Logger.debug("Got position #{inspect(position)} for start_lsn #{inspect(start_lsn)}")
 
     GenStage.async_subscribe(
@@ -285,34 +265,10 @@ defmodule Electric.Replication.Postgres.SlotServer do
   def handle_events(events, _from, %State{origin: origin} = state)
       when replication_started?(state) do
     state =
-      Enum.reduce(events, state, fn {transaction, position}, state ->
-        transaction = filter_extension_relations(transaction)
-
-        case transaction do
-          %{changes: []} ->
-            state
-
-          transaction ->
-            Logger.debug(fn ->
-              "Will send #{length(transaction.changes)} to subscriber: #{inspect(transaction.changes, pretty: true)}"
-            end)
-
-            {wal_messages, relations, new_lsn} = convert_to_wal(transaction, state)
-
-            send_all(wal_messages, state.send_fn, origin)
-
-            OffsetStorage.save_pg_position(
-              state.slot_name,
-              new_lsn,
-              position
-            )
-
-            %State{
-              state
-              | current_lsn: new_lsn,
-                sent_relations: relations,
-                current_source_position: position
-            }
+      Enum.reduce(events, state, fn {tx, pos}, state ->
+        case filter_extension_relations(tx) do
+          %{changes: []} -> state
+          tx -> send_transaction(tx, pos, origin, state)
         end
       end)
 
@@ -341,13 +297,27 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Private function
 
   defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
-    %{
-      tx
-      | changes:
-          Enum.reject(changes, fn
-            %{relation: relation} when is_extension_relation(relation) -> true
-            _ -> false
-          end)
+    filtered_changes =
+      Enum.reject(changes, fn %{relation: relation} ->
+        is_extension_relation(relation) and not is_acked_client_lsn_relation(relation)
+      end)
+
+    %{tx | changes: filtered_changes}
+  end
+
+  defp send_transaction(tx, pos, origin, state) do
+    Logger.debug(fn ->
+      "Will send #{length(tx.changes)} to subscriber: #{inspect(tx.changes, pretty: true)}"
+    end)
+
+    {wal_messages, relations, new_lsn} = convert_to_wal(tx, state)
+    send_all(wal_messages, state.send_fn, origin)
+
+    %State{
+      state
+      | current_lsn: new_lsn,
+        sent_relations: relations,
+        current_source_position: pos
     }
   end
 
@@ -380,21 +350,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
     |> Enum.each(send_fn)
   end
 
-  defp get_pg_position(slot_name, start_lsn) do
-    case OffsetStorage.get_pg_position(slot_name, start_lsn) do
-      nil ->
-        case OffsetStorage.get_largest_known_lsn_smaller_than(slot_name, start_lsn) do
-          {lsn, position} ->
-            Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to #{inspect(lsn)}")
-            position
+  defp logical_publisher_position_from_lsn(state, start_lsn) do
+    case Lsn.compare(state.current_lsn, start_lsn) do
+      :lt ->
+        # Electric was restarted. Use start_lsn as the initial value for current_lsn and start streaming from the
+        # beginning of the outgoing logical replication stream.
+        {-1, %{state | current_lsn: start_lsn}}
 
-          nil ->
-            Logger.debug("Lsn #{inspect(start_lsn)} not found, falling back to 0")
-            nil
-        end
-
-      position ->
-        position
+      _gt_or_eq ->
+        {state.current_source_position, state}
     end
   end
 
@@ -404,24 +368,34 @@ defmodule Electric.Replication.Postgres.SlotServer do
        ) do
     first_lsn = Lsn.increment(state.current_lsn)
 
+    {internal_relations, user_relations} =
+      changes
+      |> Enum.map(& &1.relation)
+      |> Enum.split_with(&is_extension_relation/1)
+
+    internal_relations =
+      internal_relations
+      |> Stream.uniq()
+      |> Stream.map(&Extension.SchemaCache.Global.internal_relation!/1)
+
     # always fetch the table info from the schema registry, don't rely on
     # our cache, which is just to determine which relations to send
     # this keeps the column lists up to date in the case of migrations
-    relations =
-      changes
-      |> Enum.map(& &1.relation)
+    user_relations =
+      user_relations
       |> state.preprocess_relation_list_fn.()
-      |> Enum.uniq()
-      |> Enum.map(&SchemaCache.Global.relation!/1)
+      |> Stream.uniq()
+      |> Stream.map(&Extension.SchemaCache.Global.relation!/1)
+
+    combined_relations = Enum.concat(internal_relations, user_relations)
 
     # detect missing relations based on name *and* on column list
     missing_relations =
-      relations
-      |> Enum.reject(fn r ->
-        Map.get(state.sent_relations, {r.schema, r.name}) == r
+      Enum.reject(combined_relations, fn table_info ->
+        Map.get(state.sent_relations, {table_info.schema, table_info.name}) == table_info
       end)
 
-    relations = Enum.into(relations, state.sent_relations, &{{&1.schema, &1.name}, &1})
+    relations = Enum.into(combined_relations, state.sent_relations, &{{&1.schema, &1.name}, &1})
 
     # Final LSN as specified by `BEGIN` message should be after all LSNs of actual changes but before the LSN of the commit
     {messages, final_lsn} =
@@ -432,9 +406,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
       |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
 
     relation_messages =
-      missing_relations
-      |> Enum.map(&relation_to_wal/1)
-      |> Enum.map(&{%Lsn{segment: 0, offset: 0}, &1})
+      Enum.map(missing_relations, fn table_info ->
+        {%Lsn{segment: 0, offset: 0}, relation_to_wal(table_info)}
+      end)
 
     commit_lsn = Lsn.increment(final_lsn)
 
@@ -460,7 +434,9 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {begin ++ relation_messages ++ messages ++ commit, relations, commit_lsn}
   end
 
-  defp preprocess_changes(%State{preprocess_change_fn: nil}, change, _, _), do: [change]
+  defp preprocess_changes(%State{} = state, change, _, _)
+       when is_nil(state.preprocess_change_fn) or is_extension_relation(change.relation),
+       do: [change]
 
   defp preprocess_changes(%State{preprocess_change_fn: fun} = state, change, relations, tag)
        when is_function(fun, 4),
@@ -509,13 +485,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
-  defp relation_to_wal(relation) do
+  defp relation_to_wal(table_info) do
     %ReplicationMessages.Relation{
-      id: relation.oid,
-      name: relation.name,
-      namespace: relation.schema,
-      replica_identity: relation.replica_identity,
-      columns: Enum.map(relation.columns, &column_to_wal/1)
+      id: table_info.oid,
+      name: table_info.name,
+      namespace: table_info.schema,
+      replica_identity: table_info.replica_identity,
+      columns: Enum.map(table_info.columns, &column_to_wal/1)
     }
   end
 

@@ -5,7 +5,6 @@ services:
       LOG_LEVEL: debug
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: integration-tests-signing-key-example
-      OFFSET_STORAGE_FILE: /tmp/electric-offset-storage.dat
     init: true
     privileged: true
 

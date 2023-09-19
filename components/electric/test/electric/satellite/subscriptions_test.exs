@@ -516,12 +516,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
   end
 
   defp active_clients() do
-    {:ok, clients} = Electric.Satellite.ClientManager.get_clients()
-
-    Enum.reduce(clients, [], fn {client_name, client_pid}, acc ->
-      case Process.alive?(client_pid) do
-        true -> [{client_name, client_pid} | acc]
-        false -> acc
+    Electric.Satellite.ClientManager.get_clients()
+    |> Enum.flat_map(fn {client_name, client_pid} ->
+      if Process.alive?(client_pid) do
+        [{client_name, client_pid}]
+      else
+        []
       end
     end)
   end

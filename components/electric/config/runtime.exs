@@ -12,7 +12,6 @@ default_instance_id = "electric"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
-default_offset_storage_path = "./offset_storage_data.dat"
 
 ###
 
@@ -113,9 +112,6 @@ if config_env() == :prod do
   ]
 
   config :electric, Electric.Replication.Connectors, connectors
-
-  config :electric, Electric.Replication.OffsetStorage,
-    file: System.get_env("OFFSET_STORAGE_FILE", default_offset_storage_path)
 else
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)
 end

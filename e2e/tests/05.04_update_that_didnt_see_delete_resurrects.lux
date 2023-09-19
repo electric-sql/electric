@@ -44,8 +44,8 @@
 
 [shell electric]
     # Wait for it to be sent to PG
-    ??pg_slot=postgres_1 [debug] Will send 1 to subscriber:
-    ?pg_slot=postgres_1 \[debug\] Sending 6 messages to the subscriber: from (#Lsn<0/29>)
+    ??pg_slot=postgres_1 [debug] Will send 2 to subscriber:
+    ?pg_slot=postgres_1 \[debug\] Sending 8 messages to the subscriber: from (#Lsn<0/33>)
     [my expected_lsn=$1]
     ??<StatusUpdate> [written_wal: $expected_lsn
 
