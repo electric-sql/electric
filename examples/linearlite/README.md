@@ -75,7 +75,6 @@ npm run client:generate
 The app is a React application to install and run it:
 
 ```bash
-npm run build
 npm run start
 ```
 

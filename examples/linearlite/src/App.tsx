@@ -61,7 +61,7 @@ const App = () => {
         },
       })
       await synced
-      const timeToSync = performance.now();
+      const timeToSync = performance.now()
       console.log(`Synced in ${timeToSync}ms from page load`)
     }
 

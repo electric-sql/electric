@@ -19,7 +19,7 @@ interface Props {
   issues: Array<Issue> | undefined
 }
 
-const itemSpacing = 10
+const itemSpacing = 8
 
 function IssueCol({ title, status, issues = [] }: Props) {
   const statusIcon = <StatusIcon status={status} />
@@ -102,6 +102,7 @@ const Row = memo(
     style: any
   }) => {
     const issue = issues[index]
+    if (!issue) return null
     return (
       <Draggable draggableId={issue.id} index={index} key={issue.id}>
         {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (

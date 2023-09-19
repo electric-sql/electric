@@ -10,7 +10,7 @@ export interface IssueListProps {
 
 function IssueList({ issues }: IssueListProps) {
   return (
-    <div className='grow'>
+    <div className="grow">
       <AutoSizer>
         {({ height, width }) => (
           <List

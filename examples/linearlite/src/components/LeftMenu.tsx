@@ -1,12 +1,15 @@
 import { ReactComponent as HelpIcon } from '../assets/icons/help.svg'
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
+import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
 import { MenuContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
+import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
+import { BsCollectionFill as IssuesIcon } from 'react-icons/bs'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
 import { Link } from 'react-router-dom'
 import Avatar from './Avatar'
@@ -45,9 +48,9 @@ function LeftMenu() {
         <div className="flex flex-col flex-grow-0 flex-shrink-0 px-5 py-3">
           <div className="flex items-center justify-between">
             {/* Project selection */}
-            <a
+            <Link
               className="flex items-center p-2 pr-3 rounded cursor-pointer hover:bg-gray-100"
-              href="https://electric-sql.com/"
+              to="/"
             >
               <img
                 src="/electric-icon.png"
@@ -57,7 +60,7 @@ function LeftMenu() {
                 G
               </div> */}
               <span className="flex text-sm font-medium">electric</span>
-            </a>
+            </Link>
 
             {/* User avatar  */}
             <div className="relative">
@@ -100,30 +103,36 @@ function LeftMenu() {
           </div>
         </div>
 
-        <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-4">
-          <ItemGroup title="React Issues">
+        <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-2">
+          <ItemGroup title="Your Issues">
             <Link
               to="/"
-              className="flex items-center pl-8 rounded cursor-pointer group h-7 hover:bg-gray-100"
+              className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
             >
+              <IssuesIcon className="w-3.5 h-3.5 mr-2" />
               <span>All Issues</span>
             </Link>
             <Link
               to="/?status=todo,in_progress"
-              className="flex items-center pl-8 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
+              <span className="w-3.5 h-6 mr-2 inline-block">
+                <span className="block w-2 h-full border-r"></span>
+              </span>
               <span>Active</span>
             </Link>
             <Link
               to="/?status=backlog"
-              className="flex items-center pl-8 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
+              <BacklogIcon className="w-3.5 h-3.5 mr-2" />
               <span>Backlog</span>
             </Link>
             <Link
               to="/board"
-              className="flex items-center pl-8 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
+              <BoardIcon className="w-3.5 h-3.5 mr-2" />
               <span>Board</span>
             </Link>
           </ItemGroup>
