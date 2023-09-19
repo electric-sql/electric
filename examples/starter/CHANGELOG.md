@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.1.5
+
+### Patch Changes
+
+- bec4399: Remove NodeJS --no-warnings flag
+
 ## 0.1.3
 
 ### Patch Changes
