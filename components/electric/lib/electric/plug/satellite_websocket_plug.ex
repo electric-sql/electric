@@ -18,10 +18,12 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         &Electric.Replication.InitialSync.query_subscription_data/2
       end)
 
+  @currently_supported_versions ">= 0.6.0 and <= #{Electric.vsn()}"
+
   def call(conn, handler_opts) do
     with {:ok, conn} <- check_if_valid_upgrade(conn),
          {:ok, conn} <- check_if_subprotocol_present(conn),
-         {:ok, conn} <- check_if_vsn_compatible(conn, with: "<= #{Electric.vsn()}") do
+         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions) do
       Logger.metadata(
         remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
         instance_id: Electric.instance_id()

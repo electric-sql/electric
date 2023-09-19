@@ -1,5 +1,16 @@
 # electric-sql
 
+## 0.6.0
+
+### Minor Changes
+
+- 2662251: Add protocol version negotiation to websocket connection step
+- e5936a6: feat: changed the protocol to have a proper RPC implementation for ease of extension and maintanence
+
+### Patch Changes
+
+- 3603703: Use parametrized SQL queries.
+
 ## 0.5.3
 
 ### Patch Changes
