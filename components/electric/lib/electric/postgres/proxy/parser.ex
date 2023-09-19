@@ -37,6 +37,8 @@ end
 
 defmodule Electric.Postgres.Proxy.Parser do
   alias Electric.Postgres.Proxy.NameParser
+  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Proxy.{QueryAnalyser, QueryAnalysis}
 
   import __MODULE__.Macros
 
@@ -50,7 +52,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   @spec table_name(binary() | struct(), Keyword.t()) ::
-          {:ok, {String.t(), String.t()}} | {:error, term()}
+          {:table | :index, {String.t(), String.t()}} | {nil, nil} | no_return
   def table_name(query, opts \\ [])
 
   def table_name(query, opts) when is_binary(query) do
@@ -59,30 +61,23 @@ defmodule Electric.Postgres.Proxy.Parser do
     end
   end
 
-  def table_name(%PgQuery.InsertStmt{} = stmt, opts) do
-    %{schemaname: s, relname: n} = stmt.relation
-    {:ok, {blank(s, opts), n}}
-  end
-
-  def table_name(%PgQuery.AlterTableStmt{} = stmt, opts) do
-    %{schemaname: s, relname: n} = stmt.relation
-    {:ok, {blank(s, opts), n}}
-  end
-
-  def table_name(%PgQuery.IndexStmt{} = stmt, opts) do
-    %{schemaname: s, relname: n} = stmt.relation
-    {:ok, {blank(s, opts), n}}
-  end
-
-  def table_name(%PgQuery.RenameStmt{} = stmt, opts) do
-    %{schemaname: s, relname: n} = stmt.relation
-    {:ok, {blank(s, opts), n}}
+  def table_name(%{relation: %{schemaname: s, relname: n}} = _stmt, opts) do
+    {:table, {blank(s, opts), n}}
   end
 
   # TODO: drop table supports a list of table names, but let's not support that for the moment
-  def table_name(%PgQuery.DropStmt{objects: [object]} = _stmt, opts) do
+  def table_name(%PgQuery.DropStmt{objects: [object]} = stmt, opts) do
     %{node: {:list, %{items: items}}} = object
     names = Enum.map(items, fn %{node: {:string, %{sval: n}}} -> n end)
+
+    type =
+      case stmt do
+        %{remove_type: :OBJECT_TABLE} ->
+          :table
+
+        %{remove_type: :OBJECT_INDEX} ->
+          :index
+      end
 
     name =
       case names do
@@ -96,7 +91,7 @@ defmodule Electric.Postgres.Proxy.Parser do
           {blank(nil, opts), table}
       end
 
-    {:ok, name}
+    {type, name}
   end
 
   def table_name(
@@ -107,27 +102,27 @@ defmodule Electric.Postgres.Proxy.Parser do
       {"electric", "electrify"} ->
         case Enum.map(funccall.args, &string_node_val/1) do
           [a1, a2] ->
-            {:ok, {a1, a2}}
+            {:table, {a1, a2}}
 
           [a1] ->
-            NameParser.parse(a1, opts)
+            {:table, NameParser.parse!(a1, opts)}
         end
 
       _ ->
-        {:ok, {blank(nil, opts), nil}}
+        {nil, nil}
     end
   end
 
-  def table_name(_stmt, opts) do
-    {:ok, {blank(nil, opts), nil}}
+  def table_name(_stmt, _opts) do
+    {nil, nil}
   end
 
-  defp string_node_val(%PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}}), do: sval
+  def string_node_val(%PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}}), do: sval
 
-  defp string_node_val(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
+  def string_node_val(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
     do: string_node_val(sval)
 
-  defp string_node_val(%PgQuery.String{sval: sval}), do: sval
+  def string_node_val(%PgQuery.String{sval: sval}), do: sval
 
   #   enum AlterTableType
   # {
@@ -407,8 +402,213 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   defp modification_action(%{subtype: :AT_AddColumn}), do: :add
+  defp modification_action(%{subtype: :AT_DropColumn}), do: :drop
+  defp modification_action(_), do: :modify
 
   defp column_definition(%{node: {:column_def, def}}) do
     [column: def.colname, type: Electric.Postgres.Dialect.Postgresql.map_type(def.type_name)]
+  end
+
+  defp column_definition(nil) do
+    []
+  end
+
+  @type analyse_options() :: [loader: SchemaLoader.t(), default_schema: String.t()]
+
+  def analyse(query, opts \\ []) when is_binary(query) do
+    {:ok, loader} = Keyword.fetch(opts, :loader)
+
+    case parse_and_split(query) do
+      {:ok, stmts} ->
+        Enum.map(stmts, &analyse_stmt(&1, loader, opts))
+
+      {:error, error} ->
+        case smuggle_electric_syntax(query, error, loader, opts) do
+          {:ok, stmts} ->
+            Enum.map(stmts, &analyse_stmt(&1, loader, opts))
+
+          {:error, _error} ->
+            [
+              %QueryAnalysis{
+                action: :invalid,
+                table: nil,
+                electrified?: false,
+                allowed?: true,
+                capture?: false,
+                ast: nil,
+                valid?: false,
+                sql: query
+              }
+            ]
+        end
+    end
+  end
+
+  defp parse_and_split(query) do
+    with {:ok, %PgQuery.ParseResult{stmts: stmts}} <- PgQuery.parse(query) do
+      stmts =
+        Enum.map(stmts, fn %PgQuery.RawStmt{
+                             stmt: %PgQuery.Node{node: {_type, struct}},
+                             stmt_location: loc,
+                             stmt_len: len
+                           } ->
+          len = if len == 0, do: byte_size(query), else: len
+          {struct, loc, len}
+        end)
+
+      stmts =
+        Enum.map(stmts, fn {stmt, loc, len} ->
+          {stmt,
+           query
+           |> binary_part(loc, len)
+           |> String.trim()}
+        end)
+
+      {:ok, stmts}
+    end
+  end
+
+  defp analyse_stmt({stmt, query}, loader, opts) do
+    {type, name} = table_name(stmt, opts)
+
+    analysis = %QueryAnalysis{
+      table: name,
+      electrified?: is_electrified?(type, name, loader),
+      ast: stmt,
+      sql: query
+    }
+
+    QueryAnalyser.analyse(stmt, analysis, opts)
+  end
+
+  defp is_electrified?(nil, nil, _loader) do
+    false
+  end
+
+  defp is_electrified?(:table, table, loader) do
+    {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
+    electrified?
+  end
+
+  defp is_electrified?(:index, index, loader) do
+    {:ok, electrified?} = SchemaLoader.index_electrified?(loader, index)
+    electrified?
+  end
+
+  @keyword_len byte_size("ELECTRIC")
+
+  defp smuggle_electric_syntax(query, %{cursorpos: cursorpos} = error, loader, opts) do
+    if byte_size(query) >= cursorpos + @keyword_len &&
+         is_electric_keyword?(binary_part(query, cursorpos, @keyword_len)) do
+      safe_query = do_smuggle_electric_syntax(query, cursorpos)
+
+      case parse_and_split(safe_query) do
+        {:ok, stmts} ->
+          {:ok, stmts}
+
+        {:error, error} ->
+          smuggle_electric_syntax(safe_query, error, loader, opts)
+      end
+    else
+      # this can't be an electrification command
+      # so just return an "ignore me" analysis
+      {:error, error}
+    end
+  end
+
+  defp do_smuggle_electric_syntax(query, cursorpos) do
+    leading = binary_part(query, 0, cursorpos)
+    trailing = binary_part(query, cursorpos, byte_size(query) - cursorpos)
+
+    start_pos = cursorpos - find_semicolon(String.reverse(leading), :reverse)
+    end_pos = find_semicolon(trailing, :forward) + cursorpos
+
+    command_sql =
+      query
+      |> binary_part(start_pos, end_pos - start_pos)
+      |> String.trim()
+      |> String.trim_trailing(";")
+
+    pre = binary_part(query, 0, start_pos)
+    post = binary_part(query, end_pos, byte_size(query) - end_pos)
+
+    # the semicolon finding drops any whitespace between the previous
+    # statement's `;` and the electric command sql, so add some in 
+    join_query([pre, "\n\n", smuggle_call(command_sql), post])
+  end
+
+  defp join_query(parts) do
+    parts
+    |> Stream.reject(&(&1 == ""))
+    |> Enum.join("")
+  end
+
+  defp smuggle_call(query) do
+    IO.iodata_to_binary(["CALL electric.__smuggle__(", quote_query(query), ");"])
+  end
+
+  defp quote_query(query) do
+    quote = random_quote()
+
+    quote <> to_string(query) <> quote
+  end
+
+  defp random_quote do
+    "$__" <> (:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)) <> "__$"
+  end
+
+  defp find_semicolon(s, direction) do
+    find_semicolon(s, %{sq: false, dq: false, p: 0, d: direction}, 0)
+  end
+
+  defp find_semicolon("", %{dq: false, sq: false}, pos) do
+    pos
+  end
+
+  defp find_semicolon(";" <> _rest, %{dq: false, sq: false, d: direction}, pos) do
+    case direction do
+      :forward ->
+        pos + 1
+
+      :reverse ->
+        pos
+    end
+  end
+
+  defp find_semicolon("\"" <> rest, %{dq: false} = state, pos) do
+    find_semicolon(rest, %{state | dq: true}, pos + 1)
+  end
+
+  defp find_semicolon("\"\"" <> rest, %{dq: true} = state, pos) do
+    find_semicolon(rest, state, pos + 2)
+  end
+
+  defp find_semicolon("\"" <> rest, %{dq: true} = state, pos) do
+    find_semicolon(rest, %{state | dq: false}, pos + 1)
+  end
+
+  defp find_semicolon("\'" <> rest, %{sq: false} = state, pos) do
+    find_semicolon(rest, %{state | sq: true}, pos + 1)
+  end
+
+  defp find_semicolon("''" <> rest, %{sq: true} = state, pos) do
+    find_semicolon(rest, state, pos + 2)
+  end
+
+  defp find_semicolon("'" <> rest, %{sq: true} = state, pos) do
+    find_semicolon(rest, %{state | sq: false}, pos + 1)
+  end
+
+  defp find_semicolon(<<_::utf8, rest::binary>>, state, pos) do
+    find_semicolon(rest, state, pos + 1)
+  end
+
+  # case ignoring match of "electric"
+  defkeyword :is_electric_keyword?, "ELECTRIC", trailing: false do
+    true
+  end
+
+  def is_electric_keyword?(_) do
+    false
   end
 end

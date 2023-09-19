@@ -36,4 +36,14 @@ defmodule Electric.Postgres.Proxy.NameParser do
       {:ok, {to_string(schema), to_string(name)}}
     end
   end
+
+  def parse!(name, opts \\ []) do
+    case parse(name, opts) do
+      {:ok, name} ->
+        name
+
+      error ->
+        raise ArgumentError, message: "Failed to parse name #{inspect(name)}: #{inspect(error)}"
+    end
+  end
 end

@@ -142,19 +142,39 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql1 =
       "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
 
-    sql2 = "CALL electric.electrify('public.buttercup')"
+    sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2] do
-      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql) |> dbg
     end
 
     assert {:ok, [_]} = Extension.ddl_history(conn)
 
     sql3 =
-      "ALTER TABLE public.buttercup ADD COLUMN amount int4; CREATE INDEX buttercup_amount_idx ON public.buttercup (amount); "
+      "ALTER TABLE public.buttercup ADD COLUMN amount int4; CREATE INDEX buttercup_amount_idx ON public.buttercup (amount);"
 
     [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, sql3)
 
-    assert {:ok, [_, {_, _, _, ^sql3}]} = Extension.ddl_history(conn)
+    assert {:ok, [_, %{"query" => ^sql3}]} = Extension.ddl_history(conn)
+  end
+
+  test_tx "CREATE INDEX; DROP <electrified> COLUMN", fn conn ->
+    sql1 =
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
+
+    sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
+
+    for sql <- [sql1, sql2] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql) |> dbg
+    end
+
+    assert {:ok, [_]} = Extension.ddl_history(conn)
+
+    sql3 =
+      "CREATE INDEX buttercup_amount_idx ON public.buttercup (amount); ALTER TABLE public.buttercup DROP COLUMN value; "
+
+    [{:ok, _, _}, {:error, _}] = :epgsql.squery(conn, sql3)
+
+    assert {:ok, [_]} = Extension.ddl_history(conn)
   end
 end

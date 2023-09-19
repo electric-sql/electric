@@ -16,10 +16,10 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
        ]}
     ]
 
-    {module, opts} = MockSchemaLoader.backend_spec(migrations: migrations)
+    spec = MockSchemaLoader.backend_spec(migrations: migrations)
 
     {:ok, conn} =
-      module.connect([], opts)
+      SchemaLoader.connect(spec, [])
 
     {:ok, injector} =
       Injector.new(
