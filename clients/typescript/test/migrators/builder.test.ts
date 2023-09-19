@@ -10,11 +10,14 @@ import {
   SatOpMigrate_PgColumnType,
 } from '../../src/_generated/protocol/satellite'
 import _m0 from 'protobufjs/minimal.js'
-import Database from 'better-sqlite3'
-import { electrify } from '../../src/drivers/better-sqlite3'
 import path from 'path'
 import { DbSchema } from '../../src/client/model'
 import { MockSocket } from '../../src/sockets/mock'
+
+// import Database from 'better-sqlite3'
+// import { electrify } from '../../src/drivers/better-sqlite3'
+import { ElectricDatabase as Database } from '../../src/drivers/postgres/database'
+import { electrify } from '../../src/drivers/postgres'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
@@ -31,7 +34,7 @@ const migrationMetaData = {
         stmts: [
           SatOpMigrate_Stmt.fromPartial({
             type: SatOpMigrate_Type.CREATE_TABLE,
-            sql: 'CREATE TABLE "stars" (\n  "id" TEXT NOT NULL,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL,\n  CONSTRAINT "stars_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n',
+            sql: 'CREATE TABLE stars (id TEXT NOT NULL PRIMARY KEY, avatar_url TEXT NOT NULL, name TEXT, starred_at TEXT NOT NULL, username TEXT NOT NULL);',
           }),
         ],
         table: SatOpMigrate_Table.fromPartial({
@@ -105,11 +108,26 @@ test('generate migration from meta data', (t) => {
   t.assert(migration.version === migrationMetaData.version)
   t.assert(
     migration.statements[0],
-    'CREATE TABLE "stars" (\n  "id" TEXT NOT NULL,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL,\n  CONSTRAINT "stars_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n'
+    'CREATE TABLE stars (id TEXT NOT NULL PRIMARY KEY, avatar_url TEXT NOT NULL, name TEXT, starred_at TEXT NOT NULL, username TEXT NOT NULL);'
   )
   t.assert(
     migration.statements[3],
-    "\n    CREATE TRIGGER update_ensure_main_stars_primarykey\n      BEFORE UPDATE ON main.stars\n    BEGIN\n      SELECT\n        CASE\n          WHEN old.id != new.id THEN\n\t\tRAISE (ABORT, 'cannot change the value of column id as it belongs to the primary key')\n        END;\n    END;\n    "
+    `
+    CREATE OR REPLACE FUNCTION update_ensure_main_stars_primarykey_function()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF OLD.id IS DISTINCT FROM NEW.id THEN
+        RAISE EXCEPTION 'Cannot change the value of column id as it belongs to the primary key';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER update_ensure_main_stars_primarykey
+    BEFORE UPDATE ON main.stars
+    FOR EACH ROW
+    EXECUTE FUNCTION update_ensure_main_stars_primarykey_function();
+    `
   )
 })
 
@@ -122,7 +140,7 @@ test('read migration meta data', async (t) => {
 })
 
 test('load migration from meta data', async (t) => {
-  const db = new Database(':memory:')
+  const db = await Database.init("./not/memory")
   const migration = makeMigration(parseMetadata(migrationMetaData))
   const electric = await electrify(
     db,
@@ -137,7 +155,11 @@ test('load migration from meta data', async (t) => {
 
   // Check that the DB is initialized with the stars table
   const tables = await electric.db.raw({
-    sql: `SELECT name FROM sqlite_master WHERE type='table' AND name='stars';`,
+    sql: `
+    SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'stars';
+    `,
   })
 
   const starIdx = tables.findIndex((tbl) => tbl.name === 'stars')
@@ -145,7 +167,9 @@ test('load migration from meta data', async (t) => {
 
   const columns = await electric.db
     .raw({
-      sql: `PRAGMA table_info(stars);`,
+      sql: `SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_name = 'stars';`,
     })
     .then((columns) => columns.map((column) => column.name))
 

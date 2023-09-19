@@ -46,65 +46,145 @@ export function generateOplogTriggers(
   return [
     `
     -- Toggles for turning the triggers on and off
-    INSERT OR IGNORE INTO _electric_trigger_settings(tablename,flag) VALUES ('${tableFullName}', 1);
+    INSERT INTO main._electric_trigger_settings (tablename, flag)
+    VALUES ('${tableFullName}', 1)
+    ON CONFLICT (tablename) DO NOTHING;
     `,
     `
     /* Triggers for table ${tableName} */
-  
+
     -- ensures primary key is immutable
-    DROP TRIGGER IF EXISTS update_ensure_${namespace}_${tableName}_primarykey;
+    DROP TRIGGER IF EXISTS update_ensure_${namespace}_${tableName}_primarykey ON ${namespace}.${tableName};
     `,
     `
-    CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
-      BEFORE UPDATE ON ${tableFullName}
+    CREATE OR REPLACE FUNCTION update_ensure_${namespace}_${tableName}_primarykey_function()
+    RETURNS TRIGGER AS $$
     BEGIN
-      SELECT
-        CASE
-          ${primary
-            .map(
-              (col) =>
-                `WHEN old.${col} != new.${col} THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
-            )
-            .join('\n')}
-        END;
+      ${primary
+        .map(
+          (col) =>
+            `IF OLD.${col} IS DISTINCT FROM NEW.${col} THEN
+              RAISE EXCEPTION 'Cannot change the value of column ${col} as it belongs to the primary key';
+            END IF;`
+        )
+        .join('\n')}
+      RETURN NEW;
     END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
+    BEFORE UPDATE ON ${namespace}.${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION update_ensure_${namespace}_${tableName}_primarykey_function();
     `,
     `
     -- Triggers that add INSERT, UPDATE, DELETE operation to the _opslog table
-    DROP TRIGGER IF EXISTS insert_${namespace}_${tableName}_into_oplog;
+    DROP TRIGGER IF EXISTS insert_${namespace}_${tableName}_into_oplog ON ${namespace}.${tableName};
     `,
     `
+    CREATE OR REPLACE FUNCTION insert_${namespace}_${tableName}_into_oplog_function()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      DECLARE
+        flag_value INTEGER;
+      BEGIN
+        SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${tableFullName}';
+
+        IF flag_value = 1 THEN
+          INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          VALUES (
+            '${namespace}',
+            '${tableName}',
+            'INSERT',
+            jsonb_build_object(${newPKs}),
+            jsonb_build_object(${newRows}),
+            NULL,
+            NULL
+          );
+        END IF;
+
+        RETURN NEW;
+      END;
+    END;
+    $$ LANGUAGE plpgsql;
+
     CREATE TRIGGER insert_${namespace}_${tableName}_into_oplog
-       AFTER INSERT ON ${tableFullName}
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
+    AFTER INSERT ON ${namespace}.${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_${namespace}_${tableName}_into_oplog_function();
+    `,
+    `
+    DROP TRIGGER IF EXISTS update_${namespace}_${tableName}_into_oplog ON ${namespace}.${tableName};
+    `,
+    `
+    CREATE OR REPLACE FUNCTION update_${namespace}_${tableName}_into_oplog_function()
+    RETURNS TRIGGER AS $$
     BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'INSERT', json_object(${newPKs}), json_object(${newRows}), NULL, NULL);
+      DECLARE
+        flag_value INTEGER;
+      BEGIN
+        -- Get the flag value from _electric_trigger_settings
+        SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = '${tableFullName}';
+
+        IF flag_value = 1 THEN
+          -- Insert into _electric_oplog
+          INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          VALUES (
+            '${namespace}',
+            '${tableName}',
+            'UPDATE',
+            jsonb_build_object(${newPKs}),
+            jsonb_build_object(${newRows}),
+            jsonb_build_object(${oldRows}),
+            NULL
+          );
+        END IF;
+
+        RETURN NEW;
+      END;
     END;
-    `,
-    `
-    DROP TRIGGER IF EXISTS update_${namespace}_${tableName}_into_oplog;
-    `,
-    `
+    $$ LANGUAGE plpgsql;
+
+    -- Create the trigger on the specified table
     CREATE TRIGGER update_${namespace}_${tableName}_into_oplog
-       AFTER UPDATE ON ${tableFullName}
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
+    AFTER UPDATE ON ${namespace}.${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION update_${namespace}_${tableName}_into_oplog_function();
+    `,
+    `
+    DROP TRIGGER IF EXISTS delete_${namespace}_${tableName}_into_oplog ON ${namespace}.${tableName};
+    `,
+    `
+    CREATE OR REPLACE FUNCTION delete_${namespace}_${tableName}_into_oplog_function()
+    RETURNS TRIGGER AS $$
     BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'UPDATE', json_object(${newPKs}), json_object(${newRows}), json_object(${oldRows}), NULL);
+      DECLARE
+        flag_value INTEGER;
+      BEGIN
+        SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${tableFullName}';
+
+        IF flag_value = 1 THEN
+          INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          VALUES (
+            '${namespace}',
+            '${tableName}',
+            'DELETE',
+            jsonb_build_object(${oldPKs}),
+            NULL,
+            jsonb_build_object(${oldRows}),
+            NULL
+          );
+        END IF;
+
+        RETURN OLD;
+      END;
     END;
-    `,
-    `
-    DROP TRIGGER IF EXISTS delete_${namespace}_${tableName}_into_oplog;
-    `,
-    `
+    $$ LANGUAGE plpgsql;
+
     CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
-       AFTER DELETE ON ${tableFullName}
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-    BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'DELETE', json_object(${oldPKs}), NULL, json_object(${oldRows}), NULL);
-    END;
+    AFTER DELETE ON ${namespace}.${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_${namespace}_${tableName}_into_oplog_function();
     `,
   ].map(mkStatement)
 }
@@ -140,33 +220,83 @@ function generateCompensationTriggers(
 
     return [
       `-- Triggers for foreign key compensations
-      DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
+      DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog ON ${namespace}.${tableName};`,
       // The compensation trigger inserts a row in `_electric_oplog` if the row pointed at by the FK exists
       // The way how this works is that the values for the row are passed to the nested SELECT
       // which will return those values for every record that matches the query
       // which can be at most once since we filter on the foreign key which is also the primary key and thus is unique.
       `
+      CREATE OR REPLACE FUNCTION compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+          meta_value INTEGER;
+        BEGIN
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${fkTableNamespace}.${fkTableName}';
+
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
+
+          IF flag_value = 1 AND meta_value = 1 THEN
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            SELECT
+              '${fkTableNamespace}',
+              '${fkTableName}',
+              'UPDATE',
+              jsonb_build_object(${joinedFkPKs}),
+              jsonb_build_object(${joinedFkPKs}),
+              NULL,
+              NULL
+            FROM ${fkTableNamespace}.${fkTableName}
+            WHERE ${foreignKey.parentKey} = NEW.${foreignKey.childKey};
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+
       CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
-        AFTER INSERT ON ${tableFullName}
-        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
-             1 == (SELECT value from _electric_meta WHERE key == 'compensations')
-      BEGIN
-        INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
-      END;
+      AFTER INSERT ON ${tableFullName}
+      FOR EACH ROW
+      EXECUTE FUNCTION compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog_function();
       `,
-      `DROP TRIGGER IF EXISTS compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog;`,
+      `DROP TRIGGER IF EXISTS compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog ON ${namespace}.${tableName};`,
       `
-      CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
-         AFTER UPDATE ON ${namespace}.${tableName}
-         WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
-              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
+      CREATE OR REPLACE FUNCTION compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog_function()
+      RETURNS TRIGGER AS $$
       BEGIN
-        INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
+        DECLARE
+          flag_value INTEGER;
+          meta_value INTEGER;
+        BEGIN
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${fkTableNamespace}.${fkTableName}';
+
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
+
+          IF flag_value = 1 AND meta_value = 1 THEN
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            SELECT
+              '${fkTableNamespace}',
+              '${fkTableName}',
+              'UPDATE',
+              jsonb_build_object(${joinedFkPKs}),
+              jsonb_build_object(${joinedFkPKs}),
+              NULL,
+              NULL
+            FROM ${fkTableNamespace}.${fkTableName}
+            WHERE ${foreignKey.parentKey} = NEW.${foreignKey.childKey};
+          END IF;
+
+          RETURN NEW;
+        END;
       END;
+      $$ LANGUAGE plpgsql;
+
+      CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
+      AFTER UPDATE ON ${namespace}.${tableName}
+      FOR EACH ROW
+      EXECUTE FUNCTION compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog_function();
       `,
     ].map(mkStatement)
   }
@@ -203,9 +333,9 @@ export function generateTriggers(tables: Tables): Statement[] {
   })
 
   const stmts = [
-    { sql: 'DROP TABLE IF EXISTS _electric_trigger_settings;' },
+    { sql: 'DROP TABLE IF EXISTS main._electric_trigger_settings;' },
     {
-      sql: 'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      sql: 'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
     },
     ...tableTriggers,
   ]
