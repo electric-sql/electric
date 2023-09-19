@@ -6,7 +6,7 @@ import { DATABASE_URL } from './util.js'
 
 const dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
-const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 1042
+const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
 
 console.info(`Connecting to Postgres..`)
 const db = createPool(DATABASE_URL)
