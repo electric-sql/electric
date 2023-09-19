@@ -80,7 +80,7 @@ export class ElectricDatabase implements Database {
       }
     }
 
-    this.invoke("tauri_exec", { sql: statement.sql , bind_params: { keys, values } });
+    this.invoke("tauri_exec_command", { sql: statement.sql , bind_params: { keys, values } });
   }
 
   async exec(statement: Statement): Promise<QueryExecResult> {
@@ -148,7 +148,7 @@ export class ElectricDatabase implements Database {
   static async init(dbName: string, sqliteDistPath: string, invoke: Function) {
     // Initialize SQLite
     console.log("JSTrace: init", dbName, sqliteDistPath)
-    let result = invoke("my_tauri_init", { name: dbName, sqlite_dist_path: sqliteDistPath });
+    let result = invoke("my_tauri_init", { name: dbName });
     result.await;
     console.log(result);
 

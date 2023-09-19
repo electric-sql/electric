@@ -92,7 +92,7 @@ const ExampleComponent = () => {
 
   const startPg = async () => {
     console.log("Start Postgres")
-    invoke("tauri_start_postgres", {} );
+    invoke("my_tauri_init", {name: "data"} );
   }
 
   const stopPg = async () => {
