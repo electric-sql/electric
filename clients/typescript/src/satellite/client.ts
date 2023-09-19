@@ -1034,6 +1034,7 @@ function deserializeColumnData(
     case 'DATE':
     case 'TIME':
     case 'TIMESTAMP':
+    case 'TIMESTAMPTZ':
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
@@ -1047,8 +1048,6 @@ function deserializeColumnData(
       return Number(typeDecoder.text(column))
     case 'TIMETZ':
       return typeDecoder.timetz(column)
-    case 'TIMESTAMPTZ':
-      return typeDecoder.timestamptz(column)
   }
   throw new SatelliteError(
     SatelliteErrorCode.UNKNOWN_DATA_TYPE,
@@ -1067,8 +1066,6 @@ function serializeColumnData(
       return typeEncoder.bool(columnValue as number)
     case 'TIMETZ':
       return typeEncoder.timetz(columnValue as string)
-    case 'TIMESTAMPTZ':
-      return typeEncoder.timestamptz(columnValue as string)
     default:
       return typeEncoder.text(columnValue as string)
   }
