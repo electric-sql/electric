@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "electric-sql": "latest",
-    "electric-toolbar": "file:../toolbar",
+    "electric-toolbar": "file:../../toolbar",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#master"

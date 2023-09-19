@@ -8,16 +8,14 @@ import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
-// @ts-ignore
-import AddToolbar from 'electric-toolbar'
-import 'electric-toolbar/dist/index.cjs.css'
 
-
+// Adds the electric toolbar
+// import AddToolbar, {TypescriptApi} from 'electric-toolbar'
+// import 'electric-toolbar/dist/index.cjs.css'
+// import { globalRegistry } from "electric-sql/satellite";
 
 import './Example.css'
-
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
 
 
 export const Example = () => {
@@ -45,7 +43,7 @@ export const Example = () => {
         return
       }
 
-      AddToolbar()
+      // AddToolbar(TypescriptApi(globalRegistry))
       setElectric(electric)
     }
 
