@@ -993,7 +993,15 @@ interface OtherItemsGetPayload extends HKT {
 
 export const tableSchemas = {
   items: {
-    fields: ["id","content","content_text_null","content_text_null_default","intvalue_null","intvalue_null_default"],
+    fields: new Map([
+      ["id", "TEXT"],
+      ["content", "TEXT"],
+      ["content_text_null", "TEXT"],
+      ["content_text_null_default", "TEXT"],
+      ["intvalue_null", "INT4"],
+      ["intvalue_null_default", "INT4"],
+    ]
+    ),
     relations: [
       new Relation("other_items", "", "", "other_items", "ItemsToOtherItems", "many"),
     ],
@@ -1022,7 +1030,11 @@ export const tableSchemas = {
     ItemsGetPayload
   >,
   other_items: {
-    fields: ["id","content","item_id"],
+    fields: new Map([
+      ["id", "TEXT"],
+      ["content", "TEXT"],
+      ["item_id", "TEXT"],
+    ]),
     relations: [
       new Relation("items", "item_id", "id", "items", "ItemsToOtherItems", "one"),
     ],
