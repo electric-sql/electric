@@ -11,6 +11,7 @@
     "active",
     "android",
     "better-sqlite3",
+    "capacitor",
     "cordova",
     "crdt",
     "crdts",
@@ -50,6 +51,7 @@
     "./package.json": "./package.json",
     "./browser": "./dist/drivers/wa-sqlite/index.js",
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
+    "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
@@ -68,6 +70,9 @@
       ],
       "cordova": [
         "./dist/drivers/cordova-sqlite-storage/index.d.ts"
+      ],
+      "capacitor": [
+        "./dist/drivers/capacitor-sqlite/index.d.ts"
       ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
@@ -179,7 +184,8 @@
     "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
-    "@types/cordova-sqlite-storage": "^1.5.5",
+    "@types/cordova-sqlite-storage": "^5.2.3",
+    "@types/capacitor-sqlite": "^1.5.5",
     "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
@@ -215,6 +221,7 @@
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
+    "@capacitor-community/sqlite": "^5.2.3",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",
@@ -225,6 +232,9 @@
     "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master"
   },
   "peerDependenciesMeta": {
+    "capacitor-community/sqlite": {
+      "optional": true
+    },
     "cordova-sqlite-storage": {
       "optional": true
     },
