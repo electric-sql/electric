@@ -1,0 +1,47 @@
+<%
+  valid_column_types =
+    ~w[
+      bool
+      date
+      float8
+      int2 int4
+      text
+      time
+      timestamp timestamptz
+      uuid
+      varchar
+    ]a
+    |> Enum.map(&"'#{&1}'")
+    |> Enum.join(",")
+%>
+
+CREATE OR REPLACE FUNCTION electric.__validate_table_column_types(table_name text)
+RETURNS VOID AS $function$
+DECLARE
+    _col_name text;
+    _col_type text;
+    _col_typmod int;
+    _col_type_pretty text;
+    _invalid_cols text[];
+BEGIN
+    FOR _col_name, _col_type, _col_typmod, _col_type_pretty IN
+        SELECT attname, typname, atttypmod, format_type(atttypid, atttypmod)
+            FROM pg_attribute
+            JOIN pg_type on atttypid = pg_type.oid
+            WHERE attrelid = table_name::regclass AND attnum > 0 AND NOT attisdropped
+            ORDER BY attnum
+    LOOP
+        IF _col_type NOT IN (<%= valid_column_types %>)
+           -- We only support unsized varchar type
+           OR ('varchar' IN (<%= valid_column_types %>) AND _col_type = 'varchar' AND _col_typmod <> -1)
+        THEN
+            _invalid_cols = array_append(_invalid_cols, format('"%s" %s', _col_name, _col_type_pretty));
+        END IF;
+    END LOOP;
+
+    IF _invalid_cols IS NOT NULL THEN
+        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have types not supported by Electric:\n  %',
+                        table_name, array_to_string(_invalid_cols, E'\n  ');
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL;

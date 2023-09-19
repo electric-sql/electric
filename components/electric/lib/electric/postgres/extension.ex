@@ -3,7 +3,7 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{Extension.Migration, Schema, Schema.Proto}
+  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
   alias Electric.Utils
 
   require Logger
@@ -227,6 +227,16 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @spec define_functions(conn) :: :ok
+  def define_functions(conn) do
+    Enum.each(Functions.list(), fn {name, sql} ->
+      case :epgsql.squery(conn, sql) do
+        {:ok, [], []} -> :ok
+        error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
+      end
+    end)
+  end
+
   @spec migrations() :: [module(), ...]
   def migrations do
     alias Electric.Postgres.Extension.Migrations
@@ -266,6 +276,13 @@ defmodule Electric.Postgres.Extension do
       create_migration_table(txconn)
 
       with_migration_lock(txconn, fn ->
+        # NOTE(alco): This is currently called BEFORE running any internal migrations because we're only defining the
+        # type-checking function that the later defined `electrify()` function depends on.
+        #
+        # Once we move all function definitions out of migrations, we should call this AFTER all internal migrations
+        # have been applied.
+        define_functions(txconn)
+
         existing_migrations = existing_migrations(txconn)
 
         versions =

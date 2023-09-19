@@ -43,7 +43,7 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 - `boolean`
 - `uuid`
 
-The authoritative list of supported data types is maintained in the [`supported_pg_types/0` function](https://github.com/search?q=repo%3Aelectric-sql%2Felectric+symbol%3Asupported_pg_types&type=code).
+The authoritative list of supported data types is maintained in the [`validate_table_column_types.sql.eex` file](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/postgres/extension/functions/validate_table_column_types.sql.eex).
 
 :::caution Work in progress
 We are actively working on building out data type support. If you need a type we don't yet support, please [let us know on Discord](https://discord.electric-sql.com).
