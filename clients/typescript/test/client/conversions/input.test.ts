@@ -420,5 +420,107 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
   t.deepEqual(fetchRes, expected)
 })
 
+test.serial('delete transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+
+  const row1 = {
+    id: 1,
+    timestamp: date1,
+    related: {
+      create: {
+        id: 2,
+        timestamp: date2
+      }
+    }
+  }
+
+  const createRes = await tbl.create({
+    data: row1,
+    include: {
+      related: true
+    }
+  })
+
+  const expected = {
+    ...dateNulls,
+    id: 1,
+    timestamp: date1,
+    related: {
+      id: 2,
+      timestamp: date2
+    },
+    relatedId: 2,
+  }
+
+  t.deepEqual(createRes, expected)
+
+  const updateRes = await tbl.delete({
+    where: {
+      id: 1, // TODO: delete on unique timestamp to check transformation
+    },
+    include: {
+      related: true
+    }
+  })
+
+  t.deepEqual(updateRes, expected)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1
+    }
+  })
+
+  t.is(fetchRes, null)
+})
+
+test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
+  const date1 = new Date('2023-09-13 23:33:04.271')
+  const date2 = new Date('2023-09-12 23:33:04.271')
+  const date3 = new Date('2023-09-11 23:33:04.271')
+
+  const o1 = {
+    id: 1,
+    timestamp: date1,
+  }
+
+  const o2 = {
+    id: 2,
+    timestamp: date2,
+  }
+  
+  const o3 = {
+    id: 3,
+    timestamp: date3,
+  }
+
+  const { count } = await tbl.createMany({
+    data: [ o1, o2, o3 ]
+  })
+
+  t.is(count, 3)
+
+  const deleteRes = await tbl.deleteMany({
+    where: {
+      timestamp: {
+        in: [ o1.timestamp, o2.timestamp ]
+      }
+    }
+  })
+
+  t.is(deleteRes.count, 2)
+
+  const fetchRes = await tbl.findMany()
+
+  t.deepEqual(fetchRes, [
+    {
+      ...dateNulls,
+      ...o3,
+      relatedId: null,
+    }
+  ])
+})
+
 // TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
-// TODO: write tests for delete, deleteMany
+//       same for delete
