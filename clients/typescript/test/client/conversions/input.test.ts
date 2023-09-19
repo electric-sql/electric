@@ -115,9 +115,7 @@ test.serial('findFirst transforms JS objects in deeply nested filter to SQLite',
   const res = await tbl.findFirst({
     where: {
       timestamp: {
-        not: {
-          lte: new Date('2023-09-13 23:33:03.271')
-        }
+        gt: new Date('2023-09-13 23:33:03.271')
       }
     }
   })
