@@ -1,85 +1,82 @@
-# linearlite
+<a href="https://electric-sql.com">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-light-trans.svg"
+    />
+    <source media="(prefers-color-scheme: light)"
+        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+    />
+    <img alt="ElectricSQL logo"
+        src="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+    />
+  </picture>
+</a>
+
+# ElectricSQL LinearLite Example
 
 This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL.
 
-This example is built on top of the excellent clone of the Linear UI built by
+It's built on top of the excellent clone of the Linear UI built by
 Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
 [https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
-We have replaced the canned data with a local stack running Electric in Docker.
 
-## Run example
+## Prereqs
 
-### Start a local Electrified Postgres
+You need Docker, Docker Compose v2 and Nodejs >= 16.14.
 
-Run the Electric local-stack which is in `/local-stack`
+## Install
 
-see here https://Electric-sql.com/docs/overview/examples
+Clone this repo and change directory into this folder:
 
-```bash
-cd ../../local-stack
-source .envrc
-docker compose pull
-docker compose up -d
+```sh
+git clone https://github.com/electric-sql/electric
+cd electric/examples/linearlite
 ```
 
-This will start a local Postgres and the Electric service on your machine.
+Install the dependencies:
 
-You can then talk to the Postgres with psql using the password `password`:
-
-`psql -h 127.0.0.1 -U postgres -d Electric `
-
-### Configure Node
-
-This project is using Node v16
-
-```
-nvm use v16
-```
-
-### Install
-
-In the root of the Electric folder install all the js dependencies for submodules and examples:
-
-```
+```shell
 npm install
 ```
 
-### Setup
+## Backend
 
-Start Postgres and Electric using Docker (see [running the examples](https://Electric-sql.com/docs/examples/notes/running) for more options):
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-npm backend:up
-# Or `yarn backend:start` to foreground
+npm run backend:up
+# Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-npm db:psql
+npm run db:psql
 ```
 
-The [database schema](https://Electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
 You can apply it with:
 
 ```shell
-npm db:migrate
+npm run db:migrate
 ```
 
-Generate your [type-safe client](https://Electric-sql.com/docs/usage/data-access/client):
+## Client
+
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-npm client:generate
-# or `npm client:watch`` to re-generate whenever the DB schema changes
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
-### Run web app
+## Run
 
 The app is a React application to install and run it:
 
 ```bash
-npm build
-npm start
+npm run build
+npm run start
 ```
 
 The app should be available on `localhost:5173`
