@@ -1,193 +1,128 @@
 import * as http from 'http'
-import { WebSocketServer } from 'ws'
-import { getSizeBuf, getTypeFromString, SatPbMsg } from '../../src/util/proto'
+import { WebSocketServer, WebSocket } from 'ws'
+import { getBufWithMsgTag, GetName, SatPbMsg } from '../../src/util/proto'
 import {
-  SatAuthResp,
+  messageTypeRegistry,
+  UnknownMessage,
+} from '../../src/_generated/typeRegistry'
+import {
+  Root,
+  SatErrorResp,
   SatInStartReplicationReq,
-  SatInStartReplicationResp,
-  SatInStopReplicationResp,
-  SatOpLog,
-  SatRelation,
-  SatShapeDataBegin,
-  SatShapeDataEnd,
-  SatSubsDataBegin,
-  SatSubsDataEnd,
-  SatSubsDataError,
-  SatSubsResp,
-  SatUnsubsResp,
+  SatRpcRequest,
+  SatRpcResponse,
 } from '../../src/_generated/protocol/satellite'
+import { toMessage } from '../../src/satellite/client'
+import { ExecutionContext } from 'ava'
+import { sleepAsync } from '../../src/util'
 
 const PORT = 30002
 const IP = '127.0.0.1'
 
-type fakeResponse = SatPbMsg | ((data?: Buffer) => void)
+type NonRpcMessage = Exclude<SatPbMsg, SatRpcRequest>
+
+type RpcResponseBody = Awaited<ReturnType<Root[keyof Root]>> | SatErrorResp
+type RegularResponse<T extends NonRpcMessage> =
+  | SatPbMsg[]
+  | ((msg: T) => SatPbMsg[] | void)
+export type RpcResponse<K extends keyof Root> = [
+  Awaited<ReturnType<Root[K]>> | SatErrorResp,
+  ...(SatPbMsg | `${number}ms`)[]
+]
+type RpcResponseOrMatch<K extends keyof Root> =
+  | RpcResponse<K>
+  | ((msg: Uint8Array) => RpcResponse<K> | Promise<RpcResponse<K>>)
+
+type RegularExpectation<T extends NonRpcMessage> = [
+  T['$type'],
+  RegularResponse<any>
+]
 
 export class SatelliteWSServerStub {
   private httpServer: http.Server
   private server: WebSocketServer
-  private queue: fakeResponse[][]
+  private nonRpcExpectations: RegularExpectation<NonRpcMessage>[] = []
+  private rpcResponses = new Map<
+    keyof Root | `${keyof Root}/${number}`,
+    RpcResponseOrMatch<keyof Root>[]
+  >()
+  private socket!: WebSocket
 
-  constructor() {
-    this.queue = []
+  constructor(private t: ExecutionContext) {
     this.httpServer = http.createServer((_request, response) => {
       response.writeHead(404)
       response.end()
     })
-
     this.server = new WebSocketServer({
       server: this.httpServer,
     })
-
     this.server.on('connection', (socket) => {
-      socket.on('message', (data: Buffer) => {
-        const next = this.queue.shift()
-        if (next == undefined) {
-          // do nothing
-        } else {
-          for (const msgOrFun of next) {
-            if (typeof msgOrFun == 'function') {
-              msgOrFun(data)
-              return
-            }
-
-            const msg = msgOrFun
-
-            const msgType = getTypeFromString(msg.$type)
-
-            if (msgType == getTypeFromString(SatInStartReplicationResp.$type)) {
-              // do nothing
-            }
-
-            if (msgType == getTypeFromString(SatAuthResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatAuthResp.encode(msg as SatAuthResp).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatInStartReplicationResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatInStartReplicationResp.encode(
-                    msg as SatInStartReplicationResp
-                  ).finish(),
-                ])
-              )
-              const req = SatInStartReplicationReq.fromPartial({})
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(req),
-                  SatInStartReplicationReq.encode(
-                    req as SatInStartReplicationReq
-                  ).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatInStopReplicationResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatInStopReplicationResp.encode(
-                    msg as SatInStopReplicationResp
-                  ).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatRelation.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatRelation.encode(msg as SatRelation).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatOpLog.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatOpLog.encode(msg as SatOpLog).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatSubsResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatSubsResp.encode(msg as SatSubsResp).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatSubsDataError.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatSubsDataError.encode(msg as SatSubsDataError).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatSubsDataBegin.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatSubsDataBegin.encode(msg as SatSubsDataBegin).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatSubsDataEnd.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatSubsDataEnd.encode(msg as SatSubsDataEnd).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatShapeDataBegin.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatShapeDataBegin.encode(msg as SatShapeDataBegin).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatShapeDataEnd.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatShapeDataEnd.encode(msg as SatShapeDataEnd).finish(),
-                ])
-              )
-            }
-
-            if (msgType == getTypeFromString(SatUnsubsResp.$type)) {
-              socket.send(
-                Buffer.concat([
-                  getSizeBuf(msg),
-                  SatUnsubsResp.encode(msg as SatUnsubsResp).finish(),
-                ])
-              )
-            }
-          }
-        }
-      })
-
-      // socket.on('close', function (_reasonCode, _description) { });
-
-      socket.on('error', (error) => console.error(error))
+      socket.on('message', this.handleMessage.bind(this))
+      socket.on('error', (err) => console.error(err))
+      this.socket = socket
     })
   }
 
+  private async handleMessage(data: Buffer) {
+    const request = toMessage(data)
+
+    if (request.$type === 'Electric.Satellite.SatRpcRequest') {
+      // Get expected RPC response, prioritizing known request IDs
+      const expected =
+        this.rpcResponses
+          .get(`${request.method as keyof Root}/${request.requestId}`)
+          ?.shift() ??
+        this.rpcResponses.get(request.method as keyof Root)?.shift()
+
+      if (expected === undefined) return
+
+      const [rpcBody, ...messages] =
+        typeof expected === 'function'
+          ? await expected(request.message)
+          : expected
+
+      // Special-case StartReplication to also start it the other way
+      if (rpcBody.$type === 'Electric.Satellite.SatInStartReplicationResp') {
+        const message = SatInStartReplicationReq.create()
+
+        const request = SatRpcRequest.create({
+          method: 'startReplication',
+          requestId: 1,
+          message: encode(message),
+        })
+
+        messages.unshift(request)
+      }
+
+      this.socket.send(writeMsg(wrapRpcResponse(request, rpcBody)))
+
+      for (const message of messages) {
+        if (typeof message === 'string') await sleepAsync(parseInt(message))
+        else this.socket.send(writeMsg(message))
+      }
+    } else {
+      // Regular message handlers
+      // const expected = this.regularResponses.get(getShortName(request))?.shift()
+
+      const expected = this.nonRpcExpectations.shift()
+      if (expected === undefined) return
+
+      const [msgType, responses] = expected
+
+      if (!this.t.is(request.$type, msgType)) {
+        throw new Error(
+          `Expected request type ${msgType} but got ${request.$type}`
+        )
+      }
+
+      const messageQueue =
+        typeof responses === 'function' ? responses(request) ?? [] : responses
+
+      for (const message of messageQueue) {
+        this.socket.send(writeMsg(message))
+      }
+    }
+  }
   start() {
     this.httpServer.listen(PORT, IP)
   }
@@ -197,7 +132,49 @@ export class SatelliteWSServerStub {
     this.httpServer.close()
   }
 
-  nextResponses(messages: (SatPbMsg | ((data?: Buffer) => void))[]) {
-    this.queue.push(messages)
+  /** Expect next non-RPC message received by the server to match `type`, and either send `responses` arg directly or execute as a function */
+  nextMsgExpect<
+    K extends GetName<NonRpcMessage>,
+    T extends NonRpcMessage & { $type: `Electric.Satellite.${K}` }
+  >(type: K, responses: RegularResponse<T>) {
+    this.nonRpcExpectations.push([`Electric.Satellite.${type}`, responses])
   }
+
+  /**
+   * Set next response to a given RPC method, optionally with `/n` suffix to match on request ID.
+   *
+   * - If `responses` is an array, then it's sent directly, with first element being an RPC response
+   * and the rest being regular messages sent immediately as a follow-up.
+   * - If `responses` is a function, then it's called with the decoded body of RPC request, and it's
+   * return value is expected to be an array with same semantics as in the previous point.
+   */
+  nextRpcResponse<K extends keyof Root>(
+    method: K | `${K}/${number}`,
+    responses: RpcResponseOrMatch<K>
+  ) {
+    const queue = this.rpcResponses.get(method)
+    if (queue) queue.push(responses)
+    else this.rpcResponses.set(method, [responses])
+  }
+}
+
+const encode = (msg: UnknownMessage) =>
+  messageTypeRegistry.get(msg.$type)!.encode(msg).finish()
+
+const writeMsg = (msg: SatPbMsg) =>
+  Buffer.concat([getBufWithMsgTag(msg), encode(msg)])
+
+function wrapRpcResponse(
+  request: SatRpcRequest,
+  body: RpcResponseBody
+): SatRpcResponse {
+  return SatRpcResponse.create({
+    method: request.method,
+    requestId: request.requestId,
+    message:
+      body.$type !== 'Electric.Satellite.SatErrorResp'
+        ? encode(body)
+        : undefined,
+    error: body.$type === 'Electric.Satellite.SatErrorResp' ? body : undefined,
+  })
 }

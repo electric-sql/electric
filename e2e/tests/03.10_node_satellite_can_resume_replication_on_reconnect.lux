@@ -17,8 +17,8 @@
 [shell satellite_1]
   # The client starts replication from scratch.
   ??no previous LSN, start replication from scratch
-  ??[proto] send: #SatInStartReplicationReq{lsn: ,
-  ??[proto] recv: #SatInStartReplicationResp
+  ??[rpc] send: #SatInStartReplicationReq{lsn: ,
+  ??[rpc] recv: #SatInStartReplicationResp
 
   ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration1_vsn, for: foo
   ?\[proto\] recv: #SatOpLog\{.*#Migrate\{vsn: $migration2_vsn, for: bar
@@ -35,8 +35,8 @@
   -no previous LSN
 
   ?starting replication with lsn:
-  ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
-  ??[proto] recv: #SatInStartReplicationResp
+  ?\[rpc\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ??[rpc] recv: #SatInStartReplicationResp
 
 [cleanup]
   [invoke teardown]

@@ -342,11 +342,11 @@ defmodule Electric.Satellite.WebsocketServer do
 
     lsn = fetch_last_acked_client_lsn(state) || ""
 
-    msgs =
+    {msgs, state} =
       case in_rep.status do
-        :requested -> []
-        :active -> [%SatInStopReplicationReq{}, %SatInStartReplicationReq{lsn: lsn}]
-        st when st in [nil, :paused] -> [%SatInStartReplicationReq{lsn: lsn}]
+        :requested -> {[], state}
+        :active -> Protocol.restart_replication_from_client(lsn, state)
+        st when st in [nil, :paused] -> Protocol.start_replication_from_client(lsn, state)
       end
 
     in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
@@ -359,11 +359,10 @@ defmodule Electric.Satellite.WebsocketServer do
          %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
        ) do
     # status == :nil is not possible, as it is set to pause once we have consumer
-    maybe_stop =
+    {maybe_stop, state} =
       case in_rep.status do
-        :active -> [%SatInStopReplicationReq{}]
-        :paused -> []
-        :requested -> [%SatInStopReplicationReq{}]
+        :paused -> {[], state}
+        s when s in [:active, :requested] -> Protocol.stop_replication_from_client(state)
       end
 
     in_rep = %InRep{state.in_rep | queue: :queue.new(), pid: nil, stage_sub: nil, status: :paused}

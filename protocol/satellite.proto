@@ -1,33 +1,56 @@
-// This file defines protobuf protocol for Satellite <> Electric replication
-// Messages are sent over the wire in the following format:
-//
-// Size:32, MsgType:8, Msg/binary
-//
-// In this document there is a notation of the Client/Server and
-// Producer/Consumer which are used to annotate messages.
-//
-// Server is expected to be one of the Electric instances, while Client is a
-// client application that talks to Electric via Satellite library, or any other
-// entity that implements this protocol.
-//
-// Producer and Consumer are the corresponding roles Client and Server play in
-// replication process. Consumer requests replication from the Producer, and
-// periodically answer Ping requests form the Producer to acknowledge
-// successful replication. Consumer may also send such Ping requests, if the
-// bidirectional replication is enabled. If one of the parties is not involved
-// in the replication lsn field may be left empty.
+/*
+This file defines protobuf protocol for Satellite <> Electric replication
+
+In this document there is a notation of the Client/Server and
+Producer/Consumer which are used to annotate messages.
+
+This protocol uses a custom RPC implementation that allows bidirectional RPC calls (usually the client
+calls the server, but the server makes some RPC calls to the client too) and non-RPC messages.
+
+Any RPC call should be done as an `SatRpcRequest` message, with `message` field being a method-appropriate
+encoded message from this protocol. The answering side should then respond with `SatRpcResponse` with the same
+method and request id. If RPC call fully failed, the `error` field will be filled. Otherwise, the message field
+will be field, which may or may not have its own internal error fields.
+
+Any message not wrapped in rpc request or response should not warrant a direct response from the other side.
+*/
 syntax = "proto3";
 
-// NOTE: Part after Electric.Satellite is used as a version of the protocol
-// itself where the format vMAJOR_MINOR is treated in the following way:
-//
-//   - MAJOR version is incremented when breaking API changes are introduced
-//
-//   - MINOR version is incremented when new API or bugfixes are introduced
-//     in a backwards-compatible manner
-//
 package Electric.Satellite;
 
+/* RPC request transport message, must be used to implement service RPC calls in the protocol */
+message SatRpcRequest {
+    string method = 1;
+    uint32 request_id = 2;
+    
+    bytes message = 3;
+}
+
+/* RPC response transport message, must be used to implement service RPC calls in the protocol */
+message SatRpcResponse {
+    string method = 1;
+    uint32 request_id = 2;
+    
+    oneof result {
+        bytes message = 3;
+        SatErrorResp error = 4;
+    }
+}
+
+/* Main RPC service that the Electric server fulfills */
+service Root {
+    rpc authenticate (SatAuthReq) returns (SatAuthResp);
+    rpc startReplication (SatInStartReplicationReq) returns (SatInStartReplicationResp);
+    rpc stopReplication (SatInStopReplicationReq) returns (SatInStopReplicationResp);
+    rpc subscribe (SatSubsReq) returns (SatSubsResp);
+    rpc unsubscribe (SatUnsubsReq) returns (SatUnsubsResp);
+}
+
+/* RPC calls that the server makes to the client */
+service ClientRoot {
+    rpc startReplication (SatInStartReplicationReq) returns (SatInStartReplicationResp);
+    rpc stopReplication (SatInStopReplicationReq) returns (SatInStopReplicationResp);    
+}
 
 enum SatAuthHeader {
     reserved 1;
@@ -258,17 +281,6 @@ message SatOpDelete {
     // dependency information
     repeated string tags = 3;
 
-}
-
-// Message is sent when server is migrated while client is still connected It's
-// up to the client to immediately perform a migration or stop replication
-// stream if it's ongoing.
-message SatMigrationNotification {
-    // all fields are required
-    string old_schema_version = 1;
-    string old_schema_hash = 2;
-    string new_schema_version = 3;
-    string new_schema_hash = 4;
 }
 
 // Dependency information for row data.

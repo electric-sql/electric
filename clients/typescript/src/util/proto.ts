@@ -5,10 +5,14 @@ import { ShapeRequest } from '../satellite/shapes/types'
 import { base64, typeDecoder } from './common'
 import { getMaskBit } from './bitmaskHelpers'
 
-type GetName<T extends { $type: string }> =
+export type GetName<T extends SatPbMsg> =
   T['$type'] extends `Electric.Satellite.${infer K}` ? K : never
 type MappingTuples = {
   [k in SatPbMsg as GetName<k>]: [number, SatPbMsgObj<k>]
+}
+
+export type HandlerMapping = {
+  [k in SatPbMsg as GetName<k>]: (msg: k) => void
 }
 
 const serverErrorToSatError: Record<
@@ -109,24 +113,15 @@ const subsDataErrorShapeReqToSatError: Record<
 // protocol version.
 const msgtypetuples: MappingTuples = {
   SatErrorResp: [0, Pb.SatErrorResp],
-  SatAuthReq: [1, Pb.SatAuthReq],
-  SatAuthResp: [2, Pb.SatAuthResp],
-  SatInStartReplicationReq: [5, Pb.SatInStartReplicationReq],
-  SatInStartReplicationResp: [6, Pb.SatInStartReplicationResp],
-  SatInStopReplicationReq: [7, Pb.SatInStopReplicationReq],
-  SatInStopReplicationResp: [8, Pb.SatInStopReplicationResp],
   SatOpLog: [9, Pb.SatOpLog],
   SatRelation: [10, Pb.SatRelation],
-  SatMigrationNotification: [11, Pb.SatMigrationNotification],
-  SatSubsReq: [12, Pb.SatSubsReq],
-  SatSubsResp: [13, Pb.SatSubsResp],
   SatSubsDataError: [14, Pb.SatSubsDataError],
   SatSubsDataBegin: [15, Pb.SatSubsDataBegin],
   SatSubsDataEnd: [16, Pb.SatSubsDataEnd],
   SatShapeDataBegin: [17, Pb.SatShapeDataBegin],
   SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
-  SatUnsubsReq: [19, Pb.SatUnsubsReq],
-  SatUnsubsResp: [20, Pb.SatUnsubsResp],
+  SatRpcRequest: [21, Pb.SatRpcRequest],
+  SatRpcResponse: [22, Pb.SatRpcResponse],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -137,30 +132,53 @@ const codemapping = Object.fromEntries(
   Object.entries(msgtypetuples).map((e) => [e[1][0], getFullTypeName(e[0])])
 )
 
+type ResponseOrError<T> = PromiseLike<Awaited<T> | Pb.SatErrorResp>
+
+export type RpcResponder = {
+  [k in keyof Pb.ClientRoot]: (
+    ...args: Parameters<Pb.ClientRoot[k]>
+  ) => ResponseOrError<ReturnType<Pb.ClientRoot[k]>>
+}
+
+export type ClientRpcResponse = Awaited<
+  ReturnType<Pb.ClientRoot[keyof Pb.ClientRoot]>
+>
+type RpcResponseEncoders = {
+  [K in ClientRpcResponse as K['$type']]: SatPbMsgObj<K>
+}
+const rpcResponseEncoders: RpcResponseEncoders = {
+  'Electric.Satellite.SatInStartReplicationResp': Pb.SatInStartReplicationResp,
+  'Electric.Satellite.SatInStopReplicationResp': Pb.SatInStopReplicationResp,
+}
+
+export function encodeRpcResponse<T extends ClientRpcResponse>(
+  resp: T
+): Uint8Array {
+  const encoder = rpcResponseEncoders[resp.$type] as SatPbMsgObj<T>
+  return encoder.encode(resp).finish()
+}
+
+/**
+ * Satellite Protobuf messages that appear at the top level of the protocol
+ */
 export type SatPbMsg =
+  | Pb.SatRpcRequest
+  | Pb.SatRpcResponse
   | Pb.SatErrorResp
-  | Pb.SatAuthReq
-  | Pb.SatAuthResp
-  | Pb.SatInStartReplicationReq
-  | Pb.SatInStartReplicationResp
-  | Pb.SatInStopReplicationReq
-  | Pb.SatInStopReplicationResp
   | Pb.SatOpLog
   | Pb.SatRelation
-  | Pb.SatMigrationNotification
-  | Pb.SatSubsReq
-  | Pb.SatSubsResp
   | Pb.SatSubsDataError
   | Pb.SatSubsDataBegin
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
-  | Pb.SatUnsubsReq
-  | Pb.SatUnsubsResp
 
-export type SatPbMsgObj<Msg extends SatPbMsg, Part = Pb.DeepPartial<Msg>> = {
+export type SatPbMsgObj<
+  Msg extends { $type: string },
+  Part = Pb.DeepPartial<Msg>
+> = {
   $type: Msg['$type']
-  encode(message: Msg, writer: _m0.Writer): _m0.Writer
+  encode(message: Msg, writer?: _m0.Writer): _m0.Writer
   decode(input: _m0.Reader | Uint8Array, length?: number): Msg
   fromPartial<I extends Pb.Exact<Part, I>>(object: I): Msg
 }
@@ -191,12 +209,16 @@ export function getObjFromString(string_type: string): any {
   return msgtypemapping[string_type]?.[1]
 }
 
-export function getSizeBuf(msg_type: SatPbMsg) {
+export function getBufWithMsgTag(msg_type: SatPbMsg) {
   const msgtype = getMsgType(msg_type)
 
   const buf = new Uint8Array(1)
   buf.set([msgtype], 0)
   return buf
+}
+
+export function getShortName<T extends SatPbMsg>(msg: T): GetName<T> {
+  return msg.$type.replace('Electric.Satellite.', '') as GetName<T>
 }
 
 export function getProtocolVersion(): string {
@@ -295,7 +317,12 @@ export function shapeRequestToSatShapeReq(
   return shapeReqs
 }
 
-export function msgToString(message: SatPbMsg): string {
+type MessageOfInterest =
+  | SatPbMsg
+  | Awaited<ReturnType<Pb.Root[keyof Pb.Root]>>
+  | Parameters<Pb.Root[keyof Pb.Root]>[0]
+
+export function msgToString(message: MessageOfInterest): string {
   switch (message.$type) {
     case 'Electric.Satellite.SatAuthReq':
       return `#SatAuthReq{id: ${message.id}, token: ${message.token}}`
@@ -323,8 +350,6 @@ export function msgToString(message: SatPbMsg): string {
       return `#SatInStopReplicationReq{}`
     case 'Electric.Satellite.SatInStopReplicationResp':
       return `#SatInStopReplicationResp{}`
-    case 'Electric.Satellite.SatMigrationNotification':
-      return `#SatMigrationNotification{to: ${message.newSchemaVersion}, from: ${message.newSchemaVersion}}`
     case 'Electric.Satellite.SatRelation': {
       const cols = message.columns
         .map((x) => `${x.name}: ${x.type}${x.primaryKey ? ' PK' : ''}`)
@@ -376,6 +401,12 @@ export function msgToString(message: SatPbMsg): string {
       return `#SatUnsubsResp{}`
     case 'Electric.Satellite.SatOpLog':
       return `#SatOpLog{ops: [${message.ops.map(opToString).join(', ')}]}`
+    case 'Electric.Satellite.SatRpcRequest':
+      return `#SatRpcRequest{method: ${message.method}, requestId: ${message.requestId}}`
+    case 'Electric.Satellite.SatRpcResponse':
+      return `#SatRpcResponse{method: ${message.method}, requestId: ${
+        message.requestId
+      }${message.error ? ', error: ' + msgToString(message.error) : ''}}`
   }
 }
 

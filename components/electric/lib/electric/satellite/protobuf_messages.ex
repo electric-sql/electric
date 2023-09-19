@@ -8104,477 +8104,6 @@
       end
     )
   end,
-  defmodule Electric.Satellite.SatMigrationNotification do
-    @moduledoc false
-    defstruct old_schema_version: "",
-              old_schema_hash: "",
-              new_schema_version: "",
-              new_schema_hash: ""
-
-    (
-      (
-        @spec encode(struct) :: {:ok, iodata} | {:error, any}
-        def encode(msg) do
-          try do
-            {:ok, encode!(msg)}
-          rescue
-            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
-          end
-        end
-
-        @spec encode!(struct) :: iodata | no_return
-        def encode!(msg) do
-          []
-          |> encode_old_schema_version(msg)
-          |> encode_old_schema_hash(msg)
-          |> encode_new_schema_version(msg)
-          |> encode_new_schema_hash(msg)
-        end
-      )
-
-      []
-
-      [
-        defp encode_old_schema_version(acc, msg) do
-          try do
-            if msg.old_schema_version == "" do
-              acc
-            else
-              [acc, "\n", Protox.Encode.encode_string(msg.old_schema_version)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:old_schema_version, "invalid field value"),
-                      __STACKTRACE__
-          end
-        end,
-        defp encode_old_schema_hash(acc, msg) do
-          try do
-            if msg.old_schema_hash == "" do
-              acc
-            else
-              [acc, "\x12", Protox.Encode.encode_string(msg.old_schema_hash)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:old_schema_hash, "invalid field value"),
-                      __STACKTRACE__
-          end
-        end,
-        defp encode_new_schema_version(acc, msg) do
-          try do
-            if msg.new_schema_version == "" do
-              acc
-            else
-              [acc, "\x1A", Protox.Encode.encode_string(msg.new_schema_version)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:new_schema_version, "invalid field value"),
-                      __STACKTRACE__
-          end
-        end,
-        defp encode_new_schema_hash(acc, msg) do
-          try do
-            if msg.new_schema_hash == "" do
-              acc
-            else
-              [acc, "\"", Protox.Encode.encode_string(msg.new_schema_hash)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:new_schema_hash, "invalid field value"),
-                      __STACKTRACE__
-          end
-        end
-      ]
-
-      []
-    )
-
-    (
-      (
-        @spec decode(binary) :: {:ok, struct} | {:error, any}
-        def decode(bytes) do
-          try do
-            {:ok, decode!(bytes)}
-          rescue
-            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
-              {:error, e}
-          end
-        end
-
-        (
-          @spec decode!(binary) :: struct | no_return
-          def decode!(bytes) do
-            parse_key_value(bytes, struct(Electric.Satellite.SatMigrationNotification))
-          end
-        )
-      )
-
-      (
-        @spec parse_key_value(binary, struct) :: struct
-        defp parse_key_value(<<>>, msg) do
-          msg
-        end
-
-        defp parse_key_value(bytes, msg) do
-          {field, rest} =
-            case Protox.Decode.parse_key(bytes) do
-              {0, _, _} ->
-                raise %Protox.IllegalTagError{}
-
-              {1, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[old_schema_version: delimited], rest}
-
-              {2, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[old_schema_hash: delimited], rest}
-
-              {3, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[new_schema_version: delimited], rest}
-
-              {4, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[new_schema_hash: delimited], rest}
-
-              {tag, wire_type, rest} ->
-                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
-                {[], rest}
-            end
-
-          msg_updated = struct(msg, field)
-          parse_key_value(rest, msg_updated)
-        end
-      )
-
-      []
-    )
-
-    (
-      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
-      def json_decode(input, opts \\ []) do
-        try do
-          {:ok, json_decode!(input, opts)}
-        rescue
-          e in Protox.JsonDecodingError -> {:error, e}
-        end
-      end
-
-      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
-      def json_decode!(input, opts \\ []) do
-        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
-
-        Protox.JsonDecode.decode!(
-          input,
-          Electric.Satellite.SatMigrationNotification,
-          &json_library_wrapper.decode!(json_library, &1)
-        )
-      end
-
-      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
-      def json_encode(msg, opts \\ []) do
-        try do
-          {:ok, json_encode!(msg, opts)}
-        rescue
-          e in Protox.JsonEncodingError -> {:error, e}
-        end
-      end
-
-      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
-      def json_encode!(msg, opts \\ []) do
-        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
-        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
-      end
-    )
-
-    (
-      @deprecated "Use fields_defs()/0 instead"
-      @spec defs() :: %{
-              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
-            }
-      def defs() do
-        %{
-          1 => {:old_schema_version, {:scalar, ""}, :string},
-          2 => {:old_schema_hash, {:scalar, ""}, :string},
-          3 => {:new_schema_version, {:scalar, ""}, :string},
-          4 => {:new_schema_hash, {:scalar, ""}, :string}
-        }
-      end
-
-      @deprecated "Use fields_defs()/0 instead"
-      @spec defs_by_name() :: %{
-              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
-            }
-      def defs_by_name() do
-        %{
-          new_schema_hash: {4, {:scalar, ""}, :string},
-          new_schema_version: {3, {:scalar, ""}, :string},
-          old_schema_hash: {2, {:scalar, ""}, :string},
-          old_schema_version: {1, {:scalar, ""}, :string}
-        }
-      end
-    )
-
-    (
-      @spec fields_defs() :: list(Protox.Field.t())
-      def fields_defs() do
-        [
-          %{
-            __struct__: Protox.Field,
-            json_name: "oldSchemaVersion",
-            kind: {:scalar, ""},
-            label: :optional,
-            name: :old_schema_version,
-            tag: 1,
-            type: :string
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "oldSchemaHash",
-            kind: {:scalar, ""},
-            label: :optional,
-            name: :old_schema_hash,
-            tag: 2,
-            type: :string
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "newSchemaVersion",
-            kind: {:scalar, ""},
-            label: :optional,
-            name: :new_schema_version,
-            tag: 3,
-            type: :string
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "newSchemaHash",
-            kind: {:scalar, ""},
-            label: :optional,
-            name: :new_schema_hash,
-            tag: 4,
-            type: :string
-          }
-        ]
-      end
-
-      [
-        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
-        (
-          def field_def(:old_schema_version) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_version,
-               tag: 1,
-               type: :string
-             }}
-          end
-
-          def field_def("oldSchemaVersion") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_version,
-               tag: 1,
-               type: :string
-             }}
-          end
-
-          def field_def("old_schema_version") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_version,
-               tag: 1,
-               type: :string
-             }}
-          end
-        ),
-        (
-          def field_def(:old_schema_hash) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_hash,
-               tag: 2,
-               type: :string
-             }}
-          end
-
-          def field_def("oldSchemaHash") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_hash,
-               tag: 2,
-               type: :string
-             }}
-          end
-
-          def field_def("old_schema_hash") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "oldSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :old_schema_hash,
-               tag: 2,
-               type: :string
-             }}
-          end
-        ),
-        (
-          def field_def(:new_schema_version) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_version,
-               tag: 3,
-               type: :string
-             }}
-          end
-
-          def field_def("newSchemaVersion") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_version,
-               tag: 3,
-               type: :string
-             }}
-          end
-
-          def field_def("new_schema_version") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaVersion",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_version,
-               tag: 3,
-               type: :string
-             }}
-          end
-        ),
-        (
-          def field_def(:new_schema_hash) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_hash,
-               tag: 4,
-               type: :string
-             }}
-          end
-
-          def field_def("newSchemaHash") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_hash,
-               tag: 4,
-               type: :string
-             }}
-          end
-
-          def field_def("new_schema_hash") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "newSchemaHash",
-               kind: {:scalar, ""},
-               label: :optional,
-               name: :new_schema_hash,
-               tag: 4,
-               type: :string
-             }}
-          end
-        ),
-        def field_def(_) do
-          {:error, :no_such_field}
-        end
-      ]
-    )
-
-    []
-
-    (
-      @spec required_fields() :: []
-      def required_fields() do
-        []
-      end
-    )
-
-    (
-      @spec syntax() :: atom()
-      def syntax() do
-        :proto3
-      end
-    )
-
-    [
-      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
-      def default(:old_schema_version) do
-        {:ok, ""}
-      end,
-      def default(:old_schema_hash) do
-        {:ok, ""}
-      end,
-      def default(:new_schema_version) do
-        {:ok, ""}
-      end,
-      def default(:new_schema_hash) do
-        {:ok, ""}
-      end,
-      def default(_) do
-        {:error, :no_such_field}
-      end
-    ]
-
-    (
-      @spec file_options() :: nil
-      def file_options() do
-        nil
-      end
-    )
-  end,
   defmodule Electric.Satellite.SatShapeDataBegin do
     @moduledoc false
     defstruct request_id: "", uuid: ""
@@ -9165,6 +8694,448 @@
       end,
       def default(:lsn) do
         {:ok, ""}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatRpcResponse do
+    @moduledoc false
+    defstruct method: "", request_id: 0, result: nil
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_result(msg) |> encode_method(msg) |> encode_request_id(msg)
+        end
+      )
+
+      [
+        defp encode_result(acc, msg) do
+          case msg.result do
+            nil -> acc
+            {:message, _field_value} -> encode_message(acc, msg)
+            {:error, _field_value} -> encode_error(acc, msg)
+          end
+        end
+      ]
+
+      [
+        defp encode_method(acc, msg) do
+          try do
+            if msg.method == "" do
+              acc
+            else
+              [acc, "\n", Protox.Encode.encode_string(msg.method)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:method, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_request_id(acc, msg) do
+          try do
+            if msg.request_id == 0 do
+              acc
+            else
+              [acc, "\x10", Protox.Encode.encode_uint32(msg.request_id)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:request_id, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_message(acc, msg) do
+          try do
+            {_, child_field_value} = msg.result
+            [acc, "\x1A", Protox.Encode.encode_bytes(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:message, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_error(acc, msg) do
+          try do
+            {_, child_field_value} = msg.result
+            [acc, "\"", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:error, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatRpcResponse))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[method: delimited], rest}
+
+              {2, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint32(bytes)
+                {[request_id: value], rest}
+
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[result: {:message, delimited}], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.result do
+                     {:error, previous_value} ->
+                       {:result,
+                        {:error,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatErrorResp.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:result, {:error, Electric.Satellite.SatErrorResp.decode!(delimited)}}
+                   end
+                 ], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatRpcResponse,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:method, {:scalar, ""}, :string},
+          2 => {:request_id, {:scalar, 0}, :uint32},
+          3 => {:message, {:oneof, :result}, :bytes},
+          4 => {:error, {:oneof, :result}, {:message, Electric.Satellite.SatErrorResp}}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          error: {4, {:oneof, :result}, {:message, Electric.Satellite.SatErrorResp}},
+          message: {3, {:oneof, :result}, :bytes},
+          method: {1, {:scalar, ""}, :string},
+          request_id: {2, {:scalar, 0}, :uint32}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "method",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :method,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "requestId",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :request_id,
+            tag: 2,
+            type: :uint32
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "message",
+            kind: {:oneof, :result},
+            label: :optional,
+            name: :message,
+            tag: 3,
+            type: :bytes
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "error",
+            kind: {:oneof, :result},
+            label: :optional,
+            name: :error,
+            tag: 4,
+            type: {:message, Electric.Satellite.SatErrorResp}
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:method) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "method",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :method,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("method") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "method",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :method,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:request_id) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+
+          def field_def("requestId") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+
+          def field_def("request_id") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+        ),
+        (
+          def field_def(:message) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "message",
+               kind: {:oneof, :result},
+               label: :optional,
+               name: :message,
+               tag: 3,
+               type: :bytes
+             }}
+          end
+
+          def field_def("message") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "message",
+               kind: {:oneof, :result},
+               label: :optional,
+               name: :message,
+               tag: 3,
+               type: :bytes
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:error) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "error",
+               kind: {:oneof, :result},
+               label: :optional,
+               name: :error,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatErrorResp}
+             }}
+          end
+
+          def field_def("error") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "error",
+               kind: {:oneof, :result},
+               label: :optional,
+               name: :error,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatErrorResp}
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:method) do
+        {:ok, ""}
+      end,
+      def default(:request_id) do
+        {:ok, 0}
+      end,
+      def default(:message) do
+        {:error, :no_default_value}
+      end,
+      def default(:error) do
+        {:error, :no_default_value}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -15083,6 +15054,372 @@
         {:ok, :UNSPECIFIED}
       end,
       def default(:value) do
+        {:ok, ""}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatRpcRequest do
+    @moduledoc false
+    defstruct method: "", request_id: 0, message: ""
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_method(msg) |> encode_request_id(msg) |> encode_message(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_method(acc, msg) do
+          try do
+            if msg.method == "" do
+              acc
+            else
+              [acc, "\n", Protox.Encode.encode_string(msg.method)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:method, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_request_id(acc, msg) do
+          try do
+            if msg.request_id == 0 do
+              acc
+            else
+              [acc, "\x10", Protox.Encode.encode_uint32(msg.request_id)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:request_id, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_message(acc, msg) do
+          try do
+            if msg.message == "" do
+              acc
+            else
+              [acc, "\x1A", Protox.Encode.encode_bytes(msg.message)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:message, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatRpcRequest))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[method: delimited], rest}
+
+              {2, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint32(bytes)
+                {[request_id: value], rest}
+
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[message: delimited], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatRpcRequest,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:method, {:scalar, ""}, :string},
+          2 => {:request_id, {:scalar, 0}, :uint32},
+          3 => {:message, {:scalar, ""}, :bytes}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          message: {3, {:scalar, ""}, :bytes},
+          method: {1, {:scalar, ""}, :string},
+          request_id: {2, {:scalar, 0}, :uint32}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "method",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :method,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "requestId",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :request_id,
+            tag: 2,
+            type: :uint32
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "message",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :message,
+            tag: 3,
+            type: :bytes
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:method) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "method",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :method,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("method") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "method",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :method,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:request_id) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+
+          def field_def("requestId") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+
+          def field_def("request_id") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "requestId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :request_id,
+               tag: 2,
+               type: :uint32
+             }}
+          end
+        ),
+        (
+          def field_def(:message) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "message",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :message,
+               tag: 3,
+               type: :bytes
+             }}
+          end
+
+          def field_def("message") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "message",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :message,
+               tag: 3,
+               type: :bytes
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:method) do
+        {:ok, ""}
+      end,
+      def default(:request_id) do
+        {:ok, 0}
+      end,
+      def default(:message) do
         {:ok, ""}
       end,
       def default(_) do

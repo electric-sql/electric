@@ -5,6 +5,39 @@ defmodule ElectricTest.SatelliteHelpers do
 
   alias Satellite.TestWsClient, as: MockClient
 
+  @doc """
+  Starts the replication and then asserts that the server sends all messages
+  that it should to `Satellite.TestWsClient` after replication request has been sent.
+
+  Assumes that the database has been migrated before the replication started, and that
+  there is only one migration that includes all tables. If you need more granular control over
+  this response -- don't use this function.
+  """
+  def start_replication_and_assert_response(conn, table_count) do
+    assert {:ok, _} =
+             MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
+
+    assert_receive {^conn, %SatRpcRequest{method: "startReplication"}}
+
+    unless table_count == 0 do
+      for _ <- 1..table_count, do: assert_receive({^conn, %SatRelation{}})
+
+      assert_receive {^conn,
+                      %SatOpLog{
+                        ops: ops
+                      }},
+                     300
+
+      assert length(ops) == 2 + table_count
+      assert [_begin | ops] = ops
+      {migrates, [_end]} = Enum.split(ops, table_count)
+      Enum.each(migrates, fn op -> assert %SatTransOp{op: {:migrate, _}} = op end)
+
+      # We shouldn't receive anything else without subscriptions
+      refute_receive {^conn, %SatOpLog{}}
+    end
+  end
+
   def assert_receive_migration(conn, version, table_name) do
     assert_receive {^conn, %SatRelation{table_name: ^table_name}}
 
