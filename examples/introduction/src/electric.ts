@@ -1,3 +1,4 @@
+import { version } from 'electric-sql/package.json'
 import { makeElectricContext } from 'electric-sql/react'
 import { globalRegistry } from 'electric-sql/satellite'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
@@ -22,9 +23,9 @@ export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const initElectric = async (name: string = 'intro') => {
   const { tabId } = uniqueTabId()
-  const tabScopedDbName = `${name}-${tabId}.db`
+  const scopedDbName = `${name}-${version}-${tabId}.db`
 
-  const conn = await ElectricDatabase.init(tabScopedDbName, '/')
+  const conn = await ElectricDatabase.init(scopedDbName, '/')
 
   const config = {
     auth: {
