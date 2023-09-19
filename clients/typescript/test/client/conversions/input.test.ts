@@ -79,24 +79,13 @@ test.serial('findFirst transforms JS objects in equals filter to SQLite', async 
 
   await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
 
-  const res = await tbl.findFirst({
-    where: {
-      timestamp: {
-        gt: new Date('2023-09-13 23:33:03.271')
-      }
-    }
-  })
-
-  /*
-  // DEBUG WHY `equals` filter does not work
-  const res = await tbl.findFirst({
-    where: {
-      timestamp: {
-        equals: new Date(date)
-      }
-    }
-  })
-   */
+    const res = await tbl.findFirst({
+      where: {
+        timestamp: {
+          gt: new Date('2023-09-13 23:33:03.271'),
+        },
+      },
+    })
 
   t.deepEqual(res?.timestamp, new Date(date))
 })
