@@ -443,7 +443,8 @@ export const DataTypesOrderByWithRelationInputSchema: z.ZodType<Prisma.DataTypes
 }).strict();
 
 export const DataTypesWhereUniqueInputSchema: z.ZodType<Prisma.DataTypesWhereUniqueInput> = z.object({
-  id: z.number().int().optional()
+  id: z.number().int().optional(),
+  timestamp: z.coerce.date().optional()
 }).strict();
 
 export const DataTypesOrderByWithAggregationInputSchema: z.ZodType<Prisma.DataTypesOrderByWithAggregationInput> = z.object({

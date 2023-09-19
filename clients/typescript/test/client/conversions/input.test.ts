@@ -46,6 +46,20 @@ test.beforeEach(setupDB)
  * The tests below check that the DAL correctly transforms JS objects in user input.
  */
 
+test.serial('findUnique transforms JS objects to SQLite', async (t) => {
+  const date = '2023-09-13 23:33:04.271'
+
+  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
+
+  const res = await tbl.findUnique({
+    where: {
+      timestamp: new Date(date)
+    }
+  })
+
+  t.deepEqual(res?.timestamp, new Date(date))
+})
+
 test.serial('findFirst transforms JS objects to SQLite', async (t) => {
   const date = '2023-09-13 23:33:04.271'
 
@@ -455,16 +469,16 @@ test.serial('delete transforms JS objects to SQLite', async (t) => {
 
   t.deepEqual(createRes, expected)
 
-  const updateRes = await tbl.delete({
+  const deleteRes = await tbl.delete({
     where: {
-      id: 1, // TODO: delete on unique timestamp to check transformation
+      timestamp: date1
     },
     include: {
       related: true
     }
   })
 
-  t.deepEqual(updateRes, expected)
+  t.deepEqual(deleteRes, expected)
 
   const fetchRes = await tbl.findUnique({
     where: {
@@ -521,6 +535,3 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
     }
   ])
 })
-
-// TODO: make timestamp column unique such that we can test findUnique by passing a timestamp in where of findUnique
-//       same for delete

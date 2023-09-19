@@ -7003,6 +7003,7 @@ export namespace Prisma {
 
   export type DataTypesWhereUniqueInput = {
     id?: number
+    timestamp?: Date | string
   }
 
   export type DataTypesOrderByWithAggregationInput = {
