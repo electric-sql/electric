@@ -578,23 +578,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
                  ]
 
           assert tx.origin !== ""
-
-          # Wait for everything to be persisted
-          Process.sleep(200)
-        end)
-
-        # After restart we still get same lsn
-        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          lsn = "some_long_internal_lsn"
-
-          {:ok, _} =
-            MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
-
-          assert_receive {^conn, %SatRpcRequest{method: "startReplication", message: message}},
-                         @default_wait
-
-          assert {:ok, %SatInStartReplicationReq{lsn: ^lsn}} =
-                   SatInStartReplicationReq.decode(message)
         end)
       end
     end

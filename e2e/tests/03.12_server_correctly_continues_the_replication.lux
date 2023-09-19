@@ -28,7 +28,7 @@
 [invoke setup_client 2 "electric_1" 5133]
 
 [shell satellite_2]
-  ??[proto] recv: #SatInStartReplicationResp
+  ??[rpc] recv: #SatInStartReplicationResp
   [invoke node_await_table "items"]
 
   # Perform multiple writes to bump the LSN repeatedly
@@ -59,8 +59,8 @@
   -no previous LSN
 
   ?+Server sent a replication request to start from 1,
-  ?\[rpc\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
-  ??[rpc] recv: #SatInStartReplicationResp
+  ?+\[rpc\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ?\[rpc\] recv: #SatInStartReplicationResp
 
   # Second write gets propagated
   [invoke node_await_insert "['hello from satellite - second']"]
@@ -85,10 +85,9 @@
 
   -no previous LSN
 
-  # Server requests replication. The `AAAAAw==` here is [0, 0, 0, 3] UInt8Array, representing the integer 3
-  ?+\[proto\] recv: #SatInStartReplicationReq\{lsn: AAAAAw==,
-  ?\[proto\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
-  ??[proto] recv: #SatInStartReplicationResp
+  ?+Server sent a replication request to start from 3,
+  ?+\[rpc\] send: #SatInStartReplicationReq\{lsn: [a-zA-Z0-9=]+,
+  ?\[rpc\] recv: #SatInStartReplicationResp
 
   # Another write gets propagated
   [invoke node_await_insert "['hello from satellite - client 2 - once again']"]
