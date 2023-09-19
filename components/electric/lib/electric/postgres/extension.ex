@@ -4,6 +4,8 @@ defmodule Electric.Postgres.Extension do
   """
 
   alias Electric.Postgres.{Extension.Migration, Schema, Schema.Proto}
+  alias Electric.Utils
+
   require Logger
 
   @type conn() :: :epgsql.connection()
@@ -506,5 +508,18 @@ defmodule Electric.Postgres.Extension do
       {:ok, _, []} ->
         nil
     end
+  end
+
+  @doc """
+  Try inserting a new cluster id into PostgreSQL to persist, but return
+  the already-existing value on conflict.
+  """
+  def save_and_get_cluster_id(conn) do
+    :epgsql.squery(conn, """
+    INSERT INTO #{transaction_marker_table()} as o (id, content)
+      VALUES ('cluster_id', '"#{Utils.uuid4()}"')
+    ON CONFLICT (id) DO UPDATE SET content = o.content
+    RETURNING content->>0;
+    """)
   end
 end

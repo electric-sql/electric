@@ -2,6 +2,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Telemetry.Metrics
 
   alias Electric.Postgres.LogicalReplication
@@ -43,7 +45,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               drop_current_transaction?: false,
               types: %{},
-              ignore_relations: []
+              ignore_relations: [],
+              span: nil
 
     @type t() :: %__MODULE__{
             conn: pid(),
@@ -55,7 +58,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             origin: Connectors.origin(),
             drop_current_transaction?: boolean(),
             types: %{},
-            ignore_relations: [term()]
+            ignore_relations: [term()],
+            span: Metrics.t() | nil
           }
   end
 
@@ -89,19 +93,36 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     with {:ok, conn} <- Client.connect(conn_opts),
          {:ok, _} <- Client.create_slot(conn, slot),
          :ok <- Client.set_display_settings_for_replication(conn),
+         {:ok, {short, long, cluster}} <- Client.get_server_versions(conn),
+         {:ok, table_count} <- SchemaLoader.count_electrified_tables({SchemaCache, origin}),
          :ok <- Client.start_replication(conn, publication, slot, self()) do
+      Process.monitor(conn)
+
       Logger.metadata(pg_producer: origin)
       Logger.info("Starting replication from #{origin}")
       Logger.info("Connection settings: #{inspect(conn_opts)}")
+
+      span =
+        Metrics.start_span([:postgres, :replication_from], %{electrified_tables: table_count}, %{
+          cluster: cluster,
+          short_version: short,
+          long_version: long
+        })
 
       {:producer,
        %State{
          conn: conn,
          queue: :queue.new(),
          publication: publication,
-         origin: origin
+         origin: origin,
+         span: span
        }}
     end
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    Metrics.stop_span(state.span)
   end
 
   @impl true
@@ -109,6 +130,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     binary_msg
     |> LogicalReplication.decode_message()
     |> process_message(state)
+  end
+
+  def handle_info({:DOWN, _, :process, conn, reason}, %State{conn: conn} = state) do
+    Logger.warning("PostgreSQL closed the replication connection")
+    Metrics.stop_span(state.span)
+
+    {:stop, reason, state}
   end
 
   @impl true
@@ -179,8 +207,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
-    Metrics.pg_producer_received(state.origin, :insert)
-
     relation = Map.get(state.relations, msg.relation_id)
 
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
@@ -199,8 +225,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
-    Metrics.pg_producer_received(state.origin, :update)
-
     relation = Map.get(state.relations, msg.relation_id)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
@@ -224,8 +248,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
-    Metrics.pg_producer_received(state.origin, :delete)
-
     relation = Map.get(state.relations, msg.relation_id)
 
     data =
@@ -290,6 +312,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       txn
       |> Electric.Postgres.ShadowTableTransformation.enrich_tx_from_shadow_ops()
       |> build_message(end_lsn, state)
+
+    Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     queue = :queue.in(event, queue)
     state = %{state | queue: queue, transaction: nil, drop_current_transaction?: false}

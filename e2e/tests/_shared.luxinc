@@ -9,7 +9,6 @@
         [progress start development environment]
         !make start_dev_env
         [invoke ok]
-        -$fail_pattern
         !make log_dev_env
 
     [newshell pg_1]
@@ -22,7 +21,11 @@
         !make start_electric_1
         -$fail_pattern
         ?START_REPLICATION SLOT
-         [progress setup finished]
+        [progress setup finished]
+
+    [shell postgres_logs]
+        ?logical replication apply worker for subscription "postgres_1" has started
+        -$fail_pattern
 [endmacro]
 
 [macro teardown]

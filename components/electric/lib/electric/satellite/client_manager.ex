@@ -1,4 +1,5 @@
 defmodule Electric.Satellite.ClientManager do
+  alias Electric.Telemetry.Metrics
   alias Electric.Replication.Connectors
   alias Electric.Replication.SatelliteConnector
 
@@ -42,9 +43,24 @@ defmodule Electric.Satellite.ClientManager do
     GenServer.call(server, :get_clients)
   end
 
+  def emit_telemetry_stats(server \\ __MODULE__, event) do
+    GenServer.cast(server, {:emit_telemetry_stats, event})
+  end
+
   @impl GenServer
   def init(_) do
     {:ok, %State{}}
+  end
+
+  @impl GenServer
+  def handle_cast({:emit_telemetry_stats, event}, state) do
+    Metrics.non_span_event(event, %{connected: map_size(state.clients)})
+    {:noreply, state}
+  end
+
+  def handle_cast(msg, state) do
+    Logger.warning("Unhandled cast: #{inspect(msg)}")
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -112,12 +128,6 @@ defmodule Electric.Satellite.ClientManager do
   @impl GenServer
   def handle_call(_, _, state) do
     {:reply, {:error, :not_implemented}, state}
-  end
-
-  @impl GenServer
-  def handle_cast(msg, state) do
-    Logger.info("Unhandled cast: #{inspect(msg)}")
-    {:noreply, state}
   end
 
   @impl GenServer

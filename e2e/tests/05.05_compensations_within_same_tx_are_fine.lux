@@ -66,7 +66,7 @@
 
 [shell electric]
     ??pg_slot=postgres_1 [debug] Will send 4 to subscriber:
-    ?pg_slot=postgres_1 \[debug\] Sending 14 messages to the subscriber: from (#Lsn<[0-9A-F]+/[0-9A-F]+>)
+    ?pg_slot=postgres_1 \[debug\] Sending 14 messages to the subscriber: from #Lsn<[0-9A-F]+/[0-9A-F]+> to (#Lsn<[0-9A-F]+/[0-9A-F]+>)
     [my expected_lsn=$1]
     # We expect to see the status update without PG failing to apply the operations sent above
     ??<StatusUpdate> [written_wal: $expected_lsn

@@ -31,6 +31,8 @@ defmodule Electric.Replication.Changes do
           | Changes.DeletedRecord.t()
 
   defmodule Transaction do
+    alias Electric.Replication.Changes
+
     @type t() :: %__MODULE__{
             xid: non_neg_integer() | nil,
             changes: [Changes.change()],
@@ -53,6 +55,23 @@ defmodule Electric.Replication.Changes do
       :ack_fn,
       :origin_type
     ]
+
+    def count_operations(%__MODULE__{changes: changes}) do
+      base = %{operations: 0, inserts: 0, updates: 0, deletes: 0}
+
+      Enum.reduce(changes, base, fn %module{}, acc ->
+        key =
+          case module do
+            Changes.NewRecord -> :inserts
+            Changes.UpdatedRecord -> :updates
+            Changes.DeletedRecord -> :deletes
+          end
+
+        %{^key => value, :operations => total} = acc
+
+        %{acc | key => value + 1, :operations => total + 1}
+      end)
+    end
   end
 
   defmodule NewRecord do

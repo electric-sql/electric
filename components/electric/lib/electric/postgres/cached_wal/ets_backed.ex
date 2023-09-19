@@ -88,6 +88,13 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     end
   end
 
+  @impl Api
+  def telemetry_stats() do
+    GenStage.call(__MODULE__, :telemetry_stats)
+  catch
+    :exit, _ -> nil
+  end
+
   # Internal API
 
   @impl GenStage
@@ -126,6 +133,27 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     state = Map.update!(state, :notification_requests, &Map.delete(&1, ref))
 
     {:reply, :ok, [], state}
+  end
+
+  @impl GenStage
+  def handle_call(:telemetry_stats, _from, state) do
+    oldest_timestamp =
+      with {:ok, key} <- ETS.Set.first(state.table),
+           {:ok, %Transaction{} = tx} <- ETS.Set.get_element(state.table, key, 2) do
+        tx.commit_timestamp
+      else
+        _ -> nil
+      end
+
+    stats = %{
+      transaction_count: state.current_cache_count,
+      max_transaction_count: state.max_cache_count,
+      oldest_transaction_timestamp: oldest_timestamp,
+      cache_memory_total:
+        ETS.Set.info!(state.table, true)[:memory] * :erlang.system_info(:wordsize)
+    }
+
+    {:reply, stats, [], state}
   end
 
   @impl GenStage

@@ -40,6 +40,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
               current_source_position: nil,
               preprocess_relation_list_fn: nil,
               preprocess_change_fn: nil,
+              telemetry_span: nil,
               opts: []
   end
 
@@ -197,7 +198,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
     Logger.info("Starting replication to #{state.slot_name}")
 
-    Metrics.pg_slot_replication_event(state.origin, %{start: 1})
+    span =
+      Metrics.start_span([:postgres, :replication_to], %{}, %{})
 
     :gproc.await(state.producer_name, 1_000)
 
@@ -216,13 +218,18 @@ defmodule Electric.Replication.Postgres.SlotServer do
     send(self(), :send_keepalive)
 
     {:reply, :ok, [],
-     %{state | publication: publication, send_fn: send_fn, timer: timer, socket_process_ref: ref}}
+     %{
+       state
+       | publication: publication,
+         send_fn: send_fn,
+         timer: timer,
+         socket_process_ref: ref,
+         telemetry_span: span
+     }}
   end
 
   @impl true
   def handle_call({:stop_replication}, _, state) do
-    Metrics.pg_slot_replication_event(state.origin, %{stop: 1})
-
     {:reply, :ok, [], clear_replication(state)}
   end
 
@@ -262,13 +269,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   @impl true
-  def handle_events(events, _from, %State{origin: origin} = state)
+  def handle_events(events, _from, %State{} = state)
       when replication_started?(state) do
     state =
       Enum.reduce(events, state, fn {tx, pos}, state ->
         case filter_extension_relations(tx) do
           %{changes: []} -> state
-          tx -> send_transaction(tx, pos, origin, state)
+          tx -> send_transaction(tx, pos, state)
         end
       end)
 
@@ -305,13 +312,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
     %{tx | changes: filtered_changes}
   end
 
-  defp send_transaction(tx, pos, origin, state) do
+  defp send_transaction(tx, pos, state) do
     Logger.debug(fn ->
       "Will send #{length(tx.changes)} to subscriber: #{inspect(tx.changes, pretty: true)}"
     end)
 
     {wal_messages, relations, new_lsn} = convert_to_wal(tx, state)
-    send_all(wal_messages, state.send_fn, origin)
+    send_all(wal_messages, state.send_fn, state.telemetry_span)
 
     %State{
       state
@@ -324,6 +331,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   defp clear_replication(%State{} = state) do
     Process.demonitor(state.socket_process_ref)
     if state.timer, do: :timer.cancel(state.timer)
+    Metrics.stop_span(state.telemetry_span)
 
     %State{
       state
@@ -331,21 +339,22 @@ defmodule Electric.Replication.Postgres.SlotServer do
         send_fn: nil,
         timer: nil,
         socket_process_ref: nil,
-        sent_relations: %{}
+        sent_relations: %{},
+        telemetry_span: nil
     }
   end
 
-  defp send_all(reversed_messages, send_fn, origin) when is_function(send_fn, 1) do
-    {{first_lsn, _}, len} = Electric.Utils.list_last_and_length(reversed_messages)
-    {last_lsn, _} = List.first(reversed_messages)
+  defp send_all(messages, send_fn, telemetry_span) when is_function(send_fn, 1) do
+    {{last_lsn, _}, len} = Electric.Utils.list_last_and_length(messages)
+    {first_lsn, _} = List.first(messages)
 
-    Metrics.pg_slot_replication_event(origin, %{sent_total: len})
+    Metrics.span_event(telemetry_span, :send, %{wal_messages: len, transactions: 1})
 
     Logger.debug(
       "Sending #{len} messages to the subscriber: from #{inspect(first_lsn)} to #{inspect(last_lsn)}"
     )
 
-    reversed_messages
+    messages
     |> Enum.map(fn {lsn, message} -> Messaging.replication_log(lsn, lsn, message) end)
     |> Enum.each(send_fn)
   end

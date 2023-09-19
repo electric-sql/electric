@@ -29,6 +29,60 @@ defmodule Electric.Satellite.Protocol do
   @producer_timeout 5_000
   @producer_demand 5
 
+  defmodule Telemetry do
+    defstruct connection_span: nil,
+              replication_span: nil,
+              subscription_spans: %{}
+
+    @type t() :: %__MODULE__{
+            connection_span: Metrics.t(),
+            replication_span: Metrics.t() | nil,
+            subscription_spans: %{optional(subscription_id :: String.t()) => Metrics.t()}
+          }
+
+    @spec start_subscription_span(t(), String.t(), map(), map()) :: t()
+    def start_subscription_span(
+          %__MODULE__{replication_span: parent} = telemetry,
+          subscription_id,
+          measurements,
+          metadata
+        ) do
+      span =
+        Metrics.start_child_span(
+          parent,
+          [:satellite, :replication, :new_subscription],
+          measurements,
+          Map.put(metadata, :subscription_id, subscription_id)
+        )
+
+      put_in(telemetry.subscription_spans[subscription_id], span)
+    end
+
+    @spec subscription_data_ready(t(), String.t()) :: t()
+    def subscription_data_ready(%__MODULE__{} = telemetry, id) do
+      put_in(
+        telemetry.subscription_spans[id].intermediate_measurements[:data_ready_monotonic_time],
+        System.monotonic_time()
+      )
+    end
+
+    @spec stop_subscription_span(t(), String.t()) :: t()
+    def stop_subscription_span(%__MODULE__{} = telemetry, id) do
+      {span, telemetry} = pop_in(telemetry.subscription_spans[id])
+      monotonic_time = System.monotonic_time()
+      data_time = span.intermediate_measurements.data_ready_monotonic_time
+
+      Metrics.stop_span(span, %{
+        monotonic_time: monotonic_time,
+        data_ready_monotonic_time: data_time,
+        data_ready_duration: data_time - span.start_time,
+        send_lag: monotonic_time - data_time
+      })
+
+      telemetry
+    end
+  end
+
   defmodule InRep do
     defstruct lsn: "",
               status: nil,
@@ -157,7 +211,8 @@ defmodule Electric.Satellite.Protocol do
               auth_provider: nil,
               pg_connector_opts: [],
               subscriptions: %{},
-              subscription_data_fun: nil
+              subscription_data_fun: nil,
+              telemetry: nil
 
     @type t() :: %__MODULE__{
             auth_passed: boolean(),
@@ -169,11 +224,8 @@ defmodule Electric.Satellite.Protocol do
             auth_provider: Electric.Satellite.Auth.provider(),
             pg_connector_opts: Keyword.t(),
             subscriptions: map(),
-            subscription_data_fun:
-              ({id :: String.t(), [ShapeRequest.t(), ...]},
-               reply_to: {reference(), pid()},
-               connection: Keyword.t() ->
-                 none())
+            subscription_data_fun: fun(),
+            telemetry: Telemetry.t() | nil
           }
   end
 
@@ -420,6 +472,10 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
+          for tx <- complete do
+            telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+          end
+
           in_rep =
             send_downstream(%InRep{
               in_rep
@@ -435,6 +491,8 @@ defmodule Electric.Satellite.Protocol do
       end
     rescue
       e ->
+        telemetry_event(state, :bad_transaction)
+
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end
@@ -480,14 +538,19 @@ defmodule Electric.Satellite.Protocol do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
   end
 
-  defp handle_start_replication_request(%{subscription_ids: []} = msg, :initial_sync, state) do
+  defp handle_start_replication_request(
+         %{subscription_ids: []} = msg,
+         :initial_sync,
+         %State{} = state
+       ) do
     # This particular client is connecting for the first time, so it needs to perform
     # the initial sync before we start streaming any changes to it.
     #
     # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
     # client first, followed by the initial migrations.
     send(self(), {:perform_initial_sync_and_subscribe, msg})
-    {%SatInStartReplicationResp{}, state}
+
+    {%SatInStartReplicationResp{}, start_replication_telemetry(state, :initial_sync)}
   end
 
   defp handle_start_replication_request(_msg, :initial_sync, _state) do
@@ -502,7 +565,11 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(lsn) do
       case restore_subscriptions(msg.subscription_ids, state) do
         {:ok, state} ->
-          state = subscribe_client_to_replication_stream(lsn, state)
+          state =
+            state
+            |> start_replication_telemetry(subscriptions: length(msg.subscription_ids))
+            |> subscribe_client_to_replication_stream(lsn)
+
           {%SatInStartReplicationResp{}, state}
 
         {:error, bad_id} ->
@@ -543,6 +610,13 @@ defmodule Electric.Satellite.Protocol do
 
     {out_rep, acc} =
       if filtered_tx.changes != [] do
+        telemetry_event(
+          state,
+          :transaction_send,
+          Transaction.count_operations(filtered_tx)
+          |> Map.put(:original_operations, length(tx.changes))
+        )
+
         {relations, transaction, out_rep} = handle_out_trans({filtered_tx, offset}, state)
         {out_rep, Enum.concat([transaction, relations, acc])}
       else
@@ -594,8 +668,8 @@ defmodule Electric.Satellite.Protocol do
     {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
-  @spec subscribe_client_to_replication_stream(any(), State.t()) :: State.t()
-  def subscribe_client_to_replication_stream(lsn, %State{out_rep: out_rep} = state) do
+  @spec subscribe_client_to_replication_stream(State.t(), any()) :: State.t()
+  def subscribe_client_to_replication_stream(%State{out_rep: out_rep} = state, lsn) do
     Metrics.satellite_replication_event(%{started: 1})
 
     {:via, :gproc, producer} = CachedWal.Producer.name(state.client_id)
@@ -638,6 +712,8 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def handle_subscription_data(id, data, %State{} = state) do
+    state = %{state | telemetry: Telemetry.stop_subscription_span(state.telemetry, id)}
+
     # TODO: in a perfect world there would be potential to stream out the changes instead of
     #       sending it all at once. It's quite hard to do with :ranch, or I haven't found a way.
     {relations, messages, state} =
@@ -704,13 +780,13 @@ defmodule Electric.Satellite.Protocol do
     |> Enum.flat_map(fn {_, shapes} -> shapes end)
   end
 
+  @spec query_subscription_data(String.t(), [ShapeRequest.t(), ...], State.t()) ::
+          {%SatSubsResp{}, State.t()}
   defp query_subscription_data(id, requests, %State{} = state) do
     ref = make_ref()
     parent = self()
 
-    # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
-    fun = state.subscription_data_fun
-    opts = state.pg_connector_opts
+    state = start_subscription_telemetry_span(state, id, requests)
 
     context = %{
       user_id: Pathex.get(state, path(:auth / :user_id)),
@@ -721,10 +797,19 @@ defmodule Electric.Satellite.Protocol do
         |> MapSet.new()
     }
 
+    # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
+    fun = state.subscription_data_fun
+    opts = state.pg_connector_opts
+    span = state.telemetry.subscription_spans[id]
+
     Task.start(fn ->
       # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
-      fun.({id, requests, context}, reply_to: {ref, parent}, connection: opts)
+      fun.({id, requests, context},
+        reply_to: {ref, parent},
+        connection: opts,
+        telemetry_span: span
+      )
     end)
 
     receive do
@@ -748,6 +833,27 @@ defmodule Electric.Satellite.Protocol do
            err: %SatSubsError{message: "Internal error while checking data availability"}
          }, state}
     end
+  end
+
+  @spec start_subscription_telemetry_span(State.t(), String.t(), [ShapeRequest.t()]) :: State.t()
+  defp start_subscription_telemetry_span(state, id, requests) do
+    {included_tables, {total_requests, hashes}} =
+      Enum.flat_map_reduce(requests, {0, []}, fn req, {total, hashes} ->
+        {ShapeRequest.included_tables(req), {total + 1, [ShapeRequest.hash(req) | hashes]}}
+      end)
+
+    telemetry =
+      Telemetry.start_subscription_span(
+        state.telemetry,
+        id,
+        %{
+          included_tables: length(Enum.uniq(included_tables)),
+          shapes: total_requests
+        },
+        Map.put(common_metadata(state), :shape_hashes, hashes)
+      )
+
+    %{state | telemetry: telemetry}
   end
 
   defp serialize_unknown_relations(unknown_relations) do
@@ -779,5 +885,36 @@ defmodule Electric.Satellite.Protocol do
     %SatInStartReplicationResp{
       err: %SatInStartReplicationResp.ReplicationError{code: code, message: message}
     }
+  end
+
+  defp telemetry_event(%State{} = state, event, measurements \\ %{}, metadata \\ %{}) do
+    Metrics.untimed_span_event(
+      state.telemetry.replication_span,
+      event,
+      measurements,
+      Map.merge(common_metadata(state), metadata)
+    )
+  end
+
+  defp start_replication_telemetry(state, opts) do
+    {subscriptions, initial_sync} =
+      case opts do
+        :initial_sync -> {0, true}
+        [subscriptions: n] when is_integer(n) -> {n, false}
+      end
+
+    span =
+      Metrics.start_child_span(
+        state.telemetry.connection_span,
+        [:satellite, :replication],
+        %{continued_subscriptions: subscriptions},
+        Map.put(common_metadata(state), :initial_sync, initial_sync)
+      )
+
+    put_in(state.telemetry.replication_span, span)
+  end
+
+  defp common_metadata(%State{} = state) do
+    %{client_id: state.client_id, user_id: state.auth && state.auth.user_id}
   end
 end
