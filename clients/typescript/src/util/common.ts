@@ -22,7 +22,6 @@ export const typeDecoder = {
   number: bytesToNumber,
   text: bytesToString,
   timetz: bytesToTimetzString,
-  timestamptz: bytesToTimestamptzString,
 }
 
 export const typeEncoder = {
@@ -31,7 +30,6 @@ export const typeEncoder = {
   real: realToBytes,
   text: (string: string) => new TextEncoder().encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
-  timestamptz: (string: string) => typeEncoder.text(stringToTimestamptzString(string)),
 }
 
 export const base64 = {
@@ -93,16 +91,6 @@ export function bytesToString(bytes: Uint8Array) {
 }
 
 /**
- * Converts a PG string of type `timestamptz` to its equivalent SQLite string.
- * e.g. '2023-08-07 18:28:35.42108+00' -> '2023-08-07 18:28:35.42108Z'
- * @param bytes Data for this `timestamptz` column.
- */
-function bytesToTimestamptzString(bytes: Uint8Array) {
-  const str = bytesToString(bytes)
-  return str.replace('+00', 'Z')
-}
-
-/**
  * Converts a PG string of type `timetz` to its equivalent SQLite string.
  * e.g. '18:28:35.42108+00' -> '18:28:35.42108'
  * @param bytes Data for this `timetz` column.
@@ -111,16 +99,6 @@ function bytesToTimestamptzString(bytes: Uint8Array) {
 function bytesToTimetzString(bytes: Uint8Array) {
   const str = bytesToString(bytes)
   return str.replace('+00', '')
-}
-
-/**
- * Converts a SQLite string representing a `timestamptz` value to a PG string.
- * e.g. '2023-08-07 18:28:35.42108Z' -> '2023-08-07 18:28:35.42108+00'
- * @param str The SQLite string representing a `timestamptz` value.
- * @returns The PG string.
- */
-function stringToTimestamptzString(str: string) {
-  return str.replace('Z', '+00')
 }
 
 /**

@@ -1035,6 +1035,7 @@ function deserializeColumnData(
     case 'DATE':
     case 'TIME':
     case 'TIMESTAMP':
+    case 'TIMESTAMPTZ':
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
@@ -1049,8 +1050,6 @@ function deserializeColumnData(
       return Number(typeDecoder.text(column))
     case 'TIMETZ':
       return typeDecoder.timetz(column)
-    case 'TIMESTAMPTZ':
-      return typeDecoder.timestamptz(column)
   }
   throw new SatelliteError(
     SatelliteErrorCode.UNKNOWN_DATA_TYPE,
@@ -1066,19 +1065,13 @@ function serializeColumnData(
   const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
     case 'BOOL':
-<<<<<<< HEAD
-      return typeEncoder.bool(col_val as number)
+      return typeEncoder.bool(columnValue as number)
     case 'REAL':
     case 'FLOAT4':
     case 'FLOAT8':
-      return typeEncoder.real(col_val as number)
-=======
-      return typeEncoder.bool(columnValue as number)
+      return typeEncoder.real(columnValue as number)
     case 'TIMETZ':
       return typeEncoder.timetz(columnValue as string)
-    case 'TIMESTAMPTZ':
-      return typeEncoder.timestamptz(columnValue as string)
->>>>>>> 6af6e502 (Transform values in DAL input to SQLite values.)
     default:
       return typeEncoder.text(columnValue as string)
   }
