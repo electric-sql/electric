@@ -11,6 +11,8 @@ default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
+default_num_http_acceptors = 100
+default_num_pg_acceptors = 5
 
 ###
 
@@ -65,7 +67,9 @@ config :electric,
   # Used in telemetry, and to identify the server to the client
   instance_id: System.get_env("ELECTRIC_INSTANCE_ID", Electric.Utils.uuid4()),
   http_port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer(),
-  pg_server_port: pg_server_port
+  pg_server_port: pg_server_port,
+  num_http_acceptors: default_num_http_acceptors,
+  num_pg_acceptors: default_num_pg_acceptors
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,

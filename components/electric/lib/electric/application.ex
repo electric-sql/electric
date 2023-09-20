@@ -14,7 +14,9 @@ defmodule Electric.Application do
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,
       {ThousandIsland,
-       port: pg_server_port(), handler_module: Electric.Replication.Postgres.TcpServer}
+       port: pg_server_port(),
+       handler_module: Electric.Replication.Postgres.TcpServer,
+       num_acceptors: num_pg_acceptors()}
     ]
 
     children =
@@ -22,7 +24,10 @@ defmodule Electric.Application do
         unless Application.get_env(:electric, :disable_listeners, false) do
           [
             # Satellite websocket connections are served from this router
-            {Bandit, plug: Electric.Plug.Router, port: http_port()}
+            {Bandit,
+             plug: Electric.Plug.Router,
+             port: http_port(),
+             thousand_island_options: [num_acceptors: num_http_acceptors()]}
           ]
         else
           []
@@ -54,4 +59,7 @@ defmodule Electric.Application do
 
   defp http_port, do: Application.fetch_env!(:electric, :http_port)
   defp pg_server_port, do: Application.fetch_env!(:electric, :pg_server_port)
+
+  defp num_http_acceptors, do: Application.fetch_env!(:electric, :num_http_acceptors)
+  defp num_pg_acceptors, do: Application.fetch_env!(:electric, :num_pg_acceptors)
 end
