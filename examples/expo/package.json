@@ -5,8 +5,8 @@
   "license": "Apache-2.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "backend:pull": "docker pull electricsql/electric:latest",
-    "backend:down": "yarn backend:pull && docker compose -f backend/compose/docker-compose.yaml down --volumes",
+    "electric:pull": "docker pull electricsql/electric:latest",
+    "backend:down": "yarn electric:pull && docker compose -f backend/compose/docker-compose.yaml down --volumes",
     "backend:start": "docker pull electricsql/electric:latest && docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
     "backend:stop": "yarn backend:down",
     "backend:up": "yarn backend:start --detach",

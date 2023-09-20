@@ -6,10 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "beers:allocate": "docker compose --env-file backend/.envrc -f backend/compose.yaml run server eval \"BeerStars.Release.allocate_beers()\"",
-    "backend:pull": "docker pull electricsql/electric:latest",
+    "electric:pull": "docker pull electricsql/electric:latest",
     "backend:down": "docker compose --env-file backend/.envrc -f backend/compose.yaml down --volumes postgres electric",
-    "backend:start": "yarn backend:pull && docker compose --env-file backend/.envrc -f backend/compose.yaml up postgres electric",
-    "backend:up": "yarn backend:pull && docker compose --env-file backend/.envrc -f backend/compose.yaml up --detach postgres electric",
+    "backend:start": "yarn electric:pull && docker compose --env-file backend/.envrc -f backend/compose.yaml up postgres electric",
+    "backend:up": "yarn electric:pull && docker compose --env-file backend/.envrc -f backend/compose.yaml up --detach postgres electric",
     "build": "rm -rf dist && node builder.js",
     "build:prod": "rm -rf dist && NODE_ENV=production node builder.js",
     "client:generate": "npx --no-install electric-sql generate --out ./src/generated/client",
