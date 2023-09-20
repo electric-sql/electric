@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.6.3
+
+### Patch Changes
+
+- 3c0a4ca: Relax the client-side migration version validation to allow an arbitrary suffix to follow the version itself.
+
 ## 0.6.2
 
 ### Patch Changes
