@@ -79,7 +79,7 @@ defmodule Electric.Replication.Connectors do
   @spec get_replication_opts(config()) :: replication_opts()
   def get_replication_opts(config) do
     origin = origin(config)
-    database_name = get_connection_opts(config).database
+    database_name = get_in(config, [:connection, :database]) || "test"
 
     config
     |> Keyword.fetch!(:replication)
