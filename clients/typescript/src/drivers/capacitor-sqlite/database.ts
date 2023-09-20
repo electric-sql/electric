@@ -11,10 +11,7 @@ type OriginalDatabase = SQLiteDBConnection;
 export interface Database
   extends Pick<
     OriginalDatabase,
-    'execute' | 'executeTransaction' | 'query' | 'run'
+    'executeTransaction' | 'query' | 'run'
   > {
-  // Cordova calls the database name `.dbname` using camel case.
-  // this is different to React Native which uses `.dbname`.
-  // TODO: understand this???
   dbname?: DbName
 }
