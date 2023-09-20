@@ -295,7 +295,7 @@ export class SatelliteProcess implements Satellite {
     const stmts: Statement[] = []
     const tablenames: string[] = []
     // reverts to off on commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    // stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
@@ -457,7 +457,7 @@ export class SatelliteProcess implements Satellite {
   // subscriptions for entire tables.
   async _applySubscriptionData(changes: InitialDataChange[], lsn: LSN) {
     const stmts: Statement[] = []
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    // stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
     // It's much faster[1] to do less statements to insert the data instead of doing an insert statement for each row
     // so we're going to do just that, but with a caveat: SQLite has a max number of parameters in prepared statements,
@@ -530,8 +530,17 @@ export class SatelliteProcess implements Satellite {
         upsertShadowStmt,
         ['namespace', 'tablename', 'primaryKey', 'tags'],
         allArgsForShadowInsert,
-        this.maxSqlParameters
+        this.maxSqlParameters,
+        `
+        ON CONFLICT (primaryKey) DO UPDATE
+        SET namespace = EXCLUDED.namespace,
+          tablename = EXCLUDED.tablename,
+          tags = EXCLUDED.tags;
+        `
       )
+    )
+
+    stmts.push(
     )
 
     // Then update subscription state and LSN
@@ -787,9 +796,9 @@ export class SatelliteProcess implements Satellite {
     const shadow = this.opts.shadowTable.tablename
 
     const tablesExist = `
-      SELECT count(name) as numTables FROM sqlite_master
-        WHERE type='table'
-        AND name IN (?, ?, ?)
+      SELECT COUNT(name) AS numTables
+      FROM information_schema.tables
+      WHERE table_type = 'BASE TABLE' AND table_name IN ($1, $2, $3);
     `
 
     const [{ numTables }] = await this.adapter.query({
@@ -1483,7 +1492,7 @@ function _applyNonDeleteOperation(
 
   if (updateColumnStmts.values.length > 0) {
     insertStmt = `
-                INSERT ${insertStmt} 
+                INSERT ${insertStmt}
                 ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
               `
     columnValues.push(...updateColumnStmts.values)
