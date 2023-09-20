@@ -19,23 +19,14 @@ export class DatabaseAdapter
   run({ sql, args }: Statement): Promise<RunResult> {
     if (args && !Array.isArray(args)) {
       throw new Error(
-        `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
+        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
       )
     }
 
     return new Promise<RunResult>((resolve, reject) => {
-      return this.db.transaction((tx) =>
-        tx.executeSql(
-          sql,
-          args,
-          (_, res) => {
-            resolve({
-              rowsAffected: res.rowsAffected,
-            })
-          },
-          reject
-        )
-      )
+      const ret = this.db.run(sql, args);
+      
+
     })
   }
 
