@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.6.1
+
+### Patch Changes
+
+- a658123: Remove node debugging detection because it broke Webpack builds
+
 ## 0.6.0
 
 ### Minor Changes
