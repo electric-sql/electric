@@ -18,7 +18,7 @@ const DEFAULTS: MigratorOptions = {
   tableName: '_electric_migrations',
 }
 
-const VALID_VERSION_EXP = new RegExp('^[0-9_]+$')
+const VALID_VERSION_EXP = new RegExp('^[0-9_]+')
 
 export class BundleMigrator implements Migrator {
   adapter: DatabaseAdapter
