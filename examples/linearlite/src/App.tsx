@@ -8,7 +8,7 @@ import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
 
-import { ElectricProvider, initElectric, dbName } from './electric'
+import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
 
 interface MenuContextInterface {
@@ -62,7 +62,9 @@ const App = () => {
       })
       await synced
       const timeToSync = performance.now()
-      console.log(`Synced in ${timeToSync}ms from page load`)
+      if (DEBUG) {
+        console.log(`Synced in ${timeToSync}ms from page load`)
+      }
     }
 
     init()
