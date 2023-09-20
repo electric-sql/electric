@@ -423,8 +423,10 @@ defmodule Electric.Postgres.ExtensionTest do
     end)
 
     test_tx("table electrification successfully validates column types", fn conn ->
-      assert [{:ok, [], []}, {:ok, [], []}] ==
+      assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
+               CREATE TYPE shapes AS ENUM ('circle', 'square', 'diamond');
+
                CREATE TABLE public.t1 (
                  id UUID PRIMARY KEY,
                  content TEXT NOT NULL,
@@ -445,8 +447,10 @@ defmodule Electric.Postgres.ExtensionTest do
                  d DATE,
                  t TIME,
                  flag BOOLEAN,
-                 jb JSONB
+                 jb JSONB,
+                 shape shapes
                );
+
                CALL electric.electrify('public.t1');
                """)
     end)
