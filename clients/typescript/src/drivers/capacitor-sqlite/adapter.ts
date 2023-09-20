@@ -1,3 +1,4 @@
+import { capSQLiteChanges } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
@@ -23,37 +24,27 @@ export class DatabaseAdapter
       )
     }
 
-    return new Promise<RunResult>((resolve, reject) => {
-      const ret = this.db.run(sql, args);
-      
-
-    })
+    return this.db.run(sql,args).then((result: capSQLiteChanges) => {
+			// TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
+      const rowsAffected = result.changes?.changes ?? 0;
+			return { rowsAffected };
+		});
   }
 
   runInTransaction(...statements: Statement[]): Promise<RunResult> {
     if (statements.some((x) => x.args && !Array.isArray(x.args))) {
       throw new Error(
-        `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
-      )
+        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
+      );
     }
 
-    return new Promise<RunResult>((resolve, reject) => {
-      let rowsAffected = 0
-      this.db.transaction(
-        (tx) => {
-          for (const { sql, args } of statements) {
-            tx.executeSql(sql, args as SqlValue[] | undefined, (_, res) => {
-              rowsAffected += res.rowsAffected
-            })
-          }
-        },
-        reject,
-        () =>
-          resolve({
-            rowsAffected: rowsAffected,
-          })
-      )
-    })
+    const txn = statements.map( ({sql, args}) => ({statement: sql, args }));
+
+     return this.db.executeTransaction(txn).then( (result: capSQLiteChanges) => {
+        // TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
+        const rowsAffected = result.changes?.changes ?? 0;
+        return { rowsAffected };
+		});
   }
 
   transaction<T>(
