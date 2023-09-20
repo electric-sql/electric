@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.6.1
+
+### Patch Changes
+
+- 5f44c1a: Suffix electric-created slot with db name to be able to run Electric per database on a single PostgreSQL instance
+
 ## 0.6.0
 
 ### Minor Changes
