@@ -1,5 +1,5 @@
-// N.b.: importing this module is an entrypoint that imports the Cordova
-// environment dependencies. Specifically `./filesystems/cordova`. You can
+// N.b.: importing this module is an entrypoint that imports the Capacitor
+// environment dependencies. You can
 // use the alternative entrypoint in `./test` to avoid importing this.
 import { DbName } from '../../util/types'
 

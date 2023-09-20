@@ -52,7 +52,7 @@ export class DatabaseAdapter
   query({ sql, args }: Statement): Promise<Row[]> {
     if (args && !Array.isArray(args)) {
       throw new Error(
-        `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
+        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
       )
     }
 
@@ -68,9 +68,14 @@ export class DatabaseAdapter
     const wrappedTx = new WrappedTx(this);
 
     return new Promise<T>( (resolve,reject) => {
-      f(wrappedTx, (res) => {
-        resolve(res);
-      });
+      try {
+        f(wrappedTx, (res) => {
+          resolve(res);
+        });
+      }
+      catch (err) {
+        reject(err);
+      }
     });
   }
 }
