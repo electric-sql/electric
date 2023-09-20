@@ -1,12 +1,11 @@
-import {ToolbarApiBase} from "./api-base";
+import { ToolbarApiBase } from './api-base'
 
-let toolbar_api: ToolbarApiBase;
+let toolbar_api: ToolbarApiBase
 
-export function setApi(api: ToolbarApiBase){
-    toolbar_api = api
+export function setApi(api: ToolbarApiBase) {
+  toolbar_api = api
 }
 
 export function getApi(): ToolbarApiBase {
-    return toolbar_api;
+  return toolbar_api
 }
-

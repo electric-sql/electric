@@ -1,6 +1,5 @@
 {
-  "compilerOptions":
-{
+  "compilerOptions": {
     "allowJs": true, // Allow JavaScript files to be compiled
     "allowSyntheticDefaultImports": true, // Allow default imports from modules with no default export
     "baseUrl": "src/toolbar",
@@ -26,5 +25,3 @@
   },
   "include": ["src/toolbar/*", "custom.d.ts"]
 }
-
-

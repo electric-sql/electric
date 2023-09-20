@@ -39,6 +39,7 @@
     "esbuild": "^0.16.17",
     "esbuild-plugin-inline-image": "^0.0.9",
     "fs-extra": "^10.0.0",
+    "prettier": "3.0.3",
     "prisma": "4.8.1",
     "shelljs": "^0.8.5",
     "typescript": "^4.4.3",

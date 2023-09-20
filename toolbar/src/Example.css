@@ -11,11 +11,11 @@
   cursor: pointer;
   user-select: none;
   width: calc(15vw + 100px);
-  margin-right: .5rem!important;
-  margin-left: .5rem!important;
+  margin-right: 0.5rem !important;
+  margin-left: 0.5rem !important;
   border-radius: 32px;
-  text-shadow: 2px 6px 20px rgba(0,0,0,0.4);
-  box-shadow: rgba(0,0,0,0.5) 1px 2px 8px 0px;
+  text-shadow: 2px 6px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: rgba(0, 0, 0, 0.5) 1px 2px 8px 0px;
   background: #1e2123;
   border: 2px solid #229089;
   color: #f9fdff;
@@ -34,7 +34,7 @@
   margin-left: auto;
   border-radius: 32px;
   border: 1.5px solid #bbb;
-  box-shadow: rgba(0,0,0,0.3) 1px 2px 8px 0px;
+  box-shadow: rgba(0, 0, 0, 0.3) 1px 2px 8px 0px;
   color: #f9fdff;
   font-size: 13px;
   padding: 10px 18px;

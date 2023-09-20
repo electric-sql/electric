@@ -1,0 +1,10 @@
+*.log
+.DS_Store
+dist/
+dist-dev/
+node_modules/
+backend/
+db/
+.gitignore
+.github/
+src/generated/

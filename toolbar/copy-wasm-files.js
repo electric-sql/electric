@@ -18,5 +18,7 @@ try {
   copyFile(mjsFile, mjsDest)
   copyFile(wasmFile, wasmDest)
 } catch {
-  console.error('Could not copy wasm files required for wa-sqlite. Did you forget to run `npm install` ?')
+  console.error(
+    'Could not copy wasm files required for wa-sqlite. Did you forget to run `npm install` ?',
+  )
 }
