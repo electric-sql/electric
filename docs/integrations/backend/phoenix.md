@@ -32,6 +32,7 @@ end
 There are quite a few options in Elixir for event sourcing. Two to flag up include:
 
 - [cainophile/cainophile](https://github.com/cainophile/cainophile) for consuming a logical replication stream
+- [https://github.com/cpursley/walex] for listen to Postgres change events and doing stuff in Elixir
 - [Oban](https://hexdocs.pm/oban/Oban.html) for running jobs in response to database writes
 
 You can also see the [Electric source code for consuming Postgres logical replication](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/replication/postgres/logical_replication_producer.ex).
