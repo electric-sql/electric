@@ -1,4 +1,4 @@
-import { capSQLiteChanges } from '@capacitor-community/sqlite'
+import { SQLiteDBConnection, capSQLiteChanges } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
@@ -24,7 +24,9 @@ export class DatabaseAdapter
       )
     }
 
-    return this.db.run(sql,args).then((result: capSQLiteChanges) => {
+    const wrapInTransaction = true; // Default. Not sure what electric is expecting here. Also unsure if true means implicit transaction.
+
+    return this.db.run(sql,args,wrapInTransaction).then((result: capSQLiteChanges) => {
 			// TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
       const rowsAffected = result.changes?.changes ?? 0;
 			return { rowsAffected };
@@ -47,19 +49,6 @@ export class DatabaseAdapter
 		});
   }
 
-  transaction<T>(
-    f: (_tx: Tx, setResult: (res: T) => void) => void
-  ): Promise<T> {
-    let result: T
-    return new Promise<void>((resolve, reject) => {
-      const txFn = (tx: SQLitePlugin.Transaction) => {
-        f(new WrappedTx(tx), (res) => (result = res))
-      }
-
-      this.db.transaction(txFn, reject, resolve)
-    }).then(() => result)
-  }
-
   query({ sql, args }: Statement): Promise<Row[]> {
     if (args && !Array.isArray(args)) {
       throw new Error(
@@ -67,34 +56,42 @@ export class DatabaseAdapter
       )
     }
 
-    return new Promise<Row[]>((resolve, reject) => {
-      this.db.readTransaction((tx) => {
-        tx.executeSql(
-          sql,
-          args,
-          (_, results) => resolve(rowsFromResults(results)),
-          reject
-        )
-      })
-    })
+    return this.db.query(sql, args).then( (result) => {
+      // TODO: verify compatibility
+      return result.values ?? [];
+    });
+  }
+
+  transaction<T>(
+    f: (_tx: Tx, setResult: (res: T) => void) => void
+  ): Promise<T> {
+    const wrappedTx = new WrappedTx(this);
+
+    return new Promise<T>( (resolve,reject) => {
+      f(wrappedTx, (res) => {
+        resolve(res);
+      });
+    });
   }
 }
 
 class WrappedTx implements Tx {
-  constructor(private tx: SQLitePlugin.Transaction) {}
+  constructor(private adapter: DatabaseAdapter) {}
 
   run(
     statement: Statement,
     successCallback?: (tx: Tx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    this.executeSQL(
-      statement,
-      (tx, _rows, res) => {
-        if (typeof successCallback !== 'undefined') successCallback(tx, res)
-      },
-      errorCallback
-    )
+    this.adapter.run(statement).then( (runResult) => {
+      if (typeof successCallback !== 'undefined') {
+        successCallback(this, runResult)
+      }
+    }).catch( (err) => {
+      if (typeof errorCallback !== 'undefined') {
+        errorCallback(err);
+      }
+    });
   }
 
   query(
@@ -102,33 +99,14 @@ class WrappedTx implements Tx {
     successCallback: (tx: Tx, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    this.executeSQL(statement, successCallback, errorCallback)
-  }
-
-  private executeSQL(
-    { sql, args }: Statement,
-    successCallback?: (tx: Tx, rows: Row[], res: RunResult) => void,
-    errorCallback?: (error: any) => void
-  ) {
-    if (args && !Array.isArray(args)) {
-      throw new Error(
-        `cordova-sqlite-storage doesn't support named query parameters, use positional parameters instead`
-      )
-    }
-
-    this.tx.executeSql(
-      sql,
-      args,
-      (tx, res) => {
-        if (typeof successCallback !== 'undefined')
-          successCallback(new WrappedTx(tx), rowsFromResults(res), {
-            rowsAffected: res.rowsAffected,
-          })
-      },
-      (_tx, err) => {
-        if (typeof errorCallback !== 'undefined') errorCallback(err)
-        return true
+    this.adapter.query(statement).then( (result) => {
+      if (typeof successCallback !== 'undefined') {
+        successCallback(this, result)
       }
-    )
+    }).catch( (err) => {
+      if (typeof errorCallback !== 'undefined') {
+        errorCallback(err);
+      }
+    });
   }
 }
