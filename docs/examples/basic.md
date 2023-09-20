@@ -8,11 +8,11 @@ import BrowserOnly from '@docusaurus/BrowserOnly'
 
 # Basic example
 
-See the basic web example running online at [electric-sql-basic-web-example.netlify.app](https://electric-sql-basic-web-example.netlify.app):
+See the basic web example running online at [basic-items.electric-sql.com](https://basic-items.electric-sql.com):
 
 <div className="my-6">
 
-[![Example banner](./basic-demo-screenshot.png)](https://electric-sql-basic-web-example.netlify.app)
+[![Example banner](./basic-demo-screenshot.png)](https://basic-items.electric-sql.com)
 
 </div>
 
@@ -26,8 +26,8 @@ It's a basic app running in the web browser [using wa-sqlite](../integrations/dr
           <div className="qr-container">
             <BrowserOnly>
               {() => (
-                <a href="https://electric-sql-basic-web-example.netlify.app" target="_blank">
-                  <QRCode value="https://electric-sql-basic-web-example.netlify.app" />
+                <a href="https://basic-items.electric-sql.com" target="_blank">
+                  <QRCode value="https://basic-items.electric-sql.com" />
                 </a>
               )}
             </BrowserOnly>
