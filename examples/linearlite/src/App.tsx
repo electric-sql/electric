@@ -41,9 +41,19 @@ const App = () => {
 
   useEffect(() => {
     const init = async () => {
-      let client
       try {
-        client = await initElectric()
+        const client = await initElectric()
+        setElectric(client)
+        const { synced } = await client.db.issue.sync({
+          include: {
+            comment: true,
+          },
+        })
+        await synced
+        const timeToSync = performance.now()
+        if (DEBUG) {
+          console.log(`Synced in ${timeToSync}ms from page load`)
+        }
       } catch (error) {
         if (
           (error as Error).message.startsWith(
@@ -53,17 +63,6 @@ const App = () => {
           deleteDB()
         }
         throw error
-      }
-      setElectric(client)
-      const { synced } = await client.db.issue.sync({
-        include: {
-          comment: true,
-        },
-      })
-      await synced
-      const timeToSync = performance.now()
-      if (DEBUG) {
-        console.log(`Synced in ${timeToSync}ms from page load`)
       }
     }
 

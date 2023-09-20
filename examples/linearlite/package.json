@@ -21,11 +21,11 @@
     "electric:start": "node ./backend/startElectric.js",
     "prepare-wa-sqlite": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
     "dev": "vite",
-    "start": "npm run dev",
+    "start": "npm run prepare-wa-sqlite && npm run dev",
     "build": "npm run prepare-wa-sqlite && tsc && vite build",
     "build-only": "npm run prepare-wa-sqlite && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "type-check": "tsc --noEmit --skipLibCheck",
+    "typecheck": "tsc --noEmit --skipLibCheck",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn .",
     "preview": "vite preview"

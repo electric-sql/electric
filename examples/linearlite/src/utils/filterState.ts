@@ -86,7 +86,6 @@ export function filterStateToWhere(filterState: FilterState) {
     where.priority = { in: priority }
   }
   if (query) {
-    // where.title = { contains: query }
     where.OR = [
       { title: { contains: query } },
       { description: { contains: query } },

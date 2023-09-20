@@ -15,32 +15,26 @@ const issues = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'issues.json'), 'utf8')
 )
 
+async function makeInsertQuery(db, table, data) {
+  const columns = Object.keys(data)
+  const columnsNames = columns.join(', ')
+  const values = columns.map((column) => data[column])
+  return await db.query(sql`
+    INSERT INTO ${sql.ident(table)} (${sql(columnsNames)})
+    VALUES (${sql.join(values.map(sql.value), ', ')})
+  `)
+}
+
 async function importIssue(db, issue) {
-  return await db.query(
-    sql`INSERT INTO issue(id, title, description, priority, status, modified, created, kanbanorder, username) VALUES (\
-      ${issue.id},\
-      ${issue.title},\
-      ${issue.description},\
-      ${issue.priority},\
-      ${issue.status},\
-      ${issue.modified},\
-      ${issue.created},\
-      ${issue.kanbanorder},\
-      ${issue.username})`
-  )
+  const { comments, ...rest } = issue
+  return await makeInsertQuery(db, 'issue', rest)
 }
 
 async function importComment(db, comment) {
-  return await db.query(
-    sql`INSERT INTO comment(id, body, username, issue_id, created_at) VALUES (\
-      ${comment.id},\
-      ${comment.body},\
-      ${comment.username},\
-      ${comment.issue_id},\
-      ${comment.created_at})`
-  )
+  return await makeInsertQuery(db, 'comment', comment)
 }
 
+let commentCount = 0
 const issueToLoad = Math.min(ISSUES_TO_LOAD, issues.length)
 await db.tx(async (db) => {
   for (let i = 0; i < issueToLoad; i++) {
@@ -48,6 +42,7 @@ await db.tx(async (db) => {
     const issue = issues[i]
     await importIssue(db, issue)
     for (const comment of issue.comments) {
+      commentCount++
       await importComment(db, comment)
     }
   }
@@ -55,4 +50,4 @@ await db.tx(async (db) => {
 process.stdout.write('\n')
 
 db.dispose()
-console.info('Done.')
+console.info(`Loaded ${issueToLoad} issues with ${commentCount} comments.`)

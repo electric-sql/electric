@@ -13,7 +13,7 @@ function List({ showSearch = false }) {
       where: filterStateToWhere(filterState),
     })
   )
-  const issues: Issue[] = results !== undefined ? [...results] : []
+  const issues: Issue[] = results ?? []
 
   return (
     <div className="flex flex-col flex-grow">

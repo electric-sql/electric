@@ -30,22 +30,21 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
   }, [issues])
 
   const { issuesByStatus } = useMemo(() => {
-    // Sort issues into columns by status
-    const issuesByStatus = issues.reduce((acc, issue) => {
+    const issuesByStatus: Record<string, Issue[]> = {};
+    issues.forEach((issue) => {
       // If the issue has been moved, patch with new status and kanbanorder for sorting
       if (movedIssues[issue.id]) {
         issue = {
           ...issue,
           ...movedIssues[issue.id],
-        }
+        };
       }
-      const status = issue.status.toLowerCase()
-      if (!acc[issue.status]) {
-        acc[issue.status] = []
+      const status = issue.status.toLowerCase();
+      if (!issuesByStatus[status]) {
+        issuesByStatus[status] = [];
       }
-      acc[status].push(issue)
-      return acc
-    }, {} as Record<string, Issue[]>)
+      issuesByStatus[status].push(issue);
+    });
 
     // Sort issues in each column by kanbanorder and issue id
     Object.keys(issuesByStatus).forEach((status) => {
@@ -179,20 +178,21 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
       const kanbanorder = getNewKanbanOrder(prevIssue, nextIssue)
       // Keep track of moved issues so we can override the status and kanbanorder when
       // sorting issues into columns.
+      const modified = new Date().toISOString()
       setMovedIssues((prev) => ({
         ...prev,
         [draggableId]: {
           status: destination.droppableId,
-          kanbanorder: kanbanorder,
-          modified: new Date().toISOString(),
+          kanbanorder,
+          modified,
         },
       }))
       // Update the issue in the database
       db.issue.update({
         data: {
           status: destination.droppableId,
-          kanbanorder: kanbanorder,
-          modified: new Date().toISOString(),
+          kanbanorder,
+          modified,
         },
         where: {
           id: draggableId,

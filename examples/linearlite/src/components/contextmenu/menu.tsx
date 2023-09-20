@@ -13,7 +13,7 @@ const sizeClasses = {
 
 export interface MenuProps {
   id: string
-  size: 'small' | 'normal'
+  size: keyof typeof sizeClasses
   className?: string
   onKeywordChange?: (kw: string) => void
   filterKeyword: boolean
@@ -84,7 +84,6 @@ export const Menu = (props: MenuProps) => {
             className="text-sm font-normal flex-0 w-full placeholder-gray-400 px-3.5 py-2.5 rounded border border-gray-200 "
             ref={ref}
             onChange={(e) => {
-              //TODO: use debounced call
               if (onKeywordChange) onKeywordChange(e.target.value)
             }}
             onClick={(e) => {

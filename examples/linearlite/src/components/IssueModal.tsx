@@ -51,7 +51,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         username: 'testuser',
         priority: priority,
         status: status,
-        description: description || '',
+        description: description ?? '',
         modified: date,
         created: date,
         kanbanorder: kanbanorder,

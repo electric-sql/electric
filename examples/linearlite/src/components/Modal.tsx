@@ -20,7 +20,7 @@ interface Props {
   /* function called when modal is closed */
   onDismiss?: () => void
   children?: React.ReactNode
-  size: 'normal' | 'large'
+  size: keyof typeof sizeClasses
 }
 const sizeClasses = {
   large: 'w-175',

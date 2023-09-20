@@ -16,7 +16,7 @@ function FilterMenu({ id, button, className }: Props) {
   const [filterState, setFilterState] = useFilterState()
   const [keyword, setKeyword] = useState('')
 
-  let priorities = [...PriorityOptions]
+  let priorities = PriorityOptions
   if (keyword !== '') {
     const normalizedKeyword = keyword.toLowerCase().trim()
     priorities = priorities.filter(
@@ -25,7 +25,7 @@ function FilterMenu({ id, button, className }: Props) {
     )
   }
 
-  let statuses = [...StatusOptions]
+  let statuses = StatusOptions
   if (keyword !== '') {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statuses = statuses.filter(

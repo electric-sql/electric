@@ -121,8 +121,6 @@ function IssuePage() {
   }
 
   const handleDelete = () => {
-    // TODO: Can we do a cascade delete, or do we need to delete the comments first?
-    // can this be done in a transaction?
     db.comment.deleteMany({
       where: {
         issue_id: issue.id,

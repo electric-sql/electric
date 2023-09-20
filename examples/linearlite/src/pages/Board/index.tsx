@@ -15,7 +15,7 @@ function Board() {
       where: filterStateToWhere(filterState),
     })
   )
-  const issues: Issue[] = results !== undefined ? [...results] : []
+  const issues: Issue[] = results ?? []
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

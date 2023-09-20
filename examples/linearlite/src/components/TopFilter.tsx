@@ -32,7 +32,7 @@ export default function ({
   // We don't yet have a DAL for counts, so we use raw SQL
   const totalIssuesCount: number =
     useLiveQuery(db.liveRaw({ sql: 'SELECT COUNT(*) FROM issue' }))
-      .results?.[0]?.['COUNT(*)'] || 0
+      .results?.[0]?.['COUNT(*)'] ?? 0
 
   const filteredIssuesCount = issues.length
 

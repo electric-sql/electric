@@ -25,7 +25,7 @@ function PriorityMenu({
     setKeyword('')
     if (onSelect) onSelect(priority)
   }
-  let statusOpts = [...PriorityOptions]
+  let statusOpts = PriorityOptions
   if (keyword !== '') {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statusOpts = statusOpts.filter(

@@ -112,7 +112,3 @@ fs.writeFileSync(
   path.join(DATA_DIR, 'issues.json'),
   JSON.stringify(issueList, null, 2)
 )
-// fs.writeFileSync(
-//   path.join(DATA_DIR, 'comments.json'),
-//   JSON.stringify(commentList, null, 2)
-// )
