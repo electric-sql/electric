@@ -185,7 +185,6 @@
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
-    "@types/capacitor-sqlite": "^5.2.3",
     "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
