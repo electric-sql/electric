@@ -25,6 +25,7 @@ if (db === undefined) {
 
 const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 
+shell.exec('docker pull electricsql/electric:latest')
 shell.exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
