@@ -31,7 +31,7 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:logger, :os_mon]
+      extra_applications: [:logger, :os_mon, :runtime_tools, :wx, :observer]
     ]
   end
 
