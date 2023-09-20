@@ -79,7 +79,13 @@ defmodule Electric.Replication.Connectors do
   @spec get_replication_opts(config()) :: replication_opts()
   def get_replication_opts(config) do
     origin = origin(config)
-    database_name = get_in(config, [:connection, :database]) || "test"
+
+    database_name =
+      (get_in(config, [:connection, :database]) || "test")
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9_]/, "_")
+      |> String.trim("_")
+      |> String.slice(0..(62 - String.length(Extension.slot_name()) - 1))
 
     config
     |> Keyword.fetch!(:replication)
