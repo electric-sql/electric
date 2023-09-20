@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.6.2
+
+### Patch Changes
+
+- 704b237: Make sure the database name in the slot is escaped to match PG requirements (a-z, 0-9, \_ and less then 64 chars)
+
 ## 0.6.1
 
 ### Patch Changes
