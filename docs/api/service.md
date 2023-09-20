@@ -38,7 +38,7 @@ Everything in the table below that doesn't have a default value is required to r
 | `LOGICAL_PUBLISHER_PORT`<p>&nbsp;&nbsp;(`5433`)</p> | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                       |
 | `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>              | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`                                                                                                                                                                                                                        |
 
-### Authentication config
+### Authentication
 
 When `AUTH_MODE=secure` (the default), the `AUTH_JWT_ALG` and `AUTH_JWT_KEY` options are also required.
 
@@ -52,6 +52,17 @@ When `AUTH_MODE=insecure`, all other authentication options can be omitted.
 | `AUTH_JWT_NAMESPACE`                     | <p>This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric.</p><p>Currently, only the `user_id` custom claim is required.</p>                                                                                                                                                                                     |
 | `AUTH_JWT_ISS`                           | <p>This optional setting allows you to specificy the "issuer" that will be matched against the `iss` claim extracted from auth tokens.</p><p>This can be used to ensure that only tokens created by the expected party are used to authenticate your client.</p>                                                                                                                  |
 | `AUTH_JWT_AUD`                           | <p>This optional setting allows you to specificy the "audience" that will be matched against the aud claim extracted from auth tokens.</p><p>This can be used to ensure that only tokens for a specific application are used to authenticate your client.</p>                                                                                                                     |
+
+### Telemetry
+
+By default, ElectricSQL collects aggregated, anonymous usage data and sends them to our telemetry service. See <DocPageLink path="reference/telemetry" /> for more information.
+
+It's extremely helpful to leave telemetry enabled if you can.
+
+| Variable                                 | Description                                                                                                      |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ELECTRIC_TELEMETRY`<p>&nbsp;&nbsp;(`enabled`)</p> | <p>Telemetry mode. Telemetry is enabled by default. Set to `disabled` to disable collection.</p> |
+
 
 ## Networking requirements
 
