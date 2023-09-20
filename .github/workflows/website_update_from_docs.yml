@@ -1,0 +1,33 @@
+name: Docs / Deploy
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'examples/introduction/**'
+
+jobs:
+  update_website_submodule:
+    name: Update submodule to latest `main` commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.CROSSREPO_PAT }}
+          repository: electric-sql/website
+          ref: main
+          submodules: true
+      - name: Update the submodule to latest `main`
+        run: git submodule update --init --recursive --remote
+      - name: Commit updated submodule
+        run: >-
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+          if [ -n "`git status --porcelain`" ];
+          then
+            git commit -am "updated docs submodule";
+            git push;
+          fi
+
+
