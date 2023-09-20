@@ -11,7 +11,7 @@ ElectricSQL collects anonymous usage data and sends them to our telemetry servic
 We collect telemetry to understand key usage metrics. Specifically, the key metrics are:
 
 1. how many applications are using the Electric sync service
-2. what volume of data are they're syncing
+2. what volume of data they are syncing
 
 ## Where is data collected from
 
