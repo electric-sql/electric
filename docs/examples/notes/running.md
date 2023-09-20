@@ -29,7 +29,7 @@ Use the database schema to generate your [type-safe Client](../../usage/data-acc
 yarn client:generate
 ```
 
-(Or `yarn client:watch` to montior for database schema changes and auto-generate the client whenever the schema changes.)
+(Or `yarn client:watch` to monitor for database schema changes and auto-generate the client whenever the schema changes.)
 
 Start the app:
 
@@ -66,7 +66,7 @@ DATABASE_URL="postgresql://..." yarn db:migrate
 ```
 
 :::note
-Note that this time, the database URL is used by the migration script (not running in Docker), so not need `host.docker.internal`.
+Note that this time, the database URL is used by the migration script (not running in Docker), so there's no need to use `host.docker.internal`.
 :::
 
 ### Postgres <-> Electric interactions
@@ -79,4 +79,4 @@ Postgres |                               | Electric
          |-----LOGICAL_PUBLISHER_HOST--->|
 ```
 
-With the `yarn electric:start` script, `LOGICAL_PUBLISHER_HOST` defaults to `localhost`. If you sync service is running on a different host, you may need to change this. Either by patching the `./backend/startElectric.js` script, or by just running the Electric sync service directly using the docker command shown in <DocPageLink path="api/service" />.
+With the `yarn electric:start` script, `LOGICAL_PUBLISHER_HOST` defaults to `localhost`. If your sync service is running on a different host, you may need to change this. Either by patching the `./backend/startElectric.js` script, or by just running the Electric sync service directly using the `docker run` command shown in <DocPageLink path="api/service" />.
