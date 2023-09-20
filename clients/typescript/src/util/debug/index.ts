@@ -17,13 +17,5 @@ export const isNode =
   process.versions != null &&
   process.versions.node != null
 
-/** True if running in NodeJS with debugger attached */
-export let isDebuggingNode = false
-
-if (isNode) {
-  try {
-    const { default: inspector } = await import('node:inspector')
-
-    isDebuggingNode = inspector.url() !== undefined
-  } catch {} // eslint-disable-line no-empty
-}
+/** True if running in NodeJS with debugger attached, but currently always false */
+export const isDebuggingNode = false
