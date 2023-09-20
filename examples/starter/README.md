@@ -11,7 +11,7 @@ This is a starter app template. You can use it to generate an ElectricSQL applic
 ## Usage
 
 ```sh
-npx create-electric-app my-app
+npx create-electric-app@latest my-app
 ```
 
 Change directory into the created folder (`./my-app` in the example command above) and then follow the instructions in the generated README.
