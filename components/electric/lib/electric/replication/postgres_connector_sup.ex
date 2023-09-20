@@ -53,7 +53,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
              # default: Electric.Postgres.Proxy.Injector.Capture.Transparent,
              default: nil,
              per_user: %{
-               "prisma" => Electric.Postgres.Proxy.Injector.Capture.Prisma
+               "prisma" => Electric.Postgres.Proxy.Injector.Capture.Prisma,
+               "transparent" => Electric.Postgres.Proxy.Injector.Capture.Transparent
              }
            ]
          ]
