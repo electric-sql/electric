@@ -82,6 +82,7 @@ defmodule Electric.Replication.Connectors do
 
     database_name =
       (get_in(config, [:connection, :database]) || "test")
+      |> to_string()
       |> String.downcase()
       |> String.replace(~r/[^a-z0-9_]/, "_")
       |> String.trim("_")
