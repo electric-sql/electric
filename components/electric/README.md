@@ -135,7 +135,7 @@ will reach the clients and be created there as well. For example:
 
 ```sql
 BEGIN;
-SELECT electric.migration_version('1_version');
+SELECT electric.migration_version('20230920_114900');
 CREATE TABLE public.mtable1 (id uuid PRIMARY KEY);
 CALL electric.electrify('public.mtable1');
 COMMIT;
