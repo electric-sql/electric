@@ -56,7 +56,5 @@ ARG RELEASE_NAME=electric
 COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
 RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
-VOLUME ./offset_storage_data.dat
-
 ENTRYPOINT ["/app/bin/entrypoint"]
 CMD ["start"]

@@ -1,5 +1,5 @@
 
-.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests rm_offset_storage print_version_from_git
+.PHONY: build_tools deps compile tests start_dev_env stop_dev_env integration_tests print_version_from_git
 
 INFERRED_VERSION = $(shell git describe --abbrev=7 --tags --always --first-parent --match '@core/electric@*' | sed -En 's|^@core/electric@||p')
 PROTO_DIR ?= ../../protocol
@@ -96,9 +96,6 @@ docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
 	docker image rm -f electric:local-build
 endif
-
-rm_offset_storage:
-	rm offset_storage_*
 
 update_protobuf: deps
 	mix protox.generate \
