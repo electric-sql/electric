@@ -1,7 +1,7 @@
 Make sure you have Docker and Node.js (>=16.11) and then:
 
 ```shell
-npx create-electric-app my-app
+npx create-electric-app@latest my-app
 ```
 
 Change directory into `my-app` and start the backend services. This will use Docker Compose to run [Postgres](../usage/installation/postgres.md) and the [Electric sync service](../usage/installation/service.md):
