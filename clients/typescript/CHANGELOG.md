@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.6.2
+
+### Patch Changes
+
+- 406089d: Publically expose the version module.
+
 ## 0.6.1
 
 ### Patch Changes
