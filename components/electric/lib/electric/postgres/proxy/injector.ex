@@ -195,7 +195,7 @@ defmodule Electric.Postgres.Proxy.Injector do
         :rollback
 
       {true, {:drop, "index"} = action} ->
-        {:ok, index} = Parser.table_name(query)
+        {:index, index} = Parser.table_name(query)
         {action, State.index_electrified?(state, index), query, index}
 
       {true, {:electric, command} = action} ->
@@ -207,7 +207,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
         case Electric.DDLX.Parse.Parser.parse(query) do
           nil ->
-            {:ok, table} = Parser.table_name(query)
+            {_, table} = Parser.table_name(query)
 
             {action, State.table_electrified?(state, table), query, table}
 
@@ -222,7 +222,7 @@ defmodule Electric.Postgres.Proxy.Injector do
         end
 
       {true, action} ->
-        {:ok, table} = Parser.table_name(query)
+        {_, table} = Parser.table_name(query)
 
         {action, State.table_electrified?(state, table), query, table}
 
@@ -236,7 +236,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
     if Parser.insert?(query) do
       {:ok, ast} = Parser.parse(query)
-      {:ok, table} = Parser.table_name(ast)
+      {:table, table} = Parser.table_name(ast)
 
       case msg do
         # with a query we can simply extract the version from the query

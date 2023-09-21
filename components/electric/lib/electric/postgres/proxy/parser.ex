@@ -389,7 +389,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   defp analyse_modifications_query(%PgQuery.AlterTableStmt{} = stmt) do
-    {:ok, {_schema, _name} = table} = table_name(stmt)
+    {:table, {_schema, _name} = table} = table_name(stmt)
 
     Enum.map(stmt.cmds, fn %{node: {:alter_table_cmd, cmd}} ->
       Map.new([{:action, modification_action(cmd)}, {:table, table} | column_definition(cmd.def)])
