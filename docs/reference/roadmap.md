@@ -162,4 +162,4 @@ Why: maintaining foreign key integrity requires write permissions on referred ro
 
 **Roadmap**:
 
-Currently, if a user tries to replicate a shape that does not include all reachable tables following the foreign key relations, an error is throws. We are looking into solutions for optimising the amount of data that needs to be replicated into the client, while maintaining foreign keys and enforcing write permissions.
+Currently, if a user tries to replicate a shape that does not include all reachable tables following the foreign key relations, an error is thrown. We are looking into solutions for optimising the amount of data that needs to be replicated into the client, while maintaining foreign keys and enforcing write permissions.
