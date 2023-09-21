@@ -54,6 +54,15 @@ defmodule Electric.Postgres.Extension do
   @slot_name "electric_replication_out"
   @subscription_name "electric_replication_in"
 
+  # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT
+  # pg_current_xact_id() -> xid8
+  # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
+  # does not wrap around during the life of an installation
+  @txid_type "xid8"
+  # use an int8 for the txts timestamp column because epgsql has very poor
+  # support for timestamp columns :(
+  @txts_type "int8"
+
   defp migration_history_query(after_version) do
     where_clause =
       if after_version do
@@ -273,10 +282,33 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  def txid_type, do: @txid_type
+  def txts_type, do: @txts_type
+
+  @default_function_args [
+    # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT
+    # pg_current_xact_id() -> xid8
+    # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
+    # does not wrap around during the life of an installation
+    txid_type: @txid_type,
+    # use an int8 for the txts timestamp column because epgsql has very poor
+    # support for timestamp columns :(
+    txts_type: @txts_type,
+    schema: @schema,
+    ddl_table: @ddl_table,
+    version_table: @version_table,
+    electrified_tracking_table: @electrified_tracking_table,
+    publication_name: @publication_name
+  ]
+
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
-    Enum.each(Functions.list(), fn {name, sql} ->
-      case :epgsql.squery(conn, sql) do
+    dbg(define_functions: conn)
+
+    Enum.each(Functions.list(@default_function_args) |> dbg, fn {name, sql} ->
+      dbg({name, sql})
+
+      case :epgsql.squery(conn, sql) |> dbg do
         {:ok, [], []} -> :ok
         error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
       end
@@ -295,8 +327,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230715000000_UtilitiesTable,
       Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
-      Migrations.Migration_20230913132415_AlterShadowTables,
-      Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
+      Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
+      Migrations.Migration_20230921161418_ProxyCompatibility
     ]
   end
 
@@ -339,6 +371,7 @@ defmodule Electric.Postgres.Extension do
 
       {:ok, newly_applied_versions}
     end)
+    |> dbg
   end
 
   defp apply_migration(txconn, version, module) do

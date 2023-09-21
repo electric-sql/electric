@@ -1,0 +1,9 @@
+CREATE OR REPLACE FUNCTION <%= schema %>.tx_has_assigned_version() RETURNS bool SECURITY DEFINER AS $function$
+DECLARE
+    _txid <%= txid_type %>;
+    _txts <%= txts_type %>;
+BEGIN
+    SELECT txid, txts INTO _txid, _txts FROM <%= schema %>.current_transaction_id();
+    RETURN EXISTS (SELECT version FROM <%= version_table %> WHERE txid = _txid AND txts = _txts);
+END;
+$function$ LANGUAGE PLPGSQL;

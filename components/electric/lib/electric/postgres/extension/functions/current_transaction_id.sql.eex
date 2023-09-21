@@ -1,0 +1,10 @@
+
+CREATE OR REPLACE FUNCTION <%= schema %>.current_transaction_id(
+    OUT txid <%= txid_type %>,
+    OUT txts <%= txts_type %>
+) SECURITY DEFINER AS $function$
+BEGIN
+    txid := (SELECT <%= schema %>.current_xact_id());
+    txts := (SELECT <%= schema %>.current_xact_ts());
+END;
+$function$ LANGUAGE PLPGSQL;

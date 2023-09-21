@@ -5,11 +5,13 @@ defmodule Electric.Postgres.Extension.Functions do
 
   alias Electric.Postgres.Extension
   require EEx
+  require Logger
 
   sql_files =
-    "functions/*.sql.eex"
+    "functions/**/*.sql.eex"
     |> Path.expand(__DIR__)
     |> Path.wildcard()
+    |> dbg
 
   function_names =
     for path <- sql_files do
@@ -39,6 +41,22 @@ defmodule Electric.Postgres.Extension.Functions do
   # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
   # does not wrap around during the life of an installation
   @txid_type "xid8"
+
+  # @function_args [
+  #   {"validate_table_column_types", []},
+  #   {"current_xact_ts", []},
+  #   {"current_xact_id", []},
+  #   {"tx_has_assigned_version", []},
+  #   {"assign_migration_version", []},
+  #   {"migration_version", []},
+  #   {"current_transaction_id", []},
+  #   {"capture_ddl", []},
+  #   {"electrify", []},
+  #   {"__resolve_table_from_names", []},
+  #   {"__table_schema", []},
+  #   {"__pg_version", []},
+  #   {"enable", []}
+  # ]
 
   @doc """
   Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).

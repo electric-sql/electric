@@ -13,17 +13,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
   def version, do: 2023_06_05_14_12_56
 
   @impl true
-  def up(schema) do
+  def up(_schema) do
     electrified_tracking_table = Extension.electrified_tracking_table()
-    publication = Extension.publication_name()
-
-    electrify_function =
-      electrify_function_sql(
-        schema,
-        electrified_tracking_table,
-        publication,
-        Extension.add_table_to_publication_sql("%I.%I")
-      )
 
     [
       """
@@ -44,7 +35,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       # This function definition is included here because it is referenced in the definition of the electrify() function
       # below it.
       Extension.Functions.by_name(:validate_table_column_types),
-      electrify_function
     ]
   end
 
@@ -52,11 +42,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
   def down(_schema) do
     []
   end
-
-  EEx.function_from_file(:defp, :electrify_function_sql, sql_template, [
-    :schema,
-    :electrified_tracking_table,
-    :publication_name,
-    :publication_sql
-  ])
 end

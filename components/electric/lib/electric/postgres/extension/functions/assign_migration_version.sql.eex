@@ -1,0 +1,6 @@
+
+CREATE OR REPLACE PROCEDURE <%= schema %>.assign_migration_version(_version text) SECURITY DEFINER AS $function$
+BEGIN
+    INSERT INTO <%= version_table %> (version) VALUES (_version);
+END;
+$function$ LANGUAGE PLPGSQL;
