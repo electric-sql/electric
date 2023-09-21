@@ -11,7 +11,7 @@ type OriginalDatabase = SQLiteDBConnection;
 export interface Database
   extends Pick<
     OriginalDatabase,
-    'executeTransaction' | 'query' | 'run'
+    'executeSet' | 'query' | 'run'
   > {
   dbname?: DbName
 }

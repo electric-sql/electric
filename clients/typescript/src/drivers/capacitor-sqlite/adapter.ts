@@ -1,11 +1,11 @@
-import { capSQLiteChanges } from '@capacitor-community/sqlite'
+import { capSQLiteChanges, capSQLiteSet } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
   TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Row, Statement } from '../../util'
+import { Row, SqlValue, Statement } from '../../util'
 import { Database } from './database'
 
 export class DatabaseAdapter
@@ -39,10 +39,11 @@ export class DatabaseAdapter
       );
     }
 
-    const txn = statements.map( ({sql, args}) => ({statement: sql, args }));
+    const set: capSQLiteSet[] = statements.map( ({sql, args}) => ({statement: sql, values: args as SqlValue[] }));
+    const wrapInTransaction = true;
 
-     return this.db.executeTransaction(txn).then( (result: capSQLiteChanges) => {
-        // TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
+     return this.db.executeSet(set, wrapInTransaction).then( (result: capSQLiteChanges) => {
+        // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
         const rowsAffected = result.changes?.changes ?? 0;
         return { rowsAffected };
 		});
