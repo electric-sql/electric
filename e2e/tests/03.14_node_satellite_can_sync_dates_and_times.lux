@@ -29,7 +29,7 @@
     ??INSERT 0 3
 
 [shell satellite_1]
-    [invoke node_await_get_from_table "datetimes" "003"]
+    [invoke node_await_get_datetimes "003"]
 
     ??id: '001'
     ??d: '2023-08-23'
@@ -63,7 +63,7 @@
     [invoke node_await_table "datetimes"]
     [invoke node_sync_table "datetimes"]
 
-    [invoke node_await_get_from_table "datetimes" "005"]
+    [invoke node_await_get_datetimes "005"]
     ??id: '001'
     ??d: '2023-08-23'
     ??t: '11:00:59'
