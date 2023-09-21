@@ -42,10 +42,10 @@ export class DatabaseAdapter
     const set: capSQLiteSet[] = statements.map( ({sql, args}) => ({statement: sql, values: args as SqlValue[] }));
     const wrapInTransaction = true;
 
-     return this.db.executeSet(set, wrapInTransaction).then( (result: capSQLiteChanges) => {
-        // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
-        const rowsAffected = result.changes?.changes ?? 0;
-        return { rowsAffected };
+    return this.db.executeSet(set, wrapInTransaction).then( (result: capSQLiteChanges) => {
+      // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
+      const rowsAffected = result.changes?.changes ?? 0;
+      return { rowsAffected };
 		});
   }
 
@@ -57,29 +57,38 @@ export class DatabaseAdapter
     }
 
     return this.db.query(sql, args).then( (result) => {
-      // TODO: verify compatibility
       return result.values ?? [];
     });
   }
 
+  // No async await on capacitor-sqlite promise-based APIs + the complexity of the transaction<T> API make for one ugly implementation...
   transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-    const wrappedTx = new WrappedTx(this);
 
     return new Promise<T>( (resolve,reject) => {
-      try {
-        f(wrappedTx, (res) => {
-          resolve(res);
-        });
-      }
-      catch (err) {
-        reject(err);
-      }
+      this.db.beginTransaction().then( (capBeginResult) => {
+        const wrappedTx = new WrappedTx(this);
+        try {
+          f(wrappedTx, (res) => {
+            // Client calls this setResult function when done. Commit and resolve.
+            this.db.commitTransaction().then( (capCommitResult) => {
+              resolve(res);
+            });
+          });
+        }
+        catch (err) {
+          this.db.rollbackTransaction().then( (capRollbackResult) => {
+            reject(err);
+          });
+        }
+      } );
     });
   }
 }
 
+// Did consider handling begin/commit/rollback transaction in this wrapper, but in the end it made more sense
+// to do so within the transaction<T> implementation, promises bublle up naturally that way and no need for inTransaction flag.
 class WrappedTx implements Tx {
   constructor(private adapter: DatabaseAdapter) {}
 
