@@ -1,4 +1,4 @@
-defnitmodule Electric.Postgres.Extension.SchemaCache do
+defmodule Electric.Postgres.Extension.SchemaCache do
   @moduledoc """
   Per-Postgres instance schema load/save functionality.
 

@@ -32,8 +32,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
   @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
-  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
-  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
   @callback table_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
   @callback index_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
   @callback tx_version(state(), tx_fk_row()) :: {:ok, version()} | {:error, term()}
