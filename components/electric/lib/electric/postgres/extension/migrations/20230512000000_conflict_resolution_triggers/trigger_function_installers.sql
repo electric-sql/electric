@@ -505,9 +505,9 @@ BEGIN
     case_columns_formatter := format(
         $$
                 CASE
-                    WHEN %s THEN main.%%1$s
-                    WHEN %s THEN tomb.%%1$s
-                END as %%1$s$$, format(all_pks_present_formatter, 'main'), format(all_pks_present_formatter, 'tomb'));
+                    WHEN %s THEN main.%%1$I
+                    WHEN %s THEN tomb.%%1$I
+                END as %%1$I$$, format(all_pks_present_formatter, 'main'), format(all_pks_present_formatter, 'tomb'));
     case_columns := electric.format_every_and_join(non_pk_column_list, case_columns_formatter, ',');
 
     on_primary_keys := electric.format_every_and_join(primary_key_list, 'main.%1$I = tomb.%1$I', ' AND ');
