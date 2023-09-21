@@ -3,6 +3,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.TestScenario
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.MockSchemaLoader
 
   @moduletag capture_log: true
@@ -18,12 +19,12 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
     spec = MockSchemaLoader.backend_spec(migrations: migrations)
 
-    {:ok, conn} =
+    {:ok, loader} =
       SchemaLoader.connect(spec, [])
 
     {:ok, injector} =
       Injector.new(
-        [loader: {module, conn}, query_generator: TestScenario.MockInjector],
+        [loader: loader, query_generator: TestScenario.MockInjector],
         username: "electric",
         database: "electric"
       )
