@@ -38,7 +38,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
     electrified?
   end
 
-  @valid_types for t <- Electric.Satellite.Serialization.supported_pg_types(), do: to_string(t)
+  @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
   def check_column_type(%PgQuery.ColumnDef{} = coldef) do
     %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)

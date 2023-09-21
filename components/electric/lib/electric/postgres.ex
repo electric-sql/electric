@@ -79,4 +79,18 @@ defmodule Electric.Postgres do
   def json_types, do: @json_types
   def bool_types, do: @bool_types
   def uuid_types, do: @uuid_types
+
+  def supported_types do
+    ~w[
+      bool
+      date
+      float8
+      int2 int4
+      text
+      time
+      timestamp timestamptz
+      uuid
+      varchar
+    ]a
+  end
 end

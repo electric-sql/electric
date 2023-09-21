@@ -323,7 +323,7 @@ defmodule Electric.Postgres.Proxy.Injector do
     end)
   end
 
-  @valid_types for t <- Electric.Satellite.Serialization.supported_pg_types(), do: to_string(t)
+  @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
   defp check_valid_column(%PgQuery.ColumnDef{} = coldef, query) do
     %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)
