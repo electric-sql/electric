@@ -77,6 +77,41 @@ export const get_rows = async (electric: Electric, table: string) => {
   return await electric.db.raw({sql: `SELECT * FROM ${table};`})
 }
 
+export const get_timestamps = async (electric: Electric) => {
+  return await electric.db.timestamps.findMany()
+}
+
+type Timestamp = { id: string, created_at: Date, updated_at: Date }
+
+export const write_timestamp = async (electric: Electric, timestamp: Timestamp) => {
+  return await electric.db.timestamps.create({
+    data: timestamp
+  })
+}
+
+export const get_timestamp = async (electric: Electric, id: string): Promise<Timestamp | undefined> => {
+  return await electric.db.timestamps.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const read_timestamp = async (electric: Electric, id: string, expected_created_at: string, expected_updated_at: string) => {
+  const timestamp = await get_timestamp(electric, id)
+  return check_timestamp(timestamp, expected_created_at, expected_updated_at)
+}
+
+export const check_timestamp = (timestamp: Timestamp | undefined, expected_created_at: string, expected_updated_at: string) => {
+  return (timestamp ?? false) &&
+    timestamp!.created_at.getTime() === new Date(expected_created_at).getTime() &&
+    timestamp!.updated_at.getTime() === new Date(expected_updated_at).getTime()
+}
+
+export const get_datetimes = async (electric: Electric) => {
+  return await electric.db.datetimes.findMany()
+}
+
 export const get_items = async (electric: Electric) => {
   return await electric.db.items.findMany({})
 }
