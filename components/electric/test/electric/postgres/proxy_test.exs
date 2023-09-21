@@ -42,9 +42,9 @@ defmodule Electric.Postgres.ProxyTest do
   test "electrified index tracking", cxt do
     sqls = [
       "CREATE SCHEMA meadow;",
-      "CREATE TABLE public.buttercup (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
-      "CREATE TABLE meadow.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
-      "CREATE TABLE public.daisy (id int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+      "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+      "CREATE TABLE meadow.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
+      "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
       "ALTER TABLE buttercup ENABLE ELECTRIC",
       "ALTER TABLE meadow.daisy ENABLE ELECTRIC",
       "CREATE INDEX buttercup_id_idx ON public.buttercup (id)",
