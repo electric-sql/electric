@@ -1,12 +1,11 @@
-import { SQLiteDBConnection, capSQLiteChanges } from '@capacitor-community/sqlite'
+import { capSQLiteChanges } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
   TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Row, SqlValue, Statement } from '../../util'
-import { rowsFromResults } from '../util/results'
+import { Row, Statement } from '../../util'
 import { Database } from './database'
 
 export class DatabaseAdapter
@@ -24,7 +23,7 @@ export class DatabaseAdapter
       )
     }
 
-    const wrapInTransaction = true; // Default. Not sure what electric is expecting here. Also unsure if true means implicit transaction.
+    const wrapInTransaction = false; // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
 
     return this.db.run(sql,args,wrapInTransaction).then((result: capSQLiteChanges) => {
 			// TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
