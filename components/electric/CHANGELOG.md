@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.6.3
+
+### Patch Changes
+
+- ce30518: Correctly detect cases where the clients are ahead of WAL window, which may happen in case of a DB reset, like in development
+
 ## 0.6.2
 
 ### Patch Changes
