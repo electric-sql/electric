@@ -6,6 +6,9 @@ defmodule Satellite.ProtocolHelpers do
   use Electric.Satellite.Protobuf
   alias Electric.Satellite.Serialization
 
+  @entries_relation_oid 11111
+  @camelCase_relation_oid 134
+
   def subscription_request(id \\ nil, shape_requests) do
     shape_requests
     |> Enum.map(fn
@@ -29,12 +32,25 @@ defmodule Satellite.ProtocolHelpers do
     %{
       schema: "public",
       name: "entries",
-      oid: 11111,
+      oid: @entries_relation_oid,
       primary_keys: ["id"],
       columns: [
         %{name: "id", type: :uuid},
         %{name: "content", type: :varchar},
         %{name: "content_b", type: :varchar}
+      ]
+    }
+  end
+
+  def schema("public.camelCase") do
+    %{
+      schema: "public",
+      name: "camelCase",
+      oid: @camelCase_relation_oid,
+      primary_keys: ["id"],
+      columns: [
+        %{name: "id", type: :text},
+        %{name: "userId", type: :text}
       ]
     }
   end
@@ -46,9 +62,22 @@ defmodule Satellite.ProtocolHelpers do
         %SatRelationColumn{name: "content", type: "varchar", is_nullable: false},
         %SatRelationColumn{name: "content_b", type: "varchar", is_nullable: true}
       ],
-      relation_id: 11111,
+      relation_id: @entries_relation_oid,
       schema_name: "public",
       table_name: "entries",
+      table_type: :TABLE
+    }
+  end
+
+  def relation("public.camelCase") do
+    %SatRelation{
+      columns: [
+        %SatRelationColumn{name: "id", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "userId", type: "text", is_nullable: true}
+      ],
+      relation_id: @camelCase_relation_oid,
+      schema_name: "public",
+      table_name: "camelCase",
       table_type: :TABLE
     }
   end
