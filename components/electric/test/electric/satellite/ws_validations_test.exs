@@ -278,7 +278,9 @@ defmodule Electric.Satellite.WsValidationsTest do
     vsn = "2023082201"
 
     :ok =
-      migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY, d date)")
+      migrate(ctx.db, vsn, "CREATE TABLE public.foo (id TEXT PRIMARY KEY, d date)",
+        electrify: "public.foo"
+      )
 
     valid_records = [
       %{"id" => "1", "d" => "2023-08-07"},
@@ -321,7 +323,9 @@ defmodule Electric.Satellite.WsValidationsTest do
     vsn = "2023091101"
 
     :ok =
-      migrate(ctx.db, vsn, "public.foo", "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t time)")
+      migrate(ctx.db, vsn, "CREATE TABLE public.foo (id TEXT PRIMARY KEY, t time)",
+        electrify: "public.foo"
+      )
 
     valid_records = [
       %{"id" => "1", "t" => "00:00:00"},
