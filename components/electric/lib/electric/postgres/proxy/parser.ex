@@ -415,6 +415,12 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   @type analyse_options() :: [loader: SchemaLoader.t(), default_schema: String.t()]
 
+  @doc """
+  Given a SQL query (potentially containing > 1 SQL statements, separated by
+  semicolons) returns an analysis of the statements indicating how they should
+  be treated by the proxy.
+  """
+  @spec analyse(String.t(), analyse_options()) :: [QueryAnalysis.t()]
   def analyse(query, opts \\ []) when is_binary(query) do
     {:ok, loader} = Keyword.fetch(opts, :loader)
 
@@ -473,7 +479,7 @@ defmodule Electric.Postgres.Proxy.Parser do
 
     analysis = %QueryAnalysis{
       table: name,
-      electrified?: is_electrified?(type, name, loader),
+      electrified?: object_electrified?(type, name, loader),
       ast: stmt,
       sql: query
     }
@@ -481,16 +487,16 @@ defmodule Electric.Postgres.Proxy.Parser do
     QueryAnalyser.analyse(stmt, analysis, opts)
   end
 
-  defp is_electrified?(nil, nil, _loader) do
+  defp object_electrified?(nil, nil, _loader) do
     false
   end
 
-  defp is_electrified?(:table, table, loader) do
+  defp object_electrified?(:table, table, loader) do
     {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
     electrified?
   end
 
-  defp is_electrified?(:index, index, loader) do
+  defp object_electrified?(:index, index, loader) do
     {:ok, electrified?} = SchemaLoader.index_electrified?(loader, index)
     electrified?
   end
@@ -610,5 +616,13 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   def is_electric_keyword?(_) do
     false
+  end
+
+  def electrified?(analysis) when is_list(analysis) do
+    Enum.any?(analysis, & &1.electrified?)
+  end
+
+  def allowed?(analysis) when is_list(analysis) do
+    Enum.all?(analysis, & &1.allowed?)
   end
 end

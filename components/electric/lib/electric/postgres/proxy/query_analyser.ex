@@ -120,9 +120,10 @@ defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
       case stmt.kind do
         :TRANS_STMT_BEGIN -> :begin
         :TRANS_STMT_COMMIT -> :commit
+        :TRANS_STMT_ROLLBACK -> :rollback
       end
 
-    %{analysis | action: kind}
+    %{analysis | action: {:tx, kind}}
   end
 end
 

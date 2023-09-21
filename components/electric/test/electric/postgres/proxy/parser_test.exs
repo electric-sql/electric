@@ -210,7 +210,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     test "BEGIN; COMMIT", cxt do
       assert [
                %QueryAnalysis{
-                 action: :begin,
+                 action: {:tx, :begin},
                  table: nil,
                  electrified?: false,
                  allowed?: true,
@@ -218,7 +218,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{}
                },
                %QueryAnalysis{
-                 action: :commit,
+                 action: {:tx, :commit},
                  table: nil,
                  electrified?: false,
                  allowed?: true,
@@ -226,6 +226,25 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{}
                }
              ] = Parser.analyse("BEGIN; COMMIT;", loader: cxt.loader)
+
+      assert [
+               %QueryAnalysis{
+                 action: {:tx, :begin},
+                 table: nil,
+                 electrified?: false,
+                 allowed?: true,
+                 sql: "BEGIN",
+                 ast: %{}
+               },
+               %QueryAnalysis{
+                 action: {:tx, :rollback},
+                 table: nil,
+                 electrified?: false,
+                 allowed?: true,
+                 sql: "ROLLBACK",
+                 ast: %{}
+               }
+             ] = Parser.analyse("BEGIN; ROLLBACK;", loader: cxt.loader)
     end
 
     test "CREATE TABLE", cxt do
