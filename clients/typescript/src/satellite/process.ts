@@ -442,12 +442,12 @@ export class SatelliteProcess implements Satellite {
 
   async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
     this.subscriptions.subscriptionDelivered(subsData)
-    
+
     // When data is empty, we will simply store the subscription and lsn state
     // Not storing this state means that a second open of the app will try to
-    // re-insert rows which will possible trigger a UNIQUE constraint violation 
+    // re-insert rows which will possible trigger a UNIQUE constraint violation
     await this._applySubscriptionData(subsData.data, subsData.lsn)
-    
+
     // Call the `onSuccess` callback for this subscription
     const { resolve: onSuccess } =
       this.subscriptionNotifiers[subsData.subscriptionId]
