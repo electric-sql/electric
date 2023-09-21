@@ -1,5 +1,8 @@
 import * as z from 'zod'
-import { SatOpMigrate, SatOpMigrate_Table } from '../_generated/protocol/satellite'
+import {
+  SatOpMigrate,
+  SatOpMigrate_Table,
+} from '../_generated/protocol/satellite'
 import { base64, getProtocolVersion } from '../util'
 import { Migration } from './index'
 import { generateTriggersForTable } from '../satellite/process'
@@ -73,11 +76,11 @@ export function makeMigration(migration: MetaData): Migration {
   const statements = migration.ops
     .map((op) => op.stmts.map((stmt) => stmt.sql))
     .flat()
-  const tables = (migration.ops
-    .map((op) => op.table)
+  const tables = migration.ops
     // if the operation did not change any table
     // then ignore it as we don't have to build triggers for it
-    .filter((tbl) => tbl !== undefined) as Array<SatOpMigrate_Table>)
+    .filter((op) => op.table !== undefined)
+    .map((op) => op.table!)
     // remove duplicate tables
     .filter((tbl, idx, arr) => {
       return arr.findIndex((t) => t?.name === tbl?.name) === idx
