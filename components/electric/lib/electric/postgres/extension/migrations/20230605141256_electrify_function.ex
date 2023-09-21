@@ -15,14 +15,12 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
   @impl true
   def up(schema) do
     electrified_tracking_table = Extension.electrified_tracking_table()
-    electrified_index_table = Extension.electrified_index_table()
     publication = Extension.publication_name()
 
     electrify_function =
       electrify_function_sql(
         schema,
         electrified_tracking_table,
-        Extension.electrified_index_table(),
         publication,
         Extension.add_table_to_publication_sql("%I.%I")
       )
@@ -42,23 +40,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       CREATE INDEX #{Extension.electrified_tracking_relation()}_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
       CREATE INDEX #{Extension.electrified_tracking_relation()}_oid_idx ON #{electrified_tracking_table} (oid);
       """,
-      """
-      CREATE TABLE #{electrified_index_table} (
-          id          oid NOT NULL PRIMARY KEY,
-          table_id    int8 NOT NULL REFERENCES #{electrified_tracking_table} (id) ON DELETE CASCADE,
-          created_at  timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      """,
       Extension.add_table_to_publication_sql(electrified_tracking_table),
       # This function definition is included here because it is referenced in the definition of the electrify() function
       # below it.
       Extension.Functions.by_name(:validate_table_column_types),
       electrify_function
-      # """
-      # CREATE EVENT TRIGGER #{event_triggers[:sql_drop]} ON sql_drop
-      #     WHEN TAG IN (#{Enum.join(event_trigger_tags, ", ")}) 
-      #     EXECUTE FUNCTION #{schema}.ddlx_sql_drop_handler();
-      # """
     ]
   end
 
@@ -70,7 +56,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
   EEx.function_from_file(:defp, :electrify_function_sql, sql_template, [
     :schema,
     :electrified_tracking_table,
-    :electrified_index_table,
     :publication_name,
     :publication_sql
   ])

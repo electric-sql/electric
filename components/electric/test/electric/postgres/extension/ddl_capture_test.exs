@@ -71,8 +71,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
     sql5 = "DROP INDEX buttercup_value_idx;"
 
-    assert {:ok, []} = Extension.electrified_indexes(conn)
-
     # we have to setup the loader with knowledge of the electrified table
     # and the attached index, otherwise (since we're running in a tx via the proxy)
     # the default schema loader (backed by schemaloader.epgsql) therefore
@@ -84,7 +82,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
 
-    assert {:ok, []} = Extension.electrified_indexes(conn)
     assert {:ok, [ddl1, ddl2, ddl3]} = Extension.ddl_history(conn)
 
     assert %{"id" => 1, "query" => "CREATE TABLE " <> _} = ddl1
@@ -96,8 +93,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
-
-    assert {:ok, []} = Extension.electrified_indexes(conn)
 
     for sql <- [sql1, sql2, sql3] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -127,8 +122,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
-    assert {:ok, []} = Extension.electrified_indexes(conn)
-
     for sql <- [sql1, sql2, sql3] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
@@ -138,6 +131,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:error, _error} = :epgsql.squery(conn, sql4)
   end
 
+  @tag prisma_support: true
   test_tx "ADD column; CREATE INDEX only adds a single migration", fn conn ->
     sql1 =
       "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
@@ -158,6 +152,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:ok, [_, %{"query" => ^sql3}]} = Extension.ddl_history(conn)
   end
 
+  @tag prisma_support: true
   test_tx "CREATE INDEX; DROP <electrified> COLUMN", fn conn ->
     sql1 =
       "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"

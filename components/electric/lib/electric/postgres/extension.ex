@@ -22,7 +22,6 @@ defmodule Electric.Postgres.Extension do
   @ddl_relation "ddl_commands"
   @schema_relation "schema"
   @electrified_table_relation "electrified"
-  @electrified_index_relation "electrified_idx"
   @acked_client_lsn_relation "acknowledged_client_lsns"
 
   @grants_relation "grants"
@@ -36,7 +35,6 @@ defmodule Electric.Postgres.Extension do
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
   @electrified_tracking_table electric.(@electrified_table_relation)
-  @electrified_index_table electric.(@electrified_index_relation)
   @transaction_marker_table electric.("transaction_marker")
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
 
@@ -97,7 +95,6 @@ defmodule Electric.Postgres.Extension do
   def version_table, do: @version_table
   def electrified_tracking_relation, do: @electrified_table_relation
   def electrified_tracking_table, do: @electrified_tracking_table
-  def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
 
@@ -235,13 +232,6 @@ defmodule Electric.Postgres.Extension do
   def electrified?(conn, schema \\ "public", table) do
     with {:ok, _, [{count}]} <- :epgsql.equery(conn, @table_is_electrifed_query, [schema, table]) do
       {:ok, count == 1}
-    end
-  end
-
-  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
-  def electrified_indexes(conn) do
-    with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
-      {:ok, rows}
     end
   end
 
