@@ -29,7 +29,7 @@ export const Example = () => {
       }
 
       const { tabId } = uniqueTabId()
-      const scopedDbName = `electric-${LIB_VERSION}-${tabId}.db`
+      const scopedDbName = `basic-items-${LIB_VERSION}-${tabId}.db`
 
       const conn = await ElectricDatabase.init(scopedDbName, '')
       const electric = await electrify(conn, schema, config)
