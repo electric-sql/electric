@@ -111,18 +111,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         %{relation: relation} when is_ddl_relation(relation) ->
           true
 
-        %{relation: relation} = change when is_acked_client_lsn_relation(relation) ->
-          %{"client_id" => client_id, "lsn" => encoded_client_lsn} = change.record
-
-          with {:ok, client_pid} <- Electric.Satellite.ClientManager.fetch_client(client_id) do
-            client_lsn = Electric.Postgres.Bytea.from_postgres_hex(encoded_client_lsn)
-            send(client_pid, {:lsn_ack, client_lsn})
-            Logger.info("acknowledged lsn: #{inspect(client_lsn)} for #{client_id}")
-          end
-
-          Logger.debug("---- Filtering #{inspect(change)}")
-          false
-
         %{relation: relation} = change when is_extension_relation(relation) ->
           Logger.debug("---- Filtering #{inspect(change)}")
           false
