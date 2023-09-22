@@ -67,22 +67,22 @@ export class DatabaseAdapter
   ): Promise<T> {
 
     return new Promise<T>( (resolve,reject) => {
-      this.db.beginTransaction().then( (capBeginResult) => {
+      this.db.beginTransaction().then( () => {
         const wrappedTx = new WrappedTx(this);
         try {
           f(wrappedTx, (res) => {
             // Client calls this setResult function when done. Commit and resolve.
-            this.db.commitTransaction().then( (capCommitResult) => {
+            this.db.commitTransaction().then( () => {
               resolve(res);
-            });
+            }).catch( (err) => reject(err));
           });
         }
         catch (err) {
-          this.db.rollbackTransaction().then( (capRollbackResult) => {
+          this.db.rollbackTransaction().then( () => {
             reject(err);
-          });
+          }).catch( (err) => reject(err));
         }
-      });
+      }).catch( (err) => reject(err)); // Are all those catch -> rejects needed? Apparently, yes because of explicit promises. Tests confirm this.
     });
   }
 }

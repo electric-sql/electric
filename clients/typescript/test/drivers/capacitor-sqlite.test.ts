@@ -72,7 +72,7 @@ test('database adapter interactive transaction works', async (t) => {
   t.assert(res == 5)
 })
 
-test('database adapter rejects promise on failure', async (t) => {
+test('database adapter run, query, runInTransaction reject promise on failure', async (t) => {
   const err = new Error('Test failure')
   const db = new MockDatabase('test.db', err)
   const adapter = new DatabaseAdapter(db)
@@ -86,6 +86,19 @@ test('database adapter rejects promise on failure', async (t) => {
   await assertFailure(adapter.run({ sql }))
   await assertFailure(adapter.query({ sql }))
   await assertFailure(adapter.runInTransaction({ sql }, { sql }))
+})
+
+test('database adapter transaction rejects promise on failure', async (t) => {
+  const err = new Error('Test failure')
+  const db = new MockDatabase('test.db', err)
+  const adapter = new DatabaseAdapter(db)
+
+  const sql = 'select * from bars'
+
+  const assertFailure = async (prom: Promise<any>) => {
+    await t.throwsAsync(prom, { instanceOf: Error, message: err.message })
+  }
+
   await assertFailure(
     adapter.transaction((tx, setResult) => {
       tx.run({ sql }, () => {

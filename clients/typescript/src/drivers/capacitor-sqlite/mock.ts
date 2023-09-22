@@ -1,4 +1,4 @@
-import { capSQLiteSet, capSQLiteChanges, DBSQLiteValues } from '@capacitor-community/sqlite'
+import { capSQLiteChanges, DBSQLiteValues } from '@capacitor-community/sqlite'
 import { DbName } from '../../util/types'
 import { Database } from './database'
 
@@ -11,17 +11,15 @@ export class MockDatabase implements Database {
     this.fail = fail;
   }
 
-  executeSet(set: capSQLiteSet[], transaction?: boolean | undefined, returnMode?: string | undefined, isSQL92?: boolean | undefined): Promise<capSQLiteChanges> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-
+  executeSet(): Promise<capSQLiteChanges> {
     return new Promise<capSQLiteChanges>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({ changes: {changes: 0}});
     }); 
   }
-  query(statement: string, values?: any[] | undefined, isSQL92?: boolean | undefined): Promise<DBSQLiteValues> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-
+  query(): Promise<DBSQLiteValues> {
     return new Promise<DBSQLiteValues>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({values: 
         [
           {textColumn: 'text1', numberColumn: 1},
@@ -29,31 +27,27 @@ export class MockDatabase implements Database {
         ]});
     }); 
   }
-  run(statement: string, values?: any[] | undefined, transaction?: boolean | undefined, returnMode?: string | undefined, isSQL92?: boolean | undefined): Promise<capSQLiteChanges> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-
+  run(): Promise<capSQLiteChanges> {
     return new Promise<capSQLiteChanges>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({ changes: {changes: 0}});
     }); 
   }
   beginTransaction(): Promise<capSQLiteChanges> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-
     return new Promise<capSQLiteChanges>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({ changes: {changes: 0}});
     }); 
   }
   commitTransaction(): Promise<capSQLiteChanges> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-
     return new Promise<capSQLiteChanges>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({ changes: {changes: 0}});
     }); 
   }
   rollbackTransaction(): Promise<capSQLiteChanges> {
-    if (typeof this.fail !== 'undefined') throw this.fail;
-    
     return new Promise<capSQLiteChanges>( (resolve, reject) => {
+      if (typeof this.fail !== 'undefined') reject(this.fail)
       resolve({ changes: {changes: 0}});
     }); 
   }
