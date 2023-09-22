@@ -82,7 +82,7 @@ export class DatabaseAdapter
             reject(err);
           });
         }
-      } );
+      });
     });
   }
 }
