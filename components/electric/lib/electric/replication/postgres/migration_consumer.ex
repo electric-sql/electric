@@ -22,8 +22,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   require Logger
 
-  import Electric.Postgres.Extension,
-    only: [is_ddl_relation: 1, is_acked_client_lsn_relation: 1, is_extension_relation: 1]
+  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
 
   @spec name(Connectors.config()) :: Electric.reg_name()
   def name(conn_config) when is_list(conn_config) do
