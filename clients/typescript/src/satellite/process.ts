@@ -853,7 +853,7 @@ export class SatelliteProcess implements Satellite {
     // Update the timestamps on all "new" entries - they have been added but timestamp is still `NULL`
     const q1: Statement = {
       sql: `
-      UPDATE ${oplog} SET timestamp = ?
+      UPDATE ${oplog} SET timestamp = $1
       WHERE rowid in (
         SELECT rowid FROM ${oplog}
             WHERE timestamp is NULL
@@ -1048,7 +1048,7 @@ export class SatelliteProcess implements Satellite {
     const selectEntries = `
       SELECT * FROM ${oplog}
         WHERE timestamp IS NOT NULL
-          AND rowid > ?
+          AND rowid > $1
         ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
@@ -1059,9 +1059,9 @@ export class SatelliteProcess implements Satellite {
     const shadowTable = this.opts.shadowTable.toString()
     const deleteRow = `
       DELETE FROM ${shadowTable}
-      WHERE namespace = ? AND
-            tablename = ? AND
-            primaryKey = ?;
+      WHERE namespace = $1 AND
+            tablename = $2 AND
+            primaryKey = $3;
     `
     return {
       sql: deleteRow,
@@ -1072,8 +1072,10 @@ export class SatelliteProcess implements Satellite {
   _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
     const shadowTable = this.opts.shadowTable.toString()
     const updateTags = `
-      INSERT or REPLACE INTO ${shadowTable} (namespace, tablename, primaryKey, tags) VALUES
-      (?, ?, ?, ?);
+      INSERT INTO ${shadowTable} (namespace, tablename, primaryKey, tags)
+        VALUES ($1, $2, $3, $4)
+      ON CONFLICT (namespace, tablename, primaryKey) DO UPDATE
+        SET tags = EXCLUDED.tags;
     `
     return {
       sql: updateTags,
@@ -1145,7 +1147,7 @@ export class SatelliteProcess implements Satellite {
     let firstDMLChunk = true
 
     // switches off on transaction commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    // stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
 
@@ -1281,8 +1283,8 @@ export class SatelliteProcess implements Satellite {
     if (tablenames.length > 0)
       return [
         {
-          sql: `UPDATE ${triggers} SET flag = ? WHERE ${tablenames
-            .map(() => 'tablename = ?')
+          sql: `UPDATE ${triggers} SET flag = $1 WHERE ${tablenames
+            .map((_, index) => 'tablename = ' + `$${index + 2}`)
             .join(' OR ')}`,
           args: [flag, ...tablenames],
         },
@@ -1298,7 +1300,7 @@ export class SatelliteProcess implements Satellite {
   _setMetaStatement(key: string, value: SqlValue) {
     const meta = this.opts.metaTable.toString()
 
-    const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
+    const sql = `UPDATE ${meta} SET value = $1 WHERE key = $2`
     const args = [value, key]
     return { sql, args }
   }
@@ -1321,7 +1323,7 @@ export class SatelliteProcess implements Satellite {
   async _getMeta(key: string) {
     const meta = this.opts.metaTable.toString()
 
-    const sql = `SELECT value from ${meta} WHERE key = ?`
+    const sql = `SELECT value from ${meta} WHERE key = $1`
     const args = [key]
     const rows = await this.adapter.query({ sql, args })
 
@@ -1351,15 +1353,15 @@ export class SatelliteProcess implements Satellite {
       this.opts.oplogTable.tablename.toString(),
       this.opts.triggersTable.tablename.toString(),
       this.opts.shadowTable.tablename.toString(),
-      'sqlite_schema',
-      'sqlite_sequence',
-      'sqlite_temp_schema',
+      'information_schema',
+      'pg_temp',
     ]
 
     const tables = `
-      SELECT name FROM sqlite_master
-        WHERE type = 'table'
-          AND name NOT IN (${notIn.map(() => '?').join(',')})
+      SELECT table_name AS name
+      FROM information_schema.tables
+      WHERE table_type = 'BASE TABLE'
+        AND table_name NOT IN (${notIn.map((_, index) => "$" + (index + 1)).join(',')});
     `
     return (await this.adapter.query({ sql: tables, args: notIn })) as {
       name: string
@@ -1376,7 +1378,13 @@ export class SatelliteProcess implements Satellite {
     const schema = 'public' // TODO
     for (const table of tableNames) {
       const tableName = table.name
-      const sql = 'SELECT * FROM pragma_table_info(?)'
+      const sql = `
+      SELECT column_name
+      FROM information_schema.key_column_usage
+      WHERE table_name = $1
+        AND constraint_name = 'PRIMARY KEY';
+      `;
+
       const args = [tableName]
       const columnsForTable = await this.adapter.query({ sql, args })
       if (columnsForTable.length == 0) {
@@ -1413,7 +1421,7 @@ export class SatelliteProcess implements Satellite {
     const oplog = this.opts.oplogTable.tablename.toString()
 
     await this.adapter.run({
-      sql: `DELETE FROM ${oplog} WHERE timestamp = ?`,
+      sql: `DELETE FROM ${oplog} WHERE timestamp = $1`,
       args: [isoString],
     })
   }
@@ -1428,12 +1436,14 @@ export class SatelliteProcess implements Satellite {
     this._lsn = lsn
     const lsn_base64 = base64.fromBytes(lsn)
     return {
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
+      sql: `UPDATE ${this.opts.metaTable.tablename} set value = $1 WHERE key = $2`,
       args: [lsn_base64, 'lsn'],
     }
   }
 
   private async checkMaxSqlParameters() {
+    this.maxSqlParameters = 999 // Hardcoded to not check anything from Postgres
+    return
     const [{ version }] = (await this.adapter.query({
       sql: 'SELECT sqlite_version() AS version',
     })) as [{ version: string }]
@@ -1455,8 +1465,8 @@ function _applyDeleteOperation(
       "Can't apply delete operation. None of the columns in changes are marked as PK."
     )
   const params = pkEntries.reduce(
-    (acc, [column, value]) => {
-      acc.where.push(`${column} = ?`)
+    (acc, [column, value], index) => {
+      acc.where.push(`${column} =  $${index + 1}`)
       acc.values.push(value)
       return acc
     },
@@ -1477,7 +1487,7 @@ function _applyNonDeleteOperation(
   const columnValues = Object.values(fullRow)
   let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
     ', '
-  )}) VALUES (${columnValues.map((_) => '?').join(',')})`
+  )}) VALUES (${columnValues.map((_, index) => '$' + (index + 1)).join(',')})`
 
   const updateColumnStmts = columnNames
     .filter((c) => !(c in primaryKeyCols))
@@ -1498,7 +1508,7 @@ function _applyNonDeleteOperation(
     columnValues.push(...updateColumnStmts.values)
   } else {
     // no changes, can ignore statement if exists
-    insertStmt = `INSERT OR IGNORE ${insertStmt}`
+    // insertStmt = `INSERT OR IGNORE ${insertStmt}` TODO: postgres: can we ingore this?
   }
 
   return { sql: insertStmt, args: columnValues }

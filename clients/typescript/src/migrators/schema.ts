@@ -32,7 +32,7 @@ export const data = {
 
         `INSERT INTO ${metaTable} (key, value) VALUES ('compensations', '1'), ('lsn', ''), ('clientId', ''), ('subscriptions', '') ON CONFLICT DO NOTHING;`,
         `DROP TABLE IF EXISTS ${triggersTable};`,
-        `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY DEFERRABLE, flag INTEGER);`,
+        `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY, flag INTEGER);`,
         `DROP TABLE IF EXISTS ${shadowTable};`,
         `CREATE TABLE ${shadowTable} (\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey) DEFERRABLE);`,
        ],
