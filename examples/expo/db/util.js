@@ -11,7 +11,7 @@ shell.config.silent = true // don't log output of child processes
 const pgPort = fetchHostPortPG() ?? 5432
 const appName = fetchAppName() ?? 'electric'
 const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
-const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
+const DATABASE_URL = process.env.ELECTRIC_DATABASE_URL || DEFAULT_URL
 
 function fetchHostPortPG() {
   return fetchHostPort('compose-postgres-1', 5432)
