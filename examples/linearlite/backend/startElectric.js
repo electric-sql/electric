@@ -1,6 +1,6 @@
 const shell = require('shelljs')
 
-let db = process.env.DATABASE_URL
+let db = process.env.ELECTRIC_DATABASE_URL
 
 if (process.argv.length === 4) {
   const command = process.argv[2]
