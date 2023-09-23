@@ -12,7 +12,7 @@ This allows you to bind [live queries](../../usage/data-access/queries.md) to co
 :::caution Work in progress
 ElectricSQL currently only has official support for React (both ReactJS and React Native).
 
-If you're interested in helping to develop Solid, Svelte, Vue or any other frontend framework integrations [let us know on Discord](https://discord.electric-sql/com).
+If you're interested in helping to develop Solid, Svelte, Vue or any other frontend framework integrations [let us know on Discord](https://discord.electric-sql.com).
 :::
 
 <DocCardList />
