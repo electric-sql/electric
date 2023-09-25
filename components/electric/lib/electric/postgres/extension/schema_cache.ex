@@ -217,7 +217,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       internal_schema: nil
     }
 
-    {:ok, state, {:continue, :init}}
+    {:ok, state}
   end
 
   @impl GenServer
@@ -267,6 +267,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call(:internal_schema, _from, state) do
+    state = load_internal_schema(state)
     {:reply, state.internal_schema, state}
   end
 
@@ -368,8 +369,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:noreply, state}
   end
 
-  def handle_continue(:init, state) do
-    {:noreply, %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}}
+  defp load_internal_schema(%{internal_schema: nil} = state) do
+    %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}
+  end
+
+  defp load_internal_schema(state) do
+    state
   end
 
   defp current_schema(%{current: nil} = state) do
