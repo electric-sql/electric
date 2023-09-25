@@ -57,7 +57,7 @@ defprotocol Electric.Postgres.Proxy.QueryAnalyser do
   @fallback_to_any true
   @type options() :: Electric.Postgres.Proxy.Parser.analyse_options()
 
-  @spec analyse(t(), QueryAnalysis.t(), options()) :: __MODULE__.Analysis.t()
+  @spec analyse(t(), QueryAnalysis.t(), options()) :: QueryAnalysis.t()
   def analyse(stmt, analysis, opts)
 end
 
