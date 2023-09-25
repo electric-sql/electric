@@ -11,7 +11,6 @@ defmodule Electric.Postgres.Extension.Functions do
     "functions/**/*.sql.eex"
     |> Path.expand(__DIR__)
     |> Path.wildcard()
-    |> dbg
 
   function_names =
     for path <- sql_files do
@@ -42,26 +41,11 @@ defmodule Electric.Postgres.Extension.Functions do
   # does not wrap around during the life of an installation
   @txid_type "xid8"
 
-  # @function_args [
-  #   {"validate_table_column_types", []},
-  #   {"current_xact_ts", []},
-  #   {"current_xact_id", []},
-  #   {"tx_has_assigned_version", []},
-  #   {"assign_migration_version", []},
-  #   {"migration_version", []},
-  #   {"current_transaction_id", []},
-  #   {"capture_ddl", []},
-  #   {"electrify", []},
-  #   {"__resolve_table_from_names", []},
-  #   {"__table_schema", []},
-  #   {"__pg_version", []},
-  #   {"enable", []}
-  # ]
-
   @doc """
   Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).
 
-  Every function in the list is defined as `CREATE OR REPLACE FUNCTION`.
+  Every function in the list is defined as `CREATE OR REPLACE
+  {FUNCTION,PROCEDURE}`.
   """
   # NOTE(alco): Eventually, we're hoping to move all function definitions out of migrations and define them all
   # here. See VAX-1016 for details.

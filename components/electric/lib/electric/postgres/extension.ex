@@ -303,12 +303,8 @@ defmodule Electric.Postgres.Extension do
 
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
-    dbg(define_functions: conn)
-
-    Enum.each(Functions.list(@default_function_args) |> dbg, fn {name, sql} ->
-      dbg({name, sql})
-
-      case :epgsql.squery(conn, sql) |> dbg do
+    Enum.each(Functions.list(@default_function_args), fn {name, sql} ->
+      case :epgsql.squery(conn, sql) do
         {:ok, [], []} -> :ok
         error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
       end
@@ -328,6 +324,7 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
+      Migrations.Migration_20230921161045_DropEventTriggers,
       Migrations.Migration_20230921161418_ProxyCompatibility
     ]
   end
@@ -371,7 +368,6 @@ defmodule Electric.Postgres.Extension do
 
       {:ok, newly_applied_versions}
     end)
-    |> dbg
   end
 
   defp apply_migration(txconn, version, module) do

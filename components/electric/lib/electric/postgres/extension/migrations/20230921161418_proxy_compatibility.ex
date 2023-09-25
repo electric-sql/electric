@@ -92,19 +92,12 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161418_ProxyC
       """
       ALTER TABLE #{ddl_table}
         ALTER COLUMN txts SET DEFAULT #{schema}.current_xact_ts(),
-        ALTER COLUMN txts SET NOT NULL,
         ALTER COLUMN txid SET DEFAULT #{schema}.current_xact_id();
       """,
       """
       ALTER TABLE #{ddl_table}
         ADD CONSTRAINT ddl_table_unique_migrations
         UNIQUE (txid, txts, query);
-      """,
-      """
-      DROP EVENT TRIGGER IF EXISTS "#{schema}_event_trigger_ddl_end CASCADE";
-      """,
-      """
-      DROP EVENT TRIGGER IF EXISTS "#{schema}_event_trigger_sql_drop CASCADE";
       """,
       # functions that are being re-defined as procedures:
       """

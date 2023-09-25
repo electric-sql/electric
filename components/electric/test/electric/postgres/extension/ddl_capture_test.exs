@@ -139,7 +139,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2] do
-      {:ok, _cols, _rows} = :epgsql.squery(conn, sql) |> dbg
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
 
     assert {:ok, [_]} = Extension.ddl_history(conn)
@@ -160,7 +160,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2] do
-      {:ok, _cols, _rows} = :epgsql.squery(conn, sql) |> dbg
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
 
     assert {:ok, [_]} = Extension.ddl_history(conn)
