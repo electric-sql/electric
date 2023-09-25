@@ -18,18 +18,24 @@ defmodule Electric.Postgres.Proxy.Injector.State do
 
   alias Electric.Postgres.Proxy.Injector
 
+  @derive {Inspect, except: [:loader]}
+
   defstruct loader: nil,
             query_generator: nil,
-            default_capture: nil,
-            tx: nil
+            capture: nil,
+            default_schema: "public",
+            tx: nil,
+            metadata: %{}
 
   @type loader() :: {module(), term()}
   @type query_generator() :: {module(), term()}
   @type t() :: %__MODULE__{
           loader: loader(),
           query_generator: query_generator(),
-          default_capture: Injector.Capture.t(),
-          tx: nil | Tx.t()
+          capture: Injector.Capture.t(),
+          default_schema: String.t(),
+          tx: nil | Tx.t(),
+          metadata: map()
         }
 
   @doc """
@@ -140,5 +146,9 @@ defmodule Electric.Postgres.Proxy.Injector.State do
       {:ok, _version} -> true
       :error -> false
     end
+  end
+
+  def assign_version_metadata(%__MODULE__{} = state, version) do
+    Map.update!(state, :metadata, &Map.put(&1, :version, to_string(version)))
   end
 end

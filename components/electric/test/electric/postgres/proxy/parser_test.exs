@@ -2,10 +2,11 @@ defmodule Electric.Postgres.Proxy.ParserTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias Electric.Postgres.Proxy.Parser
+  alias Electric.Postgres.Proxy.{Injector.State, Parser}
   alias Electric.Postgres.MockSchemaLoader
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.SQLGenerator
+  alias PgProtocol.Message, as: M
 
   @whitespace [" ", "\n", "\t"]
   describe "tag matching" do
@@ -187,8 +188,121 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     end
   end
 
+  def simple(sql), do: %M.Query{query: sql}
+  def extended(sql, attrs \\ []), do: struct(M.Parse, Keyword.put(attrs, :query, sql))
+
+  describe "parse/1" do
+    test "pg-syntax" do
+      assert {:ok,
+              [
+                {%M.Query{query: "ALTER TABLE monkey ADD tail int2 NOT NULL"},
+                 %PgQuery.AlterTableStmt{}}
+              ]} =
+               Parser.parse(simple("ALTER TABLE monkey ADD tail int2 NOT NULL;"))
+
+      assert {:ok,
+              [
+                {%M.Parse{query: "ALTER TABLE monkey ADD tail int2 NOT NULL"},
+                 %PgQuery.AlterTableStmt{}}
+              ]} =
+               Parser.parse(extended("ALTER TABLE monkey ADD tail int2 NOT NULL;"))
+    end
+
+    test "electric-syntax" do
+      assert {:ok, [{%M.Query{query: "CALL electric.__smuggle__" <> _}, %PgQuery.CallStmt{}}]} =
+               Parser.parse(simple("ALTER TABLE monkey ENABLE ELECTRIC;"))
+
+      assert {:ok,
+              [
+                {%M.Query{query: "CALL electric.__smuggle__" <> _}, %PgQuery.CallStmt{}}
+              ]} =
+               Parser.parse(
+                 simple(
+                   "ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin'"
+                 )
+               )
+    end
+
+    test "mix of pg- and electric-syntax" do
+      assert {:ok,
+              [
+                {%M.Query{query: "BEGIN"}, %PgQuery.TransactionStmt{}},
+                {%M.Query{query: "CALL electric.__smuggle__" <> _}, %PgQuery.CallStmt{}},
+                {%M.Query{query: "CALL electric.__smuggle__" <> _}, %PgQuery.CallStmt{}},
+                {%M.Query{query: "COMMIT"}, %PgQuery.TransactionStmt{}}
+              ]} =
+               Parser.parse(
+                 simple("""
+                  BEGIN;
+                  ALTER TABLE monkey ENABLE ELECTRIC;
+                  ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';
+                  COMMIT;
+                 """)
+               )
+    end
+
+    test "DO .. END" do
+      # these queries come in as a `DoStmt` with a string node containing the query between the `$$`
+      # and unless the language is `SQL` we can't parse it... so just reject it
+      query =
+        String.trim("""
+        DO $$ 
+        DECLARE 
+          schema_exists BOOLEAN;
+        BEGIN
+          SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.schemata
+            WHERE schema_name = 'electric'
+          ) INTO schema_exists;
+
+          IF schema_exists THEN
+            CALL electric.electrify('public."Items"');
+          END IF;
+        END $$
+        """)
+
+      assert {:error, _} = Parser.parse(simple(query))
+    end
+
+    test "invalid pg-syntax" do
+      assert {:error, _} = Parser.parse(simple("WHAT EXACTLY SHOULD THIS DO?"))
+    end
+
+    test "invalid electric-syntax" do
+      assert {:error, _} =
+               Parser.parse(
+                 simple(
+                   "ELECTRIC REVOKE CRISPS (status, name) ON truths FROM 'projects:house.admin';"
+                 )
+               )
+    end
+
+    test "invalid mix" do
+      assert {:error, _} =
+               Parser.parse(
+                 simple("""
+                  BEGIN;
+                  ALTER TABLE monkey ENABLE ELECTRIC;
+                  ELECTRIC REVOKE CRISPS (status, name) ON truths FROM 'projects:house.admin';
+                  COMMIT;
+                 """)
+               )
+    end
+  end
+
   describe "analyse/2" do
     alias Electric.Postgres.Proxy.QueryAnalysis
+
+    def analyse(sql, cxt) when is_binary(sql) do
+      analyse(simple(sql), cxt)
+    end
+
+    def analyse(msg, cxt) do
+      with {:ok, stmts} <- Parser.parse(msg) do
+        Enum.map(stmts, &Parser.analyse(&1, cxt.state))
+      end
+    end
 
     setup do
       migrations = [
@@ -204,12 +318,15 @@ defmodule Electric.Postgres.Proxy.ParserTest do
       {:ok, loader} =
         SchemaLoader.connect(spec, [])
 
-      {:ok, loader: loader}
+      state = %State{loader: loader}
+
+      {:ok, state: state, loader: loader}
     end
 
     test "BEGIN; COMMIT", cxt do
       assert [
                %QueryAnalysis{
+                 mode: :simple,
                  action: {:tx, :begin},
                  table: nil,
                  electrified?: false,
@@ -218,6 +335,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{}
                },
                %QueryAnalysis{
+                 mode: :simple,
                  action: {:tx, :commit},
                  table: nil,
                  electrified?: false,
@@ -225,7 +343,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  sql: "COMMIT",
                  ast: %{}
                }
-             ] = Parser.analyse("BEGIN; COMMIT;", loader: cxt.loader)
+             ] = analyse(simple("BEGIN; COMMIT;"), cxt)
 
       assert [
                %QueryAnalysis{
@@ -244,24 +362,50 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  sql: "ROLLBACK",
                  ast: %{}
                }
-             ] = Parser.analyse("BEGIN; ROLLBACK;", loader: cxt.loader)
+             ] = analyse(simple("BEGIN; ROLLBACK;"), cxt)
     end
 
     test "CREATE TABLE", cxt do
       assert [
                %QueryAnalysis{
+                 mode: :simple,
                  action: {:create, "table"},
                  table: {"public", "balloons"},
+                 type: :table,
                  electrified?: false,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
+                 source: %M.Query{
+                   query: "CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text)"
+                 },
                  sql: "CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text)"
                }
              ] =
-               Parser.analyse(
-                 "CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text);",
-                 loader: cxt.loader
+               analyse(
+                 simple("CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text);"),
+                 cxt
+               )
+
+      assert [
+               %QueryAnalysis{
+                 mode: :extended,
+                 action: {:create, "table"},
+                 table: {"public", "balloons"},
+                 type: :table,
+                 electrified?: false,
+                 allowed?: true,
+                 capture?: false,
+                 source: %M.Parse{
+                   query: "CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text);"
+                 },
+                 ast: %{},
+                 sql: "CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text);"
+               }
+             ] =
+               analyse(
+                 extended("CREATE TABLE public.balloons (id uuid PRIMARY KEY, value text);"),
+                 cxt
                )
     end
 
@@ -270,15 +414,18 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:alter, "table"},
                  table: {"public", "truths"},
+                 type: :table,
                  electrified?: true,
                  allowed?: true,
                  capture?: true,
+                 source: %M.Query{query: "ALTER TABLE public.truths ADD COLUMN clowns text"},
                  ast: %{},
                  sql: "ALTER TABLE public.truths ADD COLUMN clowns text"
                }
              ] =
-               Parser.analyse("ALTER TABLE public.truths ADD COLUMN clowns text;",
-                 loader: cxt.loader
+               analyse(
+                 "ALTER TABLE public.truths ADD COLUMN clowns text;",
+                 cxt
                )
 
       assert [
@@ -288,11 +435,14 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  electrified?: true,
                  allowed?: false,
                  ast: %{},
+                 source: %M.Query{query: "ALTER TABLE public.truths ADD COLUMN ip cidr"},
                  sql: "ALTER TABLE public.truths ADD COLUMN ip cidr",
-                 errors: [invalid_column_type: "cidr"]
+                 error: %{
+                   message: ~s[Cannot electrify column of type "cidr"]
+                 }
                }
              ] =
-               Parser.analyse("ALTER TABLE public.truths ADD COLUMN ip cidr;", loader: cxt.loader)
+               analyse("ALTER TABLE public.truths ADD COLUMN ip cidr;", cxt)
 
       assert [
                %QueryAnalysis{
@@ -303,12 +453,14 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.truths ADD COLUMN clowns text, ADD COLUMN ip cidr",
-                 errors: [invalid_column_type: "cidr"]
+                 error: %{
+                   message: ~s[Cannot electrify column of type "cidr"]
+                 }
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "ALTER TABLE public.truths ADD COLUMN clowns text, ADD COLUMN ip cidr;",
-                 loader: cxt.loader
+                 cxt
                )
 
       assert [
@@ -319,10 +471,10 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  allowed?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.socks ADD COLUMN ip cidr",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse("ALTER TABLE public.socks ADD COLUMN ip cidr;", loader: cxt.loader)
+               analyse("ALTER TABLE public.socks ADD COLUMN ip cidr;", cxt)
     end
 
     test "ALTER TABLE .. DROP COLUMN", cxt do
@@ -334,10 +486,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  allowed?: false,
                  ast: %{},
                  sql: "ALTER TABLE public.truths DROP COLUMN value",
-                 errors: [drop_column: "value"]
+                 error: %{
+                   message: ~s[Cannot drop column "value" of electrified table "public"."truths"]
+                 }
                }
              ] =
-               Parser.analyse("ALTER TABLE public.truths DROP COLUMN value;", loader: cxt.loader)
+               analyse("ALTER TABLE public.truths DROP COLUMN value;", cxt)
 
       assert [
                %QueryAnalysis{
@@ -347,12 +501,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  allowed?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.socks DROP COLUMN value, DROP COLUMN something",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "ALTER TABLE public.socks DROP COLUMN value, DROP COLUMN something;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -361,25 +515,36 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:rename, "column"},
                  table: {"public", "truths"},
+                 type: :table,
                  electrified?: true,
                  allowed?: false,
                  ast: %{},
+                 source: %M.Query{
+                   query: "ALTER TABLE public.truths RENAME COLUMN value TO colour"
+                 },
                  sql: "ALTER TABLE public.truths RENAME COLUMN value TO colour",
-                 errors: [rename: "value"]
+                 error: %{
+                   message:
+                     ~s[Cannot rename column "value" of electrified table "public"."truths"]
+                 }
                },
                %QueryAnalysis{
                  action: {:rename, "column"},
                  table: {"public", "socks"},
+                 type: :table,
                  electrified?: false,
                  allowed?: true,
                  ast: %{},
+                 source: %M.Query{
+                   query: "ALTER TABLE public.socks RENAME COLUMN value TO colour"
+                 },
                  sql: "ALTER TABLE public.socks RENAME COLUMN value TO colour",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "ALTER TABLE public.truths RENAME COLUMN value TO colour;ALTER TABLE public.socks RENAME COLUMN value TO colour;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -392,7 +557,10 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  allowed?: false,
                  ast: %{},
                  sql: "ALTER TABLE public.truths ALTER COLUMN value TYPE int2",
-                 errors: [alter_column: "value"]
+                 error: %{
+                   message:
+                     ~s[Cannot change type of column "value" of electrified table "public"."truths"]
+                 }
                },
                %QueryAnalysis{
                  action: {:alter, "table"},
@@ -401,12 +569,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  allowed?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.socks ALTER COLUMN value TYPE int2",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "ALTER TABLE public.truths ALTER COLUMN value TYPE int2; ALTER TABLE public.socks ALTER COLUMN value TYPE int2;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -415,14 +583,14 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     property "ALTER TABLE... (electrified)", cxt do
       check all(sql <- SQLGenerator.Table.alter_table(namespace: "public", table_name: "truths")) do
         assert [%QueryAnalysis{electrified?: true, sql: ^sql}] =
-                 Parser.analyse(sql, loader: cxt.loader)
+                 analyse(sql, cxt)
       end
     end
 
     property "ALTER TABLE... (non-electrified)", cxt do
       check all(sql <- SQLGenerator.Table.alter_table(namespace: "public", table_name: "socks")) do
         assert [%QueryAnalysis{electrified?: false, allowed?: true, capture?: false}] =
-                 Parser.analyse(sql, loader: cxt.loader)
+                 analyse(sql, cxt)
       end
     end
 
@@ -436,7 +604,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: true,
                  ast: %{},
                  sql: "CREATE INDEX public_truths_idx ON public.truths USING gist (value)",
-                 errors: []
+                 error: nil
                },
                %QueryAnalysis{
                  action: {:create, "index"},
@@ -446,12 +614,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: false,
                  ast: %{},
                  sql: "CREATE INDEX public_socks_idx ON public.socks (value)",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "CREATE INDEX public_truths_idx ON public.truths USING gist (value);\nCREATE INDEX public_socks_idx ON public.socks (value);",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -465,7 +633,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: true,
                  ast: %{},
                  sql: "DROP INDEX truths_idx",
-                 errors: []
+                 error: nil
                },
                %QueryAnalysis{
                  action: {:drop, "index"},
@@ -475,12 +643,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: false,
                  ast: %{},
                  sql: "DROP INDEX some_other_idx",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "DROP INDEX truths_idx;\nDROP INDEX some_other_idx;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -489,27 +657,33 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:drop, "table"},
                  table: {"public", "truths"},
+                 type: :table,
                  electrified?: true,
                  allowed?: false,
                  capture?: false,
                  ast: %{},
                  sql: "DROP TABLE public.truths",
-                 errors: []
+                 source: %M.Query{query: "DROP TABLE public.truths"},
+                 error: %{
+                   message: ~s[Cannot drop electrified table "public"."truths"]
+                 }
                },
                %QueryAnalysis{
                  action: {:drop, "table"},
                  table: {"public", "socks"},
+                 type: :table,
                  electrified?: false,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
                  sql: "DROP TABLE public.socks",
-                 errors: []
+                 source: %M.Query{query: "DROP TABLE public.socks"},
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "DROP TABLE public.truths; DROP TABLE public.socks;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -525,12 +699,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{},
                  sql:
                    "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2)",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2);",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -545,7 +719,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: false,
                  ast: %{},
                  sql: "DELETE FROM public.schema_migrations",
-                 errors: []
+                 error: nil
                },
                %QueryAnalysis{
                  action: :delete,
@@ -555,12 +729,12 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  capture?: false,
                  ast: %{},
                  sql: "DELETE FROM public.truths",
-                 errors: []
+                 error: nil
                }
              ] =
-               Parser.analyse(
+               analyse(
                  "DELETE FROM public.schema_migrations; DELETE FROM public.truths ;",
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -617,43 +791,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{},
                  sql: ^query3
                }
-             ] = Parser.analyse(query, loader: cxt.loader)
-    end
-
-    test "DO .. END", cxt do
-      # these queries come in as a `DoStmt` with a string node containing the query between the `$$`
-      # and unless the language is `SQL` we can't parse it... so just reject it
-      # 
-      query =
-        String.trim("""
-        DO $$ 
-        DECLARE 
-          schema_exists BOOLEAN;
-        BEGIN
-          SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.schemata
-            WHERE schema_name = 'electric'
-          ) INTO schema_exists;
-
-          IF schema_exists THEN
-            CALL electric.electrify('public."Items"');
-          END IF;
-        END $$
-        """)
-
-      assert [
-               %QueryAnalysis{
-                 action: :do,
-                 table: nil,
-                 electrified?: false,
-                 allowed?: false,
-                 capture?: false,
-                 ast: %{},
-                 sql: ^query,
-                 errors: [unsupported_query: "DO ... END"]
-               }
-             ] = Parser.analyse(query <> ";\n", loader: cxt.loader)
+             ] = analyse(query, cxt)
     end
 
     test "ELECTRIC...", cxt do
@@ -668,7 +806,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  sql: "ALTER TABLE truths ENABLE ELECTRIC"
                }
              ] =
-               Parser.analyse("ALTER TABLE truths ENABLE ELECTRIC;", loader: cxt.loader)
+               analyse("ALTER TABLE truths ENABLE ELECTRIC;", cxt)
 
       assert [
                %QueryAnalysis{
@@ -682,9 +820,9 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                    ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin']
                }
              ] =
-               Parser.analyse(
+               analyse(
                  ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';],
-                 loader: cxt.loader
+                 cxt
                )
     end
 
@@ -730,7 +868,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %{},
                  sql: ^query3
                }
-             ] = Parser.analyse(query, loader: cxt.loader)
+             ] = analyse(query, cxt)
     end
 
     test "multitple ELECTRIC commands", cxt do
@@ -744,6 +882,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:electric, %Electric.DDLX.Command.Enable{}},
                  table: {"public", "pants"},
+                 type: nil,
                  electrified?: true,
                  allowed?: true,
                  capture?: true,
@@ -753,6 +892,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:electric, %Electric.DDLX.Command.Enable{}},
                  table: {"public", "hats"},
+                 type: nil,
                  electrified?: true,
                  allowed?: true,
                  capture?: true,
@@ -762,6 +902,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                %QueryAnalysis{
                  action: {:create, "table"},
                  table: {"public", "teeth"},
+                 type: :table,
                  electrified?: false,
                  allowed?: true,
                  capture?: false,
@@ -777,39 +918,105 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  ast: %Electric.DDLX.Command.Grant{},
                  sql: ^query4
                }
-             ] = Parser.analyse(query, loader: cxt.loader)
+             ] = analyse(query, cxt)
     end
 
     test "electric.electrify(...)", cxt do
       assert [
                %QueryAnalysis{
-                 action: :call,
+                 action: {:electric, %Electric.DDLX.Command.Enable{}},
                  table: {"public", "pants"},
+                 type: :table,
                  electrified?: true,
                  allowed?: true,
-                 capture?: false,
+                 capture?: true,
                  ast: %{},
                  sql: "CALL electric.electrify('public.pants')"
                }
-             ] = Parser.analyse("CALL electric.electrify('public.pants');", loader: cxt.loader)
+             ] = analyse("CALL electric.electrify('public.pants');", cxt)
     end
 
-    test "invalid sql is just forwarded on to pg", cxt do
+    test "Ecto migration version", cxt do
       assert [
                %QueryAnalysis{
-                 action: :invalid,
-                 table: nil,
-                 electrified?: false,
-                 allowed?: true,
-                 capture?: false,
-                 valid?: false,
-                 ast: nil,
-                 sql: "UPHOLD MODERN VALUES ON public.truths; SELECT * FROM mental;"
+                 action:
+                   {:migration_version,
+                    %{
+                      framework: :ecto,
+                      version: 1,
+                      columns: %{"version" => 0, "inserted_at" => 1}
+                    }},
+                 table: {"public", "schema_migrations"},
+                 mode: :extended,
+                 source: %M.Parse{name: "some_query_99"},
+                 sql:
+                   "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2)"
                }
              ] =
-               Parser.analyse("UPHOLD MODERN VALUES ON public.truths; SELECT * FROM mental;",
-                 loader: cxt.loader
+               analyse(
+                 extended(
+                   "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2)",
+                   name: "some_query_99"
+                 ),
+                 cxt
                )
+    end
+
+    # TODO: how to handle invalid sql (that doesn't include electric syntax)?
+    #       ideally we'd want to forward to pg so it can give proper
+    #       error messages
+    # test "invalid sql is just forwarded on to pg", cxt do
+    #   assert [
+    #            %QueryAnalysis{
+    #              action: :invalid,
+    #              table: nil,
+    #              electrified?: false,
+    #              allowed?: true,
+    #              capture?: false,
+    #              valid?: false,
+    #              ast: nil,
+    #              sql: "UPHOLD MODERN VALUES ON public.truths; SELECT * FROM mental;"
+    #            }
+    #          ] =
+    #            analyse(
+    #              "UPHOLD MODERN VALUES ON public.truths; SELECT * FROM mental;",
+    #              cxt
+    #            )
+    # end
+  end
+
+  describe "find_semicolon/2" do
+    test "no semicolons in string" do
+      s = "ELECTRIC GRANT JUNK ON \"thing.Köln_en$ts\" TO 'projects:house.admin'"
+      assert Parser.find_semicolon(s, :forward) - byte_size(s) == 0
+      assert Parser.find_semicolon(s, :reverse) - byte_size(s) == 0
+    end
+
+    test "semicolon in middle" do
+      a = "ELECTRIC GRANT JUNK"
+      b = " ON \"t;hing.Köln_en$ts\" TO 'projects;house.admin'"
+      s = a <> ";" <> b
+      f = Parser.find_semicolon(s, :forward)
+      assert binary_part(s, f, 1) == ";"
+      assert Parser.find_semicolon(s, :forward) == byte_size(a)
+
+      f = Parser.find_semicolon(s, :reverse)
+      assert binary_part(String.reverse(s), f, 1) == ";"
+      assert Parser.find_semicolon(s, :reverse) == byte_size(b)
+    end
+
+    test "real world" do
+      a =
+        "CREATE TABLE something (id uuid PRIMARY KEY, value text);\nALTER TABLE something ENABLE "
+
+      b =
+        "ELECTRIC;\nCREATE TABLE ignoreme (id uuid PRIMARY KEY);\nALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;\n"
+
+      f = Parser.find_semicolon(b, :forward)
+      assert binary_part(b, f, 1) == ";"
+
+      f = Parser.find_semicolon(a, :reverse)
+      assert binary_part(String.reverse(a), f, 1) == ";"
     end
   end
 end

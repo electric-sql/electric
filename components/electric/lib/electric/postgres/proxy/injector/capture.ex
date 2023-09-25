@@ -8,6 +8,8 @@ defprotocol Electric.Postgres.Proxy.Injector.Capture do
 
   @spec recv_backend(t(), M.t(), State.t(), Send.t()) :: {t(), State.t(), Send.t()}
   def recv_backend(capture, msg, state, send)
+
+  def recv_client(capture, msgs, state)
 end
 
 defimpl Electric.Postgres.Proxy.Injector.Capture, for: Atom do

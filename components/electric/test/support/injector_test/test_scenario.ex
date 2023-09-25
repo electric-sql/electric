@@ -93,7 +93,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     # )
   end
 
-  def parse_describe(sql, name \\ "") do
+  def parse_describe(sql, name \\ nil) do
+    name = name || random_name()
+
     [
       # putting the close here makes the tests difficult -- 
       # because we can only really respond to the parse message
@@ -104,6 +106,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       %M.Describe{name: name},
       %M.Flush{}
     ]
+  end
+
+  defp random_name() do
+    "query_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
   end
 
   def parse_describe_complete(params \\ []) do
@@ -195,9 +201,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   # updating the expected messages when calling an electric procedure
   def electric_call_complete(status \\ :tx) do
     [
-      %M.RowDescription{},
-      %M.DataRow{},
-      %M.CommandComplete{tag: "SELECT 1"},
+      %M.CommandComplete{tag: "CALL"},
       %M.ReadyForQuery{status: status}
     ]
   end
@@ -206,7 +210,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   Asserts that the injector is in the idle state, so outside a transaction
   with no active capture mode.
   """
-  def idle!({nil, state} = injector) do
+  def idle!({[], state} = injector) do
     refute Injector.State.tx?(state)
     injector
   end
@@ -314,18 +318,18 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   """
   def server(injector, server_messages, receipients) do
-    expected_server_server =
+    expected_proxy_server =
       Keyword.get(receipients, :server, []) |> to_struct()
 
-    expected_server_client =
+    expected_proxy_client =
       Keyword.get(receipients, :client, []) |> to_struct()
 
-    {:ok, injector, server_server, server_client} =
-      Injector.recv_backend(injector, to_struct(server_messages))
+    {:ok, injector, proxy_server, proxy_client} =
+      Injector.recv_server(injector, to_struct(server_messages))
 
     assert_messages_equal(
-      server_server: {server_server, expected_server_server},
-      server_client: {server_client, expected_server_client}
+      proxy_server: {proxy_server, expected_proxy_server},
+      proxy_client: {proxy_client, expected_proxy_client}
     )
 
     injector
@@ -346,15 +350,15 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   """
   def client(injector, client_messages, receipients) do
-    expected_client_server = Keyword.get(receipients, :server, []) |> to_struct()
-    expected_client_client = Keyword.get(receipients, :client, []) |> to_struct()
+    expected_proxy_server = Keyword.get(receipients, :server, []) |> to_struct()
+    expected_proxy_client = Keyword.get(receipients, :client, []) |> to_struct()
 
-    {:ok, injector, client_server, client_client} =
-      Injector.recv_frontend(injector, to_struct(client_messages))
+    {:ok, injector, proxy_server, proxy_client} =
+      Injector.recv_client(injector, to_struct(client_messages))
 
     assert_messages_equal(
-      client_server: {client_server, expected_client_server},
-      client_client: {client_client, expected_client_client}
+      proxy_server: {proxy_server, expected_proxy_server},
+      proxy_client: {proxy_client, expected_proxy_client}
     )
 
     injector
@@ -363,7 +367,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   defp assert_messages_equal(messages) do
     for {direction, {sent, expected}} <- messages do
       if length(sent) != length(expected) do
-        assert [{direction, sent}] == [{direction, expected}]
+        assert_unequal(messages)
       end
 
       for {s, e} <- Enum.zip(sent, expected) do
@@ -377,9 +381,21 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
         # I want to compare lists of messages, not individual messages, so if there's
         # message mis-match, just assert a comparison of the entire list
-        if !equals?, do: assert([{direction, sent}] == [{direction, expected}])
+        # if !equals?, do: assert([{direction, sent}] == [{direction, expected}])
+
+        if !equals?, do: assert_unequal(messages)
       end
     end
+  end
+
+  defp assert_unequal(messages) do
+    {expected, received} =
+      Enum.reduce(messages, {[], []}, fn {direction, {sent, expected}}, {e, r} ->
+        {Keyword.put(e, direction, expected), Keyword.put(r, direction, sent)}
+      end)
+
+    # assert([{direction, sent}] == [{direction, expected}])
+    assert received == expected
   end
 
   @doc """
@@ -418,18 +434,26 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     execute_tx_sql({:capture, {sql, opts}}, injector, mode)
   end
 
-  def execute_tx_sql({:capture, sql}, injector, mode) when is_binary(sql) do
-    execute_tx_sql({:capture, {sql, []}}, injector, mode)
+  def execute_tx_sql({action, sql}, injector, mode) when is_binary(sql) and is_atom(action) do
+    execute_tx_sql({action, {sql, []}}, injector, mode)
   end
 
-  def execute_tx_sql({:passthrough, query}, injector, :simple) do
+  def execute_tx_sql({:passthrough, {query, _opts}}, injector, :simple) do
     injector
     |> client(query(query))
     |> server(complete_ready())
   end
 
-  def execute_tx_sql({:electric, query}, injector, :simple) do
-    {:ok, command} = DDLX.ddlx_to_commands(query)
+  def execute_tx_sql({:electric, {query, opts}}, injector, :simple) do
+    command =
+      case Keyword.fetch(opts, :command) do
+        {:ok, command} ->
+          command
+
+        :error ->
+          {:ok, command} = DDLX.ddlx_to_commands(query)
+          command
+      end
 
     injector
     |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
@@ -439,12 +463,17 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tag = random_tag()
 
     injector
-    |> client(query(query), server: query(query), client: [capture_notice(query)])
+    |> client(query(query),
+      server: query(query),
+      client: [
+        # capture_notice(query)
+      ]
+    )
     |> server(complete_ready(tag), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, client: complete_ready(tag))
   end
 
-  def execute_tx_sql({:passthrough, query}, injector, :extended) do
+  def execute_tx_sql({:passthrough, {query, _opts}}, injector, :extended) do
     injector
     |> client(parse_describe(query))
     |> server(parse_describe_complete())
@@ -452,8 +481,16 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> server(bind_execute_complete())
   end
 
-  def execute_tx_sql({:electric, query}, injector, :extended) do
-    {:ok, command} = DDLX.ddlx_to_commands(query)
+  def execute_tx_sql({:electric, {query, opts}}, injector, :extended) do
+    command =
+      case Keyword.fetch(opts, :command) do
+        {:ok, command} ->
+          command
+
+        :error ->
+          {:ok, command} = DDLX.ddlx_to_commands(query)
+          command
+      end
 
     injector
     |> client(parse_describe(query), client: parse_describe_complete(), server: [])
@@ -466,7 +503,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     injector
     |> client(parse_describe(query),
       server: parse_describe(query),
-      client: [capture_notice(query)]
+      client: [
+        # capture_notice(query)
+      ]
     )
     |> server(parse_describe_complete())
     |> client(bind_execute())

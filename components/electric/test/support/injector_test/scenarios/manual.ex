@@ -44,7 +44,12 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
     injector
     |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: query(query), client: [capture_notice(query)])
+    |> server(complete_ready("BEGIN", :tx),
+      server: query(query),
+      client: [
+        # capture_notice(query)
+      ]
+    )
     |> server(complete_ready(tag, :tx), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
@@ -54,13 +59,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
   def assert_injector_error(injector, _framework, query, error_details) do
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN"),
-      # we should abort the tx before sending a readyforcommand back to the client
-      server: rollback()
-      # client: [error(error_details), ready(:failed)]
-    )
-    |> server(complete_ready("ROLLBACK", :idle), client: [error(error_details), ready(:failed)])
+    |> client(query(query), client: [error(error_details), ready(:failed)])
     |> idle!()
   end
 

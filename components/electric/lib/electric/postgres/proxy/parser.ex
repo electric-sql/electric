@@ -37,23 +37,23 @@ end
 
 defmodule Electric.Postgres.Proxy.Parser do
   alias Electric.Postgres.Proxy.NameParser
+  alias Electric.Postgres.Proxy.Injector.State
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Proxy.{QueryAnalyser, QueryAnalysis}
+  alias PgProtocol.Message, as: M
 
   import __MODULE__.Macros
 
   @default_schema "public"
   @wspc ~c"\t\n\r "
 
-  def parse(sql) do
-    with {:ok, ast} <- PgQuery.parse(sql) do
-      {:ok, stmt(ast)}
-    end
-  end
-
   @spec table_name(binary() | struct(), Keyword.t()) ::
           {:table | :index, {String.t(), String.t()}} | {nil, nil} | no_return
   def table_name(query, opts \\ [])
+
+  def table_name(query, %State{} = state) do
+    table_name(query, default_schema: state.default_schema)
+  end
 
   def table_name(query, opts) when is_binary(query) do
     with {:ok, ast} <- parse(query) do
@@ -415,42 +415,81 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   @type analyse_options() :: [loader: SchemaLoader.t(), default_schema: String.t()]
 
+  @type parse_result() :: {M.Query.t() | M.Parse.t(), PgQuery.t()}
+
+  @spec parse(M.Query.t() | M.Parse.t()) :: {:ok, [parse_result()]} | {:error, term()}
+  def parse(%M.Query{query: query}) when is_binary(query) do
+    with {:ok, query_stmts} <- parse_with_electric_syntax(query, M.Query) do
+      Enum.find_value(query_stmts, {:ok, query_stmts}, fn {_query, stmt} ->
+        case QueryAnalyser.validate(stmt) do
+          {:error, _} = error -> error
+          :ok -> false
+        end
+      end)
+    end
+  end
+
+  # parse statements can only contain a single query, and the parse message
+  # contains additional fields that we need to preserve, so special case these
+  # messages to pass the original message through
+  def parse(%M.Parse{query: query} = msg) when is_binary(query) do
+    with {:ok, [{_query, stmt}]} <- parse_with_electric_syntax(query, M.Parse) do
+      with :ok <- QueryAnalyser.validate(stmt) do
+        {:ok, [{msg, stmt}]}
+      end
+    end
+  end
+
+  defp parse_with_electric_syntax(query, type) do
+    case parse_and_split(query, type) do
+      {:ok, stmts} ->
+        {:ok, stmts}
+
+      {:error, error} ->
+        smuggle_electric_syntax(query, type, error)
+    end
+  end
+
+  @spec analyse([parse_result()], State.t()) :: [QueryAnalysis.t()]
+  def analyse(stmts, state) when is_list(stmts) do
+    Enum.map(stmts, &analyse(&1, state))
+  end
+
   @doc """
   Given a SQL query (potentially containing > 1 SQL statements, separated by
   semicolons) returns an analysis of the statements indicating how they should
   be treated by the proxy.
   """
-  @spec analyse(String.t(), analyse_options()) :: [QueryAnalysis.t()]
-  def analyse(query, opts \\ []) when is_binary(query) do
-    {:ok, loader} = Keyword.fetch(opts, :loader)
-
-    case parse_and_split(query) do
-      {:ok, stmts} ->
-        Enum.map(stmts, &analyse_stmt(&1, loader, opts))
-
-      {:error, error} ->
-        case smuggle_electric_syntax(query, error, loader, opts) do
-          {:ok, stmts} ->
-            Enum.map(stmts, &analyse_stmt(&1, loader, opts))
-
-          {:error, _error} ->
-            [
-              %QueryAnalysis{
-                action: :invalid,
-                table: nil,
-                electrified?: false,
-                allowed?: true,
-                capture?: false,
-                ast: nil,
-                valid?: false,
-                sql: query
-              }
-            ]
-        end
-    end
+  @spec analyse(parse_result(), State.t()) :: QueryAnalysis.t()
+  def analyse({%M.Query{query: query} = msg, stmt}, %State{} = state) do
+    analyse(query, stmt, :simple, msg, state)
   end
 
-  defp parse_and_split(query) do
+  def analyse({%M.Parse{query: query} = msg, stmt}, %State{} = state) do
+    analyse(query, stmt, :extended, msg, state)
+  end
+
+  defp analyse(query, stmt, mode, msg, state)
+       when is_binary(query) and mode in [:simple, :extended] do
+    {type, name} = table_name(stmt, default_schema: state.default_schema)
+
+    analysis =
+      electrify(
+        %QueryAnalysis{
+          mode: mode,
+          table: name,
+          type: type,
+          ast: stmt,
+          sql: query,
+          source: msg
+        },
+        state
+      )
+
+    QueryAnalyser.analyse(stmt, analysis, state)
+  end
+
+  defp parse_and_split(query, type) do
     with {:ok, %PgQuery.ParseResult{stmts: stmts}} <- PgQuery.parse(query) do
       stmts =
         Enum.map(stmts, fn %PgQuery.RawStmt{
@@ -462,58 +501,69 @@ defmodule Electric.Postgres.Proxy.Parser do
           {struct, loc, len}
         end)
 
-      stmts =
+      query_stmts =
         Enum.map(stmts, fn {stmt, loc, len} ->
-          {stmt,
-           query
-           |> binary_part(loc, len)
-           |> String.trim()}
+          {
+            struct(type,
+              query:
+                query
+                |> binary_part(loc, len)
+                |> String.trim()
+            ),
+            stmt
+          }
         end)
 
-      {:ok, stmts}
+      {:ok, query_stmts}
     end
   end
 
-  defp analyse_stmt({stmt, query}, loader, opts) do
-    {type, name} = table_name(stmt, opts)
-
-    analysis = %QueryAnalysis{
-      table: name,
-      electrified?: object_electrified?(type, name, loader),
-      ast: stmt,
-      sql: query
+  @spec electrify(QueryAnalysis.t(), State.t()) :: QueryAnalysis.t()
+  def electrify(%QueryAnalysis{} = analysis, state) do
+    %{
+      analysis
+      | electrified?:
+          analysis.electrified? || object_electrified?(analysis.type, analysis.table, state)
     }
-
-    QueryAnalyser.analyse(stmt, analysis, opts)
   end
 
-  defp object_electrified?(nil, nil, _loader) do
+  def refresh_analysis(analysis, state) do
+    %{electrified?: orig_electrified} = analysis
+
+    analysis = electrify(analysis, state)
+
+    if analysis.electrified? != orig_electrified do
+      QueryAnalyser.analyse(analysis.ast, analysis, state)
+    else
+      analysis
+    end
+  end
+
+  defp object_electrified?(nil, _name, _state) do
     false
   end
 
-  defp object_electrified?(:table, table, loader) do
-    {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
-    electrified?
+  defp object_electrified?(:table, table, state) do
+    State.table_electrified?(state, table)
   end
 
-  defp object_electrified?(:index, index, loader) do
-    {:ok, electrified?} = SchemaLoader.index_electrified?(loader, index)
-    electrified?
+  defp object_electrified?(:index, index, state) do
+    State.index_electrified?(state, index)
   end
 
   @keyword_len byte_size("ELECTRIC")
 
-  defp smuggle_electric_syntax(query, %{cursorpos: cursorpos} = error, loader, opts) do
+  defp smuggle_electric_syntax(query, type, %{cursorpos: cursorpos} = error) do
     if byte_size(query) >= cursorpos + @keyword_len &&
          is_electric_keyword?(binary_part(query, cursorpos, @keyword_len)) do
       safe_query = do_smuggle_electric_syntax(query, cursorpos)
 
-      case parse_and_split(safe_query) do
+      case parse_and_split(safe_query, type) do
         {:ok, stmts} ->
           {:ok, stmts}
 
         {:error, error} ->
-          smuggle_electric_syntax(safe_query, error, loader, opts)
+          smuggle_electric_syntax(safe_query, type, error)
       end
     else
       # this can't be an electrification command
@@ -526,7 +576,7 @@ defmodule Electric.Postgres.Proxy.Parser do
     leading = binary_part(query, 0, cursorpos)
     trailing = binary_part(query, cursorpos, byte_size(query) - cursorpos)
 
-    start_pos = cursorpos - find_semicolon(String.reverse(leading), :reverse)
+    start_pos = cursorpos - find_semicolon(leading, :reverse)
     end_pos = find_semicolon(trailing, :forward) + cursorpos
 
     command_sql =
@@ -563,22 +613,24 @@ defmodule Electric.Postgres.Proxy.Parser do
     "$__" <> (:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)) <> "__$"
   end
 
-  defp find_semicolon(s, direction) do
-    find_semicolon(s, %{sq: false, dq: false, p: 0, d: direction}, 0)
+  def find_semicolon(s, :reverse) do
+    find_semicolon(
+      String.reverse(s),
+      %{sq: false, dq: false, p: 0, d: :reverse, bs: byte_size(s)},
+      0
+    )
+  end
+
+  def find_semicolon(s, :forward) do
+    find_semicolon(s, %{sq: false, dq: false, p: 0, d: :forward, bs: byte_size(s)}, 0)
   end
 
   defp find_semicolon("", %{dq: false, sq: false}, pos) do
     pos
   end
 
-  defp find_semicolon(";" <> _rest, %{dq: false, sq: false, d: direction}, pos) do
-    case direction do
-      :forward ->
-        pos + 1
-
-      :reverse ->
-        pos
-    end
+  defp find_semicolon(";" <> _rest, %{dq: false, sq: false}, pos) do
+    pos
   end
 
   defp find_semicolon("\"" <> rest, %{dq: false} = state, pos) do
@@ -605,8 +657,8 @@ defmodule Electric.Postgres.Proxy.Parser do
     find_semicolon(rest, %{state | sq: false}, pos + 1)
   end
 
-  defp find_semicolon(<<_::utf8, rest::binary>>, state, pos) do
-    find_semicolon(rest, state, pos + 1)
+  defp find_semicolon(<<c::utf8, rest::binary>>, state, pos) do
+    find_semicolon(rest, state, pos + byte_size(<<c::utf8>>))
   end
 
   # case ignoring match of "electric"
@@ -624,5 +676,9 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   def allowed?(analysis) when is_list(analysis) do
     Enum.all?(analysis, & &1.allowed?)
+  end
+
+  def allowed?(%QueryAnalysis{allowed?: allowed?}) do
+    allowed?
   end
 end

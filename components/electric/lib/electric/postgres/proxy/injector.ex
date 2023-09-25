@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Parser
   alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
+  alias Electric.Postgres.Proxy.Capture.Command
   alias Electric.DDLX
 
   require Logger
@@ -24,7 +25,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   @callback migration_version() :: binary()
 
   # FIXME: replace `nil` with some default capture mode module
-  @default_mode nil
+  @default_mode {Capture.Electric, []}
 
   # FIXME: add in the username and the db to this, so we can pass them onto the 
   #        capture modes
@@ -51,7 +52,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
-      {:ok, {capture, %State{loader: loader, query_generator: query_generator}}}
+      {:ok, {[], %State{capture: capture, loader: loader, query_generator: query_generator}}}
     end
   end
 
@@ -83,6 +84,46 @@ defmodule Electric.Postgres.Proxy.Injector do
     else
       struct(module, opts)
     end
+  end
+
+  def recv_client({stack, state}, msgs) do
+    {capture, cmds, state} = Capture.recv_client(state.capture, msgs, state)
+
+    stack = Enum.concat(cmds, stack)
+
+    {stack, state, send} = Command.initialise(stack, state, Send.new())
+
+    %{front: front, back: back} = Send.flush(send)
+
+    {:ok, {stack, %{state | capture: capture}}, back, front}
+  end
+
+  def recv_server({cmds, state}, msgs) do
+    # handle errors from the server here so detecting errors doesn't have to be
+    # done by every command
+    {non_errors, errors} = Enum.split_while(msgs, &(!is_struct(&1, M.ErrorResponse)))
+
+    {cmds, state, send} =
+      Enum.reduce(non_errors, {cmds, state, Send.new()}, fn msg, {cmds, state, send} ->
+        Command.recv_server(cmds, msg, state, send)
+      end)
+
+    {cmds, state, send} =
+      case errors do
+        [] ->
+          if Enum.any?(send.front, &is_struct(&1, M.ErrorResponse)) do
+            Command.send_error(cmds, state, send)
+          else
+            Command.send_client(cmds, state, send)
+          end
+
+        [_ | _] ->
+          Command.recv_error(cmds, errors, state, Send.front(send, errors))
+      end
+
+    %{front: front, back: back} = Send.flush(send)
+
+    {:ok, {cmds, state}, back, front}
   end
 
   @spec recv_frontend(state(), M.t() | [M.t()]) :: response()

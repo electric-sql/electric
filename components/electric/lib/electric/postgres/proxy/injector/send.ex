@@ -104,4 +104,9 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   def pending(%__MODULE__{} = send, side) when side in [:front, :back] do
     Map.fetch!(flush(send), side)
   end
+
+  def filter_front(%__MODULE__{} = send, msg_type) when is_atom(msg_type) do
+    {filtered, front} = Enum.split_with(send.front, &is_struct(&1, msg_type))
+    {filtered, %{send | front: front}}
+  end
 end
