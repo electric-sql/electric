@@ -113,6 +113,12 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       $function$ LANGUAGE PLPGSQL;
       """,
       ##################
+      # This function is overriden at Electric startup by a slightly modified defintion stored in
+      # `functions/create_active_migrations.sql.eex`. We're only keep the old version here so that the migration keeps
+      # working for new users.
+      #
+      # Once all function definitions are evaluated at Electric startup, as outlined in VAX-1016, we'll be able to
+      # remove this legacy one.
       """
       CREATE OR REPLACE FUNCTION #{schema}.create_active_migration(_txid #{@txid_type}, _txts timestamptz, _version text, _query text DEFAULT NULL) RETURNS int8 AS
       $function$
@@ -147,7 +153,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       ##################
       # this function is over-written by later versions
       """
-      CREATE OR REPLACE FUNCTION #{schema}.ddlx_command_end_handler() 
+      CREATE OR REPLACE FUNCTION #{schema}.ddlx_command_end_handler()
           RETURNS EVENT_TRIGGER AS $function$
       BEGIN
           NULL;
@@ -161,7 +167,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
           EXECUTE FUNCTION #{schema}.ddlx_command_end_handler();
       """,
       """
-      CREATE PUBLICATION "#{publication_name}"; 
+      CREATE PUBLICATION "#{publication_name}";
       """,
       Extension.add_table_to_publication_sql(ddl_table)
     ]
