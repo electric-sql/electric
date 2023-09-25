@@ -12,7 +12,7 @@ export default function LocalDBTab(dbName: string): JSX.Element {
 
   return (
     <div>
-      <h3>IndexDB: {dbName}</h3>
+      <h3>{dbName}</h3>
       <ul>
         <li>status: {status}</li>
       </ul>

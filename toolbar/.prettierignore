@@ -1,10 +1,12 @@
 *.log
+*.md
 .DS_Store
 dist/
-dist-dev/
+dev-app/dist/
+dev-app/public/
+dev-app/db/
+dev-app/backend/
 node_modules/
-backend/
-db/
 .gitignore
 .github/
-src/generated/
+dev-app/src/generated/

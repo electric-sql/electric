@@ -24,13 +24,13 @@
   },
   "dependencies": {
     "electric-sql": "latest",
-    "electric-toolbar": "file:../../toolbar",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#master"
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
+    "@electric-sql/debug-toolbar": "file:../../toolbar",
     "@electric-sql/prisma-generator": "latest",
     "@prisma/client": "4.8.1",
     "@types/node": ">=16.11.0",

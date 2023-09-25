@@ -1,9 +1,9 @@
 dist
-dev-dist
+dev-app/dist
 node_modules
-public/wa-sqlite-async.wasm
-public/wa-sqlite-async.mjs
-src/generated
+dev-app/public/wa-sqlite-async.wasm
+dev-app/public/wa-sqlite-async.mjs
+dev-app/src/generated
 
 # We're ignoring the lockfiles here because this example is meant to act like `npx create-electric-app` in that they use latest deps
 pnpm-lock.yaml

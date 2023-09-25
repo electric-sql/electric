@@ -9,14 +9,13 @@ import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 
-// Adds the electric toolbar
-// import AddToolbar, {TypescriptApi} from 'electric-toolbar'
-// import 'electric-toolbar/dist/index.cjs.css'
-// import { globalRegistry } from "electric-sql/satellite";
+// toolbar imports
+import AddToolbar, {TypescriptApi} from '@electric-sql/debug-toolbar'
+import '@electric-sql/debug-toolbar/dist/index.cjs.css'
+import { globalRegistry } from "electric-sql/satellite";
 
 import './Example.css'
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
 
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
@@ -43,8 +42,11 @@ export const Example = () => {
         return
       }
 
-      // AddToolbar(TypescriptApi(globalRegistry))
       setElectric(electric)
+
+      if (DEBUG_MODE) {
+        AddToolbar(TypescriptApi(globalRegistry))
+      }
     }
 
     init()

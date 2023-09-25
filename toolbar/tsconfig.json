@@ -2,7 +2,7 @@
   "compilerOptions": {
     "allowJs": true, // Allow JavaScript files to be compiled
     "allowSyntheticDefaultImports": true, // Allow default imports from modules with no default export
-    "baseUrl": "src/toolbar",
+    "baseUrl": "src",
     "declaration": true, // Generate corresponding .d.ts file
     "esModuleInterop": true, // Disables namespace imports (import * as fs from "fs") and enables CJS/AMD/UMD style imports (import fs from "fs")
     "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased references to the same file.
@@ -17,11 +17,11 @@
     "noUnusedLocals": true, // Report errors on unused locals
     "noUnusedParameters": true, // Report errors on unused parameters
     "resolveJsonModule": true, // Include modules imported with .json extension
-    "outDir": "./toolbar-dist",
+    "outDir": "./dist",
     "skipLibCheck": true, // Skip type checking of all declaration files
     "sourceMap": true, // Generate corrresponding .map file
     "strict": true, // Enable all strict type checking options
     "target": "es6" // Specify ECMAScript target version
   },
-  "include": ["src/toolbar/*", "custom.d.ts"]
+  "include": ["src/*", "custom.d.ts"]
 }

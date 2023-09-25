@@ -1,5 +1,5 @@
 {
-  "name": "electric-toolbar",
+  "name": "@electric-sql/debug-toolbar",
   "version": "0.1.0",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
@@ -7,19 +7,19 @@
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
-    "backend:down": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
-    "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
+    "backend:down": "docker compose -f dev-app/backend/compose/docker-compose.yaml down --volumes",
+    "backend:start": "docker compose --env-file dev-app/backend/compose/.envrc -f dev-app/backend/compose/docker-compose.yaml up",
     "backend:stop": "yarn backend:down",
-    "backend:up": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up --detach",
-    "client:generate": "npx electric-sql generate",
+    "backend:up": "docker compose --env-file dev-app/backend/compose/.envrc -f dev-app/backend/compose/docker-compose.yaml up --detach",
+    "client:generate": "npx electric-sql generate --out ./dev-app/src/generated/client",
     "client:watch": "npx electric-sql generate --watch",
-    "db:migrate": "node ./db/migrate.js",
-    "db:psql": "node ./db/connect.js",
-    "electric:start": "node ./backend/startElectric.js",
-    "build-dev": "node copy-wasm-files.js && node builder.js",
+    "db:migrate": "node ./dev-app/db/migrate.js",
+    "db:psql": "node ./dev-app/db/connect.js",
+    "electric:start": "node ./dev-app/backend/startElectric.js",
+    "build-dev": "node ./dev-app/copy-wasm-files.js && node dev-app/builder.js",
     "build-prod": "NODE_ENV=production npm run build-dev",
     "start": "SERVE=true npm run build-dev",
-    "build": "node toolbar-build.js && tsc --emitDeclarationOnly --outDir dist"
+    "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist"
   },
   "engines": {
     "node": ">=16.11.0"

@@ -9,7 +9,7 @@ import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 
 import { globalRegistry } from 'electric-sql/satellite'
-import { AddToolbar, TypescriptApi } from './toolbar'
+import AddToolbar, { TypescriptApi } from '../../src'
 
 import './Example.css'
 

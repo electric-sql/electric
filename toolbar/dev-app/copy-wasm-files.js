@@ -4,7 +4,7 @@ const path = require('node:path')
 // Copies the wasm files needed for wa-sqlite
 // from `/node_modules/wa-sqlite/dist` into `public`
 const waSqlitePath = path.join('node_modules', 'wa-sqlite', 'dist')
-const publicFolder = 'public'
+const publicFolder = path.join('dev-app', 'public')
 
 const mjsFileName = 'wa-sqlite-async.mjs'
 const mjsFile = path.join(waSqlitePath, mjsFileName)
