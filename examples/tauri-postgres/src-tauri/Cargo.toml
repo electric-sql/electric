@@ -17,6 +17,7 @@ tauri-build = { version = "1.4.0", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.4"
 tauri = { version = "1.4.0", features = [] }
 sqlx = { version = "0.7.0", features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1.29.1", features = ["full"] }
@@ -33,11 +34,11 @@ log = "0.4.19"
 lazy_static = "1.4.0"
 portable-pty = "0.8.1"
 urlencoding = "2.1.3"
-
-
+wasm-bindgen = "0.2.87"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
 # If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
 # DO NOT REMOVE!!
 custom-protocol = [ "tauri/custom-protocol" ]
+

@@ -2,10 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::Serializer;
+use serde_wasm_bindgen::Deserializer;
 use sqlx::Column;
 use sqlx::Row;
 use tokio::runtime::Runtime;
 use tokio::task;
+use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 use std::fs::File;
 use std::fs::OpenOptions;
 use serde_json::Number;
@@ -231,13 +235,42 @@ fn my_tauri_init(connection: State<DbConnection>, name: &str) -> Result<(), Stri
   Ok(())
 }
 
+#[wasm_bindgen]
+pub struct iib {
+  actions: JsValue
+}
+
+impl Serialize for iib {
+  fn serialize<S>(&self, serializer: S) -> JsValue {
+    let serializer = Serializer::new()
+      .serialize_large_number_types_as_bigints(true)
+      .serialize_bytes_as_arrays(false);
+
+    self.serialize(&serializer)?
+  }
+}
+
+impl Deserialize<'_> for iib {
+  fn deserialize(data: &[u8]) -> Self {
+      let s = str::from_utf8(data).unwrap();
+      let parts: Vec<&str> = s.split(',').collect();
+      let name = parts[0];
+      let age = parts[1].parse().unwrap();
+
+      iib {
+          actions: String::from(name),
+      }
+  }
+}
+
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_getRowsModified(connection: State<DbConnection>) -> i64 {
+fn tauri_getRowsModified(connection: State<DbConnection>, iib: iib) -> i64 {
   println!("RSTrace: tauri_getRowsModified");
 
   0
 }
+
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_stop_postgres(connection: State<DbConnection>) -> i64 {
@@ -247,6 +280,8 @@ fn tauri_stop_postgres(connection: State<DbConnection>) -> i64 {
       pg.stop_db().await;
     }
   });
+
+  println!("");
 
   0
 }
@@ -329,6 +364,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -454,5 +491,45 @@ mod tests {
       stop.unwrap();
 
       assert!(true);
+    }
+
+    #[tokio::test]
+    /// This test is a playground for all the things. After something matures, it can become its own test and a new fresh playground should be created
+    /// Run with `cargo test playground`
+    async fn playground() {
+      use serde::{Serialize, Deserialize};
+      use serde_wasm_bindgen;
+      use wasm_bindgen::prelude::*;
+
+
+      #[derive(Serialize, Deserialize)]
+      pub struct Example {
+          pub field1: HashMap<u32, String>,
+          pub field2: Vec<Vec<f32>>,
+          pub field3: [f32; 4],
+      }
+
+      #[wasm_bindgen]
+      pub fn send_example_to_js() -> Result<JsValue, JsValue> {
+          let mut field1 = HashMap::new();
+          field1.insert(0, String::from("ex"));
+
+          let example = Example {
+              field1,
+              field2: vec![vec![1., 2.], vec![3., 4.]],
+              field3: [1., 2., 3., 4.]
+          };
+
+          Ok(serde_wasm_bindgen::to_value(&example)?)
+      }
+
+      #[wasm_bindgen]
+      pub fn receive_example_from_js(val: JsValue) -> Result<(), JsValue> {
+          let example: Example = serde_wasm_bindgen::from_value(val)?;
+          /* …do something with `example`… */
+          Ok(())
+      }
+
+      ()
     }
 }

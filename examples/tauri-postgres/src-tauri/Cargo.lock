@@ -113,6 +113,7 @@ dependencies = [
  "portable-pty",
  "rustyline",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "sqlx 0.7.1",
  "tauri",
@@ -120,6 +121,7 @@ dependencies = [
  "tauri-plugin-log",
  "tokio",
  "urlencoding",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3355,6 +3357,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-wasm-bindgen"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3b4c031cd0d9014307d82b8abf653c0290fbdaeb4c02d00c63cf52f728628bf"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
 ]
 
 [[package]]
