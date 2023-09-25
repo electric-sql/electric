@@ -13,9 +13,10 @@ import { ToolbarApiTypescript } from './client/api/api-typescript'
 
 import { GlobalRegistry } from 'electric-sql/satellite'
 
-
 declare global {
-    interface Window { toolbarApi: ToolbarApiBase; }
+  interface Window {
+    toolbarApi: ToolbarApiBase
+  }
 }
 
 export type { ToolbarApiBase } from './client/api/api-base'
@@ -70,14 +71,11 @@ export function Index() {
   }
 }
 
-
-export function UseTypescriptApi(
-  globalRegistry: GlobalRegistry,
-){
+export function UseTypescriptApi(globalRegistry: GlobalRegistry) {
   window.toolbarApi = new ToolbarApiTypescript(globalRegistry)
 }
 
-export function UseDummyApi(){
+export function UseDummyApi() {
   window.toolbarApi = new ToolbarApiDummy()
 }
 
