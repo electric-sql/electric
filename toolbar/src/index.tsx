@@ -13,6 +13,11 @@ import { ToolbarApiTypescript } from './client/api/api-typescript'
 
 import { GlobalRegistry } from 'electric-sql/satellite'
 
+
+declare global {
+    interface Window { toolbarApi: ToolbarApiBase; }
+}
+
 export type { ToolbarApiBase } from './client/api/api-base'
 
 export function Index() {
@@ -65,18 +70,19 @@ export function Index() {
   }
 }
 
-export function TypescriptApi(
+
+export function UseTypescriptApi(
   globalRegistry: GlobalRegistry,
-): ToolbarApiTypescript {
-  return new ToolbarApiTypescript(globalRegistry)
+){
+  window.toolbarApi = new ToolbarApiTypescript(globalRegistry)
 }
 
-export function DummyApi(): ToolbarApiDummy {
-  return new ToolbarApiDummy()
+export function UseDummyApi(){
+  window.toolbarApi = new ToolbarApiDummy()
 }
 
-export default function AddToolbar(toolbarApi: ToolbarApiBase) {
-  setApi(toolbarApi)
+export function AddToolbar() {
+  setApi(window.toolbarApi)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   document.body.appendChild(toolbar_div)

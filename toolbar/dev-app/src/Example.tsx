@@ -9,7 +9,7 @@ import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 
 import { globalRegistry } from 'electric-sql/satellite'
-import AddToolbar, { TypescriptApi } from '../../src'
+import { AddToolbar, UseTypescriptApi } from '../../src'
 
 import './Example.css'
 
@@ -39,8 +39,9 @@ export const Example = () => {
       if (!isMounted) {
         return
       }
-
-      AddToolbar(TypescriptApi(globalRegistry))
+      //UseDummyApi()
+      UseTypescriptApi(globalRegistry)
+      AddToolbar()
       setElectric(electric)
     }
 

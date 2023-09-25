@@ -10,8 +10,6 @@ import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 
 // toolbar imports
-import AddToolbar, {TypescriptApi} from '@electric-sql/debug-toolbar'
-import '@electric-sql/debug-toolbar/dist/index.cjs.css'
 import { globalRegistry } from "electric-sql/satellite";
 
 import './Example.css'
@@ -44,9 +42,14 @@ export const Example = () => {
 
       setElectric(electric)
 
-      if (DEBUG_MODE) {
-        AddToolbar(TypescriptApi(globalRegistry))
-      }
+      import("@electric-sql/debug-toolbar").then(toolbar => {
+        import('@electric-sql/debug-toolbar/dist/index.cjs.css').then(_ => {
+          if (window.toolbarApi === undefined){
+            toolbar.UseTypescriptApi(globalRegistry)
+          }
+          toolbar.AddToolbar()
+        })
+      });
     }
 
     init()
