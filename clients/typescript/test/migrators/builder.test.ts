@@ -124,7 +124,7 @@ test('generate index creation migration from meta data', (t) => {
             SatOpMigrate_Stmt.create({
               type: SatOpMigrate_Type.CREATE_INDEX,
               sql: 'CREATE INDEX idx_stars_username ON stars(username);',
-            })
+            }),
           ],
         })
       ),
@@ -134,12 +134,9 @@ test('generate index creation migration from meta data', (t) => {
   })
   const migration = makeMigration(metaData)
   t.assert(migration.version === migrationMetaData.version)
-  t.deepEqual(
-    migration.statements,
-    [
-      'CREATE INDEX idx_stars_username ON stars(username);',
-    ]
-  )
+  t.deepEqual(migration.statements, [
+    'CREATE INDEX idx_stars_username ON stars(username);',
+  ])
 })
 
 const migrationsFolder = path.join('./test/migrators/support/migrations')
