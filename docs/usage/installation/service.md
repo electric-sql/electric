@@ -30,7 +30,7 @@ See <DocPageLink path="api/service" /> for the full list of configuration option
 Pre-packaged images are available on Docker Hub at [electricsql/electric](https://hub.docker.com/r/electricsql/electric). Run using e.g.:
 
 ```shell
-docker pull electricsql/electric:latest && 
+docker pull electricsql/electric:latest 
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
