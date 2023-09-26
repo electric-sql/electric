@@ -2,4 +2,4 @@
 "electric-sql": patch
 ---
 
-Do not build triggers if table information is missing.
+Fix the bug where the client would crash/stop working/stop syncing if it received a migration containing a new index creation.
