@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-// Usage: npx create-electric-app my-app
+// Usage: npx create-electric-app@latest my-app
 
 import { spawn } from 'child_process'
 import * as fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import ora from 'ora'
+import shell from 'shelljs'
 
 const spinner = ora('Creating project structure').start()
 
@@ -76,15 +77,43 @@ if (name) {
 }
 
 // Run `yarn install` in the project directory to install the dependencies
+// Also run `yarn upgrade` to replace `electric-sql: latest` by `electric-sql: x.y.z`
+// where `x.y.z` corresponds to the latest version.
+// Same for `@electric-sql/prisma-generator`
 spinner.text = 'Installing dependencies (may take some time) ...'
-const proc = spawn('yarn install', [], { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true })
+const proc = spawn(
+  'yarn install && yarn upgrade --exact electric-sql && yarn upgrade --exact @electric-sql/prisma-generator',
+  [],
+  { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true }
+)
 
 let errors: Uint8Array[] = []
 proc.stderr.on('data', (data) => {
   errors = errors.concat(data)
 })
 
-proc.on('close', (code) => {
+proc.on('close', async (code) => {
+  if (code === 0) {
+    // Pull latest electric image from docker hub
+    // such that we are sure that it is compatible with the latest client
+    shell.exec('docker pull electricsql/electric:latest', { silent: true })
+    
+    const { stdout } = shell.exec("docker image inspect --format '{{.RepoDigests}}' electricsql/electric:latest", { silent: true })
+    const parsedHash = /^\[(.+)\]/.exec(stdout)
+    let electricImage = 'electricsql/electric:latest'
+    if (parsedHash) {
+      electricImage = parsedHash[1]
+    }
+    else {
+      // electric image hash not found
+      // ignore it, and just let .envrc point to electricsql/electric:latest
+      console.info("Could not find hash of electric image. Using 'electricsql/electric:latest' instead.")
+    }
+
+    // write the electric image to use to .envrc file
+    await fs.appendFile(envrcFile, `\nexport ELECTRIC_IMAGE=${electricImage}\n`)
+  }
+
   spinner.stop()
   if (code === 0) {
     console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
