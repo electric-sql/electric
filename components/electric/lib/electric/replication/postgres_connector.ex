@@ -34,7 +34,10 @@ defmodule Electric.Replication.PostgresConnector do
     :ets.new(@ets_table, [:named_table])
     store_config(conn_config)
 
-    [{PostgresConnectorMng, conn_config}]
+    [
+      {Electric.Postgres.ConnectionPool, conn_config},
+      {PostgresConnectorMng, conn_config}
+    ]
     |> Supervisor.init(strategy: :one_for_all)
   end
 

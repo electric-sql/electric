@@ -9,11 +9,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   use GenServer
 
-  alias Electric.Postgres.Extension
+  alias Electric.Postgres.{ConnectionPool, Extension, OidDatabase}
+  alias Electric.Replication.{Connectors, PostgresConnector}
   alias Electric.Replication.Postgres.Client
-  alias Electric.Replication.PostgresConnector
-  alias Electric.Replication.Connectors
-  alias Electric.Postgres.OidDatabase
 
   require Logger
 
@@ -159,15 +157,13 @@ defmodule Electric.Replication.PostgresConnectorMng do
     %State{state | backoff: {backoff, tref}}
   end
 
-  defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case Client.with_conn(
-           conn_config,
-           fn conn ->
-             Client.start_subscription(conn, rep_conf.subscription)
-           end
-         ) do
+  defp start_subscription(%State{origin: origin, repl_config: rep_conf}) do
+    ConnectionPool.checkout!(origin, fn conn ->
+      Client.start_subscription(conn, rep_conf.subscription)
+    end)
+    |> case do
       :ok ->
-        Logger.notice("subscription started for #{state.origin}")
+        Logger.notice("subscription started for #{origin}")
         :ok
 
       error ->
@@ -189,7 +185,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       "Attempting to initialize #{origin}: #{conn_config.username}@#{conn_config.host}:#{conn_config.port}"
     )
 
-    Client.with_conn(conn_config, fn conn ->
+    ConnectionPool.checkout!(origin, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
            {:ok, _} <-
              Client.create_subscription(conn, subscription, publication, electric_connection),
