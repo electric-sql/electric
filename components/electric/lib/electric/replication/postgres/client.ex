@@ -17,44 +17,6 @@ defmodule Electric.Replication.Postgres.Client do
     :epgsql.connect(config)
   end
 
-  @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
-  def with_conn(%{host: host, username: username, password: password} = config, fun) do
-    # Best effort capture exit message, expect trap_exit to be set
-    wait_exit = fn conn, res ->
-      receive do
-        {:EXIT, ^conn, _} -> res
-      after
-        500 -> res
-      end
-    end
-
-    Logger.info("connect: #{inspect(Map.drop(config, [:password]))}")
-
-    {:ok, conn} = :epgsql_sock.start_link()
-
-    case :epgsql.connect(conn, host, username, password, config) do
-      {:ok, ^conn} ->
-        try do
-          fun.(conn)
-        rescue
-          e ->
-            Logger.error(Exception.format(:error, e, __STACKTRACE__))
-            {:error, e}
-        after
-          close(conn)
-          wait_exit.(conn, :ok)
-        end
-
-      error ->
-        close(conn)
-        wait_exit.(conn, error)
-    end
-  end
-
-  def close(conn) do
-    :epgsql.close(conn)
-  end
-
   @types_query """
   SELECT nspname, typname, pg_type.oid, typarray, typelem, typlen, typtype, typbasetype, typrelid, EXISTS(SELECT 1 FROM pg_type as t WHERE pg_type.oid = t.typarray) as is_array
   FROM pg_type
