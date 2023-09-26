@@ -52,6 +52,9 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       );
       """,
       Extension.add_table_to_publication_sql(electrified_tracking_table),
+      # This function definition is included here because it is referenced in the definition of the electrify() function
+      # below it.
+      Extension.Functions.by_name(:validate_table_column_types),
       electrify_function,
       """
       CREATE EVENT TRIGGER #{event_triggers[:sql_drop]} ON sql_drop

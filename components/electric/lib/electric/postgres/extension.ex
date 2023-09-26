@@ -275,58 +275,56 @@ defmodule Electric.Postgres.Extension do
       create_schema(txconn)
       create_migration_table(txconn)
 
-      with_migration_lock(txconn, fn ->
-        # NOTE(alco): This is currently called BEFORE running any internal migrations because we're only defining the
-        # type-checking function that the later defined `electrify()` function depends on.
-        #
-        # Once we move all function definitions out of migrations, we should call this AFTER all internal migrations
-        # have been applied.
-        define_functions(txconn)
+      newly_applied_versions =
+        with_migration_lock(txconn, fn ->
+          existing_versions = txconn |> existing_migration_versions() |> MapSet.new()
 
-        existing_migrations = existing_migrations(txconn)
-
-        versions =
           migrations
-          |> Enum.reject(fn {version, _module} -> version in existing_migrations end)
-          |> Enum.reduce([], fn {version, module}, v ->
-            Logger.info("Running extension migration: #{version}")
-
-            disabling_event_triggers(txconn, module, fn ->
-              for sql <- module.up(@schema) do
-                case :epgsql.squery(txconn, sql) do
-                  results when is_list(results) ->
-                    errors = Enum.filter(results, &(elem(&1, 0) == :error))
-
-                    unless(Enum.empty?(errors)) do
-                      raise RuntimeError,
-                        message:
-                          "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-                    end
-
-                    :ok
-
-                  {:ok, _} ->
-                    :ok
-
-                  {:ok, _cols, _rows} ->
-                    :ok
-                end
-              end
-            end)
-
-            {:ok, _count} =
-              :epgsql.squery(
-                txconn,
-                "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
-              )
-
-            [version | v]
+          |> Enum.reject(fn {version, _module} -> version in existing_versions end)
+          |> Enum.map(fn {version, module} ->
+            :ok = apply_migration(txconn, version, module)
+            version
           end)
-          |> Enum.reverse()
+        end)
 
-        {:ok, versions}
-      end)
+      :ok = define_functions(txconn)
+
+      {:ok, newly_applied_versions}
     end)
+  end
+
+  defp apply_migration(txconn, version, module) do
+    Logger.info("Running extension migration: #{version}")
+
+    disabling_event_triggers(txconn, module, fn ->
+      for sql <- module.up(@schema) do
+        case :epgsql.squery(txconn, sql) do
+          results when is_list(results) ->
+            errors = Enum.filter(results, &(elem(&1, 0) == :error))
+
+            unless(Enum.empty?(errors)) do
+              raise RuntimeError,
+                message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
+            end
+
+            :ok
+
+          {:ok, _} ->
+            :ok
+
+          {:ok, _cols, _rows} ->
+            :ok
+        end
+      end
+    end)
+
+    {:ok, 1} =
+      :epgsql.squery(
+        txconn,
+        "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
+      )
+
+    :ok
   end
 
   # https://dba.stackexchange.com/a/311714
@@ -391,7 +389,7 @@ defmodule Electric.Postgres.Extension do
     {:ok, [], []} = :epgsql.squery(conn, query)
   end
 
-  defp existing_migrations(conn) do
+  defp existing_migration_versions(conn) do
     {:ok, _cols, rows} =
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 

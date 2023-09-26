@@ -1,0 +1,69 @@
+[doc A regression test that verifies correct column name quoting on the generated "perform_reordered_op___*" function]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public."camelCase" (
+            id TEXT PRIMARY KEY,
+            "userId" TEXT
+        );
+        CALL electric.electrify('public."camelCase"');
+        """]
+    [invoke migrate_pg 20230921 $sql]
+
+    !INSERT INTO public."camelCase" VALUES ('1', NULL), ('2', 'pg_user');
+    ?INSERT 0 2
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+
+    ! Satellite.TestWsClient.send_data(conn, ProtocolHelpers.relation("public.camelCase"))
+    ??:ok
+    ?$eprompt
+    """!
+    Satellite.TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
+        ProtocolHelpers.insert("public.camelCase", %{"id" => "3", "userId" => "satellite_user"}),
+        ProtocolHelpers.update("public.camelCase", %{"id" => "1"}, %{"userId" => nil}, %{"userId" => "test_user"})
+    ]))
+    """
+    ??:ok
+    ?$eprompt
+
+[shell electric]
+    ?ws data received: %Electric.Satellite.SatOpLog\{ops: \[.*\
+        %Electric.Satellite.SatTransOp\{op: \{:insert, %Electric.Satellite.SatOpInsert\{\
+          relation_id: \d+, \
+          row_data: %Electric.Satellite.SatOpRow\{nulls_bitmask: <<0>>, values: \["3", "satellite_user"\]\}, \
+          tags: \[\]\
+        \}\}\}, \
+        %Electric.Satellite.SatTransOp\{op: \{:update, %Electric.Satellite.SatOpUpdate\{\
+          relation_id: \d+, \
+          row_data: %Electric.Satellite.SatOpRow\{nulls_bitmask: <<0>>, values: \["1", "test_user"\]\}, \
+          old_row_data: %Electric.Satellite.SatOpRow\{nulls_bitmask: "@", values: \["1", ""\]\}, \
+          tags: \[\]\
+        \}\}\}
+
+    ?Saving transaction \d+ at [0-9/A-F]+ with changes \[\
+      %Electric.Replication.Changes.NewRecord\{relation: \{"public", "camelCase"\}, \
+                                               record: %\{"id" => "3", "userId" => "satellite_user"\}, \
+                                               tags: \["client_1_1@\d+"\]\}, \
+      %Electric.Replication.Changes.UpdatedRecord\{relation: \{"public", "camelCase"\}, \
+                                                   old_record: %\{"id" => "1", "userId" => nil\}, \
+                                                   record: %\{"id" => "1", "userId" => "test_user"\}, \
+                                                   tags: \["postgres_1@\d+", "client_1_1@\d+"\]\}
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.\"camelCase\";" "test_user" 10 ${psql}]
+
+    !SELECT * FROM public."camelCase" ORDER BY id;
+    ??1  | test_user
+    ??2  | pg_user
+    ??3  | satellite_user
+
+[cleanup]
+   [invoke teardown]
