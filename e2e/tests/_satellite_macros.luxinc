@@ -47,6 +47,10 @@
     [invoke wait-for "await client.read_timestamp(db, '${id}', '${timestamp}', '${timestamptz}')" "true" 10 $node]
 [endmacro]
 
+[macro node_await_read_datetime id date time]
+    [invoke wait-for "await client.read_datetime(db, '${id}', '${date}', '${time}')" "true" 10 $node]
+[endmacro]
+
 [macro node_await_table match]
     [invoke wait-for "await client.get_tables(db)" "${match}" 10 $node]
 [endmacro]
