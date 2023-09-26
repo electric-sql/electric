@@ -38,7 +38,7 @@
   "nimble_pool": {:hex, :nimble_pool, "1.0.0", "5eb82705d138f4dd4423f69ceb19ac667b3b492ae570c9f5c900bb3d2f50a847", [:mix], [], "hexpm", "80be3b882d2d351882256087078e1b1952a28bf98d0a287be87e4a24a710b67a"},
   "parse_trans": {:hex, :parse_trans, "3.4.1", "6e6aa8167cb44cc8f39441d05193be6e6f4e7c2946cb2759f015f8c56b76e5ff", [:rebar3], [], "hexpm", "620a406ce75dada827b82e453c19cf06776be266f5a67cff34e1ef2cbb60e49a"},
   "pathex": {:hex, :pathex, "2.5.2", "808510f6d7978881bbdbe6ced56d4125553171db52f85611baf5f35e773f11e1", [:mix], [], "hexpm", "15a9e5bdb5585d0c9c485b3da97604a64d63cbe0e8972851f567b0dba639f7f3"},
-  "pg_protocol": {:git, "https://github.com/electric-sql/pg_protocol.git", "2d05565b06935835427a19b4a17e5385228b9122", []},
+  "pg_protocol": {:git, "https://github.com/electric-sql/pg_protocol.git", "3c10edc882f3fcb60cb63412bb1b73446ad4bbf1", []},
   "pg_query_ex": {:git, "https://github.com/electric-sql/pg_query_ex.git", "fee6dc748deb80e3fc3c6f77d5fa77faef91336d", []},
   "plug": {:hex, :plug, "1.14.2", "cff7d4ec45b4ae176a227acd94a7ab536d9b37b942c8e8fa6dfc0fff98ff4d80", [:mix], [{:mime, "~> 1.0 or ~> 2.0", [hex: :mime, repo: "hexpm", optional: false]}, {:plug_crypto, "~> 1.1.1 or ~> 1.2", [hex: :plug_crypto, repo: "hexpm", optional: false]}, {:telemetry, "~> 0.4.3 or ~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "842fc50187e13cf4ac3b253d47d9474ed6c296a8732752835ce4a86acdf68d13"},
   "plug_crypto": {:hex, :plug_crypto, "1.2.5", "918772575e48e81e455818229bf719d4ab4181fcbf7f85b68a35620f78d89ced", [:mix], [], "hexpm", "26549a1d6345e2172eb1c233866756ae44a9609bd33ee6f99147ab3fd87fd842"},
