@@ -8,10 +8,9 @@ defmodule Electric.Replication.InitialSync do
 
   alias Electric.Telemetry.Metrics
   alias Electric.Replication.Shapes
-  alias Electric.Postgres.{CachedWal, Extension}
+  alias Electric.Postgres.{CachedWal, ConnectionPool, Extension}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
   alias Electric.Replication.Connectors
-  alias Electric.Replication.Postgres.Client
 
   @doc """
   Get a list of transactions that, taken together, represent the current state of the Postgres database.
@@ -98,10 +97,10 @@ defmodule Electric.Replication.InitialSync do
         connection: opts,
         telemetry_span: span
       ) do
-    Client.with_conn(Connectors.get_connection_opts(opts, replication: false), fn conn ->
-      origin = Connectors.origin(opts)
-      {:ok, _, schema} = Extension.SchemaCache.load(origin)
+    origin = Connectors.origin(opts)
+    {:ok, _, schema} = Extension.SchemaCache.load(origin)
 
+    ConnectionPool.checkout!(origin, fn conn ->
       :epgsql.with_transaction(
         conn,
         fn conn ->
@@ -109,7 +108,7 @@ defmodule Electric.Replication.InitialSync do
           # 1. after the transaction had started, and
           # 2. in a separate transaction (thus on a different connection), and
           # 3. before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(opts, subscription_id) end)
+          Task.start(fn -> perform_magic_write(origin, subscription_id) end)
 
           {:ok, _, [{xmin}]} =
             :epgsql.squery(
@@ -150,9 +149,9 @@ defmodule Electric.Replication.InitialSync do
     end)
   end
 
-  defp perform_magic_write(opts, subscription_id) do
-    Connectors.get_connection_opts(opts, replication: false)
-    |> Client.with_conn(
+  defp perform_magic_write(origin, subscription_id) do
+    ConnectionPool.checkout!(
+      origin,
       &Extension.update_transaction_marker(&1, "subscription:" <> subscription_id)
     )
   end

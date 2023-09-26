@@ -48,7 +48,7 @@ defmodule Electric.PlugTest do
 
   describe "/migrations" do
     test_tx "returns 204 if there are no migrations", fn conn ->
-      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+      start_schema_cache(__connection__: conn, origin: "postgres_1")
 
       assert {204, _, _} =
                conn(:get, "/api/migrations", %{"dialect" => "sqlite"})
@@ -59,7 +59,7 @@ defmodule Electric.PlugTest do
     test_tx "returns migrations translated to given dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
-      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+      start_schema_cache(__connection__: conn, origin: "postgres_1")
 
       resp =
         conn(:get, "/api/migrations", %{"dialect" => "sqlite"})
@@ -152,7 +152,7 @@ defmodule Electric.PlugTest do
     test_tx "can return migrations after a certain point", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
-      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+      start_schema_cache(__connection__: conn, origin: "postgres_1")
 
       resp =
         conn(:get, "/api/migrations", %{"dialect" => "sqlite", "version" => "0002"})
@@ -190,12 +190,17 @@ defmodule Electric.PlugTest do
 
     test_tx "returns 204 if there are no new migrations after a given version", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
-      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+      start_schema_cache(__connection__: conn, origin: "postgres_1")
 
       assert {204, _, _} =
                conn(:get, "/api/migrations", %{"dialect" => "sqlite", "version" => "0004"})
                |> Electric.Plug.Router.call([])
                |> sent_resp()
     end
+  end
+
+  defp start_schema_cache(conn_config) do
+    _pool = start_link_supervised!({Electric.Postgres.ConnectionPool, conn_config})
+    {:ok, _pid} = start_supervised({SchemaCache, conn_config})
   end
 end

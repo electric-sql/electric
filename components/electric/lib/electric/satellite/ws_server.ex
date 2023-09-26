@@ -501,9 +501,9 @@ defmodule Electric.Satellite.WebsocketServer do
     defp maybe_pause(_), do: :ok
 
     def fetch_last_acked_client_lsn(state) do
-      state.pg_connector_opts
-      |> Electric.Replication.Connectors.get_connection_opts(replication: false)
-      |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
+      origin = Electric.Replication.Connectors.origin(state.pg_connector_opts)
+
+      Electric.Postgres.ConnectionPool.checkout!(origin, fn conn ->
         Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)
       end)
     end
