@@ -45,6 +45,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   use Electric.Extension.Case, async: false
 
   alias Electric.Replication.Postgres
+  alias Electric.Postgres.ConnectionPool
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Schema
   alias Electric.Postgres.Replication.{Column, Table}
@@ -88,7 +89,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       replication: []
     ]
 
-    {:ok, _pid} = start_supervised({Extension.SchemaCache, {conn_config, [producer: producer]}})
+    _pool = start_link_supervised!({ConnectionPool, conn_config})
+    {:ok, _pid} = start_supervised({Extension.SchemaCache, conn_config})
 
     {:ok, migration_consumer} =
       start_supervised(

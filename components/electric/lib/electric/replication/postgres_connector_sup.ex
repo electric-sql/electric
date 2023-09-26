@@ -5,7 +5,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres
   alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.{CachedWal, ConnectionPool}
   alias Electric.Replication.SatelliteCollectorProducer
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
@@ -27,6 +27,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
     postgres_producer_consumer = Postgres.MigrationConsumer.name(origin)
 
     children = [
+      {ConnectionPool, conn_config},
       %{
         id: :postgres_schema_cache,
         start: {SchemaCache, :start_link, [conn_config]}
