@@ -66,11 +66,11 @@ export const syncTable = async (electric: Electric, table: string) => {
 }
 
 export const get_tables = async (electric: Electric) => {
-  return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
+  return await electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
 
 export const get_columns = async (electric: Electric, table: string) => {
-  return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+  return await electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
 }
 
 export const get_rows = async (electric: Electric, table: string) => {
@@ -82,6 +82,7 @@ export const get_timestamps = async (electric: Electric) => {
 }
 
 type Timestamp = { id: string, created_at: Date, updated_at: Date }
+type Datetime = { id: string, d: Date, t: Date }
 
 export const write_timestamp = async (electric: Electric, timestamp: Timestamp) => {
   return await electric.db.timestamps.create({
@@ -89,7 +90,13 @@ export const write_timestamp = async (electric: Electric, timestamp: Timestamp) 
   })
 }
 
-export const get_timestamp = async (electric: Electric, id: string): Promise<Timestamp | undefined> => {
+export const write_datetime = async (electric: Electric, datetime: Datetime) => {
+  return await electric.db.datetimes.create({
+    data: datetime
+  })
+}
+
+export const get_timestamp = async (electric: Electric, id: string): Promise<Timestamp | undefined> => {
   return await electric.db.timestamps.findUnique({
     where: {
       id: id
@@ -97,15 +104,36 @@ export const get_timestamp = async (electric: Electric, id: string): Promise<Tim
   })
 }
 
-export const read_timestamp = async (electric: Electric, id: string, expected_created_at: string, expected_updated_at: string) => {
-  const timestamp = await get_timestamp(electric, id)
-  return check_timestamp(timestamp, expected_created_at, expected_updated_at)
+export const get_datetime = async (electric: Electric, id: string): Promise<Datetime | undefined> => {
+  const datetime = await electric.db.datetimes.findUnique({
+    where: {
+      id: id
+    }
+  })
+  console.log(`Found date time?:\n${JSON.stringify(datetime, undefined, 2)}`)
+  return datetime
 }
 
-export const check_timestamp = (timestamp: Timestamp | undefined, expected_created_at: string, expected_updated_at: string) => {
+export const read_timestamp = async (electric: Electric, id: string, expectedCreatedAt: string, expectedUpdatedAt: string) => {
+  const timestamp = await get_timestamp(electric, id)
+  return check_timestamp(timestamp, expectedCreatedAt, expectedUpdatedAt)
+}
+
+export const read_datetime = async (electric: Electric, id: string, expectedDate: string, expectedTime: string) => {
+  const datetime = await get_datetime(electric, id)
+  return check_datetime(datetime, expectedDate, expectedTime)
+}
+
+export const check_timestamp = (timestamp: Timestamp | undefined, expectedCreatedAt: string, expectedUpdatedAt: string) => {
   return (timestamp ?? false) &&
-    timestamp!.created_at.getTime() === new Date(expected_created_at).getTime() &&
-    timestamp!.updated_at.getTime() === new Date(expected_updated_at).getTime()
+    timestamp!.created_at.getTime() === new Date(expectedCreatedAt).getTime() &&
+    timestamp!.updated_at.getTime() === new Date(expectedUpdatedAt).getTime()
+}
+
+export const check_datetime = (datetime: Datetime | undefined, expectedDate: string, expectedTime: string) => {
+  return (datetime ?? false) &&
+    datetime!.d.getTime() === new Date(expectedDate).getTime() &&
+    datetime!.t.getTime() === new Date(expectedTime).getTime()
 }
 
 export const get_datetimes = async (electric: Electric) => {
