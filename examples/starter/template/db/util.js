@@ -8,13 +8,14 @@ shell.config.silent = true // don't log output of child processes
 // which binds the container's 5432 port used by PG
 // to some available port on the host machine.
 // So we fetch this host port and use it in the default url.
-const pgPort = fetchHostPortPG() ?? 5432
 const appName = fetchAppName() ?? 'electric'
+const pgPort = fetchHostPortPG() ?? 5432
 const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
+const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
 function fetchHostPortPG() {
-  return fetchHostPort('compose-postgres-1', 5432)
+  return fetchHostPort(`${appName}-postgres-1`, 5432)
 }
 
 // Returns the host port to which the `containerPort` of the `container` is bound.
@@ -50,3 +51,4 @@ function fetchAppName() {
 }
 
 exports.DATABASE_URL = DATABASE_URL
+exports.PUBLIC_DATABASE_URL = PUBLIC_DATABASE_URL
