@@ -9,10 +9,28 @@ import path from 'path'
 import ora from 'ora'
 import shell from 'shelljs'
 
-const spinner = ora('Creating project structure').start()
+const spinner = ora('Validating app name').start()
 
 // The first argument will be the project name
 const projectName = process.argv[2]
+// Validate the project name to follow
+// the restrictions for Docker compose project names.
+// cf. https://docs.docker.com/compose/environment-variables/envvars/
+// Because we will use the app name
+// as the Docker compose project name.
+const regex = /^[a-z0-9]+[a-z0-9-_]*$/
+if (!regex.test(projectName)) {
+  spinner.stop()
+  console.error(
+    '\x1b[31m', // print error in red
+    `Invalid app name '${projectName}'. ` +
+    'App names must contain only lowercase letters, decimal digits, dashes, and underscores, ' +
+    'and must begin with a lowercase letter or decimal digit.'
+  )
+  process.exit(1)
+}
+
+spinner.text = 'Creating project structure'
 
 // Create a project directory with the project name
 const currentDir = process.cwd()
@@ -96,6 +114,7 @@ proc.on('close', async (code) => {
   if (code === 0) {
     // Pull latest electric image from docker hub
     // such that we are sure that it is compatible with the latest client
+    spinner.text = 'Pulling latest Electric image'
     shell.exec('docker pull electricsql/electric:latest', { silent: true })
     
     const { stdout } = shell.exec("docker image inspect --format '{{.RepoDigests}}' electricsql/electric:latest", { silent: true })
