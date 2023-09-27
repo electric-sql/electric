@@ -45,7 +45,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def lsn_in_cached_window?(client_wal_pos) do
+  def lsn_in_cached_window?(client_wal_pos) when not is_nil(client_wal_pos) do
     case :ets.first(@ets_table_name) do
       :"$end_of_table" ->
         false
@@ -70,15 +70,18 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def next_segment(wal_pos) do
-    case :ets.next(@ets_table_name, wal_pos) do
+    case next_ets_key(@ets_table_name, wal_pos) do
       :"$end_of_table" -> :latest
       key -> {:ok, :ets.lookup_element(@ets_table_name, key, 2), key}
     end
   end
 
+  defp next_ets_key(table, nil), do: :ets.first(table)
+  defp next_ets_key(table, wal_pos), do: :ets.next(table, wal_pos)
+
   @impl Api
-  def request_notification(wal_pos) do
-    GenStage.call(__MODULE__, {:request_notification, wal_pos})
+  def request_notification(wal_pos_or_nil) do
+    GenStage.call(__MODULE__, {:request_notification, wal_pos_or_nil})
   end
 
   @impl Api
@@ -87,7 +90,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def serialize_wal_position(wal_pos), do: Integer.to_string(wal_pos)
+  def serialize_wal_position(wal_pos) when not is_nil(wal_pos), do: Integer.to_string(wal_pos)
 
   @impl Api
   def parse_wal_position(binary) do
@@ -126,11 +129,11 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl GenStage
-  def handle_call({:request_notification, wal_pos}, {from, _}, state) do
+  def handle_call({:request_notification, wal_pos_or_nil}, {from, _}, state) do
     ref = make_ref()
-    state = Map.update!(state, :notification_requests, &Map.put(&1, ref, {wal_pos, from}))
+    state = Map.update!(state, :notification_requests, &Map.put(&1, ref, {wal_pos_or_nil, from}))
 
-    if wal_pos < state.last_seen_wal_pos do
+    if is_nil(wal_pos_or_nil) or wal_pos_or_nil < state.last_seen_wal_pos do
       send(self(), :fulfill_notifications)
     end
 
@@ -219,7 +222,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   defp fulfill_notification_requests(%{last_seen_wal_pos: new_max_lsn} = state) do
     fulfilled_refs =
       state.notification_requests
-      |> Stream.filter(fn {_, {target, _}} -> target <= new_max_lsn end)
+      |> Stream.filter(fn {_, {target, _}} -> is_nil(target) or target <= new_max_lsn end)
       |> Stream.each(fn {ref, {_, pid}} ->
         send(pid, {:cached_wal_notification, ref, :new_segments_available})
       end)
