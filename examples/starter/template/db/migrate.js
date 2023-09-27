@@ -14,7 +14,7 @@ const apply = async (fileName) => {
   const filePath = path.join(MIGRATIONS_DIR, fileName)
   console.log('Applying', filePath)
 
-  await db.tx(
+  db.tx(
     (tx) => tx.query(
       sql.file(filePath)
     )
