@@ -7,7 +7,7 @@ defmodule Electric.Replication.ElectrificationTest do
   alias Electric.Replication.Changes.{NewRecord, Transaction}
 
   @origin "electrification-test"
-  @sleep_timeout 5000
+  @sleep_timeout 1000
 
   setup ctx, do: Map.put(ctx, :origin, @origin)
   setup :setup_replicated_db
