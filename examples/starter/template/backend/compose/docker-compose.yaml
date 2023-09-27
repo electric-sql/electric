@@ -1,4 +1,5 @@
 version: "3.8"
+name: "${APP_NAME:-electric}"
 
 configs:
   postgres_config:
