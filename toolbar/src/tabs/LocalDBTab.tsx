@@ -1,22 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { getApi } from '../client/api'
+import { ToolbarTabsProps } from '../tabs'
 
-export default function LocalDBTab(dbName: string): JSX.Element {
-  const [status, setStatus] = useState('')
-
-  useEffect(() => {
-    if (dbName !== undefined) {
-      setStatus(getApi().getSatelliteStatus(dbName))
-    }
-  }, [])
-
+export default function LocalDBTab({ dbName }: ToolbarTabsProps): JSX.Element {
   return (
     <div>
       <h3>{dbName}</h3>
-      <ul>
-        <li>status: {status}</li>
-      </ul>
-      <button onClick={() => getApi().resetDB(dbName)}>RESET LOCAL DB</button>
+      <button onClick={() => getApi().resetDB(dbName)}>RESET INDEXDB </button>
     </div>
   )
 }

@@ -15,16 +15,14 @@
   border-radius: 5px;
   height: fit-content;
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 16px;
+  text-align: left;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #201c1c;
   color: white;
   box-sizing: border-box;
 }
-
-/*.Toolbar *{*/
-/*  all: revert;*/
-/*}*/
 
 .Toolbar-header {
   /*all: revert;*/
@@ -37,7 +35,6 @@
   -moz-osx-font-smoothing: grayscale;
   height: 30px;
   box-sizing: border-box;
-  /*display: inline-block;*/
 }
 
 .Toolbar-header-hidden {
@@ -72,7 +69,7 @@
   float: right;
   color: #61dafb;
   border-style: solid;
-  border-width: 0px;
+  border-width: 0;
   background-color: #1c1e20;
   border-color: #61dafb;
   font-size: 0.8rem;
@@ -140,9 +137,6 @@
 }
 
 .Toolbar-tab-content button {
-  /*all: revert;*/
-  width: 180px;
-  height: 30px;
   margin-right: 10px;
   float: left;
   color: #61dafb;
@@ -150,7 +144,9 @@
   border-width: 1px;
   background-color: #1c1e20;
   border-color: #61dafb;
-  font-size: 0.8rem;
+  width: 150px;
+  height: 25px;
+  font-size: 0.7rem;
   border-radius: 4px;
 }
 
@@ -161,14 +157,4 @@
 .Toolbar-tab-content button:active {
   background-color: #61dafb;
   color: #1c1e20;
-}
-
-#editor {
-  position: relative;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  background-color: lightgrey;
-  color: black;
 }

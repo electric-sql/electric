@@ -21,7 +21,12 @@ declare global {
 
 export type { ToolbarApiBase } from './client/api/api-base'
 
-export function Index() {
+export type ToolbarProps = {
+  api: ToolbarApiBase
+}
+
+export default function ElectricToolbar({ api }: ToolbarProps) {
+  setApi(api)
   const [hidden, setHidden] = useState(true)
   const [dbNames, setDbNames] = useState(['mary', 'mungo', 'midge'])
   const [dbName, setDbName] = useState('mary')
@@ -42,50 +47,54 @@ export function Index() {
 
   if (hidden) {
     return (
-      <div className="Toolbar">
-        <header className="Toolbar-header Toolbar-header-hidden">
-          <img src={logo} className="Toolbar-logo" alt="logo" />
-          <span className="nav-text text-3xl">ElectricSQL Debug Tools</span>
-          <button onClick={handleClick}>SHOW</button>
-        </header>
-      </div>
+      // <div id={'electric-toolbar'}>
+        <div className="Toolbar">
+          <header className="Toolbar-header Toolbar-header-hidden">
+            <img src={logo} className="Toolbar-logo" alt="logo" />
+            <span className="nav-text text-3xl">ElectricSQL Debug Tools</span>
+            <button onClick={handleClick}>SHOW</button>
+          </header>
+        </div>
+      // </div>
     )
   } else {
     return (
-      <div className="Toolbar">
-        <header className="Toolbar-header">
-          <img src={logo} className="Toolbar-logo" alt="logo" />
-          <span className="nav-text">ElectricSQL Debug Tools</span>
-          <button onClick={handleClick}>HIDE</button>
-          <select onInput={handleSelect}>
-            {dbNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </header>
-        <ToolbarTabs dbName={dbName} />
-      </div>
+      // <div id={'electric-toolbar'}>
+        <div className="Toolbar">
+          <header className="Toolbar-header">
+            <img src={logo} className="Toolbar-logo" alt="logo" />
+            <span className="nav-text">ElectricSQL Debug Tools</span>
+            <button onClick={handleClick}>HIDE</button>
+            <select onInput={handleSelect}>
+              {dbNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </header>
+          <ToolbarTabs dbName={dbName} />
+        </div>
+      // </div>
     )
   }
 }
 
-export function UseTypescriptApi(globalRegistry: GlobalRegistry) {
-  window.toolbarApi = new ToolbarApiTypescript(globalRegistry)
+export function TypescriptApi(globalRegistry: GlobalRegistry) {
+  return new ToolbarApiTypescript(globalRegistry)
 }
 
-export function UseDummyApi() {
-  window.toolbarApi = new ToolbarApiDummy()
+export function DummyApi() {
+  return new ToolbarApiDummy()
 }
 
-export function AddToolbar() {
-  setApi(window.toolbarApi)
+export function AddToolbar( api: ToolbarApiBase) {
+  setApi(api)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   document.body.appendChild(toolbar_div)
   const toolbar_root = ReactDOM.createRoot(
     document.getElementById('electric-toolbar') as HTMLElement,
   )
-  toolbar_root.render(<Index />)
+  toolbar_root.render(<ElectricToolbar api={api}/>)
 }

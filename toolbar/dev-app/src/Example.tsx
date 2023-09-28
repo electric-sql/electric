@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useContext } from 'react'
 
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
-
 import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
-
+import { ElectricContext } from 'electric-sql/react'
 import { globalRegistry } from 'electric-sql/satellite'
-import { AddToolbar, UseTypescriptApi } from '../../src'
+import ElectricToolbar, {AddToolbar, TypescriptApi} from '../../src'
 
 import './Example.css'
 
@@ -39,10 +38,9 @@ export const Example = () => {
       if (!isMounted) {
         return
       }
-      //UseDummyApi()
-      UseTypescriptApi(globalRegistry)
-      AddToolbar()
+      AddToolbar(TypescriptApi(globalRegistry))
       setElectric(electric)
+
     }
 
     init()
@@ -56,15 +54,19 @@ export const Example = () => {
     return null
   }
 
+
+
   return (
     <ElectricProvider db={electric}>
       <ExampleComponent />
+      {/*<ElectricToolbar api={TypescriptApi(globalRegistry)} />*/}
     </ElectricProvider>
   )
 }
 
 const ExampleComponent = () => {
-  const { db } = useElectric()!
+  //const { db } = useElectric()!
+  const { db } = useContext(ElectricContext)
   const { results } = useLiveQuery(db.items.liveMany())
 
   useEffect(() => {

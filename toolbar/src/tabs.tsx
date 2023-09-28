@@ -1,24 +1,18 @@
 import React, { useState } from 'react'
 
 import LocalDBTab from './tabs/LocalDBTab'
-import DDLXTab from './tabs/DDLXTab'
-import ShapesTab from './tabs/ShapesTab'
-import XTermTab from './tabs/XTermTab'
-
-let tabs: { [key: string]: (dbName: string) => JSX.Element } = {}
+import SQLTab from './tabs/SQLTab'
+import StatusTab from './tabs/StatusTab'
 
 function TabItem(
   label: string,
   name: string,
-  element: (dbName: string) => JSX.Element,
   handleClick: (e: React.MouseEvent<HTMLLIElement>, name: string) => void,
   active: string,
 ): JSX.Element {
   function click(e: React.MouseEvent<HTMLLIElement>) {
     handleClick(e, name)
   }
-
-  tabs[name] = element
 
   if (active == name) {
     return (
@@ -35,25 +29,37 @@ function TabItem(
   }
 }
 
-type ToolbarTabsProps = {
+export type ToolbarTabsProps = {
   dbName: string
 }
 
 export default function ToolbarTabs({ dbName }: ToolbarTabsProps): JSX.Element {
-  const [active, setActive] = useState('db')
+  const [active, setActive] = useState('status')
   function handleClick(_e: React.MouseEvent<HTMLLIElement>, name: string) {
     setActive(name)
+  }
+
+  function renderComp() {
+    switch (active) {
+      case 'status':
+        return <StatusTab dbName={dbName} />
+      case 'db':
+        return <LocalDBTab dbName={dbName} />
+      case 'sql':
+        return <SQLTab dbName={dbName} />
+      default:
+        return <StatusTab dbName={dbName} />
+    }
   }
 
   return (
     <div className="Toolbar-tabs">
       <ul className="Toolbar-tab-items">
-        {TabItem('Local DB', 'db', LocalDBTab, handleClick, active)}
-        {TabItem('SQL', 'sql', XTermTab, handleClick, active)}
-        {TabItem('Shapes', 'shapes', ShapesTab, handleClick, active)}
-        {TabItem('DDLX', 'ddlx', DDLXTab, handleClick, active)}
+        {TabItem('Status', 'status', handleClick, active)}
+        {TabItem('IndexDB', 'db', handleClick, active)}
+        {TabItem('SQLite', 'sql', handleClick, active)}
       </ul>
-      <div className="Toolbar-tab-content">{tabs[active](dbName)}</div>
+      <div className="Toolbar-tab-content">{renderComp()}</div>
     </div>
   )
 }

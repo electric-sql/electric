@@ -12,6 +12,9 @@ const shared = {
   logLevel: 'info',
   minify: true,
   sourcemap: true,
+  define: {
+    global: 'window',
+  },
 }
 
 build({

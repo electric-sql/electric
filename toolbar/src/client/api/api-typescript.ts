@@ -1,5 +1,8 @@
 import { ToolbarApiBase } from './api-base'
 import { GlobalRegistry } from 'electric-sql/satellite'
+export type SqlValue = string | number | null | Uint8Array | bigint
+export type Row = { [key: string]: SqlValue }
+// import * as ts from "typescript"
 
 export class ToolbarApiTypescript implements ToolbarApiBase {
   private globalRegistry: GlobalRegistry
@@ -9,8 +12,6 @@ export class ToolbarApiTypescript implements ToolbarApiBase {
   }
 
   getSatelliteNames(): string[] {
-    console.log('getSatelliteNames rrr')
-    console.log(this.globalRegistry)
     return Object.keys(this.globalRegistry.satellites)
   }
 
@@ -38,4 +39,35 @@ export class ToolbarApiTypescript implements ToolbarApiBase {
     // On reload, the database will be recreated.
     window.location.reload()
   }
+
+  queryDB(dbName: string, sql: string): Promise<Row[]> {
+    let sat = this.globalRegistry.satellites[dbName]
+    if (sat === undefined) {
+      return new Promise((resolve, _reject) => {
+        resolve([])
+      })
+    } else {
+      return sat.adapter.query({ sql: sql })
+    }
+  }
+
+  //
+  // evalTs(dbName: string, input: string) {
+  //   let sat = this.globalRegistry.satellites[dbName]
+  //   if (sat === undefined) {
+  //
+  //   } else {
+  //     let db = sat
+  //     let code: string = `({
+  //   Run: (data: string): string => {
+  //       return ` + input + ` }
+  //   })`;
+  //
+  //     let result = ts.transpile(code);
+  //     let runnalbe: any = eval(result);
+  //     result = runnalbe.Run("RUN!")
+  //     console.log(result);
+  //
+  //   }
+  // }
 }

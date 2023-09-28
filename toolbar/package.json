@@ -26,7 +26,9 @@
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-codemirror2": "^7.2.1",
+    "codemirror": "^5.57.0"
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
