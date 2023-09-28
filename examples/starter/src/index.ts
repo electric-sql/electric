@@ -164,7 +164,7 @@ await findAndReplaceInFile('ElectricSQL starter template', projectName, indexFil
 
 // Update the port on which Electric runs in the builder.js file
 const builderFile = path.join(projectDir, 'builder.js')
-await findAndReplaceInFile('5133', `${electricPort}`, builderFile)
+await findAndReplaceInFile('ws://localhost:5133', `ws://localhost:${electricPort}`, builderFile)
 
 // Update the port on which Electric runs in startElectric.js file
 const startElectricFile = path.join(projectDir, 'backend', 'startElectric.js')
