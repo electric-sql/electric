@@ -105,7 +105,7 @@ async function checkPort(port, process, defaultPort) {
   spinner.stop()
   
   // Warn the user that the chosen port is occupied
-  console.warn(`Port ${port} for ${process} already in use.`)
+  console.warn(`Port ${port} for ${process} is already in use.`)
   // Propose user to change port
   prompt.start()
   const i = (await prompt.get({
