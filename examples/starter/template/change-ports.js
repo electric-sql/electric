@@ -49,7 +49,6 @@ async function init() {
   webserverPort = await checkPort(userInput.webserverPort, 'the web server', 3001)
   
   // Update port in package.json file
-  const packageJsonContents = await fs.readFile(packageJsonFile, 'utf8')
   await findAndReplaceInFile(`http://localhost:${oldElectricPort}`, `http://localhost:${electricPort}`, packageJsonFile)
   
   // Update the port on which Electric runs in the builder.js file
@@ -60,7 +59,7 @@ async function init() {
   await findAndReplaceInFile(oldElectricPort, `${electricPort}`, startElectricFile)
   
   // Update the port of the web server of the example in the builder.js file
-  await findAndReplaceInFile(new RegExp(`/${oldWebserverPort}/g`), `${webserverPort}`, builderFile)
+  await findAndReplaceInFile(new RegExp(oldWebserverPort, 'g'), `${webserverPort}`, builderFile)
   
   // Update the port for Electric in .envrc
   const envrcFile = path.join(__dirname, 'backend', 'compose', '.envrc')
@@ -90,8 +89,6 @@ async function checkPort(port, process, defaultPort) {
   if (!portOccupied) {
     return port
   }
-  
-  spinner.stop()
   
   // Warn the user that the chosen port is occupied
   console.warn(`Port ${port} for ${process} is already in use.`)
