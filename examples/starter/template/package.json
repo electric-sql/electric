@@ -7,15 +7,16 @@
     "backend:start": "node ./backend/startCompose.js",
     "backend:stop": "yarn backend:down",
     "backend:up": "yarn backend:start --detach",
-    "client:generate": "npx electric-sql generate --service http://localhost:5133",
+    "client:generate": "electric:check && npx electric-sql generate --service http://localhost:5133",
     "client:watch": "yarn client:generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",
     "ports:configure": "node ./change-ports.js",
     "electric:start": "node ./backend/startElectric.js",
+    "electric:check": "node ./check-electric-is-running.js",
     "build": "node copy-wasm-files.js && node builder.js",
     "build-prod": "NODE_ENV=production npm run build",
-    "start": "SERVE=true npm run build"
+    "start": "yarn electric:check && SERVE=true npm run build"
   },
   "engines": {
     "node": ">=16.11.0"

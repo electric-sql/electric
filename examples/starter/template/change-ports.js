@@ -2,6 +2,7 @@ const portUsed = require('tcp-port-used')
 const prompt = require('prompt')
 const path = require('path')
 const fs = require('fs/promises')
+const { findFirstMatchInFile, fetchConfiguredElectricPort } = require('./util/util.js')
 
 // Regex to check that a number is between 0 and 65535
 const portRegex = /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
@@ -13,14 +14,12 @@ init()
 async function init() {
   // Find the old ports for Electric and the webserver
   // such that we know which ports to replace
-  const electricPortRegex = /http:\/\/localhost:([0-9]+)/
   const webserverPortRegex = /listen\(([0-9]+)\)/
   
-  //const __dirname = path.dirname(fileURLToPath(import.meta.url)) // because __dirname is not defined when using modules
   const packageJsonFile = path.join(__dirname, 'package.json')
   const builderFile = path.join(__dirname, 'builder.js')
   
-  const oldElectricPort = await findFirstMatchInFile(electricPortRegex, packageJsonFile, 'Could not find current Electric port in package.json')
+  const oldElectricPort = await fetchConfiguredElectricPort()
   const oldWebserverPort = await findFirstMatchInFile(webserverPortRegex, builderFile, 'Could not find current webserver port in builder.js')
 
   prompt.start()
@@ -54,7 +53,7 @@ async function init() {
   await findAndReplaceInFile(`http://localhost:${oldElectricPort}`, `http://localhost:${electricPort}`, packageJsonFile)
   
   // Update the port on which Electric runs in the builder.js file
-  await findAndReplaceInFile(oldElectricPort, `${electricPort}`, builderFile)
+  await findAndReplaceInFile(`ws://localhost:${oldElectricPort}`, `ws://localhost:${electricPort}`, builderFile)
   
   // Update the port on which Electric runs in startElectric.js file
   const startElectricFile = path.join(__dirname, 'backend', 'startElectric.js')
@@ -78,16 +77,6 @@ async function findAndReplaceInFile(find, replace, file) {
   const content = await fs.readFile(file, 'utf8')
   const replacedContent = content.replace(find, replace)
   await fs.writeFile(file, replacedContent)
-}
-
-async function findFirstMatchInFile(regex, file, notFoundError) {
-  const content = await fs.readFile(file, 'utf8')
-  const res = content.match(regex)
-  if (res === null) {
-    console.error(notFoundError)
-    process.exit(1)
-  }
-  return res[1]
 }
 
 /**
