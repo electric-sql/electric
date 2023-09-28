@@ -28,7 +28,7 @@ const liveServer = (buildOpts) => {
   ).catch(() => process.exit(1))
 
   serve({servedir: 'dist' }, {})
-    .then(() => {
+    .then((serveResult) => {
       createServer((req, res) => {
         const { url, method, headers } = req
 
@@ -43,7 +43,7 @@ const liveServer = (buildOpts) => {
 
         const path = ~url.split('/').pop().indexOf('.') ? url : `/index.html` //for PWA with router
         req.pipe(
-          request({ hostname: '0.0.0.0', port: 8000, path, method, headers }, (prxRes) => {
+          request({ hostname: '0.0.0.0', port: serveResult.port, path, method, headers }, (prxRes) => {
             res.writeHead(prxRes.statusCode, prxRes.headers)
             prxRes.pipe(res, { end: true })
           }),
