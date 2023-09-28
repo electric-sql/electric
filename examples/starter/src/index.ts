@@ -148,8 +148,8 @@ const projectPackageJson = JSON.parse(await fs.readFile(packageJsonFile, 'utf8')
 projectPackageJson.name = projectName
 
 await fs.writeFile(
-  path.join(projectDir, 'package.json'),
-  JSON.stringify(projectPackageJson, null, 2).replace('5133', `${electricPort}`)
+  packageJsonFile,
+  JSON.stringify(projectPackageJson, null, 2).replace('http://localhost:5133', `http://localhost:${electricPort}`)
 )
 
 // Update the project's title in the index.html file
@@ -242,6 +242,12 @@ async function findAndReplaceInFile(find: string | RegExp, replace: string, file
   await fs.writeFile(file, replacedContent)
 }
 
+/**
+ * Checks if the given port is open.
+ * If not, it will ask the user if
+ * they want to choose another port.
+ * @returns The chosen port.
+ */
 async function checkPort(port: number, process: string, defaultPort: number): Promise<number> {
   const portOccupied = await portUsed.check(port)
   if (!portOccupied) {
