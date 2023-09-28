@@ -55,6 +55,10 @@ while (args.length > 0) {
 }
 
 spinner.text = 'Validating app name'
+const appNameRegex = /^[a-z0-9]+[a-z0-9-_]*$/
+const invalidAppNameMessage = `Invalid app name. ` +
+  'App names must contain only lowercase letters, decimal digits, dashes, and underscores, ' +
+  'and must begin with a lowercase letter or decimal digit.'
 
 if (typeof projectName === 'undefined') {
   // no project name is provided -> enter prompt mode
@@ -70,10 +74,8 @@ if (typeof projectName === 'undefined') {
         // cf. https://docs.docker.com/compose/environment-variables/envvars/
         // Because we will use the app name
         // as the Docker compose project name.
-        pattern: /^[a-z0-9]+[a-z0-9-_]*$/,
-        message: `Invalid app name. ` +
-          'App names must contain only lowercase letters, decimal digits, dashes, and underscores, ' +
-          'and must begin with a lowercase letter or decimal digit.',
+        pattern: appNameRegex,
+        message: invalidAppNameMessage,
         required: true,
       },
       electricPort: {
@@ -100,6 +102,10 @@ if (typeof projectName === 'undefined') {
 }
 
 spinner.text = 'Ensuring the necessary ports are free'
+
+if (!appNameRegex.test(projectName)) {
+  error(invalidAppNameMessage)
+}
 
 electricPort = await checkPort(electricPort, 'Electric', 5133)
 webserverPort = await checkPort(webserverPort, 'the web server', 3001)
@@ -257,7 +263,7 @@ async function checkPort(port: number, process: string, defaultPort: number): Pr
   spinner.stop()
 
   // Warn the user that the chosen port is occupied
-  console.warn(`Port ${port} for ${process} already in use.`)
+  console.warn(`Port ${port} for ${process} is already in use.`)
   // Propose user to change port
   prompt.start()
   const i = (await prompt.get({
