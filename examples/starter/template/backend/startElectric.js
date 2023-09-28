@@ -48,7 +48,7 @@ if (db === undefined) {
 
 const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 
-shell.exec(
+const res = shell.exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
@@ -56,6 +56,15 @@ shell.exec(
       -p ${electricPort}:5133 \
       -p 5433:5433 ${electric}`
 )
+
+if (res.code !== 0 && res.stderr.includes('port is already allocated')) {
+  // inform the user that they should change ports
+  console.error(
+    '\x1b[31m',
+    'Could not start Electric because the port seems to be taken.\n' +
+    'To run Electric on another port execute `yarn ports:configure`'
+  )
+}
 
 function error(err) {
   console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]')
