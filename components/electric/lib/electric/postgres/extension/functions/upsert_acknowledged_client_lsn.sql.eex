@@ -10,18 +10,10 @@ BEGIN
 
     INSERT INTO electric.acknowledged_client_lsns AS t
         VALUES (NEW.client_id, NEW.lsn)
-        ON CONFLICT (client_id) DO UPDATE 
+        ON CONFLICT (client_id) DO UPDATE
             SET lsn = NEW.lsn
             WHERE t.lsn IS DISTINCT FROM NEW.lsn;
 
     RETURN NULL;
 END;
 $function$;
-
-CREATE OR REPLACE TRIGGER upsert_acknowledged_client_lsn
-BEFORE INSERT ON electric.acknowledged_client_lsns
-FOR EACH ROW
-WHEN (pg_trigger_depth() < 1)
-EXECUTE FUNCTION electric.upsert_acknowledged_client_lsn();
-
-ALTER TABLE electric.acknowledged_client_lsns ENABLE REPLICA TRIGGER upsert_acknowledged_client_lsn;
