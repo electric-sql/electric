@@ -1,8 +1,9 @@
 defmodule Electric.Postgres.Proxy.Injector do
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Parser
+  alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
-  alias Electric.Postgres.Proxy.Capture.Command
+  alias Electric.Postgres.Proxy.Injector.Operation
   alias Electric.DDLX
 
   require Logger
@@ -25,7 +26,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   @callback migration_version() :: binary()
 
   # FIXME: replace `nil` with some default capture mode module
-  @default_mode {Capture.Electric, []}
+  @default_mode {Injector.Electric, []}
 
   # FIXME: add in the username and the db to this, so we can pass them onto the 
   #        capture modes
@@ -91,11 +92,11 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def recv_client({stack, state}, msgs) do
-    {stack, state} = Command.recv_client(stack, msgs, state)
+    {stack, state} = Operation.recv_client(stack, msgs, state)
 
     # stack = Enum.concat(cmds, stack)
 
-    {stack, state, send} = Command.initialise(stack, state, Send.new())
+    {stack, state, send} = Operation.initialise(stack, state, Send.new())
 
     %{front: front, back: back} = Send.flush(send)
 
@@ -110,20 +111,20 @@ defmodule Electric.Postgres.Proxy.Injector do
 
     {cmds, state, send} =
       Enum.reduce(non_errors, {cmds, state, Send.new()}, fn msg, {cmds, state, send} ->
-        Command.recv_server(cmds, msg, state, send)
+        Operation.recv_server(cmds, msg, state, send)
       end)
 
     {cmds, state, send} =
       case errors do
         [] ->
           if Enum.any?(send.front, &is_struct(&1, M.ErrorResponse)) do
-            Command.send_error(cmds, state, send)
+            Operation.send_error(cmds, state, send)
           else
-            Command.send_client(cmds, state, send)
+            Operation.send_client(cmds, state, send)
           end
 
         [_ | _] ->
-          Command.recv_error(cmds, errors, state, Send.front(send, errors))
+          Operation.recv_error(cmds, errors, state, Send.front(send, errors))
       end
 
     %{front: front, back: back} = Send.flush(send)

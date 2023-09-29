@@ -210,7 +210,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   Asserts that the injector is in the idle state, so outside a transaction
   with no active capture mode.
   """
-  def idle!({[%Electric.Postgres.Proxy.Injector.Capture.Electric{}], state} = injector) do
+  def idle!({[%Electric.Postgres.Proxy.Injector.Electric{}], state} = injector) do
     refute Injector.State.tx?(state)
     injector
   end

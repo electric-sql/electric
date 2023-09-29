@@ -445,8 +445,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     |> idle!()
   end
 
-  describe "Capture.Electric" do
-    alias Electric.Postgres.Proxy.Injector.Capture.Electric
+  describe "Injector.Electric" do
+    alias Electric.Postgres.Proxy.Injector.Electric
     alias PgProtocol.Message, as: M
 
     test "group_messages/1" do
