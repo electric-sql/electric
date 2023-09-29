@@ -16,7 +16,7 @@ export class DatabaseAdapter
     super()
   }
 
-  run({ sql, args }: Statement): Promise<RunResult> {
+  async run({ sql, args }: Statement): Promise<RunResult> {
     if (args && !Array.isArray(args)) {
       throw new Error(
         `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
@@ -25,16 +25,12 @@ export class DatabaseAdapter
 
     const wrapInTransaction = false // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
 
-    return this.db
-      .run(sql, args, wrapInTransaction)
-      .then((result: capSQLiteChanges) => {
-        // TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
-        const rowsAffected = result.changes?.changes ?? 0
-        return { rowsAffected }
-      })
+    const result = await this.db.run(sql, args, wrapInTransaction)
+    const rowsAffected = result.changes?.changes ?? 0
+    return { rowsAffected }
   }
 
-  runInTransaction(...statements: Statement[]): Promise<RunResult> {
+  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     if (statements.some((x) => x.args && !Array.isArray(x.args))) {
       throw new Error(
         `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
@@ -43,29 +39,24 @@ export class DatabaseAdapter
 
     const set: capSQLiteSet[] = statements.map(({ sql, args }) => ({
       statement: sql,
-      values: args as SqlValue[],
+      values: args as SqlValue[] | undefined,
     }))
-    const wrapInTransaction = true
 
-    return this.db
-      .executeSet(set, wrapInTransaction)
-      .then((result: capSQLiteChanges) => {
-        // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
-        const rowsAffected = result.changes?.changes ?? 0
-        return { rowsAffected }
-      })
+    const wrapInTransaction = true
+    const result = await this.db.executeSet(set, wrapInTransaction)
+    const rowsAffected = result.changes?.changes ?? 0
+    // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
+    return { rowsAffected } 
   }
 
-  query({ sql, args }: Statement): Promise<Row[]> {
+  async query({ sql, args }: Statement): Promise<Row[]> {
     if (args && !Array.isArray(args)) {
       throw new Error(
         `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
       )
     }
-
-    return this.db.query(sql, args).then((result) => {
-      return result.values ?? []
-    })
+    const result = await this.db.query(sql, args)
+    return result.values ?? []
   }
 
   // No async await on capacitor-sqlite promise-based APIs + the complexity of the transaction<T> API make for one ugly implementation...
