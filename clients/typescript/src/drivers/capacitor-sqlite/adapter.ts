@@ -7,13 +7,17 @@ import {
 } from '../../electric/adapter'
 import { Row, SqlValue, Statement } from '../../util'
 import { Database } from './database'
+import { Mutex } from 'async-mutex'
 
 export class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
+  #txMutex: Mutex
+
   constructor(public db: Database) {
     super()
+    this.#txMutex = new Mutex()
   }
 
   async run({ sql, args }: Statement): Promise<RunResult> {
@@ -60,10 +64,17 @@ export class DatabaseAdapter
   }
 
   // No async await on capacitor-sqlite promise-based APIs + the complexity of the transaction<T> API make for one ugly implementation...
-  transaction<T>(
+  async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
+    const releaseMutex = await this.#txMutex.acquire()
     return new Promise<T>((resolve, reject) => {
+      const releaseMutexAndReject = (err?: any) => {
+        // if the tx is rolled back, release the lock and reject the promise
+        releaseMutex()
+        reject(err)
+      }
+
       this.db
         .beginTransaction()
         .then(() => {
@@ -74,20 +85,21 @@ export class DatabaseAdapter
               this.db
                 .commitTransaction()
                 .then(() => {
+                  releaseMutex()
                   resolve(res)
                 })
-                .catch((err) => reject(err))
+                .catch((err) => releaseMutexAndReject(err))
             })
           } catch (err) {
             this.db
               .rollbackTransaction()
               .then(() => {
-                reject(err)
+                releaseMutexAndReject(err)
               })
-              .catch((err) => reject(err))
+              .catch((err) => releaseMutexAndReject(err))
           }
         })
-        .catch((err) => reject(err)) // Are all those catch -> rejects needed? Apparently, yes because of explicit promises. Tests confirm this.
+        .catch((err) => releaseMutexAndReject(err)) // Are all those catch -> rejects needed? Apparently, yes because of explicit promises. Tests confirm this.
     })
   }
 }
