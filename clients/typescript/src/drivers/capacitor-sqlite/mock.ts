@@ -3,7 +3,6 @@ import { DbName } from '../../util/types'
 import { Database } from './database'
 
 export class MockDatabase implements Database {
-
   constructor(public dbname: DbName, public fail?: Error) {}
 
   executeSet(): Promise<capSQLiteChanges> {
@@ -14,8 +13,8 @@ export class MockDatabase implements Database {
     return this.resolveIfNotFail({
       values: [
         { textColumn: 'text1', numberColumn: 1 },
-        { textColumn: 'text2', numberColumn: 2 }
-      ]
+        { textColumn: 'text2', numberColumn: 2 },
+      ],
     })
   }
 
@@ -33,9 +32,7 @@ export class MockDatabase implements Database {
   }
 
   private resolveIfNotFail<T>(value: T): Promise<T> {
-    if (typeof this.fail !== 'undefined')
-      return Promise.reject(this.fail)
-    else 
-      return Promise.resolve(value)
+    if (typeof this.fail !== 'undefined') return Promise.reject(this.fail)
+    else return Promise.resolve(value)
   }
 }

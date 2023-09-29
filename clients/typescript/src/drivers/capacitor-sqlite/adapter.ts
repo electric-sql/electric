@@ -50,7 +50,7 @@ export class DatabaseAdapter
     const result = await this.db.executeSet(set, wrapInTransaction)
     const rowsAffected = result.changes?.changes ?? 0
     // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
-    return { rowsAffected } 
+    return { rowsAffected }
   }
 
   async query({ sql, args }: Statement): Promise<Row[]> {
