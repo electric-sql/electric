@@ -58,12 +58,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       ]
 
       assert {:ok,
-              {[],
-               %Injector.State{
-                 capture: %FakeCapture{
+              {[
+                 %FakeCapture{
                    database: "important",
                    version: :default
-                 },
+                 }
+               ],
+               %Injector.State{
                  loader: {MockSchemaLoader, something: :here}
                }}} =
                Injector.new(opts, username: "simon", database: "important")
@@ -78,8 +79,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         ]
       ]
 
-      assert {:ok,
-              {[], %Injector.State{capture: %FakeCapture{database: "important", version: :fake}}}} =
+      assert {:ok, {[%FakeCapture{database: "important", version: :fake}], %Injector.State{}}} =
                Injector.new(opts, username: "fake", database: "important")
     end
   end

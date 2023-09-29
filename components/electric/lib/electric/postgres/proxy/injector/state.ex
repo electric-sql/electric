@@ -22,7 +22,6 @@ defmodule Electric.Postgres.Proxy.Injector.State do
 
   defstruct loader: nil,
             query_generator: nil,
-            capture: nil,
             default_schema: "public",
             tx: nil,
             metadata: %{}
@@ -32,7 +31,6 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   @type t() :: %__MODULE__{
           loader: loader(),
           query_generator: query_generator(),
-          capture: Injector.Capture.t(),
           default_schema: String.t(),
           tx: nil | Tx.t(),
           metadata: map()

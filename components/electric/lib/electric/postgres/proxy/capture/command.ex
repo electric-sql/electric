@@ -1,5 +1,6 @@
 defprotocol Electric.Postgres.Proxy.Capture.Command do
   def initialise(cmd, state, send)
+  def recv_client(cmd, msgs, state)
   def recv_server(cmd, msg, state, send)
   def send_client(cmd, state, send)
   def recv_error(cmd, msgs, state, send)
@@ -15,6 +16,14 @@ defmodule Electric.Postgres.Proxy.Capture.Command.Impl do
       import Electric.Postgres.Proxy.Capture.Command.Impl
       alias Electric.Postgres.Proxy.{Injector.Send, Injector.State, Parser}
       alias PgProtocol.Message, as: M
+
+      def initialise(cmd, state, send) do
+        {cmd, state, send}
+      end
+
+      def recv_client(cmd, msgs, state) do
+        {cmd, state}
+      end
 
       def recv_server(_, %M.ReadyForQuery{} = msg, state, send) do
         {nil, state, send}
@@ -36,7 +45,12 @@ defmodule Electric.Postgres.Proxy.Capture.Command.Impl do
         {nil, state, send}
       end
 
-      defoverridable recv_server: 4, send_client: 3, recv_error: 4, send_error: 3
+      defoverridable initialise: 3,
+                     recv_client: 3,
+                     recv_server: 4,
+                     send_client: 3,
+                     recv_error: 4,
+                     send_error: 3
     end
   end
 
@@ -108,11 +122,25 @@ alias Electric.Postgres.Proxy.{Injector.Send, Capture.Command}
 defimpl Command, for: List do
   use Command.Impl
 
+  def recv_client([], _msgs, _state) do
+    raise "empty command stack!"
+  end
+
+  def recv_client([cmd | rest], msgs, state) do
+    case Command.recv_client(cmd, msgs, state) do
+      {nil, state} ->
+        {rest, state}
+
+      {cmds, state} ->
+        {List.flatten([cmds | rest]), state}
+    end
+  end
+
   def initialise([], state, send) do
     {[], state, send}
   end
 
-  def initialise([cmd | rest] = cmds, state, send) do
+  def initialise([cmd | rest], state, send) do
     case Command.initialise(cmd, state, send) do
       {nil, state, send} ->
         initialise(rest, state, send)

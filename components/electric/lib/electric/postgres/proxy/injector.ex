@@ -52,7 +52,11 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
-      {:ok, {[], %State{capture: capture, loader: loader, query_generator: query_generator}}}
+      {:ok,
+       {
+         [capture],
+         %State{loader: loader, query_generator: query_generator}
+       }}
     end
   end
 
@@ -87,15 +91,16 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def recv_client({stack, state}, msgs) do
-    {capture, cmds, state} = Capture.recv_client(state.capture, msgs, state)
+    {stack, state} = Command.recv_client(stack, msgs, state)
 
-    stack = Enum.concat(cmds, stack)
+    # stack = Enum.concat(cmds, stack)
 
     {stack, state, send} = Command.initialise(stack, state, Send.new())
 
     %{front: front, back: back} = Send.flush(send)
 
-    {:ok, {stack, %{state | capture: capture}}, back, front}
+    # {:ok, {stack, %{state | capture: capture}}, back, front}
+    {:ok, {stack, state}, back, front}
   end
 
   def recv_server({cmds, state}, msgs) do

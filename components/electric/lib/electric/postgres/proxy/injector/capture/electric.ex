@@ -9,7 +9,9 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
   defmodule BindExecuteMigration do
     defstruct [:commands, :framework]
 
-    defimpl Capture do
+    defimpl Command do
+      use Command.Impl
+
       require Logger
 
       def recv_client(execute, msgs, state) do
@@ -17,7 +19,6 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
           {version_commands, state} = capture_version(msgs, execute, state)
 
           {
-            nil,
             Enum.concat(
               [%Command.Transparent{msgs: msgs}],
               [%Command.Between{commands: execute.commands ++ version_commands}]
@@ -25,7 +26,7 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
             state
           }
         else
-          {execute, [%Command.Transparent{msgs: msgs}], state}
+          {[%Command.Transparent{msgs: msgs}, execute], state}
         end
       end
 
@@ -60,16 +61,17 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
   defmodule BindExecute do
     defstruct [:commands]
 
-    defimpl Capture do
+    defimpl Command do
+      use Command.Impl
+
       def recv_client(execute, msgs, state) do
         if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
           {
-            nil,
             [%Command.Transparent{msgs: msgs}, %Command.Between{commands: execute.commands}],
             state
           }
         else
-          {execute, [%Command.Transparent{msgs: msgs}], state}
+          {[%Command.Transparent{msgs: msgs}, execute], state}
         end
       end
     end
@@ -78,16 +80,18 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
   defmodule BindExecuteElectric do
     defstruct [:commands, :electric]
 
-    defimpl Capture do
+    defimpl Command do
+      use Command.Impl
+
       alias Elixir.Electric.DDLX
 
       def recv_client(execute, msgs, state) do
         if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
           tag = DDLX.Command.tag(execute.electric)
 
-          {nil, execute.commands ++ [%Command.FakeExecute{msgs: msgs, tag: tag}], state}
+          {execute.commands ++ [%Command.FakeExecute{msgs: msgs, tag: tag}], state}
         else
-          {execute, [], state}
+          {execute, state}
         end
       end
     end
@@ -203,28 +207,36 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
     end
   end
 
-  defimpl Capture do
-    def recv_frontend(m, msg, state, send) do
-      {m, state, Send.back(send, msg)}
+  defimpl Command do
+    def initialise(electric, state, send) do
+      {electric, state, send}
     end
 
-    def recv_backend(m, msg, state, send) do
-      {m, state, Send.front(send, msg)}
-    end
-
-    def recv_client(%{capture: nil} = electric, msgs, state) do
+    def recv_client(electric, msgs, state) do
       chunks = Electric.group_messages(msgs)
 
       {commands, {electric, state}} =
         Enum.flat_map_reduce(chunks, {electric, state}, &command_for_msgs/2)
 
-      {electric, commands, state}
+      {Enum.concat(commands, [electric]), state}
     end
 
-    def recv_client(%{capture: capture} = electric, msgs, state) do
-      {capture, commands, state} = Capture.recv_client(capture, msgs, state)
+    # override the default implementations because we never want to pop ourselves off
+    # the operation stack
+    def recv_server(electric, msg, state, send) do
+      {electric, state, Send.front(send, msg)}
+    end
 
-      {%{electric | capture: capture}, commands, state}
+    def send_client(electric, state, send) do
+      {electric, state, send}
+    end
+
+    def recv_error(electric, _msgs, state, send) do
+      {electric, state, send}
+    end
+
+    def send_error(electric, state, send) do
+      {electric, state, send}
     end
 
     defp command_for_msgs({:simple, [%M.Query{} = msg]}, {electric, state}) do
@@ -261,30 +273,28 @@ defmodule Electric.Postgres.Proxy.Injector.Capture.Electric do
                   {Electric.command_from_analysis([], analysis, state), {electric, state}}
 
                 %{action: {:electric, cmd}} = analysis ->
-                  capture =
+                  bind =
                     %BindExecuteElectric{
                       commands: Electric.command_from_analysis([], analysis, state),
                       electric: cmd
                     }
 
-                  {[%Command.FakeBind{msgs: msgs}], {%{electric | capture: capture}, state}}
+                  {[%Command.FakeBind{msgs: msgs}, bind], {electric, state}}
 
                 %{action: {:migration_version, framework}} = analysis ->
-                  capture = %BindExecuteMigration{
+                  bind = %BindExecuteMigration{
                     commands: Electric.command_from_analysis([], analysis, state),
                     framework: framework
                   }
 
-                  {[%Command.Wait{msgs: msgs, signal: signal}],
-                   {%{electric | capture: capture}, state}}
+                  {[%Command.Wait{msgs: msgs, signal: signal}, bind], {electric, state}}
 
                 analysis ->
-                  capture = %BindExecute{
+                  bind = %BindExecute{
                     commands: Electric.command_from_analysis([], analysis, state)
                   }
 
-                  {[%Command.Wait{msgs: msgs, signal: signal}],
-                   {%{electric | capture: capture}, state}}
+                  {[%Command.Wait{msgs: msgs, signal: signal}, bind], {electric, state}}
               end
 
             {:error, error} ->
