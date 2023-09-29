@@ -24,12 +24,12 @@ test('database adapter query works', async (t) => {
   t.deepEqual(result, [
     {
       textColumn: 'text1',
-      numberColumn: 1
+      numberColumn: 1,
     },
     {
       textColumn: 'text2',
-      numberColumn: 2
-    }
+      numberColumn: 2,
+    },
   ])
 })
 
@@ -56,12 +56,12 @@ test('database adapter interactive transaction works', async (t) => {
         t.deepEqual(res, [
           {
             textColumn: 'text1',
-            numberColumn: 1
+            numberColumn: 1,
           },
           {
             textColumn: 'text2',
-            numberColumn: 2
-          }
+            numberColumn: 2,
+          },
         ])
 
         setResult(5)

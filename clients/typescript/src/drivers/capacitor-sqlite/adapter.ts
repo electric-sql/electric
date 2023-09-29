@@ -23,30 +23,37 @@ export class DatabaseAdapter
       )
     }
 
-    const wrapInTransaction = false; // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
+    const wrapInTransaction = false // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
 
-    return this.db.run(sql,args,wrapInTransaction).then((result: capSQLiteChanges) => {
-			// TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
-      const rowsAffected = result.changes?.changes ?? 0;
-			return { rowsAffected };
-		});
+    return this.db
+      .run(sql, args, wrapInTransaction)
+      .then((result: capSQLiteChanges) => {
+        // TODO: unsure how capacitor-sqlite populates the changes value, and what is expected of electric here.
+        const rowsAffected = result.changes?.changes ?? 0
+        return { rowsAffected }
+      })
   }
 
   runInTransaction(...statements: Statement[]): Promise<RunResult> {
     if (statements.some((x) => x.args && !Array.isArray(x.args))) {
       throw new Error(
         `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
-      );
+      )
     }
 
-    const set: capSQLiteSet[] = statements.map( ({sql, args}) => ({statement: sql, values: args as SqlValue[] }));
-    const wrapInTransaction = true;
+    const set: capSQLiteSet[] = statements.map(({ sql, args }) => ({
+      statement: sql,
+      values: args as SqlValue[],
+    }))
+    const wrapInTransaction = true
 
-    return this.db.executeSet(set, wrapInTransaction).then( (result: capSQLiteChanges) => {
-      // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
-      const rowsAffected = result.changes?.changes ?? 0;
-      return { rowsAffected };
-		});
+    return this.db
+      .executeSet(set, wrapInTransaction)
+      .then((result: capSQLiteChanges) => {
+        // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
+        const rowsAffected = result.changes?.changes ?? 0
+        return { rowsAffected }
+      })
   }
 
   query({ sql, args }: Statement): Promise<Row[]> {
@@ -56,34 +63,41 @@ export class DatabaseAdapter
       )
     }
 
-    return this.db.query(sql, args).then( (result) => {
-      return result.values ?? [];
-    });
+    return this.db.query(sql, args).then((result) => {
+      return result.values ?? []
+    })
   }
 
   // No async await on capacitor-sqlite promise-based APIs + the complexity of the transaction<T> API make for one ugly implementation...
   transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-
-    return new Promise<T>( (resolve,reject) => {
-      this.db.beginTransaction().then( () => {
-        const wrappedTx = new WrappedTx(this);
-        try {
-          f(wrappedTx, (res) => {
-            // Client calls this setResult function when done. Commit and resolve.
-            this.db.commitTransaction().then( () => {
-              resolve(res);
-            }).catch( (err) => reject(err));
-          });
-        }
-        catch (err) {
-          this.db.rollbackTransaction().then( () => {
-            reject(err);
-          }).catch( (err) => reject(err));
-        }
-      }).catch( (err) => reject(err)); // Are all those catch -> rejects needed? Apparently, yes because of explicit promises. Tests confirm this.
-    });
+    return new Promise<T>((resolve, reject) => {
+      this.db
+        .beginTransaction()
+        .then(() => {
+          const wrappedTx = new WrappedTx(this)
+          try {
+            f(wrappedTx, (res) => {
+              // Client calls this setResult function when done. Commit and resolve.
+              this.db
+                .commitTransaction()
+                .then(() => {
+                  resolve(res)
+                })
+                .catch((err) => reject(err))
+            })
+          } catch (err) {
+            this.db
+              .rollbackTransaction()
+              .then(() => {
+                reject(err)
+              })
+              .catch((err) => reject(err))
+          }
+        })
+        .catch((err) => reject(err)) // Are all those catch -> rejects needed? Apparently, yes because of explicit promises. Tests confirm this.
+    })
   }
 }
 
@@ -97,15 +111,18 @@ class WrappedTx implements Tx {
     successCallback?: (tx: Tx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    this.adapter.run(statement).then( (runResult) => {
-      if (typeof successCallback !== 'undefined') {
-        successCallback(this, runResult)
-      }
-    }).catch( (err) => {
-      if (typeof errorCallback !== 'undefined') {
-        errorCallback(err);
-      }
-    });
+    this.adapter
+      .run(statement)
+      .then((runResult) => {
+        if (typeof successCallback !== 'undefined') {
+          successCallback(this, runResult)
+        }
+      })
+      .catch((err) => {
+        if (typeof errorCallback !== 'undefined') {
+          errorCallback(err)
+        }
+      })
   }
 
   query(
@@ -113,14 +130,17 @@ class WrappedTx implements Tx {
     successCallback: (tx: Tx, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    this.adapter.query(statement).then( (result) => {
-      if (typeof successCallback !== 'undefined') {
-        successCallback(this, result)
-      }
-    }).catch( (err) => {
-      if (typeof errorCallback !== 'undefined') {
-        errorCallback(err);
-      }
-    });
+    this.adapter
+      .query(statement)
+      .then((result) => {
+        if (typeof successCallback !== 'undefined') {
+          successCallback(this, result)
+        }
+      })
+      .catch((err) => {
+        if (typeof errorCallback !== 'undefined') {
+          errorCallback(err)
+        }
+      })
   }
 }
