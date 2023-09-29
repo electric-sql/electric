@@ -1037,6 +1037,7 @@ function deserializeColumnData(
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
+    case 'REAL':
     case 'FLOAT4':
     case 'FLOAT8':
     case 'INT':
