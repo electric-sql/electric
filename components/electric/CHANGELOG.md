@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.6.4
+
+### Patch Changes
+
+- f045ec8: [VAX-1062] Fix column name quoting in a trigger function.
+
 ## 0.6.3
 
 ### Patch Changes
