@@ -1,4 +1,4 @@
-import { capSQLiteChanges, capSQLiteSet } from '@capacitor-community/sqlite'
+import { capSQLiteSet } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
@@ -67,10 +67,14 @@ export class DatabaseAdapter
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
+    
+    // Acquire mutex before even instantiating the transaction object.
+    // This will ensure transactions cannot get interleaved. 
     const releaseMutex = await this.#txMutex.acquire()
     return new Promise<T>((resolve, reject) => {
+      
+      // Convenience function. Rejecting should always release the acquired mutex. 
       const releaseMutexAndReject = (err?: any) => {
-        // if the tx is rolled back, release the lock and reject the promise
         releaseMutex()
         reject(err)
       }
