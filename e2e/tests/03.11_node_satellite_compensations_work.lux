@@ -9,25 +9,18 @@
 # PREPARATION: Set up dependent tables and add a row that will be referenced
 
 [shell pg_1]
+    [invoke migrate_items_table 001]
+
     [local sql=
         """
-        CREATE TABLE public.items (
-            id TEXT PRIMARY KEY,
-            content TEXT NOT NULL,
-            content_text_null TEXT,
-            content_text_null_default TEXT DEFAULT '',
-            intvalue_null integer,
-            intvalue_null_default integer DEFAULT 10
-        );
         CREATE TABLE public.other_items (
             id TEXT PRIMARY KEY,
             content TEXT NOT NULL,
-            item_id TEXT REFERENCES public.items(id)
+            item_id UUID REFERENCES public.items(id)
         );
-        CALL electric.electrify('public.items');
         CALL electric.electrify('public.other_items');
         """]
-    [invoke migrate_pg 11111 $sql]
+    [invoke migrate_pg 002 $sql]
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp
@@ -39,7 +32,7 @@
 
     """!await db.db.items.create({
       data: {
-        id: "test_id_1",
+        id: "00000000-0000-0000-0000-000000000001",
         content: "hello world"
       }
     })
@@ -53,7 +46,7 @@
 
 [shell pg_1]
     # Concurrently, update and then delete the referenced row on the server
-    !DELETE FROM public.items WHERE id = 'test_id_1';
+    !DELETE FROM public.items WHERE id = '00000000-0000-0000-0000-000000000001';
     ?$psql
 
 [shell satellite_1]
@@ -63,7 +56,7 @@
       data: {
         id: "other_test_id_1",
         content: "",
-        item_id: "test_id_1"
+        item_id: "00000000-0000-0000-0000-000000000001"
       }
     })
     """

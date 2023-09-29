@@ -1,3 +1,6 @@
+-- This function validates the type of each column of the table that's being electrified,
+-- to check if the type is supported by Electric.
+
 <%
   valid_column_types =
     Electric.Postgres.supported_types()
@@ -25,7 +28,7 @@ BEGIN
            -- We only support unsized varchar type
            OR ('varchar' IN (<%= valid_column_types %>) AND _col_type = 'varchar' AND _col_typmod <> -1)
         THEN
-            _invalid_cols = array_append(_invalid_cols, format('"%s" %s', _col_name, _col_type_pretty));
+            _invalid_cols = array_append(_invalid_cols, format('%I %s', _col_name, _col_type_pretty));
         END IF;
     END LOOP;
 
