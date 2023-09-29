@@ -1060,6 +1060,10 @@ function serializeColumnData(
   switch (col_type.toUpperCase()) {
     case 'BOOL':
       return typeEncoder.bool(col_val as number)
+    case 'REAL':
+    case 'FLOAT4':
+    case 'FLOAT8':
+      return typeEncoder.real(col_val as number)
     default:
       return typeEncoder.text(col_val as string)
   }
