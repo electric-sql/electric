@@ -93,7 +93,7 @@ export class DatabaseAdapter
 }
 
 // Did consider handling begin/commit/rollback transaction in this wrapper, but in the end it made more sense
-// to do so within the transaction<T> implementation, promises bublle up naturally that way and no need for inTransaction flag.
+// to do so within the transaction<T> implementation, promises bubble up naturally that way and no need for inTransaction flag.
 class WrappedTx implements Tx {
   constructor(private adapter: DatabaseAdapter) {}
 
