@@ -18,7 +18,7 @@ defmodule Electric.Postgres.ConnectionPool do
       worker: {__MODULE__, conn_config},
       # only connect when required, not immediately
       lazy: true,
-      pool_size: 4,
+      pool_size: 20,
       worker_idle_timeout: 30_000,
       name: name(Connectors.origin(conn_config))
     )
