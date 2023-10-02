@@ -319,21 +319,24 @@ test.serial('migration transaction contains all information', async (t) => {
         type: 'TEXT',
         isNullable: false,
         primaryKey: true,
-      }
+      },
     ],
   }
 
   const start = Proto.SatInStartReplicationResp.create()
   const relation = Proto.SatRelation.create(newTableRelation)
-  const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO, isMigration: true })
-  const migrationVersion = "123_456"
+  const begin = Proto.SatOpBegin.fromPartial({
+    commitTimestamp: Long.ZERO,
+    isMigration: true,
+  })
+  const migrationVersion = '123_456'
   const migrate = Proto.SatOpMigrate.create({
     version: migrationVersion,
     stmts: [
       Proto.SatOpMigrate_Stmt.create({
         type: Proto.SatOpMigrate_Type.CREATE_TABLE,
         sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
-      })
+      }),
     ],
     table: Proto.SatOpMigrate_Table.create({
       name: 'foo',
@@ -346,10 +349,10 @@ test.serial('migration transaction contains all information', async (t) => {
             array: [],
             size: [],
           }),
-        })
+        }),
       ],
       fks: [],
-      pks: ['value']
+      pks: ['value'],
     }),
   })
   const commit = Proto.SatOpCommit.create()
@@ -359,43 +362,35 @@ test.serial('migration transaction contains all information', async (t) => {
       Proto.SatTransOp.fromPartial({ begin }),
       Proto.SatTransOp.fromPartial({ migrate }),
       Proto.SatTransOp.fromPartial({ commit }),
-    ]
+    ],
   })
 
   const stop = Proto.SatInStopReplicationResp.create()
 
-  server.nextRpcResponse('startReplication', [
-    start,
-    relation,
-    opLogMsg,
-  ])
+  server.nextRpcResponse('startReplication', [start, relation, opLogMsg])
   server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (transaction: Transaction) => {
       t.is(transaction.migrationVersion, migrationVersion)
-      t.deepEqual(
-        transaction,
-        {
-          commit_timestamp: commit.commitTimestamp,
-          lsn: begin.lsn,
-          changes: [
-            {
-              migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
-              table: migrate.table,
-              sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
-            }
-          ],
-          origin: begin.origin,
-          migrationVersion: migrationVersion,
-        }
-      )
+      t.deepEqual(transaction, {
+        commit_timestamp: commit.commitTimestamp,
+        lsn: begin.lsn,
+        changes: [
+          {
+            migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
+            table: migrate.table,
+            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+          },
+        ],
+        origin: begin.origin,
+        migrationVersion: migrationVersion,
+      })
       res()
     })
 
     await client.startReplication()
   })
-
 })
 
 test.serial('acknowledge lsn', async (t) => {
