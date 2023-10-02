@@ -45,7 +45,8 @@
     "prisma": "4.8.1",
     "shelljs": "^0.8.5",
     "typescript": "^4.4.3",
-    "wa-sqlite": "rhashimoto/wa-sqlite#master"
+    "wa-sqlite": "rhashimoto/wa-sqlite#master",
+    "zod": "^3.21.1"
   },
   "peerDependencies": {
     "electric-sql": "latest"

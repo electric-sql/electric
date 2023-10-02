@@ -55,9 +55,9 @@ export default function ToolbarTabs({ dbName }: ToolbarTabsProps): JSX.Element {
   return (
     <div className="Toolbar-tabs">
       <ul className="Toolbar-tab-items">
-        {TabItem('Status', 'status', handleClick, active)}
-        {TabItem('IndexDB', 'db', handleClick, active)}
-        {TabItem('SQLite', 'sql', handleClick, active)}
+        {TabItem('Connection', 'status', handleClick, active)}
+        {TabItem('Local DB', 'db', handleClick, active)}
+        {TabItem('Shell', 'sql', handleClick, active)}
       </ul>
       <div className="Toolbar-tab-content">{renderComp()}</div>
     </div>
