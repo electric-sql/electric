@@ -11,6 +11,11 @@ import LeftMenu from './components/LeftMenu'
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
 
+// toolbar imports
+import { globalRegistry } from "electric-sql/satellite";
+import AddToolbar, { TypescriptApi } from '@electric-sql/debug-toolbar'
+import '@electric-sql/debug-toolbar/dist/index.cjs.css'
+
 interface MenuContextInterface {
   showMenu: boolean
   setShowMenu: (show: boolean) => void
@@ -67,6 +72,12 @@ const App = () => {
     }
 
     init()
+
+    setTimeout(() => {
+     AddToolbar(TypescriptApi(globalRegistry))
+    }, 1000);
+
+
   }, [])
 
   if (electric === undefined) {
@@ -81,6 +92,8 @@ const App = () => {
       <Route path="/issue/:id" element={<Issue />} />
     </Routes>
   )
+
+
 
   return (
     <ElectricProvider db={electric}>

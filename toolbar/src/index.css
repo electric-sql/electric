@@ -1,11 +1,16 @@
+
+
 #electric-toolbar {
   all: revert;
   position: absolute;
   bottom: 0;
+  right: 0;
   width: 100%;
   padding: 10px;
+  z-index: 800;
   box-sizing: border-box;
 }
+
 
 .Toolbar {
   all: revert;
@@ -22,10 +27,22 @@
   background-color: #201c1c;
   color: white;
   box-sizing: border-box;
+  width: 100%;
+}
+
+.Toolbar-hidden {
+  width: 400px;
+  float: right;
+}
+
+.Toolbar h3{
+  all: revert;
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
 
 .Toolbar-header {
-  /*all: revert;*/
+  all: revert;
   border-color: lightgrey;
   border-width: 0 0 1px 0;
   border-style: solid;
@@ -38,31 +55,28 @@
 }
 
 .Toolbar-header-hidden {
+
   border-width: 0;
 }
 
-.Toolbar-logo {
-  /*all: revert;*/
+.Toolbar-logo {;
+  all: revert;
   width: 30px;
   height: 30px;
   margin: 0;
-  vertical-align: middle;
-}
-
-.Toolbar-title {
-  /*all: revert;*/
   display: inline-block;
+  /*float: left;*/
   vertical-align: middle;
 }
 
 .nav-text {
-  /*all: revert;*/
+  all: revert;
   display: inline-block;
   vertical-align: middle;
 }
 
 .Toolbar-header button {
-  /*all: revert;*/
+  all: revert;
   height: 20px;
   margin-top: 5px;
   margin-right: 10px;
@@ -77,14 +91,14 @@
 }
 
 .Toolbar-header select {
-  /*all: revert;*/
+  all: revert;
   height: 20px;
   margin-top: 5px;
   margin-right: 10px;
   float: right;
   color: #61dafb;
   border-style: solid;
-  border-width: 0px;
+  border-width: 0;
   background-color: #1c1e20;
   border-color: #61dafb;
   font-size: 0.8rem;
@@ -92,7 +106,9 @@
   text-align: right;
 }
 
+
 .Toolbar-tabs {
+  all: revert;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
@@ -100,12 +116,14 @@
 }
 
 .Toolbar-tab-items {
+  all: revert;
   flex-basis: 180px;
   padding: 0;
   margin: 0;
 }
 
 .Toolbar-tab-item {
+  all: revert;
   list-style: none;
   padding: 5px;
   background-color: #333;
@@ -126,6 +144,7 @@
 }
 
 .Toolbar-tab-content {
+  all: revert;
   flex-basis: 180px;
   flex-grow: 4;
   height: 33vh;
@@ -137,6 +156,7 @@
 }
 
 .Toolbar-tab-content button {
+  all: revert;
   margin-right: 10px;
   float: left;
   color: #61dafb;

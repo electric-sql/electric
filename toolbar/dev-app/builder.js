@@ -82,7 +82,6 @@ let buildParams = {
   logLevel: 'error',
   incremental: true,
   define: {
-    global: 'window',
     __DEBUG_MODE__: JSON.stringify(process.env.DEBUG_MODE === 'true'),
     __ELECTRIC_URL__: JSON.stringify(
       process.env.ELECTRIC_URL ?? 'ws://localhost:5133',

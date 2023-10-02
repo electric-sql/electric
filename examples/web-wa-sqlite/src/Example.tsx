@@ -14,8 +14,9 @@ import './Example.css'
 
 // toolbar imports
 import { globalRegistry } from "electric-sql/satellite";
-import {AddToolbar, TypescriptApi } from '@electric-sql/debug-toolbar'
+import AddToolbar, { TypescriptApi } from '@electric-sql/debug-toolbar'
 import '@electric-sql/debug-toolbar/dist/index.cjs.css'
+
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 
@@ -46,7 +47,6 @@ export const Example = () => {
       }
       setElectric(electric)
       AddToolbar(TypescriptApi(globalRegistry))
-
     }
 
     init()
@@ -70,7 +70,7 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  // const { db } = useContext(ElectricContext)
+  //const { db } = useContext(ElectricContext)
   const { results } = useLiveQuery(
     db.items.liveMany()
   )
