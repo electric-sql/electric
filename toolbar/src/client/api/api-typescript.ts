@@ -40,12 +40,10 @@ export class ToolbarApiTypescript implements ToolbarApiBase {
     window.location.reload()
   }
 
-  queryDB(dbName: string, sql: string): Promise<Row[]> {
+  async queryDB(dbName: string, sql: string): Promise<Row[]> {
     let sat = this.globalRegistry.satellites[dbName]
     if (sat === undefined) {
-      return new Promise((resolve, _reject) => {
-        resolve([])
-      })
+      return []
     } else {
       return sat.adapter.query({ sql: sql })
     }
