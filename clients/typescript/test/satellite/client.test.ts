@@ -17,6 +17,7 @@ import {
   DataTransaction,
   Relation,
   SatelliteErrorCode,
+  Transaction,
 } from '../../src/util/types'
 import { relations } from './common'
 import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
@@ -301,6 +302,100 @@ test.serial('receive transaction over multiple messages', async (t) => {
 
     await client.startReplication()
   })
+})
+
+test.serial('migration transaction contains all information', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const newTableRelation = {
+    relationId: 2001, // doesn't matter
+    schemaName: 'public',
+    tableName: 'NewTable',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      {
+        name: 'id',
+        type: 'TEXT',
+        isNullable: false,
+        primaryKey: true,
+      }
+    ],
+  }
+
+  const start = Proto.SatInStartReplicationResp.create()
+  const relation = Proto.SatRelation.create(newTableRelation)
+  const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO, isMigration: true })
+  const migrationVersion = "123_456"
+  const migrate = Proto.SatOpMigrate.create({
+    version: migrationVersion,
+    stmts: [
+      Proto.SatOpMigrate_Stmt.create({
+        type: Proto.SatOpMigrate_Type.CREATE_TABLE,
+        sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+      })
+    ],
+    table: Proto.SatOpMigrate_Table.create({
+      name: 'foo',
+      columns: [
+        Proto.SatOpMigrate_Column.create({
+          name: 'value',
+          sqliteType: 'TEXT',
+          pgType: Proto.SatOpMigrate_PgColumnType.create({
+            name: 'VARCHAR',
+            array: [],
+            size: [],
+          }),
+        })
+      ],
+      fks: [],
+      pks: ['value']
+    }),
+  })
+  const commit = Proto.SatOpCommit.create()
+
+  const opLogMsg = Proto.SatOpLog.create({
+    ops: [
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ migrate }),
+      Proto.SatTransOp.fromPartial({ commit }),
+    ]
+  })
+
+  const stop = Proto.SatInStopReplicationResp.create()
+
+  server.nextRpcResponse('startReplication', [
+    start,
+    relation,
+    opLogMsg,
+  ])
+  server.nextRpcResponse('stopReplication', [stop])
+
+  await new Promise<void>(async (res) => {
+    client.on('transaction', (transaction: Transaction) => {
+      t.is(transaction.migrationVersion, migrationVersion)
+      t.deepEqual(
+        transaction,
+        {
+          commit_timestamp: commit.commitTimestamp,
+          lsn: begin.lsn,
+          changes: [
+            {
+              migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
+              table: migrate.table,
+              sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+            }
+          ],
+          origin: begin.origin,
+          migrationVersion: migrationVersion,
+        }
+      )
+      res()
+    })
+
+    await client.startReplication()
+  })
+
 })
 
 test.serial('acknowledge lsn', async (t) => {
