@@ -98,7 +98,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     valid_records = [
       %{"id" => "1", "b" => "t"},
       %{"id" => "2", "b" => "f"},
-      %{"id" => "3", "b" => ""}
+      %{"id" => "3", "b" => nil}
     ]
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -107,7 +107,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         MockClient.send_data(conn, tx_op_log)
       end)
 
-      refute_received {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
     end)
 
     invalid_records = [

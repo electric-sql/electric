@@ -474,9 +474,10 @@ defmodule Electric.Satellite.Serialization do
   """
   @spec decode_column_value!(binary, atom) :: binary
 
+  def decode_column_value!(val, :bool) when val in ["t", "f"], do: val
+
   def decode_column_value!(val, :bool) do
-    true = val in ["t", "f"]
-    val
+    raise "Unexpected value for bool column: #{inspect(val)}"
   end
 
   def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
@@ -487,15 +488,15 @@ defmodule Electric.Satellite.Serialization do
     <<yyyy::binary-4, ?-, mm::binary-2, ?-, dd::binary-2>> = val
 
     year = String.to_integer(yyyy)
-    :ok = assert_year_in_range(year)
+    assert_valid_year!(year)
 
     month = String.to_integer(mm)
-    true = month in 1..12
+    assert_valid_month!(month)
 
     day = String.to_integer(dd)
-    true = day in 1..31
+    assert_valid_day!(day)
 
-    %Date{} = Date.from_iso8601!(val)
+    _ = Date.from_iso8601!(val)
 
     val
   end
@@ -508,10 +509,9 @@ defmodule Electric.Satellite.Serialization do
   end
 
   def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
-    :ok =
-      val
-      |> String.to_integer()
-      |> assert_integer_in_range!(type)
+    val
+    |> String.to_integer()
+    |> assert_valid_integer!(type)
 
     val
   end
@@ -525,15 +525,15 @@ defmodule Electric.Satellite.Serialization do
     <<hh::binary-2, ?:, mm::binary-2, ?:, ss::binary-2>> <> frac = val
 
     hours = String.to_integer(hh)
-    true = hours in 0..23
+    assert_valid_hours!(hours)
 
     minutes = String.to_integer(mm)
-    true = minutes in 0..59
+    assert_valid_minutes!(minutes)
 
     seconds = String.to_integer(ss)
-    true = seconds in 0..59
+    assert_valid_seconds!(seconds)
 
-    :ok = validate_fractional_seconds(frac)
+    assert_valid_fractional_seconds!(frac)
 
     _ = Time.from_iso8601!(val)
 
@@ -546,32 +546,34 @@ defmodule Electric.Satellite.Serialization do
     {:error, :missing_offset} = DateTime.from_iso8601(val)
 
     dt = NaiveDateTime.from_iso8601!(val)
-    :ok = assert_year_in_range(dt.year)
+    assert_valid_year!(dt.year)
 
     val
   end
 
   def decode_column_value!(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
-    true = String.ends_with?(val, "Z")
+    len_minus_1 = byte_size(val) - 1
+    <<_::binary-size(len_minus_1), "Z">> = val
 
     {:ok, dt, 0} = DateTime.from_iso8601(val)
-    :ok = assert_year_in_range(dt.year)
+    assert_valid_year!(dt.year)
 
     val
   end
 
   def decode_column_value!(val, :uuid) do
-    {:ok, uuid} = Electric.Utils.validate_uuid(val)
-    uuid
+    Electric.Utils.validate_uuid!(val)
   end
 
   defp decode_float_value!(val, type) do
-    with {num, ""} <- Float.parse(val),
-         :ok = assert_float_in_range(num, type) do
-      val
-    else
-      _ -> raise "Unexpected value for #{type} colum: #{inspect(val)}"
+    case Float.parse(val) do
+      {num, ""} ->
+        assert_float_in_range!(num, type)
+        val
+
+      _ ->
+        raise "Unexpected value for #{type} colum: #{inspect(val)}"
     end
   end
 
@@ -579,9 +581,9 @@ defmodule Electric.Satellite.Serialization do
   @int4_range -2_147_483_648..2_147_483_647
   @int8_range -9_223_372_036_854_775_808..9_223_372_036_854_775_807
 
-  defp assert_integer_in_range!(int, :int2) when int in @int2_range, do: :ok
-  defp assert_integer_in_range!(int, :int4) when int in @int4_range, do: :ok
-  defp assert_integer_in_range!(int, :int8) when int in @int8_range, do: :ok
+  defp assert_valid_integer!(int, :int2) when int in @int2_range, do: :ok
+  defp assert_valid_integer!(int, :int4) when int in @int4_range, do: :ok
+  defp assert_valid_integer!(int, :int8) when int in @int8_range, do: :ok
 
   # Postgres[1] uses BC/AD suffixes to indicate whether the date is in the Common Era or precedes it. Postgres assumes year
   # 0 did not exist, so in its worldview '0001-12-31 BC' is immediately followed by '0001-01-01'.
@@ -595,20 +597,29 @@ defmodule Electric.Satellite.Serialization do
   #
   #   [1]: https://www.postgresql.org/docs/current/datatype-datetime.html
   #   [2]: https://www.sqlite.org/lang_datefunc.html
-  defp assert_year_in_range(year) when year in 1..9999, do: :ok
+  defp assert_valid_year!(year) when year in 1..9999, do: :ok
 
-  defp validate_fractional_seconds(""), do: :ok
+  defp assert_valid_month!(month) when month in 1..12, do: :ok
 
-  defp validate_fractional_seconds("." <> fs_str) do
-    # Fractional seconds must not exceed 6 decimal digits, otherwise Postgres will round the last digit up or down.
-    true = byte_size(fs_str) <= 6
+  defp assert_valid_day!(day) when day in 1..31, do: :ok
+
+  defp assert_valid_hours!(hours) when hours in 0..23, do: :ok
+
+  defp assert_valid_minutes!(minutes) when minutes in 0..59, do: :ok
+
+  defp assert_valid_seconds!(seconds) when seconds in 0..59, do: :ok
+
+  defp assert_valid_fractional_seconds!(""), do: :ok
+
+  # Fractional seconds must not exceed 6 decimal digits, otherwise Postgres will round client's value.
+  defp assert_valid_fractional_seconds!("." <> fs_str) when byte_size(fs_str) <= 6 do
     _ = String.to_integer(fs_str)
     :ok
   end
 
-  defp assert_float_in_range(_num, :float8), do: :ok
+  defp assert_float_in_range!(_num, :float8), do: :ok
 
-  defp assert_float_in_range(num, :float4) do
+  defp assert_float_in_range!(num, :float4) do
     conversion_result =
       case <<num::float-32>> do
         <<_sign::1, 0xFF, 0::23>> ->
