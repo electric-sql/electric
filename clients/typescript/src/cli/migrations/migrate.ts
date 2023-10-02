@@ -321,7 +321,6 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
         : capitaliseFirstLetter(tableName) // always capitalise first letter
 
       // Replace the model name on this line
-      //const newLn = ln.replace(tableName, modelName)
       const newLn = ln.replace(modelRegex, (_, _tableName) => {
         return `model ${modelName} {`
       })

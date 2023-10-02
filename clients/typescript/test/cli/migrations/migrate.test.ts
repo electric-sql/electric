@@ -112,6 +112,5 @@ test('migrator correctly PascalCases model names', (t) => {
   const newSchema = doPascalCaseTableNames(
     lowerCasePrismaSchema.split(/\r?\n/)
   ).join('\n')
-  console.log(expectedPrismaSchema)
   t.assert(newSchema === expectedPrismaSchema)
 })
