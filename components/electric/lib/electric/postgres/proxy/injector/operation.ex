@@ -230,26 +230,28 @@ defmodule Operation.Wait do
   end
 end
 
-defmodule Operation.Transparent do
-  defstruct [:msgs]
+defmodule Operation.Pass do
+  defstruct [:msgs, :direction]
 
-  defimpl Operation do
-    use Operation.Impl
-
-    def initialise(op, state, send) do
-      {nil, state, Send.back(send, op.msgs)}
-    end
+  def client(msgs) do
+    %__MODULE__{direction: :client, msgs: msgs}
   end
-end
 
-defmodule Operation.Forward do
-  defstruct [:msgs]
+  def server(msgs) do
+    %__MODULE__{direction: :server, msgs: msgs}
+  end
 
   defimpl Operation do
     use Operation.Impl
 
     def initialise(op, state, send) do
-      {nil, state, Send.front(send, op.msgs)}
+      send =
+        case op.direction do
+          :client -> Send.front(send, op.msgs)
+          :server -> Send.back(send, op.msgs)
+        end
+
+      {nil, state, send}
     end
   end
 end
@@ -284,7 +286,7 @@ defmodule Operation.Between do
     end
 
     defp execute(op, msgs, state, send) do
-      Operation.initialise(op.commands ++ [%Operation.Forward{msgs: msgs}], state, send)
+      Operation.initialise(op.commands ++ [Operation.Pass.client(msgs)], state, send)
     end
 
     def recv_error(op, msgs, state, send) do
@@ -337,7 +339,7 @@ defmodule Operation.Commit do
       Operation.initialise(
         [
           %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
-          %Operation.Forward{msgs: [front]}
+          Operation.Pass.client([front])
         ],
         state,
         Send.new()
@@ -348,7 +350,7 @@ defmodule Operation.Commit do
       Operation.initialise(
         [
           %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
-          %Operation.Forward{msgs: msgs}
+          Operation.Pass.client(msgs)
         ],
         state,
         Send.new()
@@ -673,11 +675,11 @@ defmodule Operation.BindExecute do
     def recv_client(op, msgs, state) do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
         {
-          [%Operation.Transparent{msgs: msgs}, %Operation.Between{commands: op.commands}],
+          [Operation.Pass.server(msgs), %Operation.Between{commands: op.commands}],
           state
         }
       else
-        {[%Operation.Transparent{msgs: msgs}, op], state}
+        {[Operation.Pass.server(msgs), op], state}
       end
     end
   end
@@ -697,13 +699,13 @@ defmodule Operation.BindExecuteMigration do
 
         {
           Enum.concat(
-            [%Operation.Transparent{msgs: msgs}],
+            [Operation.Pass.server(msgs)],
             [%Operation.Between{commands: op.commands ++ version_commands}]
           ),
           state
         }
       else
-        {[%Operation.Transparent{msgs: msgs}, op], state}
+        {[Operation.Pass.server(msgs), op], state}
       end
     end
 

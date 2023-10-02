@@ -1,5 +1,7 @@
 defmodule Electric.Postgres.Proxy.Injector.Electric do
-  defstruct [:capture]
+  defstruct []
+
+  @type t() :: %__MODULE__{}
 
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Parser

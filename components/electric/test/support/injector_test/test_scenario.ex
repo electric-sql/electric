@@ -210,14 +210,16 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   Asserts that the injector is in the idle state, so outside a transaction
   with no active capture mode.
   """
-  def idle!({[%Electric.Postgres.Proxy.Injector.Electric{}], state} = injector) do
+  def idle!(injector, operator \\ Electric.Postgres.Proxy.Injector.Electric)
+
+  def idle!({[%op{}], state} = injector, op) do
     refute Injector.State.tx?(state)
     injector
   end
 
-  def idle!({capture, state}) do
+  def idle!({capture, state}, op) do
     flunk(
-      "Message sequence ended with pending capture state:\ncapture: #{inspect(capture)}\ntx: #{inspect(state.tx)}"
+      "Message sequence ended with pending capture state:\ncapture: #{inspect(capture)}\ntx: #{inspect(state.tx)}, expected #{inspect(op)}"
     )
   end
 

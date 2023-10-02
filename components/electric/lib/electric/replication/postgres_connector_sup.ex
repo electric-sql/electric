@@ -7,6 +7,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{CachedWal, Proxy}
   alias Electric.Replication.SatelliteCollectorProducer
+  alias Electric.Postgres.Proxy.Injector
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(conn_config) do
@@ -49,12 +50,10 @@ defmodule Electric.Replication.PostgresConnectorSup do
        handler_config: [
          injector: [
            capture_mode: [
-             # turn on the transparent capture mode to just log the client<->server messages
-             # default: Electric.Postgres.Proxy.Injector.Capture.Transparent,
-             default: nil,
+             default: Injector.Electric,
              per_user: %{
-               "prisma" => Electric.Postgres.Proxy.Injector.Capture.Prisma,
-               "transparent" => Electric.Postgres.Proxy.Injector.Capture.Transparent
+               "prisma" => Injector.Prisma,
+               "transparent" => Injector.Transparent
              }
            ]
          ]
