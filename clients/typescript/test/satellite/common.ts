@@ -181,10 +181,10 @@ export const makeContext = async (
 }
 
 export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
-  const { dbName } = t.context
+  // const { dbName } = t.context
 
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
+  // await removeFile(dbName, { force: true })
+  // await removeFile(`${dbName}-journal`, { force: true })
 }
 
 export const cleanAndStopSatellite = async (

@@ -9,8 +9,8 @@
 export default [
   {
     statements: [
-      'DROP TABLE IF EXISTS _electric_trigger_settings;',
-      'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      'DROP TABLE IF EXISTS main._electric_trigger_settings;',
+      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
     ],
     version: '1',
   },
@@ -19,11 +19,11 @@ export default [
       'CREATE TABLE IF NOT EXISTS main.items (\n  value TEXT PRIMARY KEY NOT NULL\n);',
       'CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n);',
       'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id)\n);',
-      'DROP TABLE IF EXISTS _electric_trigger_settings;',
-      'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",
+      'DROP TABLE IF EXISTS main._electric_trigger_settings;',
+      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",
 
 
       'DROP TRIGGER IF EXISTS update_ensure_main_child_primarykey ON main.child;',
@@ -54,11 +54,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'child', 'INSERT', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), NULL, NULL);
           END IF;
 
@@ -84,11 +84,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'child', 'UPDATE', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
@@ -113,11 +113,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'child', 'DELETE', jsonb_build_object('id', OLD.id), NULL, jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
@@ -133,7 +133,7 @@ export default [
       EXECUTE FUNCTION delete_main_child_into_oplog_function();
       `,
 
-      'DROP TRIGGER IF EXISTS compensation_insert_main_child_parent_into_oplog ON main.parent;',
+      'DROP TRIGGER IF EXISTS compensation_insert_main_child_parent_into_oplog ON main.child;',
       `
       CREATE OR REPLACE FUNCTION compensation_insert_main_child_parent_into_oplog_function()
       RETURNS TRIGGER AS $$
@@ -142,18 +142,15 @@ export default [
           flag_value INTEGER;
           meta_value TEXT;
         BEGIN
-          -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
 
-          -- Get the 'compensations' value from _electric_meta
-          SELECT value INTO meta_value FROM _electric_meta WHERE key = 'compensations';
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
           IF flag_value = 1 AND meta_value = '1' THEN
-            -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             SELECT 'main', 'parent', 'INSERT', jsonb_build_object('id', id),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
-            FROM main.parent WHERE id = NEW.parent;
+            FROM main.parent WHERE id = NEW."parent";
           END IF;
 
           RETURN NEW;
@@ -163,7 +160,7 @@ export default [
       `,
       `
       CREATE TRIGGER compensation_insert_main_child_parent_into_oplog
-      AFTER INSERT ON main.parent
+      AFTER INSERT ON main.child
       FOR EACH ROW
       EXECUTE FUNCTION compensation_insert_main_child_parent_into_oplog_function();
       `,
@@ -178,17 +175,17 @@ export default [
           meta_value TEXT;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
 
           -- Get the 'compensations' value from _electric_meta
-          SELECT value INTO meta_value FROM _electric_meta WHERE key = 'compensations';
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
           IF flag_value = 1 AND meta_value = '1' THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             SELECT 'main', 'parent', 'UPDATE', jsonb_build_object('id', id),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
-            FROM main.parent WHERE id = NEW.parent;
+            FROM main.parent WHERE id = NEW."parent";
           END IF;
 
           RETURN NEW;
@@ -230,11 +227,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'items', 'INSERT', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), NULL, NULL);
           END IF;
 
@@ -261,11 +258,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'items', 'UPDATE', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
@@ -292,11 +289,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES ('main', 'items', 'DELETE', jsonb_build_object('value', OLD.value), NULL, jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
@@ -342,11 +339,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES (
               'main',
               'parent',
@@ -382,11 +379,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES (
               'main',
               'parent',
@@ -422,11 +419,11 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM _electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
             VALUES (
               'main',
               'parent',

@@ -796,16 +796,17 @@ export class SatelliteProcess implements Satellite {
     const shadow = this.opts.shadowTable.tablename
 
     const tablesExist = `
-      SELECT COUNT(name) AS numTables
+      SELECT COUNT(table_name)::integer AS numTables
       FROM information_schema.tables
       WHERE table_type = 'BASE TABLE' AND table_name IN ($1, $2, $3);
     `
 
-    const [{ numTables }] = await this.adapter.query({
+    const [{ numtables }] = await this.adapter.query({
       sql: tablesExist,
       args: [meta, oplog, shadow],
     })
-    return numTables === 3
+    return numtables === 3
+    // return numtables === '3' // TODO: This passes. Resolve the types
   }
 
   // Handle auth state changes.
@@ -868,32 +869,27 @@ export class SatelliteProcess implements Satellite {
     const q2: Statement = {
       sql: `
       UPDATE ${oplog}
-      SET clearTags = updates.tags
-      FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as op_rowid
-        FROM ${shadow} AS shadow
-        JOIN ${oplog} as op
-          ON op.namespace = shadow.namespace
-            AND op.tablename = shadow.tablename
-            AND op.primaryKey = shadow.primaryKey
-        WHERE op.timestamp = ?
-        GROUP BY op.namespace, op.tablename, op.primaryKey
-      ) AS updates
-      WHERE updates.op_rowid = ${oplog}.rowid
-      `,
+      SET clearTags = shadow.tags
+      FROM ${shadow} AS shadow
+      WHERE ${oplog}.namespace = shadow.namespace
+        AND ${oplog}.tablename = shadow.tablename
+        AND ${oplog}.primaryKey = shadow.primaryKey
+        AND ${oplog}.timestamp = $1
+            `,
       args: [timestamp.toISOString()],
     }
 
     // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
     const q3: Statement = {
       sql: `
-      INSERT OR REPLACE INTO ${shadow} (namespace, tablename, primaryKey, tags)
-      SELECT namespace, tablename, primaryKey, ?
-        FROM ${oplog} AS op
-        WHERE timestamp = ?
-        GROUP BY namespace, tablename, primaryKey
-        HAVING rowid = max(rowid) AND optype != 'DELETE'
-      `,
+      INSERT INTO ${shadow} (namespace, tablename, primaryKey, tags)
+      SELECT namespace, tablename, primaryKey, $1
+      FROM ${oplog} AS op
+      WHERE timestamp = $2
+        AND optype != 'DELETE'
+      ON CONFLICT (namespace, tablename, primaryKey)
+      DO UPDATE SET tags = EXCLUDED.tags;
+                  `,
       args: [encodeTags([newTag]), timestamp.toISOString()],
     }
 
@@ -903,17 +899,19 @@ export class SatelliteProcess implements Satellite {
       sql: `
       WITH _to_be_deleted (rowid) AS (
         SELECT shadow.rowid
-          FROM ${oplog} AS op
-          INNER JOIN ${shadow} AS shadow
-            ON shadow.namespace = op.namespace AND shadow.tablename = op.tablename AND shadow.primaryKey = op.primaryKey
-          WHERE op.timestamp = ?
-          GROUP BY op.namespace, op.tablename, op.primaryKey
-          HAVING op.rowid = max(op.rowid) AND op.optype = 'DELETE'
+        FROM ${oplog} AS op
+        INNER JOIN ${shadow} AS shadow
+        ON shadow.namespace = op.namespace
+        AND shadow.tablename = op.tablename
+        AND shadow.primaryKey = op.primaryKey
+        WHERE op.timestamp = $1
+        AND op.optype = 'DELETE'
+        GROUP BY shadow.rowid
       )
 
       DELETE FROM ${shadow}
-      WHERE rowid IN _to_be_deleted
-      `,
+      WHERE rowid IN (SELECT rowid FROM _to_be_deleted);
+                  `,
       args: [timestamp.toISOString()],
     }
 

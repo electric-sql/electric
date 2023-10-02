@@ -8,9 +8,9 @@ export const data = {
     {
       statements: [
         `CREATE SCHEMA IF NOT EXISTS main`,
-        `CREATE TABLE IF NOT EXISTS ${oplogTable.tablename} (\n  rowid SERIAL PRIMARY KEY DEFERRABLE,\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  optype TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  newRow TEXT,\n  oldRow TEXT,\n  timestamp TEXT,  clearTags TEXT DEFAULT '[]' NOT NULL\n);`,
-        `CREATE INDEX IF NOT EXISTS _electric_table_pk_reference ON ${oplogTable.tablename} (\n namespace, tablename, primaryKey)`,
-        `CREATE INDEX IF NOT EXISTS _electric_timestamp ON ${oplogTable.tablename} (timestamp);`,
+        `CREATE TABLE IF NOT EXISTS ${oplogTable} (\n  rowid SERIAL PRIMARY KEY,\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  optype TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  newRow TEXT,\n  oldRow TEXT,\n  timestamp TEXT,  clearTags TEXT DEFAULT '[]' NOT NULL\n);`,
+        `CREATE INDEX IF NOT EXISTS _electric_table_pk_reference ON ${oplogTable} (\n namespace, tablename, primaryKey)`,
+        `CREATE INDEX IF NOT EXISTS _electric_timestamp ON ${oplogTable} (timestamp);`,
         `CREATE TABLE IF NOT EXISTS ${metaTable} (key TEXT PRIMARY KEY, value TEXT)`,
         // `
         // ALTER TABLE ${metaTable}
@@ -22,7 +22,7 @@ export const data = {
         `
         ALTER TABLE ${migrationsTable}
           DROP CONSTRAINT IF EXISTS migrations_table_pkey,
-          ADD CONSTRAINT migrations_table_pkey PRIMARY KEY (id) DEFERRABLE INITIALLY DEFERRED;
+          ADD CONSTRAINT migrations_table_pkey PRIMARY KEY (id) INITIALLY DEFERRED;
         `,
         // `
         // ALTER TABLE ${migrationsTable}
@@ -34,7 +34,7 @@ export const data = {
         `DROP TABLE IF EXISTS ${triggersTable};`,
         `CREATE TABLE ${triggersTable} (tablename TEXT PRIMARY KEY, flag INTEGER);`,
         `DROP TABLE IF EXISTS ${shadowTable};`,
-        `CREATE TABLE ${shadowTable} (\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey) DEFERRABLE);`,
+        `CREATE TABLE ${shadowTable} (rowid SERIAL,\n  namespace TEXT NOT NULL,\n  tablename TEXT NOT NULL,\n  primaryKey TEXT NOT NULL,\n  tags TEXT NOT NULL,\n  PRIMARY KEY (namespace, tablename, primaryKey));`,
        ],
        version: '0',
      },

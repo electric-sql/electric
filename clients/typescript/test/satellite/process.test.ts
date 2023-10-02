@@ -72,7 +72,7 @@ test('start creates system tables', async (t) => {
 
   await satellite.start(authState)
 
-  const sql = "select name from sqlite_master where type = 'table'"
+  const sql = "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE';"
   const rows = await adapter.query({ sql })
   const names = rows.map((row) => row.name)
 
@@ -85,7 +85,7 @@ test('load metadata', async (t) => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
-    compensations: 1,
+    compensations: '1',
     lsn: '',
     clientId: '',
     subscriptions: '',
@@ -111,11 +111,11 @@ test('cannot UPDATE primary key', async (t) => {
   const { adapter, runMigrations } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
   await t.throwsAsync(
-    adapter.run({ sql: `UPDATE parent SET id='3' WHERE id = '1'` }),
+    adapter.run({ sql: `UPDATE main.parent SET id='3' WHERE id = '1'` }),
     {
-      code: 'SQLITE_CONSTRAINT_TRIGGER',
+      code: 'P0001',
     }
   )
 })
@@ -126,7 +126,7 @@ test('snapshot works', async (t) => {
   await runMigrations()
   await satellite._setAuthState(authState)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   let snapshotTimestamp = await satellite._performSnapshot()
 
@@ -134,7 +134,7 @@ test('snapshot works', async (t) => {
   let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
   var shadowRows = await adapter.query({
-    sql: `SELECT tags FROM _electric_shadow`,
+    sql: `SELECT tags FROM main._electric_shadow`,
   })
   t.is(shadowRows.length, 2)
   for (const row of shadowRows) {
@@ -201,7 +201,7 @@ test('starting and stopping the process works', async (t) => {
   const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   await satellite.start(authState)
 
@@ -210,14 +210,14 @@ test('starting and stopping the process works', async (t) => {
   // connect, 1st txn
   t.is(notifier.notifications.length, 2)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
   // 2nd txm
   t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
   // no txn notified
