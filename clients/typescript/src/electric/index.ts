@@ -32,7 +32,8 @@ export interface ElectrifyOptions {
 }
 
 const defaultPrepare = async (connection: DatabaseAdapter) => {
-  await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
+  // await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
+  console.log(connection) // TODO: connection is unused otherwise
 }
 
 /**

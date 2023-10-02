@@ -195,6 +195,9 @@ importers:
       ava:
         specifier: ^4.3.1
         version: 4.3.3
+      embedded-postgres:
+        specifier: 15.4.0-beta.9
+        version: 15.4.0-beta.9
       eslint:
         specifier: ^8.22.0
         version: 8.41.0
@@ -230,7 +233,7 @@ importers:
         version: 1.148.1
       typeorm:
         specifier: ^0.3.9
-        version: 0.3.16(better-sqlite3@8.4.0)
+        version: 0.3.16(better-sqlite3@8.4.0)(pg@8.11.3)
       typescript:
         specifier: ^4.9
         version: 4.9.5
@@ -813,6 +816,7 @@ packages:
   /@babel/plugin-proposal-class-properties@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-cumfXOF0+nzZrrN8Rf0t7M+tF6sZc7vhQwYQck9q1/5w2OExlD+b4v4RpMJFaV1Z7WcDRgO6FqvxqxGlwo+RHQ==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-class-properties instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -851,6 +855,7 @@ packages:
   /@babel/plugin-proposal-nullish-coalescing-operator@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-wQxQzxYeJqHcfppzBDnm1yAY0jSRkUXR2z8RePZYrKwMKgMlE8+Z6LUno+bd6LvbGh8Gltvy74+9pIYkr+XkKA==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-nullish-coalescing-operator instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -861,6 +866,7 @@ packages:
   /@babel/plugin-proposal-object-rest-spread@7.20.7(@babel/core@7.22.1):
     resolution: {integrity: sha512-d2S98yCiLxDVmBmE8UjGcfPvNEUbA1U5q5WxaWFUGRzJSVAZqm5W6MbPct0jxnegUZ0niLeNX+IOzEs7wYg9Dg==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-object-rest-spread instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -874,6 +880,7 @@ packages:
   /@babel/plugin-proposal-optional-catch-binding@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-Q40HEhs9DJQyaZfUjjn6vE8Cv4GmMHCYuMGIWUnlxH6400VGxOuwWsPt4FxXxJkC/5eOzgn0z21M9gMT4MOhbw==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-optional-catch-binding instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -884,6 +891,7 @@ packages:
   /@babel/plugin-proposal-optional-chaining@7.21.0(@babel/core@7.22.1):
     resolution: {integrity: sha512-p4zeefM72gpmEe2fkUr/OnOXpWEf8nAgk7ZYVqqfFiyIG7oFfVZcCrU64hWn5xp4tQ9LkV4bTIa5rD0KANpKNA==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-optional-chaining instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -2193,6 +2201,71 @@ packages:
     engines: {node: '>=12'}
     cpu: [arm64]
     os: [android]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+
+  /@embedded-postgres/darwin-arm64@15.4.0-beta.9:
+    resolution: {integrity: sha512-YW0+Fs16bx7JvRMtuwSAFGIXMqcQk7w93Jf1dKppLC9YntmP9ODrjJREw+DV02vN9zfsFD4eCfM2nicYNOXQFw==}
+    cpu: [arm64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/darwin-x64@15.4.0-beta.9:
+    resolution: {integrity: sha512-gzQUtrOpFMnh3TffSdgu+pnRVeD24aw2T5AimGG95PmTIYVzIci5fpmXrQqdLYxXL7jUwfnPp3MOjjBmmPc7AA==}
+    cpu: [x64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-arm64@15.4.0-beta.9:
+    resolution: {integrity: sha512-gEV3MsVFCfx3t5hYel8r6Mn9CZ7fimW3oOCdrJBK1jYJlexo0+blZ/KywYKu0bHeZTvvzLlBn/hkGheY0vaWpQ==}
+    cpu: [arm64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-arm@15.4.0-beta.9:
+    resolution: {integrity: sha512-pE/Tvn2IeWMGJwPeymku4s5DjEu/roUi9nN1TDJByVp8KOCiXvuCrjIoD9HBjEM5R3Z1pWzUtFEJpmy+PERwfg==}
+    cpu: [arm]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-ia32@15.4.0-beta.9:
+    resolution: {integrity: sha512-mLOksdUho7AH2rOLn3fhW4zNslCrV6OzD8BKq7oCY3kiOMi2V2Z1whOLApgpbXzrEcVGr+APCtOtkaVyfYWoPg==}
+    cpu: [ia32]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-ppc64@15.4.0-beta.9:
+    resolution: {integrity: sha512-TR4Y9nbt7kVEv/M5yv/fECSqrgt/UoHv4SbNHNYiS0+1d49i9Mw0FXVZvl9nBcGqmZJtlDG3An1iR3r8RfH/xA==}
+    cpu: [ppc64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-x64@15.4.0-beta.9:
+    resolution: {integrity: sha512-VNDXCNt4W2M3KrUSdocIu7cq+Os0m+/tLI8VVCQfw3M1H5j/HustvLC4/BX8duxjNPKPrhW9MNwGCS0bMepnUQ==}
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/windows-x64@15.4.0-beta.9:
+    resolution: {integrity: sha512-sIpDu1tY3+vgdB5BVTbTL40Zki1LCTYxvNexjBULv8/LKFTybf8dkkVEzJk7vvEfwEov7+5EIUzx3cuoXf/Crw==}
+    cpu: [x64]
+    os: [win32]
     requiresBuild: true
     dev: true
     optional: true
@@ -4917,6 +4990,11 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
+  /async-exit-hook@2.0.1:
+    resolution: {integrity: sha512-NW2cX8m1Q7KPA7a5M2ULQeZ2wR5qI5PAbw5L0UOMxdioVk9PMZ0h1TmyZEkPYrCvYjDlFICusOu1dlEKAAeXBw==}
+    engines: {node: '>=0.12.0'}
+    dev: true
+
   /async-limiter@1.0.1:
     resolution: {integrity: sha512-csOlWGAcRFJaI6m+F2WKdnMKr4HhdhFVBk0H/QbJFMCr+uO2kwohwXQPxw/9OCxp05r5ghVBFSyioixx3gfkNQ==}
     dev: false
@@ -6572,6 +6650,24 @@ packages:
 
   /electron-to-chromium@1.4.416:
     resolution: {integrity: sha512-AUYh0XDTb2vrj0rj82jb3P9hHSyzQNdTPYWZIhPdCOui7/vpme7+HTE07BE5jwuqg/34TZ8ktlRz6GImJ4IXjA==}
+
+  /embedded-postgres@15.4.0-beta.9:
+    resolution: {integrity: sha512-H+t9c3B7Sw/TrDQPe2Pqx72jTHn3uViCEgSa9WdcrOHEir3ov/SSKPzFsluBEZcSMByFXPDgz6tvMaAkbSUD/Q==}
+    dependencies:
+      async-exit-hook: 2.0.1
+      pg: 8.11.3
+    optionalDependencies:
+      '@embedded-postgres/darwin-arm64': 15.4.0-beta.9
+      '@embedded-postgres/darwin-x64': 15.4.0-beta.9
+      '@embedded-postgres/linux-arm': 15.4.0-beta.9
+      '@embedded-postgres/linux-arm64': 15.4.0-beta.9
+      '@embedded-postgres/linux-ia32': 15.4.0-beta.9
+      '@embedded-postgres/linux-ppc64': 15.4.0-beta.9
+      '@embedded-postgres/linux-x64': 15.4.0-beta.9
+      '@embedded-postgres/windows-x64': 15.4.0-beta.9
+    transitivePeerDependencies:
+      - pg-native
+    dev: true
 
   /emittery@0.11.0:
     resolution: {integrity: sha512-S/7tzL6v5i+4iJd627Nhv9cLFIo5weAIlGccqJFpnBoDB8U1TF2k5tez4J/QNuxyyhWuFqHg1L84Kd3m7iXg6g==}
@@ -11428,6 +11524,10 @@ packages:
     resolution: {integrity: sha512-HAKu/fG3HpHFO0AA8WE8q2g+gBJaZ9MG7fcKk+IJPLTGAD6Psw4443l+9DGRbOIh3/aXr7Phy0TjilYivJo5XQ==}
     dev: true
 
+  /packet-reader@1.0.0:
+    resolution: {integrity: sha512-HAKu/fG3HpHFO0AA8WE8q2g+gBJaZ9MG7fcKk+IJPLTGAD6Psw4443l+9DGRbOIh3/aXr7Phy0TjilYivJo5XQ==}
+    dev: true
+
   /parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -14000,7 +14100,7 @@ packages:
       is-typedarray: 1.0.0
     dev: true
 
-  /typeorm@0.3.16(better-sqlite3@8.4.0):
+  /typeorm@0.3.16(better-sqlite3@8.4.0)(pg@8.11.3):
     resolution: {integrity: sha512-wJ4Qy1oqRKNDdZiBTTaVMqwo/XxC52Q7uNPTjltPgLhvIW173bL6Iad0lhptMOsFlpixFPaUu3PNziaRBwX2Zw==}
     engines: {node: '>= 12.9.0'}
     hasBin: true
@@ -14069,6 +14169,7 @@ packages:
       dotenv: 16.1.1
       glob: 8.1.0
       mkdirp: 2.1.6
+      pg: 8.11.3
       reflect-metadata: 0.1.13
       sha.js: 2.4.11
       tslib: 2.5.2

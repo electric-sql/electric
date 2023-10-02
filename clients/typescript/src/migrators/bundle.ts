@@ -12,6 +12,7 @@ import { data as baseMigration } from './schema'
 import Log from 'loglevel'
 import { SatelliteError, SatelliteErrorCode } from '../util'
 
+
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
 const DEFAULTS: MigratorOptions = {
@@ -25,12 +26,15 @@ export class BundleMigrator implements Migrator {
   migrations: StmtMigration[]
 
   tableName: string
+  pg: boolean = false
 
   constructor(
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
+    pg: boolean = false,
     tableName?: string
   ) {
+    this.pg = pg
     const overrides = { tableName: tableName }
     const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
 
@@ -58,10 +62,9 @@ export class BundleMigrator implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = `
-      SELECT 1 FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
+    let tableExists = `
+    SELECT 1 FROM information_schema.tables
+      WHERE table_name = $1
     `
     const tables = await this.adapter.query({
       sql: tableExists,
@@ -77,9 +80,10 @@ export class BundleMigrator implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM ${this.tableName}
-        ORDER BY id ASC
+    SELECT version FROM main.${this.tableName}
+      ORDER BY id ASC
     `
+
     const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
   }
@@ -93,10 +97,10 @@ export class BundleMigrator implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM ${this.tableName}
-        WHERE version != '0'
-        ORDER BY version DESC
-        LIMIT 1
+    SELECT version FROM main.${this.tableName}
+      WHERE version != '0'
+      ORDER BY version DESC
+      LIMIT 1
     `
     const rows = await this.adapter.query({ sql: schemaVersion })
     if (rows.length === 0) {
@@ -106,14 +110,14 @@ export class BundleMigrator implements Migrator {
     return (rows[0] as MigrationRecord).version
   }
 
+  // TODO: does this need to be converted to PG?
   async validateApplied(
     migrations: StmtMigration[],
-    existing: MigrationRecord[]
+    existing: MigrationRecord[],
   ) {
     // We validate that the existing records are the first migrations.
     existing.forEach(({ version }, i) => {
       const migration = migrations[i]
-
       if (migration.version !== version) {
         throw new SatelliteError(
           SatelliteErrorCode.UNKNOWN_SCHEMA_VSN,
@@ -133,10 +137,9 @@ export class BundleMigrator implements Migrator {
       )
     }
 
-    const applied = `INSERT INTO ${this.tableName}
-        ('version', 'applied_at') VALUES (?, ?)
-        `
-
+    const applied = `
+      INSERT INTO main.${this.tableName}(version, applied_at) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING
+    `
     await this.adapter.runInTransaction(...statements, {
       sql: applied,
       args: [version, Date.now()],
@@ -151,9 +154,10 @@ export class BundleMigrator implements Migrator {
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
     const versionExists = `
-      SELECT 1 FROM ${this.tableName}
-        WHERE version = ?
+    SELECT 1 FROM main.${this.tableName}
+      WHERE version = $1
     `
+
     const rows = await this.adapter.query({
       sql: versionExists,
       args: [migration.version],

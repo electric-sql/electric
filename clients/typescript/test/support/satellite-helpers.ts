@@ -39,7 +39,7 @@ export const initTableInfo = (): TableInfo => {
 
 export const loadSatelliteMetaTable = async (
   db: DatabaseAdapter,
-  metaTableName = '_electric_meta'
+  metaTableName = 'main._electric_meta'
 ): Promise<Row> => {
   const rows = await db.query({
     sql: `SELECT key, value FROM ${metaTableName}`,

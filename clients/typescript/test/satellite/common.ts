@@ -7,8 +7,12 @@ import {
   SqlValue,
   randomValue,
 } from '../../src/util'
-import Database from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
+// import Database from 'better-sqlite3'
+// import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
+
+import { ElectricDatabase as Database } from '../../src/drivers/postgres/database'
+import { DatabaseAdapter } from '../../src/drivers/postgres/adapter'
+
 import { BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
@@ -139,8 +143,8 @@ export const makeContext = async (
   options: Opts = opts
 ) => {
   await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
+  const dbName = `.tmp/test-${randomValue()}/`
+  const db = await Database.init(dbName)
   const adapter = new DatabaseAdapter(db)
   const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
@@ -177,10 +181,10 @@ export const makeContext = async (
 }
 
 export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
-  const { dbName } = t.context
+  // const { dbName } = t.context
 
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
+  // await removeFile(dbName, { force: true })
+  // await removeFile(`${dbName}-journal`, { force: true })
 }
 
 export const cleanAndStopSatellite = async (

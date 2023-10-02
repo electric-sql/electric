@@ -9,49 +9,445 @@
 export default [
   {
     statements: [
-      'DROP TABLE IF EXISTS _electric_trigger_settings;',
-      'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      'DROP TABLE IF EXISTS main._electric_trigger_settings;',
+      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
     ],
     version: '1',
   },
   {
     statements: [
-      'CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;',
-      'DROP TABLE IF EXISTS _electric_trigger_settings;',
-      'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
-      "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",
-      'DROP TRIGGER IF EXISTS update_ensure_main_child_primarykey;',
-      "CREATE TRIGGER update_ensure_main_child_primarykey\n   BEFORE UPDATE ON main.child\nBEGIN\n  SELECT\n    CASE\n      WHEN old.id != new.id THEN\n        RAISE (ABORT,'cannot change the value of column id as it belongs to the primary key')\n    END;\nEND;",
-      'DROP TRIGGER IF EXISTS insert_main_child_into_oplog;',
-      "CREATE TRIGGER insert_main_child_into_oplog\n   AFTER INSERT ON main.child\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.child')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'child', 'INSERT', json_object('id', new.id), json_object('id', new.id, 'parent', new.parent), NULL, NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS update_main_child_into_oplog;',
-      "CREATE TRIGGER update_main_child_into_oplog\n   AFTER UPDATE ON main.child\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.child')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'child', 'UPDATE', json_object('id', new.id), json_object('id', new.id, 'parent', new.parent), json_object('id', old.id, 'parent', old.parent), NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS delete_main_child_into_oplog;',
-      "CREATE TRIGGER delete_main_child_into_oplog\n   AFTER DELETE ON main.child\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.child')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'child', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'parent', old.parent), NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS compensation_insert_main_child_parent_into_oplog;',
-      "CREATE TRIGGER compensation_insert_main_child_parent_into_oplog\n   AFTER INSERT ON main.child\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent') AND\n        1 == (SELECT value from _electric_meta WHERE key == 'compensations')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  SELECT 'main', 'parent', 'UPDATE', json_object('id', id), json_object('id', id, 'value', value, 'other', other), NULL, NULL\n  FROM main.parent WHERE id = new.parent;\nEND;",
-      'DROP TRIGGER IF EXISTS compensation_update_main_child_parent_into_oplog;',
-      "CREATE TRIGGER compensation_update_main_child_parent_into_oplog\n   AFTER UPDATE ON main.child\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent') AND\n        1 == (SELECT value from _electric_meta WHERE key == 'compensations')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  SELECT 'main', 'parent', 'UPDATE', json_object('id', id), json_object('id', id, 'value', value, 'other', other), NULL, NULL\n  FROM main.parent WHERE id = new.parent;\nEND;",
-      'DROP TRIGGER IF EXISTS update_ensure_main_items_primarykey;',
-      "CREATE TRIGGER update_ensure_main_items_primarykey\n   BEFORE UPDATE ON main.items\nBEGIN\n  SELECT\n    CASE\n      WHEN old.value != new.value THEN\n        RAISE (ABORT,'cannot change the value of column value as it belongs to the primary key')\n    END;\nEND;",
-      'DROP TRIGGER IF EXISTS insert_main_items_into_oplog;',
-      "CREATE TRIGGER insert_main_items_into_oplog\n   AFTER INSERT ON main.items\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'items', 'INSERT', json_object('value', new.value), json_object('value', new.value), NULL, NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS update_main_items_into_oplog;',
-      "CREATE TRIGGER update_main_items_into_oplog\n   AFTER UPDATE ON main.items\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'items', 'UPDATE', json_object('value', new.value), json_object('value', new.value), json_object('value', old.value), NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS delete_main_items_into_oplog;',
-      "CREATE TRIGGER delete_main_items_into_oplog\n   AFTER DELETE ON main.items\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.items')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'items', 'DELETE', json_object('value', old.value), NULL, json_object('value', old.value), NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS update_ensure_main_parent_primarykey;',
-      "CREATE TRIGGER update_ensure_main_parent_primarykey\n   BEFORE UPDATE ON main.parent\nBEGIN\n  SELECT\n    CASE\n      WHEN old.id != new.id THEN\n        RAISE (ABORT,'cannot change the value of column id as it belongs to the primary key')\n    END;\nEND;",
-      'DROP TRIGGER IF EXISTS insert_main_parent_into_oplog;',
-      "CREATE TRIGGER insert_main_parent_into_oplog\n   AFTER INSERT ON main.parent\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'parent', 'INSERT', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'other', new.other), NULL, NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS update_main_parent_into_oplog;',
-      "CREATE TRIGGER update_main_parent_into_oplog\n   AFTER UPDATE ON main.parent\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'parent', 'UPDATE', json_object('id', new.id), json_object('id', new.id, 'value', new.value, 'other', new.other), json_object('id', old.id, 'value', old.value, 'other', old.other), NULL);\nEND;",
-      'DROP TRIGGER IF EXISTS delete_main_parent_into_oplog;',
-      "CREATE TRIGGER delete_main_parent_into_oplog\n   AFTER DELETE ON main.parent\n   WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'main.parent')\nBEGIN\n  INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)\n  VALUES ('main', 'parent', 'DELETE', json_object('id', old.id), NULL, json_object('id', old.id, 'value', old.value, 'other', old.other), NULL);\nEND;",
+      'CREATE TABLE IF NOT EXISTS main.items (\n  value TEXT PRIMARY KEY NOT NULL\n);',
+      'CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n);',
+      'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id)\n);',
+      'DROP TABLE IF EXISTS main._electric_trigger_settings;',
+      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
+      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",
+
+
+      'DROP TRIGGER IF EXISTS update_ensure_main_child_primarykey ON main.child;',
+      `
+      CREATE OR REPLACE FUNCTION update_ensure_main_child_primarykey_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF old.id != new.id THEN
+          RAISE EXCEPTION 'cannot change the value of column id as it belongs to the primary key';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;`,
+      `
+      CREATE TRIGGER update_ensure_main_child_primarykey
+      BEFORE UPDATE ON main.child
+      FOR EACH ROW
+      EXECUTE FUNCTION update_ensure_main_child_primarykey_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS insert_main_child_into_oplog ON main.child',
+
+      `
+      CREATE OR REPLACE FUNCTION insert_main_child_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'child', 'INSERT', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), NULL, NULL);
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      CREATE TRIGGER insert_main_child_into_oplog
+      AFTER INSERT ON main.child
+      FOR EACH ROW
+      EXECUTE FUNCTION insert_main_child_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS update_main_child_into_oplog ON main.child;',
+      `
+      CREATE OR REPLACE FUNCTION update_main_child_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'child', 'UPDATE', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER update_main_child_into_oplog
+      AFTER UPDATE ON main.child
+      FOR EACH ROW
+      EXECUTE FUNCTION update_main_child_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS delete_main_child_into_oplog ON main.child;',
+      `
+      CREATE OR REPLACE FUNCTION delete_main_child_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'child', 'DELETE', jsonb_build_object('id', OLD.id), NULL, jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER delete_main_child_into_oplog
+      AFTER DELETE ON main.child
+      FOR EACH ROW
+      EXECUTE FUNCTION delete_main_child_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS compensation_insert_main_child_parent_into_oplog ON main.child;',
+      `
+      CREATE OR REPLACE FUNCTION compensation_insert_main_child_parent_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+          meta_value TEXT;
+        BEGIN
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
+
+          IF flag_value = 1 AND meta_value = '1' THEN
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            SELECT 'main', 'parent', 'INSERT', jsonb_build_object('id', id),
+              jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
+            FROM main.parent WHERE id = NEW."parent";
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER compensation_insert_main_child_parent_into_oplog
+      AFTER INSERT ON main.child
+      FOR EACH ROW
+      EXECUTE FUNCTION compensation_insert_main_child_parent_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS compensation_update_main_child_parent_into_oplog ON main.parent;',
+      `
+      CREATE OR REPLACE FUNCTION compensation_update_main_child_parent_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+          meta_value TEXT;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+
+          -- Get the 'compensations' value from _electric_meta
+          SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
+
+          IF flag_value = 1 AND meta_value = '1' THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            SELECT 'main', 'parent', 'UPDATE', jsonb_build_object('id', id),
+              jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
+            FROM main.parent WHERE id = NEW."parent";
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER compensation_update_main_child_parent_into_oplog
+      AFTER UPDATE ON main.parent
+      FOR EACH ROW
+      EXECUTE FUNCTION compensation_update_main_child_parent_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS update_ensure_main_items_primarykey ON main.items;',
+      `
+      CREATE OR REPLACE FUNCTION update_ensure_main_items_primarykey_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF old.value != new.value THEN
+          RAISE EXCEPTION 'cannot change the value of column value as it belongs to the primary key';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;`,
+      `
+      CREATE TRIGGER update_ensure_main_items_primarykey
+      BEFORE UPDATE ON main.items
+      FOR EACH ROW
+      EXECUTE FUNCTION update_ensure_main_items_primarykey_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS insert_main_items_into_oplog ON main.items;',
+      `
+      CREATE OR REPLACE FUNCTION insert_main_items_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'items', 'INSERT', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), NULL, NULL);
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER insert_main_items_into_oplog
+      AFTER INSERT ON main.items
+      FOR EACH ROW
+      EXECUTE FUNCTION insert_main_items_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS update_main_items_into_oplog ON main.items;',
+      `
+      CREATE OR REPLACE FUNCTION update_main_items_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'items', 'UPDATE', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), jsonb_build_object('value', OLD.value), NULL);
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;`,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER update_main_items_into_oplog
+      AFTER UPDATE ON main.items
+      FOR EACH ROW
+      EXECUTE FUNCTION update_main_items_into_oplog_function();
+      `,
+
+
+      'DROP TRIGGER IF EXISTS delete_main_items_into_oplog ON main.items;',
+      `
+      CREATE OR REPLACE FUNCTION delete_main_items_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES ('main', 'items', 'DELETE', jsonb_build_object('value', OLD.value), NULL, jsonb_build_object('value', OLD.value), NULL);
+          END IF;
+
+          RETURN OLD;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;`,
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER delete_main_items_into_oplog
+      AFTER DELETE ON main.items
+      FOR EACH ROW
+      EXECUTE FUNCTION delete_main_items_into_oplog_function();
+      `,
+      'DROP TRIGGER IF EXISTS update_ensure_main_parent_primarykey ON main.parent;',
+
+      `
+      CREATE OR REPLACE FUNCTION update_ensure_main_parent_primarykey_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF OLD.id != NEW.id THEN
+          RAISE EXCEPTION 'cannot change the value of column id as it belongs to the primary key';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER update_ensure_main_parent_primarykey
+      BEFORE UPDATE ON main.parent
+      FOR EACH ROW
+      EXECUTE FUNCTION update_ensure_main_parent_primarykey_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS insert_main_parent_into_oplog ON main.parent;',
+      `
+      CREATE OR REPLACE FUNCTION insert_main_parent_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES (
+              'main',
+              'parent',
+              'INSERT',
+              jsonb_build_object('id', NEW.id),
+              jsonb_build_object('id', NEW.id, 'value', NEW.value, 'other', NEW.other),
+              NULL,
+              NULL
+            );
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER insert_main_parent_into_oplog
+      AFTER INSERT ON main.parent
+      FOR EACH ROW
+      EXECUTE FUNCTION insert_main_parent_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS update_main_parent_into_oplog ON main.parent;',
+
+      `
+      CREATE OR REPLACE FUNCTION update_main_parent_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES (
+              'main',
+              'parent',
+              'UPDATE',
+              jsonb_build_object('id', NEW.id),
+              jsonb_build_object('id', NEW.id, 'value', NEW.value, 'other', NEW.other),
+              jsonb_build_object('id', OLD.id, 'value', OLD.value, 'other', OLD.other),
+              NULL
+            );
+          END IF;
+
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER update_main_parent_into_oplog
+      AFTER UPDATE ON main.parent
+      FOR EACH ROW
+      EXECUTE FUNCTION update_main_parent_into_oplog_function();
+      `,
+
+      'DROP TRIGGER IF EXISTS delete_main_parent_into_oplog ON main.parent;',
+
+      `
+      CREATE OR REPLACE FUNCTION delete_main_parent_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            VALUES (
+              'main',
+              'parent',
+              'DELETE',
+              jsonb_build_object('id', OLD.id),
+              NULL,
+              jsonb_build_object('id', OLD.id, 'value', OLD.value, 'other', OLD.other),
+              NULL
+            );
+          END IF;
+
+          RETURN OLD;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+
+      `
+      -- Attach the trigger function to the table
+      CREATE TRIGGER delete_main_parent_into_oplog
+      AFTER DELETE ON main.parent
+      FOR EACH ROW
+      EXECUTE FUNCTION delete_main_parent_into_oplog_function();
+      `
     ],
     version: '2',
   },

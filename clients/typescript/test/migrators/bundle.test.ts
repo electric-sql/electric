@@ -1,20 +1,22 @@
 import test from 'ava'
-import Database from 'better-sqlite3'
+
+import { ElectricDatabase as Database } from '../../src/drivers/postgres/database'
+import { DatabaseAdapter } from '../../src/drivers/postgres/adapter'
 
 import { rm as removeFile } from 'node:fs/promises'
+import { AnyDatabase } from '../../src/drivers'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { BundleMigrator } from '../../src/migrators/bundle'
 import { makeStmtMigration } from '../../src/migrators'
 
-import { randomValue } from '../../src/util/random'
-
 import migrations from '../support/migrations/migrations.js'
 
-test.beforeEach((t) => {
-  const dbName = `bundle-migrator-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
+test.beforeEach(async (t) => {
+
+  const dbName = "./data/db";
+
+  let db = await Database.init(dbName)
+  let adapter = new DatabaseAdapter(db)
 
   t.context = {
     adapter,
@@ -23,10 +25,13 @@ test.beforeEach((t) => {
 })
 
 test.afterEach.always(async (t) => {
-  const { dbName } = t.context as any
+  const { dbName, adapter } = t.context as any
 
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
+  // await pg.stop();
+  await (<DatabaseAdapter>adapter).stop()
+
+  // Remove postgres directory
+  await removeFile(dbName, { force: true, recursive: true });
 })
 
 test('run the bundle migrator', async (t) => {

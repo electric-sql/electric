@@ -10,6 +10,8 @@ import { Database as ReactNativeSQLiteStorageDatabase } from './react-native-sql
 
 import { Database as SQLXDatabase } from './sqlx/database'
 
+import { Database as PostgresDatabase } from './postgres/database'
+
 export type AnyDatabase =
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
@@ -17,3 +19,4 @@ export type AnyDatabase =
   | ReactNativeSQLiteStorageDatabase
   | WASQLiteDatabase
   | SQLXDatabase
+  | PostgresDatabase

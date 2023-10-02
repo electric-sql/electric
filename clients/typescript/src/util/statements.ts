@@ -21,13 +21,15 @@ export function isInsertUpdateOrDeleteStatement(sql: string) {
  * @param columns columns that describe records
  * @param records records to be inserted
  * @param maxParameters max parameters this SQLite can accept - determines batching factor
+ * @param extraSql Postgres sometimes needs `ON CONFLICT` clauses after the `INSERT`s
  * @returns array of statements ready to be executed by the adapter
  */
 export function prepareInsertBatchedStatements(
   baseSql: string,
   columns: string[],
   records: Record<string, SqlValue>[],
-  maxParameters: number
+  maxParameters: number,
+  extraSql: string = ""
 ): Statement[] {
   const stmts: Statement[] = []
   const columnCount = columns.length
@@ -41,7 +43,7 @@ export function prepareInsertBatchedStatements(
     (maxParameters - (maxParameters % columnCount)) / columnCount
   while (processed < recordCount) {
     const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
-    const sql = baseSql + insertPattern.repeat(currentInsertCount).slice(0, -1)
+    const sql = baseSql + insertPattern.repeat(currentInsertCount).slice(0, -1) + extraSql
     const args = records
       .slice(processed, processed + currentInsertCount)
       .flatMap((record) => columns.map((col) => record[col] as SqlValue))
