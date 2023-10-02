@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Controlled as CodeMirror } from 'react-codemirror2'
+import { UnControlled as CodeMirror } from 'react-codemirror2'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
@@ -18,10 +18,6 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
   const [history, setHistory] = useState('')
   const [active, setActive] = useState('query')
   // const { db } = useElectric()
-
-  const handleChange = (value: string) => {
-    setCode(value)
-  }
 
   function submitSQL() {
     let cmd = code
@@ -66,8 +62,9 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
             <div className="mirror-in">
               <CodeMirror
                 value={code}
-                onBeforeChange={handleChange}
-                onChange={(_editor, _data, _value) => {}}
+                onChange={(_editor, _data, value) => {
+                  setCode(value)
+                }}
                 options={{
                   tabSize: 2,
                   mode: 'sql',
@@ -100,7 +97,6 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
             <div className="mirror-in">
               <CodeMirror
                 value={history}
-                onBeforeChange={(_editor, _data, _value) => {}}
                 onChange={(_editor, _data, _value) => {}}
                 options={{
                   readOnly: true,
@@ -131,7 +127,6 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
         <div className="mirror-in">
           <CodeMirror
             value={response}
-            onBeforeChange={(_editor, _data, _value) => {}}
             onChange={(_editor, _data, _value) => {}}
             options={{
               readOnly: true,

@@ -8,7 +8,6 @@ import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 import { ElectricContext } from 'electric-sql/react'
 
-
 import './Example.css'
 import { globalRegistry } from 'electric-sql/satellite'
 import AddToolbar, { TypescriptApi } from '../../src'
@@ -53,8 +52,6 @@ export const Example = () => {
   if (electric === undefined) {
     return null
   }
-
-
 
   return (
     <ElectricProvider db={electric}>
