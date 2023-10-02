@@ -46,6 +46,10 @@ model user_profile {
   userId Int    @unique
   user   user?  @relation(fields: [userId], references: [id])
 }
+
+model model {
+  id Int @id
+}
 `
 
 const expectedPrismaSchema = `
@@ -97,11 +101,17 @@ model UserProfile {
   userId Int    @unique
   user   User?  @relation(fields: [userId], references: [id])
 }
+
+model Model {
+  @@map("model")
+  id Int @id
+}
 `
 
 test('migrator correctly PascalCases model names', (t) => {
   const newSchema = doPascalCaseTableNames(
     lowerCasePrismaSchema.split(/\r?\n/)
   ).join('\n')
+  console.log(expectedPrismaSchema)
   t.assert(newSchema === expectedPrismaSchema)
 })
