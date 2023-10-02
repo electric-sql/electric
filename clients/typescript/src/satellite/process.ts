@@ -70,8 +70,8 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { IBackOffOptions, backOff } from 'exponential-backoff'
-import { SCHEMA_VSN_ERROR_MSG } from '../migrators/bundle'
 import { chunkBy } from '../util'
+import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -96,22 +96,27 @@ type MetaEntries = {
 }
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
-
-const connectRetryHandler: ConnectRetryHandler = (_error, _attempts) => {
-  // for simplicity, always retry
+const connectRetryHandler: ConnectRetryHandler = (error) => {
+  if (
+    !(error instanceof SatelliteError) ||
+    isThrowable(error) ||
+    isFatal(error)
+  ) {
+    Log.debug(`connectAndStartRetryHandler was cancelled: ${error.message}`)
+    return false
+  }
   return true
 }
 
+// default values are set to not overload the server
 const connectionRetryPolicy: Partial<IBackOffOptions> = {
-  delayFirstAttempt: false,
-  startingDelay: 100,
+  delayFirstAttempt: true,
+  startingDelay: 1000,
   jitter: 'full',
-  maxDelay: 5000,
-  numOfAttempts: 100,
+  maxDelay: 10000,
+  numOfAttempts: 50,
   timeMultiple: 2,
 }
-
-const throwErrors = [SatelliteErrorCode.INTERNAL]
 
 export class SatelliteProcess implements Satellite {
   dbName: DbName
@@ -136,6 +141,7 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
+  previousShapeSubscriptions: ClientShapeDefinition[]
   subscriptions: SubscriptionsManager
   subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
   subscriptionIdGenerator: (...args: any) => string
@@ -171,6 +177,7 @@ export class SatelliteProcess implements Satellite {
     this.opts = opts
     this.relations = {}
 
+    this.previousShapeSubscriptions = []
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
@@ -242,7 +249,7 @@ export class SatelliteProcess implements Satellite {
     const connectivityStateHandler = ({
       connectivityState,
     }: ConnectivityStateChangeNotification) => {
-      this._connectivityStateChanged(connectivityState)
+      this._handleConnectivityStateChange(connectivityState)
     }
     this._connectivityChangeSubscription =
       this.notifier.subscribeToConnectivityStateChanges(
@@ -279,9 +286,7 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.setState(subscriptionsState)
     }
 
-    const connectionPromise = this._connectWithBackoff().then(() =>
-      this._startReplication()
-    )
+    const connectionPromise = this._connectWithBackoff()
     return { connectionPromise }
   }
 
@@ -368,7 +373,7 @@ export class SatelliteProcess implements Satellite {
       this._potentialDataChangeSubscription = undefined
     }
 
-    return this._connectivityStateChanged('disconnected')
+    this._disconnect()
   }
 
   async subscribe(
@@ -561,15 +566,21 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // maintains subscriptions
-  async _resetClientState(): Promise<ClientShapeDefinition[]> {
-    await this._connectivityStateChanged('disconnected')
-
+  async _resetClientState(opts?: {
+    keepSubscribedShapes: boolean
+  }): Promise<void> {
+    Log.warn(`resetting client state`)
+    this._disconnect()
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
-    const shapeDefs: ClientShapeDefinition[] = subscriptionIds
-      .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
-      .filter((s): s is ShapeDefinition[] => s !== undefined)
-      .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
+
+    if (opts?.keepSubscribedShapes) {
+      const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+        .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
+        .filter((s): s is ShapeDefinition[] => s !== undefined)
+        .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
+
+      this.previousShapeSubscriptions.push(...shapeDefs)
+    }
 
     this._lsn = undefined
 
@@ -582,23 +593,6 @@ export class SatelliteProcess implements Satellite {
       this._setMetaStatement('lsn', null),
       this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
-
-    return shapeDefs
-  }
-
-  async _reconnect(shapeDefs: ClientShapeDefinition[]): Promise<void> {
-    Log.warn(`reconnecting to server`)
-    await this._connectWithBackoff()
-    await this._startReplication()
-
-    if (shapeDefs.length > 0) {
-      this.subscribe(shapeDefs)
-    }
-  }
-
-  async _resetClientStateAndReconnect() {
-    const shapes = await this._resetClientState()
-    return await this._reconnect(shapes)
   }
 
   async _handleSubscriptionError(
@@ -630,7 +624,7 @@ export class SatelliteProcess implements Satellite {
       if (satelliteError.code === SatelliteErrorCode.AUTH_REQUIRED) {
         // TODO: should stop retrying
         Log.warn(
-          `a fatal error occurred while initializing: ${satelliteError.message}`
+          `an authentication error occurred while connecting to server: ${satelliteError.message}`
         )
         return
       }
@@ -641,24 +635,39 @@ export class SatelliteProcess implements Satellite {
 
     Log.warn(`an error occurred in satellite: ${satelliteError.message}`)
 
-    // all other errors are handled by closing the client (if not yet) and retrying
-    this._connectivityStateChanged('disconnected').then(() =>
-      this._connectivityStateChanged('available')
-    )
+    this._handleOrThrowError(satelliteError)
   }
 
-  async _connectivityStateChanged(status: ConnectivityState): Promise<void> {
-    this.connectivityState = status
-    Log.debug(`connectivity state changed ${status}`)
-    // TODO: no op if state is the same
+  _handleOrThrowError(error: SatelliteError): Promise<void> {
+    if (!error) {
+      const e = new SatelliteError(
+        SatelliteErrorCode.INTERNAL,
+        'received an error event without an error code'
+      )
+      throw wrapFatalError(e)
+    }
+
+    if (isThrowable(error) || isFatal(error)) {
+      this._disconnect()
+      throw isFatal(error) ? wrapFatalError(error) : error
+    }
+
+    Log.warn('Disconnected with a non fatal error, reconnecting')
+
+    this._disconnect()
+    return this._connectWithBackoff()
+  }
+
+  async _handleConnectivityStateChange(
+    status: ConnectivityState
+  ): Promise<void> {
+    Log.debug(`Connectivity state changed: ${status}`)
     switch (status) {
       case 'available': {
         Log.warn(`checking network availability and reconnecting`)
-        return this._connectWithBackoff().then(() => this._startReplication())
+        return this._connectWithBackoff()
       }
-      case 'error':
       case 'disconnected': {
-        Log.warn(`client disconnected from server`)
         this.client.close()
         return
       }
@@ -671,28 +680,53 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // we might just move starting replication into the retrier, which might be more simple to manage
   async _connectWithBackoff(): Promise<void> {
     if (!this.initializing || this.initializing?.finished()) {
       this.initializing = getWaiter()
     }
 
-    await backOff(() => this._connect(), {
+    const opts = {
       ...connectionRetryPolicy,
       retry: this._connectRetryHandler,
-    }).catch((e) => {
+    }
+
+    await backOff(async () => {
+      await this._connect()
+      await this._startReplication()
+      this._subscribePreviousShapeRequests()
+
+      this._notifyConnectivityState('connected')
+      this.initializing?.resolve()
+    }, opts).catch((e) => {
       // We're very sure that no calls are going to modify `this.initializing` before this promise resolves
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-
-      const error = new SatelliteError(
-        SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
-        `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
-      )
-
-      this.initializing?.reject(e)
-      this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
+      const error = !connectRetryHandler(e, 0)
+        ? e
+        : new SatelliteError(
+            SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
+            `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
+          )
+      this._disconnect()
+      this.initializing?.reject(error)
       throw error
     })
+  }
+
+  _subscribePreviousShapeRequests(): void {
+    try {
+      if (this.previousShapeSubscriptions.length > 0) {
+        Log.warn(`Subscribing previous shape definitions`)
+        this.subscribe(
+          this.previousShapeSubscriptions.splice(
+            0,
+            this.previousShapeSubscriptions.length
+          )
+        )
+      }
+    } catch (error: any) {
+      const message = `Client was unable to subscribe previously subscribed shapes: ${error.message}`
+      throw new SatelliteError(SatelliteErrorCode.INTERNAL, message)
+    }
   }
 
   // NO DIRECT CALLS TO CONNECT
@@ -719,6 +753,11 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  private _disconnect(): void {
+    this.client.close()
+    this._notifyConnectivityState('disconnected')
+  }
+
   async _startReplication(): Promise<void> {
     try {
       const schemaVersion = await this.migrator.querySchemaVersion()
@@ -735,52 +774,30 @@ export class SatelliteProcess implements Satellite {
       )
 
       if (error) {
-        if (
-          (error.code == SatelliteErrorCode.INVALID_POSITION ||
-            error.code == SatelliteErrorCode.BEHIND_WINDOW ||
-            error.code == SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND) &&
-          this.opts?.clearOnBehindWindow
-        ) {
-          Log.warn(
-            `server error: ${error.message}. resetting client state and retrying connection`
-          )
-          // restart reconnection loop
-          return await this._resetClientStateAndReconnect()
-        }
+        throw error
+      }
+    } catch (error: any) {
+      Log.warn(`Couldn't start replication: ${error.message}`)
+      if (!(error instanceof SatelliteError)) {
+        throw new SatelliteError(SatelliteErrorCode.INTERNAL, error.message)
+      }
 
+      if (isOutOfSyncError(error) && this.opts?.clearOnBehindWindow) {
+        await this._resetClientState({ keepSubscribedShapes: true })
         throw error
       }
 
-      this.notifier.connectivityStateChanged(this.dbName, 'connected')
-      this.initializing?.resolve()
-    } catch (error: any) {
-      if (error.code == SatelliteErrorCode.UNKNOWN_SCHEMA_VSN) {
-        Log.warn(SCHEMA_VSN_ERROR_MSG)
-
-        // FIXME: I think at this point it's clear the client needs to be re-generated
-        this.initializing?.reject(
-          new SatelliteError(error.code, SCHEMA_VSN_ERROR_MSG)
-        )
-        this.notifier.connectivityStateChanged(this.dbName, 'disconnected')
-        return
-      } else {
-        this.initializing?.reject(error)
-
-        if (!(error instanceof SatelliteError)) {
-          throw error
-        }
-        if (throwErrors.includes(error.code)) {
-          throw error
-        }
-
-        Log.warn(
-          `Couldn't start replication with reason: ${error.message}. resetting client state and retrying`
-        )
-        return this._resetClientStateAndReconnect()
+      // Some errors could be fixed by dropping local database entirely
+      // We propagate a fatal error, so the application can decide how to handle it
+      if (isThrowable(error) || isFatal(error)) {
+        throw isFatal(error) ? wrapFatalError(error) : error
       }
-    } finally {
-      this.initializing = undefined
     }
+  }
+
+  private _notifyConnectivityState(connectivityState: ConnectivityState): void {
+    this.connectivityState = connectivityState
+    this.notifier.connectivityStateChanged(this.dbName, this.connectivityState)
   }
 
   async _verifyTableStructure(): Promise<boolean> {

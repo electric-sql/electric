@@ -70,7 +70,8 @@ test('setup starts a satellite process', async (t) => {
 test('start creates system tables', async (t) => {
   const { adapter, satellite, authState } = t.context
 
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
 
   const sql = "select name from sqlite_master where type = 'table'"
   const rows = await adapter.query({ sql })
@@ -95,12 +96,14 @@ test('load metadata', async (t) => {
 test('set persistent client id', async (t) => {
   const { satellite, authState } = t.context
 
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
   await satellite.stop()
 
-  await satellite.start(authState)
+  const conn1 = await satellite.start(authState)
+  await conn1.connectionPromise
 
   const clientId2 = satellite._authState!.clientId
   t.truthy(clientId2)
@@ -203,7 +206,8 @@ test('starting and stopping the process works', async (t) => {
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
 
   await sleepAsync(opts.pollingInterval)
 
@@ -221,13 +225,13 @@ test('starting and stopping the process works', async (t) => {
   await sleepAsync(opts.pollingInterval)
 
   // no txn notified
-  t.is(notifier.notifications.length, 3)
+  t.is(notifier.notifications.length, 4)
 
-  await satellite.start(authState)
-  await sleepAsync(0)
+  const conn1 = await satellite.start(authState)
+  await conn1.connectionPromise
 
   // connect, 4th txn
-  t.is(notifier.notifications.length, 5)
+  t.is(notifier.notifications.length, 6)
 })
 
 test('snapshots on potential data change', async (t) => {
@@ -1157,9 +1161,11 @@ test('get transactions from opLogEntries', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState } = t.context
+  const { runMigrations, dbName, satellite, adapter, authState, notifier } =
+    t.context
   await runMigrations()
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
@@ -1168,10 +1174,10 @@ test('handling connectivity state change stops queueing operations', async (t) =
   await satellite._performSnapshot()
 
   // We should have sent (or at least enqueued to send) one row
-  const sentLsn = await satellite.client.getLastSentLsn()
+  const sentLsn = satellite.client.getLastSentLsn()
   t.deepEqual(sentLsn, numberToBytes(1))
 
-  await satellite._connectivityStateChanged('disconnected')
+  await satellite._handleConnectivityStateChange('disconnected')
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1180,13 +1186,13 @@ test('handling connectivity state change stops queueing operations', async (t) =
   await satellite._performSnapshot()
 
   // Since connectivity is down, that row isn't yet sent
-  const lsn1 = await satellite.client.getLastSentLsn()
+  const lsn1 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn1, sentLsn)
 
   // Once connectivity is restored, we will immediately run a snapshot to send pending rows
-  await satellite._connectivityStateChanged('available')
+  await satellite._handleConnectivityStateChange('available')
   await sleepAsync(200) // Wait for snapshot to run
-  const lsn2 = await satellite.client.getLastSentLsn()
+  const lsn2 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn2, numberToBytes(2))
 })
 
@@ -1194,7 +1200,8 @@ test('garbage collection is triggered when transaction from the same origin is r
   const { satellite } = t.context
   const { runMigrations, adapter, authState } = t.context
   await runMigrations()
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -1204,12 +1211,12 @@ test('garbage collection is triggered when transaction from the same origin is r
   })
 
   // Before snapshot, we didn't send anything
-  const lsn1 = await satellite.client.getLastSentLsn()
+  const lsn1 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn1, numberToBytes(0))
 
   // Snapshot sends these oplog entries
   await satellite._performSnapshot()
-  const lsn2 = await satellite.client.getLastSentLsn()
+  const lsn2 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn2, numberToBytes(2))
 
   const old_oplog = await satellite._getEntries()
@@ -1255,8 +1262,7 @@ test('throw other replication errors', async (t) => {
   return Promise.all(
     [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
       p?.catch((e: SatelliteError) => {
-        console.log(`error ${e}`)
-        t.is(e.code, SatelliteErrorCode.INTERNAL)
+        t.is(e.code, SatelliteErrorCode.FATAL_ERROR)
       })
     )
   )
@@ -1637,7 +1643,8 @@ test('a subscription request failure does not clear the manager state', async (t
 
 test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
-  await satellite.start(authState)
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
   await runMigrations()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
   const ts = await satellite._performSnapshot()
