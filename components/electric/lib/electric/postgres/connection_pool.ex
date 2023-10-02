@@ -32,11 +32,19 @@ defmodule Electric.Postgres.ConnectionPool do
     NimblePool.checkout!(
       pool,
       :checkout,
-      fn _pool, conn ->
-        {fun.(conn), :ok}
-      end,
+      fn _pool, conn -> {execute_fun_with_conn(fun, conn), :ok} end,
       @pool_timeout
     )
+  end
+
+  defp execute_fun_with_conn(fun, conn) do
+    try do
+      fun.(conn)
+    rescue
+      e ->
+        Logger.error(Exception.format(:error, e, __STACKTRACE__))
+        {:error, e}
+    end
   end
 
   @spec name(Connectors.origin()) :: Electric.reg_name()
