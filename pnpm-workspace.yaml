@@ -4,3 +4,5 @@ packages:
   - 'examples/starter'
   - 'generator'
   - 'components/electric'
+  - 'examples/tauri-postgres'
+  - 'examples/web-wa-sqlite'

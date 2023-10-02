@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
-    "@electric-sql/prisma-generator": "latest",
+    "@electric-sql/prisma-generator": "workspace:*",
     "@prisma/client": "4.8.1",
     "@tauri-apps/cli": "^1.4.0",
     "@types/node": ">=16.11.0",

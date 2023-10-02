@@ -235,37 +235,37 @@ fn my_tauri_init(connection: State<DbConnection>, name: &str) -> Result<(), Stri
   Ok(())
 }
 
-#[wasm_bindgen]
-pub struct iib {
-  actions: JsValue
-}
+// #[wasm_bindgen]
+// pub struct iib {
+//   actions: JsValue
+// }
 
-impl Serialize for iib {
-  fn serialize<S>(&self, serializer: S) -> JsValue {
-    let serializer = Serializer::new()
-      .serialize_large_number_types_as_bigints(true)
-      .serialize_bytes_as_arrays(false);
+// impl Serialize for iib {
+//   fn serialize<S>(&self, serializer: S) -> JsValue {
+//     let serializer = Serializer::new()
+//       .serialize_large_number_types_as_bigints(true)
+//       .serialize_bytes_as_arrays(false);
 
-    self.serialize(&serializer)?
-  }
-}
+//     self.serialize(&serializer)?
+//   }
+// }
 
-impl Deserialize<'_> for iib {
-  fn deserialize(data: &[u8]) -> Self {
-      let s = str::from_utf8(data).unwrap();
-      let parts: Vec<&str> = s.split(',').collect();
-      let name = parts[0];
-      let age = parts[1].parse().unwrap();
+// impl Deserialize<'_> for iib {
+//   fn deserialize(data: &[u8]) -> Self {
+//       let s = str::from_utf8(data).unwrap();
+//       let parts: Vec<&str> = s.split(',').collect();
+//       let name = parts[0];
+//       let age = parts[1].parse().unwrap();
 
-      iib {
-          actions: String::from(name),
-      }
-  }
-}
+//       iib {
+//           actions: String::from(name),
+//       }
+//   }
+// }
 
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_getRowsModified(connection: State<DbConnection>, iib: iib) -> i64 {
+fn tauri_getRowsModified(connection: State<DbConnection>) -> i64 {
   println!("RSTrace: tauri_getRowsModified");
 
   0
