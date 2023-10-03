@@ -134,11 +134,22 @@ export class MockSatelliteClient extends EventEmitter implements Client {
   timeouts: NodeJS.Timeout[] = []
 
   relations: RelationsCache = {}
+  relationsCb?: (relation: Relation) => void
+  transactionsCb?: (tx: Transaction) => void
 
   relationData: Record<string, DataRecord[]> = {}
 
   setRelations(relations: RelationsCache): void {
     this.relations = relations
+    if (this.relationsCb) {
+      Object.values(relations).forEach(this.relationsCb)
+    }
+  }
+
+  setTransactions(transactions: Transaction[]): void {
+    if (this.transactionsCb) {
+      transactions.forEach(this.transactionsCb)
+    }
   }
 
   setRelationData(tablename: string, record: DataRecord): void {
@@ -286,11 +297,15 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     return Promise.resolve({})
   }
 
-  subscribeToRelations(_callback: (relation: Relation) => void): void {}
+  subscribeToRelations(callback: (relation: Relation) => void): void {
+    this.relationsCb = callback
+  }
 
   subscribeToTransactions(
-    _callback: (transaction: Transaction) => Promise<void>
-  ): void {}
+    callback: (transaction: Transaction) => Promise<void>
+  ): void {
+    this.transactionsCb = callback
+  }
 
   enqueueTransaction(transaction: DataTransaction): void {
     this.outboundSent = transaction.lsn

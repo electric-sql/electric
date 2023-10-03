@@ -837,13 +837,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       const lastTxnIdx = replication.transactions.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes, origin } =
+        const { commit_timestamp, lsn, changes, origin, migrationVersion } =
           replication.transactions[lastTxnIdx]
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
           changes,
           origin,
+          migrationVersion,
         }
         this.emit(
           'transaction',
