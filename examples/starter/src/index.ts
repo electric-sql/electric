@@ -266,34 +266,26 @@ async function checkPort(port: number, process: string, defaultPort: number): Pr
   console.warn(`Port ${port} for ${process} is already in use.`)
   // Propose user to change port
   prompt.start()
-  const i = (await prompt.get({
+  
+  const { port: newPort } = (await prompt.get({
     properties: {
-      switch: {
-        description: `Do you want to chose another port for ${process}? [y/n]`,
-        type: 'string',
-        pattern: /^[y|n]$/,
-        message: "Please reply with 'y' or 'n'",
-        default: 'y',
+      port: {
+        description: 'Hit Enter to keep it or enter a different port number',
+        type: 'number',
+        pattern: portRegex,
+        message: 'Please choose a port between 0 and 65535',
+        default: port,
       }
     }
-  })) as { switch: 'y' | 'n' }
-  
-  if (i.switch === 'y') {
-    const { port } = (await prompt.get({
-      properties: {
-        port: {
-          description: 'port',
-          type: 'number',
-          pattern: portRegex,
-          message: 'Please choose a port between 0 and 65535',
-          default: defaultPort,
-        }
-      }
-    }))
-    return checkPort(port, process, defaultPort)
+  }))
+
+  if (newPort === port) {
+    // user chose not to change port
+    return newPort
   }
   else {
-    return port
+    // user changed port, check that it is free
+    return checkPort(newPort, process, defaultPort)
   }
 }
 
