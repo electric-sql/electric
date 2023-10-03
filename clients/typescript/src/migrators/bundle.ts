@@ -116,13 +116,13 @@ export class BundleMigrator implements Migrator {
     // Thus, `existing` may be longer than `migrations`.
     // So we should only compare a prefix of `existing`
     // that has the same length as `migrations`
-    
+
     // take a slice of `existing` migrations
     // that will be checked against `migrations`
     const existingPrefix = existing.slice(0, migrations.length)
 
     // We validate that the existing records are the first migrations.
-    existingPrefix.forEach(({ version }, i) => {      
+    existingPrefix.forEach(({ version }, i) => {
       const migration = migrations[i]
 
       if (migration.version !== version) {
