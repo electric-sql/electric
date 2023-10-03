@@ -1,5 +1,7 @@
 defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
   @moduledoc false
+  # Ripped almost entirely, without shame, [from
+  # Postgrex](https://github.com/elixir-ecto/postgrex/blob/cd684e7eb25201602c931fab98c9d64e5ae44b2a/lib/postgrex/scram.ex)
 
   # SCRAM authentication requires expensive calculations
   # that may be repeated across multiple connections.
@@ -9,6 +11,7 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
   # Since those resources can be created dynamically,
   # multiple times, they are stored in ETS instead of
   # persistent term.
+  #
   use GenServer
 
   @name __MODULE__

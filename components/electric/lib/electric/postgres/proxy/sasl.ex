@@ -4,7 +4,8 @@ defmodule Electric.Postgres.Proxy.SASL do
 
   See: https://www.postgresql.org/docs/current/sasl-authentication.html
 
-  Ripped almost entirely, without shame, [from Postgrex](https://github.com/elixir-ecto/postgrex/blob/cd684e7eb25201602c931fab98c9d64e5ae44b2a/lib/postgrex/scram.ex)
+  Ripped almost entirely, without shame, [from
+  Postgrex](https://github.com/elixir-ecto/postgrex/blob/cd684e7eb25201602c931fab98c9d64e5ae44b2a/lib/postgrex/scram.ex)
   """
 
   alias PgProtocol.Message, as: M
