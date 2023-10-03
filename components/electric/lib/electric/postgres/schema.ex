@@ -172,6 +172,18 @@ defmodule Electric.Postgres.Schema do
     end
   end
 
+  @spec table_info!(t(), {name(), name()} | integer()) :: Replication.Table.t()
+  def table_info!(schema, oid_or_tuple) do
+    {:ok, table_info} = table_info(schema, oid_or_tuple)
+    table_info
+  end
+
+  @spec table_info!(t(), name(), name()) :: Replication.Table.t()
+  def table_info!(schema, pg_schema, table_name) do
+    {:ok, table_info} = table_info(schema, pg_schema, table_name)
+    table_info
+  end
+
   @doc """
   Look up a table in the schema and return replication information about it.
   """

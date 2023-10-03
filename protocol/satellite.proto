@@ -431,6 +431,8 @@ message SatSubsResp {
 
                 // Attempt to request the same table more than once in one shape
                 DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4;
+
+                INVALID_WHERE_CLAUSE = 5;
             }
 
             // error code
@@ -470,6 +472,7 @@ message SatShapeDef {
     message Select {
         // table name for this select
         string tablename = 1;
+        string where = 2; 
     }
 
     // Selects for the Shape definition

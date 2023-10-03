@@ -84,6 +84,8 @@ const subsErrorShapeReqErrorToSatError: Record<
   [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code
     .DUPLICATE_TABLE_IN_SHAPE_DEFINITION]:
     SatelliteErrorCode.DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.INVALID_WHERE_CLAUSE]:
+    SatelliteErrorCode.INVALID_WHERE_CLAUSE_IN_SHAPE_DEFINITION,
 }
 
 const subsDataErrorToSatError: Record<

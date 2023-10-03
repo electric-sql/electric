@@ -12,11 +12,16 @@ defmodule Satellite.ProtocolHelpers do
   def subscription_request(id \\ nil, shape_requests) do
     shape_requests
     |> Enum.map(fn
-      {id, tables: tables} ->
+      {id, tables} ->
         %SatShapeReq{
           request_id: to_string(id),
           shape_definition: %SatShapeDef{
-            selects: tables |> Enum.map(&%SatShapeDef.Select{tablename: &1})
+            selects:
+              tables
+              |> Enum.map(fn
+                table when is_binary(table) -> %SatShapeDef.Select{tablename: table}
+                {table, where: where} -> %SatShapeDef.Select{tablename: table, where: where}
+              end)
           }
         }
     end)

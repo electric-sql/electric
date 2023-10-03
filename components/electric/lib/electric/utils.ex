@@ -49,6 +49,58 @@ defmodule Electric.Utils do
     do: list_last_and_length(list, default, length + 1)
 
   @doc """
+  Map each value of the enumerable using a mapper, unwrapping a result tuple returned by
+  the mapper and stopping on error.
+  """
+  @spec map_while_ok(Enumerable.t(elem), (elem -> {:ok, result} | {:error, term()})) ::
+          {:ok, list(result)} | {:error, term()}
+        when elem: var, result: var
+  def map_while_ok(enum, mapper) when is_function(mapper, 1) do
+    Enum.reduce_while(enum, {:ok, []}, fn elem, {:ok, acc} ->
+      case mapper.(elem) do
+        {:ok, value} -> {:cont, {:ok, [value | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, x} -> {:ok, Enum.reverse(x)}
+      error -> error
+    end
+  end
+
+  @doc """
+  Return a list of values from `enum` that are the maximal elements as calculated
+  by the given `fun`.
+
+  Base behaviour is similar to `Enum.max_by/4`, but this function returns a list
+  of all maximal values instead of just the first one.
+  """
+  def all_max_by(
+        enum,
+        fun,
+        sorter \\ &>=/2,
+        comparator \\ &==/2,
+        empty_fallback \\ fn -> raise(Enum.EmptyError) end
+      )
+
+  def all_max_by([], _, _, _, empty_fallback), do: empty_fallback.()
+
+  def all_max_by([head | tail], fun, sorter, comparator, _) when is_function(fun, 1) do
+    {_, max_values} =
+      Enum.reduce(tail, {fun.(head), [head]}, fn elem, {curr_max, agg} ->
+        new = fun.(elem)
+
+        cond do
+          comparator.(curr_max, new) -> {curr_max, [elem | agg]}
+          sorter.(curr_max, new) -> {curr_max, agg}
+          true -> {new, [elem]}
+        end
+      end)
+
+    Enum.reverse(max_values)
+  end
+
+  @doc """
   Check if the list has any duplicates.
 
   ## Examples

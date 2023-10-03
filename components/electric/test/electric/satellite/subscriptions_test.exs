@@ -528,6 +528,200 @@ defmodule Electric.Satellite.SubscriptionsTest do
                        100
       end)
     end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Doe');
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Nobody');
+         """
+    test "The client can connect and subscribe with where clauses on shapes",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        start_replication_and_assert_response(conn, 3)
+
+        request_id = uuid4()
+        sub_id = uuid4()
+
+        request = %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id,
+              shape_definition: %SatShapeDef{
+                selects: [
+                  %SatShapeDef.Select{tablename: "users", where: "this.name ILIKE '% doe'"}
+                ]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        received = receive_subscription_data(conn, sub_id)
+        assert Map.keys(received) == [request_id]
+        assert [%SatOpInsert{row_data: %{values: [_, "John Doe"]}}] = received[request_id]
+
+        jane_nobody_uuid = uuid4()
+
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
+            uuid4(),
+            "WRONG"
+          ])
+
+        {:ok, 2} =
+          :epgsql.equery(
+            pg_conn,
+            "INSERT INTO public.users (id, name) VALUES ($1, $2), ($3, $4)",
+            [
+              uuid4(),
+              "Jane Doe",
+              jane_nobody_uuid,
+              "Jane Nobody"
+            ]
+          )
+
+        # We get the message of insertion for a table we have a subscription for, filtered on where clause
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane Doe"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        # But not for the one we don't have included in the subscription
+        refute_received {^conn,
+                         %SatOpLog{
+                           ops: [
+                             %{op: {:begin, _}},
+                             %{op: {:insert, %{row_data: %{values: [_, "WRONG", _]}}}},
+                             %{op: {:commit, _}}
+                           ]
+                         }}
+
+        # Update to the row is converted to insert if it moves into shape
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "UPDATE public.users SET name = $2 WHERE id = $1", [
+            jane_nobody_uuid,
+            "Jane New Doe"
+          ])
+
+        # We get the message of insertion for a table we have a subscription for, filtered on where clause
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane New Doe"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        # Update to the row is converted to delete if it moves out of shape
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "UPDATE public.users SET name = $2 WHERE id = $1", [
+            jane_nobody_uuid,
+            "Jane New"
+          ])
+
+        # We get the message of insertion for a table we have a subscription for, filtered on where clause
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:delete, %{old_row_data: %{values: [_, "Jane New Doe"]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+      end)
+    end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Doe');
+         """
+    test "Second subscription with where clause doesn't duplicate data",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        start_replication_and_assert_response(conn, 3)
+
+        sub_id1 = uuid4()
+        request_id1 = uuid4()
+
+        request = %SatSubsReq{
+          subscription_id: sub_id1,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id1,
+              shape_definition: %SatShapeDef{
+                selects: [
+                  %SatShapeDef.Select{tablename: "users", where: "this.name ILIKE 'john%'"}
+                ]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        received = receive_subscription_data(conn, sub_id1)
+        assert Map.keys(received) == [request_id1]
+        assert [%SatOpInsert{row_data: %{values: [_, "John Doe"]}}] = received[request_id1]
+
+        sub_id2 = uuid4()
+        request_id2 = uuid4()
+
+        request = %SatSubsReq{
+          subscription_id: sub_id2,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id2,
+              shape_definition: %SatShapeDef{
+                selects: [
+                  %SatShapeDef.Select{tablename: "users", where: "this.name ILIKE '%doe'"}
+                ]
+              }
+            }
+          ]
+        }
+
+        # Since all existing rows that satisfy new where clause have already been sent, we shouldn't receive it again
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        received = receive_subscription_data(conn, sub_id2)
+        assert Map.keys(received) == [request_id2]
+        assert [] == received[request_id2]
+
+        # But an unsubscribe from one of those still keeps messages coming for the mentioned table
+        assert {:ok, _} =
+                 MockClient.send_rpc(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id1]
+                 })
+
+        # We still get the message because the other subscription is active
+        {:ok, 1} =
+          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+            uuid4(),
+            "Jane doe"
+          ])
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            _begin,
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane doe"]}}}},
+                            _commit
+                          ]
+                        }},
+                       1000
+      end)
+    end
   end
 
   defp active_clients() do
