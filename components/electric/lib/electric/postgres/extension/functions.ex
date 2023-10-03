@@ -5,10 +5,9 @@ defmodule Electric.Postgres.Extension.Functions do
 
   alias Electric.Postgres.Extension
   require EEx
-  require Logger
 
   sql_files =
-    "functions/**/*.sql.eex"
+    "functions/*.sql.eex"
     |> Path.expand(__DIR__)
     |> Path.wildcard()
 
@@ -44,8 +43,7 @@ defmodule Electric.Postgres.Extension.Functions do
   @doc """
   Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).
 
-  Every function in the list is defined as `CREATE OR REPLACE
-  {FUNCTION,PROCEDURE}`.
+  Every function in the list is defined as `CREATE OR REPLACE FUNCTION`.
   """
   # NOTE(alco): Eventually, we're hoping to move all function definitions out of migrations and define them all
   # here. See VAX-1016 for details.
