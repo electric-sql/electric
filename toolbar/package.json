@@ -19,7 +19,9 @@
     "build-dev": "node ./dev-app/copy-wasm-files.js && node dev-app/builder.js",
     "build-prod": "NODE_ENV=production npm run build-dev",
     "start": "SERVE=true npm run build-dev",
-    "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist"
+    "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist",
+    "check-styleguide": "prettier --check --loglevel warn .",
+    "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=16.11.0"
