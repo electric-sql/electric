@@ -22,7 +22,7 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
   defimpl Operation do
     alias Electric.Postgres.Extension.SchemaLoader
 
-    def initialise(prisma, state, send) do
+    def activate(prisma, state, send) do
       {prisma, state, send}
     end
 

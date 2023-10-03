@@ -1,10 +1,68 @@
 defprotocol Electric.Postgres.Proxy.Injector.Operation do
-  def initialise(cmd, state, send)
-  def recv_client(cmd, msgs, state)
-  def recv_server(cmd, msg, state, send)
-  def send_client(cmd, state, send)
-  def recv_error(cmd, msgs, state, send)
-  def send_error(cmd, state, send)
+  @moduledoc """
+  Defines the interface between the top-level Injector module and the
+  particular behaviour of the proxy.
+
+  The behaviour is modelled as a stack of atomic operations, which is handled
+  by the implementation of this protocol for `List` below.
+
+  For any of the functions in this protocol, returning `nil` for the operation,
+  the first element in the `result` tuple (`{op, state, send}`) means that the
+  operation is done and the next in the stack should be moved up to the top.
+
+  At the root of the stack should be an implementation of this protocol which
+  never returns `nil` as the next operation, which means it is never popped off
+  the stack and will always be called to handle new client requests.
+
+  ## Handling messages from the client
+
+
+  When messages are received from the client, which calls
+  `Injector.recv_client/2`, the process is:
+
+  1. `recv_client/3` this updates the operation stack with whatever operation
+     is needed to handle the messages from the client.
+
+  2. `activate/3` is then called on the operation stack with an empty `%Send{}`
+     struct so that new operations pushed by `recv_client/3` can make their
+     move.
+
+  3. Messages put into the `Send` struct are then returned to the proxy handler
+     so they can be forwared onto their destination.
+
+
+  ## Handling messages from the server
+  """
+
+  alias Electric.Postgres.Proxy.Injector.{Send, State}
+
+  @type op_stack() :: nil | t() | [t()]
+  @type op() :: nil | t()
+  @type result() :: {op(), State.t(), Send.t()}
+
+  @doc """
+  Given a set of messages from the client returns an updated operation stack.
+  """
+  @spec recv_client(t(), [PgProtocol.t()], State.t()) :: {op_stack(), State.t()}
+  def recv_client(op, msgs, state)
+
+  @doc """
+
+  """
+  @spec activate(t(), State.t(), Send.t()) :: result()
+  def activate(op, state, send)
+
+  @spec recv_server(t(), PgProtocol.t(), State.t(), Send.t()) :: result()
+  def recv_server(op, msg, state, send)
+
+  @spec send_client(t(), State.t(), Send.t()) :: result()
+  def send_client(op, state, send)
+
+  @spec recv_error(t(), [PgProtocol.t()], State.t(), Send.t()) :: result()
+  def recv_error(op, msgs, state, send)
+
+  @spec send_error(t(), State.t(), Send.t()) :: result()
+  def send_error(op, state, send)
 end
 
 alias PgProtocol.Message, as: M
@@ -23,12 +81,12 @@ defmodule Operation.Impl do
     quote do
       import Injector.Operation.Impl
 
-      def initialise(op, state, send) do
-        {op, state, send}
-      end
-
       def recv_client(op, msgs, state) do
         {op, state}
+      end
+
+      def activate(op, state, send) do
+        {op, state, send}
       end
 
       def recv_server(_op, %M.ReadyForQuery{} = msg, state, send) do
@@ -51,8 +109,8 @@ defmodule Operation.Impl do
         {nil, state, send}
       end
 
-      defoverridable initialise: 3,
-                     recv_client: 3,
+      defoverridable recv_client: 3,
+                     activate: 3,
                      recv_server: 4,
                      send_client: 3,
                      recv_error: 4,
@@ -139,14 +197,14 @@ defimpl Operation, for: List do
     end
   end
 
-  def initialise([], state, send) do
+  def activate([], state, send) do
     {[], state, send}
   end
 
-  def initialise([op | rest], state, send) do
-    case Operation.initialise(op, state, send) do
+  def activate([op | rest], state, send) do
+    case Operation.activate(op, state, send) do
       {nil, state, send} ->
-        initialise(rest, state, send)
+        activate(rest, state, send)
 
       {op, state, send} ->
         {List.flatten([op | rest]), state, send}
@@ -160,7 +218,7 @@ defimpl Operation, for: List do
   def recv_server([op | rest], msg, state, send) do
     case Operation.recv_server(op, msg, state, send) do
       {nil, state, send} ->
-        Operation.initialise(rest, state, send)
+        Operation.activate(rest, state, send)
 
       {op, state, send} ->
         {List.flatten([op | rest]), state, send}
@@ -219,11 +277,11 @@ defmodule Operation.Wait do
       {nil, state}
     end
 
-    def initialise(%{msgs: []}, state, send) do
+    def activate(%{msgs: []}, state, send) do
       {nil, state, send}
     end
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {op, state, Send.back(send, op.msgs)}
     end
 
@@ -251,7 +309,7 @@ defmodule Operation.Pass do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       send =
         case op.direction do
           :client -> Send.front(send, op.msgs)
@@ -269,7 +327,7 @@ defmodule Operation.Between do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       if ready?(send) do
         %{front: front} = Send.flush(send)
         execute(op, front, state, Send.new())
@@ -294,7 +352,7 @@ defmodule Operation.Between do
 
     defp execute(op, msgs, state, send) do
       msgs = Enum.map(msgs, &tx_status(&1, op.status))
-      Operation.initialise(op.commands ++ [Operation.Pass.client(msgs)], state, send)
+      Operation.activate(op.commands ++ [Operation.Pass.client(msgs)], state, send)
     end
 
     def recv_error(op, msgs, state, send) do
@@ -334,7 +392,7 @@ defmodule Operation.Begin do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.begin(state), Send.back(send, op.msg)}
     end
   end
@@ -346,7 +404,7 @@ defmodule Operation.Rollback do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.rollback(state), Send.back(send, op.msg)}
     end
   end
@@ -358,14 +416,14 @@ defmodule Operation.Commit do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.commit(state), Send.back(send, op.msg)}
     end
 
     def send_error(_op, state, send) do
       %{front: front} = Send.flush(send)
 
-      Operation.initialise(
+      Operation.activate(
         [
           %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
           Operation.Pass.client([front])
@@ -376,7 +434,7 @@ defmodule Operation.Commit do
     end
 
     def recv_error(_op, msgs, state, _send) do
-      Operation.initialise(
+      Operation.activate(
         [
           %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
           Operation.Pass.client(msgs)
@@ -394,7 +452,7 @@ defmodule Operation.AssignMigrationVersion do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       if State.electrified?(state) do
         version = migration_version(op, state)
         query_generator = Map.fetch!(state, :query_generator)
@@ -427,11 +485,11 @@ defmodule Operation.Simple do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(%{stmts: []} = _op, state, send) do
+    def activate(%{stmts: []} = _op, state, send) do
       {nil, state, send}
     end
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       if State.tx?(state) || has_tx?(op) do
         next(op, state, send)
       else
@@ -447,7 +505,7 @@ defmodule Operation.Simple do
           }
         ]
 
-        Operation.initialise(ops, state, send)
+        Operation.activate(ops, state, send)
       end
     end
 
@@ -495,7 +553,7 @@ defmodule Operation.Simple do
         |> Parser.refresh_analysis(state)
         |> Injector.Electric.command_from_analysis(state)
 
-      {cmd, state, send} = Operation.initialise(cmd, state, send)
+      {cmd, state, send} = Operation.activate(cmd, state, send)
 
       {%{op | stmts: rest, op: cmd}, state, send}
     end
@@ -521,9 +579,9 @@ defmodule Operation.Electric do
 
     alias Electric.DDLX
 
-    # FIXME: replace single electric command with multiple queries by 
+    # FIXME: replace single electric command with multiple queries by
     # multiple electric commands with single queries
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       [query | queries] = DDLX.Command.pg_sql(op.command)
       op = %{op | queries: queries}
 
@@ -557,7 +615,7 @@ defmodule Operation.Capture do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       query_generator = Map.fetch!(state, :query_generator)
       sql = query_generator.capture_ddl_query(op.analysis.sql)
       %{table: {schema, table}} = op.analysis
@@ -588,7 +646,7 @@ defmodule Operation.AlterShadow do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       query_generator = Map.fetch!(state, :query_generator)
       sql = query_generator.alter_shadow_table_query(op.modification)
       {op, State.electrify(state), Send.back(send, query(sql))}
@@ -602,7 +660,7 @@ defmodule Operation.Disallowed do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       msgs = [error_response(op.analysis), %M.ReadyForQuery{status: :failed}]
       {nil, state, Send.front(send, msgs)}
     end
@@ -641,7 +699,7 @@ defmodule Operation.SyntaxError do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       msgs = [error_response(op.error), %M.ReadyForQuery{status: :failed}]
       {nil, state, Send.front(send, msgs)}
     end
@@ -677,7 +735,7 @@ defmodule Operation.FakeBind do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {nil, state, Send.front(send, Enum.map(op.msgs, &response(&1, state)))}
     end
   end
@@ -689,7 +747,7 @@ defmodule Operation.FakeExecute do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       {nil, state, Send.front(send, Enum.map(op.msgs, &response(&1, op.tag, state)))}
     end
   end
@@ -701,9 +759,9 @@ defmodule Operation.AutoTx do
   defimpl Operation do
     use Operation.Impl
 
-    def initialise(op, state, send) do
+    def activate(op, state, send) do
       if State.tx?(state) do
-        Operation.initialise(op.ops, state, send)
+        Operation.activate(op.ops, state, send)
       else
         ops = [
           %Operation.Begin{msg: %M.Query{query: "BEGIN"}, hidden?: true},
@@ -717,7 +775,7 @@ defmodule Operation.AutoTx do
           }
         ]
 
-        Operation.initialise(ops, state, send)
+        Operation.activate(ops, state, send)
       end
     end
   end

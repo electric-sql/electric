@@ -119,7 +119,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   end
 
   defimpl Operation do
-    def initialise(electric, state, send) do
+    def activate(electric, state, send) do
       {electric, state, send}
     end
 

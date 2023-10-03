@@ -99,7 +99,7 @@ defmodule Electric.Postgres.Proxy.Injector do
     Logger.debug("recv_client: #{inspect_stack(stack)}")
     {stack, state} = Operation.recv_client(stack, msgs, state)
 
-    {stack, state, send} = Operation.initialise(stack, state, Send.new())
+    {stack, state, send} = Operation.activate(stack, state, Send.new())
 
     %{front: front, back: back} = Send.flush(send)
 

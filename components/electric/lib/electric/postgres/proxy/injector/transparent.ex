@@ -17,7 +17,7 @@ defmodule Electric.Postgres.Proxy.Injector.Transparent do
   end
 
   defimpl Operation do
-    def initialise(transparent, state, send) do
+    def activate(transparent, state, send) do
       {transparent, state, send}
     end
 
