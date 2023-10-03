@@ -8,7 +8,7 @@
     |> Enum.join(",")
 %>
 
-CREATE OR REPLACE PROCEDURE <%= @schema %>.__validate_table_column_types(table_name text)
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_types(table_name text)
 SECURITY DEFINER AS $function$
 DECLARE
     _col_name text;

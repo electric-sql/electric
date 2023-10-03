@@ -3,11 +3,12 @@ defmodule Electric.Postgres.Extension.Functions do
   This module organizes SQL functions that are to be defined in Electric's internal database schema.
   """
 
-  alias Electric.Postgres.Extension
+  import Electric.Postgres.Extension
+
   require EEx
 
   sql_files =
-    "functions/*.sql.eex"
+    "functions/**/*.sql.eex"
     |> Path.expand(__DIR__)
     |> Path.wildcard()
 
@@ -16,7 +17,7 @@ defmodule Electric.Postgres.Extension.Functions do
       @external_resource path
 
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
-      _ = EEx.function_from_file(:def, name, path, [:assigns])
+      _ = EEx.function_from_file(:def, name, path, [])
 
       name
     end
@@ -56,19 +57,8 @@ defmodule Electric.Postgres.Extension.Functions do
   """
   @spec by_name(name) :: sql
   def by_name(name) when name in @function_names do
-    apply(__MODULE__, name, [assigns()])
+    apply(__MODULE__, name, [])
   end
 
-  # This map of assigns is the same for all function templates.
-  defp assigns do
-    %{
-      schema: Extension.schema(),
-      ddl_table: Extension.ddl_table(),
-      txid_type: Extension.txid_type(),
-      txts_type: Extension.txts_type(),
-      version_table: Extension.version_table(),
-      electrified_tracking_table: Extension.electrified_tracking_table(),
-      publication_name: Extension.publication_name()
-    }
-  end
+  defp publication_sql, do: add_table_to_publication_sql("%I.%I")
 end

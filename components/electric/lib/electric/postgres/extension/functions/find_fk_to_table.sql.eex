@@ -1,6 +1,4 @@
--- vim:ft=sql
-
-CREATE OR REPLACE FUNCTION <%= @schema %>.find_fk_to_table(
+CREATE OR REPLACE FUNCTION <%= schema() %>.find_fk_to_table(
     src_schema text,
     src_table text,
     dst_table text

@@ -1,8 +1,4 @@
--- vim:ft=sql
-
-<% assignments_table = Electric.Postgres.Extension.assignments_table() %>
-
-CREATE OR REPLACE PROCEDURE <%= @schema %>.unassign(
+CREATE OR REPLACE PROCEDURE <%= schema() %>.unassign(
     assign_table_full_name text,
     scope text,
     user_column_name text,
@@ -25,7 +21,7 @@ BEGIN
 
     -- SELECT n[1], n[2] INTO assign_schema, assign_table FROM parse_ident(assign_table_full_name) n;
 
-    SELECT id FROM <%= assignments_table %>
+    SELECT id FROM <%= assignments_table() %>
         WHERE table_name = assign_table_full_name
         AND scope_table = scope_table_not_null
         AND user_column = user_column_name
@@ -36,7 +32,7 @@ BEGIN
     assignment_name = REPLACE(format('%s', assignment_id), '-', '_');
 
     -- remove triggers
-    EXECUTE format('DROP TRIGGER IF EXISTS electric_cleanup_role_%s ON <%= @schema %>.assignment_%s_join;',
+    EXECUTE format('DROP TRIGGER IF EXISTS electric_cleanup_role_%s ON <%= schema() %>.assignment_%s_join;',
         assignment_name,
         assignment_name
     );
@@ -52,21 +48,21 @@ BEGIN
     );
 
     -- remove functions
-    EXECUTE format('DROP FUNCTION IF EXISTS <%= @schema %>.cleanup_role_%s;',
+    EXECUTE format('DROP FUNCTION IF EXISTS <%= schema() %>.cleanup_role_%s;',
         assignment_name
     );
 
-    EXECUTE format('DROP FUNCTION IF EXISTS <%= @schema %>.upsert_role_%s;',
+    EXECUTE format('DROP FUNCTION IF EXISTS <%= schema() %>.upsert_role_%s;',
         assignment_name
     );
 
     -- remove join table
-    EXECUTE format('DROP TABLE IF EXISTS <%= @schema %>.assignment_%s_join;',
+    EXECUTE format('DROP TABLE IF EXISTS <%= schema() %>.assignment_%s_join;',
         assignment_name
     );
 
     -- remove assignment
-    DELETE FROM <%= assignments_table %> WHERE id = assignment_id;
+    DELETE FROM <%= assignments_table() %> WHERE id = assignment_id;
 END;
 $$ LANGUAGE plpgsql;
 

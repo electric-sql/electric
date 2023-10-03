@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE <%= @schema %>.alter_shadow_table(
+CREATE OR REPLACE PROCEDURE <%= schema() %>.alter_shadow_table(
     schema_name name,
     table_name name,
     action text,
@@ -23,22 +23,22 @@ BEGIN
     tombstone_table_name := 'tombstone__' || schema_name || '__' || table_name;
 
     reordered_column_definition := format(E'    ADD COLUMN %I %s,\n', '__reordered_' || col_name, col_type);
-    shadow_column_definition := format(E'    ADD COLUMN %I <%= @schema %>.tag', '_tag_' || col_name);
+    shadow_column_definition := format(E'    ADD COLUMN %I <%= schema() %>.tag', '_tag_' || col_name);
     tombstone_column_definition := format(E'    ADD COLUMN %I %s\n', col_name, col_type);
 
     EXECUTE format(
-        E'ALTER TABLE <%= @schema %>.%I\n%s;',
+        E'ALTER TABLE <%= schema() %>.%I\n%s;',
         shadow_table_name,
         reordered_column_definition || shadow_column_definition
     );
     EXECUTE format(
-        E'ALTER TABLE <%= @schema %>.%I\n%s;',
+        E'ALTER TABLE <%= schema() %>.%I\n%s;',
         tombstone_table_name,
         tombstone_column_definition
     );
 
-    SELECT r.table_oid INTO table_oid FROM <%= @schema %>.__resolve_table_from_names(schema_name, table_name) r;
-    SELECT <%= @schema %>.__primary_key_list(table_oid) INTO primary_key_list;
+    SELECT r.table_oid INTO table_oid FROM <%= schema() %>.__resolve_table_from_names(schema_name, table_name) r;
+    SELECT <%= schema() %>.__primary_key_list(table_oid) INTO primary_key_list;
 
     SELECT array_agg(c.col_name) INTO non_pk_column_list
         FROM electric.lookup_columns(table_oid) c WHERE NOT col_primary;
@@ -51,7 +51,7 @@ BEGIN
     explicitly) but safer since `DROP` + `CREATE` can have some unexpected
     effects.
     */
-    PERFORM <%= @schema %>.install_conflict_resolution_functions(schema_name, table_name, primary_key_list, non_pk_column_list);
+    PERFORM <%= schema() %>.install_conflict_resolution_functions(schema_name, table_name, primary_key_list, non_pk_column_list);
 END;
 $function$;
 

@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE FUNCTION <%= @schema %>.__table_schema(table_oid oid) RETURNS name SECURITY DEFINER AS $function$
+CREATE OR REPLACE FUNCTION <%= schema() %>.__table_schema(table_oid oid) RETURNS name SECURITY DEFINER AS $function$
 DECLARE
    _schema name;
 BEGIN

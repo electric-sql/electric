@@ -1,5 +1,4 @@
-<% publication_sql = Extension.add_table_to_publication_sql("%I.%I") %>
-CREATE OR REPLACE PROCEDURE <%= @schema %>.electrify(
+CREATE OR REPLACE PROCEDURE <%= schema() %>.electrify(
     name1 text,
     name2 text DEFAULT NULL
 ) SECURITY DEFINER AS $function$
@@ -14,7 +13,7 @@ BEGIN
         table_name, schema_name, table_oid
     INTO
         _table, _schema, _oid
-    FROM <%= @schema %>.__resolve_table_from_names(name1, name2);
+    FROM <%= schema() %>.__resolve_table_from_names(name1, name2);
 
     _quoted_name := format('%I.%I', _schema, _table);
     _oid := (SELECT _quoted_name::regclass);
@@ -24,37 +23,37 @@ BEGIN
     END IF;
 
     IF NOT EXISTS (
-        SELECT oid FROM <%= @electrified_tracking_table %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
+        SELECT oid FROM <%= electrified_tracking_table() %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
         ) THEN
         RAISE NOTICE 'Electrify table %', _quoted_name;
 
-        CALL <%= @schema %>.__validate_table_column_types(_quoted_name);
-        CALL <%= @schema %>.__validate_table_column_defaults(_quoted_name);
+        CALL <%= schema() %>.__validate_table_column_types(_quoted_name);
+        CALL <%= schema() %>.__validate_table_column_defaults(_quoted_name);
 
         -- insert the required ddl into the migrations table
-        SELECT <%= @schema %>.generate_electrified_sql(_oid) INTO _create_sql;
+        SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _create_sql;
 
         RAISE DEBUG '%', _create_sql;
 
-        CALL <%= @schema %>.capture_ddl(_create_sql);
+        CALL <%= schema() %>.capture_ddl(_create_sql);
 
         EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
 
-        INSERT INTO <%= @electrified_tracking_table %>
+        INSERT INTO <%= electrified_tracking_table() %>
             (schema_name, table_name, oid)
           VALUES
             (_schema, _table, _oid);
 
-        EXECUTE format('<%= publication_sql %>;', _schema, _table);
+        EXECUTE format('<%= publication_sql() %>;', _schema, _table);
 
         -- We want to disable any possible hooks from `CREATE TABLE` statements
-        PERFORM set_config('<%= @schema %>.is_in_event_trigger', 'true', true);
-        PERFORM <%= @schema %>.ddlx_make_or_update_shadow_tables('CREATE TABLE', _schema, _oid);
-        PERFORM set_config('<%= @schema %>.is_in_event_trigger', '', true);
+        PERFORM set_config('<%= schema() %>.is_in_event_trigger', 'true', true);
+        PERFORM <%= schema() %>.ddlx_make_or_update_shadow_tables('CREATE TABLE', _schema, _oid);
+        PERFORM set_config('<%= schema() %>.is_in_event_trigger', '', true);
 
         EXECUTE format(
-            '<%= publication_sql  %>;',
-            '<%= @schema %>',
+            '<%= publication_sql()  %>;',
+            '<%= schema() %>',
             ('shadow__' || _schema || '__' || _table)::name
         );
     ELSE

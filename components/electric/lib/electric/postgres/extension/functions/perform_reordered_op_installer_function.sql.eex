@@ -1,11 +1,11 @@
-CREATE OR REPLACE FUNCTION <%= @schema %>.install_function__perform_reordered_op(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
+CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__perform_reordered_op(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
     RETURNS TEXT
     LANGUAGE PLPGSQL AS $outer_function$
 DECLARE
     function_name TEXT := 'perform_reordered_op___' || schema_name || '__' || table_name;
     shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
     tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
-    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
+    tag_column_list TEXT[] := <%= schema() %>.format_every(non_pk_column_list, '_tag_%s');
     reordered_column_list TEXT[];
     where_pks_equal_shadow TEXT;
     built_row_fill_pks TEXT;
@@ -20,38 +20,38 @@ DECLARE
     built_row_overrides TEXT;
     update_clause TEXT;
 BEGIN
-    reordered_column_list := electric.format_every(non_pk_column_list, '__reordered_%s');
+    reordered_column_list := <%= schema() %>.format_every(non_pk_column_list, '__reordered_%s');
 
-    where_pks_equal_shadow := electric.format_every_and_join(primary_key_list, '%1$I = shadow_row.%1$I', ' AND ');
+    where_pks_equal_shadow := <%= schema() %>.format_every_and_join(primary_key_list, '%1$I = shadow_row.%1$I', ' AND ');
 
-    built_row_fill_pks := electric.format_every_and_join(primary_key_list, E'\n            built_row.%1$I := shadow_row.%1$I;', '');
-    built_row_fill_from_reordered := electric.zip_format_every_and_join(non_pk_column_list, reordered_column_list, E'\n            built_row.%1$I := shadow_row.%2$I;', '');
+    built_row_fill_pks := <%= schema() %>.format_every_and_join(primary_key_list, E'\n            built_row.%1$I := shadow_row.%1$I;', '');
+    built_row_fill_from_reordered := <%= schema() %>.zip_format_every_and_join(non_pk_column_list, reordered_column_list, E'\n            built_row.%1$I := shadow_row.%2$I;', '');
 
-    case_pks := electric.format_every_and_join(primary_key_list,
+    case_pks := <%= schema() %>.format_every_and_join(primary_key_list,
         $$
                 CASE
                     WHEN main.%1$I IS NOT NULL THEN main.%1$I
                     ELSE NULL
                 END as %1$I$$, ',');
 
-    all_pks_present_formatter := electric.format_every_and_join(primary_key_list, '%%1$I.%1$I IS NOT NULL', ' AND ');
+    all_pks_present_formatter := <%= schema() %>.format_every_and_join(primary_key_list, '%%1$I.%1$I IS NOT NULL', ' AND ');
     case_columns_formatter := format(
         $$
                 CASE
                     WHEN %s THEN main.%%1$I
                     WHEN %s THEN tomb.%%1$I
                 END as %%1$I$$, format(all_pks_present_formatter, 'main'), format(all_pks_present_formatter, 'tomb'));
-    case_columns := electric.format_every_and_join(non_pk_column_list, case_columns_formatter, ',');
+    case_columns := <%= schema() %>.format_every_and_join(non_pk_column_list, case_columns_formatter, ',');
 
-    on_primary_keys := electric.format_every_and_join(primary_key_list, 'main.%1$I = tomb.%1$I', ' AND ');
+    on_primary_keys := <%= schema() %>.format_every_and_join(primary_key_list, 'main.%1$I = tomb.%1$I', ' AND ');
     where_pk_main_or_tomb_clause :=
-        '(' || electric.format_every_and_join(primary_key_list, 'main.%1$I = shadow_row.%1$I', ' AND ')
+        '(' || <%= schema() %>.format_every_and_join(primary_key_list, 'main.%1$I = shadow_row.%1$I', ' AND ')
             || ') OR ('
-            || electric.format_every_and_join(primary_key_list, 'tomb.%1$I = shadow_row.%1$I', ' AND ') || ')';
+            || <%= schema() %>.format_every_and_join(primary_key_list, 'tomb.%1$I = shadow_row.%1$I', ' AND ') || ')';
 
-    current_row_fill_from_reordered := electric.zip_format_every_and_join(non_pk_column_list, reordered_column_list, E'\n                current_row.%1$I = shadow_row.%2$I;', '');
+    current_row_fill_from_reordered := <%= schema() %>.zip_format_every_and_join(non_pk_column_list, reordered_column_list, E'\n                current_row.%1$I = shadow_row.%2$I;', '');
 
-    built_row_overrides := electric.zip_format_every_and_join(tag_column_list, non_pk_column_list,
+    built_row_overrides := <%= schema() %>.zip_format_every_and_join(tag_column_list, non_pk_column_list,
         $$
             IF shadow_row.%1$I != shadow_row._tag OR NOT shadow_row._modified_columns_bit_mask[%3$s] THEN
                 built_row.%2$I = current_row.%2$I;
@@ -67,7 +67,7 @@ BEGIN
             $$,
             format('%I.%I', schema_name, table_name),
             where_pks_equal_shadow,
-            electric.format_every_and_join(non_pk_column_list, '%1$I = built_row.%1$I'));
+            <%= schema() %>.format_every_and_join(non_pk_column_list, '%1$I = built_row.%1$I'));
     ELSE
         update_clause := 'NULL;'; -- No-op, since there are no non-pk columns
     END IF;
@@ -75,14 +75,14 @@ BEGIN
     -- The `%n$I` placeholders use n-th argument for formatting.
     -- Generally, 1 is a function name, 2 is a shadow table name, 3 is a tombstone table name
     EXECUTE format($injected$
-        CREATE OR REPLACE FUNCTION electric.%1$I(shadow_row electric.%2$I)
+        CREATE OR REPLACE FUNCTION <%= schema() %>.%1$I(shadow_row <%= schema() %>.%2$I)
             RETURNS VOID
             LANGUAGE PLPGSQL SECURITY DEFINER AS
         $function$
         DECLARE
             built_row %4$s%%ROWTYPE;
             current_row %4$s%%ROWTYPE;
-            tombstone_row electric.%3$I%%ROWTYPE;
+            tombstone_row <%= schema() %>.%3$I%%ROWTYPE;
             old_row_found boolean;
         BEGIN
             RAISE DEBUG '  Preparing a real operation based on shadow row %%', to_json(shadow_row);
@@ -110,7 +110,7 @@ BEGIN
                 %8$s
                 INTO current_row
                 FROM %4$s AS main
-                FULL OUTER JOIN electric.%3$I AS tomb
+                FULL OUTER JOIN <%= schema() %>.%3$I AS tomb
                     ON %9$s
                 WHERE %10$s;
             IF NOT FOUND THEN
@@ -151,14 +151,14 @@ BEGIN
     where_pks_equal_shadow, -- 5
     built_row_fill_pks, -- 6
     built_row_fill_from_reordered, -- 7
-    electric.append_string_unless_empty(case_pks, case_columns), -- 8
+    <%= schema() %>.append_string_unless_empty(case_pks, case_columns), -- 8
     on_primary_keys, -- 9
     where_pk_main_or_tomb_clause, -- 10
     current_row_fill_from_reordered, -- 11
     format(all_pks_present_formatter, 'current_row'), -- 12
     built_row_overrides, -- 13
-    electric.format_every_and_join(primary_key_list || non_pk_column_list, '%I'), -- 14
-    electric.format_every_and_join(primary_key_list || non_pk_column_list, 'built_row.%I'), -- 15
+    <%= schema() %>.format_every_and_join(primary_key_list || non_pk_column_list, '%I'), -- 14
+    <%= schema() %>.format_every_and_join(primary_key_list || non_pk_column_list, 'built_row.%I'), -- 15
     update_clause -- 16
     );
 

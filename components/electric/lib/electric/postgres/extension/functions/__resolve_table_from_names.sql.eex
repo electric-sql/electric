@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE FUNCTION <%= @schema %>.__resolve_table_from_names(
+CREATE OR REPLACE FUNCTION <%= schema() %>.__resolve_table_from_names(
     name1 text,
     name2 text,
     OUT schema_name name,
@@ -18,7 +18,7 @@ BEGIN
             IF array_length(_ident, 1) = 1 THEN
                 table_name := _ident[1];
                 table_oid := (SELECT quote_ident(table_name)::regclass);
-                schema_name := <%= @schema %>.__table_schema(table_oid);
+                schema_name := <%= schema() %>.__table_schema(table_oid);
             ELSIF array_length(_ident, 1) = 2 THEN
                 schema_name := _ident[1];
                 table_name := _ident[2];
@@ -29,7 +29,7 @@ BEGIN
         ELSE
             table_name := name1;
             table_oid := (SELECT quote_ident(table_name)::regclass);
-            schema_name := <%= @schema %>.__table_schema(table_oid);
+            schema_name := <%= schema() %>.__table_schema(table_oid);
         END IF;
     ELSIF name1 IS NOT NULL AND name2 IS NOT NULL THEN
         table_name := name2;

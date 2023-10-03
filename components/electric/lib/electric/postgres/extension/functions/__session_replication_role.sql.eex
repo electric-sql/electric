@@ -10,7 +10,7 @@
 --
 -- [1]: https://www.postgresql.org/docs/14/runtime-config-client.html#GUC-SESSION-REPLICATION-ROLE
 -- [2]: https://www.postgresql.org/docs/14/runtime-config-custom.html
-CREATE OR REPLACE FUNCTION <%= @schema %>.__session_replication_role(OUT role text) AS $$
+CREATE OR REPLACE FUNCTION <%= schema() %>.__session_replication_role(OUT role text) AS $$
 BEGIN
   SELECT INTO role current_setting('electric.session_replication_role');
 EXCEPTION WHEN undefined_object THEN

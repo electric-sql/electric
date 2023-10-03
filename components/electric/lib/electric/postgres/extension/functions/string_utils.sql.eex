@@ -1,5 +1,4 @@
--- Utility function
-CREATE OR REPLACE FUNCTION electric.format_every(arr TEXT[], format_pattern TEXT)
+CREATE OR REPLACE FUNCTION <%= schema() %>.format_every(arr TEXT[], format_pattern TEXT)
     RETURNS TEXT[]
     STABLE PARALLEL SAFE
     RETURNS NULL ON NULL INPUT
@@ -8,7 +7,7 @@ CREATE OR REPLACE FUNCTION electric.format_every(arr TEXT[], format_pattern TEXT
     $$;
 
 -- Utility function
-CREATE OR REPLACE FUNCTION electric.format_every_and_join(arr TEXT[], format_pattern TEXT, joiner TEXT DEFAULT ', ')
+CREATE OR REPLACE FUNCTION <%= schema() %>.format_every_and_join(arr TEXT[], format_pattern TEXT, joiner TEXT DEFAULT ', ')
     RETURNS TEXT
     STABLE PARALLEL SAFE
     RETURNS NULL ON NULL INPUT
@@ -17,7 +16,7 @@ CREATE OR REPLACE FUNCTION electric.format_every_and_join(arr TEXT[], format_pat
     $$;
 
 -- Utility function
-CREATE OR REPLACE FUNCTION electric.zip_format_every_and_join(arr1 TEXT[], arr2 TEXT[], format_pattern TEXT, joiner TEXT DEFAULT ', ')
+CREATE OR REPLACE FUNCTION <%= schema() %>.zip_format_every_and_join(arr1 TEXT[], arr2 TEXT[], format_pattern TEXT, joiner TEXT DEFAULT ', ')
     RETURNS TEXT
     STABLE PARALLEL SAFE
     RETURNS NULL ON NULL INPUT
@@ -25,7 +24,7 @@ CREATE OR REPLACE FUNCTION electric.zip_format_every_and_join(arr1 TEXT[], arr2 
     SELECT array_to_string(array_agg(format(format_pattern, x, y, ordinality)), joiner) FROM unnest(arr1, arr2) WITH ORDINALITY AS val(x, y, ordinality);
     $$;
 
-CREATE OR REPLACE FUNCTION electric.append_string_unless_empty(str1 TEXT, str2 TEXT, joiner TEXT DEFAULT ', ')
+CREATE OR REPLACE FUNCTION <%= schema() %>.append_string_unless_empty(str1 TEXT, str2 TEXT, joiner TEXT DEFAULT ', ')
     RETURNS TEXT
     STABLE PARALLEL SAFE
     CALLED ON NULL INPUT
