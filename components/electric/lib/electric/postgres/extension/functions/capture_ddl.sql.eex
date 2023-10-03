@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE PROCEDURE <%= schema %>.capture_ddl(_query text DEFAULT NULL) SECURITY DEFINER AS
+CREATE OR REPLACE PROCEDURE <%= @schema %>.capture_ddl(_query text DEFAULT NULL) SECURITY DEFINER AS
 $function$
 BEGIN
     IF _query IS NULL THEN
@@ -8,7 +8,7 @@ BEGIN
 
     RAISE DEBUG 'capture migration: %', _query;
 
-    INSERT INTO <%= ddl_table %> (query)
+    INSERT INTO <%= @ddl_table %> (query)
         VALUES (_query)
         ON CONFLICT ON CONSTRAINT ddl_table_unique_migrations DO NOTHING;
 END;

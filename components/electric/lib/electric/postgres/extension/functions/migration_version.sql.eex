@@ -1,8 +1,8 @@
 
-CREATE OR REPLACE PROCEDURE <%= schema %>.migration_version(_version text) SECURITY DEFINER AS $function$
+CREATE OR REPLACE PROCEDURE <%= @schema %>.migration_version(_version text) SECURITY DEFINER AS $function$
 BEGIN
-    IF NOT (SELECT <%= schema %>.tx_has_assigned_version()) THEN
-      CALL <%= schema %>.assign_migration_version(_version);
+    IF NOT (SELECT <%= @schema %>.tx_has_assigned_version()) THEN
+      CALL <%= @schema %>.assign_migration_version(_version);
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;

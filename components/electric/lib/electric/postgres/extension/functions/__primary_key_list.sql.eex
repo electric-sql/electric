@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION <%= schema %>.__primary_key_list(target_oid oid)
+CREATE OR REPLACE FUNCTION <%= @schema %>.__primary_key_list(target_oid oid)
     RETURNS text[]
     SECURITY DEFINER
     LANGUAGE SQL AS

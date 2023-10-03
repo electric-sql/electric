@@ -285,25 +285,9 @@ defmodule Electric.Postgres.Extension do
   def txid_type, do: @txid_type
   def txts_type, do: @txts_type
 
-  @default_function_args [
-    # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT
-    # pg_current_xact_id() -> xid8
-    # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
-    # does not wrap around during the life of an installation
-    txid_type: @txid_type,
-    # use an int8 for the txts timestamp column because epgsql has very poor
-    # support for timestamp columns :(
-    txts_type: @txts_type,
-    schema: @schema,
-    ddl_table: @ddl_table,
-    version_table: @version_table,
-    electrified_tracking_table: @electrified_tracking_table,
-    publication_name: @publication_name
-  ]
-
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
-    Enum.each(Functions.list(@default_function_args), fn {name, sql} ->
+    Enum.each(Functions.list(), fn {name, sql} ->
       case :epgsql.squery(conn, sql) do
         {:ok, [], []} -> :ok
         error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
@@ -435,7 +419,7 @@ defmodule Electric.Postgres.Extension do
     fun.()
   end
 
-  defp existing_migrations(conn) do
+  defp existing_migration_versions(conn) do
     {:ok, _cols, rows} =
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 

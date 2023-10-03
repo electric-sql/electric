@@ -1,5 +1,5 @@
-CREATE OR REPLACE FUNCTION <%= schema %>.current_xact_ts() RETURNS <%= txts_type %> SECURITY DEFINER AS $function$
+CREATE OR REPLACE FUNCTION <%= @schema %>.current_xact_ts() RETURNS <%= @txts_type %> SECURITY DEFINER AS $function$
 BEGIN
-    RETURN (extract(epoch from transaction_timestamp()) * 1000000)::<%= txts_type %>;
+    RETURN (extract(epoch from transaction_timestamp()) * 1000000)::<%= @txts_type %>;
 END;
 $function$ LANGUAGE PLPGSQL STABLE STRICT PARALLEL SAFE;
