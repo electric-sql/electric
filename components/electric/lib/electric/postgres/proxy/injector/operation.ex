@@ -68,7 +68,7 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   @doc """
   Given a set of messages from the client returns an updated operation stack.
   """
-  @spec recv_client(t(), [PgProtocol.t()], State.t()) :: {op_stack(), State.t()}
+  @spec recv_client(t(), [PgProtocol.Message.t()], State.t()) :: {op_stack(), State.t()}
   def recv_client(op, msgs, state)
 
   @doc """
@@ -80,7 +80,7 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   @doc """
   Handle a message received from the server.
   """
-  @spec recv_server(t(), PgProtocol.t(), State.t(), Send.t()) :: result()
+  @spec recv_server(t(), PgProtocol.Message.t(), State.t(), Send.t()) :: result()
   def recv_server(op, msg, state, send)
 
   @doc """
@@ -95,7 +95,7 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   proxy-generated command. Operations should use this callback to issue
   any cleanup commands.
   """
-  @spec recv_error(t(), [PgProtocol.t()], State.t(), Send.t()) :: result()
+  @spec recv_error(t(), [PgProtocol.Message.t()], State.t(), Send.t()) :: result()
   def recv_error(op, msgs, state, send)
 
   @doc """
@@ -203,7 +203,7 @@ defmodule Operation.Impl do
     %M.Query{query: sql}
   end
 
-  @spec query(String.t(), QueryAnalysis.t()) :: M.Query.t() | M.Parse.t()
+  @spec query(String.t(), %{analysis: QueryAnalysis.t()}) :: M.Query.t() | M.Parse.t()
   def query(sql, %{analysis: %QueryAnalysis{mode: mode}}) do
     case mode do
       :simple -> %M.Query{query: sql}
@@ -226,7 +226,7 @@ defmodule Operation.Impl do
   Used by Electric DDLX commands which fake the responses from
   Parse/Describe and Bind/Execute.
   """
-  @spec response(PgProtocol.t(), String.t(), State.t()) :: PgProtocol.t()
+  @spec response(PgProtocol.Message.t(), String.t() | nil, State.t()) :: PgProtocol.Message.t()
   def response(msg, tag \\ nil, state)
 
   def response(%M.Parse{}, _tag, _state) do
@@ -506,12 +506,12 @@ defmodule Operation.Commit do
     end
 
     def send_error(_op, state, send) do
-      %{front: front} = Send.flush(send)
+      %{client: client} = Send.flush(send)
 
       Operation.activate(
         [
           %Operation.Rollback{hidden?: true},
-          Operation.Pass.client([front])
+          Operation.Pass.client([client])
         ],
         state,
         Send.new()
@@ -701,26 +701,28 @@ defmodule Operation.Capture do
     use Operation.Impl
 
     def activate(op, state, send) do
-      query_generator = Map.fetch!(state, :query_generator)
-      sql = query_generator.capture_ddl_query(op.analysis.sql)
-      %{table: {schema, table}} = op.analysis
+      case op.analysis do
+        %{table: {schema, table}} ->
+          query_generator = Map.fetch!(state, :query_generator)
+          sql = query_generator.capture_ddl_query(op.analysis.sql)
 
-      _notice =
-        %M.NoticeResponse{
-          code: "00000",
-          severity: "NOTICE",
-          message: "Migration affecting electrified table #{table_name(op.analysis)}",
-          detail: "Capturing migration: #{op.analysis.sql}",
-          schema: schema,
-          table: table
-        }
+          _notice =
+            %M.NoticeResponse{
+              code: "00000",
+              severity: "NOTICE",
+              message: "Migration affecting electrified table #{table_name(op.analysis)}",
+              detail: "Capturing migration: #{op.analysis.sql}",
+              schema: schema,
+              table: table
+            }
 
-      {
-        op,
-        State.electrify(state),
-        send |> Send.server(query(sql))
-        # |> Send.client(notice)
-      }
+          {
+            op,
+            State.electrify(state),
+            send |> Send.server(query(sql))
+            # |> Send.client(notice)
+          }
+      end
     end
   end
 end

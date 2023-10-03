@@ -124,32 +124,6 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   def string_node_val(%PgQuery.String{sval: sval}), do: sval
 
-  def is_additive_migration(query) when is_binary(query) do
-    with {:ok, ast} <- parse(query) do
-      case ast do
-        %PgQuery.AlterTableStmt{} ->
-          {:ok, Enum.all?(ast.cmds, &is_additive_migration_cmd/1)}
-
-        %PgQuery.RenameStmt{} ->
-          {:ok, false}
-
-        _ ->
-          {:error, "not an alter table statement #{inspect(query)}"}
-      end
-    end
-  end
-
-  # there are alter table commands that we support: add column
-  # there are those we dont support, e.g. drop column
-  # and those we couldn't care less about, e.g. AT_ReAddStatistics
-  # for the moment the ignorable ones will raise an error because they're
-  # fairly niche IMHO
-  @additive_cmds [:AT_AddColumn, :AT_AddColumnRecurse]
-
-  defp is_additive_migration_cmd(%{node: {:alter_table_cmd, cmd}}) do
-    cmd.subtype in @additive_cmds
-  end
-
   def column_map(sql) when is_binary(sql) do
     with {:ok, [{_msg, ast}]} <- parse(%M.Query{query: sql}) do
       column_map(ast)
@@ -333,7 +307,7 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   @type analyse_options() :: [loader: SchemaLoader.t(), default_schema: String.t()]
 
-  @type parse_result() :: {M.Query.t() | M.Parse.t(), PgQuery.t()}
+  @type parse_result() :: {M.Query.t() | M.Parse.t(), Electric.Postgres.PgQuery.t()}
 
   @spec parse(M.Query.t() | M.Parse.t()) :: {:ok, [parse_result()]} | {:error, term()}
   def parse(%M.Query{query: query}) when is_binary(query) do

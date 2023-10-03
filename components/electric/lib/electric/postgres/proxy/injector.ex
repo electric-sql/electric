@@ -1,8 +1,7 @@
 defmodule Electric.Postgres.Proxy.Injector do
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
-  alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
-  alias Electric.Postgres.Proxy.Injector.Operation
+  alias Electric.Postgres.Proxy.Injector.{Operation, Send, State}
 
   require Logger
 
@@ -12,7 +11,7 @@ defmodule Electric.Postgres.Proxy.Injector do
           column: String.t(),
           type: String.t()
         }
-  @type state() :: {Capture.t(), State.t()}
+  @type state() :: {[Operation.t()], State.t()}
   @type msgs() :: [M.t()]
   @type response() :: {:ok, state(), backend_msgs :: msgs(), frontend_msgs :: msgs()}
   @type quote_mark() :: String.t()
@@ -135,10 +134,12 @@ defmodule Electric.Postgres.Proxy.Injector do
     {:ok, {stack, state}, server, client}
   end
 
+  @spec capture_ddl_query(String.t(), String.t() | nil) :: String.t()
   def capture_ddl_query(query, quote \\ nil) do
     ~s|CALL electric.capture_ddl(#{quote_query(query, quote)})|
   end
 
+  @spec capture_version_query(String.t(), String.t() | nil) :: String.t()
   def capture_version_query(version, quote \\ nil) do
     ~s|CALL electric.migration_version(#{quote_query(version, quote)})|
   end

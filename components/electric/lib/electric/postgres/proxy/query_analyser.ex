@@ -25,7 +25,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
           ast: Electric.DDLX.Command.t() | struct(),
           sql: String.t(),
           mode: :simple | :extended,
-          source: PgQuery.t(),
+          source: Electric.Postgres.PgQuery.t(),
           electrified?: boolean,
           allowed?: boolean,
           capture?: boolean,

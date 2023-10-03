@@ -26,7 +26,7 @@ defmodule Electric.Postgres.Proxy.Injector.State do
             metadata: %{}
 
   @type loader() :: {module(), term()}
-  @type query_generator() :: {module(), term()}
+  @type query_generator() :: module()
   @type t() :: %__MODULE__{
           loader: loader(),
           query_generator: query_generator(),
