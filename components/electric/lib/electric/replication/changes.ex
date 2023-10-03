@@ -159,4 +159,12 @@ defmodule Electric.Replication.Changes do
   def generateTag(%Transaction{origin: origin, commit_timestamp: tm}) do
     origin <> "@" <> Integer.to_string(DateTime.to_unix(tm, :millisecond))
   end
+
+  def convert_update(%UpdatedRecord{} = record, to: :new_record) do
+    %NewRecord{relation: record.relation, tags: record.tags, record: record.record}
+  end
+
+  def convert_update(%UpdatedRecord{} = record, to: :deleted_record) do
+    %DeletedRecord{relation: record.relation, tags: record.tags, old_record: record.old_record}
+  end
 end

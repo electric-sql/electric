@@ -708,7 +708,7 @@ defmodule Electric.Satellite.Protocol do
     filtered_tx =
       tx
       |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
-      |> Shapes.filter_changes_from_tx(current_shapes(state))
+      |> Shapes.filter_map_changes_from_tx(current_shapes(state))
       |> Changes.filter_changes_belonging_to_user(state.auth.user_id)
 
     {out_rep, acc} =
@@ -910,14 +910,12 @@ defmodule Electric.Satellite.Protocol do
 
     state = start_subscription_telemetry_span(state, id, requests)
 
-    context = %{
-      user_id: Pathex.get(state, path(:auth / :user_id)),
-      sent_tables:
-        Map.values(state.subscriptions)
-        |> List.flatten()
-        |> Enum.flat_map(fn %ShapeRequest{included_tables: tables} -> tables end)
-        |> MapSet.new()
-    }
+    shape_requests = List.flatten(Map.values(state.subscriptions))
+
+    context =
+      shape_requests
+      |> ShapeRequest.prepare_filtering_context()
+      |> Map.put(:user_id, Pathex.get(state, path(:auth / :user_id)))
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
