@@ -22,7 +22,6 @@ import {
   relations,
 } from './common'
 import { getMatchingShadowEntries } from '../support/satellite-helpers'
-import { BundleMigrator } from '../../src/migrators'
 
 type CurrentContext = ContextType<{ clientId: string; txDate: Date }>
 const test = testAny as TestFn<CurrentContext>
