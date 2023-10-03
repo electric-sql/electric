@@ -43,7 +43,7 @@ export class DatabaseAdapter
 
     const set: capSQLiteSet[] = statements.map(({ sql, args }) => ({
       statement: sql,
-      values: args as SqlValue[] | undefined,
+      values: (args ?? []) as SqlValue[],
     }))
 
     const wrapInTransaction = true
