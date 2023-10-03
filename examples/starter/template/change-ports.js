@@ -59,7 +59,8 @@ async function init() {
   await findAndReplaceInFile(oldElectricPort, `${electricPort}`, startElectricFile)
   
   // Update the port of the web server of the example in the builder.js file
-  await findAndReplaceInFile(new RegExp(oldWebserverPort, 'g'), `${webserverPort}`, builderFile)
+  await findAndReplaceInFile(`listen(${oldWebserverPort})`, `listen(${webserverPort})`, builderFile)
+  await findAndReplaceInFile(`http://localhost:${oldWebserverPort}`, `http://localhost:${webserverPort}`, builderFile)
   
   // Update the port for Electric in .envrc
   const envrcFile = path.join(__dirname, 'backend', 'compose', '.envrc')

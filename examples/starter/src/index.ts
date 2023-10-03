@@ -171,7 +171,9 @@ const startElectricFile = path.join(projectDir, 'backend', 'startElectric.js')
 await findAndReplaceInFile('5133', `${electricPort}`, startElectricFile)
 
 // Update the port of the web server of the example in the builder.js file
-await findAndReplaceInFile(/3001/g, `${webserverPort}`, builderFile)
+await findAndReplaceInFile("listen(3001)", `listen(${webserverPort})`, builderFile)
+await findAndReplaceInFile("http://localhost:3001", `http://localhost:${webserverPort}`, builderFile)
+
 
 // Store the app's name in .envrc
 // db name must start with a letter
