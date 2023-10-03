@@ -44,6 +44,8 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   import __MODULE__.Macros
 
+  require Logger
+
   @default_schema "public"
   @wspc ~c"\t\n\r "
 
@@ -67,8 +69,44 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   # TODO: drop table supports a list of table names, but let's not support that for the moment
   def table_name(%PgQuery.DropStmt{objects: [object]} = stmt, opts) do
-    %{node: {:list, %{items: items}}} = object
-    names = Enum.map(items, fn %{node: {:string, %{sval: n}}} -> n end)
+    name =
+      case object do
+        %{node: {:list, %{items: items}}} ->
+          names = Enum.map(items, fn %{node: {:string, %{sval: n}}} -> n end)
+
+          case names do
+            [_tablespace, schema, table] ->
+              {schema, table}
+
+            [schema, table] ->
+              {schema, table}
+
+            [table] ->
+              {blank(nil, opts), table}
+          end
+
+        %{node: {:object_with_args, %{objname: objname}}} ->
+          names = Enum.map(objname, fn %{node: {:string, %{sval: n}}} -> n end)
+
+          case names do
+            [_tablespace, schema, table] ->
+              {schema, table}
+
+            [schema, table] ->
+              {schema, table}
+
+            [table] ->
+              {:ok, {schema, table}} = NameParser.parse(table, opts)
+              {schema, table}
+          end
+
+        %{node: {:string, %PgQuery.String{sval: name}}} ->
+          name
+
+        other ->
+          Logger.warning("Unrecognised drop object #{inspect(other)}")
+          {"unknown", "unknown"}
+      end
 
     type =
       case stmt do
@@ -77,18 +115,15 @@ defmodule Electric.Postgres.Proxy.Parser do
 
         %{remove_type: :OBJECT_INDEX} ->
           :index
-      end
 
-    name =
-      case names do
-        [_tablespace, schema, table] ->
-          {schema, table}
+        %{remove_type: type} ->
+          [_, t] =
+            type
+            |> to_string()
+            |> String.downcase()
+            |> String.split("_", parts: 2)
 
-        [schema, table] ->
-          {schema, table}
-
-        [table] ->
-          {blank(nil, opts), table}
+          t
       end
 
     {type, name}
@@ -431,16 +466,16 @@ defmodule Electric.Postgres.Proxy.Parser do
     end
   end
 
-  defp object_electrified?(nil, _name, _state) do
-    false
-  end
-
   defp object_electrified?(:table, table, state) do
     State.table_electrified?(state, table)
   end
 
   defp object_electrified?(:index, index, state) do
     State.index_electrified?(state, index)
+  end
+
+  defp object_electrified?(_type, _name, _state) do
+    false
   end
 
   @keyword_len byte_size("ELECTRIC")

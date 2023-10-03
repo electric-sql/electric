@@ -496,6 +496,61 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     |> idle!()
   end
 
+  test "create function", cxt do
+    import Electric.Postgres.Proxy.TestScenario
+
+    query1 =
+      "create or replace function function1() returns bool as $$ return true; $$ language pgpsql"
+
+    query2 =
+      "create or replace function function2() returns bool as $$ return true; $$ language pgpsql"
+
+    query3 =
+      "alter table electric.nonsense add column age int4"
+
+    query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";"], "\n")
+
+    cxt.injector
+    |> client(begin())
+    |> server(complete_ready("BEGIN"))
+    |> client(query(query), server: query(query1))
+    |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
+    |> server(complete_ready("CREATE FUNCTION2"), server: query(query3))
+    |> server(complete_ready("ALTER TABLE"),
+      client: [
+        complete("CREATE FUNCTION1"),
+        complete("CREATE FUNCTION2"),
+        complete("ALTER TABLE"),
+        ready(:tx)
+      ]
+    )
+    |> client(commit())
+    |> server(complete_ready("COMMIT", :idle))
+    |> idle!()
+  end
+
+  test "drop random things", cxt do
+    import Electric.Postgres.Proxy.TestScenario
+
+    cxt.injector
+    |> client(begin())
+    |> server(complete_ready("BEGIN"))
+    |> client(query("DROP FUNCTION IF EXISTS \"electric.ddlx_sql_drop_handler\" CASCADE"))
+    |> server(complete_ready("DROP FUNCTION"))
+    |> client(commit())
+    |> server(complete_ready("COMMIT", :idle))
+    |> idle!()
+
+    cxt.injector
+    |> client(begin())
+    |> server(complete_ready("BEGIN"))
+    |> client(query("DROP EVENT TRIGGER IF EXISTS \"electric_event_trigger_sql_drop\" CASCADE"))
+    |> server(complete_ready("DROP EVENT TRIGGER"))
+    |> client(commit())
+    |> server(complete_ready("COMMIT", :idle))
+    |> idle!()
+  end
+
   describe "Injector.Electric" do
     alias Electric.Postgres.Proxy.Injector.Electric
     alias PgProtocol.Message, as: M

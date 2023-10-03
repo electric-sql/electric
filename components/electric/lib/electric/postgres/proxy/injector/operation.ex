@@ -620,10 +620,21 @@ defmodule Operation.Simple do
     end
 
     defp next(%{stmts: []} = op, state, send) do
+      {ready, send} =
+        case Send.filter_client(send, M.ReadyForQuery) do
+          {[ready], send} ->
+            {ready, send}
+
+          {[], send} ->
+            {op.ready, send}
+        end
+
+      {command_complete, send} = Send.filter_client(send, M.CommandComplete)
+
       complete =
-        op.ready
+        ready
         |> List.wrap()
-        |> Enum.concat(List.flatten(op.complete))
+        |> Enum.concat(command_complete ++ List.flatten(op.complete))
         |> Enum.reverse()
 
       {nil, state, Send.client(send, complete)}

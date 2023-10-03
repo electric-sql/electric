@@ -288,6 +288,16 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
   defp action(%{remove_type: :OBJECT_TABLE}), do: {:drop, "table"}
   defp action(%{remove_type: :OBJECT_INDEX}), do: {:drop, "index"}
 
+  defp action(%{remove_type: type}) do
+    [_, t] =
+      type
+      |> to_string()
+      |> String.downcase()
+      |> String.split("_", parts: 2)
+
+    {:drop, t}
+  end
+
   defp allowed?(%{remove_type: :OBJECT_INDEX}), do: true
   defp allowed?(%{remove_type: :OBJECT_TABLE}), do: false
 
