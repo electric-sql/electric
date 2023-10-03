@@ -48,6 +48,8 @@ if (db === undefined) {
 
 const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 
+// 5433 is the logical publisher port
+// it is exposed because PG must be able to connect to Electric
 const res = shell.exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
