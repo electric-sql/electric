@@ -430,6 +430,10 @@ defmodule Electric.Postgres.Proxy.Parser do
 
       query_stmts =
         Enum.map(stmts, fn {stmt, loc, len} ->
+          # pgquery is weird, if we have two statements with no trailing ;,
+          # the len comes in as the full length of the query or something.
+          len = if(loc + len > byte_size(query), do: byte_size(query) - loc, else: len)
+
           {
             struct(type,
               query:

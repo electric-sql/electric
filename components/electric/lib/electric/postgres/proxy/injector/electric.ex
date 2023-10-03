@@ -60,6 +60,14 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
     ]
   end
 
+  # never capture create table commands (has to come before the electrified?:
+  # true test below because in tests we need to migrate the schema loader
+  # before running the queries and so the table we're creating registers as
+  # electrified already at the point of creation...)
+  def command_from_analysis(msg, %{action: {:create, "table"}}, _state) do
+    [%Operation.Wait{msgs: List.wrap(msg)}]
+  end
+
   def command_from_analysis(msg, %{electrified?: true} = analysis, _state) do
     [%Operation.Wait{msgs: List.wrap(msg)}, %Operation.Capture{msg: msg, analysis: analysis}]
   end

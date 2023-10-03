@@ -203,10 +203,31 @@ defmodule Electric.Postgres.Proxy.ParserTest do
 
       assert {:ok,
               [
+                {%M.Query{query: "ALTER TABLE monkey ADD tail int2 NOT NULL"},
+                 %PgQuery.AlterTableStmt{}}
+              ]} =
+               Parser.parse(simple("ALTER TABLE monkey ADD tail int2 NOT NULL"))
+
+      assert {:ok,
+              [
                 {%M.Parse{query: "ALTER TABLE monkey ADD tail int2 NOT NULL;"},
                  %PgQuery.AlterTableStmt{}}
               ]} =
                Parser.parse(extended("ALTER TABLE monkey ADD tail int2 NOT NULL;"))
+    end
+
+    test "pg-syntax, no trailing semicolon" do
+      assert {:ok,
+              [
+                {%M.Query{query: "ALTER TABLE monkey ADD tail int2 NOT NULL"},
+                 %PgQuery.AlterTableStmt{}},
+                {%M.Query{query: "ALTER TABLE giraffe ADD neck int2"}, %PgQuery.AlterTableStmt{}}
+              ]} =
+               Parser.parse(
+                 simple(
+                   "ALTER TABLE monkey ADD tail int2 NOT NULL; ALTER TABLE giraffe ADD neck int2"
+                 )
+               )
     end
 
     test "electric-syntax" do

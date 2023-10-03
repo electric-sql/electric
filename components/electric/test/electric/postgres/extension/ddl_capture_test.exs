@@ -15,10 +15,10 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     ]
 
   test_tx "migration of non-electrified tables", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY);"
-    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY);"
-    sql3 = "ALTER TABLE buttercup ADD COLUMN petal text;"
-    sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text;"
+    sql1 = "CREATE TABLE buttercup (id int8 GENERATED ALWAYS AS IDENTITY)"
+    sql2 = "CREATE TABLE daisy (id int8 GENERATED ALWAYS AS IDENTITY)"
+    sql3 = "ALTER TABLE buttercup ADD COLUMN petal text"
+    sql4 = "ALTER TABLE buttercup ADD COLUMN stem text, ADD COLUMN leaf text"
 
     for sql <- [sql1, sql2, sql3, sql4] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -28,11 +28,11 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE is captured", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
-    sql4 = "ALTER TABLE buttercup ADD COLUMN petal text;"
-    sql5 = "ALTER TABLE daisy ADD COLUMN stem text, ADD COLUMN leaf text;"
+    sql4 = "ALTER TABLE buttercup ADD COLUMN petal text"
+    sql5 = "ALTER TABLE daisy ADD COLUMN stem text, ADD COLUMN leaf text"
 
     for sql <- [sql1, sql2, sql3, sql4, sql5] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -45,11 +45,11 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "CREATE INDEX on electrified table is captured", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
-    sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
-    sql5 = "CREATE INDEX daisy_value_idx ON daisy (value);"
+    sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value)"
+    sql5 = "CREATE INDEX daisy_value_idx ON daisy (value)"
 
     for sql <- [sql1, sql2, sql3, sql4, sql5] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
@@ -65,11 +65,11 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     # this loader instance is used by the proxy injector
     loader = MockSchemaLoader.agent_id(__MODULE__.Loader)
 
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
-    sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value);"
-    sql5 = "DROP INDEX buttercup_value_idx;"
+    sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value)"
+    sql5 = "DROP INDEX buttercup_value_idx"
 
     # we have to setup the loader with knowledge of the electrified table
     # and the attached index, otherwise (since we're running in a tx via the proxy)
@@ -90,8 +90,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "DROP electrified TABLE is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2, sql3] do
@@ -104,8 +104,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE DROP COLUMN is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2, sql3] do
@@ -118,15 +118,15 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "ALTER electrified TABLE RENAME COLUMN is rejected", fn conn ->
-    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
-    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text);"
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
+    sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
     for sql <- [sql1, sql2, sql3] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
 
-    sql4 = "ALTER TABLE buttercup RENAME COLUMN value TO variable;"
+    sql4 = "ALTER TABLE buttercup RENAME COLUMN value TO variable"
 
     assert {:error, _error} = :epgsql.squery(conn, sql4)
   end
@@ -134,7 +134,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   @tag prisma_support: true
   test_tx "ADD column; CREATE INDEX only adds a single migration", fn conn ->
     sql1 =
-      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
 
     sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
@@ -145,17 +145,21 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:ok, [_]} = Extension.ddl_history(conn)
 
     sql3 =
-      "ALTER TABLE public.buttercup ADD COLUMN amount int4; CREATE INDEX buttercup_amount_idx ON public.buttercup (amount);"
+      "ALTER TABLE public.buttercup ADD COLUMN amount int4"
 
-    [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, sql3)
+    sql4 =
+      "CREATE INDEX buttercup_amount_idx ON public.buttercup (amount)"
 
-    assert {:ok, [_, %{"query" => ^sql3}]} = Extension.ddl_history(conn)
+    sql34 = sql3 <> "; " <> sql4
+    [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, sql34)
+
+    assert {:ok, [_, %{"query" => ^sql3}, %{"query" => ^sql4}]} = Extension.ddl_history(conn)
   end
 
   @tag prisma_support: true
   test_tx "CREATE INDEX; DROP <electrified> COLUMN", fn conn ->
     sql1 =
-      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
 
     sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
 
@@ -168,7 +172,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     sql3 =
       "CREATE INDEX buttercup_amount_idx ON public.buttercup (amount); ALTER TABLE public.buttercup DROP COLUMN value; "
 
-    [{:ok, _, _}, {:error, _}] = :epgsql.squery(conn, sql3)
+    {:error, _} = :epgsql.squery(conn, sql3)
 
     assert {:ok, [_]} = Extension.ddl_history(conn)
   end
