@@ -113,12 +113,6 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:noreply, {socket, state}}
   end
 
-  # defp handle_messages(msgs, socket, state) do
-  #   Enum.reduce(msgs, {:continue, state}, fn msg, {return, state} ->
-  #     handle_authentication_message(msg, return, socket, state)
-  #   end)
-  # end
-
   defp handle_messages([], _socket, state) do
     {:continue, state}
   end
@@ -155,11 +149,6 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   defp handle_messages([%M.GSSResponse{} = msg | msgs], socket, state) do
     case state.authentication do
-      # nil ->
-      #   Logger.warning("Not validating authentication response #{inspect(msg)}")
-      #   state = authenticated(socket, state)
-      #   handle_messages(msgs, socket, state)
-
       {:md5, username, salt} ->
         <<"md5", hash::binary-32, 0>> = msg.data
 
