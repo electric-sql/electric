@@ -1,0 +1,44 @@
+[doc Where clauses on subscription function correctly]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[include _shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table entries]
+
+[global user_id_1=1]
+[newshell user_1_ws1]
+    -$fail_pattern|(bad sentinel value)
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id_1 1]
+    # Subscribe with where clause
+    """!
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: [{"entries", where: "this.content ILIKE 'sentinel%'"}]))
+    """
+    ?$eprompt
+
+[shell pg_1]
+    !BEGIN;
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'sentinel value');
+    # "bad sentinel value" doesn't fall into WHERE clause, so we shouldn't see it.
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000001', 'bad sentinel value');
+    !COMMIT;
+    ?$psql
+
+[shell electric]
+    # We expect to send the transaction to Satellite
+    ?client_id=client_1_1 .+ user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord\{(.*)record: %\{
+    ?+"content" => "sentinel value"
+    ?+"content_b" => nil
+    ?"id" => "00000000-0000-0000-0000-000000000000"
+    ?\}
+
+[shell user_1_ws1]
+    # And receive it there
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)row_data: %Electric\.Satellite\.SatOpRow\{
+    ?values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    ?\}
+    ?tags: \["postgres_1@\d{13,16}"\]
+    ?\}
+
+[cleanup]
+    [invoke teardown]

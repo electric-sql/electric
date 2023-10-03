@@ -474,6 +474,7 @@ export enum SatSubsResp_SatSubsError_ShapeReqError_Code {
   EMPTY_SHAPE_DEFINITION = 3,
   /** DUPLICATE_TABLE_IN_SHAPE_DEFINITION - Attempt to request the same table more than once in one shape */
   DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4,
+  INVALID_WHERE_CLAUSE = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -510,6 +511,7 @@ export interface SatShapeDef_Select {
   $type: "Electric.Satellite.SatShapeDef.Select";
   /** table name for this select */
   tablename: string;
+  where: string;
 }
 
 /**
@@ -3166,7 +3168,7 @@ export const SatShapeDef = {
 messageTypeRegistry.set(SatShapeDef.$type, SatShapeDef);
 
 function createBaseSatShapeDef_Select(): SatShapeDef_Select {
-  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "" };
+  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "", where: "" };
 }
 
 export const SatShapeDef_Select = {
@@ -3175,6 +3177,9 @@ export const SatShapeDef_Select = {
   encode(message: SatShapeDef_Select, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.tablename !== "") {
       writer.uint32(10).string(message.tablename);
+    }
+    if (message.where !== "") {
+      writer.uint32(18).string(message.where);
     }
     return writer;
   },
@@ -3193,6 +3198,13 @@ export const SatShapeDef_Select = {
 
           message.tablename = reader.string();
           continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.where = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3209,6 +3221,7 @@ export const SatShapeDef_Select = {
   fromPartial<I extends Exact<DeepPartial<SatShapeDef_Select>, I>>(object: I): SatShapeDef_Select {
     const message = createBaseSatShapeDef_Select();
     message.tablename = object.tablename ?? "";
+    message.where = object.where ?? "";
     return message;
   },
 };
