@@ -1,4 +1,4 @@
-const shell = require('shelljs')
+const exec = require('shelljs-live')
 
 let db = process.env.DATABASE_URL
 let electricPort = process.env.ELECTRIC_PORT ?? 5133
@@ -50,7 +50,7 @@ const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 
 // 5433 is the logical publisher port
 // it is exposed because PG must be able to connect to Electric
-const res = shell.exec(
+const res = exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
