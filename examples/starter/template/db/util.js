@@ -14,7 +14,7 @@ const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appNam
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
-const error = (err) => {
+function error(err) {
   console.error('\x1b[31m', err)
   process.exit(1)
 }
