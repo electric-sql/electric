@@ -82,9 +82,4 @@ defmodule Electric.Postgres.Proxy.Injector.NameParserTest do
   defp escape_quotes(<<c::binary-1, rest::binary>>, acc) do
     escape_quotes(rest, [acc | c])
   end
-
-  # test "unquoted name"
-  # test "unquoted schema.name"
-  # test "quoted name"
-  # test "quoted schema.name"
 end
