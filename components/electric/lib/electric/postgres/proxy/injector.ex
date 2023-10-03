@@ -22,11 +22,8 @@ defmodule Electric.Postgres.Proxy.Injector do
   @callback alter_shadow_table_query(table_modification()) :: binary()
   @callback migration_version() :: binary()
 
-  # FIXME: replace `nil` with some default capture mode module
   @default_mode {Injector.Electric, []}
 
-  # FIXME: add in the username and the db to this, so we can pass them onto the 
-  #        capture modes
   def new(opts \\ [], connection) do
     with {:ok, loader} <- Keyword.fetch(opts, :loader) do
       query_generator = Keyword.get(opts, :query_generator, __MODULE__)
@@ -38,12 +35,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       session_id = Keyword.get(connection, :session_id, 0)
 
-      mode =
-        if username = connection[:username] do
-          Map.get(per_user, username, default)
-        else
-          nil
-        end
+      mode = Map.get(per_user, connection[:username], default)
 
       capture =
         mode
@@ -60,11 +52,8 @@ defmodule Electric.Postgres.Proxy.Injector do
     end
   end
 
-  # FIXME: default mode should be some module, like Capture.Migration
-  #        and we save this default mode and if a capture module
-  #        returns `nil` as the mode, we replace it with this default mode
   defp default_capture_mode(nil) do
-    nil
+    @default_mode
   end
 
   defp default_capture_mode(module) when is_atom(module) do
@@ -74,10 +63,6 @@ defmodule Electric.Postgres.Proxy.Injector do
   defp default_capture_mode({module, params})
        when is_atom(module) and (is_list(params) or is_map(params)) do
     {module, params}
-  end
-
-  defp initialise_capture_mode(nil, _) do
-    nil
   end
 
   defp initialise_capture_mode({module, opts}, args) do
