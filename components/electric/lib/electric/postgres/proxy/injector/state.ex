@@ -16,8 +16,6 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     end
   end
 
-  alias Electric.Postgres.Proxy.Injector
-
   @derive {Inspect, except: [:loader]}
 
   defstruct loader: nil,

@@ -1,10 +1,8 @@
 defmodule Electric.Postgres.Proxy.Injector do
   alias PgProtocol.Message, as: M
-  alias Electric.Postgres.Proxy.Parser
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.Injector.{Capture, Send, State}
   alias Electric.Postgres.Proxy.Injector.Operation
-  alias Electric.DDLX
 
   require Logger
 

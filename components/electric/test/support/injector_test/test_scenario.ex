@@ -111,9 +111,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     ]
   end
 
-  defp random_name() do
-    "query_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
-  end
+  # defp _random_name() do
+  #   "query_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
+  # end
 
   def parse_describe_complete(params \\ []) do
     [
@@ -364,7 +364,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   defp assert_messages_equal(messages) do
-    for {direction, {sent, expected}} <- messages do
+    for {_direction, {sent, expected}} <- messages do
       if length(sent) != length(expected) do
         assert_unequal(messages)
       end

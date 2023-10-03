@@ -126,10 +126,6 @@ defmodule Electric.Postgres.Proxy.ParserTest do
   end
 
   describe "table_name/1" do
-    def table_name(query) do
-      # wrap the table name function because it is only used on asts 
-    end
-
     test "ALTER TABLE" do
       assert {:table, {"public", "fish"}} =
                Parser.table_name("ALTER TABLE fish ADD COLUMN door int8")

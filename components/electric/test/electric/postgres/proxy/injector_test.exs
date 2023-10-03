@@ -435,8 +435,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
     """
 
-    version = random_version()
-
     {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE something ENABLE ELECTRIC")
     [electric] = DDLX.Command.pg_sql(command)
 

@@ -1,7 +1,6 @@
 defmodule Electric.Postgres.Proxy.Injector.TransparentTest do
   use ExUnit.Case, async: true
 
-  alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector.Transparent
 
   import Electric.Postgres.Proxy.TestScenario

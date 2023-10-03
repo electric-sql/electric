@@ -119,7 +119,10 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
          %{
            analysis
            | allowed?: false,
-             error: %{code: "EX001", message: ~s[Cannot electrify column of type "cidr"]}
+             error: %{
+               code: "EX001",
+               message: ~s[Cannot electrify column of type #{inspect(type)}]
+             }
          }}
     end
   end
@@ -333,7 +336,7 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
     end
   end
 
-  def analyse(stmt, analysis, _state) do
+  def analyse(_stmt, analysis, _state) do
     %{analysis | action: :insert}
   end
 

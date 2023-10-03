@@ -215,7 +215,7 @@ defmodule Operation.Wait do
     # If we're getting messages from the client then according to it
     # the last round of messages is complete so we can just cede control
     # to the next operation
-    def recv_client(op, msgs, state) do
+    def recv_client(_op, _msgs, state) do
       {nil, state}
     end
 

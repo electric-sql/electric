@@ -113,7 +113,7 @@ defmodule Electric.Postgres.Proxy.Parser do
     end
   end
 
-  def table_name(stmt, _opts) do
+  def table_name(_stmt, _opts) do
     {nil, nil}
   end
 
@@ -188,12 +188,6 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   defp decode_val({:sval, %{sval: s}}), do: s
   defp decode_val({:fval, %{fval: s}}), do: String.to_integer(s)
-
-  defp stmt(%PgQuery.ParseResult{version: _, stmts: [raw_stmt | _]}) do
-    %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {_tag, stmt}}} = raw_stmt
-
-    stmt
-  end
 
   defp blank(e, opts) when e in [nil, ""] do
     Keyword.get(opts, :default_schema, @default_schema)
