@@ -1,13 +1,13 @@
 defmodule Electric.Postgres.Proxy.Injector.Send do
   @moduledoc """
-  Provides a way to send messages to the client (`front`) or the server
-  (`back`) simultaneously.
+  Provides a way to send messages to the client (`client`) or the server
+  (`server`) simultaneously.
 
   Before sending you must call `flush/1` to ensure that the messages are in the
   right order. Once `flush/1` has been called any attempt to append messages
   will raise an exception.
   """
-  defstruct flush: false, locked: false, front: [], back: []
+  defstruct flush: false, locked: false, client: [], server: []
 
   alias PgProtocol.Message, as: M
 
@@ -15,8 +15,8 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   @type t() :: %__MODULE__{
           flush: boolean(),
           locked: boolean(),
-          front: [M.t()],
-          back: [M.t()]
+          client: [M.t()],
+          server: [M.t()]
         }
 
   @spec new() :: t()
@@ -24,14 +24,14 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
     %__MODULE__{}
   end
 
-  @spec clear(t(), :both | :front | :back) :: t() | no_return()
+  @spec clear(t(), :both | :client | :server) :: t() | no_return()
   def clear(send, side \\ :both)
 
   def clear(%{flush: true}, _side) do
     raise "cannot clear a flushed Send"
   end
 
-  def clear(send, side) when side in [:both, :front, :back] do
+  def clear(send, side) when side in [:both, :client, :server] do
     case side do
       :both -> new()
       s -> Map.put(send, s, [])
@@ -41,45 +41,45 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   @doc """
   Append a message to be sent to the client.
   """
-  @spec front(t(), msgs()) :: t() | no_return()
-  def front(send \\ new(), msg)
+  @spec client(t(), msgs()) :: t() | no_return()
+  def client(send \\ new(), msg)
 
-  def front(%__MODULE__{flush: true}, _msg) do
+  def client(%__MODULE__{flush: true}, _msg) do
     raise "Cannot send to a flushed channel"
   end
 
-  def front(%__MODULE__{locked: true} = send, _msg) do
+  def client(%__MODULE__{locked: true} = send, _msg) do
     send
   end
 
-  def front(%__MODULE__{} = send, msgs) when is_list(msgs) do
-    Enum.reduce(msgs, send, &front(&2, &1))
+  def client(%__MODULE__{} = send, msgs) when is_list(msgs) do
+    Enum.reduce(msgs, send, &client(&2, &1))
   end
 
-  def front(%__MODULE__{front: front} = send, msg) do
-    %{send | front: [msg | front]}
+  def client(%__MODULE__{client: client} = send, msg) do
+    %{send | client: [msg | client]}
   end
 
   @doc """
   Append a message to be sent to the server.
   """
-  @spec back(t(), msgs()) :: t() | no_return()
-  def back(send \\ new(), msg)
+  @spec server(t(), msgs()) :: t() | no_return()
+  def server(send \\ new(), msg)
 
-  def back(%__MODULE__{flush: true}, _msg) do
+  def server(%__MODULE__{flush: true}, _msg) do
     raise "Cannot send to a flushed channel"
   end
 
-  def back(%__MODULE__{locked: true} = send, _msg) do
+  def server(%__MODULE__{locked: true} = send, _msg) do
     send
   end
 
-  def back(%__MODULE__{} = send, msgs) when is_list(msgs) do
-    Enum.reduce(msgs, send, &back(&2, &1))
+  def server(%__MODULE__{} = send, msgs) when is_list(msgs) do
+    Enum.reduce(msgs, send, &server(&2, &1))
   end
 
-  def back(%__MODULE__{back: back} = send, msg) do
-    %{send | back: [msg | back]}
+  def server(%__MODULE__{server: server} = send, msg) do
+    %{send | server: [msg | server]}
   end
 
   @doc """
@@ -89,8 +89,8 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   Idempotent.
   """
   @spec flush(t()) :: t()
-  def flush(%__MODULE__{flush: false, front: front, back: back}) do
-    %__MODULE__{flush: true, front: Enum.reverse(front), back: Enum.reverse(back)}
+  def flush(%__MODULE__{flush: false, client: client, server: server}) do
+    %__MODULE__{flush: true, client: Enum.reverse(client), server: Enum.reverse(server)}
   end
 
   def flush(%__MODULE__{flush: true} = send) do
@@ -101,12 +101,12 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
     %{send | locked: true}
   end
 
-  def pending(%__MODULE__{} = send, side) when side in [:front, :back] do
+  def pending(%__MODULE__{} = send, side) when side in [:client, :server] do
     Map.fetch!(flush(send), side)
   end
 
-  def filter_front(%__MODULE__{} = send, msg_type) when is_atom(msg_type) do
-    {filtered, front} = Enum.split_with(send.front, &is_struct(&1, msg_type))
-    {filtered, %{send | front: front}}
+  def filter_client(%__MODULE__{} = send, msg_type) when is_atom(msg_type) do
+    {filtered, client} = Enum.split_with(send.client, &is_struct(&1, msg_type))
+    {filtered, %{send | client: client}}
   end
 end

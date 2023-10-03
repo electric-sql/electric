@@ -135,7 +135,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
     # override the default implementations because we never want to pop ourselves off
     # the operation stack
     def recv_server(electric, msg, state, send) do
-      {electric, state, Send.front(send, msg)}
+      {electric, state, Send.client(send, msg)}
     end
 
     def send_client(electric, state, send) do

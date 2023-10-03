@@ -101,9 +101,9 @@ defmodule Electric.Postgres.Proxy.Injector do
 
     {stack, state, send} = Operation.activate(stack, state, Send.new())
 
-    %{front: front, back: back} = Send.flush(send)
+    %{client: client, server: server} = Send.flush(send)
 
-    {:ok, {stack, state}, back, front}
+    {:ok, {stack, state}, server, client}
   end
 
   def recv_server({stack, state}, msgs) do
@@ -120,19 +120,19 @@ defmodule Electric.Postgres.Proxy.Injector do
     {stack, state, send} =
       case errors do
         [] ->
-          if Enum.any?(send.front, &is_struct(&1, M.ErrorResponse)) do
+          if Enum.any?(send.client, &is_struct(&1, M.ErrorResponse)) do
             Operation.send_error(stack, state, send)
           else
             Operation.send_client(stack, state, send)
           end
 
         [_ | _] ->
-          Operation.recv_error(stack, errors, state, Send.front(send, errors))
+          Operation.recv_error(stack, errors, state, Send.client(send, errors))
       end
 
-    %{front: front, back: back} = Send.flush(send)
+    %{client: client, server: server} = Send.flush(send)
 
-    {:ok, {stack, state}, back, front}
+    {:ok, {stack, state}, server, client}
   end
 
   def capture_ddl_query(query, quote \\ nil) do

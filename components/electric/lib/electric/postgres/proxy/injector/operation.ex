@@ -294,7 +294,7 @@ defimpl Operation, for: List do
   end
 
   def recv_server([], msg, state, send) do
-    {[], state, Send.front(send, msg)}
+    {[], state, Send.client(send, msg)}
   end
 
   def recv_server([op | rest], msg, state, send) do
@@ -364,15 +364,15 @@ defmodule Operation.Wait do
     end
 
     def activate(op, state, send) do
-      {op, state, Send.back(send, op.msgs)}
+      {op, state, Send.server(send, op.msgs)}
     end
 
     def recv_server(%{signal: signal}, %signal{} = msg, state, send) do
-      {nil, state, Send.front(send, msg)}
+      {nil, state, Send.client(send, msg)}
     end
 
     def recv_server(op, msg, state, send) do
-      {op, state, Send.front(send, msg)}
+      {op, state, Send.client(send, msg)}
     end
   end
 end
@@ -394,8 +394,8 @@ defmodule Operation.Pass do
     def activate(op, state, send) do
       send =
         case op.direction do
-          :client -> Send.front(send, op.msgs)
-          :server -> Send.back(send, op.msgs)
+          :client -> Send.client(send, op.msgs)
+          :server -> Send.server(send, op.msgs)
         end
 
       {nil, state, send}
@@ -411,8 +411,8 @@ defmodule Operation.Between do
 
     def activate(op, state, send) do
       if ready?(send) do
-        %{front: front} = Send.flush(send)
-        execute(op, front, state, Send.new())
+        %{client: client} = Send.flush(send)
+        execute(op, client, state, Send.new())
       else
         {op, state, send}
       end
@@ -429,7 +429,7 @@ defmodule Operation.Between do
     end
 
     defp ready?(send) do
-      Enum.any?(send.front, &is_struct(&1, M.ReadyForQuery))
+      Enum.any?(send.client, &is_struct(&1, M.ReadyForQuery))
     end
 
     defp execute(op, msgs, state, send) do
@@ -443,8 +443,8 @@ defmodule Operation.Between do
 
     def send_client(op, state, send) do
       if ready?(send) do
-        %{front: front} = Send.flush(send)
-        execute(op, front, state, Send.new())
+        %{client: client} = Send.flush(send)
+        execute(op, client, state, Send.new())
       else
         {op, state, send}
       end
@@ -476,7 +476,7 @@ defmodule Operation.Begin do
 
     def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.begin(state),
-       Send.back(send, [%M.Query{query: "BEGIN"}])}
+       Send.server(send, [%M.Query{query: "BEGIN"}])}
     end
   end
 end
@@ -489,7 +489,7 @@ defmodule Operation.Rollback do
 
     def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.rollback(state),
-       Send.back(send, [%M.Query{query: "ROLLBACK"}])}
+       Send.server(send, [%M.Query{query: "ROLLBACK"}])}
     end
   end
 end
@@ -502,7 +502,7 @@ defmodule Operation.Commit do
 
     def activate(op, state, send) do
       {if(op.hidden?, do: op, else: nil), State.commit(state),
-       Send.back(send, [%M.Query{query: "COMMIT"}])}
+       Send.server(send, [%M.Query{query: "COMMIT"}])}
     end
 
     def send_error(_op, state, send) do
@@ -542,7 +542,7 @@ defmodule Operation.AssignMigrationVersion do
         version = migration_version(op, state)
         query_generator = Map.fetch!(state, :query_generator)
         sql = query_generator.capture_version_query(version)
-        {op, State.tx_version(state, version), Send.back(send, [query(sql)])}
+        {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
       else
         {nil, state, send}
       end
@@ -605,10 +605,10 @@ defmodule Operation.Simple do
     end
 
     def send_client(op, state, send) do
-      {command_complete, send} = Send.filter_front(send, M.CommandComplete)
+      {command_complete, send} = Send.filter_client(send, M.CommandComplete)
 
       {op, send} =
-        case Send.filter_front(send, M.ReadyForQuery) do
+        case Send.filter_client(send, M.ReadyForQuery) do
           {[ready], send} ->
             {%{op | complete: [command_complete | op.complete], ready: ready}, send}
 
@@ -626,7 +626,7 @@ defmodule Operation.Simple do
         |> Enum.concat(List.flatten(op.complete))
         |> Enum.reverse()
 
-      {nil, state, Send.front(send, complete)}
+      {nil, state, Send.client(send, complete)}
     end
 
     defp next(%{stmts: [analysis | rest]} = op, state, send) do
@@ -670,7 +670,7 @@ defmodule Operation.Electric do
       [query | queries] = DDLX.Command.pg_sql(op.command)
       op = %{op | queries: queries}
 
-      {op, State.electrify(state, op.analysis.table), Send.back(send, query(query))}
+      {op, State.electrify(state, op.analysis.table), Send.server(send, query(query))}
     end
 
     def recv_server(op, %M.ReadyForQuery{} = msg, state, send) do
@@ -685,7 +685,7 @@ defmodule Operation.Electric do
             []
         end
 
-      {nil, state, Send.front(send, reply)}
+      {nil, state, Send.client(send, reply)}
     end
 
     def recv_server(op, _msg, state, send) do
@@ -718,8 +718,8 @@ defmodule Operation.Capture do
       {
         op,
         State.electrify(state),
-        send |> Send.back(query(sql))
-        # |> Send.front(notice)
+        send |> Send.server(query(sql))
+        # |> Send.client(notice)
       }
     end
   end
@@ -734,7 +734,7 @@ defmodule Operation.AlterShadow do
     def activate(op, state, send) do
       query_generator = Map.fetch!(state, :query_generator)
       sql = query_generator.alter_shadow_table_query(op.modification)
-      {op, State.electrify(state), Send.back(send, query(sql))}
+      {op, State.electrify(state), Send.server(send, query(sql))}
     end
   end
 end
@@ -747,7 +747,7 @@ defmodule Operation.Disallowed do
 
     def activate(op, state, send) do
       msgs = [error_response(op.analysis), %M.ReadyForQuery{status: :failed}]
-      {nil, state, Send.front(send, msgs)}
+      {nil, state, Send.client(send, msgs)}
     end
 
     defp error_response(%{table: {schema, table}} = analysis) do
@@ -786,7 +786,7 @@ defmodule Operation.SyntaxError do
 
     def activate(op, state, send) do
       msgs = [error_response(op.error), %M.ReadyForQuery{status: :failed}]
-      {nil, state, Send.front(send, msgs)}
+      {nil, state, Send.client(send, msgs)}
     end
 
     defp error_response(%Electric.DDLX.Command.Error{} = error) do
@@ -821,7 +821,7 @@ defmodule Operation.FakeBind do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {nil, state, Send.front(send, Enum.map(op.msgs, &response(&1, state)))}
+      {nil, state, Send.client(send, Enum.map(op.msgs, &response(&1, state)))}
     end
   end
 end
@@ -833,7 +833,7 @@ defmodule Operation.FakeExecute do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {nil, state, Send.front(send, Enum.map(op.msgs, &response(&1, op.tag, state)))}
+      {nil, state, Send.client(send, Enum.map(op.msgs, &response(&1, op.tag, state)))}
     end
   end
 end

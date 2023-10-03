@@ -26,7 +26,7 @@ defmodule Electric.Postgres.Proxy.Injector.Transparent do
     end
 
     def recv_server(electric, msg, state, send) do
-      {electric, state, Send.front(send, msg)}
+      {electric, state, Send.client(send, msg)}
     end
 
     def send_client(transparent, state, send) do

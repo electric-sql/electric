@@ -34,7 +34,7 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
     end
 
     def recv_server(prisma, msg, state, send) do
-      {prisma, state, Send.front(send, msg)}
+      {prisma, state, Send.client(send, msg)}
     end
 
     def send_client(electric, state, send) do
@@ -71,7 +71,6 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
             %M.ReadyForQuery{status: :failed}
           ]
 
-          # {prisma, state, Send.front(send, msgs)}
           {
             Operation.Pass.client(msgs),
             {prisma, state}
