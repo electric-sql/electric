@@ -21,7 +21,7 @@ defmodule Electric.DDLX.Command.Common do
   end
 
   def sql_repr({schema, table}) when is_binary(schema) and is_binary(table) do
-    ~s["#{schema}"."#{table}"]
+    ~s['"#{schema}"."#{table}"']
   end
 
   defp escape_quotes(<<>>, acc) do

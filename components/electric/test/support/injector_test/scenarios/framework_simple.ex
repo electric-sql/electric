@@ -67,7 +67,9 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
     injector
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
-    |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
+    |> electric([client: query(query)], command,
+      client: complete_ready(DDLX.Command.tag(command))
+    )
     |> framework.capture_migration_version(version)
     |> client(commit())
     |> server(complete_ready("COMMIT", :idle))

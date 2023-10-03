@@ -101,7 +101,7 @@ defmodule Electric.Postgres.Proxy.Handler do
     trace_recv(:server, state.session_id, msgs)
 
     {:ok, injector, upstream_msgs, downstream_msgs} =
-      Injector.recv_backend(state.injector, msgs)
+      Injector.recv_server(state.injector, msgs)
 
     :ok = upstream(upstream_msgs, state)
     :ok = downstream(downstream_msgs, socket, state)
@@ -113,22 +113,27 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:noreply, {socket, state}}
   end
 
-  defp handle_messages(msgs, socket, state) do
-    Enum.reduce(msgs, {:continue, state}, fn msg, {return, state} ->
-      handle_message(msg, return, socket, state)
-    end)
+  # defp handle_messages(msgs, socket, state) do
+  #   Enum.reduce(msgs, {:continue, state}, fn msg, {return, state} ->
+  #     handle_authentication_message(msg, return, socket, state)
+  #   end)
+  # end
+
+  defp handle_messages([], _socket, state) do
+    {:continue, state}
   end
 
-  defp handle_message(%M.SSLRequest{}, return, socket, state) do
+  defp handle_messages([%M.SSLRequest{} | msgs], socket, state) do
     downstream("N", socket, state)
-    {return, state}
+    handle_messages(msgs, socket, state)
   end
 
-  defp handle_message(%M.StartupMessage{} = msg, return, socket, state) do
+  defp handle_messages([%M.StartupMessage{} = msg | msgs], socket, state) do
     case msg.params do
       %{"user" => username, "database" => database, "password" => password} ->
         if password == state.password do
-          {return, authenticated(socket, %{state | username: username, database: database})}
+          state = authenticated(socket, %{state | username: username, database: database})
+          handle_messages(msgs, socket, state)
         else
           authentication_failed(username, socket, state)
         end
@@ -139,41 +144,45 @@ defmodule Electric.Postgres.Proxy.Handler do
         msg = M.AuthenticationMD5Password.new(salt: salt)
         downstream([msg], socket, state)
 
-        {return,
-         %{state | username: username, database: database, authentication: {:md5, username, salt}}}
+        handle_messages(msgs, socket, %{
+          state
+          | username: username,
+            database: database,
+            authentication: {:md5, username, salt}
+        })
     end
   end
 
-  defp handle_message(%M.GSSResponse{} = msg, return, socket, state) do
+  defp handle_messages([%M.GSSResponse{} = msg | msgs], socket, state) do
     case state.authentication do
-      nil ->
-        Logger.warning("Not validating authentication response #{inspect(msg)}")
-        state = authenticated(socket, state)
-        {return, state}
+      # nil ->
+      #   Logger.warning("Not validating authentication response #{inspect(msg)}")
+      #   state = authenticated(socket, state)
+      #   handle_messages(msgs, socket, state)
 
       {:md5, username, salt} ->
         <<"md5", hash::binary-32, 0>> = msg.data
 
         if md5_auth_valid?(state.password, username, salt, hash) do
-          {return, authenticated(socket, state)}
+          handle_messages(msgs, socket, authenticated(socket, state))
         else
           authentication_failed(username, socket, state)
         end
     end
   end
 
-  defp handle_message(%M.Terminate{}, _return, _socket, state) do
+  defp handle_messages([%M.Terminate{} | _msgs], _socket, state) do
     {:close, state}
   end
 
-  defp handle_message(msg, return, socket, %{authenticated?: true} = state) do
+  defp handle_messages(msgs, socket, %{authenticated?: true} = state) do
     {:ok, injector, upstream_msgs, downstream_msgs} =
-      Injector.recv_frontend(state.injector, msg)
+      Injector.recv_client(state.injector, msgs)
 
     :ok = upstream(upstream_msgs, state)
     :ok = downstream(downstream_msgs, socket, state)
 
-    {return, %{state | injector: injector}}
+    {:continue, %{state | injector: injector}}
   end
 
   defp md5_auth_valid?(password, username, salt, hash) do
@@ -199,7 +208,11 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:ok, injector} =
       state.injector_opts
       |> Keyword.merge(loader: {loader_module, loader_conn})
-      |> Injector.new(username: state.username, database: state.database)
+      |> Injector.new(
+        session_id: state.session_id,
+        username: state.username,
+        database: state.database
+      )
 
     {:ok, pid} =
       UpstreamConnection.start_link(

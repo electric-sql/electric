@@ -314,11 +314,17 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
 
             %{
               analysis
-              | action: {:migration_version, %{framework: :ecto, version: 1, columns: columns}}
+              | action: {:migration_version, %{framework: {:ecto, 1}, columns: columns}}
             }
 
           :simple ->
-            raise "fill out simple mode version query"
+            {:ok, columns} = Parser.column_values_map(stmt)
+            {:ok, version} = Map.fetch(columns, "version")
+
+            %{
+              analysis
+              | action: {:migration_version, %{framework: {:ecto, 1}, version: version}}
+            }
         end
 
       other ->

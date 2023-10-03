@@ -94,7 +94,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def parse_describe(sql, name \\ nil) do
-    name = name || random_name()
+    # would love to assert that the parse and describe messages
+    # are passed as-is but getting the double incantations of this to work
+    # and return the same names is tricky, and it's not **that** important
+    # name = name || random_name()
 
     [
       # putting the close here makes the tests difficult -- 
@@ -266,24 +269,18 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   Can't be done declaratively because a command can return a variable number of
   sql statements that must be executed sequentially.
   """
-  def electric(injector, initial_messages, command, final_messages, opts \\ []) do
-    initial_origin = Keyword.get(opts, :origin, :client)
-
+  def electric(injector, initial_messages, command, final_messages) do
     case Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1) do
-      # TODO: what do we do here?
-      # [] ->
-      #   client(injector, initial_messages, )
-
       [query | queries] ->
         # the initial client message which is a [bind, execute] or [query] message
         # triggers a re-write to the real procedure call
         injector =
-          case initial_origin do
-            :client ->
-              client(injector, initial_messages, server: query)
+          case initial_messages do
+            [client: msgs] ->
+              client(injector, msgs, server: query)
 
-            :server ->
-              server(injector, initial_messages, server: query)
+            [server: msgs] ->
+              server(injector, msgs, server: query)
           end
 
         # this real proc call returns a readyforquery etc response which triggers
@@ -295,7 +292,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
         # on receipt of the last readyforquery, the injector returns
         # the required message sequence that the client is expecting for
         # it's initial `ELECTRIC ...` query
-        |> server(electric_call_complete(), [{initial_origin, final_messages}])
+        |> server(electric_call_complete(), final_messages)
     end
   end
 
@@ -378,7 +375,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
             # special case error  and notice messages -- I don't want to validate the
             # fields in this case, it's enough to know that the response was of the correct type
             %m{} when m in [M.ErrorResponse, M.NoticeResponse] -> is_struct(s, m)
-            m -> m == e
+            m -> m == s
           end
 
         # I want to compare lists of messages, not individual messages, so if there's
@@ -458,7 +455,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       end
 
     injector
-    |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
+    |> electric([client: query(query)], command,
+      client: complete_ready(DDLX.Command.tag(command))
+    )
   end
 
   def execute_tx_sql({:capture, {query, opts}}, injector, :simple) do
@@ -496,7 +495,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
     injector
     |> client(parse_describe(query), client: parse_describe_complete(), server: [])
-    |> electric(bind_execute(), command, bind_execute_complete(DDLX.Command.tag(command)))
+    |> electric([client: bind_execute()], command,
+      client: bind_execute_complete(DDLX.Command.tag(command))
+    )
   end
 
   def execute_tx_sql({:capture, {query, opts}}, injector, :extended) do

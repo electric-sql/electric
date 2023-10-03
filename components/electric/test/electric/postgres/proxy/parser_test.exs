@@ -126,6 +126,10 @@ defmodule Electric.Postgres.Proxy.ParserTest do
   end
 
   describe "table_name/1" do
+    def table_name(query) do
+      # wrap the table name function because it is only used on asts 
+    end
+
     test "ALTER TABLE" do
       assert {:table, {"public", "fish"}} =
                Parser.table_name("ALTER TABLE fish ADD COLUMN door int8")
@@ -184,7 +188,8 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     end
 
     test "DELETE" do
-      assert {:error, "Not an INSERT statement" <> _} = Parser.column_map("DELETE FROM fish")
+      assert {:error, "Not an INSERT statement" <> _} =
+               Parser.column_map("DELETE FROM fish")
     end
   end
 
@@ -202,7 +207,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
 
       assert {:ok,
               [
-                {%M.Parse{query: "ALTER TABLE monkey ADD tail int2 NOT NULL"},
+                {%M.Parse{query: "ALTER TABLE monkey ADD tail int2 NOT NULL;"},
                  %PgQuery.AlterTableStmt{}}
               ]} =
                Parser.parse(extended("ALTER TABLE monkey ADD tail int2 NOT NULL;"))
@@ -691,19 +696,18 @@ defmodule Electric.Postgres.Proxy.ParserTest do
       assert [
                %QueryAnalysis{
                  action: :insert,
-                 table: {"public", "schema_migrations"},
+                 table: {"public", "data"},
                  electrified?: false,
                  allowed?: true,
                  # leave determination of the capture to somewhere later in the process that uses more context (?)
                  capture?: false,
                  ast: %{},
-                 sql:
-                   "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2)",
+                 sql: "INSERT INTO public.data (colour, amount) VALUES ($1, $2)",
                  error: nil
                }
              ] =
                analyse(
-                 "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2);",
+                 "INSERT INTO public.data (colour, amount) VALUES ($1, $2);",
                  cxt
                )
     end
@@ -712,13 +716,13 @@ defmodule Electric.Postgres.Proxy.ParserTest do
       assert [
                %QueryAnalysis{
                  action: :delete,
-                 table: {"public", "schema_migrations"},
+                 table: {"public", "data"},
                  electrified?: false,
                  allowed?: true,
                  # leave determination of the capture to somewhere later in the process that uses more context (?)
                  capture?: false,
                  ast: %{},
-                 sql: "DELETE FROM public.schema_migrations",
+                 sql: "DELETE FROM public.data",
                  error: nil
                },
                %QueryAnalysis{
@@ -733,7 +737,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                }
              ] =
                analyse(
-                 "DELETE FROM public.schema_migrations; DELETE FROM public.truths ;",
+                 "DELETE FROM public.data; DELETE FROM public.truths ;",
                  cxt
                )
     end
@@ -942,8 +946,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action:
                    {:migration_version,
                     %{
-                      framework: :ecto,
-                      version: 1,
+                      framework: {:ecto, 1},
                       columns: %{"version" => 0, "inserted_at" => 1}
                     }},
                  table: {"public", "schema_migrations"},

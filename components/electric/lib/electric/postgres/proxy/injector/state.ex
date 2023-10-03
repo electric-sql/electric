@@ -24,6 +24,7 @@ defmodule Electric.Postgres.Proxy.Injector.State do
             query_generator: nil,
             default_schema: "public",
             tx: nil,
+            session_id: nil,
             metadata: %{}
 
   @type loader() :: {module(), term()}
@@ -32,6 +33,7 @@ defmodule Electric.Postgres.Proxy.Injector.State do
           loader: loader(),
           query_generator: query_generator(),
           default_schema: String.t(),
+          session_id: integer(),
           tx: nil | Tx.t(),
           metadata: map()
         }

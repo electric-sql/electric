@@ -61,7 +61,9 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
     injector
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
-    |> electric(query(query), command, complete_ready(DDLX.Command.tag(command)))
+    |> electric([client: query(query)], command,
+      client: complete_ready(DDLX.Command.tag(command))
+    )
     |> client(commit(), server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle))

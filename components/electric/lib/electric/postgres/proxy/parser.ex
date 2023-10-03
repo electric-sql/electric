@@ -56,7 +56,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   def table_name(query, opts) when is_binary(query) do
-    with {:ok, ast} <- parse(query) do
+    with {:ok, [{_, ast}]} <- parse(%M.Query{query: query}) do
       table_name(ast, opts)
     end
   end
@@ -113,7 +113,7 @@ defmodule Electric.Postgres.Proxy.Parser do
     end
   end
 
-  def table_name(_stmt, _opts) do
+  def table_name(stmt, _opts) do
     {nil, nil}
   end
 
@@ -151,7 +151,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   def column_map(sql) when is_binary(sql) do
-    with {:ok, ast} <- parse(sql) do
+    with {:ok, [{_msg, ast}]} <- parse(%M.Query{query: sql}) do
       column_map(ast)
     end
   end

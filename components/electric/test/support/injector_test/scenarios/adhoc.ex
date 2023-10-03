@@ -64,7 +64,9 @@ defmodule Electric.Postgres.Proxy.TestScenario.AdHoc do
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
     |> client(parse_describe(query), client: parse_describe_complete(), server: [])
-    |> electric(bind_execute(), command, bind_execute_complete(DDLX.Command.tag(command)))
+    |> electric([client: bind_execute()], command,
+      client: bind_execute_complete(DDLX.Command.tag(command))
+    )
     |> client(commit(), server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle))

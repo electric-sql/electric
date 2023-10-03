@@ -132,7 +132,7 @@ defimpl Operation, for: List do
   def recv_client([op | rest], msgs, state) do
     case Operation.recv_client(op, msgs, state) do
       {nil, state} ->
-        {rest, state}
+        recv_client(rest, msgs, state)
 
       {ops, state} ->
         {List.flatten([ops | rest]), state}
@@ -173,7 +173,7 @@ defimpl Operation, for: List do
 
   def send_client([op | rest], state, send) do
     {op, state, send} = Operation.send_client(op, state, send)
-    {[op | rest], state, send}
+    {List.flatten([op | rest]), state, send}
   end
 
   def recv_error([], _msgs, state, send) do
@@ -211,6 +211,13 @@ defmodule Operation.Wait do
 
   defimpl Operation do
     use Operation.Impl
+
+    # If we're getting messages from the client then according to it
+    # the last round of messages is complete so we can just cede control
+    # to the next operation
+    def recv_client(op, msgs, state) do
+      {nil, state}
+    end
 
     def initialise(%{msgs: []}, state, send) do
       {nil, state, send}
@@ -257,7 +264,7 @@ defmodule Operation.Pass do
 end
 
 defmodule Operation.Between do
-  defstruct [:commands, buffer: []]
+  defstruct [:commands, buffer: [], status: nil]
 
   defimpl Operation do
     use Operation.Impl
@@ -286,6 +293,7 @@ defmodule Operation.Between do
     end
 
     defp execute(op, msgs, state, send) do
+      msgs = Enum.map(msgs, &tx_status(&1, op.status))
       Operation.initialise(op.commands ++ [Operation.Pass.client(msgs)], state, send)
     end
 
@@ -293,8 +301,29 @@ defmodule Operation.Between do
       Operation.recv_error(op.commands, msgs, state, send)
     end
 
+    def send_client(op, state, send) do
+      if ready?(send) do
+        %{front: front} = Send.flush(send)
+        execute(op, front, state, Send.new())
+      else
+        {op, state, send}
+      end
+    end
+
     def send_error(op, state, send) do
       Operation.send_error(op.commands, state, send)
+    end
+
+    defp tx_status(m, nil) do
+      m
+    end
+
+    defp tx_status(%M.ReadyForQuery{}, status) do
+      %M.ReadyForQuery{status: status}
+    end
+
+    defp tx_status(m, _status) do
+      m
     end
   end
 end
@@ -397,7 +426,6 @@ defmodule Operation.Simple do
 
   defimpl Operation do
     use Operation.Impl
-    # alias Electric.Postgres.Proxy.{Injector.Electric, Parser}
 
     def initialise(%{stmts: []} = _op, state, send) do
       {nil, state, send}
@@ -414,7 +442,8 @@ defmodule Operation.Simple do
             commands: [
               %Operation.AssignMigrationVersion{},
               %Operation.Commit{msg: %M.Query{query: "COMMIT"}, hidden?: true}
-            ]
+            ],
+            status: :idle
           }
         ]
 
@@ -666,8 +695,36 @@ defmodule Operation.FakeExecute do
   end
 end
 
+defmodule Operation.AutoTx do
+  defstruct [:ops]
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def initialise(op, state, send) do
+      if State.tx?(state) do
+        Operation.initialise(op.ops, state, send)
+      else
+        ops = [
+          %Operation.Begin{msg: %M.Query{query: "BEGIN"}, hidden?: true},
+          op.ops,
+          %Operation.Between{
+            commands: [
+              %Operation.AssignMigrationVersion{},
+              %Operation.Commit{msg: %M.Query{query: "COMMIT"}, hidden?: true}
+            ],
+            status: :idle
+          }
+        ]
+
+        Operation.initialise(ops, state, send)
+      end
+    end
+  end
+end
+
 defmodule Operation.BindExecute do
-  defstruct [:commands]
+  defstruct [:ops]
 
   defimpl Operation do
     use Operation.Impl
@@ -675,7 +732,7 @@ defmodule Operation.BindExecute do
     def recv_client(op, msgs, state) do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
         {
-          [Operation.Pass.server(msgs), %Operation.Between{commands: op.commands}],
+          [Operation.Pass.server(msgs), %Operation.Between{commands: op.ops}],
           state
         }
       else
@@ -727,7 +784,7 @@ defmodule Operation.BindExecuteMigration do
       end
     end
 
-    defp assign_version(%M.Bind{} = msg, %{framework: :ecto, version: 1} = v) do
+    defp assign_version(%M.Bind{} = msg, %{framework: {:ecto, 1}} = v) do
       <<version::integer-big-signed-64>> =
         Enum.at(msg.parameters, Map.fetch!(v.columns, "version"))
 
@@ -749,7 +806,15 @@ defmodule Operation.BindExecuteElectric do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
         tag = DDLX.Command.tag(op.electric)
 
-        {op.commands ++ [%Operation.FakeExecute{msgs: msgs, tag: tag}], state}
+        {
+          Enum.concat(
+            op.commands,
+            [%Operation.FakeExecute{msgs: msgs, tag: tag}]
+          ),
+          state
+        }
+
+        # {op.commands ++ [%Operation.FakeExecute{msgs: msgs, tag: tag}], state}
       else
         {op, state}
       end

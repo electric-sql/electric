@@ -89,7 +89,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     TestScenario.FrameworkSimple,
     TestScenario.Manual,
     TestScenario.AdHoc,
-    TestScenario.ManualTx
+    TestScenario.ManualTx,
+    TestScenario.ExtendedNoTx
   ]
 
   @frameworks [
@@ -136,7 +137,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               passthrough: ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)],
               electric:
                 {~s[CALL electric.electrify('socks')],
-                 command: %Electric.DDLX.Command.Enable{table_name: "socks"}},
+                 command: %Electric.DDLX.Command.Enable{table_name: ~s["public"."socks"]}},
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
@@ -369,6 +370,58 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
       end
     end
+  end
+
+  test "postgrex startup", cxt do
+    alias PgProtocol.Message, as: M
+
+    import Electric.Postgres.Proxy.TestScenario
+
+    query =
+      "SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput,\n       coalesce(d.typelem, t.typelem), coalesce(r.rngsubtype, 0), ARRAY (\n  SELECT a.atttypid\n  FROM pg_attribute AS a\n  WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped\n  ORDER BY a.attnum\n)\nFROM pg_type AS t\nLEFT JOIN pg_type AS d ON t.typbasetype = d.oid\nLEFT JOIN pg_range AS r ON r.rngtypid = t.oid OR r.rngmultitypid = t.oid OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)\nWHERE (t.typrelid = 0)\nAND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))\n\n"
+
+    cxt.injector
+    |> client(
+      query(query),
+      server: [begin()]
+    )
+    |> server(complete_ready("BEGIN"), server: query(String.trim(query)))
+    |> server([%M.RowDescription{}, %M.DataRow{}, %M.DataRow{}])
+    |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
+    |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
+    |> server(
+      [
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.CommandComplete{tag: "MY TAG"},
+        %M.ReadyForQuery{status: :tx}
+      ],
+      server: [commit()]
+    )
+    |> server(complete_ready("COMMIT"),
+      client: [
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.DataRow{},
+        %M.CommandComplete{tag: "MY TAG"},
+        %M.ReadyForQuery{status: :idle}
+      ]
+    )
+    |> client(
+      parse_describe(
+        "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
+      ),
+      server: [begin()]
+    )
+    |> server(complete_ready("BEGIN"),
+      server:
+        parse_describe(
+          "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
+        )
+    )
   end
 
   test "prisma", cxt do

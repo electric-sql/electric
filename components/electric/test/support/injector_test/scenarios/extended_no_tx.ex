@@ -1,26 +1,30 @@
-defmodule Electric.Postgres.Proxy.TestScenario.Manual do
+defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
   @moduledoc """
-  Describes migrations being done within psql, so simple query protocol, no
-  client transaction and no migration version being assigned.
+  Statements are issued using the extended protocol, but no explicit
+  transactions are used.
   """
   use Electric.Postgres.Proxy.TestScenario
 
   def tags do
-    [scenario: :manual, protocol: :simple, framework: false, tx: false, version: false]
+    [scenario: :extended_no_tx, protocol: :extended, framework: false, tx: false, version: false]
   end
 
   def description do
-    "Manual migration: [simple, no-tx, no-version]"
+    "Extended: [extended, no-tx, no-version]"
   end
 
   def tx?, do: false
 
-  def assert_non_electrified_migration(injector, _framework, query, tag \\ random_tag()) do
+  def assert_non_electrified_migration(injector, _framework, query) do
+    tag = random_tag()
+
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: query(query))
-    |> server(complete_ready(tag, :tx), server: commit())
-    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
+    |> client(parse_describe(query), server: begin())
+    |> server(complete_ready("BEGIN", :tx), server: parse_describe(query))
+    |> server(parse_describe_complete())
+    |> client(bind_execute())
+    |> server(bind_execute_complete(tag), server: commit())
+    |> server(complete_ready("COMMIT", :idle), client: [bind_execute_complete(tag, :idle)])
     |> idle!()
   end
 
@@ -43,23 +47,20 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     tag = random_tag()
 
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx),
-      server: query(query),
-      client: [
-        # capture_notice(query)
-      ]
-    )
-    |> server(complete_ready(tag, :tx), server: capture_ddl_query(query))
+    |> client(parse_describe(query), server: begin())
+    |> server(complete_ready("BEGIN", :tx), server: parse_describe(query))
+    |> server(parse_describe_complete())
+    |> client(bind_execute())
+    |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
+    |> server(complete_ready("COMMIT", :idle), client: [bind_execute_complete(tag, :idle)])
     |> idle!()
   end
 
   def assert_injector_error(injector, _framework, query, error_details) do
     injector
-    |> client(query(query), client: [error(error_details), ready(:failed)])
+    |> client(parse_describe(query), client: [error(error_details), ready(:failed)])
     |> idle!()
   end
 
@@ -67,10 +68,12 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     {:ok, command} = DDLX.ddlx_to_commands(query)
 
     injector
-    |> client(query(query), server: begin())
+    |> client(parse_describe(query), server: begin())
+    |> server(complete_ready("BEGIN", :tx), client: parse_describe_complete(), server: [])
     |> electric(
-      [server: complete_ready("BEGIN", :tx)],
+      [client: bind_execute()],
       command,
+      # bind_execute_complete(DDLX.Command.tag(command)),
       server: capture_version_query()
     )
     |> server(capture_version_complete(),
@@ -78,7 +81,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
       # client: complete(DDLX.Command.tag(command))
     )
     |> server(complete_ready("COMMIT", :idle),
-      client: complete_ready(DDLX.Command.tag(command), :idle)
+      client: bind_execute_complete(DDLX.Command.tag(command), :idle)
     )
     |> idle!()
   end
@@ -89,8 +92,9 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     [electrify] = Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1)
 
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: electrify)
+    |> client(parse_describe(query), server: begin())
+    |> server(complete_ready("BEGIN", :tx), client: parse_describe_complete(), server: [])
+    |> client(bind_execute(), server: electrify)
     |> server([error(error_details), ready(:failed)], server: rollback())
     |> server(complete_ready("ROLLBACK", :idle), client: [error(error_details), ready(:failed)])
     |> idle!()

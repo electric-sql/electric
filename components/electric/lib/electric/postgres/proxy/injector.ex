@@ -39,6 +39,8 @@ defmodule Electric.Postgres.Proxy.Injector do
       default = Keyword.get(capture_mode_opts, :default, @default_mode)
       per_user = Keyword.get(capture_mode_opts, :per_user, %{})
 
+      session_id = Keyword.get(connection, :session_id, 0)
+
       mode =
         if username = connection[:username] do
           Map.get(per_user, username, default)
@@ -50,14 +52,13 @@ defmodule Electric.Postgres.Proxy.Injector do
         mode
         |> default_capture_mode()
         |> initialise_capture_mode(connection)
-        |> dbg
 
       debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
       {:ok,
        {
          [capture],
-         %State{loader: loader, query_generator: query_generator}
+         %State{loader: loader, query_generator: query_generator, session_id: session_id}
        }}
     end
   end
@@ -92,8 +93,13 @@ defmodule Electric.Postgres.Proxy.Injector do
     end
   end
 
+  defp inspect_stack(stack) do
+    Enum.map(stack, fn %op{} -> op end)
+  end
+
   def recv_client({stack, state}, msgs) do
-    {stack, state} = Operation.recv_client(stack, msgs, state) |> dbg
+    Logger.debug("recv_client: #{inspect_stack(stack)}")
+    {stack, state} = Operation.recv_client(stack, msgs, state)
 
     {stack, state, send} = Operation.initialise(stack, state, Send.new())
 
@@ -102,33 +108,33 @@ defmodule Electric.Postgres.Proxy.Injector do
     {:ok, {stack, state}, back, front}
   end
 
-  def recv_server({cmds, state}, msgs) do
+  def recv_server({stack, state}, msgs) do
+    Logger.debug("recv_client: #{inspect_stack(stack)}")
     # handle errors from the server here so detecting errors doesn't have to be
     # done by every command
     {non_errors, errors} = Enum.split_while(msgs, &(!is_struct(&1, M.ErrorResponse)))
 
-    {cmds, state, send} =
-      Enum.reduce(non_errors, {cmds, state, Send.new()}, fn msg, {cmds, state, send} ->
-        Operation.recv_server(cmds, msg, state, send)
+    {stack, state, send} =
+      Enum.reduce(non_errors, {stack, state, Send.new()}, fn msg, {stack, state, send} ->
+        Operation.recv_server(stack, msg, state, send)
       end)
-      |> dbg
 
-    {cmds, state, send} =
+    {stack, state, send} =
       case errors do
         [] ->
           if Enum.any?(send.front, &is_struct(&1, M.ErrorResponse)) do
-            Operation.send_error(cmds, state, send)
+            Operation.send_error(stack, state, send)
           else
-            Operation.send_client(cmds, state, send)
+            Operation.send_client(stack, state, send)
           end
 
         [_ | _] ->
-          Operation.recv_error(cmds, errors, state, Send.front(send, errors))
+          Operation.recv_error(stack, errors, state, Send.front(send, errors))
       end
 
     %{front: front, back: back} = Send.flush(send)
 
-    {:ok, {cmds, state}, back, front}
+    {:ok, {stack, state}, back, front}
   end
 
   def capture_ddl_query(query, quote \\ nil) do

@@ -190,7 +190,17 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
                       electric: cmd
                     }
 
-                  {[%Operation.FakeBind{msgs: msgs}, bind], {electric, state}}
+                  {
+                    [
+                      %Operation.AutoTx{
+                        ops: [
+                          %Operation.FakeBind{msgs: msgs},
+                          bind
+                        ]
+                      }
+                    ],
+                    {electric, state}
+                  }
 
                 %{action: {:migration_version, framework}} = analysis ->
                   bind = %Operation.BindExecuteMigration{
@@ -202,10 +212,17 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
 
                 analysis ->
                   bind = %Operation.BindExecute{
-                    commands: Electric.command_from_analysis([], analysis, state)
+                    ops: Electric.command_from_analysis([], analysis, state)
                   }
 
-                  {[%Operation.Wait{msgs: msgs, signal: signal}, bind], {electric, state}}
+                  {[
+                     %Operation.AutoTx{
+                       ops: [
+                         %Operation.Wait{msgs: msgs, signal: signal},
+                         bind
+                       ]
+                     }
+                   ], {electric, state}}
               end
 
             {:error, error} ->
