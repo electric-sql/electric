@@ -54,7 +54,9 @@ const liveServer = (buildOpts) => {
     setTimeout(() => {
       const op = { darwin: ['open'], linux: ['xdg-open'], win32: ['cmd', '/c', 'start'] }
       const ptf = process.platform
-      if (clients.length === 0) spawn(op[ptf][0], [...[op[ptf].slice(1)], `http://localhost:3001`])
+      const url = "http://localhost:3001"
+      if (clients.length === 0) spawn(op[ptf][0], [...[op[ptf].slice(1)], url])
+      console.info(`Your app is running at ${url}`)
     }, 500) // open the default browser only if it is not opened yet
   })
 }
