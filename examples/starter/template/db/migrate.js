@@ -1,13 +1,13 @@
 const fs = require('fs')
 const path = require('path')
-const { DATABASE_URL } = require('./util.js')
+const { DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
 
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')
 
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
 
-console.info(`Connecting to Postgres..`)
+console.info(`Connecting to postgres at ${PUBLIC_DATABASE_URL}`)
 const db = createPool(DATABASE_URL)
 
 const apply = async (fileName) => {

@@ -1,4 +1,5 @@
 version: "3.8"
+name: "${APP_NAME:-electric}"
 
 configs:
   postgres_config:
@@ -38,7 +39,7 @@ services:
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
     ports:
-      - 5133:5133
+      - ${ELECTRIC_PORT:-5133}:5133
     volumes:
       - electric_data:/app/data
     depends_on:
