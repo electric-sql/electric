@@ -17,7 +17,7 @@ const spinner = ora('Validating arguments').start()
 
 const error = (err: string) => {
   spinner.stop()
-  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--webserver-port <port>]')
+  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--webserver-port <port>]', '\x1b[0m')
   process.exit(1)
 }
 

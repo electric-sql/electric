@@ -64,11 +64,12 @@ if (res.code !== 0 && res.stderr.includes('port is already allocated')) {
   console.error(
     '\x1b[31m',
     'Could not start Electric because the port seems to be taken.\n' +
-    'To run Electric on another port execute `yarn ports:configure`'
+    'To run Electric on another port execute `yarn ports:configure`',
+    '\x1b[0m'
   )
 }
 
 function error(err) {
-  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]')
+  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]', '\x1b[0m')
   process.exit(1)
 }
