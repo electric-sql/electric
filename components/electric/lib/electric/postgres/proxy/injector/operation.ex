@@ -387,37 +387,40 @@ defmodule Operation.Between do
 end
 
 defmodule Operation.Begin do
-  defstruct [:msg, hidden?: false]
+  defstruct hidden?: false
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.begin(state), Send.back(send, op.msg)}
+      {if(op.hidden?, do: op, else: nil), State.begin(state),
+       Send.back(send, [%M.Query{query: "BEGIN"}])}
     end
   end
 end
 
 defmodule Operation.Rollback do
-  defstruct [:msg, hidden?: false]
+  defstruct hidden?: false
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.rollback(state), Send.back(send, op.msg)}
+      {if(op.hidden?, do: op, else: nil), State.rollback(state),
+       Send.back(send, [%M.Query{query: "ROLLBACK"}])}
     end
   end
 end
 
 defmodule Operation.Commit do
-  defstruct [:msg, hidden?: false]
+  defstruct hidden?: false
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.commit(state), Send.back(send, op.msg)}
+      {if(op.hidden?, do: op, else: nil), State.commit(state),
+       Send.back(send, [%M.Query{query: "COMMIT"}])}
     end
 
     def send_error(_op, state, send) do
@@ -425,7 +428,7 @@ defmodule Operation.Commit do
 
       Operation.activate(
         [
-          %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
+          %Operation.Rollback{hidden?: true},
           Operation.Pass.client([front])
         ],
         state,
@@ -436,7 +439,7 @@ defmodule Operation.Commit do
     def recv_error(_op, msgs, state, _send) do
       Operation.activate(
         [
-          %Operation.Rollback{msg: %M.Query{query: "ROLLBACK"}, hidden?: true},
+          %Operation.Rollback{hidden?: true},
           Operation.Pass.client(msgs)
         ],
         state,
@@ -494,12 +497,12 @@ defmodule Operation.Simple do
         next(op, state, send)
       else
         ops = [
-          %Operation.Begin{msg: %M.Query{query: "BEGIN"}, hidden?: true},
+          %Operation.Begin{hidden?: true},
           op,
           %Operation.Between{
             commands: [
               %Operation.AssignMigrationVersion{},
-              %Operation.Commit{msg: %M.Query{query: "COMMIT"}, hidden?: true}
+              %Operation.Commit{hidden?: true}
             ],
             status: :idle
           }
@@ -764,12 +767,12 @@ defmodule Operation.AutoTx do
         Operation.activate(op.ops, state, send)
       else
         ops = [
-          %Operation.Begin{msg: %M.Query{query: "BEGIN"}, hidden?: true},
+          %Operation.Begin{hidden?: true},
           op.ops,
           %Operation.Between{
             commands: [
               %Operation.AssignMigrationVersion{},
-              %Operation.Commit{msg: %M.Query{query: "COMMIT"}, hidden?: true}
+              %Operation.Commit{hidden?: true}
             ],
             status: :idle
           }

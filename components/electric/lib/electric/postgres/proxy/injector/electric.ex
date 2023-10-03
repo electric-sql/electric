@@ -16,25 +16,25 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
     [%Operation.Disallowed{msg: msg, analysis: analysis}]
   end
 
-  def command_from_analysis(msg, %{action: {:tx, :begin}}, _state) do
-    [%Operation.Begin{msg: msg}]
+  def command_from_analysis(_msg, %{action: {:tx, :begin}}, _state) do
+    [%Operation.Begin{}]
   end
 
-  def command_from_analysis(msg, %{action: {:tx, :commit}}, state) do
+  def command_from_analysis(_msg, %{action: {:tx, :commit}}, state) do
     case {State.tx_version?(state), State.electrified?(state)} do
       {_, false} ->
-        [%Operation.Commit{msg: msg}]
+        [%Operation.Commit{}]
 
       {true, true} ->
-        [%Operation.Commit{msg: msg}]
+        [%Operation.Commit{}]
 
       {false, true} ->
-        [%Operation.AssignMigrationVersion{}, %Operation.Commit{msg: msg}]
+        [%Operation.AssignMigrationVersion{}, %Operation.Commit{}]
     end
   end
 
-  def command_from_analysis(msg, %{action: {:tx, :rollback}}, _state) do
-    [%Operation.Rollback{msg: msg}]
+  def command_from_analysis(_msg, %{action: {:tx, :rollback}}, _state) do
+    [%Operation.Rollback{}]
   end
 
   def command_from_analysis(msgs, %{action: {:electric, command}} = analysis, _state) do
