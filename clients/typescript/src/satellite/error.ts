@@ -2,7 +2,7 @@ import { SatelliteError, SatelliteErrorCode } from '../util'
 import Log from 'loglevel'
 
 const fatalErrorDescription =
-  "Client can't connect with the server after a fatal error. This can happen due to divergence between local client and server. Use developer tools to clear the local database, or delete the database file. We're working on tools to allow recovering the state of the local database. Check the progess XXX"
+  "Client can't connect with the server after a fatal error. This can happen due to divergence between local client and server. Use developer tools to clear the local database, or delete the database file. We're working on tools to allow recovering the state of the local database."
 
 const throwErrors = [
   SatelliteErrorCode.INTERNAL,

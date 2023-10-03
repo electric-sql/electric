@@ -7,6 +7,7 @@ import { DbName } from '../util/types'
 import { Satellite, Registry } from './index'
 import {
   SatelliteClientOpts,
+  SatelliteOpts,
   SatelliteOverrides,
   satelliteClientDefaults,
   satelliteDefaults,
@@ -205,13 +206,19 @@ export class GlobalRegistry extends BaseRegistry {
       notifier,
       satelliteClientOpts
     )
+
+    const satelliteOpts: SatelliteOpts = {
+      ...satelliteDefaults,
+      backoffOpts: config.backoffOpts,
+    }
+
     const satellite = new SatelliteProcess(
       dbName,
       adapter,
       migrator,
       notifier,
       client,
-      satelliteDefaults
+      satelliteOpts
     )
     await satellite.start(config.auth)
 

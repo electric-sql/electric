@@ -69,7 +69,7 @@ import {
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
-import { IBackOffOptions, backOff } from 'exponential-backoff'
+import { backOff } from 'exponential-backoff'
 import { chunkBy } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 
@@ -106,16 +106,6 @@ const connectRetryHandler: ConnectRetryHandler = (error) => {
     return false
   }
   return true
-}
-
-// default values are set to not overload the server
-const connectionRetryPolicy: Partial<IBackOffOptions> = {
-  delayFirstAttempt: true,
-  startingDelay: 1000,
-  jitter: 'full',
-  maxDelay: 10000,
-  numOfAttempts: 50,
-  timeMultiple: 2,
 }
 
 export class SatelliteProcess implements Satellite {
@@ -686,7 +676,7 @@ export class SatelliteProcess implements Satellite {
     }
 
     const opts = {
-      ...connectionRetryPolicy,
+      ...this.opts.backoffOpts,
       retry: this._connectRetryHandler,
     }
 

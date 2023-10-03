@@ -1,4 +1,6 @@
+import { IBackOffOptions } from 'exponential-backoff'
 import { AuthConfig } from '../auth/index'
+import { satelliteDefaults } from '../satellite/config'
 
 export interface ElectricConfig {
   auth: AuthConfig
@@ -24,6 +26,10 @@ export interface ElectricConfig {
    * Defaults to `false`.
    */
   debug?: boolean
+  /**
+   * Optional backoff options for connecting with Electric
+   */
+  backoffOpts?: Omit<IBackOffOptions, 'retry'>
 }
 
 export type HydratedConfig = {
@@ -34,6 +40,7 @@ export type HydratedConfig = {
     ssl: boolean
   }
   debug: boolean
+  backoffOpts: Omit<IBackOffOptions, 'retry'>
 }
 
 export type InternalElectricConfig = {
@@ -44,6 +51,7 @@ export type InternalElectricConfig = {
     ssl: boolean
   }
   debug?: boolean
+  backoffOpts?: Omit<IBackOffOptions, 'retry'>
 }
 
 export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
@@ -68,9 +76,12 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     ssl: sslEnabled,
   }
 
+  const backoffOpts = config.backoffOpts || satelliteDefaults.backoffOpts
+
   return {
     auth,
     replication,
     debug,
+    backoffOpts,
   }
 }
