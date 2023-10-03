@@ -32,6 +32,31 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
 
 
   ## Handling messages from the server
+
+  When messages are received from the server, which calls
+  `Injector.recv_server/2`, the process is:
+
+  1. Any error messages are found and split out. See below
+  2. The operation stack is updated by calling `Operation.recv_server/4`
+     for every message from the server.
+  3. If the server hasn't sent any errors, then we look for any errors being
+     returned by the operation stack. If any of the operations have returned an
+     error to the client, e.g. the user has tried to use an incorrect syntax for
+     one of the Electric DDLX commands, then we give the active operations a
+     chance to do cleanup (e.g. by rolling back transactions) by calling
+     `Operation.send_error/3`
+
+     If no errors were received from the server, and no operations have
+     generated an error to the client, then we give the active operations
+     a chance to re-write what's being sent to the client by calling
+     `Operation.send_client/3`.
+
+     If the server has returned an error, then we give the operations a
+     chance to cleanup by calling `Operation.recv_error/4`.
+
+  4. Finally the `Send` struct is flushed and the messages returned to the
+     `Handler` to be sent to the client and server.
+
   """
 
   alias Electric.Postgres.Proxy.Injector.{Send, State}
@@ -47,20 +72,36 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   def recv_client(op, msgs, state)
 
   @doc """
-
+  Tell new operations on the stack to activate and send any initial messages.
   """
   @spec activate(t(), State.t(), Send.t()) :: result()
   def activate(op, state, send)
 
+  @doc """
+  Handle a message received from the server.
+  """
   @spec recv_server(t(), PgProtocol.t(), State.t(), Send.t()) :: result()
   def recv_server(op, msg, state, send)
 
+  @doc """
+  Allow for active operations to re-write messages that are about to be sent to
+  the client.
+  """
   @spec send_client(t(), State.t(), Send.t()) :: result()
   def send_client(op, state, send)
 
+  @doc """
+  The server has returned an error as a result of either a client- or
+  proxy-generated command. Operations should use this callback to issue
+  any cleanup commands.
+  """
   @spec recv_error(t(), [PgProtocol.t()], State.t(), Send.t()) :: result()
   def recv_error(op, msgs, state, send)
 
+  @doc """
+  One of the operations is returning an error to the client, so any 
+  pending operations on the stack should cleanup.
+  """
   @spec send_error(t(), State.t(), Send.t()) :: result()
   def send_error(op, state, send)
 end
@@ -77,18 +118,29 @@ alias Electric.Postgres.Proxy.{
 }
 
 defmodule Operation.Impl do
+  @moduledoc """
+  Provides some useful utility functions as well as a default implementation of
+  the `Operation` protocol functions. This default implementation assumes that
+  we mostly want to intercept messages from the server until we get a
+  `ReadyForQuery` message, which is the most usual behaviour. Once we receive
+  this `ReadyForQuery` we return `nil` which pops the operation off the stack.
+  """
   defmacro __using__(_opts) do
     quote do
       import Injector.Operation.Impl
 
+      # no-op
       def recv_client(op, msgs, state) do
         {op, state}
       end
 
+      # no-op
       def activate(op, state, send) do
         {op, state, send}
       end
 
+      # pop this op off the stack once the server has finished processing
+      # whatever query we sent from `activate/3`
       def recv_server(_op, %M.ReadyForQuery{} = msg, state, send) do
         {nil, state, send}
       end
@@ -97,14 +149,21 @@ defmodule Operation.Impl do
         {op, state, send}
       end
 
+      # no-op
       def send_client(op, state, send) do
         {op, state, send}
       end
 
+      # default impl that just removes this operation from the stack
+      # in the case of a server generated error which means that the
+      # next operation in the stack will be called.
       def recv_error(_op, msgs, state, send) do
         {nil, state, send}
       end
 
+      # default impl that just removes this operation from the stack
+      # in the case of a proxy generated error, which means that the
+      # next operation in the stack will be called.
       def send_error(_op, state, send) do
         {nil, state, send}
       end
@@ -118,6 +177,16 @@ defmodule Operation.Impl do
     end
   end
 
+  @doc """
+  Unwrap an operation or analysis and return any `msg` fields.
+  """
+  @spec query(
+          %{msg: M.Query.t() | M.Parse.t()}
+          | %{analysis: QueryAnalysis.t()}
+          | QueryAnalysis.t()
+          | String.t()
+        ) ::
+          M.Query.t() | M.Parse.t()
   def query(%{msg: msg}) when is_struct(msg) do
     msg
   end
@@ -134,6 +203,7 @@ defmodule Operation.Impl do
     %M.Query{query: sql}
   end
 
+  @spec query(String.t(), QueryAnalysis.t()) :: M.Query.t() | M.Parse.t()
   def query(sql, %{analysis: %QueryAnalysis{mode: mode}}) do
     case mode do
       :simple -> %M.Query{query: sql}
@@ -141,10 +211,22 @@ defmodule Operation.Impl do
     end
   end
 
+  @doc """
+  Return a quoted version of the introspected table name. Mostly used for error
+  messages.
+  """
+  @spec table_name(QueryAnalysis.t()) :: String.t()
   def table_name(%QueryAnalysis{table: {schema, table}}) do
     "\"#{schema}\".\"#{table}\""
   end
 
+  @doc """
+  Map a client message into its expected server-response.
+
+  Used by Electric DDLX commands which fake the responses from
+  Parse/Describe and Bind/Execute.
+  """
+  @spec response(PgProtocol.t(), String.t(), State.t()) :: PgProtocol.t()
   def response(msg, tag \\ nil, state)
 
   def response(%M.Parse{}, _tag, _state) do

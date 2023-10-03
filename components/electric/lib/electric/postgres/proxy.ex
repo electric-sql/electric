@@ -91,6 +91,7 @@ defmodule Electric.Postgres.Proxy do
      messages being sent between the client and server. You can activate this
      using the `transparent` username.
   """
+
   alias Electric.Postgres.Proxy.Handler
   alias Electric.Replication.Connectors
 
