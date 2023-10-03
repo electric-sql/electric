@@ -76,7 +76,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   defp inspect_stack(stack) do
-    Enum.map(stack, fn %op{} -> op end)
+    inspect(Enum.map(stack, fn %op{} -> op end))
   end
 
   def recv_client({stack, state}, msgs) do
