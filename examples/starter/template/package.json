@@ -7,7 +7,7 @@
     "backend:start": "node ./backend/startCompose.js",
     "backend:stop": "yarn backend:down",
     "backend:up": "yarn backend:start --detach",
-    "client:generate": "electric:check && npx electric-sql generate --service http://localhost:5133",
+    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133",
     "client:watch": "yarn client:generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",
