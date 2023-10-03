@@ -28,7 +28,7 @@
     "wa-sqlite": "rhashimoto/wa-sqlite#master"
   },
   "devDependencies": {
-    "@databases/pg": "^5.4.1",
+    "@databases/pg-migrations": "^5.0.2",
     "@electric-sql/prisma-generator": "latest",
     "@prisma/client": "4.8.1",
     "@types/node": ">=16.11.0",
