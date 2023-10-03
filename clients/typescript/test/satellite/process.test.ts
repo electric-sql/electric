@@ -1161,8 +1161,7 @@ test('get transactions from opLogEntries', async (t) => {
 })
 
 test('handling connectivity state change stops queueing operations', async (t) => {
-  const { runMigrations, dbName, satellite, adapter, authState, notifier } =
-    t.context
+  const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
   const conn = await satellite.start(authState)
   await conn.connectionPromise
