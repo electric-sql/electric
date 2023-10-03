@@ -229,6 +229,7 @@ test('starting and stopping the process works', async (t) => {
 
   const conn1 = await satellite.start(authState)
   await conn1.connectionPromise
+  await sleepAsync(opts.pollingInterval)
 
   // connect, 4th txn
   t.is(notifier.notifications.length, 6)
@@ -1261,7 +1262,7 @@ test('throw other replication errors', async (t) => {
   return Promise.all(
     [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
       p?.catch((e: SatelliteError) => {
-        t.is(e.code, SatelliteErrorCode.FATAL_ERROR)
+        t.is(e.code, SatelliteErrorCode.INTERNAL)
       })
     )
   )
