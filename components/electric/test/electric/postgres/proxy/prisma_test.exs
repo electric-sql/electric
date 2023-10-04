@@ -33,6 +33,27 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       """
     },
     {
+      Electric.Postgres.Proxy.Prisma.Query.TypeV4_8,
+      """
+      SELECT t.typname as name, e.enumlabel as value, n.nspname as namespace
+      FROM pg_type t
+      JOIN pg_enum e ON t.oid = e.enumtypid
+      JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = ANY ( $1 )
+      ORDER BY e.enumsortorder
+      """
+    },
+    {
+      Electric.Postgres.Proxy.Prisma.Query.TableListV4_8,
+      """
+      SELECT tbl.relname AS table_name, namespace.nspname as namespace
+      FROM pg_class AS tbl
+      INNER JOIN pg_namespace AS namespace ON namespace.oid = tbl.relnamespace
+      WHERE tbl.relkind = 'r' AND namespace.nspname = ANY ( $1 )
+      ORDER BY namespace, table_name;
+      """
+    },
+    {
       Electric.Postgres.Proxy.Prisma.Query.TableV5_2,
       """
       SELECT
@@ -77,6 +98,14 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       """
     },
     {
+      Electric.Postgres.Proxy.Prisma.Query.ViewV4_8,
+      """
+      SELECT viewname AS view_name, definition AS view_sql, schemaname as namespace
+      FROM pg_catalog.pg_views
+      WHERE schemaname = ANY ( $1 )
+      """
+    },
+    {
       Electric.Postgres.Proxy.Prisma.Query.ViewV5_2,
       """
       SELECT
@@ -106,25 +135,58 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       """
     },
     {
+      Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8,
+      """
+      SELECT
+          oid.namespace,
+          info.table_name,
+          info.column_name,
+          format_type(att.atttypid, att.atttypmod) as formatted_type,
+          info.numeric_precision,
+          info.numeric_scale,
+          info.numeric_precision_radix,
+          info.datetime_precision,
+          info.data_type,
+          info.udt_name as full_data_type,
+          pg_get_expr(attdef.adbin, attdef.adrelid) AS column_default,
+          info.is_nullable,
+          info.is_identity,
+          info.character_maximum_length
+      FROM information_schema.columns info
+      JOIN pg_attribute att ON att.attname = info.column_name
+      JOIN (
+           SELECT pg_class.oid, relname, pg_namespace.nspname as namespace
+           FROM pg_class
+           JOIN pg_namespace on pg_namespace.oid = pg_class.relnamespace
+           AND pg_namespace.nspname = ANY ( $1 )
+          ) as oid on oid.oid = att.attrelid 
+            AND relname = info.table_name
+            AND namespace = info.table_schema
+      LEFT OUTER JOIN pg_attrdef attdef ON attdef.adrelid = att.attrelid AND attdef.adnum = att.attnum AND table_schema = namespace
+      WHERE table_schema = ANY ( $1 ) 
+      ORDER BY namespace, table_name, ordinal_position;
+      """
+    },
+    {
       Electric.Postgres.Proxy.Prisma.Query.ColumnV5_2,
       """
       SELECT
-      oid.namespace,
-      info.table_name,
-      info.column_name,
-      format_type(att.atttypid, att.atttypmod) as formatted_type,
-      info.numeric_precision,
-      info.numeric_scale,
-      info.numeric_precision_radix,
-      info.datetime_precision,
-      info.data_type,
-      info.udt_schema as type_schema_name,
-      info.udt_name as full_data_type,
-      pg_get_expr(attdef.adbin, attdef.adrelid) AS column_default,
-      info.is_nullable,
-      info.is_identity,
-      info.character_maximum_length,
-      col_description(att.attrelid, ordinal_position) AS description
+          oid.namespace,
+          info.table_name,
+          info.column_name,
+          format_type(att.atttypid, att.atttypmod) as formatted_type,
+          info.numeric_precision,
+          info.numeric_scale,
+          info.numeric_precision_radix,
+          info.datetime_precision,
+          info.data_type,
+          info.udt_schema as type_schema_name,
+          info.udt_name as full_data_type,
+          pg_get_expr(attdef.adbin, attdef.adrelid) AS column_default,
+          info.is_nullable,
+          info.is_identity,
+          info.character_maximum_length,
+          col_description(att.attrelid, ordinal_position) AS description
       FROM information_schema.columns info
       JOIN pg_attribute att ON att.attname = info.column_name
       JOIN (
@@ -138,6 +200,51 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       LEFT OUTER JOIN pg_attrdef attdef ON attdef.adrelid = att.attrelid AND attdef.adnum = att.attnum AND table_schema = namespace
       WHERE table_schema = ANY ( $1 )
       ORDER BY namespace, table_name, ordinal_position;
+      """
+    },
+    {
+      Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8,
+      """
+      SELECT
+          con.oid         AS \"con_id\",
+          att2.attname    AS \"child_column\",
+          cl.relname      AS \"parent_table\",
+          att.attname     AS \"parent_column\",
+          con.confdeltype,
+          con.confupdtype,
+          rel_ns.nspname  AS \"referenced_schema_name\",
+          conname         AS constraint_name,
+          child,
+          parent,
+          table_name, 
+          namespace
+      FROM (SELECT 
+                  ns.nspname AS \"namespace\",
+                  unnest(con1.conkey)                AS \"parent\",
+                  unnest(con1.confkey)                AS \"child\",
+                  cl.relname                          AS table_name,
+                  ns.nspname                          AS schema_name,
+                  generate_subscripts(con1.conkey, 1) AS colidx,
+                  con1.oid,
+                  con1.confrelid,
+                  con1.conrelid,
+                  con1.conname,
+                  con1.confdeltype,
+                  con1.confupdtype
+          FROM pg_class cl
+                  join pg_constraint con1 on con1.conrelid = cl.oid
+                  join pg_namespace ns on cl.relnamespace = ns.oid
+          WHERE
+              ns.nspname = ANY ( $1 )
+              and con1.contype = 'f'
+          ORDER BY colidx
+          ) con
+              JOIN pg_attribute att on att.attrelid = con.confrelid and att.attnum = con.child
+              JOIN pg_class cl on cl.oid = con.confrelid
+              JOIN pg_attribute att2 on att2.attrelid = con.conrelid and att2.attnum = con.parent
+              JOIN pg_class rel_cl on con.confrelid = rel_cl.oid
+              JOIN pg_namespace rel_ns on rel_cl.relnamespace = rel_ns.oid
+      ORDER BY namespace, table_name, constraint_name, con_id, con.colidx;
       """
     },
     {
@@ -187,6 +294,53 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
       JOIN pg_class rel_cl on con.confrelid = rel_cl.oid
       JOIN pg_namespace rel_ns on rel_cl.relnamespace = rel_ns.oid
       ORDER BY namespace, table_name, constraint_name, con_id, con.colidx;
+      """
+    },
+    {
+      Electric.Postgres.Proxy.Prisma.Query.IndexV4_8,
+      """
+      WITH rawindex AS (
+          SELECT
+              indrelid, 
+              indexrelid,
+              indisunique,
+              indisprimary,
+              unnest(indkey) AS indkeyid,
+              generate_subscripts(indkey, 1) AS indkeyidx,
+              unnest(indclass) AS indclass,
+              unnest(indoption) AS indoption
+          FROM pg_index -- https://www.postgresql.org/docs/current/catalog-pg-index.html
+          WHERE
+              indpred IS NULL -- filter out partial indexes
+              AND array_position(indkey::int2[], 0::int2) IS NULL -- filter out expression indexes
+      )
+      SELECT
+          schemainfo.nspname AS namespace,
+          indexinfo.relname AS index_name,
+          tableinfo.relname AS table_name,
+          columninfo.attname AS column_name,
+          rawindex.indisunique AS is_unique,
+          rawindex.indisprimary AS is_primary_key,
+          rawindex.indkeyidx AS column_index,
+          opclass.opcname AS opclass,
+          opclass.opcdefault AS opcdefault,
+          indexaccess.amname AS index_algo,
+          CASE rawindex.indoption & 1
+              WHEN 1 THEN 'DESC'
+              ELSE 'ASC' END
+              AS column_order
+      FROM
+          rawindex
+          INNER JOIN pg_class AS tableinfo ON tableinfo.oid = rawindex.indrelid
+          INNER JOIN pg_class AS indexinfo ON indexinfo.oid = rawindex.indexrelid
+          INNER JOIN pg_namespace AS schemainfo ON schemainfo.oid = tableinfo.relnamespace
+          INNER JOIN pg_attribute AS columninfo
+              ON columninfo.attrelid = tableinfo.oid AND columninfo.attnum = rawindex.indkeyid
+          INNER JOIN pg_am AS indexaccess ON indexaccess.oid = indexinfo.relam
+          LEFT JOIN pg_opclass AS opclass -- left join because crdb has no opclasses
+              ON opclass.oid = rawindex.indclass
+      WHERE schemainfo.nspname = ANY ( $1 )
+      ORDER BY namespace, table_name, index_name, column_index;
       """
     },
     {
@@ -290,9 +444,19 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
     }
   ]
 
-  test "parse_query/1" do
-    for {module, sql} <- @queries do
-      assert {:ok, ^module} = Prisma.parse_query(sql)
+  describe "parse_query/1" do
+    test "introspection queries" do
+      for {module, sql} <- @queries do
+        assert {:ok, ^module} = Prisma.parse_query(sql)
+      end
+    end
+
+    test "other sql" do
+      assert :passthrough = Prisma.parse_query("SET NAMES 'UTF-8';")
+    end
+
+    test "query with multiple statements" do
+      assert :passthrough = Prisma.parse_query("SET NAMES 'UTF-8'; SELECT * FROM something;")
     end
   end
 
@@ -351,6 +515,9 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
 
         injector =
           injector
+          |> client([%M.Query{query: "SET NAMES 'UTF-8';"}],
+            client: [%M.CommandComplete{tag: "SET NAMES"}, %M.ReadyForQuery{status: :idle}]
+          )
           |> client(
             [
               %M.Close{type: "S", name: "n#{n}"},

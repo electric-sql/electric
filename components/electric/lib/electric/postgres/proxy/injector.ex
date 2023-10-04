@@ -42,7 +42,7 @@ defmodule Electric.Postgres.Proxy.Injector do
         |> default_capture_mode()
         |> initialise_capture_mode(connection)
 
-      Logger.debug("Initialising injector in capture mode #{inspect(capture || "default")}")
+      Logger.info("Initialising injector in capture mode #{inspect(capture || "default")}")
 
       {:ok,
        {
@@ -81,6 +81,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   def recv_client({stack, state}, msgs) do
     Logger.debug("recv_client: #{inspect_stack(stack)}")
+
     {stack, state} = Operation.recv_client(stack, msgs, state)
 
     {stack, state, send} = Operation.activate(stack, state, Send.new())
@@ -91,7 +92,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def recv_server({stack, state}, msgs) do
-    Logger.debug("recv_client: #{inspect_stack(stack)}")
+    Logger.debug("recv_server: #{inspect_stack(stack)}")
     # handle errors from the server here so detecting errors doesn't have to be
     # done by every command
     {non_errors, errors} = Enum.split_while(msgs, &(!is_struct(&1, M.ErrorResponse)))

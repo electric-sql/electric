@@ -49,6 +49,25 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
       {electric, state, send}
     end
 
+    defp tag_for_query(query) do
+      [a, b | _rest] = String.split(query)
+      Enum.join([a, b], " ") |> String.upcase()
+    end
+
+    def recv_client_msg(%M.Query{query: query}, {prisma, state}) do
+      case Prisma.parse_query(query) do
+        # don't expect any of the real introspection queries to come via simple
+        # queries
+        # if we support prisma with migration proxy fallback, then this :passthrough result
+        # would be the place to hook into
+        :passthrough ->
+          {Operation.Pass.client([
+             %M.CommandComplete{tag: tag_for_query(query)},
+             %M.ReadyForQuery{status: :idle}
+           ]), {prisma, state}}
+      end
+    end
+
     def recv_client_msg(%M.Parse{name: name, query: query}, {prisma, state}) do
       case Prisma.parse_query(query) do
         {:ok, query} ->

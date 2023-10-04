@@ -142,6 +142,12 @@ if config_env() == :prod do
     end
 
   config :electric, :telemetry, telemetry
+
+  enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
+
+  config :electric, Electric.Postgres.Proxy.Handler.Tracing,
+    enable: enable_proxy_tracing?,
+    colour: false
 else
   config :electric, :telemetry, :disabled
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)

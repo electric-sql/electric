@@ -55,6 +55,28 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
     %{send | client: [msg | client]}
   end
 
+  def client(%__MODULE__{client: client} = send, msg, status)
+      when status in [nil, :tx, :idle, :failed] do
+    %{send | client: Enum.map([msg | client], &status(&1, status))}
+  end
+
+  @spec status(M.t(), nil | :tx | :idle | :failed) :: M.t()
+  def status(%M.ReadyForQuery{} = m, nil) do
+    m
+  end
+
+  def status(%M.ReadyForQuery{status: status} = m, status) do
+    m
+  end
+
+  def status(%M.ReadyForQuery{}, status) when status in [:tx, :idle, :failed] do
+    %M.ReadyForQuery{status: status}
+  end
+
+  def status(m, _status) do
+    m
+  end
+
   @doc """
   Append a message to be sent to the server.
   """

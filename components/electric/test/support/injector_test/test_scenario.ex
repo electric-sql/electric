@@ -101,6 +101,24 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     ]
   end
 
+  def parse_describe_sync(sql, name \\ nil) do
+    # would love to assert that the parse and describe messages
+    # are passed as-is but getting the double incantations of this to work
+    # and return the same names is tricky, and it's not **that** important
+    # name = name || random_name()
+
+    [
+      # putting the close here makes the tests difficult -- 
+      # because we can only really respond to the parse message
+      # any close->closecomplete pair should just come through the system
+      # (client->server->client) untouched
+      # %M.Close{type: "S", name: name},
+      %M.Parse{query: sql, name: name},
+      %M.Describe{name: name},
+      %M.Sync{}
+    ]
+  end
+
   # defp _random_name() do
   #   "query_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
   # end
@@ -111,6 +129,15 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       %M.ParseComplete{},
       struct(%M.ParameterDescription{}, params),
       %M.NoData{}
+    ]
+  end
+
+  def parse_describe_sync_complete(status) do
+    [
+      %M.ParseComplete{},
+      %M.ParameterDescription{},
+      %M.RowDescription{},
+      %M.ReadyForQuery{status: status}
     ]
   end
 

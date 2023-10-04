@@ -104,8 +104,15 @@ defmodule Electric.Postgres.Proxy.Handler do
       Injector.recv_server(state.injector, msgs)
 
     :ok = upstream(upstream_msgs, state)
-    :ok = downstream(downstream_msgs, socket, state)
-    {:noreply, {socket, %{state | injector: injector}}}
+
+    case downstream(downstream_msgs, socket, state) do
+      {:error, _error} ->
+        Logger.debug("Client connection already closed")
+        {:stop, {:shutdown, :closed}, {socket, %{state | injector: injector}}}
+
+      :ok ->
+        {:noreply, {socket, %{state | injector: injector}}}
+    end
   end
 
   def handle_info({UpstreamConnection, :authenticated}, {socket, state}) do

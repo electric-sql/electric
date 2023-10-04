@@ -298,6 +298,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "balloons"},
                  type: :table,
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -319,6 +320,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "balloons"},
                  type: :table,
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  source: %M.Parse{
@@ -341,6 +343,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "truths"},
                  type: :table,
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  source: %M.Query{query: "ALTER TABLE public.truths ADD COLUMN clowns text"},
@@ -358,6 +361,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  ast: %{},
                  source: %M.Query{query: "ALTER TABLE public.truths ADD COLUMN ip cidr"},
@@ -374,6 +378,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  capture?: true,
                  ast: %{},
@@ -393,6 +398,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "socks"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.socks ADD COLUMN ip cidr",
@@ -408,6 +414,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  ast: %{},
                  sql: "ALTER TABLE public.truths DROP COLUMN value",
@@ -442,6 +449,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "truths"},
                  type: :table,
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  ast: %{},
                  source: %M.Query{
@@ -458,6 +466,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "socks"},
                  type: :table,
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  ast: %{},
                  source: %M.Query{
@@ -479,6 +488,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  ast: %{},
                  sql: "ALTER TABLE public.truths ALTER COLUMN value TYPE int2",
@@ -491,6 +501,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "socks"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  ast: %{},
                  sql: "ALTER TABLE public.socks ALTER COLUMN value TYPE int2",
@@ -525,6 +536,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:create, "index"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -535,6 +547,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:create, "index"},
                  table: {"public", "socks"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -554,6 +567,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:drop, "index"},
                  table: {"public", "truths_idx"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -564,6 +578,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:drop, "index"},
                  table: {"public", "some_other_idx"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -584,6 +599,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "truths"},
                  type: :table,
                  electrified?: true,
+                 tx?: true,
                  allowed?: false,
                  capture?: false,
                  ast: %{},
@@ -598,6 +614,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "socks"},
                  type: :table,
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -612,12 +629,34 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                )
     end
 
+    test "SELECT ...", cxt do
+      assert [
+               %QueryAnalysis{
+                 action: :select,
+                 table: {"public", "data"},
+                 electrified?: false,
+                 tx?: false,
+                 allowed?: true,
+                 capture?: false,
+                 ast: %{},
+                 sql: "SELECT * FROM public.data WHERE value > 10.0",
+                 source: %M.Query{query: "SELECT * FROM public.data WHERE value > 10.0"},
+                 error: nil
+               }
+             ] =
+               analyse(
+                 "SELECT * FROM public.data WHERE value > 10.0;",
+                 cxt
+               )
+    end
+
     test "INSERT ...", cxt do
       assert [
                %QueryAnalysis{
                  action: :insert,
                  table: {"public", "data"},
                  electrified?: false,
+                 tx?: false,
                  allowed?: true,
                  # leave determination of the capture to somewhere later in the process that uses more context (?)
                  capture?: false,
@@ -638,6 +677,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: :delete,
                  table: {"public", "data"},
                  electrified?: false,
+                 tx?: false,
                  allowed?: true,
                  # leave determination of the capture to somewhere later in the process that uses more context (?)
                  capture?: false,
@@ -649,6 +689,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: :delete,
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: false,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -692,6 +733,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -701,6 +743,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:create, "index"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -710,6 +753,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "socks"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -724,6 +768,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:electric, %Electric.DDLX.Command.Enable{}},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Enable{},
@@ -737,6 +782,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:electric, %Electric.DDLX.Command.Revoke{}},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Revoke{},
@@ -769,6 +815,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:create, "table"},
                  table: {"public", "pants"},
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -778,6 +825,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:electric, %Electric.DDLX.Command.Enable{}},
                  table: {"public", "pants"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Enable{},
@@ -787,6 +835,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:alter, "table"},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -808,6 +857,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "pants"},
                  type: nil,
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Enable{},
@@ -818,6 +868,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "hats"},
                  type: nil,
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Enable{},
@@ -828,6 +879,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "teeth"},
                  type: :table,
                  electrified?: false,
+                 tx?: true,
                  allowed?: true,
                  capture?: false,
                  ast: %{},
@@ -837,6 +889,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  action: {:electric, %Electric.DDLX.Command.Grant{}},
                  table: {"public", "truths"},
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %Electric.DDLX.Command.Grant{},
@@ -852,6 +905,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                  table: {"public", "pants"},
                  type: :table,
                  electrified?: true,
+                 tx?: true,
                  allowed?: true,
                  capture?: true,
                  ast: %{},
@@ -870,6 +924,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                       columns: %{"version" => 0, "inserted_at" => 1}
                     }},
                  table: {"public", "schema_migrations"},
+                 tx?: false,
                  mode: :extended,
                  source: %M.Parse{name: "some_query_99"},
                  sql:
@@ -881,6 +936,83 @@ defmodule Electric.Postgres.Proxy.ParserTest do
                    "INSERT INTO public.schema_migrations (version, inserted_at) VALUES ($1, $2)",
                    name: "some_query_99"
                  ),
+                 cxt
+               )
+    end
+
+    test "prisma migration version", cxt do
+      assert [
+               %QueryAnalysis{
+                 action:
+                   {:migration_version,
+                    %{
+                      framework: {:prisma, 1},
+                      columns: %{
+                        "id" => 0,
+                        "checksum" => 1,
+                        "logs" => 2,
+                        "started_at" => 3,
+                        "finished_at" => 4,
+                        "migration_name" => 5
+                      }
+                    }},
+                 table: {"public", "_prisma_migrations"},
+                 tx?: false,
+                 mode: :extended,
+                 source: %M.Parse{name: "some_query_99"},
+                 sql:
+                   "INSERT INTO \"_prisma_migrations\" (\"id\",\"checksum\",\"logs\",\"started_at\",\"finished_at\",\"migration_name\") VALUES ($1,$2,$3,$4,$5,$6)"
+               }
+             ] =
+               analyse(
+                 extended(
+                   "INSERT INTO \"_prisma_migrations\" (\"id\",\"checksum\",\"logs\",\"started_at\",\"finished_at\",\"migration_name\") VALUES ($1,$2,$3,$4,$5,$6)",
+                   name: "some_query_99"
+                 ),
+                 cxt
+               )
+    end
+
+    test "@migrations migration version", cxt do
+      assert [
+               %QueryAnalysis{
+                 action:
+                   {:migration_version,
+                    %{
+                      framework: {:atdatabases, 1},
+                      columns: %{
+                        "index" => 0,
+                        "name" => 1,
+                        "script" => 2,
+                        "applied_at" => 3,
+                        "ignored_error" => 4,
+                        "obsolete" => 5
+                      }
+                    }},
+                 table: {"public", "atdatabases_migrations_applied"},
+                 tx?: false,
+                 mode: :extended,
+                 source: %M.Parse{},
+                 sql:
+                   "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
+               }
+             ] =
+               analyse(
+                 extended(
+                   "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
+                 ),
+                 cxt
+               )
+    end
+
+    test "random sql", cxt do
+      assert [
+               %QueryAnalysis{
+                 action: :passthrough
+               }
+             ] =
+               analyse(
+                 simple("SET NAMES 'UTF-8';"),
                  cxt
                )
     end

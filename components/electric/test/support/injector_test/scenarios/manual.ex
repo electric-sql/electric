@@ -24,6 +24,13 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
+  def assert_injector_passthrough(injector, _framework, query, tag \\ random_tag()) do
+    injector
+    |> client(query(query))
+    |> server(complete_ready(tag, :idle))
+    |> idle!()
+  end
+
   def assert_electrified_migration(injector, _framework, query) do
     {query, opts} =
       case query do

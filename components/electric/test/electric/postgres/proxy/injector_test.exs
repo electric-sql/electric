@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Proxy.InjectorTest do
   use ExUnit.Case, async: true
 
+  alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.TestScenario
   alias Electric.Postgres.Extension.SchemaLoader
@@ -327,15 +328,15 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           )
         end
 
-        @tag non_electrified_migration: true
+        @tag injector_passthrough: true
         test "non-electrified ALTER object", cxt do
           # just some representative (but valid) statement that we should pass-through as-is
           query = ~s[ALTER SEQUENCE IF EXISTS  "something" INCREMENT BY 2 START WITH 100]
 
-          cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
+          cxt.scenario.assert_injector_passthrough(cxt.injector, cxt.framework, query)
         end
 
-        @tag non_electrified_migration: true
+        @tag injector_passthrough: true
         test "non-electrified CREATE object", cxt do
           # just some representative (but valid) statement that we should pass-through as-is
           query = """
@@ -351,14 +352,14 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           )
           """
 
-          cxt.scenario.assert_non_electrified_migration(
+          cxt.scenario.assert_injector_passthrough(
             cxt.injector,
             cxt.framework,
             String.trim(query)
           )
         end
 
-        @tag non_electrified_migration: true
+        @tag injector_passthrough: true
         test "non-electrified DROP object", cxt do
           # just some representative (but valid) statements that we should pass-through as-is
           objects =
@@ -367,192 +368,307 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           for object <- objects do
             query = ~s[DROP #{object} "something"]
 
-            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
+            cxt.scenario.assert_injector_passthrough(cxt.injector, cxt.framework, query)
           end
         end
       end
     end
   end
 
-  test "postgrex startup", cxt do
+  describe "specific scenarios" do
+    import Electric.Postgres.Proxy.TestScenario
     alias PgProtocol.Message, as: M
 
-    import Electric.Postgres.Proxy.TestScenario
+    test "postgrex startup", cxt do
+      query =
+        "SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput,\n       coalesce(d.typelem, t.typelem), coalesce(r.rngsubtype, 0), ARRAY (\n  SELECT a.atttypid\n  FROM pg_attribute AS a\n  WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped\n  ORDER BY a.attnum\n)\nFROM pg_type AS t\nLEFT JOIN pg_type AS d ON t.typbasetype = d.oid\nLEFT JOIN pg_range AS r ON r.rngtypid = t.oid OR r.rngmultitypid = t.oid OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)\nWHERE (t.typrelid = 0)\nAND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))"
 
-    query =
-      "SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput,\n       coalesce(d.typelem, t.typelem), coalesce(r.rngsubtype, 0), ARRAY (\n  SELECT a.atttypid\n  FROM pg_attribute AS a\n  WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped\n  ORDER BY a.attnum\n)\nFROM pg_type AS t\nLEFT JOIN pg_type AS d ON t.typbasetype = d.oid\nLEFT JOIN pg_range AS r ON r.rngtypid = t.oid OR r.rngmultitypid = t.oid OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)\nWHERE (t.typrelid = 0)\nAND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))\n\n"
-
-    cxt.injector
-    |> client(
-      query(query),
-      server: [begin()]
-    )
-    |> server(complete_ready("BEGIN"), server: query(String.trim(query)))
-    |> server([%M.RowDescription{}, %M.DataRow{}, %M.DataRow{}])
-    |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
-    |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
-    |> server(
-      [
-        %M.DataRow{},
-        %M.DataRow{},
-        %M.DataRow{},
-        %M.DataRow{},
-        %M.CommandComplete{tag: "MY TAG"},
-        %M.ReadyForQuery{status: :tx}
-      ],
-      server: [commit()]
-    )
-    |> server(complete_ready("COMMIT"),
-      client: [
+      cxt.injector
+      |> client(query(query))
+      |> server([%M.RowDescription{}, %M.DataRow{}, %M.DataRow{}])
+      |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
+      |> server([%M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}, %M.DataRow{}])
+      |> server([
         %M.DataRow{},
         %M.DataRow{},
         %M.DataRow{},
         %M.DataRow{},
         %M.CommandComplete{tag: "MY TAG"},
         %M.ReadyForQuery{status: :idle}
-      ]
-    )
-    |> client(
-      parse_describe(
-        "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
-      ),
-      server: [begin()]
-    )
-    |> server(complete_ready("BEGIN"),
-      server:
+      ])
+      |> client(
         parse_describe(
           "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
+        ),
+        server: [begin()]
+      )
+      |> server(complete_ready("BEGIN", :tx),
+        server:
+          parse_describe(
+            "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
+          )
+      )
+      |> server(parse_describe_complete())
+      |> client(bind_execute())
+      |> server(bind_execute_complete("CREATE TABLE", :tx), server: commit())
+      |> server(complete_ready("COMMIT", :idle),
+        client: bind_execute_complete("CREATE TABLE", :idle)
+      )
+      |> idle!()
+    end
+
+    test "prisma", cxt do
+      alias Electric.DDLX
+
+      version_query =
+        "INSERT INTO \"_prisma_migrations\" (\"id\",\"checksum\",\"started_at\",\"migration_name\") VALUES ($1,$2,$3,$4)"
+
+      query = """
+      CREATE TABLE something (id uuid PRIMARY KEY, value text);
+      ALTER TABLE something ENABLE ELECTRIC;
+      CREATE TABLE ignoreme (id uuid PRIMARY KEY);
+      ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
+      """
+
+      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE something ENABLE ELECTRIC")
+      [electric] = DDLX.Command.pg_sql(command)
+      version = "20230915175206"
+
+      cxt.injector
+      |> client([M.Close, M.Sync, %M.Parse{name: "s4", query: version_query}, M.Describe, M.Sync])
+      |> server([M.CloseComplete, %M.ReadyForQuery{status: :idle}])
+      |> server([
+        M.ParseComplete,
+        M.ParameterDescription,
+        M.NoData,
+        %M.ReadyForQuery{status: :idle}
+      ])
+      |> client(
+        bind_execute("s3",
+          bind: [
+            parameter_format_codes: [1, 1, 1, 1],
+            parameters: [
+              "94ffb457-2f55-42f5-89c6-2674e357f3f9",
+              "f95cec29a0509d802cf4f3056f0827869ce2d62b46eb730e0cca0d540b141754",
+              <<0, 2, 169, 244, 118, 117, 13, 234>>,
+              "#{version}_init"
+            ]
+          ]
         )
-    )
-  end
+      )
+      |> server(bind_execute_complete("INSERT 1"))
+      |> client(query(query),
+        server: [begin()]
+      )
+      |> server(complete_ready("BEGIN", :tx),
+        server: [query("CREATE TABLE something (id uuid PRIMARY KEY, value text)")]
+      )
+      |> server(complete_ready("CREATE TABLE"), server: [query(electric)])
+      |> server(complete_ready("CALL"),
+        server: [query("CREATE TABLE ignoreme (id uuid PRIMARY KEY)")]
+      )
+      |> server(complete_ready("CREATE TABLE"),
+        server: [query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")]
+      )
+      |> server(complete_ready("ALTER TABLE"),
+        server: [
+          capture_ddl_query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
+        ],
+        client:
+          capture_notice("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
+      )
+      |> server(capture_ddl_complete(),
+        server: [
+          alter_shadow_table_query(%{
+            table: {"public", "something"},
+            action: :add,
+            column: "amount",
+            type: "int4"
+          })
+        ]
+      )
+      |> server(alter_shadow_table_complete(),
+        server: [
+          alter_shadow_table_query(%{
+            table: {"public", "something"},
+            action: :add,
+            column: "colour",
+            type: "varchar"
+          })
+        ]
+      )
+      |> server(alter_shadow_table_complete(), server: capture_version_query(version))
+      |> server(capture_version_complete(), server: commit())
+      |> server(complete_ready("COMMIT", :idle),
+        client: [
+          complete("CREATE TABLE"),
+          complete("ELECTRIC ENABLE"),
+          complete("CREATE TABLE"),
+          complete("ALTER TABLE"),
+          ready(:idle)
+        ]
+      )
+      |> idle!()
+    end
 
-  test "prisma", cxt do
-    alias Electric.DDLX
-    import Electric.Postgres.Proxy.TestScenario
+    test "parse, describe, sync", cxt do
+      cxt.injector
+      |> client(parse_describe_sync("SELECT version()"))
+      |> server(parse_describe_sync_complete(:idle))
+      |> client(bind_execute())
+      |> server([%M.BindComplete{}, %M.DataRow{} | complete_ready("SELECT 1", :idle)])
+      |> idle!()
+    end
 
-    query = """
-    CREATE TABLE something (id uuid PRIMARY KEY, value text);
-    ALTER TABLE something ENABLE ELECTRIC;
-    CREATE TABLE ignoreme (id uuid PRIMARY KEY);
-    ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
-    """
+    test "close, sync, parse, describe, sync", cxt do
+      cxt.injector
+      |> client(
+        [%M.Close{}, %M.Sync{} | parse_describe_sync("SELECT version()")]
+        # server: [%M.Close{}, %M.Sync{}]
+      )
+      |> server([
+        %M.CloseComplete{},
+        %M.ReadyForQuery{status: :idle} | parse_describe_sync_complete(:idle)
+      ])
+      |> client([M.Bind, M.Execute, M.Sync])
+      |> server([M.BindComplete, M.DataRow | complete_ready("SELECT 1", :idle)])
+      |> idle!()
+    end
 
-    {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE something ENABLE ELECTRIC")
-    [electric] = DDLX.Command.pg_sql(command)
+    test "interleaved close, sync, parse, describe, sync", cxt do
+      import Electric.Postgres.Proxy.TestScenario
 
-    # FIXME: prisma version capture
-    # there should be no tx around entire  operation (prisma doesn't wrap any part of the migration in a tx)
-    # the version is inserted before the main query
-    cxt.injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
-    |> client(query(query),
-      server: [query("CREATE TABLE something (id uuid PRIMARY KEY, value text)")]
-    )
-    |> server(complete_ready("CREATE TABLE"), server: [query(electric)])
-    |> server(complete_ready("CALL"),
-      server: [query("CREATE TABLE ignoreme (id uuid PRIMARY KEY)")]
-    )
-    |> server(complete_ready("CREATE TABLE"),
-      server: [query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")]
-    )
-    |> server(complete_ready("ALTER TABLE"),
-      server: [
-        capture_ddl_query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
-      ],
-      client:
-        capture_notice("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
-    )
-    |> server(capture_ddl_complete(),
-      server: [
-        alter_shadow_table_query(%{
-          table: {"public", "something"},
-          action: :add,
-          column: "amount",
-          type: "int4"
-        })
-      ]
-    )
-    |> server(alter_shadow_table_complete(),
-      server: [
-        alter_shadow_table_query(%{
-          table: {"public", "something"},
-          action: :add,
-          column: "colour",
-          type: "varchar"
-        })
-      ]
-    )
-    |> server(alter_shadow_table_complete(),
-      client: [
-        complete("CREATE TABLE"),
-        complete("ELECTRIC ENABLE"),
-        complete("CREATE TABLE"),
-        complete("ALTER TABLE"),
-        ready(:tx)
-      ]
-    )
-    # FIXME: prisma version capture
-    # |> server(alter_shadow_table_complete(), server: capture_version_query(version))
-    |> client(commit(), server: capture_version_query())
-    |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle))
-    |> idle!()
-  end
+      cxt.injector
+      |> client([%M.Close{}, %M.Sync{}])
+      |> client(parse_describe_sync("SELECT version()"))
+      |> server([%M.CloseComplete{}, %M.ReadyForQuery{status: :idle}])
+      |> server(parse_describe_sync_complete(:idle))
+      |> client([M.Bind, M.Execute, M.Sync])
+      |> server([M.BindComplete, M.DataRow | complete_ready("SELECT 1", :idle)])
+      |> idle!()
+    end
 
-  test "create function", cxt do
-    import Electric.Postgres.Proxy.TestScenario
+    test "create function", cxt do
+      query1 =
+        "create or replace function function1() returns bool as $$ return true; $$ language pgpsql"
 
-    query1 =
-      "create or replace function function1() returns bool as $$ return true; $$ language pgpsql"
+      query2 =
+        "create or replace function function2() returns bool as $$ return true; $$ language pgpsql"
 
-    query2 =
-      "create or replace function function2() returns bool as $$ return true; $$ language pgpsql"
+      query3 =
+        "alter table electric.nonsense add column age int4"
 
-    query3 =
-      "alter table electric.nonsense add column age int4"
+      query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";"], "\n")
 
-    query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";"], "\n")
+      cxt.injector
+      |> client(begin())
+      |> server(complete_ready("BEGIN"))
+      |> client(query(query), server: query(query1))
+      |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
+      |> server(complete_ready("CREATE FUNCTION2"), server: query(query3))
+      |> server(complete_ready("ALTER TABLE"),
+        client: [
+          complete("CREATE FUNCTION1"),
+          complete("CREATE FUNCTION2"),
+          complete("ALTER TABLE"),
+          ready(:tx)
+        ]
+      )
+      |> client(commit())
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
 
-    cxt.injector
-    |> client(begin())
-    |> server(complete_ready("BEGIN"))
-    |> client(query(query), server: query(query1))
-    |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
-    |> server(complete_ready("CREATE FUNCTION2"), server: query(query3))
-    |> server(complete_ready("ALTER TABLE"),
-      client: [
-        complete("CREATE FUNCTION1"),
-        complete("CREATE FUNCTION2"),
-        complete("ALTER TABLE"),
-        ready(:tx)
-      ]
-    )
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
-    |> idle!()
-  end
+    test "drop random things", cxt do
+      cxt.injector
+      |> client(begin())
+      |> server(complete_ready("BEGIN"))
+      |> client(query("DROP FUNCTION IF EXISTS \"electric.ddlx_sql_drop_handler\" CASCADE"))
+      |> server(complete_ready("DROP FUNCTION"))
+      |> client(commit())
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
 
-  test "drop random things", cxt do
-    import Electric.Postgres.Proxy.TestScenario
+      cxt.injector
+      |> client(begin())
+      |> server(complete_ready("BEGIN"))
+      |> client(query("DROP EVENT TRIGGER IF EXISTS \"electric_event_trigger_sql_drop\" CASCADE"))
+      |> server(complete_ready("DROP EVENT TRIGGER"))
+      |> client(commit())
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
 
-    cxt.injector
-    |> client(begin())
-    |> server(complete_ready("BEGIN"))
-    |> client(query("DROP FUNCTION IF EXISTS \"electric.ddlx_sql_drop_handler\" CASCADE"))
-    |> server(complete_ready("DROP FUNCTION"))
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
-    |> idle!()
+    test "delete from electrified table with no tx", cxt do
+      cxt.injector
+      |> client(query("DELETE FROM public.truths"))
+      |> server(complete_ready("DELETE 3", :idle))
+      |> idle!()
+    end
 
-    cxt.injector
-    |> client(begin())
-    |> server(complete_ready("BEGIN"))
-    |> client(query("DROP EVENT TRIGGER IF EXISTS \"electric_event_trigger_sql_drop\" CASCADE"))
-    |> server(complete_ready("DROP EVENT TRIGGER"))
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
-    |> idle!()
+    test "malformed queries", cxt do
+      cxt.injector
+      |> client(query("INSERT INTO items VALUES gen_random_uuid();"),
+        client: [M.ErrorResponse, %M.ReadyForQuery{status: :failed}]
+      )
+      |> idle!()
+    end
+
+    test "@databases version capture", cxt do
+      alias Electric.DDLX
+
+      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE public.socks ENABLE ELECTRIC;")
+      [electric] = DDLX.Command.pg_sql(command)
+
+      version_query =
+        "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
+
+      cxt.injector
+      |> client(query("BEGIN"))
+      |> server(complete_ready("BEGIN", :tx))
+      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
+      |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
+      |> client(%M.Parse{query: version_query})
+      |> client([
+        %M.Bind{
+          parameter_format_codes: [0, 0, 0, 0, 0, 0],
+          parameters: [
+            "99",
+            "99-something.sql",
+            "ALTER TABLE public.socks ENABLE ELECTRIC;",
+            "2023-10-06T11:43:15.699+01:00",
+            nil,
+            "false"
+          ]
+        },
+        M.Describe,
+        M.Execute,
+        M.Sync
+      ])
+      |> server(
+        [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ],
+        client: [],
+        server: [capture_version_query("99")]
+      )
+      |> server(capture_version_complete(),
+        client: [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ]
+      )
+      |> client(query("COMMIT"))
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
   end
 
   describe "Injector.Electric" do

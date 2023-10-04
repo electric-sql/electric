@@ -29,6 +29,10 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
     |> idle!()
   end
 
+  def assert_injector_passthrough(injector, framework, query) do
+    assert_non_electrified_migration(injector, framework, query)
+  end
+
   def assert_electrified_migration(injector, _framework, queries) do
     queries = List.wrap(queries)
 

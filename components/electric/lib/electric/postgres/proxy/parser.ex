@@ -178,6 +178,21 @@ defmodule Electric.Postgres.Proxy.Parser do
     end
   end
 
+  def table_name(%PgQuery.SelectStmt{from_clause: [object | _]}, _opts) do
+    case object do
+      %{node: {:range_var, %{schemaname: sname, relname: tname}}} ->
+        {:table, {sname, tname}}
+
+      other ->
+        # we don't really care about the table name for SELECT statements
+        # unless except perhaps in very specific cases, which are either plain
+        # `select * from table` queries, which are handled above, or would be
+        # specifically dealt with
+        Logger.debug("unrecognised from_clause object #{inspect(other)}")
+        {nil, nil}
+    end
+  end
+
   def table_name(_stmt, _opts) do
     {nil, nil}
   end

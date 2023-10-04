@@ -4,7 +4,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   @type t() :: %__MODULE__{}
 
   alias PgProtocol.Message, as: M
-  alias Electric.Postgres.Proxy.Parser
+  alias Electric.Postgres.Proxy.{Parser, QueryAnalysis}
   alias Electric.Postgres.Proxy.Injector.{Operation, Send, State}
   alias __MODULE__
 
@@ -55,7 +55,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
       |> Enum.map(&%Operation.AlterShadow{analysis: analysis, modification: &1})
 
     [
-      %Operation.Wait{msgs: List.wrap(msg)},
+      Operation.Wait.new(List.wrap(msg), state),
       %Operation.Capture{msg: msg, analysis: analysis} | shadow_modifications
     ]
   end
@@ -64,16 +64,16 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   # true test below because in tests we need to migrate the schema loader
   # before running the queries and so the table we're creating registers as
   # electrified already at the point of creation...)
-  def command_from_analysis(msg, %{action: {:create, "table"}}, _state) do
-    [%Operation.Wait{msgs: List.wrap(msg)}]
+  def command_from_analysis(msg, %{action: {:create, "table"}}, state) do
+    [Operation.Wait.new(msg, state)]
   end
 
-  def command_from_analysis(msg, %{electrified?: true} = analysis, _state) do
-    [%Operation.Wait{msgs: List.wrap(msg)}, %Operation.Capture{msg: msg, analysis: analysis}]
+  def command_from_analysis(msg, %{capture?: true} = analysis, state) do
+    [Operation.Wait.new(msg, state), %Operation.Capture{msg: msg, analysis: analysis}]
   end
 
-  def command_from_analysis(msg, _analysis, _state) do
-    [%Operation.Wait{msgs: List.wrap(msg)}]
+  def command_from_analysis(msg, _analysis, state) do
+    [Operation.Wait.new(msg, state)]
   end
 
   defp shadow_modifications(%{ast: %PgQuery.AlterTableStmt{} = ast}, state) do
@@ -126,6 +126,14 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
     end
   end
 
+  def requires_tx?(analysis) when is_list(analysis) do
+    Enum.any?(analysis, &requires_tx?/1)
+  end
+
+  def requires_tx?(%QueryAnalysis{tx?: tx?}) do
+    tx?
+  end
+
   defimpl Operation do
     def activate(electric, state, send) do
       {electric, state, send}
@@ -165,80 +173,25 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
 
           case validate_query(analysis) do
             {:ok, analysis} ->
-              {[%Operation.Simple{stmts: analysis}], {electric, state}}
+              {[%Operation.Simple{stmts: analysis, tx?: Electric.requires_tx?(analysis)}],
+               {electric, state}}
 
             {:error, analysis} ->
-              {[%Operation.SyntaxError{error: analysis}], {electric, state}}
+              {[%Operation.SyntaxError{error: analysis, msg: msg}], {electric, state}}
           end
 
         {:error, error} ->
-          {[%Operation.SyntaxError{error: error}], {electric, state}}
+          {[%Operation.SyntaxError{error: error, msg: msg}], {electric, state}}
       end
     end
 
     defp command_for_msgs({:extended, msgs}, {electric, state}) do
-      signal =
-        case List.last(msgs) do
-          %M.Sync{} -> M.ReadyForQuery
-          %M.Flush{} -> M.NoData
-        end
-
       case Enum.find(msgs, &is_struct(&1, M.Parse)) do
-        %M.Parse{} = parse ->
-          case Parser.parse(parse) do
-            {:ok, [stmt]} ->
-              case Parser.analyse(stmt, state) do
-                %{allowed?: false} = analysis ->
-                  {Electric.command_from_analysis([], analysis, state), {electric, state}}
-
-                %{action: {:electric, cmd}} = analysis ->
-                  bind =
-                    %Operation.BindExecuteElectric{
-                      commands: Electric.command_from_analysis([], analysis, state),
-                      electric: cmd
-                    }
-
-                  {
-                    [
-                      %Operation.AutoTx{
-                        ops: [
-                          %Operation.FakeBind{msgs: msgs},
-                          bind
-                        ]
-                      }
-                    ],
-                    {electric, state}
-                  }
-
-                %{action: {:migration_version, framework}} = analysis ->
-                  bind = %Operation.BindExecuteMigration{
-                    commands: Electric.command_from_analysis([], analysis, state),
-                    framework: framework
-                  }
-
-                  {[%Operation.Wait{msgs: msgs, signal: signal}, bind], {electric, state}}
-
-                analysis ->
-                  bind = %Operation.BindExecute{
-                    ops: Electric.command_from_analysis([], analysis, state)
-                  }
-
-                  {[
-                     %Operation.AutoTx{
-                       ops: [
-                         %Operation.Wait{msgs: msgs, signal: signal},
-                         bind
-                       ]
-                     }
-                   ], {electric, state}}
-              end
-
-            {:error, error} ->
-              {[%Operation.SyntaxError{error: error}], {electric, state}}
-          end
+        %M.Parse{} = msg ->
+          handle_parse(msg, msgs, electric, state)
 
         nil ->
-          {[%Operation.Wait{msgs: msgs}], {electric, state}}
+          {[Operation.Pass.server(msgs)], {electric, state}}
       end
     end
 
@@ -246,6 +199,78 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
       case Enum.split_with(analysis, &(!&1.allowed?)) do
         {[], allowed} -> {:ok, allowed}
         {[invalid | _rest], _allowed} -> {:error, invalid}
+      end
+    end
+
+    defp handle_parse(msg, msgs, electric, state) do
+      signal =
+        case List.last(msgs) do
+          %M.Sync{} -> M.ReadyForQuery
+          %M.Flush{} -> M.NoData
+          _ -> M.ReadyForQuery
+        end
+
+      case Parser.parse(msg) do
+        {:ok, [stmt]} ->
+          analysis = Parser.analyse(stmt, state)
+
+          # the query analysis sets a tx? flag if the statement should be run 
+          # within a transaction
+          # if Electric.requires_tx?(analysis) do
+          case analysis do
+            %{allowed?: false} = analysis ->
+              {Electric.command_from_analysis([], analysis, state), {electric, state}}
+
+            %{action: {:electric, cmd}} = analysis ->
+              bind =
+                %Operation.BindExecuteElectric{
+                  commands: Electric.command_from_analysis([], analysis, state),
+                  electric: cmd
+                }
+
+              {
+                [
+                  %Operation.AutoTx{
+                    ops: [
+                      %Operation.FakeBind{msgs: msgs},
+                      bind
+                    ],
+                    tx?: Electric.requires_tx?(analysis)
+                  }
+                ],
+                {electric, state}
+              }
+
+            %{action: {:migration_version, framework}} = analysis ->
+              bind = %Operation.BindExecuteMigration{
+                commands: Electric.command_from_analysis([], analysis, state),
+                framework: framework
+              }
+
+              {[Operation.Wait.new(msgs, state, signal), bind], {electric, state}}
+
+            analysis ->
+              bind = %Operation.BindExecute{
+                ops: Electric.command_from_analysis([], analysis, state)
+              }
+
+              {[
+                 %Operation.AutoTx{
+                   ops: [
+                     Operation.Wait.new(msgs, state, signal),
+                     bind
+                   ],
+                   tx?: Electric.requires_tx?(analysis)
+                 }
+               ], {electric, state}}
+          end
+
+        # else
+        #   {[Operation.Wait.new(msgs, state)], {electric, state}}
+        # end
+
+        {:error, error} ->
+          {[%Operation.SyntaxError{error: error, msg: msg}], {electric, state}}
       end
     end
   end
