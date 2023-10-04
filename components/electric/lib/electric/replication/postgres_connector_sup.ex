@@ -7,7 +7,6 @@ defmodule Electric.Replication.PostgresConnectorSup do
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{CachedWal, Proxy}
   alias Electric.Replication.SatelliteCollectorProducer
-  alias Electric.Postgres.Proxy.Injector
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(conn_config) do
@@ -45,19 +44,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
        conn_config: conn_config, producer: SatelliteCollectorProducer.name()},
       # Uses a globally registered name
       {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]},
-      {Proxy,
-       conn_config: conn_config,
-       handler_config: [
-         injector: [
-           capture_mode: [
-             default: Injector.Electric,
-             per_user: %{
-               "prisma" => Injector.Prisma,
-               "transparent" => Injector.Transparent
-             }
-           ]
-         ]
-       ]}
+      {Proxy, conn_config: conn_config}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

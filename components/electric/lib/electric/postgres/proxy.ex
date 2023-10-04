@@ -105,7 +105,7 @@ defmodule Electric.Postgres.Proxy do
   @spec child_spec(options()) :: Supervisor.child_spec()
   def child_spec(args) do
     {:ok, conn_config} = Keyword.fetch(args, :conn_config)
-    handler_config = Keyword.get(args, :handler_config, [])
+    handler_config = Keyword.get(args, :handler_config, default_handler_config())
 
     proxy_opts = Connectors.get_proxy_opts(conn_config)
 
@@ -135,5 +135,23 @@ defmodule Electric.Postgres.Proxy do
 
   def session_id do
     System.unique_integer([:positive, :monotonic])
+  end
+
+  @doc """
+  Configuration to enable the migration capturing proxy and the prisma
+  introspection mode.
+  """
+  def default_handler_config do
+    [
+      injector: [
+        capture_mode: [
+          default: Injector.Electric,
+          per_user: %{
+            "prisma" => Injector.Prisma,
+            "transparent" => Injector.Transparent
+          }
+        ]
+      ]
+    ]
   end
 end
