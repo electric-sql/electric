@@ -301,10 +301,11 @@ defmodule Electric.Postgres.Extension do
 
     [
       Migrations.Migration_20230328113927,
-      Migrations.Migration_20230424154425_DDLGen,
+      Migrations.Migration_20230424154425_DDLX,
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230814170123_RenameDDLX,
       Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
