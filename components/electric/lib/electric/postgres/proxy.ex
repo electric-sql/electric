@@ -92,7 +92,7 @@ defmodule Electric.Postgres.Proxy do
      using the `transparent` username.
   """
 
-  alias Electric.Postgres.Proxy.Handler
+  alias Electric.Postgres.Proxy.{Injector, Handler}
   alias Electric.Replication.Connectors
 
   require Logger
