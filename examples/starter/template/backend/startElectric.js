@@ -1,4 +1,4 @@
-const exec = require('shelljs-live')
+const shell = require('shelljs')
 
 let db = process.env.DATABASE_URL
 let electricPort = process.env.ELECTRIC_PORT ?? 5133
@@ -50,7 +50,7 @@ const electric = process.env.ELECTRIC_IMAGE ?? "electricsql/electric:latest"
 
 // 5433 is the logical publisher port
 // it is exposed because PG must be able to connect to Electric
-const res = exec(
+const res = shell.exec(
   `docker run \
       -e "DATABASE_URL=${db}" \
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
@@ -64,11 +64,12 @@ if (res.code !== 0 && res.stderr.includes('port is already allocated')) {
   console.error(
     '\x1b[31m',
     'Could not start Electric because the port seems to be taken.\n' +
-    'To run Electric on another port execute `yarn ports:configure`'
+    'To run Electric on another port execute `yarn ports:configure`',
+    '\x1b[0m'
   )
 }
 
 function error(err) {
-  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]')
+  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]', '\x1b[0m')
   process.exit(1)
 }

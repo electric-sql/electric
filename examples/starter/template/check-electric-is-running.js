@@ -12,7 +12,8 @@ async function checkElectricIsRunning() {
     console.error(
       '\x1b[31m',
       `Your application is configured to connect to Electric on port ${configuredPort} ` +
-      `but your instance of Electric is running on port ${port}`
+      `but your instance of Electric is running on port ${port}`,
+      '\x1b[0m'
       )
       process.exit(1)
     }
