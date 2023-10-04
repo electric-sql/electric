@@ -68,13 +68,10 @@ export function numberToBytes(i: number) {
 }
 
 export function realToBytes(num: number) {
-  let num_str = ''
+  let num_str = num.toString()
   if (Math.trunc(num) === num) {
     // num is an integer, we need to explicitly append the ".0" to it.
-    num_str += num + '.0'
-  } else {
-    // num has a fractional part, so the default string conversion produces correct result
-    num_str += num
+    num_str += '.0'
   }
   return new TextEncoder().encode(num_str)
 }
