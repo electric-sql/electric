@@ -45,12 +45,14 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     injector
     |> client(query(query), server: begin())
     |> server(complete_ready("BEGIN", :tx),
-      server: query(query),
+      server: query(query)
+    )
+    |> server(complete_ready(tag, :tx),
+      server: capture_ddl_query(query),
       client: [
-        # capture_notice(query)
+        capture_notice(query)
       ]
     )
-    |> server(complete_ready(tag, :tx), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])

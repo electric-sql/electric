@@ -51,7 +51,10 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     |> server(complete_ready("BEGIN", :tx), server: parse_describe(query))
     |> server(parse_describe_complete())
     |> client(bind_execute())
-    |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
+    |> server(bind_execute_complete(tag),
+      server: capture_ddl_query(query),
+      client: capture_notice(query)
+    )
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle), client: [bind_execute_complete(tag, :idle)])

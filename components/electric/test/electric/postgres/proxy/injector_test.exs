@@ -457,7 +457,9 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     |> server(complete_ready("ALTER TABLE"),
       server: [
         capture_ddl_query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
-      ]
+      ],
+      client:
+        capture_notice("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
     )
     |> server(capture_ddl_complete(),
       server: [

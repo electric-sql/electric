@@ -717,7 +717,7 @@ defmodule Operation.Capture do
           query_generator = Map.fetch!(state, :query_generator)
           sql = query_generator.capture_ddl_query(op.analysis.sql)
 
-          _notice =
+          notice =
             %M.NoticeResponse{
               code: "00000",
               severity: "NOTICE",
@@ -730,8 +730,9 @@ defmodule Operation.Capture do
           {
             op,
             State.electrify(state),
-            send |> Send.server(query(sql))
-            # |> Send.client(notice)
+            send
+            |> Send.server(query(sql))
+            |> Send.client(notice)
           }
       end
     end

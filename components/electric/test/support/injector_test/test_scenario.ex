@@ -464,13 +464,13 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tag = random_tag()
 
     injector
-    |> client(query(query),
-      server: query(query),
+    |> client(query(query), server: query(query))
+    |> server(complete_ready(tag),
+      server: capture_ddl_query(query),
       client: [
-        # capture_notice(query)
+        capture_notice(query)
       ]
     )
-    |> server(complete_ready(tag), server: capture_ddl_query(query))
     |> shadow_add_column(capture_ddl_complete(), opts, client: complete_ready(tag))
   end
 
@@ -504,15 +504,15 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tag = random_tag()
 
     injector
-    |> client(parse_describe(query),
-      server: parse_describe(query),
-      client: [
-        # capture_notice(query)
-      ]
-    )
+    |> client(parse_describe(query), server: parse_describe(query))
     |> server(parse_describe_complete())
     |> client(bind_execute())
-    |> server(bind_execute_complete(tag), server: capture_ddl_query(query))
+    |> server(bind_execute_complete(tag),
+      server: capture_ddl_query(query),
+      client: [
+        capture_notice(query)
+      ]
+    )
     |> shadow_add_column(capture_ddl_complete(), opts, client: bind_execute_complete(tag))
   end
 
