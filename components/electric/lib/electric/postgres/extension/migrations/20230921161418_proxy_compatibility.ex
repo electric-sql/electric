@@ -10,7 +10,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161418_ProxyC
   def up(schema) do
     ddl_table = Extension.ddl_table()
     version_table = Extension.version_table()
-    txid_type = Extension.txid_type()
     txts_type = Extension.txts_type()
 
     # FROM:
@@ -50,21 +49,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161418_ProxyC
     #     inserted_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL
     # );
     [
-      """
-      CREATE OR REPLACE FUNCTION #{schema}.current_xact_ts() RETURNS #{txts_type} SECURITY DEFINER AS $function$
-      BEGIN
-          RETURN (extract(epoch from transaction_timestamp()) * 1000000)::#{txts_type};
-      END;
-      $function$ LANGUAGE PLPGSQL STABLE STRICT PARALLEL SAFE;
-      """,
-      """
-      CREATE OR REPLACE FUNCTION #{schema}.current_xact_id() RETURNS #{txid_type} SECURITY DEFINER AS $function$
-      BEGIN
-          RETURN pg_current_xact_id();
-      END;
-      -- PARALLEL UNSAFE because `pg_current_xact_id` is parallel unsafe
-      $function$ LANGUAGE PLPGSQL STABLE STRICT PARALLEL UNSAFE;
-      """,
+      Extension.Functions.by_name(:current_xact_ts),
+      Extension.Functions.by_name(:current_xact_id),
       """
       ALTER TABLE #{ddl_table} DROP CONSTRAINT ddl_table_unique_migrations;
       """,
