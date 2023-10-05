@@ -67,13 +67,11 @@ export class DatabaseAdapter
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-    
     // Acquire mutex before even instantiating the transaction object.
-    // This will ensure transactions cannot get interleaved. 
+    // This will ensure transactions cannot get interleaved.
     const releaseMutex = await this.#txMutex.acquire()
     return new Promise<T>((resolve, reject) => {
-      
-      // Convenience function. Rejecting should always release the acquired mutex. 
+      // Convenience function. Rejecting should always release the acquired mutex.
       const releaseMutexAndReject = (err?: any) => {
         releaseMutex()
         reject(err)
