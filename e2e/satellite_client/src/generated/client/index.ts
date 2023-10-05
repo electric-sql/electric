@@ -1427,14 +1427,31 @@ interface DatetimesGetPayload extends HKT {
 export const tableSchemas = {
   items: {
     fields: new Map([
-      ["id", "TEXT"],
-      ["content", "TEXT"],
-      ["content_text_null", "TEXT"],
-      ["content_text_null_default", "TEXT"],
-      ["intvalue_null", "INT4"],
-      ["intvalue_null_default", "INT4"],
-    ]
-    ),
+      [
+        "id",
+        "TEXT"
+      ],
+      [
+        "content",
+        "TEXT"
+      ],
+      [
+        "content_text_null",
+        "TEXT"
+      ],
+      [
+        "content_text_null_default",
+        "TEXT"
+      ],
+      [
+        "intvalue_null",
+        "INT4"
+      ],
+      [
+        "intvalue_null_default",
+        "INT4"
+      ]
+    ]),
     relations: [
       new Relation("other_items", "", "", "other_items", "ItemsToOtherItems", "one"),
     ],
@@ -1464,9 +1481,18 @@ export const tableSchemas = {
   >,
   other_items: {
     fields: new Map([
-      ["id", "TEXT"],
-      ["content", "TEXT"],
-      ["item_id", "TEXT"],
+      [
+        "id",
+        "TEXT"
+      ],
+      [
+        "content",
+        "TEXT"
+      ],
+      [
+        "item_id",
+        "TEXT"
+      ]
     ]),
     relations: [
       new Relation("items", "item_id", "id", "items", "ItemsToOtherItems", "one"),
@@ -1497,9 +1523,18 @@ export const tableSchemas = {
   >,
   timestamps: {
     fields: new Map([
-      ["id", "TEXT"],
-      ["created_at", "TIMESTAMP"],
-      ["updated_at", "TIMESTAMPTZ"],
+      [
+        "id",
+        "TEXT"
+      ],
+      [
+        "created_at",
+        "TIMESTAMP"
+      ],
+      [
+        "updated_at",
+        "TIMESTAMPTZ"
+      ]
     ]),
     relations: [
     ],
@@ -1529,9 +1564,18 @@ export const tableSchemas = {
   >,
   datetimes: {
     fields: new Map([
-      ["id", "TEXT"],
-      ["d", "DATE"],
-      ["t", "TIME"],
+      [
+        "id",
+        "TEXT"
+      ],
+      [
+        "d",
+        "DATE"
+      ],
+      [
+        "t",
+        "TIME"
+      ]
     ]),
     relations: [
     ],

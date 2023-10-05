@@ -58,7 +58,7 @@ export function writeTableSchemas(
 
         writer.write(`${tableName}: `).inlineBlock(() => {
           writer.write('fields: ')
-          writeFieldsArray(model, fileWriter)
+          writeFieldsMap(model, fileWriter)
 
           writer.newLine().write(`relations: `)
 
@@ -81,7 +81,7 @@ export function writeTableSchemas(
     .writeLine('export type Electric = ElectricClient<typeof schema>')
 }
 
-export function writeFieldsArray(
+export function writeFieldsMap(
   model: ExtendedDMMFModel,
   fileWriter: CreateFileOptions
 ) {
@@ -93,7 +93,7 @@ export function writeFieldsArray(
     null,
     2
   )
-  fileWriter.writer.write(`${fieldArray},`)
+  fileWriter.writer.write(`new Map(${fieldArray}),`)
 }
 
 function pgType(field: ExtendedDMMFField, modelName: string): string {
