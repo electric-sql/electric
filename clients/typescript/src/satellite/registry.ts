@@ -209,7 +209,7 @@ export class GlobalRegistry extends BaseRegistry {
 
     const satelliteOpts: SatelliteOpts = {
       ...satelliteDefaults,
-      backoffOpts: config.backoffOpts,
+      connectionBackOffOptions: config.connectionBackOffOptions,
     }
 
     const satellite = new SatelliteProcess(

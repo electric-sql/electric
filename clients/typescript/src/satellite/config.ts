@@ -1,6 +1,7 @@
 import { IBackOffOptions } from 'exponential-backoff'
 import { QualifiedTablename } from '../util/tablename'
 
+export type ConnectionBackoffOptions = Omit<IBackOffOptions, 'retry'>
 export interface SatelliteOpts {
   /** The database table where Satellite keeps its processing metadata. */
   metaTable: QualifiedTablename
@@ -20,7 +21,7 @@ export interface SatelliteOpts {
   /** On reconnect, clear client's state if cannot catch up with Electric buffered WAL*/
   clearOnBehindWindow: boolean
   /** Backoff options for connecting with Electric*/
-  backoffOpts: Omit<IBackOffOptions, 'retry'>
+  connectionBackOffOptions: ConnectionBackoffOptions
 }
 
 export interface SatelliteOverrides {
@@ -40,9 +41,9 @@ export const satelliteDefaults: SatelliteOpts = {
   pollingInterval: 2000,
   minSnapshotWindow: 40,
   clearOnBehindWindow: true,
-  backoffOpts: {
+  connectionBackOffOptions: {
     delayFirstAttempt: false,
-    startingDelay: 1000,
+    startingDelay: 0,
     jitter: 'full',
     maxDelay: 10000,
     numOfAttempts: 50,

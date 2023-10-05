@@ -70,8 +70,7 @@ test('setup starts a satellite process', async (t) => {
 test('start creates system tables', async (t) => {
   const { adapter, satellite, authState } = t.context
 
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await satellite.start(authState)
 
   const sql = "select name from sqlite_master where type = 'table'"
   const rows = await adapter.query({ sql })
@@ -96,14 +95,12 @@ test('load metadata', async (t) => {
 test('set persistent client id', async (t) => {
   const { satellite, authState } = t.context
 
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await satellite.start(authState)
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
   await satellite.stop()
 
-  const conn1 = await satellite.start(authState)
-  await conn1.connectionPromise
+  await satellite.start(authState)
 
   const clientId2 = satellite._authState!.clientId
   t.truthy(clientId2)
@@ -1164,8 +1161,7 @@ test('get transactions from opLogEntries', async (t) => {
 test('handling connectivity state change stops queueing operations', async (t) => {
   const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await satellite.start(authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
@@ -1200,8 +1196,7 @@ test('garbage collection is triggered when transaction from the same origin is r
   const { satellite } = t.context
   const { runMigrations, adapter, authState } = t.context
   await runMigrations()
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await satellite.start(authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -1643,8 +1638,7 @@ test('a subscription request failure does not clear the manager state', async (t
 
 test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await satellite.start(authState)
   await runMigrations()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
   const ts = await satellite._performSnapshot()

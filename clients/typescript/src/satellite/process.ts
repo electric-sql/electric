@@ -625,10 +625,12 @@ export class SatelliteProcess implements Satellite {
 
     Log.warn(`an error occurred in satellite: ${satelliteError.message}`)
 
-    this._handleOrThrowError(satelliteError)
+    this._handleOrThrowClientError(satelliteError)
   }
 
-  _handleOrThrowError(error: SatelliteError): Promise<void> {
+  _handleOrThrowClientError(error: SatelliteError): Promise<void> {
+    this._disconnect()
+
     if (!error) {
       const e = new SatelliteError(
         SatelliteErrorCode.INTERNAL,
@@ -637,14 +639,14 @@ export class SatelliteProcess implements Satellite {
       throw wrapFatalError(e)
     }
 
-    if (isThrowable(error) || isFatal(error)) {
-      this._disconnect()
-      throw isFatal(error) ? wrapFatalError(error) : error
+    if (isThrowable(error)) {
+      throw error
+    }
+    if (isFatal(error)) {
+      throw wrapFatalError(error)
     }
 
-    Log.warn('Disconnected with a non fatal error, reconnecting')
-
-    this._disconnect()
+    Log.warn('Client disconnected with a non fatal error, reconnecting')
     return this._connectWithBackoff()
   }
 
@@ -676,7 +678,7 @@ export class SatelliteProcess implements Satellite {
     }
 
     const opts = {
-      ...this.opts.backoffOpts,
+      ...this.opts.connectionBackOffOptions,
       retry: this._connectRetryHandler,
     }
 
@@ -778,9 +780,13 @@ export class SatelliteProcess implements Satellite {
       }
 
       // Some errors could be fixed by dropping local database entirely
-      // We propagate a fatal error, so the application can decide how to handle it
-      if (isThrowable(error) || isFatal(error)) {
-        throw isFatal(error) ? wrapFatalError(error) : error
+      // We propagate throwable and fatal errors for the app to decide
+      if (isThrowable(error)) {
+        throw error
+      }
+
+      if (isFatal(error)) {
+        throw wrapFatalError(error)
       }
     }
   }
