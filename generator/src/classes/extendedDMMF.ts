@@ -17,17 +17,17 @@ export class ExtendedDMMF implements DMMF.Document {
   readonly imports: Set<string>
   readonly customImports: Set<string>
 
-  constructor(dmmf: DMMF.Document, config: Dictionary<string>) {
+  constructor(dmmf: DMMF.Document, config: Dictionary<string>, datamodel: string) {
     this.generatorConfig = this._setGeneratorConfig(config)
-    this.datamodel = this._getExtendedDatamodel(dmmf)
+    this.datamodel = this._getExtendedDatamodel(dmmf, datamodel)
     this.schema = this._getExtendedSchema(dmmf)
     this.mappings = this._getExtendedMappings(dmmf)
     this.imports = this._getImports()
     this.customImports = this._getCustomImports()
   }
 
-  private _getExtendedDatamodel({ datamodel }: DMMF.Document) {
-    return new ExtendedDMMFDatamodel(this.generatorConfig, datamodel)
+  private _getExtendedDatamodel({ datamodel }: DMMF.Document, prismaSchema: string) {
+    return new ExtendedDMMFDatamodel(this.generatorConfig, datamodel, prismaSchema)
   }
 
   private _getExtendedSchema(dmmf: DMMF.Document) {

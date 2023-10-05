@@ -1,6 +1,8 @@
+import { Attribute } from 'src/utils/schemaParser'
 import {
   CreateFileOptions,
   ExtendedDMMF,
+  ExtendedDMMFField,
   ExtendedDMMFModel,
 } from '../../classes'
 
@@ -56,7 +58,7 @@ export function writeTableSchemas(
 
         writer.write(`${tableName}: `).inlineBlock(() => {
           writer.write('fields: ')
-          writeFieldNamesArray(model, fileWriter)
+          writeFieldsArray(model, fileWriter)
 
           writer.newLine().write(`relations: `)
 
@@ -79,7 +81,7 @@ export function writeTableSchemas(
     .writeLine('export type Electric = ElectricClient<typeof schema>')
 }
 
-export function writeFieldNamesArray(
+export function writeFieldsArray(
   model: ExtendedDMMFModel,
   fileWriter: CreateFileOptions
 ) {
@@ -87,9 +89,77 @@ export function writeFieldNamesArray(
     (f) => model.relationFields.indexOf(f) === -1
   )
   const fieldArray = JSON.stringify(
-    fieldsWithoutRelations.map((field) => field.name)
+    fieldsWithoutRelations.map((field) => [field.name, pgType(field, model.name)]),
+    null,
+    2
   )
   fileWriter.writer.write(`${fieldArray},`)
+}
+
+function pgType(field: ExtendedDMMFField, modelName: string): string {
+  const prismaType = field.type
+  const attributes = field.attributes
+  switch (prismaType) {
+    // BigInt, Boolean, Bytes, DateTime, Decimal, Float, Int, JSON, String
+    case "String":
+      return stringToPg(attributes)
+    case "Int":
+      return "INT4"
+    case "Boolean":
+      return "BOOLEAN"
+    case "DateTime":
+      return dateTimeToPg(attributes, field.name, modelName)
+    case "BigInt":
+      return "INT8"
+    case "Bytes":
+      return "BYTEA"
+    case "Decimal":
+      return "DECIMAL"
+    case "Float":
+      return "FLOAT8"
+    case "JSON":
+      return "JSON"
+    default:
+      return "UNRECOGNIZED PRISMA TYPE"
+  }
+}
+
+function dateTimeToPg(attributes: Array<Attribute>, field: string, model: string): string {
+  const a = attributes.find(a => a.type.startsWith('@db'))
+  const type = a?.type
+  const mapping = new Map([
+    ['@db.Timestamptz', 'TIMESTAMPTZ'],
+    ['@db.Time', 'TIME'],
+    ['@db.Timetz', 'TIMETZ'],
+    ['@db.Date', 'DATE'],
+    ['@db.Timestamp', 'TIMESTAMP'],
+  ])
+
+  if (!type) {
+    // No type attribute provided
+    // Prisma defaults to `@db.Timestamp`
+    // i.e. Prisma does not add the type attribute
+    //      if the PG type is `timestamp`
+    return 'TIMESTAMP'
+  }
+  else {
+    const pgType = mapping.get(type)
+    if (!pgType) {
+      throw new Error(`Unrecognized type attribute '${type}' for field '${field}' in model '${model}'.`)
+    }
+    return pgType
+  }
+}
+
+function stringToPg(attributes: Array<Attribute>) {
+  const pgTypeAttribute = attributes.find(a => a.type.startsWith('@db'))
+  if (!pgTypeAttribute || pgTypeAttribute.type === '@db.Text') {
+    // If Prisma does not add a type attribute then the PG type was TEXT
+    return "TEXT"
+  }
+  else {
+    return "VARCHAR"
+  }
 }
 
 export function writeRelations(
