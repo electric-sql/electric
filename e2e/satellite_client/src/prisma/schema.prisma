@@ -18,7 +18,7 @@ generator client {
 model Items {
   id                        String  @id
   content                   String
-  context_text_null         String?
+  content_text_null         String?
   content_text_null_default String?
   intvalue_null             Int?
   intvalue_null_default     Int?
