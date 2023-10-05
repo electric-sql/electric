@@ -2,4 +2,4 @@
 "electric-sql": minor
 ---
 
-New adapter for capacitor-sqlite.
+New DB driver for capacitor-sqlite.
