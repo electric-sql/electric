@@ -5,7 +5,7 @@ const parseArgs = require('minimist')
 const createPool = require('@databases/pg')
 const { sql } = require('@databases/pg')
 
-const DEFAULT_URL = 'postgresql://electric:password@localhost:5432/intro'
+const DEFAULT_URL = 'postgresql://electric:password@intro.localhost:65432/electric'
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
 

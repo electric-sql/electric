@@ -39,6 +39,7 @@ services:
       AUTH_MODE: insecure
     ports:
       - 5133:5133
+      - 65432:65432
     volumes:
       - electric_data:/app/data
     depends_on:

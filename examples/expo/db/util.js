@@ -10,7 +10,7 @@ shell.config.silent = true // don't log output of child processes
 // So we fetch this host port and use it in the default url.
 const pgPort = fetchHostPortPG() ?? 5432
 const appName = fetchAppName() ?? 'electric'
-const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
+const DEFAULT_URL = `postgresql://postgres:password@${appName}.localhost:${pgPort}/electric`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 
 function fetchHostPortPG() {

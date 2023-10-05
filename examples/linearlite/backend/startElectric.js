@@ -36,5 +36,6 @@ shell.exec(
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
       -e "AUTH_MODE=insecure" \
       -p 5133:5133 \
+      -p 65432:65432 \
       -p 5433:5433 ${electric}`
 )

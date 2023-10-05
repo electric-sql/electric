@@ -9,8 +9,9 @@ shell.config.silent = true // don't log output of child processes
 // to some available port on the host machine.
 // So we fetch this host port and use it in the default url.
 const appName = fetchAppName() ?? 'electric'
-const pgPort = fetchHostPortPG() ?? 5432
-const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appName}`
+//const pgPort = fetchHostPortPG() ?? 5432
+const proxyPort = fetchHostProxyPortElectric() ?? 65432
+const DEFAULT_URL = `postgresql://postgres:password@${appName}.localhost:${proxyPort}/electric`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
@@ -28,6 +29,10 @@ function fetchHostPortPG() {
 
 function fetchHostPortElectric() {
   return fetchHostPort(`${appName}-electric-1`, 5133, 'Electric')
+}
+
+function fetchHostProxyPortElectric() {
+  return fetchHostPort(`${appName}-electric-1`, 65432, 'Electric')
 }
 
 // Returns the host port to which the `containerPort` of the `container` is bound.
@@ -70,3 +75,4 @@ exports.DATABASE_URL = DATABASE_URL
 exports.PUBLIC_DATABASE_URL = PUBLIC_DATABASE_URL
 exports.DATABASE_NAME = DATABASE_NAME
 exports.fetchHostPortElectric = fetchHostPortElectric
+exports.fetchHostProxyPortElectric = fetchHostProxyPortElectric
