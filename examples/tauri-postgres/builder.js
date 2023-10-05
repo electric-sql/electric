@@ -65,7 +65,7 @@ const liveServer = (buildOpts) => {
  */
 let buildParams = {
   color: true,
-  entryPoints: ["src/index.tsx"],
+  entryPoints: ["src/index.tsx", "src/debug.ts"],
   loader: { ".ts": "tsx" },
   outdir: "dist",
   minify: shouldMinify,

@@ -26,7 +26,10 @@
     "electric-sql": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#master"
+    "wa-sqlite": "rhashimoto/wa-sqlite#master",
+    "xterm": "^5.1.0",
+    "xterm-addon-fit": "^0.7.0",
+    "xterm-readline": "^1.1.1"
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",

@@ -704,7 +704,7 @@ export class SatelliteProcess implements Satellite {
 
   // NO DIRECT CALLS TO CONNECT
   private async _connect(): Promise<void> {
-    Log.info(`connecting to electric server`)
+    Log.info(`connecting to electric server. We have modified the line`)
 
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)

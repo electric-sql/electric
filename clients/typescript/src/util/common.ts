@@ -1,6 +1,6 @@
 import BASE64 from 'base-64'
 import { v4 } from 'uuid'
-import { SatelliteError } from './types'
+import { BindParams, SatelliteError, SqlValue } from './types'
 
 // default implementation for uuid()
 // platforms that don't support 'uuid' shall override definition
@@ -125,5 +125,26 @@ export function getWaiter(): Waiter {
     finished: () => {
       return finished
     },
+  }
+}
+
+export function separateBindParams(params: BindParams | undefined): [string[], SqlValue[]] {
+  if (typeof params === "undefined") {
+    return [[], []]
+  }
+  if (Array.isArray(params)) {
+    return [[], params];
+  } else {
+    const sqlValues: SqlValue[] = [];
+    const keys: string[] = [];
+
+    for (const key in params) {
+      if (params.hasOwnProperty(key)) {
+        keys.push(key);
+        sqlValues.push(params[key]);
+      }
+    }
+
+    return [keys, sqlValues];
   }
 }

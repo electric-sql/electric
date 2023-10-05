@@ -12,7 +12,7 @@ use pg_embed::pg_fetch::{PgFetchSettings, PG_V15};
 use pg_embed::postgres::{PgEmbed, PgSettings};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use sqlx::postgres::PgRow;
+use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::{Column, Row, ValueRef};
 use sqlx::{Connection, PgConnection};
 use std::collections::HashMap;
@@ -55,7 +55,7 @@ pub async fn tauri_pg_setup(
 pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
     // let database_dir = PathBuf::from("../resources/data_test/db");
     let database_dir = PathBuf::from(database_dir);
-    let mut pg: PgEmbed = tauri_pg_setup(54321, database_dir, true, None)
+    let mut pg: PgEmbed = tauri_pg_setup(33333, database_dir, true, None)
         .await
         .expect("PgEmbed should not fail here");
 
@@ -70,6 +70,19 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
             .await
             .expect("create_database should not fail here");
     };
+
+    let mut conn = tauri_pg_connect(&pg, "test").await;
+
+    let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;")
+        .execute(&mut conn)
+        .await
+        .map_err(|_| PgEmbedError {
+        error_type: PgEmbedErrorType::SqlQueryError,
+        source: None,
+        message: None,
+        }).unwrap();
+
+
     pg.migrate(db_name)
         .await
         .expect("migrate should not fail here");
@@ -216,6 +229,29 @@ pub async fn tauri_pg_query_sync(mut conn: PgConnection, line: &str) -> String {
     }
 
     result
+}
+
+/** Get the rows modified, using a transaction, because of lacking sqlx ergonomics */
+pub async fn get_rows_modified(pg: &PgEmbed, sql: &str, bind_params: PgArguments) -> u64 {
+    let mut conn = tauri_pg_connect(pg, "test").await;
+
+    sqlx::query_with("BEGIN", PgArguments::default())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+
+    let rows_affected = sqlx::query_with(sql, bind_params)
+        .execute(&mut conn)
+        .await
+        .unwrap()
+        .rows_affected();
+
+    sqlx::query_with("ROLLBACK", PgArguments::default())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+
+    rows_affected
 }
 
 #[tokio::main]

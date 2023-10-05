@@ -3,33 +3,13 @@ console.log("Trace: We are in the postgres driver");
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
-import { BindParams, SqlValue, Statement } from '../../util'
+
+import { separateBindParams, SqlValue, Statement } from '../../util'
 import { QueryExecResult } from '../util/results'
 
 import { Mutex } from 'async-mutex'
 
 import EmbeddedPostgres from 'embedded-postgres';
-
-function separateBindParams(params: BindParams | undefined): [SqlValue[], string[]] {
-  if (typeof params === "undefined") {
-    return [[], []]
-  }
-  if (Array.isArray(params)) {
-    return [params, []];
-  } else {
-    const sqlValues: SqlValue[] = [];
-    const keys: string[] = [];
-
-    for (const key in params) {
-      if (params.hasOwnProperty(key)) {
-        keys.push(key);
-        sqlValues.push(params[key]);
-      }
-    }
-
-    return [sqlValues, keys];
-  }
-}
 
 export interface Database {
   name: string
@@ -60,7 +40,7 @@ export class ElectricDatabase implements Database {
 
     let result: any
     try {
-      result = await this.db.query(statement.sql, separateBindParams(statement.args)[0])
+      result = await this.db.query(statement.sql, separateBindParams(statement.args)[1])
     } finally {
       release()
     }

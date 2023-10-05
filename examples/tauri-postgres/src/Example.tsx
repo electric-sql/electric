@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { genUUID, uniqueTabId } from 'electric-sql/util'
-// import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { ElectricDatabase, electrify } from 'electric-sql/sqlx'
 import { invoke } from '@tauri-apps/api'
 
@@ -32,8 +31,11 @@ export const Example = () => {
       const { tabId } = uniqueTabId()
       const tabScopedDbName = `electric-${tabId}.db`
 
-      const conn = await ElectricDatabase.init(tabScopedDbName, '', invoke) // TODO: pass sqlx config
-      const electric = await electrify(conn, schema, config)
+      const conn = await ElectricDatabase.init(`${genUUID()}`, invoke) // TODO: pass sqlx config
+      const electric = await electrify(conn, schema, config).catch((error: any) => {
+        // Handle rejection and log or inspect the error
+        console.error("Promise rejected:", error);
+      });
 
       if (!isMounted) {
         return
@@ -92,7 +94,7 @@ const ExampleComponent = () => {
 
   const startPg = async () => {
     console.log("Start Postgres")
-    invoke("my_tauri_init", {name: "data"} );
+    invoke("tauri_init_command", {name: "data"} );
   }
 
   const stopPg = async () => {

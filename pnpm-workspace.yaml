@@ -2,7 +2,6 @@ packages:
   - 'clients/typescript'
   - 'e2e/satellite_client'
   - 'examples/starter'
-  - 'examples/tauri-postgres'
   - 'generator'
   - 'components/electric'
   - 'examples/tauri-postgres'

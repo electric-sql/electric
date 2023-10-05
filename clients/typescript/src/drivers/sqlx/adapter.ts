@@ -26,6 +26,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
     let rowsAffected = 0
     try {
       await this.db.exec({ sql: 'BEGIN' })
+      await this.db.exec({ sql: 'SET CONSTRAINTS ALL DEFERRED;' }) // This is the equivalent of the `PRAGMA defer_foreign_keys = ON` from SQLite.
       open = true
       for (const stmt of statements) {
         await this.db.exec(stmt)
@@ -122,6 +123,10 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
 
   tableNames({ sql }: Statement): QualifiedTablename[] {
     return parseTableNames(sql)
+  }
+
+  async stop() {
+    await this.db.stop()
   }
 }
 

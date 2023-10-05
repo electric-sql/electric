@@ -28,4 +28,6 @@ export class MockDatabase implements Database {
   getRowsModified(): number {
     return 0
   }
+
+  async stop() {}
 }

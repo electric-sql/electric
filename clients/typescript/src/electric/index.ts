@@ -50,7 +50,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   config: ElectricConfig,
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
-  setLogLevel(config.debug ? 'TRACE' : 'WARN')
+  setLogLevel(config.debug ? 'DEBUG' : 'DEBUG')
   const prepare = opts?.prepare ?? defaultPrepare
   await prepare(adapter)
 
