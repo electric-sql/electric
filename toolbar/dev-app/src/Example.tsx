@@ -34,12 +34,13 @@ export const Example = () => {
 
       const conn = await ElectricDatabase.init(tabScopedDbName, '')
       const electric = await electrify(conn, schema, config)
+      // Add the debug toolbar
+      AddToolbar(TypescriptApi(globalRegistry))
 
       if (!isMounted) {
         return
       }
       setElectric(electric)
-      AddToolbar(TypescriptApi(globalRegistry))
     }
 
     init()

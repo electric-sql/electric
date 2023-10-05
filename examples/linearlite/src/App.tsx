@@ -48,7 +48,12 @@ const App = () => {
     const init = async () => {
       try {
         const client = await initElectric()
+
+        // Add the debug toolbar
+        AddToolbar(TypescriptApi(globalRegistry))
+
         setElectric(client)
+
         const { synced } = await client.db.issue.sync({
           include: {
             comment: true,
@@ -72,11 +77,6 @@ const App = () => {
     }
 
     init()
-
-    setTimeout(() => {
-     AddToolbar(TypescriptApi(globalRegistry))
-    }, 1000);
-
 
   }, [])
 

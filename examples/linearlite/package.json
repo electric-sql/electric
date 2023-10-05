@@ -70,7 +70,7 @@
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
-    "@electric-sql/debug-toolbar": "file:../../toolbar",
+    "@electric-sql/debug-toolbar": "latest",
     "@electric-sql/prisma-generator": "1.0.2",
     "@tailwindcss/typography": "^0.5.10",
     "@types/jest": "^29.5.4",

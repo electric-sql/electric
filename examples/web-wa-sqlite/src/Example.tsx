@@ -9,7 +9,6 @@ import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
 import { Electric, Items as Item, schema } from './generated/client'
 
-
 import './Example.css'
 
 // toolbar imports
@@ -42,11 +41,14 @@ export const Example = () => {
       const conn = await ElectricDatabase.init(scopedDbName, '')
       const electric = await electrify(conn, schema, config)
 
+      // Add the debug toolbar
+      AddToolbar(TypescriptApi(globalRegistry))
+
       if (!isMounted) {
         return
       }
       setElectric(electric)
-      AddToolbar(TypescriptApi(globalRegistry))
+
     }
 
     init()
@@ -60,7 +62,6 @@ export const Example = () => {
     return null
   }
 
-
   return (
     <ElectricProvider db={electric}>
       <ExampleComponent />
@@ -70,7 +71,6 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  //const { db } = useContext(ElectricContext)
   const { results } = useLiveQuery(
     db.items.liveMany()
   )

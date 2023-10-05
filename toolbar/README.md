@@ -12,79 +12,42 @@
   </picture>
 </a>
 
-# ElectricSQL - Web example
+# ElectricSQL - Developer Toolbar
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
+These are a collection of tools that can be used by developers to help them debug their ElectricSQL apps
 
-## Instructions
+## Adding this toolbar to your project
 
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
-```
-
-## Pre-reqs
-
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
-
-```shell
-npm -g install yarn
-```
-
-## Install
-
-Install the dependencies:
+Add the toolbar to your project's `devDependencies` in `package.json`
 
 ```sh
-yarn
+  "devDependencies": {
+    ...
+    "@electric-sql/debug-toolbar": "latest",
+    ...
+    }
 ```
 
-## Setup
+In your code add the toolbar after initialising the electric database.
 
-Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+First some imports:
 
-```shell
-yarn backend:up
-# Or `yarn backend:start` to foreground
+```typescript
+// toolbar imports
+import { globalRegistry } from "electric-sql/satellite";
+import AddToolbar, { TypescriptApi } from '@electric-sql/debug-toolbar'
+import '@electric-sql/debug-toolbar/dist/index.cjs.css'
 ```
 
-Note that, if useful, you can connect to Postgres using:
+Then add the toolbar after setting up Electric:
 
-```shell
-yarn db:psql
+```typescript
+const conn = await ElectricDatabase.init(scopedDbName, '')
+const electric = await electrify(conn, schema, config)
+
+// Add the debug toolbar after the code above
+AddToolbar(TypescriptApi(globalRegistry))
 ```
 
-Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
+This will add the toolbar to the bottom of your window
 
-```shell
-yarn db:migrate
-```
-
-Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
-
-```shell
-yarn client:generate
-# or `yarn client:watch`` to re-generate whenever the DB schema changes
-```
-
-## Run
-
-Start your app:
-
-```sh
-yarn start
-```
-
-Open [localhost:3001](http://localhost:3001) in your web browser.
-
-## Develop
-
-`./src/Example.tsx` has the main example code. For more information see the:
-
-- [Documentation](https://electric-sql.com/docs)
-- [Quickstart](https://electric-sql.com/docs/quickstart)
-- [Usage guide](https://electric-sql.com/docs/usage)
-
-If you need help [let us know on Discord](https://discord.electric-sql.com).
