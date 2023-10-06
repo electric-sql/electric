@@ -3,12 +3,8 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{
-    Replication,
-    Schema,
-    Schema.Proto,
-    Extension.Migration
-  }
+  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
+  alias Electric.Utils
 
   require Logger
 
@@ -27,6 +23,7 @@ defmodule Electric.Postgres.Extension do
   @schema_relation "schema"
   @electrified_table_relation "electrified"
   @electrified_index_relation "electrified_idx"
+  @acked_client_lsn_relation "acknowledged_client_lsns"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -37,6 +34,7 @@ defmodule Electric.Postgres.Extension do
   @electrified_tracking_table electric.(@electrified_table_relation)
   @electrified_index_table electric.(@electrified_index_relation)
   @transaction_marker_table electric.("transaction_marker")
+  @acked_client_lsn_table electric.(@acked_client_lsn_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -95,23 +93,26 @@ defmodule Electric.Postgres.Extension do
   def electrified_tracking_table, do: @electrified_tracking_table
   def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
+  def acked_client_lsn_table, do: @acked_client_lsn_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
+  def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
   def event_triggers, do: @event_triggers
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
 
-  defguard is_migration_relation(relation)
-           when elem(relation, 0) == @schema and
-                  elem(relation, 1) in [@version_relation, @ddl_relation]
-
-  defguard is_ddl_relation(relation)
-           when elem(relation, 0) == @schema and elem(relation, 1) == @ddl_relation
-
   defguard is_extension_relation(relation) when elem(relation, 0) == @schema
+
+  defguard is_migration_relation(relation)
+           when relation in [{@schema, @version_relation}, {@schema, @ddl_relation}]
+
+  defguard is_ddl_relation(relation) when relation == {@schema, @ddl_relation}
+
+  defguard is_acked_client_lsn_relation(relation)
+           when relation == {@schema, @acked_client_lsn_relation}
 
   def extract_ddl_version(%{"txid" => _, "txts" => _, "version" => version, "query" => query}) do
     {:ok, version, query}
@@ -192,26 +193,14 @@ defmodule Electric.Postgres.Extension do
     end)
   end
 
-  @electrifed_table_query "SELECT id, schema_name, table_name, oid FROM #{@electrified_tracking_table} ORDER BY id ASC"
-  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
-
-  def electrified_tables(conn) do
-    with {:ok, _, rows} <- :epgsql.squery(conn, @electrifed_table_query) do
-      {:ok,
-       Enum.map(rows, fn {_id, schema, name, oid} ->
-         %Replication.Table{schema: schema, name: name, oid: String.to_integer(oid)}
-       end)}
-    end
-  end
-
   @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
-
   @spec electrified?(conn(), String.t(), String.t()) :: boolean()
   def electrified?(conn, schema \\ "public", table) do
     {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
     count == 1
   end
 
+  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
   def electrified_indexes(conn) do
     with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
       {:ok, rows}
@@ -238,6 +227,16 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @spec define_functions(conn) :: :ok
+  def define_functions(conn) do
+    Enum.each(Functions.list(), fn {name, sql} ->
+      case :epgsql.squery(conn, sql) do
+        {:ok, [], []} -> :ok
+        error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
+      end
+    end)
+  end
+
   @spec migrations() :: [module(), ...]
   def migrations do
     alias Electric.Postgres.Extension.Migrations
@@ -248,8 +247,17 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
     ]
+  end
+
+  def replicated_table_ddls do
+    for migration_module <- migrations(),
+        function_exported?(migration_module, :replicated_table_ddls, 0),
+        ddl <- migration_module.replicated_table_ddls() do
+      ddl
+    end
   end
 
   @spec migrate(conn()) :: {:ok, versions()} | {:error, term()}
@@ -267,51 +275,56 @@ defmodule Electric.Postgres.Extension do
       create_schema(txconn)
       create_migration_table(txconn)
 
-      with_migration_lock(txconn, fn ->
-        existing_migrations = existing_migrations(txconn)
+      newly_applied_versions =
+        with_migration_lock(txconn, fn ->
+          existing_versions = txconn |> existing_migration_versions() |> MapSet.new()
 
-        versions =
           migrations
-          |> Enum.reject(fn {version, _module} -> version in existing_migrations end)
-          |> Enum.reduce([], fn {version, module}, v ->
-            Logger.info("Running extension migration: #{version}")
-
-            disabling_event_triggers(txconn, module, fn ->
-              for sql <- module.up(@schema) do
-                case :epgsql.squery(txconn, sql) do
-                  results when is_list(results) ->
-                    errors = Enum.filter(results, &(elem(&1, 0) == :error))
-
-                    unless(Enum.empty?(errors)) do
-                      raise RuntimeError,
-                        message:
-                          "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-                    end
-
-                    :ok
-
-                  {:ok, _} ->
-                    :ok
-
-                  {:ok, _cols, _rows} ->
-                    :ok
-                end
-              end
-            end)
-
-            {:ok, _count} =
-              :epgsql.squery(
-                txconn,
-                "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
-              )
-
-            [version | v]
+          |> Enum.reject(fn {version, _module} -> version in existing_versions end)
+          |> Enum.map(fn {version, module} ->
+            :ok = apply_migration(txconn, version, module)
+            version
           end)
-          |> Enum.reverse()
+        end)
 
-        {:ok, versions}
-      end)
+      :ok = define_functions(txconn)
+
+      {:ok, newly_applied_versions}
     end)
+  end
+
+  defp apply_migration(txconn, version, module) do
+    Logger.info("Running extension migration: #{version}")
+
+    disabling_event_triggers(txconn, module, fn ->
+      for sql <- module.up(@schema) do
+        case :epgsql.squery(txconn, sql) do
+          results when is_list(results) ->
+            errors = Enum.filter(results, &(elem(&1, 0) == :error))
+
+            unless(Enum.empty?(errors)) do
+              raise RuntimeError,
+                message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
+            end
+
+            :ok
+
+          {:ok, _} ->
+            :ok
+
+          {:ok, _cols, _rows} ->
+            :ok
+        end
+      end
+    end)
+
+    {:ok, 1} =
+      :epgsql.squery(
+        txconn,
+        "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
+      )
+
+    :ok
   end
 
   # https://dba.stackexchange.com/a/311714
@@ -376,7 +389,7 @@ defmodule Electric.Postgres.Extension do
     {:ok, [], []} = :epgsql.squery(conn, query)
   end
 
-  defp existing_migrations(conn) do
+  defp existing_migration_versions(conn) do
     {:ok, _cols, rows} =
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 
@@ -497,5 +510,31 @@ defmodule Electric.Postgres.Extension do
         transaction_marker_update_equery(),
         [caused_by]
       )
+  end
+
+  @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
+  def fetch_last_acked_client_lsn(conn, client_id) do
+    case :epgsql.equery(conn, @last_acked_client_lsn_equery, [client_id]) do
+      {:ok, _, [{lsn}]} ->
+        # No need for a decoding step here because :epgsql.equery() uses Postgres' binary protocol, so a BYTEA value
+        # is returned as a raw binary.
+        lsn
+
+      {:ok, _, []} ->
+        nil
+    end
+  end
+
+  @doc """
+  Try inserting a new cluster id into PostgreSQL to persist, but return
+  the already-existing value on conflict.
+  """
+  def save_and_get_cluster_id(conn) do
+    :epgsql.squery(conn, """
+    INSERT INTO #{transaction_marker_table()} as o (id, content)
+      VALUES ('cluster_id', '"#{Utils.uuid4()}"')
+    ON CONFLICT (id) DO UPDATE SET content = o.content
+    RETURNING content->>0;
+    """)
   end
 end

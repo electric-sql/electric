@@ -1,4 +1,5 @@
 version: "3.8"
+name: "${APP_NAME:-electric}"
 
 configs:
   postgres_config:
@@ -36,10 +37,9 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
       LOGICAL_PUBLISHER_HOST: electric
-      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
       AUTH_MODE: insecure
     ports:
-      - 5133:5133
+      - ${ELECTRIC_PORT:-5133}:5133
     volumes:
       - electric_data:/app/data
     depends_on:

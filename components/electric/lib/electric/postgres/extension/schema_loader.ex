@@ -1,4 +1,6 @@
 defmodule Electric.Postgres.Extension.SchemaLoader do
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+
   alias Electric.Postgres.{Schema, Extension.Migration}
   alias Electric.Replication.Connectors
 
@@ -26,7 +28,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback migration_history(state(), version() | nil) ::
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
-  @callback electrified_tables(state()) :: {:ok, [table()]} | {:error, term()}
+  @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -84,7 +86,16 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
     module.known_migration_version?(state, version)
   end
 
-  def electrified_tables({module, state}) do
-    module.electrified_tables(state)
+  def internal_schema({module, state}) do
+    module.internal_schema(state)
+  end
+
+  def count_electrified_tables({_module, _state} = impl) do
+    with {:ok, _, schema} <- load(impl) do
+      {:ok,
+       schema
+       |> Schema.table_info()
+       |> Enum.count(&(not is_extension_relation({&1.schema, &1.name})))}
+    end
   end
 end

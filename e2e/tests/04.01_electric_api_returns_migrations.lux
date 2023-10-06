@@ -28,8 +28,8 @@
     ?$psql
 
 [shell electric]
-    ?? [info] Applying migration $migration_version_1
-    ?? [info] Applying migration $migration_version_2
+    ?? [info] Saved schema version $migration_version_1
+    ?? [info] Saved schema version $migration_version_2
 
 
 [newshell developer]

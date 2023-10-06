@@ -11,14 +11,11 @@ export const setLogLevel = (level: LogLevelDesc = 'TRACE') => {
   Log.setLevel(level)
 }
 
-/*
-export const init = (
-  electrified: AnyElectrifiedDatabase,
-  context: DebugContext
-) => {
-  context.query = (sql: string) => electrified.electric.adapter.query({ sql })
-  context.electric = electrified.electric
+/** True if current running environment is NodeJS */
+export const isNode =
+  typeof process !== 'undefined' &&
+  process.versions != null &&
+  process.versions.node != null
 
-  setLogLevel('TRACE')
-}
- */
+/** True if running in NodeJS with debugger attached, but currently always false */
+export const isDebuggingNode = false

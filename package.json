@@ -6,6 +6,6 @@
     "@changesets/cli": "^2.26.2"
   },
   "scripts": {
-    "bump": "pnpm exec changeset version && pnpm install"
+    "bump": "pnpm exec changeset version && pnpm install && pnpm run -r --if-present post-version-bump"
   }
 }

@@ -74,6 +74,9 @@ export function makeMigration(migration: MetaData): Migration {
     .map((op) => op.stmts.map((stmt) => stmt.sql))
     .flat()
   const tables = migration.ops
+    // if the operation did not change any table
+    // then ignore it as we don't have to build triggers for it
+    .filter((op) => op.table !== undefined)
     .map((op) => op.table!)
     // remove duplicate tables
     .filter((tbl, idx, arr) => {

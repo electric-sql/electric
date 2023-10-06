@@ -26,6 +26,7 @@ export const typeDecoder = {
 export const typeEncoder = {
   bool: boolToBytes,
   number: numberToBytes,
+  real: realToBytes,
   text: (string: string) => new TextEncoder().encode(string),
 }
 
@@ -66,6 +67,15 @@ export function numberToBytes(i: number) {
   )
 }
 
+export function realToBytes(num: number) {
+  let num_str = num.toString()
+  if (Math.trunc(num) === num) {
+    // num is an integer, we need to explicitly append the ".0" to it.
+    num_str += '.0'
+  }
+  return new TextEncoder().encode(num_str)
+}
+
 export function bytesToNumber(bytes: Uint8Array) {
   let n = 0
   for (const byte of bytes.values()) {
@@ -82,7 +92,13 @@ export function uuid() {
   return (globalThis as any).uuid()
 }
 
-export function emptyPromise<T = void>() {
+export type PromiseWithResolvers<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: any) => void
+}
+
+export function emptyPromise<T = void>(): PromiseWithResolvers<T> {
   let resolve: (value: T | PromiseLike<T>) => void
   let reject: (reason?: any) => void
   const promise = new Promise<T>((res, rej) => {

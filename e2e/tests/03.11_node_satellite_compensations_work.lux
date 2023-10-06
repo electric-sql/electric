@@ -30,7 +30,7 @@
     [invoke migrate_pg 11111 $sql]
 
 [shell satellite_1]
-    ??[proto] recv: #SatInStartReplicationResp
+    ??[rpc] recv: #SatInStartReplicationResp
     [invoke node_await_table "other_items"]
     [invoke node_sync_table "other_items"]
     ??[proto] recv: #SatSubsDataEnd

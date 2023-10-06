@@ -48,7 +48,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
-       pg_connector_opts: [origin: "fake_origin", replication: []],
+       pg_connector_opts: [origin: "fake_origin"],
        subscription_data_fun: ctx.subscription_data_fun}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
@@ -125,13 +125,13 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect(
         [port: ctx.port],
         fn conn ->
-          MockClient.send_data(conn, %SatAuthReq{
-            id: ctx.client_id,
-            token: ctx.token
-          })
-
           server_id = ctx.server_id
-          assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
+
+          assert {:ok, %SatAuthResp{id: ^server_id}} =
+                   MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                     id: ctx.client_id,
+                     token: ctx.token
+                   })
         end
       )
     end
@@ -152,18 +152,18 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     test "Server will respond with error on attempt to skip auth", ctx do
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+        assert {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
       end)
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: ctx.client_id,
-          token: ctx.token
-        })
-
         server_id = ctx.server_id
-        assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
+
+        assert {:ok, %SatAuthResp{id: ^server_id}} =
+                 MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: ctx.token
+                 })
       end)
     end
 
@@ -171,47 +171,35 @@ defmodule Electric.Satellite.WebsocketServerTest do
       server_id = ctx.server_id
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+        assert {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
       end)
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: ctx.client_id,
-          token: ctx.token
-        })
-
-        assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
+        assert {:ok, %SatAuthResp{id: ^server_id}} =
+                 MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: ctx.token
+                 })
       end)
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: ctx.client_id,
-          token: "invalid_token"
-        })
-
-        assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+        assert {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}} =
+                 MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: "invalid_token"
+                 })
       end)
 
       past = System.os_time(:second) - 24 * 3600
       expired_token = Auth.Secure.create_token(ctx.user_id, expiry: past)
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: ctx.client_id,
-          token: expired_token
-        })
-
-        assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
-      end)
-
-      with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: ctx.client_id,
-          token: ctx.token
-        })
-
-        assert_receive {^conn, %SatAuthResp{id: ^server_id}}, @default_wait
+        assert {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}} =
+                 MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: expired_token
+                 })
       end)
     end
 
@@ -219,12 +207,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
       invalid_token = Auth.Secure.create_token(ctx.user_id, issuer: "some-other-cluster-id")
 
       with_connect([port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatAuthReq{
-          id: "client_id",
-          token: invalid_token
-        })
-
-        assert_receive {^conn, %SatErrorResp{error_type: :AUTH_REQUIRED}}, @default_wait
+        assert {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}} =
+                 MockClient.make_rpc_call(conn, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: invalid_token
+                 })
       end)
     end
 
@@ -232,12 +219,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn _conn ->
         {:ok, pid} = MockClient.connect(port: ctx.port)
 
-        MockClient.send_data(pid, %SatAuthReq{
-          id: ctx.client_id,
-          token: ctx.token
-        })
+        assert {:error, %SatErrorResp{}} =
+                 MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                   id: ctx.client_id,
+                   token: ctx.token
+                 })
 
-        assert_receive {^pid, %SatErrorResp{}}, @default_wait
         :ok = MockClient.disconnect(pid)
       end)
     end
@@ -247,13 +234,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
     @tag with_migrations: [@test_migration]
     test "common replication", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 1)
+        start_replication_and_assert_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
-        MockClient.send_data(conn, %SatSubsReq{
+        subscription = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
@@ -263,9 +249,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", subscription)
+
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
@@ -292,13 +280,16 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         # Skip initial sync
         lsn = to_string(@current_wal_pos + 1)
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
 
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: lsn
+                 })
+
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
-        MockClient.send_data(conn, %SatSubsReq{
+        subscription = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
@@ -308,9 +299,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", subscription)
+
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
         assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
@@ -321,12 +314,18 @@ defmodule Electric.Satellite.WebsocketServerTest do
             simple_transes(ctx.user_id, limit)
           )
 
-        MockClient.send_data(conn, %SatInStopReplicationReq{})
+        assert {:ok, _} =
+                 MockClient.send_rpc(conn, "stopReplication", %SatInStopReplicationReq{})
+
         last_received_lsn = consume_till_stop(nil)
         assert last_received_lsn
         assert last_received_lsn !== Kernel.inspect(limit)
 
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: last_received_lsn})
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_received_lsn
+                 })
+
         num_lsn = last_received_lsn |> String.to_integer()
 
         :ok =
@@ -347,12 +346,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
     @tag with_migrations: [@test_migration]
     test "The client cannot establish two subscriptions with the same ID", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 1)
+        start_replication_and_assert_response(conn, 1)
 
         sub_id = "00000000-0000-0000-0000-000000000000"
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -362,9 +360,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        MockClient.send_data(conn, %SatSubsReq{
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -374,18 +375,15 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
-
-        assert_receive {^conn,
-                        %SatSubsResp{
-                          subscription_id: ^sub_id,
-                          err: %{
-                            message:
-                              "Cannot establish multiple subscriptions with the same ID" <> _
-                          }
-                        }}
+        assert {:ok,
+                %SatSubsResp{
+                  err: %{
+                    message: "Cannot establish multiple subscriptions with the same ID" <> _
+                  }
+                }} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
       end)
     end
 
@@ -393,13 +391,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
     @tag with_migrations: [@test_migration]
     test "replication stream is paused until the data is sent to client", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 1)
+        start_replication_and_assert_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
@@ -409,9 +406,10 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
         refute_receive {^conn, %SatOpLog{}}
@@ -429,12 +427,16 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         # Skip initial sync
         lsn = to_string(@current_wal_pos + 1)
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
+
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: lsn
+                 })
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
           shape_requests: [
             %SatShapeReq{
@@ -444,9 +446,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
 
         # Expected LSN is the one BEFORE the insertion point
@@ -464,13 +468,17 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         # Skip initial sync
         lsn = to_string(@current_wal_pos + 1)
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: lsn})
+
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: lsn
+                 })
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
         subscription_id = "00000000-0000-0000-0000-000000000000"
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: subscription_id,
           shape_requests: [
             %SatShapeReq{
@@ -480,11 +488,15 @@ defmodule Electric.Satellite.WebsocketServerTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id, err: nil}}
-        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id]})
-        assert_receive {^conn, %SatUnsubsResp{}}
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {:ok, %SatUnsubsResp{}} =
+                 MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id]
+                 })
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
         refute_receive {^conn, %SatSubsDataBegin{}}
@@ -500,15 +512,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
          ]
     test "common replication", ctx do
       self = self()
+      client_lsn = <<0, 1, 2, 3>>
 
       with_mock Electric.DummyConsumer, [:passthrough],
         notify: fn _, ws_pid, events -> send(self, {:dummy_consumer, ws_pid, events}) end do
-        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{})
-          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-
-          assert_receive {^conn, %SatInStartReplicationReq{lsn: ""}}, @default_wait
-          MockClient.send_data(conn, %SatInStartReplicationResp{})
+        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port, auto_in_sub: true], fn conn ->
+          start_replication_and_assert_response(conn, 1)
 
           columns = [
             %SatRelationColumn{name: "satellite-column-1", type: "text"},
@@ -536,11 +545,10 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           dt = DateTime.truncate(DateTime.utc_now(), :millisecond)
           ct = DateTime.to_unix(dt, :millisecond)
-          lsn = "some_long_internal_lsn"
 
           op_log1 =
             build_op_log([
-              %SatOpBegin{commit_timestamp: ct, lsn: lsn},
+              %SatOpBegin{commit_timestamp: ct, lsn: client_lsn},
               %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"a">>, <<"b">>])}
             ])
 
@@ -555,7 +563,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
           assert_receive {:dummy_consumer, _, [%Transaction{} = tx]}
 
-          assert tx.lsn == lsn
+          assert tx.lsn == client_lsn
           assert tx.commit_timestamp == dt
 
           assert tx.changes == [
@@ -570,45 +578,32 @@ defmodule Electric.Satellite.WebsocketServerTest do
                  ]
 
           assert tx.origin !== ""
-
-          # Wait for everything to be persisted
-          Process.sleep(200)
-        end)
-
-        # After restart we still get same lsn
-        with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          lsn = "some_long_internal_lsn"
-
-          MockClient.send_data(conn, %SatInStartReplicationReq{})
-          assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-          assert_receive {^conn, %SatInStartReplicationReq{lsn: ^lsn}}, @default_wait
         end)
       end
     end
 
     test "stop subscription when consumer is not available, and restart when it's back", ctx do
-      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_receive {^conn, %SatInStartReplicationResp{}}, @default_wait
-
-        assert_receive {^conn, %SatInStartReplicationReq{}}, @default_wait
-        MockClient.send_data(conn, %SatInStartReplicationResp{})
+      with_connect([auth: ctx, id: ctx.client_id, port: ctx.port, auto_in_sub: true], fn conn ->
+        start_replication_and_assert_response(conn, 0)
 
         pid = Process.whereis(:dummy_consumer)
         Process.monitor(pid)
         Process.exit(pid, :terminate)
         assert_receive {:DOWN, _, :process, ^pid, _}
 
-        assert_receive {^conn, %SatInStopReplicationReq{}}
-        assert_receive {^conn, %SatInStartReplicationReq{}}
+        assert_receive {^conn, %SatRpcRequest{method: "stopReplication"}}
+        assert_receive {^conn, %SatRpcRequest{method: "startReplication"}}
       end)
     end
 
     test "results in an error response when the client is outside of the cached WAL window",
          ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{lsn: "1"})
-        assert_receive {^conn, %SatInStartReplicationResp{err: error}}, @default_wait
+        assert {:ok, %SatInStartReplicationResp{err: error}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: "1"
+                 })
+
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
       end)
     end
@@ -617,7 +612,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   # -------------------------------------------------------------------------------
   def mock_data_function(
         {id, requests, _context},
-        [reply_to: {ref, pid}, connection: _],
+        [reply_to: {ref, pid}, connection: _, telemetry_span: _],
         opts \\ []
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)
@@ -673,7 +668,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         # Logger.warning("consumed: #{inspect(lsn)}")
         consume_till_stop(lsn)
 
-      {_, %SatInStopReplicationResp{}} ->
+      {_, %SatRpcResponse{method: "stopReplication"}} ->
         lsn
     after
       @default_wait ->
@@ -697,12 +692,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   defp active_clients() do
-    {:ok, clients} = Electric.Satellite.ClientManager.get_clients()
-
-    Enum.reduce(clients, [], fn {client_name, client_pid}, acc ->
-      case Process.alive?(client_pid) do
-        true -> [{client_name, client_pid} | acc]
-        false -> acc
+    Electric.Satellite.ClientManager.get_clients()
+    |> Enum.flat_map(fn {client_name, client_pid} ->
+      if Process.alive?(client_pid) do
+        [{client_name, client_pid}]
+      else
+        []
       end
     end)
   end

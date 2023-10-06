@@ -21,34 +21,6 @@ defmodule ElectricTest.SetupHelpers do
   end
 
   @doc """
-  Asserts server sends all messages that it should to `Satellite.TestWsClient` after
-  replication request has been sent.
-
-  Assumes that the database has been migrated before the replication started, and that
-  there is only one migration that includes all tables. If you need more granular control over
-  this response -- don't use this function.
-  """
-  def assert_initial_replication_response(conn, table_count) do
-    assert_receive {^conn, %SatInStartReplicationResp{}}
-    assert_receive {^conn, %SatInStartReplicationReq{}}
-    for _ <- 1..table_count, do: assert_receive({^conn, %SatRelation{}})
-
-    assert_receive {^conn,
-                    %SatOpLog{
-                      ops: ops
-                    }},
-                   300
-
-    assert length(ops) == 2 + table_count
-    assert [_begin | ops] = ops
-    {migrates, [_end]} = Enum.split(ops, table_count)
-    Enum.each(migrates, fn op -> assert %SatTransOp{op: {:migrate, _}} = op end)
-
-    # We shouldn't receive anything else without subscriptions
-    refute_receive {^conn, %SatOpLog{}}
-  end
-
-  @doc """
   Wait for and receives subscription data response as sent back to the test process by `Satellite.TestWsClient`.
 
   Waits for the `SatSubsDataBegin` message, then for each shape data, then for the end message,

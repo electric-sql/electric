@@ -648,6 +648,8 @@ export class SatelliteProcess implements Satellite {
       throw satelliteError
     }
 
+    Log.warn(`an error occurred in satellite: ${satelliteError.message}`)
+
     // all other errors are handled by closing the client (if not yet) and retrying
     this._connectivityStateChanged('disconnected').then(() =>
       this._connectivityStateChanged('available')

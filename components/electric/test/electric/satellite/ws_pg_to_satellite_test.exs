@@ -32,10 +32,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
     :ok = migrate(ctx.db, "2023071702", "CREATE TABLE public.bar (id TEXT PRIMARY KEY)")
 
     with_connect(ctx.conn_opts, fn conn ->
-      assert_receive {^conn, %SatInStartReplicationReq{}}
-
-      MockClient.send_data(conn, %SatInStartReplicationReq{})
-      assert_receive {^conn, %SatInStartReplicationResp{}}
+      start_replication_and_assert_response(conn, 0)
 
       refute_receive {^conn, _}
     end)
@@ -52,10 +49,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
       ref = make_ref()
       send(current_connection_pid(ctx.server_pid), {:pause_during_initial_sync, ref, self()})
 
-      assert_receive {^conn, %SatInStartReplicationReq{}}
-
-      MockClient.send_data(conn, %SatInStartReplicationReq{})
-      assert_receive {^conn, %SatInStartReplicationResp{}}
+      start_replication_and_assert_response(conn, 0)
 
       assert_receive {^ref, :server_paused}
 
@@ -83,10 +77,7 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
     # First, verify that the client receives all migrations when it doesn't provide its schema version
     with_connect(ctx.conn_opts, fn conn ->
-      assert_receive {^conn, %SatInStartReplicationReq{}}
-
-      MockClient.send_data(conn, %SatInStartReplicationReq{})
-      assert_receive {^conn, %SatInStartReplicationResp{}}
+      start_replication_and_assert_response(conn, 0)
 
       assert_receive_migration(conn, vsn1, "foo")
       assert_receive_migration(conn, vsn2, "bar")
@@ -96,11 +87,10 @@ defmodule Electric.Satellite.WsPgToSatelliteTest do
 
     # Now, verify that the client receives only the second migration when it provides its schema version
     with_connect(ctx.conn_opts, fn conn ->
-      assert_receive {^conn, %SatInStartReplicationReq{}}
+      assert_receive {^conn, %SatRpcRequest{method: "startReplication"}}
 
       req = %SatInStartReplicationReq{schema_version: vsn1}
-      MockClient.send_data(conn, req)
-      assert_receive {^conn, %SatInStartReplicationResp{}}
+      assert {:ok, _} = MockClient.make_rpc_call(conn, "startReplication", req)
 
       assert_receive_migration(conn, vsn2, "bar")
 

@@ -10,7 +10,7 @@
     [invoke migrate_items_table 20230504114018]
 
 [shell satellite_1]
-    ??[proto] recv: #SatInStartReplicationResp
+    ??[rpc] recv: #SatInStartReplicationResp
     [invoke node_await_table "items"]
     # We shouldn't see this "hello from pg" until we actually do sync
     -(hello from pg|$fail_pattern)

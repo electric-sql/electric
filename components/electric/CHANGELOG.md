@@ -1,5 +1,50 @@
 # @core/electric
 
+## 0.6.4
+
+### Patch Changes
+
+- f045ec8: [VAX-1062] Fix column name quoting in a trigger function.
+
+## 0.6.3
+
+### Patch Changes
+
+- ce30518: Correctly detect cases where the clients are ahead of WAL window, which may happen in case of a DB reset, like in development
+
+## 0.6.2
+
+### Patch Changes
+
+- 704b237: Make sure the database name in the slot is escaped to match PG requirements (a-z, 0-9, \_ and less then 64 chars)
+
+## 0.6.1
+
+### Patch Changes
+
+- 5f44c1a: Suffix electric-created slot with db name to be able to run Electric per database on a single PostgreSQL instance
+
+## 0.6.0
+
+### Minor Changes
+
+- 2662251: Add protocol version negotiation to websocket connection step
+- e5936a6: feat: changed the protocol to have a proper RPC implementation for ease of extension and maintanence
+
+### Patch Changes
+
+- cf4ee7c: Implement support for the BOOLEAN column type in electrified tables
+- 75b2fcf: Implement support for the DATE column type in electrified tables.
+- da9a718: Rewrite the type-validating part of `electify` function to expand allowed types when Electric instance is upgraded
+- 4bd9ea2: Fix the problem where Postgres was failing to re-establish a replication connection to Electric after a restart
+- 1dd9500: Remove int8 from the list of supported types supported in electrified tables.
+- 3c47193: Implement support for electrifying and syncing tables that have columns types timestamp and timestamptz
+- de1c571: VAX-911 - store client lsn position in postgres
+- a4c5ce6: VAX-1036 - fixes bugs reported by @hugodutka by preventing insertion of duplicate ddl commands in migration history
+- 33ed7e8: Implement support for the TIME column type in electrified tables.
+- 76b15a6: Implement support for the UUID column type in electrified tables.
+- 4bbe283: Adds opt-out telemetry about Electric usage stats, configurable with `ELECTRIC_TELEMETRY`.
+
 ## 0.5.3
 
 ### Patch Changes

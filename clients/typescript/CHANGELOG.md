@@ -1,5 +1,40 @@
 # electric-sql
 
+## 0.6.4
+
+### Patch Changes
+
+- 5a0f922: Fix the bug where the client would crash/stop working/stop syncing if it received a migration containing a new index creation.
+
+## 0.6.3
+
+### Patch Changes
+
+- 3c0a4ca: Relax the client-side migration version validation to allow an arbitrary suffix to follow the version itself.
+
+## 0.6.2
+
+### Patch Changes
+
+- 406089d: Publically expose the version module.
+
+## 0.6.1
+
+### Patch Changes
+
+- a658123: Remove node debugging detection because it broke Webpack builds
+
+## 0.6.0
+
+### Minor Changes
+
+- 2662251: Add protocol version negotiation to websocket connection step
+- e5936a6: feat: changed the protocol to have a proper RPC implementation for ease of extension and maintanence
+
+### Patch Changes
+
+- 3603703: Use parametrized SQL queries.
+
 ## 0.5.3
 
 ### Patch Changes

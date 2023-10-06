@@ -6,9 +6,10 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   def init(handler_opts), do: handler_opts
 
-  defp build_websocket_opts(base_opts),
+  defp build_websocket_opts(base_opts, client_version),
     do:
       base_opts
+      |> Keyword.put(:client_version, client_version)
       |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
       |> Keyword.put_new_lazy(:pg_connector_opts, fn ->
         Electric.Application.pg_connection_opts()
@@ -17,10 +18,12 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         &Electric.Replication.InitialSync.query_subscription_data/2
       end)
 
+  @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
+
   def call(conn, handler_opts) do
     with {:ok, conn} <- check_if_valid_upgrade(conn),
          {:ok, conn} <- check_if_subprotocol_present(conn),
-         {:ok, conn} <- check_if_vsn_compatible(conn, with: "<= #{Electric.vsn()}") do
+         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions) do
       Logger.metadata(
         remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
         instance_id: Electric.instance_id()
@@ -34,10 +37,11 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       |> put_resp_header("sec-websocket-protocol", @protocol_prefix <> protocol_vsn)
       |> upgrade_adapter(
         :websocket,
-        {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts), []}
+        {Electric.Satellite.WebsocketServer, build_websocket_opts(handler_opts, client_vsn), []}
       )
     else
       {:error, code, body} ->
+        Logger.debug("Clients WebSocket connection failed with reason: #{body}")
         send_resp(conn, code, body)
     end
   end

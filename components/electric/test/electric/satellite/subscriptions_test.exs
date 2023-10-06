@@ -5,6 +5,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
   import Electric.Postgres.TestConnection
   import Electric.Utils, only: [uuid4: 0]
   import ElectricTest.SetupHelpers
+  import ElectricTest.SatelliteHelpers
   alias Satellite.TestWsClient, as: MockClient
   alias Electric.Postgres.CachedWal
 
@@ -37,9 +38,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
     test "The client can connect and immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
 
         assert_receive {^conn,
                         %SatOpLog{
@@ -61,9 +61,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and immediately gets migrations but gets neither already inserted data, nor new inserts",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
 
         assert_receive {^conn,
                         %SatOpLog{
@@ -99,13 +98,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 3)
+        start_replication_and_assert_response(conn, 3)
 
         request_id = uuid4()
         sub_id = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -115,9 +113,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id]
@@ -157,8 +157,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and that works with multiple shape requests",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 3)
+        start_replication_and_assert_response(conn, 3)
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
@@ -170,7 +169,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         request_id1 = uuid4()
         request_id2 = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -186,9 +185,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) -- [request_id1, request_id2] == []
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -234,13 +235,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and that works with multiple subscriptions",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 3)
+        start_replication_and_assert_response(conn, 3)
 
         sub_id = uuid4()
         request_id1 = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -250,9 +250,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id)
         assert Map.keys(received) == [request_id1]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -260,7 +262,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         sub_id2 = uuid4()
         request_id2 = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id2,
           shape_requests: [
             %SatShapeReq{
@@ -270,9 +272,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id2)
         assert Map.keys(received) == [request_id2]
         assert [%SatOpInsert{row_data: %{values: [_, "Old", _]}}] = received[request_id2]
@@ -316,13 +320,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "Second subscription for the same table yields no data",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 3)
+        start_replication_and_assert_response(conn, 3)
 
         sub_id1 = uuid4()
         request_id1 = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id1,
           shape_requests: [
             %SatShapeReq{
@@ -332,9 +335,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id1, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id1)
         assert Map.keys(received) == [request_id1]
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id1]
@@ -342,7 +347,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         sub_id2 = uuid4()
         request_id2 = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id2,
           shape_requests: [
             %SatShapeReq{
@@ -352,17 +357,21 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
         # Since we already got the data for this table, we shouldn't receive it again
-        assert_receive {^conn, %SatSubsResp{subscription_id: sub_id2, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         received = receive_subscription_data(conn, sub_id2)
         assert Map.keys(received) == [request_id2]
         assert [] == received[request_id2]
 
         # But an unsubscribe from one of those still keeps messages coming for the mentioned table
-        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id1]})
-        assert_receive {^conn, %SatUnsubsResp{}}
+        assert {:ok, _} =
+                 MockClient.send_rpc(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id1]
+                 })
 
         # We still get the message because the other subscription is active
         {:ok, 1} =
@@ -386,13 +395,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "The client can connect and subscribe, and then unsubscribe, and gets no data after unsubscribing",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{})
-        assert_initial_replication_response(conn, 3)
+        start_replication_and_assert_response(conn, 3)
 
         request_id = uuid4()
         sub_id = uuid4()
 
-        MockClient.send_data(conn, %SatSubsReq{
+        request = %SatSubsReq{
           subscription_id: sub_id,
           shape_requests: [
             %SatShapeReq{
@@ -402,9 +410,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
               }
             }
           ]
-        })
+        }
 
-        assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
         assert %{request_id => []} == receive_subscription_data(conn, sub_id)
 
         {:ok, 1} =
@@ -424,8 +434,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         }},
                        1000
 
-        MockClient.send_data(conn, %SatUnsubsReq{subscription_ids: [sub_id]})
-        assert_receive {^conn, %SatUnsubsResp{}}
+        assert {:ok, _} =
+                 MockClient.send_rpc(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id]
+                 })
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
@@ -444,12 +456,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       last_lsn =
         MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-          MockClient.send_data(conn, %SatInStartReplicationReq{})
-          assert_initial_replication_response(conn, 3)
+          start_replication_and_assert_response(conn, 3)
 
           request_id = uuid4()
 
-          MockClient.send_data(conn, %SatSubsReq{
+          request = %SatSubsReq{
             subscription_id: sub_id,
             shape_requests: [
               %SatShapeReq{
@@ -459,9 +470,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
                 }
               }
             ]
-          })
+          }
 
-          assert_receive {^conn, %SatSubsResp{subscription_id: ^sub_id, err: nil}}
+          assert {:ok, %SatSubsResp{err: nil}} =
+                   MockClient.make_rpc_call(conn, "subscribe", request)
+
           assert %{request_id => []} == receive_subscription_data(conn, sub_id)
 
           {:ok, 1} =
@@ -493,13 +506,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
         ])
 
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        MockClient.send_data(conn, %SatInStartReplicationReq{
-          lsn: last_lsn,
-          subscription_ids: [sub_id]
-        })
-
-        assert_receive {^conn, %SatInStartReplicationResp{}}
-        assert_receive {^conn, %SatInStartReplicationReq{}}
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
 
         # Assert that we immediately receive the data that falls into the continued subscription
         assert_receive {^conn,
@@ -516,12 +527,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
   end
 
   defp active_clients() do
-    {:ok, clients} = Electric.Satellite.ClientManager.get_clients()
-
-    Enum.reduce(clients, [], fn {client_name, client_pid}, acc ->
-      case Process.alive?(client_pid) do
-        true -> [{client_name, client_pid} | acc]
-        false -> acc
+    Electric.Satellite.ClientManager.get_clients()
+    |> Enum.flat_map(fn {client_name, client_pid} ->
+      if Process.alive?(client_pid) do
+        [{client_name, client_pid}]
+      else
+        []
       end
     end)
   end

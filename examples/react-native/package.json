@@ -4,10 +4,11 @@
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
+    "electric:pull": "docker pull electricsql/electric:latest",
     "backend:down": "docker compose -f backend/compose/docker-compose.yaml down --volumes",
-    "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
+    "backend:start": "yarn electric:pull && docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
     "backend:stop": "yarn backend:down",
-    "backend:up": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up --detach",
+    "backend:up": "yarn backend:start --detach",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "db:migrate": "node ./db/migrate.js",

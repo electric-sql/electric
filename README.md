@@ -58,7 +58,7 @@ ElectricSQL is a local-first software platform that makes it easy to develop hig
 
 ElectricSQL gives you instant local-first for your Postgres. Think of it like "Hasura for local-first". Drop ElectricSQL onto an existing Postgres-based system and you get instant local-first data synced into your apps.
 
-ElectricSQL then provides a whole developer experience for you to control what data syncs where and to work with it locally in your app code. See the [Introduction](https://electric-sql.com/docs/intro-local-first) and the [Quickstart guide](https://electric-sql.com/docs/quickstart) to get started.
+ElectricSQL then provides a whole developer experience for you to control what data syncs where and to work with it locally in your app code. See the [Introduction](https://electric-sql.com/docs/intro/local-first) and the [Quickstart guide](https://electric-sql.com/docs/quickstart) to get started.
 
 ## Repo structure
 

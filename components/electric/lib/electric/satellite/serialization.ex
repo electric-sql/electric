@@ -21,21 +21,6 @@ defmodule Electric.Satellite.Serialization do
   @type relation_mapping() ::
           %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
-  @spec supported_pg_types :: [atom]
-  def supported_pg_types do
-    ~w[
-      bool
-      date
-      float8
-      int2 int4
-      text
-      time
-      timestamp timestamptz
-      uuid
-      varchar
-    ]a
-  end
-
   @doc """
   Serialize from internal format to Satellite PB format
   """

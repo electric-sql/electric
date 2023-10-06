@@ -38,8 +38,8 @@
 [invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
-  ??[proto] send: #SatInStartReplicationReq
-  ??[proto] recv: #SatInStartReplicationResp
+  ??[rpc] send: #SatInStartReplicationReq
+  ??[rpc] recv: #SatInStartReplicationResp
 
   # Verifying the initial sync. The client receives migrations corresponding to all electrified tables on the server.
   ??[proto] recv: #SatRelation{for: public.entries

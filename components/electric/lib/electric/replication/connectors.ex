@@ -80,10 +80,18 @@ defmodule Electric.Replication.Connectors do
   def get_replication_opts(config) do
     origin = origin(config)
 
+    database_name =
+      (get_in(config, [:connection, :database]) || "test")
+      |> to_string()
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9_]/, "_")
+      |> String.trim("_")
+      |> String.slice(0..(62 - String.length(Extension.slot_name()) - 1))
+
     config
     |> Keyword.fetch!(:replication)
     |> Map.new()
-    |> Map.put(:slot, Extension.slot_name())
+    |> Map.put(:slot, Extension.slot_name() <> "_#{database_name}")
     |> Map.put(:publication, Extension.publication_name())
     |> Map.put(:subscription, to_string(origin))
   end

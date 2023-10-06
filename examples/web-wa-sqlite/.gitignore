@@ -4,7 +4,7 @@ public/wa-sqlite-async.wasm
 public/wa-sqlite-async.mjs
 src/generated
 
-# We're ignoring the lockfiles here because this example is meant to act like `npx create-electric-app` in that they use latest deps
+# We're ignoring the lockfiles here because this example is meant to act like `npx create-electric-app@latest` in that they use latest deps
 pnpm-lock.yaml
 package-lock.json
 yarn.lock

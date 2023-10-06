@@ -8,11 +8,9 @@
 import Config
 
 default_log_level = "info"
-default_instance_id = "electric"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
-default_offset_storage_path = "./offset_storage_data.dat"
 
 ###
 
@@ -64,15 +62,16 @@ pg_server_port =
   System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
 
 config :electric,
-  # Used only to send server identification upon connection,
-  # can stay default while we're not working on multi-instance setups
-  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", default_instance_id),
+  # Used in telemetry, and to identify the server to the client
+  instance_id: System.get_env("ELECTRIC_INSTANCE_ID", Electric.Utils.uuid4()),
   http_port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer(),
   pg_server_port: pg_server_port
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
   producer: Electric.Replication.Postgres.LogicalReplicationProducer
+
+config :electric, :telemetry_url, "https://checkpoint.electric-sql.com"
 
 # The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
 # a release, and we want a single configuration file in our release.
@@ -114,8 +113,17 @@ if config_env() == :prod do
 
   config :electric, Electric.Replication.Connectors, connectors
 
-  config :electric, Electric.Replication.OffsetStorage,
-    file: System.get_env("OFFSET_STORAGE_FILE", default_offset_storage_path)
+  # This is intentionally an atom and not a boolean - we expect to add `:extended` state
+  telemetry =
+    case System.get_env("ELECTRIC_TELEMETRY") do
+      nil -> :enabled
+      x when x in ~w|0 f false disable disabled n no off| -> :disabled
+      x when x in ~w|1 t true enable enabled y yes on| -> :enabled
+      x -> raise "Invalid value for `ELECTRIC_TELEMETRY`: #{x}"
+    end
+
+  config :electric, :telemetry, telemetry
 else
+  config :electric, :telemetry, :disabled
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)
 end

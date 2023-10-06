@@ -48,7 +48,7 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
     } do
       request = %ShapeRequest{id: "id", included_tables: [{"public", "my_entries"}]}
 
-      assert {:ok,
+      assert {:ok, 1,
               [
                 %NewRecord{
                   relation: {"public", "my_entries"},
@@ -72,12 +72,12 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
     } do
       request = %ShapeRequest{id: "id", included_tables: [{"public", "documents"}]}
 
-      assert {:ok, [%NewRecord{}]} =
+      assert {:ok, 1, [%NewRecord{}]} =
                ShapeRequest.query_initial_data(request, conn, schema, origin, %{
                  user_id: "00000000-0000-0000-0000-000000000000"
                })
 
-      assert {:ok, []} =
+      assert {:ok, 0, []} =
                ShapeRequest.query_initial_data(request, conn, schema, origin, %{
                  user_id: "00000000-0000-0000-0000-000000000001"
                })
@@ -93,7 +93,7 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
     } do
       request = %ShapeRequest{id: "id", included_tables: [{"public", "my_entries"}]}
 
-      assert {:ok, []} =
+      assert {:ok, 0, []} =
                ShapeRequest.query_initial_data(request, conn, schema, origin, %{
                  sent_tables: MapSet.new([{"public", "my_entries"}])
                })

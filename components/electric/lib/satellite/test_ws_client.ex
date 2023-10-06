@@ -1,8 +1,10 @@
 defmodule Satellite.TestWsClient do
+  alias Electric.Satellite.SatRpcRequest
   use Mint.WebSocketClient
   alias Electric.Satellite.Auth
 
   use Electric.Satellite.Protobuf
+  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
 
   # Public API
 
@@ -53,6 +55,18 @@ defmodule Satellite.TestWsClient do
   @spec send_data(GenServer.server(), PB.sq_pb_msg() | [PB.sq_pb_msg()]) :: :ok | {:error, term()}
   def send_data(pid, messages), do: GenServer.call(pid, {:send_data, List.wrap(messages)})
 
+  @doc """
+  Send Satellite RPC call to the server.
+  """
+  def send_rpc(pid, method, message) when is_allowed_rpc_method(method),
+    do: GenServer.call(pid, {:send_rpc, method, message})
+
+  @doc """
+  Make Satellite RPC call to the server receiving the response
+  """
+  def make_rpc_call(pid, method, message) when is_allowed_rpc_method(method),
+    do: GenServer.call(pid, {:make_rpc_call, method, message})
+
   # Implementation
 
   @impl WebSocketClient
@@ -64,7 +78,7 @@ defmodule Satellite.TestWsClient do
     with {:ok, conn, unprocessed} <- maybe_auth(conn, opts),
          {:ok, _conn} <- maybe_subscribe(conn, opts) do
       table = :ets.new(:ws_client_received_messages, [:ordered_set])
-      {:ok, %{opts: opts, count: 0, table: table}, unprocessed}
+      {:ok, %{opts: opts, count: 0, table: table, pending_rpc_calls: %{}}, unprocessed}
     end
   end
 
@@ -77,7 +91,7 @@ defmodule Satellite.TestWsClient do
       {:ok, token} ->
         id = Map.get(opts, :id, "id")
 
-        auth_req = serialize(%SatAuthReq{id: id, token: token})
+        auth_req = serialize(rpc_obj("authenticate", 1, %SatAuthReq{id: id, token: token}))
 
         {:ok, conn} = WebSocketClient.send_frames(conn, [auth_req])
         {:ok, conn, frames} = WebSocketClient.receive_next_frames!(conn)
@@ -85,7 +99,8 @@ defmodule Satellite.TestWsClient do
         decoded =
           Enum.map(frames, fn {:binary, <<type::8, data::binary>>} -> PB.decode!(type, data) end)
 
-        {[%SatAuthResp{}], rest} = Enum.split_with(decoded, &is_struct(&1, SatAuthResp))
+        {[%SatRpcResponse{method: "authenticate", request_id: 1}], rest} =
+          Enum.split_with(decoded, &is_struct(&1, SatRpcResponse))
 
         Logger.debug("Auth passed")
         {:ok, conn, Enum.map(rest, &serialize/1)}
@@ -101,17 +116,19 @@ defmodule Satellite.TestWsClient do
         {:ok, conn}
 
       "" ->
-        sub_req = serialize(%SatInStartReplicationReq{})
+        sub_req = serialize(rpc_obj("startReplication", 1, %SatInStartReplicationReq{}))
         {:ok, conn} = WebSocketClient.send_frames(conn, [sub_req])
         Logger.debug("Subscribed at LSN=0")
         {:ok, conn}
 
       lsn ->
         sub_req =
-          serialize(%SatInStartReplicationReq{
-            lsn: lsn,
-            subscription_ids: Map.get(opts, :subscription_ids, [])
-          })
+          serialize(
+            rpc_obj("startReplication", 1, %SatInStartReplicationReq{
+              lsn: lsn,
+              subscription_ids: Map.get(opts, :subscription_ids, [])
+            })
+          )
 
         {:ok, conn} = WebSocketClient.send_frames(conn, [sub_req])
         Logger.debug("Subscribed at LSN=#{inspect(lsn)}")
@@ -133,7 +150,7 @@ defmodule Satellite.TestWsClient do
         state
         |> tap(&log(&1, msg))
         |> store(msg)
-        |> tap(&send(&1.opts.parent, {self(), msg}))
+        |> fulfill_rpc_or_forward(msg)
         |> maybe_autorespond(msg)
 
       {:error, reason} ->
@@ -178,6 +195,39 @@ defmodule Satellite.TestWsClient do
     end
   end
 
+  def handle_call({:send_rpc, method, message}, _from, {conn, state}) do
+    request_id = Enum.random(1..100)
+    frames = [serialize(rpc_obj(method, request_id, message))]
+
+    case WebSocketClient.send_frames(conn, frames) do
+      {:ok, conn} ->
+        {:reply, {:ok, request_id}, {conn, state}}
+
+      {:error, %Mint.TransportError{reason: :closed}} = error ->
+        {:stop, :normal, error, {conn, state}}
+
+      error ->
+        {:reply, error, {conn, state}}
+    end
+  end
+
+  def handle_call({:make_rpc_call, method, message}, from, {conn, state}) do
+    request_id = Enum.random(1..100)
+
+    frames = [serialize(rpc_obj(method, request_id, message))]
+
+    case WebSocketClient.send_frames(conn, frames) do
+      {:ok, conn} ->
+        {:noreply, {conn, put_in(state, [:pending_rpc_calls, {method, request_id}], from)}}
+
+      {:error, %Mint.TransportError{reason: :closed}} = error ->
+        {:stop, :normal, error, {conn, state}}
+
+      error ->
+        {:reply, error, {conn, state}}
+    end
+  end
+
   defp store(%{count: count} = state, msg) do
     :ets.insert(state.table, {count, msg})
     %{state | count: count + 1}
@@ -185,11 +235,46 @@ defmodule Satellite.TestWsClient do
 
   defp log(state, msg), do: Logger.info("rec [#{state.count}]: #{inspect(msg)}")
 
-  defp maybe_autorespond(%{opts: %{auto_in_sub: true}} = state, %SatInStartReplicationReq{}) do
-    {:reply, serialize(%SatInStartReplicationResp{}), state}
+  defp maybe_autorespond(
+         %{opts: %{auto_in_sub: true}} = state,
+         %SatRpcRequest{method: "startReplication"} = req
+       ) do
+    {:reply,
+     serialize(%SatRpcResponse{
+       method: req.method,
+       request_id: req.request_id,
+       result:
+         {:message,
+          IO.iodata_to_binary(SatInStartReplicationResp.encode!(%SatInStartReplicationResp{}))}
+     }), state}
   end
 
   defp maybe_autorespond(state, _), do: {:noreply, state}
+
+  defp fulfill_rpc_or_forward(state, %SatRpcResponse{
+         method: method,
+         request_id: id,
+         result: result
+       })
+       when is_map_key(state.pending_rpc_calls, {method, id}) do
+    {from, pending} = Map.pop!(state.pending_rpc_calls, {method, id})
+
+    response =
+      case result do
+        {:message, binary} -> PB.decode_rpc_response(method, binary)
+        {:error, reason} -> {:error, reason}
+      end
+
+    Logger.info("[rpc:recv] #{inspect(response)}")
+
+    GenServer.reply(from, response)
+    %{state | pending_rpc_calls: pending}
+  end
+
+  defp fulfill_rpc_or_forward(state, msg) do
+    send(state.opts.parent, {self(), msg})
+    state
+  end
 
   defp auth_token!(nil), do: :no_auth
   defp auth_token!(%{token: token}), do: {:ok, token}
@@ -210,5 +295,13 @@ defmodule Satellite.TestWsClient do
   def serialize(data) do
     {:ok, type, iodata} = PB.encode(data)
     {:binary, IO.iodata_to_binary([<<type::8>>, iodata])}
+  end
+
+  defp rpc_obj(method, request_id, %struct{} = body) do
+    %SatRpcRequest{
+      method: method,
+      request_id: request_id,
+      message: IO.iodata_to_binary(struct.encode!(body))
+    }
   end
 end

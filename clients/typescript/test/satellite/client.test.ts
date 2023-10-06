@@ -1,5 +1,6 @@
 import anyTest, { TestFn } from 'ava'
 import Long from 'long'
+import * as Proto from '../../src/_generated/protocol/satellite'
 import { AuthState } from '../../src/auth'
 import { MockNotifier } from '../../src/notifiers'
 import {
@@ -8,23 +9,18 @@ import {
   serializeRow,
 } from '../../src/satellite/client'
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
+import { ShapeRequest } from '../../src/satellite/shapes/types'
 import { WebSocketNode } from '../../src/sockets/node'
+import { sleepAsync } from '../../src/util'
 import { base64, bytesToNumber } from '../../src/util/common'
 import {
-  getObjFromString,
-  getTypeFromCode,
-  getTypeFromString,
-  SatPbMsg,
-} from '../../src/util/proto'
-import {
+  DataTransaction,
   Relation,
   SatelliteErrorCode,
-  DataTransaction,
+  Transaction,
 } from '../../src/util/types'
-import * as Proto from '../../src/_generated/protocol/satellite'
 import { relations } from './common'
-import { SatelliteWSServerStub } from './server_ws_stub'
-import { ShapeRequest } from '../../src/satellite/shapes/types'
+import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
 
 interface Context extends AuthState {
   server: SatelliteWSServerStub
@@ -35,7 +31,7 @@ interface Context extends AuthState {
 const test = anyTest as TestFn<Context>
 
 test.beforeEach((t) => {
-  const server = new SatelliteWSServerStub()
+  const server = new SatelliteWSServerStub(t)
   server.start()
 
   const dbName = 'dbName'
@@ -80,18 +76,17 @@ test.serial('connect success', async (t) => {
 async function connectAndAuth(context: Context) {
   await context.client.connect()
 
-  const authResp = Proto.SatAuthResp.fromPartial({})
-  context.server.nextResponses([authResp])
+  const authResp = Proto.SatAuthResp.create()
+  context.server.nextRpcResponse('authenticate', [authResp])
   await context.client.authenticate(context)
 }
 
 test.serial('replication start timeout', async (t) => {
-  const { client, server } = t.context
+  const { client } = t.context
   client['opts'].timeout = 10
+  client['rpcClient']['defaultTimeout'] = 10
   await client.connect()
 
-  // empty response will trigger client timeout
-  server.nextResponses([])
   try {
     await client.startReplication()
     t.fail(`start replication should throw`)
@@ -110,7 +105,7 @@ test.serial('connect subscription error', async (t) => {
   })
   await client.connect()
 
-  server.nextResponses([startResp])
+  server.nextRpcResponse('startReplication', [startResp])
 
   try {
     const resp = await client.startReplication()
@@ -125,7 +120,7 @@ test.serial('authentication success', async (t) => {
   await client.connect()
 
   const authResp = Proto.SatAuthResp.fromPartial({ id: 'server_identity' })
-  server.nextResponses([authResp])
+  server.nextRpcResponse('authenticate', [authResp])
 
   const res = await client.authenticate(t.context)
   t.assert(res)
@@ -137,8 +132,8 @@ test.serial('replication start success', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
+  const startResp = Proto.SatInStartReplicationResp.create()
+  server.nextRpcResponse('startReplication', [startResp])
 
   await client.startReplication()
   t.pass()
@@ -148,20 +143,15 @@ test.serial('replication start sends empty', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
+  t.plan(1)
+
   return new Promise(async (resolve) => {
-    server.nextResponses([
-      (data?: Buffer) => {
-        const msgType = data!.readUInt8()
-        if (
-          msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
-        ) {
-          const req = decode(data!) as Proto.SatInStartReplicationReq
-          t.deepEqual(req.lsn, new Uint8Array())
-          t.pass()
-          resolve()
-        }
-      },
-    ])
+    server.nextRpcResponse('startReplication', (data) => {
+      const req = Proto.SatInStartReplicationReq.decode(data)
+      t.deepEqual(req.lsn, new Uint8Array())
+      resolve()
+      return [Proto.SatInStartReplicationResp.create()]
+    })
     await client.startReplication()
   })
 })
@@ -170,20 +160,15 @@ test.serial('replication start sends schemaVersion', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
+  t.plan(1)
+
   return new Promise(async (resolve) => {
-    server.nextResponses([
-      (data?: Buffer) => {
-        const msgType = data!.readUInt8()
-        t.assert(
-          msgType == getTypeFromString(Proto.SatInStartReplicationReq.$type)
-        )
-
-        const req = decode(data!) as Proto.SatInStartReplicationReq
-        t.assert(req.schemaVersion === '20230711')
-
-        resolve()
-      },
-    ])
+    server.nextRpcResponse('startReplication', (data) => {
+      const req = Proto.SatInStartReplicationReq.decode(data)
+      t.assert(req.schemaVersion === '20230711')
+      resolve()
+      return [Proto.SatInStartReplicationResp.create()]
+    })
     await client.startReplication(new Uint8Array(), '20230711')
   })
 })
@@ -192,8 +177,8 @@ test.serial('replication start failure', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
+  const startResp = Proto.SatInStartReplicationResp.create()
+  server.nextRpcResponse('startReplication', [startResp])
 
   try {
     await client.startReplication()
@@ -207,10 +192,10 @@ test.serial('replication stop success', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
-  server.nextResponses([start])
-  server.nextResponses([stop])
+  const start = Proto.SatInStartReplicationResp.create()
+  const stop = Proto.SatInStopReplicationResp.create()
+  server.nextRpcResponse('startReplication', [start])
+  server.nextRpcResponse('stopReplication', [stop])
 
   await client.startReplication()
   await client.stopReplication()
@@ -221,9 +206,8 @@ test.serial('replication stop failure', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
-  server.nextResponses([stop])
-
+  const stop = Proto.SatInStopReplicationResp.create()
+  server.nextRpcResponse('stopReplication', [stop])
   try {
     await client.stopReplication()
     t.fail(`stop replication should throw`)
@@ -236,9 +220,9 @@ test.serial('receive transaction over multiple messages', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.create()
   const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
-  const commit = Proto.SatOpCommit.fromPartial({})
+  const commit = Proto.SatOpCommit.create()
 
   const rel: Relation = {
     id: 1,
@@ -300,14 +284,108 @@ test.serial('receive transaction over multiple messages', async (t) => {
     ],
   })
 
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.create()
 
-  server.nextResponses([start, relation, firstOpLogMessage, secondOpLogMessage])
-  server.nextResponses([stop])
+  server.nextRpcResponse('startReplication', [
+    start,
+    relation,
+    firstOpLogMessage,
+    secondOpLogMessage,
+  ])
+  server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (transaction: DataTransaction) => {
       t.is(transaction.changes.length, 3)
+      res()
+    })
+
+    await client.startReplication()
+  })
+})
+
+test.serial('migration transaction contains all information', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const newTableRelation = {
+    relationId: 2001, // doesn't matter
+    schemaName: 'public',
+    tableName: 'NewTable',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      {
+        name: 'id',
+        type: 'TEXT',
+        isNullable: false,
+        primaryKey: true,
+      },
+    ],
+  }
+
+  const start = Proto.SatInStartReplicationResp.create()
+  const relation = Proto.SatRelation.create(newTableRelation)
+  const begin = Proto.SatOpBegin.fromPartial({
+    commitTimestamp: Long.ZERO,
+    isMigration: true,
+  })
+  const migrationVersion = '123_456'
+  const migrate = Proto.SatOpMigrate.create({
+    version: migrationVersion,
+    stmts: [
+      Proto.SatOpMigrate_Stmt.create({
+        type: Proto.SatOpMigrate_Type.CREATE_TABLE,
+        sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+      }),
+    ],
+    table: Proto.SatOpMigrate_Table.create({
+      name: 'foo',
+      columns: [
+        Proto.SatOpMigrate_Column.create({
+          name: 'value',
+          sqliteType: 'TEXT',
+          pgType: Proto.SatOpMigrate_PgColumnType.create({
+            name: 'VARCHAR',
+            array: [],
+            size: [],
+          }),
+        }),
+      ],
+      fks: [],
+      pks: ['value'],
+    }),
+  })
+  const commit = Proto.SatOpCommit.create()
+
+  const opLogMsg = Proto.SatOpLog.create({
+    ops: [
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ migrate }),
+      Proto.SatTransOp.fromPartial({ commit }),
+    ],
+  })
+
+  const stop = Proto.SatInStopReplicationResp.create()
+
+  server.nextRpcResponse('startReplication', [start, relation, opLogMsg])
+  server.nextRpcResponse('stopReplication', [stop])
+
+  await new Promise<void>(async (res) => {
+    client.on('transaction', (transaction: Transaction) => {
+      t.is(transaction.migrationVersion, migrationVersion)
+      t.deepEqual(transaction, {
+        commit_timestamp: commit.commitTimestamp,
+        lsn: begin.lsn,
+        changes: [
+          {
+            migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
+            table: migrate.table,
+            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+          },
+        ],
+        origin: begin.origin,
+        migrationVersion: migrationVersion,
+      })
       res()
     })
 
@@ -321,12 +399,12 @@ test.serial('acknowledge lsn', async (t) => {
 
   const lsn = base64.toBytes('FAKE')
 
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.create()
   const begin = Proto.SatOpBegin.fromPartial({
     lsn: lsn,
     commitTimestamp: Long.ZERO,
   })
-  const commit = Proto.SatOpCommit.fromPartial({})
+  const commit = Proto.SatOpCommit.create()
 
   const opLog = Proto.SatOpLog.fromPartial({
     ops: [
@@ -335,10 +413,10 @@ test.serial('acknowledge lsn', async (t) => {
     ],
   })
 
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
+  const stop = Proto.SatInStopReplicationResp.create()
 
-  server.nextResponses([start, opLog])
-  server.nextResponses([stop])
+  server.nextRpcResponse('startReplication', [start, opLog])
+  server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (_t: DataTransaction, ack: any) => {
@@ -358,7 +436,7 @@ test.serial('send transaction', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
+  const startResp = Proto.SatInStartReplicationResp.create()
 
   const opLogEntries: OplogEntry[] = [
     {
@@ -410,72 +488,49 @@ test.serial('send transaction', async (t) => {
   const transaction = toTransactions(opLogEntries, relations)
   // console.log(transaction)
 
-  t.plan(10) // We expect exactly 1 + 3 messages to be sent by the client, with 3 checks per non-relation message
+  t.plan(7) // We expect exactly 1 + 3 messages to be sent by the client, with 2 checks per non-relation message
 
   return new Promise(async (res, rej) => {
-    server.nextResponses([startResp])
-    server.nextResponses([])
+    server.nextRpcResponse('startReplication', [startResp])
+    server.nextMsgExpect('SatRpcResponse', [])
 
     let expectedCount = 4
 
     // first message is a relation
-    server.nextResponses([
-      (data?: Buffer) => {
-        expectedCount -= 1
-        const msgType = data!.readUInt8()
-        if (msgType == getTypeFromString(Proto.SatRelation.$type)) {
-          const relation = decode(data!) as Proto.SatRelation
-          t.deepEqual(relation.relationId, 1)
-        }
-      },
-    ])
+    server.nextMsgExpect('SatRelation', (data) => {
+      expectedCount -= 1
+      t.deepEqual(data.relationId, 1)
+    })
 
     // second message is a transaction
-    server.nextResponses([
-      (data?: Buffer) => {
-        expectedCount -= 1
-        const msgType = data!.readUInt8()
-        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
+    server.nextMsgExpect('SatOpLog', (data) => {
+      expectedCount -= 1
+      const satOpLog = data.ops
+      const lsn = satOpLog[0].begin!.lsn
 
-        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
-        const lsn = satOpLog[0].begin?.lsn as Uint8Array
-
-        t.is(bytesToNumber(lsn), 1)
-        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(1000))
-      },
-    ])
+      t.is(bytesToNumber(lsn), 1)
+      t.deepEqual(satOpLog[0].begin!.commitTimestamp, Long.UZERO.add(1000))
+    })
 
     // third message after new enqueue does not send relation
-    server.nextResponses([
-      (data?: Buffer) => {
-        expectedCount -= 1
-        const msgType = data!.readUInt8()
-        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
+    server.nextMsgExpect('SatOpLog', (data) => {
+      const satOpLog = data.ops
+      const lsn = satOpLog[0].begin!.lsn
 
-        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
-        const lsn = satOpLog[0].begin?.lsn as Uint8Array
-
-        t.is(bytesToNumber(lsn), 2)
-        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(2000))
-      },
-    ])
+      t.is(bytesToNumber(lsn), 2)
+      t.deepEqual(satOpLog[0].begin!.commitTimestamp, Long.UZERO.add(2000))
+    })
 
     // fourth message is also an insert
-    server.nextResponses([
-      (data?: Buffer) => {
-        expectedCount -= 1
-        const msgType = data!.readUInt8()
-        t.is(getTypeFromString(Proto.SatOpLog.$type), msgType)
+    server.nextMsgExpect('SatOpLog', (data) => {
+      const satOpLog = data.ops
+      const lsn = satOpLog[0].begin!.lsn
 
-        const satOpLog = (decode(data!) as Proto.SatOpLog).ops
-        const lsn = satOpLog[0].begin?.lsn as Uint8Array
+      t.is(bytesToNumber(lsn), 3)
+      t.deepEqual(satOpLog[0].begin!.commitTimestamp, Long.UZERO.add(3000))
 
-        t.is(bytesToNumber(lsn), 3)
-        t.deepEqual(satOpLog[0].begin?.commitTimestamp, Long.UZERO.add(3000))
-
-        res()
-      },
-    ])
+      res()
+    })
 
     setTimeout(() => {
       rej()
@@ -499,10 +554,10 @@ test.serial('default and null test', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
-  const start = Proto.SatInStartReplicationResp.fromPartial({})
+  const start = Proto.SatInStartReplicationResp.create()
   const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
-  const commit = Proto.SatOpCommit.fromPartial({})
-  const stop = Proto.SatInStopReplicationResp.fromPartial({})
+  const commit = Proto.SatOpCommit.create()
+  const stop = Proto.SatInStopReplicationResp.create()
 
   const rel: Relation = {
     id: 1,
@@ -587,8 +642,14 @@ test.serial('default and null test', async (t) => {
     ],
   })
 
-  server.nextResponses([start, relation, firstOpLogMessage])
-  server.nextResponses([stop])
+  server.nextRpcResponse('startReplication', [
+    start,
+    relation,
+    firstOpLogMessage,
+  ])
+  server.nextRpcResponse('stopReplication', [stop])
+
+  t.plan(3)
 
   await new Promise<void>(async (res) => {
     client.on('transaction', (transaction: any) => {
@@ -611,10 +672,7 @@ test.serial('default and null test', async (t) => {
 test.serial('subscription succesful', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
+  await startReplication(client, server)
 
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
@@ -625,7 +683,7 @@ test.serial('subscription succesful', async (t) => {
 
   const subscriptionId = 'THE_ID'
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
-  server.nextResponses([subsResp])
+  server.nextRpcResponse('subscribe', [subsResp])
 
   const res = await client.subscribe(subscriptionId, [shapeReq])
   t.is(res.subscriptionId, subscriptionId)
@@ -636,10 +694,7 @@ test.serial(
   async (t) => {
     await connectAndAuth(t.context)
     const { client, server } = t.context
-
-    const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-    server.nextResponses([startResp])
-    await client.startReplication()
+    await startReplication(client, server)
 
     const shapeReq1: ShapeRequest = {
       requestId: 'fake1',
@@ -663,11 +718,22 @@ test.serial(
     const subsResp2 = Proto.SatSubsResp.fromPartial({
       subscriptionId: subscriptionId2,
     })
-    server.nextResponses([subsResp1, subsResp2])
+    // Result of the first call is delayed
+    server.nextRpcResponse('subscribe', async (_req) => {
+      await sleepAsync(50)
+      return [subsResp1]
+    })
+    server.nextRpcResponse('subscribe', [subsResp2])
 
     const p1 = client.subscribe(subscriptionId1, [shapeReq1])
     const p2 = client.subscribe(subscriptionId2, [shapeReq2])
-    const [resp1, resp2] = await Promise.all([p1, p2])
+    const [resp1, resp2] = await Promise.race([
+      Promise.all([p1, p2]),
+      sleepAsync(300).then(() => {
+        t.fail('Timed out while waiting for subsciptions to fulfill')
+        throw new Error('Timed out while waiting for subsciptions to fulfill')
+      }),
+    ])
 
     t.is(resp1.subscriptionId, subscriptionId1)
     t.is(resp2.subscriptionId, subscriptionId2)
@@ -677,10 +743,7 @@ test.serial(
 test.serial('listen to subscription events: error', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
+  await startReplication(client, server)
 
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
@@ -700,7 +763,7 @@ test.serial('listen to subscription events: error', async (t) => {
     message: 'FAKE ERROR',
     subscriptionId,
   })
-  server.nextResponses([subsResp, subsData, subsError])
+  server.nextRpcResponse('subscribe', [subsResp, '50ms', subsData, subsError])
 
   const success = () => t.fail()
   const error = () => t.pass()
@@ -713,10 +776,7 @@ test.serial('listen to subscription events: error', async (t) => {
 test.serial('subscription incorrect protocol sequence', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
+  await startReplication(client, server)
 
   const requestId = 'THE_REQUEST_ID'
   const subscriptionId = 'THE_SUBS_ID'
@@ -742,16 +802,16 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     requestId,
     uuid: shapeUuid,
   })
-  const endShape = Proto.SatShapeDataEnd.fromPartial({})
-  const endSub = Proto.SatSubsDataEnd.fromPartial({})
-  const satOpLog = Proto.SatOpLog.fromPartial({})
+  const endShape = Proto.SatShapeDataEnd.create()
+  const endSub = Proto.SatSubsDataEnd.create()
+  const satOpLog = Proto.SatOpLog.create()
 
   const begin = Proto.SatOpBegin.fromPartial({
     commitTimestamp: Long.ZERO,
   })
-  const commit = Proto.SatOpCommit.fromPartial({})
+  const commit = Proto.SatOpCommit.create()
 
-  const insert = Proto.SatOpInsert.fromPartial({})
+  const insert = Proto.SatOpInsert.create()
 
   const satTransOpBegin = Proto.SatTransOp.fromPartial({ begin })
   const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert })
@@ -777,26 +837,34 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
     ops: [satTransOpInsert, satTransOpInsert],
   })
 
-  const testCases = [
-    [subsResp, beginShape],
-    [subsResp, endShape],
-    [subsResp, endSub],
-    [subsResp, beginSub, endShape],
-    [subsResp, beginSub, beginShape, endSub],
-    [subsResp, beginSub, endShape],
-    [subsResp, beginSub, satOpLog],
-    [subsResp, beginSub, beginShape, endShape, satOpLog],
-    [subsResp, beginSub, beginShape, satOpLog, endSub],
-    [subsResp, beginSub, beginShape, wrongSatOpLog1],
-    [subsResp, beginSub, beginShape, wrongSatOpLog2],
-    [subsResp, beginSub, beginShape, wrongSatOpLog3],
-    [subsResp, beginSub, beginShape, wrongSatOpLog4],
-    [subsResp, beginSub, beginShape, validSatOpLog, endShape, validSatOpLog],
-    [subsRespWithErr, beginSub],
+  const testCases: RpcResponse<'subscribe'>[] = [
+    [subsResp, '10ms', beginShape],
+    [subsResp, '10ms', endShape],
+    [subsResp, '10ms', endSub],
+    [subsResp, '10ms', beginSub, endShape],
+    [subsResp, '10ms', beginSub, beginShape, endSub],
+    [subsResp, '10ms', beginSub, endShape],
+    [subsResp, '10ms', beginSub, satOpLog],
+    [subsResp, '10ms', beginSub, beginShape, endShape, satOpLog],
+    [subsResp, '10ms', beginSub, beginShape, satOpLog, endSub],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog1],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog2],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog3],
+    [subsResp, '10ms', beginSub, beginShape, wrongSatOpLog4],
+    [
+      subsResp,
+      '10ms',
+      beginSub,
+      beginShape,
+      validSatOpLog,
+      endShape,
+      validSatOpLog,
+    ],
+    [subsRespWithErr, '10ms', beginSub],
   ]
   t.plan(testCases.length) // Expect exactly this amount of assertions
   for (const next of testCases) {
-    server.nextResponses(next)
+    server.nextRpcResponse('subscribe', next)
     const promise = new Promise<void>((res, rej) => {
       const success = () => {
         t.fail('expected the client to fail on an invalid message sequence')
@@ -817,10 +885,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
 test.serial('subscription correct protocol sequence with data', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
+  await startReplication(client, server)
 
   const rel: Relation = {
     id: 0,
@@ -867,8 +932,8 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
     requestId: requestId2,
     uuid: uuid2,
   })
-  const endShape = Proto.SatShapeDataEnd.fromPartial({})
-  const endSub = Proto.SatSubsDataEnd.fromPartial({})
+  const endShape = Proto.SatShapeDataEnd.create()
+  const endSub = Proto.SatSubsDataEnd.create()
 
   const promise = new Promise<void>((res, rej) => {
     const success = () => {
@@ -893,8 +958,9 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
     ops: [satTransOpInsert],
   })
 
-  server.nextResponses([
+  server.nextRpcResponse('subscribe', [
     subsResp,
+    '10ms',
     beginSub,
     beginShape1,
     satOpLog1,
@@ -909,25 +975,24 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   await promise
 })
 
-function decode(data: Buffer): SatPbMsg {
-  const code = data.readUInt8()
-  const type = getTypeFromCode(code)
-  const obj = getObjFromString(type)
-  return obj!.decode(data.subarray(1))
-}
-
 test.serial('unsubscribe successfull', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
-
-  const startResp = Proto.SatInStartReplicationResp.fromPartial({})
-  server.nextResponses([startResp])
-  await client.startReplication()
+  await startReplication(client, server)
 
   const subscriptionId = 'THE_ID'
 
-  const unsubResp = Proto.SatUnsubsResp.fromPartial({})
-  server.nextResponses([unsubResp])
+  const unsubResp = Proto.SatUnsubsResp.create()
+  server.nextRpcResponse('unsubscribe', [unsubResp])
   const resp = await client.unsubscribe([subscriptionId])
   t.deepEqual(resp, {})
 })
+
+async function startReplication(
+  client: Context['client'],
+  server: Context['server']
+) {
+  const startResp = Proto.SatInStartReplicationResp.create()
+  server.nextRpcResponse('startReplication', [startResp])
+  await client.startReplication()
+}

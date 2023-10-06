@@ -28,17 +28,18 @@ defmodule Electric.Satellite.WebsocketServer do
   require Logger
   use Pathex, default_mod: :map
 
+  alias Electric.Telemetry.Metrics
   use Electric.Satellite.Protobuf
   import Electric.Satellite.Protocol, only: :macros
 
   alias Electric.Utils
   alias Electric.Postgres.CachedWal
-  alias Electric.Replication.OffsetStorage
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.State
   alias Electric.Satellite.Protocol.OutRep
   alias Electric.Satellite.Protocol.InRep
+  alias Electric.Satellite.Protocol.Telemetry
 
   # in milliseconds
   @ping_interval 5_000
@@ -54,8 +55,25 @@ defmodule Electric.Satellite.WebsocketServer do
        last_msg_time: :erlang.timestamp(),
        auth_provider: Keyword.fetch!(opts, :auth_provider),
        pg_connector_opts: Keyword.fetch!(opts, :pg_connector_opts),
-       subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun)
+       subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
+       telemetry: %Telemetry{
+         connection_span:
+           Metrics.start_span([:satellite, :connection], %{}, %{
+             client_version: Keyword.fetch!(opts, :client_version)
+           })
+       }
      })}
+  end
+
+  @impl WebSock
+  def terminate(reason, %State{} = state) do
+    unless is_nil(state.telemetry.replication_span) do
+      Metrics.stop_span(state.telemetry.replication_span)
+    end
+
+    Metrics.stop_span(state.telemetry.connection_span, %{}, %{
+      initiator: if(reason == :remote, do: :client, else: :server)
+    })
   end
 
   @impl WebSock
@@ -166,7 +184,8 @@ defmodule Electric.Satellite.WebsocketServer do
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
     state =
-      Protocol.subscribe_client_to_replication_stream(lsn, state)
+      state
+      |> Protocol.subscribe_client_to_replication_stream(lsn)
       |> Map.update!(:out_rep, &%{&1 | last_migration_xid_at_initial_sync: max_txid})
 
     push({msgs, state})
@@ -187,6 +206,11 @@ defmodule Electric.Satellite.WebsocketServer do
       "Received initial data for subscription #{subscription_id} while paused waiting for it"
     )
 
+    state = %{
+      state
+      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
+    }
+
     push(send_subscription_data_and_unpause(subscription_id, data, state))
   end
 
@@ -196,12 +220,22 @@ defmodule Electric.Satellite.WebsocketServer do
       "Received initial data for subscription #{subscription_id} while paused waiting for a different subscription"
     )
 
+    state = %{
+      state
+      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
+    }
+
     {:ok,
      %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
   end
 
   def handle_info({:subscription_data, subscription_id, data}, %State{} = state) do
     Logger.debug("Saving the initial data until we reach insertion point")
+
+    state = %{
+      state
+      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
+    }
 
     # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
     {:ok,
@@ -306,13 +340,13 @@ defmodule Electric.Satellite.WebsocketServer do
       _pid -> Process.monitor(pid)
     end
 
-    lsn = OffsetStorage.get_satellite_lsn(state.client_id) || <<>>
+    lsn = fetch_last_acked_client_lsn(state) || ""
 
-    msgs =
+    {msgs, state} =
       case in_rep.status do
-        :requested -> []
-        :active -> [%SatInStopReplicationReq{}, %SatInStartReplicationReq{lsn: lsn}]
-        st when st in [nil, :paused] -> [%SatInStartReplicationReq{lsn: lsn}]
+        :requested -> {[], state}
+        :active -> Protocol.restart_replication_from_client(lsn, state)
+        st when st in [nil, :paused] -> Protocol.start_replication_from_client(lsn, state)
       end
 
     in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
@@ -325,11 +359,10 @@ defmodule Electric.Satellite.WebsocketServer do
          %State{in_rep: %InRep{pid: pid, stage_sub: sub_tag} = in_rep} = state
        ) do
     # status == :nil is not possible, as it is set to pause once we have consumer
-    maybe_stop =
+    {maybe_stop, state} =
       case in_rep.status do
-        :active -> [%SatInStopReplicationReq{}]
-        :paused -> []
-        :requested -> [%SatInStopReplicationReq{}]
+        :paused -> {[], state}
+        s when s in [:active, :requested] -> Protocol.stop_replication_from_client(state)
       end
 
     in_rep = %InRep{state.in_rep | queue: :queue.new(), pid: nil, stage_sub: nil, status: :paused}
@@ -426,7 +459,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
   @spec send_subscription_data_and_unpause(deep_msg_list(), String.t(), any(), State.t()) ::
           pushable()
-  defp send_subscription_data_and_unpause(msgs \\ [], id, data, state) do
+  defp send_subscription_data_and_unpause(msgs \\ [], id, data, %State{} = state) do
     state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
 
     {more_msgs, state} = Protocol.handle_subscription_data(id, data, state)
@@ -460,7 +493,17 @@ defmodule Electric.Satellite.WebsocketServer do
         end
       end
     end
+
+    defp fetch_last_acked_client_lsn(_state), do: nil
   else
     defp maybe_pause(_), do: :ok
+
+    def fetch_last_acked_client_lsn(state) do
+      state.pg_connector_opts
+      |> Electric.Replication.Connectors.get_connection_opts(replication: false)
+      |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
+        Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)
+      end)
+    end
   end
 end

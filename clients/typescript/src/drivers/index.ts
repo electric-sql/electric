@@ -12,6 +12,8 @@ import { Database as SQLXDatabase } from './sqlx/database'
 
 import { Database as PostgresDatabase } from './postgres/database'
 
+import { Database as CapacitorSQLiteDatabase } from './capacitor-sqlite/database'
+
 export type AnyDatabase =
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
@@ -20,3 +22,4 @@ export type AnyDatabase =
   | WASQLiteDatabase
   | SQLXDatabase
   | PostgresDatabase
+  | CapacitorSQLiteDatabase

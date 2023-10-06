@@ -15,7 +15,7 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'name3', type: 'TEXT', isNullable: true },
       { name: 'int1', type: 'INTEGER', isNullable: true },
       { name: 'int2', type: 'INTEGER', isNullable: true },
-      { name: 'float1', type: 'FLOAT4', isNullable: true },
+      { name: 'float1', type: 'REAL', isNullable: true },
       { name: 'float2', type: 'FLOAT4', isNullable: true },
       { name: 'bool1', type: 'BOOL', isNullable: true },
       { name: 'bool2', type: 'BOOL', isNullable: true },
@@ -29,15 +29,20 @@ test('serialize/deserialize row data', async (t) => {
     name3: null,
     int1: 1,
     int2: -30,
-    float1: 1.1,
+    float1: 1.0,
     float2: -30.3,
     bool1: 1,
     bool2: 0,
     bool3: null,
   }
-  const s_row = serializeRow(record, rel)
-  const d_row = deserializeRow(s_row, rel)
 
+  const s_row = serializeRow(record, rel)
+  t.deepEqual(
+    s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
+    ['Hello', 'World!', '', '1', '-30', '1.0', '-30.3', 't', 'f', '']
+  )
+
+  const d_row = deserializeRow(s_row, rel)
   t.deepEqual(record, d_row)
 })
 

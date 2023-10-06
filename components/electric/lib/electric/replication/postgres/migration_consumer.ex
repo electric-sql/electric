@@ -4,6 +4,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   """
   use GenStage
 
+  alias Electric.Telemetry.Metrics
   alias Electric.Replication.Connectors
 
   alias Electric.Replication.Changes.{
@@ -197,6 +198,14 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp save_schema(state, version, schema, stmts) do
     Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
     {:ok, loader} = SchemaLoader.save(state.loader, version, schema, stmts)
+
+    {:ok, table_count} = SchemaLoader.count_electrified_tables(loader)
+
+    Metrics.non_span_event(
+      [:postgres, :migration],
+      %{electrified_tables: table_count},
+      %{migration_version: version}
+    )
 
     refresh_subscription(%{state | loader: loader})
   end

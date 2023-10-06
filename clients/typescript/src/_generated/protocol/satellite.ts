@@ -7,29 +7,42 @@ export const protobufPackage = "Electric.Satellite";
 
 /**
  * This file defines protobuf protocol for Satellite <> Electric replication
- * Messages are sent over the wire in the following format:
- *
- * Size:32, MsgType:8, Msg/binary
  *
  * In this document there is a notation of the Client/Server and
  * Producer/Consumer which are used to annotate messages.
  *
- * Server is expected to be one of the Electric instances, while Client is a
- * client application that talks to Electric via Satellite library, or any other
- * entity that implements this protocol.
+ * This protocol uses a custom RPC implementation that allows bidirectional RPC calls (usually the client
+ * calls the server, but the server makes some RPC calls to the client too) and non-RPC messages.
  *
- * Producer and Consumer are the corresponding roles Client and Server play in
- * replication process. Consumer requests replication from the Producer, and
- * periodically answer Ping requests form the Producer to acknowledge
- * successful replication. Consumer may also send such Ping requests, if the
- * bidirectional replication is enabled. If one of the parties is not involved
- * in the replication lsn field may be left empty.
+ * Any RPC call should be done as an `SatRpcRequest` message, with `message` field being a method-appropriate
+ * encoded message from this protocol. The answering side should then respond with `SatRpcResponse` with the same
+ * method and request id. If RPC call fully failed, the `error` field will be filled. Otherwise, the message field
+ * will be field, which may or may not have its own internal error fields.
+ *
+ * Any message not wrapped in rpc request or response should not warrant a direct response from the other side.
  */
 
 export enum SatAuthHeader {
   /** UNSPECIFIED - Required by the Protobuf spec. */
   UNSPECIFIED = 0,
   UNRECOGNIZED = -1,
+}
+
+/** RPC request transport message, must be used to implement service RPC calls in the protocol */
+export interface SatRpcRequest {
+  $type: "Electric.Satellite.SatRpcRequest";
+  method: string;
+  requestId: number;
+  message: Uint8Array;
+}
+
+/** RPC response transport message, must be used to implement service RPC calls in the protocol */
+export interface SatRpcResponse {
+  $type: "Electric.Satellite.SatRpcResponse";
+  method: string;
+  requestId: number;
+  message?: Uint8Array | undefined;
+  error?: SatErrorResp | undefined;
 }
 
 export interface SatAuthHeaderPair {
@@ -284,20 +297,6 @@ export interface SatOpDelete {
     | undefined;
   /** dependency information */
   tags: string[];
-}
-
-/**
- * Message is sent when server is migrated while client is still connected It's
- * up to the client to immediately perform a migration or stop replication
- * stream if it's ongoing.
- */
-export interface SatMigrationNotification {
-  $type: "Electric.Satellite.SatMigrationNotification";
-  /** all fields are required */
-  oldSchemaVersion: string;
-  oldSchemaHash: string;
-  newSchemaVersion: string;
-  newSchemaHash: string;
 }
 
 /** Message that corresponds to the single row. */
@@ -568,6 +567,163 @@ export interface SatShapeDataBegin {
 export interface SatShapeDataEnd {
   $type: "Electric.Satellite.SatShapeDataEnd";
 }
+
+function createBaseSatRpcRequest(): SatRpcRequest {
+  return { $type: "Electric.Satellite.SatRpcRequest", method: "", requestId: 0, message: new Uint8Array() };
+}
+
+export const SatRpcRequest = {
+  $type: "Electric.Satellite.SatRpcRequest" as const,
+
+  encode(message: SatRpcRequest, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.method !== "") {
+      writer.uint32(10).string(message.method);
+    }
+    if (message.requestId !== 0) {
+      writer.uint32(16).uint32(message.requestId);
+    }
+    if (message.message.length !== 0) {
+      writer.uint32(26).bytes(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatRpcRequest {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatRpcRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.method = reader.string();
+          continue;
+        case 2:
+          if (tag !== 16) {
+            break;
+          }
+
+          message.requestId = reader.uint32();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.message = reader.bytes();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatRpcRequest>, I>>(base?: I): SatRpcRequest {
+    return SatRpcRequest.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatRpcRequest>, I>>(object: I): SatRpcRequest {
+    const message = createBaseSatRpcRequest();
+    message.method = object.method ?? "";
+    message.requestId = object.requestId ?? 0;
+    message.message = object.message ?? new Uint8Array();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatRpcRequest.$type, SatRpcRequest);
+
+function createBaseSatRpcResponse(): SatRpcResponse {
+  return { $type: "Electric.Satellite.SatRpcResponse", method: "", requestId: 0, message: undefined, error: undefined };
+}
+
+export const SatRpcResponse = {
+  $type: "Electric.Satellite.SatRpcResponse" as const,
+
+  encode(message: SatRpcResponse, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.method !== "") {
+      writer.uint32(10).string(message.method);
+    }
+    if (message.requestId !== 0) {
+      writer.uint32(16).uint32(message.requestId);
+    }
+    if (message.message !== undefined) {
+      writer.uint32(26).bytes(message.message);
+    }
+    if (message.error !== undefined) {
+      SatErrorResp.encode(message.error, writer.uint32(34).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatRpcResponse {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatRpcResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.method = reader.string();
+          continue;
+        case 2:
+          if (tag !== 16) {
+            break;
+          }
+
+          message.requestId = reader.uint32();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.message = reader.bytes();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.error = SatErrorResp.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatRpcResponse>, I>>(base?: I): SatRpcResponse {
+    return SatRpcResponse.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatRpcResponse>, I>>(object: I): SatRpcResponse {
+    const message = createBaseSatRpcResponse();
+    message.method = object.method ?? "";
+    message.requestId = object.requestId ?? 0;
+    message.message = object.message ?? undefined;
+    message.error = (object.error !== undefined && object.error !== null)
+      ? SatErrorResp.fromPartial(object.error)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatRpcResponse.$type, SatRpcResponse);
 
 function createBaseSatAuthHeaderPair(): SatAuthHeaderPair {
   return { $type: "Electric.Satellite.SatAuthHeaderPair", key: 0, value: "" };
@@ -1885,95 +2041,6 @@ export const SatOpDelete = {
 };
 
 messageTypeRegistry.set(SatOpDelete.$type, SatOpDelete);
-
-function createBaseSatMigrationNotification(): SatMigrationNotification {
-  return {
-    $type: "Electric.Satellite.SatMigrationNotification",
-    oldSchemaVersion: "",
-    oldSchemaHash: "",
-    newSchemaVersion: "",
-    newSchemaHash: "",
-  };
-}
-
-export const SatMigrationNotification = {
-  $type: "Electric.Satellite.SatMigrationNotification" as const,
-
-  encode(message: SatMigrationNotification, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.oldSchemaVersion !== "") {
-      writer.uint32(10).string(message.oldSchemaVersion);
-    }
-    if (message.oldSchemaHash !== "") {
-      writer.uint32(18).string(message.oldSchemaHash);
-    }
-    if (message.newSchemaVersion !== "") {
-      writer.uint32(26).string(message.newSchemaVersion);
-    }
-    if (message.newSchemaHash !== "") {
-      writer.uint32(34).string(message.newSchemaHash);
-    }
-    return writer;
-  },
-
-  decode(input: _m0.Reader | Uint8Array, length?: number): SatMigrationNotification {
-    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
-    let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSatMigrationNotification();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1:
-          if (tag !== 10) {
-            break;
-          }
-
-          message.oldSchemaVersion = reader.string();
-          continue;
-        case 2:
-          if (tag !== 18) {
-            break;
-          }
-
-          message.oldSchemaHash = reader.string();
-          continue;
-        case 3:
-          if (tag !== 26) {
-            break;
-          }
-
-          message.newSchemaVersion = reader.string();
-          continue;
-        case 4:
-          if (tag !== 34) {
-            break;
-          }
-
-          message.newSchemaHash = reader.string();
-          continue;
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skipType(tag & 7);
-    }
-    return message;
-  },
-
-  create<I extends Exact<DeepPartial<SatMigrationNotification>, I>>(base?: I): SatMigrationNotification {
-    return SatMigrationNotification.fromPartial(base ?? {});
-  },
-
-  fromPartial<I extends Exact<DeepPartial<SatMigrationNotification>, I>>(object: I): SatMigrationNotification {
-    const message = createBaseSatMigrationNotification();
-    message.oldSchemaVersion = object.oldSchemaVersion ?? "";
-    message.oldSchemaHash = object.oldSchemaHash ?? "";
-    message.newSchemaVersion = object.newSchemaVersion ?? "";
-    message.newSchemaHash = object.newSchemaHash ?? "";
-    return message;
-  },
-};
-
-messageTypeRegistry.set(SatMigrationNotification.$type, SatMigrationNotification);
 
 function createBaseSatOpRow(): SatOpRow {
   return { $type: "Electric.Satellite.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
@@ -3384,6 +3451,90 @@ export const SatShapeDataEnd = {
 };
 
 messageTypeRegistry.set(SatShapeDataEnd.$type, SatShapeDataEnd);
+
+/** Main RPC service that the Electric server fulfills */
+export interface Root {
+  authenticate(request: SatAuthReq): Promise<SatAuthResp>;
+  startReplication(request: SatInStartReplicationReq): Promise<SatInStartReplicationResp>;
+  stopReplication(request: SatInStopReplicationReq): Promise<SatInStopReplicationResp>;
+  subscribe(request: SatSubsReq): Promise<SatSubsResp>;
+  unsubscribe(request: SatUnsubsReq): Promise<SatUnsubsResp>;
+}
+
+export class RootClientImpl implements Root {
+  private readonly rpc: Rpc;
+  private readonly service: string;
+  constructor(rpc: Rpc, opts?: { service?: string }) {
+    this.service = opts?.service || "Electric.Satellite.Root";
+    this.rpc = rpc;
+    this.authenticate = this.authenticate.bind(this);
+    this.startReplication = this.startReplication.bind(this);
+    this.stopReplication = this.stopReplication.bind(this);
+    this.subscribe = this.subscribe.bind(this);
+    this.unsubscribe = this.unsubscribe.bind(this);
+  }
+  authenticate(request: SatAuthReq): Promise<SatAuthResp> {
+    const data = SatAuthReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "authenticate", data);
+    return promise.then((data) => SatAuthResp.decode(_m0.Reader.create(data)));
+  }
+
+  startReplication(request: SatInStartReplicationReq): Promise<SatInStartReplicationResp> {
+    const data = SatInStartReplicationReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "startReplication", data);
+    return promise.then((data) => SatInStartReplicationResp.decode(_m0.Reader.create(data)));
+  }
+
+  stopReplication(request: SatInStopReplicationReq): Promise<SatInStopReplicationResp> {
+    const data = SatInStopReplicationReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "stopReplication", data);
+    return promise.then((data) => SatInStopReplicationResp.decode(_m0.Reader.create(data)));
+  }
+
+  subscribe(request: SatSubsReq): Promise<SatSubsResp> {
+    const data = SatSubsReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "subscribe", data);
+    return promise.then((data) => SatSubsResp.decode(_m0.Reader.create(data)));
+  }
+
+  unsubscribe(request: SatUnsubsReq): Promise<SatUnsubsResp> {
+    const data = SatUnsubsReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "unsubscribe", data);
+    return promise.then((data) => SatUnsubsResp.decode(_m0.Reader.create(data)));
+  }
+}
+
+/** RPC calls that the server makes to the client */
+export interface ClientRoot {
+  startReplication(request: SatInStartReplicationReq): Promise<SatInStartReplicationResp>;
+  stopReplication(request: SatInStopReplicationReq): Promise<SatInStopReplicationResp>;
+}
+
+export class ClientRootClientImpl implements ClientRoot {
+  private readonly rpc: Rpc;
+  private readonly service: string;
+  constructor(rpc: Rpc, opts?: { service?: string }) {
+    this.service = opts?.service || "Electric.Satellite.ClientRoot";
+    this.rpc = rpc;
+    this.startReplication = this.startReplication.bind(this);
+    this.stopReplication = this.stopReplication.bind(this);
+  }
+  startReplication(request: SatInStartReplicationReq): Promise<SatInStartReplicationResp> {
+    const data = SatInStartReplicationReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "startReplication", data);
+    return promise.then((data) => SatInStartReplicationResp.decode(_m0.Reader.create(data)));
+  }
+
+  stopReplication(request: SatInStopReplicationReq): Promise<SatInStopReplicationResp> {
+    const data = SatInStopReplicationReq.encode(request).finish();
+    const promise = this.rpc.request(this.service, "stopReplication", data);
+    return promise.then((data) => SatInStopReplicationResp.decode(_m0.Reader.create(data)));
+  }
+}
+
+interface Rpc {
+  request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>;
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

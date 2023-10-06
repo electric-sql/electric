@@ -195,12 +195,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def electrified_tables({[version | _versions], _opts}) do
-    {:ok, Schema.table_info(version.schema)}
-  end
-
-  def electrified_tables(_state) do
-    {:ok, []}
+  def internal_schema(_state) do
+    Schema.new()
   end
 
   defp notify(%{parent: parent}, msg) when is_pid(parent) do

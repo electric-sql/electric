@@ -49,6 +49,27 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   end
 
   @doc """
+  Get the names of tables included in this shape request.
+
+  If the name is in this list, it doesn't necessarily mean any data from
+  that table will actually fall into the shape, but it will likely be queried.
+  """
+  @spec included_tables(t()) :: [String.t(), ...]
+  def included_tables(%__MODULE__{included_tables: tables}) do
+    tables
+  end
+
+  @doc """
+  Get the hash of the entire shape request, bar the id.
+  """
+  @spec hash(t()) :: binary()
+  def hash(%__MODULE__{} = req) do
+    %{req | id: ""}
+    |> :erlang.term_to_iovec([:deterministic])
+    |> then(&:crypto.hash(:sha, &1))
+  end
+
+  @doc """
   Query PostgreSQL for initial data which corresponds to this shape request.
 
   Each shape request requires a different initial dataset, so this function
@@ -71,13 +92,13 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   for details.)
   """
   @spec query_initial_data(t(), :epgsql.connection(), Schema.t(), String.t(), map()) ::
-          {:ok, [Changes.NewRecord.t()]} | {:error, term()}
+          {:ok, non_neg_integer, [Changes.NewRecord.t()]} | {:error, term()}
   # TODO: `filtering_context` is underdefined by design. It's a stand-in for a more complex solution while we need to enable basic functionality.
   def query_initial_data(%__MODULE__{} = request, conn, schema, origin, filtering_context \\ %{}) do
-    Enum.reduce_while(request.included_tables, {:ok, []}, fn table, {:ok, acc} ->
+    Enum.reduce_while(request.included_tables, {:ok, 0, []}, fn table, {:ok, num_records, acc} ->
       case query_full_table(conn, table, schema, origin, filtering_context) do
-        {:ok, results} ->
-          {:cont, {:ok, acc ++ results}}
+        {:ok, count, results} ->
+          {:cont, {:ok, num_records + count, acc ++ results}}
 
         {:error, error} ->
           Logger.error("""
@@ -98,7 +119,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
          filtering_context
        ) do
     if filtering_context[:sent_tables] && MapSet.member?(filtering_context[:sent_tables], rel) do
-      {:ok, []}
+      {:ok, 0, []}
     else
       table = Enum.find(schema.tables, &(&1.name.schema == schema_name && &1.name.name == name))
       columns = Enum.map_join(table.columns, ", ", &~s|main."#{&1.name}"|)
@@ -127,7 +148,10 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
 
       case :epgsql.squery(conn, query) do
         {:ok, _, rows} ->
-          {:ok, rows_to_records_with_tags(rows, Enum.map(table.columns, & &1.name), rel, origin)}
+          {records, count} =
+            rows_to_records_with_tags(rows, Enum.map(table.columns, & &1.name), rel, origin)
+
+          {:ok, count, records}
 
         {:error, _} = error ->
           error
@@ -135,11 +159,10 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
     end
   end
 
-  @spec rows_to_records_with_tags([tuple()], [String.t(), ...], term(), String.t()) :: [
-          Changes.NewRecord.t()
-        ]
+  @spec rows_to_records_with_tags([tuple()], [String.t(), ...], term(), String.t()) ::
+          {[Changes.NewRecord.t()], non_neg_integer()}
   defp rows_to_records_with_tags(rows, col_names, relation, origin) when is_list(rows) do
-    for row_tuple <- rows do
+    Enum.map_reduce(rows, 0, fn row_tuple, count ->
       [tags | values] =
         row_tuple
         |> Tuple.to_list()
@@ -152,11 +175,13 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
         Enum.zip(col_names, values)
         |> Map.new()
 
-      %Changes.NewRecord{
+      record = %Changes.NewRecord{
         relation: relation,
         record: row,
         tags: ShadowTableTransformation.convert_tag_list_pg_to_satellite(tags, origin)
       }
-    end
+
+      {record, count + 1}
+    end)
   end
 end

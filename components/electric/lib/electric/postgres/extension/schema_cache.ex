@@ -119,8 +119,18 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
+  def internal_schema(origin) do
+    call(origin, :internal_schema)
+  end
+
   def electrified_tables(origin) do
     call(origin, :electrified_tables)
+  end
+
+  def replicated_internal_tables(origin) do
+    origin
+    |> internal_schema()
+    |> Schema.table_info()
   end
 
   def relation(origin, oid) when is_integer(oid) do
@@ -154,6 +164,17 @@ defmodule Electric.Postgres.Extension.SchemaCache do
         raise ArgumentError,
           message:
             "unknown relation #{inspect(relation)} for version #{inspect(version)}: #{inspect(error)}"
+    end
+  end
+
+  def internal_relation!(origin, relation) do
+    case call(origin, {:internal_relation, relation}) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError,
+          message: "unknown internal relation #{inspect(relation)}: #{inspect(error)}"
     end
   end
 
@@ -192,7 +213,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       conn_config: conn_config,
       opts: opts,
       current: nil,
-      refresh_task: nil
+      refresh_task: nil,
+      internal_schema: nil
     }
 
     {:ok, state}
@@ -242,6 +264,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:known_migration_version?, version}, _from, state) do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
+  end
+
+  def handle_call(:internal_schema, _from, state) do
+    state = load_internal_schema(state)
+    {:reply, state.internal_schema, state}
   end
 
   def handle_call(:electrified_tables, _from, state) do
@@ -321,6 +348,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, :ok, state}
   end
 
+  def handle_call({:internal_relation, relation}, _from, state) do
+    {:reply, Schema.table_info(state.internal_schema, relation), state}
+  end
+
   @impl GenServer
   # refresh subscription Task process done
   def handle_info({ref, :ok}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
@@ -336,6 +367,14 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_continue({:close, conn}, state) do
     :ok = :epgsql.close(conn)
     {:noreply, state}
+  end
+
+  defp load_internal_schema(%{internal_schema: nil} = state) do
+    %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}
+  end
+
+  defp load_internal_schema(state) do
+    state
   end
 
   defp current_schema(%{current: nil} = state) do

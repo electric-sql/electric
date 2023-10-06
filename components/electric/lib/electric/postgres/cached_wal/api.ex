@@ -2,6 +2,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @moduledoc """
   Behavior for accessing cached wal
   """
+  alias Electric.Telemetry.Metrics
   @type lsn :: Electric.Postgres.Lsn.t()
 
   @typedoc "Position in the cached write-ahead log"
@@ -13,6 +14,13 @@ defmodule Electric.Postgres.CachedWal.Api do
   @typedoc "Wal segment, where segment is just an abstraction term within Electric"
   @type segment :: Electric.Replication.Changes.Transaction.t()
 
+  @type stats :: %{
+          transaction_count: non_neg_integer(),
+          max_transaction_count: pos_integer(),
+          oldest_transaction_timestamp: DateTime.t() | nil,
+          cache_memory_total: non_neg_integer()
+        }
+
   @callback lsn_in_cached_window?(wal_pos) :: boolean
   @callback get_current_position() :: wal_pos | nil
   @callback next_segment(wal_pos()) ::
@@ -22,6 +30,8 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @callback serialize_wal_position(wal_pos()) :: binary()
   @callback parse_wal_position(binary()) :: {:ok, wal_pos()} | :error
+
+  @callback telemetry_stats() :: stats() | nil
 
   @default_adapter Application.compile_env!(:electric, [__MODULE__, :adapter])
   def default_module(), do: @default_adapter
@@ -89,5 +99,13 @@ defmodule Electric.Postgres.CachedWal.Api do
   @spec serialize_wal_position(module(), wal_pos()) :: binary()
   def serialize_wal_position(module \\ @default_adapter, wal_pos) do
     module.serialize_wal_position(wal_pos)
+  end
+
+  @spec emit_telemetry_stats(module()) :: :ok
+  def emit_telemetry_stats(module \\ @default_adapter, event) do
+    case module.telemetry_stats() do
+      nil -> :ok
+      stats -> Metrics.non_span_event(event, stats)
+    end
   end
 end

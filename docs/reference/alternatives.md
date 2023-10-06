@@ -52,6 +52,7 @@ Other local-first projects:
 - [Powersync](https://www.powersync.co)
 - [Redwood (Braid)](https://docs.redwood.dev)
 - [remoteStorage.js](https://remotestorage.io)
+- [RhizomeDB](https://github.com/RhizomeDB/rs-rhizome)
 - [ShareDB](https://share.github.io/sharedb)
 - [SkyAlt](https://github.com/milansuk/skyalt)
 - [Socket](https://socketsupply.co)

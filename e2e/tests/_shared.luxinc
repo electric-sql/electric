@@ -9,7 +9,6 @@
         [progress start development environment]
         !make start_dev_env
         [invoke ok]
-        -$fail_pattern
         !make log_dev_env
 
     [newshell pg_1]
@@ -22,7 +21,11 @@
         !make start_electric_1
         -$fail_pattern
         ?START_REPLICATION SLOT
-         [progress setup finished]
+        [progress setup finished]
+
+    [shell postgres_logs]
+        ?logical replication apply worker for subscription "postgres_1" has started
+        -$fail_pattern
 [endmacro]
 
 [macro teardown]
@@ -47,8 +50,8 @@
                         auto_ping: true)
     """
     ?+$eprompt
-    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
-    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatRpcRequest\{(?:.*)method: "startReplication"
+    ?rec \[\d\]: %Electric.Satellite.SatRpcResponse\{(?:.*)method: "startReplication"
 [endmacro]
 
 [macro client_session_continue user_id session_id position subscription_ids]
@@ -70,24 +73,22 @@
     ?Connection established with protocol vsn
     ?Auth passed
     ?Subscribed
-    ?+rec \[\d\]: %Electric.Satellite.SatInStartReplicationReq\{
-    ?rec \[\d\]: %Electric.Satellite.SatInStartReplicationResp\{
+    ?+rec \[\d\]: %Electric.Satellite.SatRpcRequest\{(?:.*)method: "startReplication"
+    ?rec \[\d\]: %Electric.Satellite.SatRpcResponse\{(?:.*)method: "startReplication"
 [endmacro]
 
 [macro elixir_client_subscribe tables]
     """!
-    TestWsClient.send_data(conn, ProtocolHelpers.subscription_request(request_1: [tables: ~w|$tables|]))
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: [tables: ~w|$tables|]))
     """
-    ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
+    ?$eprompt
 [endmacro]
 
 [macro elixir_client_subscribe_with_id id tables]
     """!
-    TestWsClient.send_data(conn, ProtocolHelpers.subscription_request("$id", request_1: [tables: ~w|$tables|]))
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: [tables: ~w|$tables|]))
     """
-    ?+$eprompt
-    ?rec \[\d\]: %Electric.Satellite.SatSubsResp\{[^\}]+err: nil
+    ?$eprompt
 [endmacro]
 
 

@@ -309,7 +309,8 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
   const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
 
-  const getModelName = (ln: string) => ln.match(/^\s*model\s+(\w+)/)?.[1]
+  const modelRegex = /^\s*model\s+(\w+)\s*{/
+  const getModelName = (ln: string) => ln.match(modelRegex)?.[1]
 
   lines.forEach((ln, idx) => {
     const tableName = getModelName(ln)
@@ -320,7 +321,9 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
         : capitaliseFirstLetter(tableName) // always capitalise first letter
 
       // Replace the model name on this line
-      const newLn = ln.replace(tableName, modelName)
+      const newLn = ln.replace(modelRegex, (_, _tableName) => {
+        return `model ${modelName} {`
+      })
       lines[idx] = newLn
 
       replacements.set(tableName, modelName)

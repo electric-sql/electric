@@ -3,8 +3,8 @@ defmodule Electric.Postgres.PBTest do
   use ExUnit.Case, async: true
 
   describe "Decode and encode work correctly" do
-    test "message for SatAuthReq is encoded and decoded" do
-      original_msg = %SatAuthReq{token: "token"}
+    test "message for SatRpcRequest is encoded and decoded" do
+      original_msg = %SatRpcRequest{method: "test", request_id: 1}
       {:ok, type, iodata} = PB.encode(original_msg)
       {:ok, decoded_msg} = PB.decode(type, :erlang.iolist_to_binary(iodata))
       assert original_msg == decoded_msg

@@ -47,8 +47,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl Api
   def lsn_in_cached_window?(client_wal_pos) do
     case :ets.first(@ets_table_name) do
-      :"$end_of_table" -> false
-      position -> position <= client_wal_pos
+      :"$end_of_table" ->
+        false
+
+      first_position ->
+        case :ets.last(@ets_table_name) do
+          :"$end_of_table" ->
+            false
+
+          last_position ->
+            first_position <= client_wal_pos and client_wal_pos <= last_position
+        end
     end
   end
 
@@ -86,6 +95,13 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
       {num, ""} -> {:ok, num}
       _ -> :error
     end
+  end
+
+  @impl Api
+  def telemetry_stats() do
+    GenStage.call(__MODULE__, :telemetry_stats)
+  catch
+    :exit, _ -> nil
   end
 
   # Internal API
@@ -126,6 +142,27 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     state = Map.update!(state, :notification_requests, &Map.delete(&1, ref))
 
     {:reply, :ok, [], state}
+  end
+
+  @impl GenStage
+  def handle_call(:telemetry_stats, _from, state) do
+    oldest_timestamp =
+      with {:ok, key} <- ETS.Set.first(state.table),
+           {:ok, %Transaction{} = tx} <- ETS.Set.get_element(state.table, key, 2) do
+        tx.commit_timestamp
+      else
+        _ -> nil
+      end
+
+    stats = %{
+      transaction_count: state.current_cache_count,
+      max_transaction_count: state.max_cache_count,
+      oldest_transaction_timestamp: oldest_timestamp,
+      cache_memory_total:
+        ETS.Set.info!(state.table, true)[:memory] * :erlang.system_info(:wordsize)
+    }
+
+    {:reply, stats, [], state}
   end
 
   @impl GenStage

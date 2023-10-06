@@ -1,6 +1,7 @@
 defmodule Electric.Replication.SatelliteCollectorProducerTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.SatelliteCollectorProducer, as: Producer
   alias Electric.DummyConsumer
 
@@ -83,5 +84,12 @@ defmodule Electric.Replication.SatelliteCollectorProducerTest do
     assert_receive {:dummy_consumer, ^pid, [_, _, _]}
   end
 
-  defp tx(), do: %{ack_fn: fn -> nil end, changes: ["change 1"]}
+  defp tx() do
+    %Transaction{
+      ack_fn: fn -> nil end,
+      changes: ["change 1"],
+      origin: "client_id",
+      lsn: <<0, 0, 0, 1>>
+    }
+  end
 end
