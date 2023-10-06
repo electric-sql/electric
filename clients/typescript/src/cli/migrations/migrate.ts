@@ -5,7 +5,6 @@ import { createWriteStream } from 'fs'
 import http from 'node:http'
 import https from 'node:https'
 import decompress from 'decompress'
-import Database from 'better-sqlite3'
 import { buildMigrations, getMigrationNames } from './builder'
 import { exec } from 'child_process'
 import { dedent } from 'ts-dedent'
@@ -14,29 +13,15 @@ const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
 export const defaultOptions = {
   service: process.env.ELECTRIC_URL ?? 'http://127.0.0.1:5133',
+  proxy:
+    process.env.ELECTRIC_PROXY_URL ??
+    'postgresql://prisma:password@localhost:65432/electric', // use "prisma" user because we will introspect the DB via the proxy
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
   pollingInterval: 1000, // in ms
 }
 
 export type GeneratorOptions = typeof defaultOptions
-
-/**
- * A `DataSourceDescription` object describes on which line the Prisma schema
- * data source is defined and on which line its `provider` and `url` are defined
- * and what their values are.
- */
-type DataSourceDescription = {
-  dataSourceLineIdx: number
-  provider: {
-    lineIdx: number
-    value: string
-  }
-  url: {
-    lineIdx: number
-    value: string
-  }
-}
 
 export async function generate(opts: GeneratorOptions) {
   if (opts.watch) {
@@ -182,36 +167,10 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
     await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
 
-    const dbFile = path.resolve(path.join(tmpFolder, 'electric.db'))
-    const db = new Database(dbFile)
-
-    // Load migrations and apply them on our fresh `db` SQLite DB
-    const migrations = await loadMigrations(migrationsFolder)
-    await applyMigrations(migrations, db)
-
-    // Close the DB
-    db.close()
-
-    // Create a fresh Prisma schema that will be used
-    // to introspect the SQLite DB after migrating it
     const prismaSchema = await createPrismaSchema(tmpFolder, opts)
-
-    // Replace the data source in the Prisma schema to be SQLite
-    // Remember the original data source such that we can restore it later
-    const originalDataSource = await getDataSource(prismaSchema)
-    await changeDataSourceToSQLite(prismaSchema, dbFile)
 
     // Introspect the created DB to update the Prisma schema
     await introspectDB(prismaSchema)
-
-    // Modify the data source back to Postgres
-    // because Prisma won't generate createMany/updateMany/... schemas
-    // if the data source is a SQLite DB.
-    await setDataSource(
-      prismaSchema,
-      originalDataSource.provider.value,
-      originalDataSource.url.value
-    )
 
     // Modify snake_case table names to PascalCase
     await pascalCaseTableNames(prismaSchema)
@@ -241,7 +200,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
  */
 async function createPrismaSchema(
   folder: string,
-  { out }: Omit<GeneratorOptions, 'watch'>
+  { out, proxy }: Omit<GeneratorOptions, 'watch'>
 ) {
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
@@ -264,21 +223,10 @@ async function createPrismaSchema(
 
     datasource db {
       provider = "postgresql"
-      url      = env("PRISMA_DB_URL")
+      url      = "${proxy}"
     }`
   await fs.writeFile(prismaSchemaFile, schema)
   return prismaSchemaFile
-}
-
-async function loadMigrations(migrationsFolder: string): Promise<string[]> {
-  const migrationDirNames = await getMigrationNames(migrationsFolder)
-  const migrationFiles = migrationDirNames.map((dirName) =>
-    path.join(migrationsFolder, dirName, 'migration.sql')
-  )
-  const migrations = await Promise.all(
-    migrationFiles.map((migration) => fs.readFile(migration, 'utf8'))
-  )
-  return migrations
 }
 
 async function getFileLines(prismaSchema: string): Promise<Array<string>> {
@@ -371,76 +319,6 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   return lines
 }
 
-async function getDataSource(
-  prismaSchema: string
-): Promise<DataSourceDescription> {
-  const lines = await getFileLines(prismaSchema)
-  const dataSourceStartIdx = lines.findIndex((ln) =>
-    ln.trim().startsWith('datasource ')
-  )
-  if (dataSourceStartIdx === -1) {
-    throw new Error('Prisma schema does not define a datasource.')
-  }
-
-  const linesStartingAtDataSource = lines.slice(dataSourceStartIdx)
-  const providerIdx =
-    dataSourceStartIdx +
-    linesStartingAtDataSource.findIndex((ln) =>
-      ln.trim().startsWith('provider ')
-    )
-  const urlIdx =
-    dataSourceStartIdx +
-    linesStartingAtDataSource.findIndex((ln) => ln.trim().startsWith('url '))
-
-  const providerLine = lines[providerIdx]
-  const urlLine = lines[urlIdx]
-
-  return {
-    dataSourceLineIdx: dataSourceStartIdx,
-    provider: {
-      lineIdx: providerIdx,
-      value: providerLine,
-    },
-    url: {
-      lineIdx: urlIdx,
-      value: urlLine,
-    },
-  }
-}
-
-async function changeDataSourceToSQLite(prismaSchema: string, dbFile: string) {
-  await setDataSource(
-    prismaSchema,
-    '  provider = "sqlite"',
-    `  url = "file:${dbFile}"`
-  )
-}
-
-/**
- * Changes the data source in the Prisma schema to the provided data source values.
- * @param prismaSchema Path to the schema whose datasource must be modified.
- * @param provider The new provider
- * @param url The new url
- */
-async function setDataSource(
-  prismaSchema: string,
-  provider: string,
-  url: string
-) {
-  const ogDataSource = await getDataSource(prismaSchema)
-  const providerLineIdx = ogDataSource.provider.lineIdx
-  const urlLineIdx = ogDataSource.url.lineIdx
-
-  const lines = (await getFileLines(prismaSchema)).map((ln) => ln)
-  lines[providerLineIdx] = provider
-  lines[urlLineIdx] = url
-
-  const data = lines.join('\n')
-
-  // Write the modified schema to the file
-  await fs.writeFile(prismaSchema, data)
-}
-
 async function introspectDB(prismaSchema: string): Promise<void> {
   await executeShellCommand(
     `npx prisma db pull --schema="${prismaSchema}"`,
@@ -475,15 +353,6 @@ async function executeShellCommand(
       }
     })
   })
-}
-
-/**
- * Opens the provided DB (or creates it if it doesn't exist) and applies the given migrations on it.
- * @migrations Migrations to apply
- * @db The DB on which to apply the migrations
- */
-async function applyMigrations(migrations: string[], db: Database.Database) {
-  migrations.forEach((migration) => db.exec(migration))
 }
 
 /**
