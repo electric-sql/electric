@@ -4,12 +4,11 @@ const shell = require('shelljs')
 shell.config.silent = true // don't log output of child processes
 
 // If we are running the docker compose file
-// there will be a compose-postgres-1 container running
-// which binds the container's 5432 port used by PG
-// to some available port on the host machine.
+// there will be an electric container running
+// which binds the container's 65432 port used by the proxy
+// to some port on the host machine.
 // So we fetch this host port and use it in the default url.
 const appName = fetchAppName() ?? 'electric'
-//const pgPort = fetchHostPortPG() ?? 5432
 const proxyPort = fetchHostProxyPortElectric() ?? 65432
 const DEFAULT_URL = `postgresql://electric:password@localhost:${proxyPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
@@ -21,10 +20,6 @@ const DATABASE_NAME = urlComponents[urlComponents.length-1]
 function error(err) {
   console.error('\x1b[31m', err, '\x1b[0m')
   process.exit(1)
-}
-
-function fetchHostPortPG() {
-  return fetchHostPort(`${appName}-postgres-1`, 5432, 'Postgres')
 }
 
 function fetchHostPortElectric() {

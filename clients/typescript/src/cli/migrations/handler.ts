@@ -11,6 +11,13 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     If not provided, it uses the url set in the `ELECTRIC_URL`
  *     environment variable. If that variable is not set, it
  *     resorts to the default url which is `http://localhost:5133`.
+ * - `--proxy <url>`
+ *    Optional argument providing the url to connect to the PG database via the proxy.
+ *    If not provided, it uses the url set in the `PG_PROXY_URL` environment variable.
+ *    If that variable is not set, it resorts to the default url which is
+ *    'postgresql://prisma:password@localhost:65432/electric'.
+ *    NOTE: the generator introspects the PG database via the proxy,
+ *          the URL must therefore connect using the "prisma" user.
  *  - `--out <path>`
  *     Optional argument to specify where to write the generated client.
  *     If this argument is not provided the generated client is written
@@ -78,18 +85,24 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
       process.exit(9)
     }
   }
-  const service = genArgs.service?.trim()
 
   // prepend protocol if not provided in service url
+  const service = genArgs.service?.trim()
   if (service && !/^https?:\/\//.test(service)) {
     genArgs.service = 'http://' + service
+  }
+
+  // prepend protocol if not provided in proxy url
+  const proxy = genArgs.proxy?.trim()
+  if (proxy && !/^postgresql?:\/\//.test(proxy)) {
+    genArgs.proxy = 'postgresql://' + proxy
   }
 
   return genArgs
 }
 
 function checkFlag(flag: string): keyof GeneratorArgs {
-  const supportedFlags = ['--service', '--out', '--watch']
+  const supportedFlags = ['--service', '--out', '--watch', '--proxy']
   if (supportedFlags.includes(flag))
     return flag.substring(2) as keyof GeneratorArgs
   // substring removes the double dash --
