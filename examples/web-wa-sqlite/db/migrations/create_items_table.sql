@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS items (
 
 -- ⚡
 -- Electrify the items table
-CALL electric.electrify('items');
+ALTER TABLE items ENABLE ELECTRIC;
 COMMIT;

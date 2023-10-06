@@ -67,9 +67,9 @@ BEGIN;
 
   -- ⚡
   -- Electrify the tables
-  CALL electric.electrify('demos');
-  CALL electric.electrify('sliders');
-  CALL electric.electrify('items');
-  CALL electric.electrify('players');
-  CALL electric.electrify('tournaments');
+  ALTER TABLE demos ENABLE ELECTRIC;
+  ALTER TABLE sliders ENABLE ELECTRIC;
+  ALTER TABLE items ENABLE ELECTRIC;
+  ALTER TABLE players ENABLE ELECTRIC;
+  ALTER TABLE tournaments ENABLE ELECTRIC;
 COMMIT;

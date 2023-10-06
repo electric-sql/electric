@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="d06de90e-cdfa-4bcd-9136-be03840b9bf4" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/input/createInput.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/input/createInput.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/input/findInput.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/input/findInput.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/input/updateInput.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/input/updateInput.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/input/upsertInput.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/input/upsertInput.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/model/table.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/model/table.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../clients/typescript/src/client/util/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../clients/typescript/src/client/util/types.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../../pnpm-lock.yaml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CodeStyleSettingsInfer">
+    <option name="done" value="true" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../.." />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectCodeStyleSettingsMigration">
+    <option name="version" value="2" />
+  </component>
+  <component name="ProjectId" id="2Nv19l7Dt73A7CsQhe15BZpOw9q" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "last_opened_file_path": "/Users/kevin/Documents/Electric/development/electric/examples/todoMVC",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "yarn",
+    "ts.external.directory.path": "/Applications/IntelliJ IDEA.app/Contents/plugins/javascript-impl/jsLanguageServicesImpl/external",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src/generated/models" />
+      <recent name="$PROJECT_DIR$/public" />
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="prisma-generate" type="js.build_tools.npm" temporary="true" nameIsGenerated="true">
+      <package-json value="$PROJECT_DIR$/package.json" />
+      <command value="run" />
+      <scripts>
+        <script value="prisma-generate" />
+      </scripts>
+      <node-interpreter value="project" />
+      <envs />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="npm.prisma-generate" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="d06de90e-cdfa-4bcd-9136-be03840b9bf4" name="Changes" comment="" />
+      <created>1680529592361</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1680529592361</updated>
+      <workItem from="1680529593603" duration="16849000" />
+      <workItem from="1680605212181" duration="23729000" />
+      <workItem from="1680864853448" duration="599000" />
+      <workItem from="1681298240577" duration="26830000" />
+      <workItem from="1682002693495" duration="598000" />
+      <workItem from="1685948150330" duration="8231000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
