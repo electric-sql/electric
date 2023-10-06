@@ -33,8 +33,7 @@ For example, to run using Docker:
 ```shell
 docker run \
     -e "POSTGRES_PASSWORD=..." \
-    -c "wal_level=logical" \
-    postgres
+    postgres -c "wal_level=logical"
 ```
 
 #### Homebrew
