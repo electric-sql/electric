@@ -43,7 +43,7 @@ export const satelliteDefaults: SatelliteOpts = {
   clearOnBehindWindow: true,
   connectionBackOffOptions: {
     delayFirstAttempt: false,
-    startingDelay: 0,
+    startingDelay: 1000,
     jitter: 'full',
     maxDelay: 10000,
     numOfAttempts: 50,
