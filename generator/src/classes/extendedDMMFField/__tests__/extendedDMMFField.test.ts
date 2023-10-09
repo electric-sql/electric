@@ -9,7 +9,11 @@ const getField = (field?: Partial<DMMF.Field>) =>
     { ...FIELD_BASE, ...field },
     DEFAULT_GENERATOR_CONFIG,
     'ModelName',
-    { field: field?.name ?? 'dummy', type: field?.type?? 'TEXT', attributes: [] }
+    {
+      field: field?.name ?? 'dummy',
+      type: field?.type ?? 'TEXT',
+      attributes: [],
+    }
   )
 
 // BASE TESTS

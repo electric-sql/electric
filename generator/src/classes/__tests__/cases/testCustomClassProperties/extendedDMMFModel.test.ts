@@ -6,7 +6,9 @@ import { ExtendedDMMF } from '../../../extendedDMMF'
 import { loadDMMF } from '../../utils/loadDMMF'
 
 describe('testSimpleModelNoValidators', async () => {
-  const [dmmf, datamodel] = await loadDMMF(`${__dirname}/extendedDMMFModel.prisma`)
+  const [dmmf, datamodel] = await loadDMMF(
+    `${__dirname}/extendedDMMFModel.prisma`
+  )
   const extendedDMMF = new ExtendedDMMF(dmmf, {}, datamodel)
   const model = extendedDMMF.datamodel.models[0]
 
