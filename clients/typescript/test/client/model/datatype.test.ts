@@ -50,15 +50,15 @@ test.serial('support date type', async (t) => {
     data: {
       id: 1,
       date: d,
-    }
+    },
   })
 
   t.deepEqual(res.date, new Date(date))
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   t.deepEqual(fetchRes?.date, new Date(date))
@@ -70,15 +70,15 @@ test.serial('support date type passed as string', async (t) => {
     data: {
       id: 1,
       date: date,
-    }
+    },
   })
 
   t.deepEqual(res.date, new Date(date))
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   t.deepEqual(fetchRes?.date, new Date(date))
@@ -90,15 +90,15 @@ test.serial('support time type', async (t) => {
     data: {
       id: 1,
       time: date,
-    }
+    },
   })
 
   t.deepEqual(res.time, new Date('1970-01-01 18:28:35.421'))
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   t.deepEqual(fetchRes?.time, new Date('1970-01-01 18:28:35.421'))
@@ -114,14 +114,14 @@ test.serial('support timetz type', async (t) => {
     data: {
       id: 1,
       timetz: date1,
-    }
+    },
   })
 
   const res2 = await tbl.create({
     data: {
       id: 2,
       timetz: date2,
-    }
+    },
   })
 
   t.deepEqual(res1.timetz, new Date('1970-01-01 18:28:35.421+02'))
@@ -129,14 +129,14 @@ test.serial('support timetz type', async (t) => {
 
   const fetchRes1 = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   const fetchRes2 = await tbl.findUnique({
     where: {
-      id: 2
-    }
+      id: 2,
+    },
   })
 
   t.deepEqual(fetchRes1?.timetz, new Date('1970-01-01 18:28:35.421+02'))
@@ -150,15 +150,15 @@ test.serial('support timestamp type', async (t) => {
     data: {
       id: 1,
       timestamp: date,
-    }
+    },
   })
 
   t.deepEqual(res.timestamp, new Date('2023-08-07 18:28:35.421'))
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   t.deepEqual(fetchRes?.timestamp, new Date('2023-08-07 18:28:35.421'))
@@ -175,14 +175,14 @@ test.serial('support timestamptz type', async (t) => {
     data: {
       id: 1,
       timestamptz: date1,
-    }
+    },
   })
 
   const res2 = await tbl.create({
     data: {
       id: 2,
       timestamptz: date2,
-    }
+    },
   })
 
   t.deepEqual(res1.timestamptz, date1)
@@ -190,14 +190,14 @@ test.serial('support timestamptz type', async (t) => {
 
   const fetchRes1 = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   const fetchRes2 = await tbl.findUnique({
     where: {
-      id: 2
-    }
+      id: 2,
+    },
   })
 
   t.deepEqual(fetchRes1?.timestamptz, date1)
@@ -207,7 +207,7 @@ test.serial('support timestamptz type', async (t) => {
 test.serial('support null value for timestamptz type', async (t) => {
   const expectedRes = {
     id: 1,
-    timestamptz: null
+    timestamptz: null,
   }
 
   const res = await tbl.create({
@@ -217,20 +217,20 @@ test.serial('support null value for timestamptz type', async (t) => {
     },
     select: {
       id: true,
-      timestamptz: true
-    }
+      timestamptz: true,
+    },
   })
 
   t.deepEqual(res, expectedRes)
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
+      id: 1,
     },
     select: {
       id: true,
-      timestamptz: true
-    }
+      timestamptz: true,
+    },
   })
 
   t.deepEqual(fetchRes, expectedRes)

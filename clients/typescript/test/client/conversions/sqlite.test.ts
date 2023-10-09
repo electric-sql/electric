@@ -50,10 +50,13 @@ test.serial('date is converted correctly to SQLite', async (t) => {
     data: {
       id: 1,
       date: d,
-    }
+    },
   })
 
-  const rawRes = await electric.db.raw({ sql: "SELECT date FROM DataTypes WHERE id = ?", args: [1] })
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT date FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
   t.is(rawRes[0].date, date)
 })
 
@@ -65,10 +68,13 @@ test.serial('time is converted correctly to SQLite', async (t) => {
     data: {
       id: 1,
       time: date,
-    }
+    },
   })
 
-  const rawRes = await electric.db.raw({ sql: "SELECT time FROM DataTypes WHERE id = ?", args: [1] })
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT time FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
   t.is(rawRes[0].time, '18:28:35.421')
 })
 
@@ -85,14 +91,20 @@ test.serial('timetz is converted correctly to SQLite', async (t) => {
       {
         id: 2,
         timetz: date2,
-      }
-    ]
+      },
+    ],
   })
 
-  const rawRes1 = await electric.db.raw({ sql: "SELECT timetz FROM DataTypes WHERE id = ?", args: [1] })
+  const rawRes1 = await electric.db.raw({
+    sql: 'SELECT timetz FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
   t.is(rawRes1[0].timetz, '16:28:35.421') // time must have been converted to UTC time
 
-  const rawRes2 = await electric.db.raw({ sql: "SELECT timetz FROM DataTypes WHERE id = ?", args: [2] })
+  const rawRes2 = await electric.db.raw({
+    sql: 'SELECT timetz FROM DataTypes WHERE id = ?',
+    args: [2],
+  })
   t.is(rawRes2[0].timetz, '15:28:35.421')
 })
 
@@ -105,7 +117,10 @@ test.serial('timestamp is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({ sql: "SELECT timestamp FROM DataTypes WHERE id = ?", args: [1] })
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT timestamp FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
   t.is(rawRes[0].timestamp, '2023-08-07 18:28:35.421') // time must have been converted to UTC time
 })
 
@@ -121,13 +136,19 @@ test.serial('timestamptz is converted correctly to SQLite', async (t) => {
       {
         id: 2,
         timestamptz: date2,
-      }
-    ]
+      },
+    ],
   })
 
-  const rawRes1 = await electric.db.raw({ sql: "SELECT timestamptz FROM DataTypes WHERE id = ?", args: [1] })
+  const rawRes1 = await electric.db.raw({
+    sql: 'SELECT timestamptz FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
   t.is(rawRes1[0].timestamptz, '2023-08-07 16:28:35.421Z') // timestamp must have been converted to UTC timestamp
 
-  const rawRes2 = await electric.db.raw({ sql: "SELECT timestamptz FROM DataTypes WHERE id = ?", args: [2] })
+  const rawRes2 = await electric.db.raw({
+    sql: 'SELECT timestamptz FROM DataTypes WHERE id = ?',
+    args: [2],
+  })
   t.is(rawRes2[0].timestamptz, '2023-08-07 15:28:35.421Z')
 })

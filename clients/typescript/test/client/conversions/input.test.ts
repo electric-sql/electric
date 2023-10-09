@@ -35,9 +35,7 @@ function setupDB() {
   )
 
   db.exec('DROP TABLE IF EXISTS Dummy')
-  db.exec(
-    "CREATE TABLE Dummy('id' int PRIMARY KEY, 'timestamp' varchar);"
-  )
+  db.exec("CREATE TABLE Dummy('id' int PRIMARY KEY, 'timestamp' varchar);")
 }
 
 test.beforeEach(setupDB)
@@ -49,12 +47,14 @@ test.beforeEach(setupDB)
 test.serial('findUnique transforms JS objects to SQLite', async (t) => {
   const date = '2023-09-13 23:33:04.271'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
+  await electric.adapter.run({
+    sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')`,
+  })
 
   const res = await tbl.findUnique({
     where: {
-      timestamp: new Date(date)
-    }
+      timestamp: new Date(date),
+    },
   })
 
   t.deepEqual(res?.timestamp, new Date(date))
@@ -63,21 +63,27 @@ test.serial('findUnique transforms JS objects to SQLite', async (t) => {
 test.serial('findFirst transforms JS objects to SQLite', async (t) => {
   const date = '2023-09-13 23:33:04.271'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
+  await electric.adapter.run({
+    sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')`,
+  })
 
   const res = await tbl.findFirst({
     where: {
-      timestamp: new Date(date)
-    }
+      timestamp: new Date(date),
+    },
   })
 
   t.deepEqual(res?.timestamp, new Date(date))
 })
 
-test.serial('findFirst transforms JS objects in equals filter to SQLite', async (t) => {
-  const date = '2023-09-13 23:33:04.271'
+test.serial(
+  'findFirst transforms JS objects in equals filter to SQLite',
+  async (t) => {
+    const date = '2023-09-13 23:33:04.271'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
+    await electric.adapter.run({
+      sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')`,
+    })
 
     const res = await tbl.findFirst({
       where: {
@@ -87,62 +93,78 @@ test.serial('findFirst transforms JS objects in equals filter to SQLite', async 
       },
     })
 
-  t.deepEqual(res?.timestamp, new Date(date))
-})
+    t.deepEqual(res?.timestamp, new Date(date))
+  }
+)
 
-test.serial('findFirst transforms JS objects in not filter to SQLite', async (t) => {
-  const date1 = '2023-09-13 23:33:04.271'
-  const date2 = '2023-09-12 16:04:39.034'
+test.serial(
+  'findFirst transforms JS objects in not filter to SQLite',
+  async (t) => {
+    const date1 = '2023-09-13 23:33:04.271'
+    const date2 = '2023-09-12 16:04:39.034'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date1}'), (2, '${date2}')` })
+    await electric.adapter.run({
+      sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date1}'), (2, '${date2}')`,
+    })
 
-  const res = await tbl.findFirst({
-    where: {
-      timestamp: {
-        not: new Date(date1)
-      }
-    }
-  })
+    const res = await tbl.findFirst({
+      where: {
+        timestamp: {
+          not: new Date(date1),
+        },
+      },
+    })
 
-  t.deepEqual(res?.timestamp, new Date(date2))
-})
+    t.deepEqual(res?.timestamp, new Date(date2))
+  }
+)
 
-test.serial('findFirst transforms JS objects in deeply nested filter to SQLite', async (t) => {
-  const date = '2023-09-13 23:33:04.271'
+test.serial(
+  'findFirst transforms JS objects in deeply nested filter to SQLite',
+  async (t) => {
+    const date = '2023-09-13 23:33:04.271'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')` })
+    await electric.adapter.run({
+      sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date}')`,
+    })
 
-  const res = await tbl.findFirst({
-    where: {
-      timestamp: {
-        gt: new Date('2023-09-13 23:33:03.271')
-      }
-    }
-  })
+    const res = await tbl.findFirst({
+      where: {
+        timestamp: {
+          gt: new Date('2023-09-13 23:33:03.271'),
+        },
+      },
+    })
 
-  t.deepEqual(res?.timestamp, new Date(date))
-})
+    t.deepEqual(res?.timestamp, new Date(date))
+  }
+)
 
-test.serial('findMany transforms JS objects in `in` filter to SQLite', async (t) => {
-  const date1 = '2023-09-13 23:33:04.271'
-  const date2 = '2023-09-12 16:04:39.034'
-  const date3 = '2023-09-11 08:19:21.827'
+test.serial(
+  'findMany transforms JS objects in `in` filter to SQLite',
+  async (t) => {
+    const date1 = '2023-09-13 23:33:04.271'
+    const date2 = '2023-09-12 16:04:39.034'
+    const date3 = '2023-09-11 08:19:21.827'
 
-  await electric.adapter.run({ sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date1}'), (2, '${date2}'), (3, '${date3}')` })
+    await electric.adapter.run({
+      sql: `INSERT INTO DataTypes('id', 'timestamp') VALUES (1, '${date1}'), (2, '${date2}'), (3, '${date3}')`,
+    })
 
-  const res = await tbl.findMany({
-    where: {
-      timestamp: {
-        in: [
-          new Date(date1),
-          new Date(date2)
-        ]
-      }
-    }
-  })
+    const res = await tbl.findMany({
+      where: {
+        timestamp: {
+          in: [new Date(date1), new Date(date2)],
+        },
+      },
+    })
 
-  t.deepEqual(res.map(row => row.timestamp), [new Date(date1), new Date(date2)])
-})
+    t.deepEqual(
+      res.map((row) => row.timestamp),
+      [new Date(date1), new Date(date2)]
+    )
+  }
+)
 
 test.serial('create transforms nested JS objects to SQLite', async (t) => {
   const date1 = new Date('2023-09-13 23:33:04.271')
@@ -154,31 +176,31 @@ test.serial('create transforms nested JS objects to SQLite', async (t) => {
     related: {
       create: {
         id: 2,
-        timestamp: date2
-      }
-    }
+        timestamp: date2,
+      },
+    },
   }
 
-  const res = await tbl.create({
+  const res = (await tbl.create({
     data: record,
     include: {
-      related: true
-    }
-  }) as (DataTypes & { related: Dummy })
+      related: true,
+    },
+  })) as DataTypes & { related: Dummy }
 
   t.deepEqual(res.id, 1)
   t.deepEqual(res.timestamp, date1)
   t.deepEqual(res.related.id, 2)
   t.deepEqual(res.related.timestamp, date2)
 
-  const fetchRes = await tbl.findUnique({
+  const fetchRes = (await tbl.findUnique({
     where: {
-      id: 1
+      id: 1,
     },
     include: {
-      related: true
-    }
-  }) as (DataTypes & { related: Dummy })
+      related: true,
+    },
+  })) as DataTypes & { related: Dummy }
 
   t.deepEqual(fetchRes.id, 1)
   t.deepEqual(fetchRes.timestamp, date1)
@@ -210,11 +232,11 @@ test.serial('createMany transforms JS objects to SQLite', async (t) => {
 
   const record2 = {
     id: 2,
-    timestamp: date2
+    timestamp: date2,
   }
 
   const res = await tbl.createMany({
-    data: [record1, record2]
+    data: [record1, record2],
   })
 
   t.is(res.count, 2)
@@ -222,19 +244,19 @@ test.serial('createMany transforms JS objects to SQLite', async (t) => {
   const fetchRes = await tbl.findMany({
     where: {
       id: {
-        in: [1, 2]
-      }
-    }
+        in: [1, 2],
+      },
+    },
   })
 
   t.deepEqual(fetchRes, [
     {
       ...nulls,
-      ...record1
+      ...record1,
     },
     {
       ...nulls,
-      ...record2
+      ...record2,
     },
   ])
 })
@@ -250,10 +272,10 @@ test.serial('update transforms JS objects to SQLite', async (t) => {
       related: {
         create: {
           id: 2,
-          timestamp: date2
-        }
-      }
-    }
+          timestamp: date2,
+        },
+      },
+    },
   })
 
   const updateRes = await tbl.update({
@@ -262,15 +284,15 @@ test.serial('update transforms JS objects to SQLite', async (t) => {
       related: {
         update: {
           timestamp: date1,
-        }
-      }
+        },
+      },
     },
     where: {
       id: 1,
     },
     include: {
       related: true,
-    }
+    },
   })
 
   const expected = {
@@ -281,18 +303,18 @@ test.serial('update transforms JS objects to SQLite', async (t) => {
     related: {
       id: 2,
       timestamp: date1,
-    }
+    },
   }
 
   t.deepEqual(updateRes, expected)
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
+      id: 1,
     },
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   t.deepEqual(fetchRes, expected)
@@ -307,14 +329,14 @@ test.serial('updateMany transforms JS objects to SQLite', async (t) => {
     data: {
       id: 1,
       timestamp: date1,
-    }
+    },
   })
 
   await tbl.create({
     data: {
       id: 2,
       timestamp: date2,
-    }
+    },
   })
 
   const { count } = await tbl.updateMany({
@@ -322,8 +344,8 @@ test.serial('updateMany transforms JS objects to SQLite', async (t) => {
       timestamp: date3,
     },
     where: {
-      timestamp: date1
-    }
+      timestamp: date1,
+    },
   })
 
   t.is(count, 1)
@@ -331,10 +353,10 @@ test.serial('updateMany transforms JS objects to SQLite', async (t) => {
   const fetchRes = await tbl.findMany({
     select: {
       timestamp: true,
-    }
+    },
   })
 
-  t.deepEqual(fetchRes, [ { timestamp: date3 }, { timestamp: date2 } ])
+  t.deepEqual(fetchRes, [{ timestamp: date3 }, { timestamp: date2 }])
 })
 
 test.serial('upsert transforms JS objects to SQLite', async (t) => {
@@ -348,23 +370,23 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
     related: {
       create: {
         id: 2,
-        timestamp: date2
-      }
-    }
+        timestamp: date2,
+      },
+    },
   }
 
   // upsert will create row1
   const createRes = await tbl.upsert({
     create: row1,
     update: {
-      timestamp: date1
+      timestamp: date1,
     },
     where: {
-      id: 1
+      id: 1,
     },
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   t.deepEqual(createRes, {
@@ -373,7 +395,7 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
     timestamp: date1,
     related: {
       id: 2,
-      timestamp: date2
+      timestamp: date2,
     },
     relatedId: 2,
   })
@@ -384,16 +406,16 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
       timestamp: date3,
       related: {
         update: {
-          timestamp: date3
-        }
-      }
+          timestamp: date3,
+        },
+      },
     },
     where: {
-      id: 1
+      id: 1,
     },
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   const expected = {
@@ -402,7 +424,7 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
     timestamp: date3,
     related: {
       id: 2,
-      timestamp: date3
+      timestamp: date3,
     },
     relatedId: 2,
   }
@@ -411,11 +433,11 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
+      id: 1,
     },
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   t.deepEqual(fetchRes, expected)
@@ -431,16 +453,16 @@ test.serial('delete transforms JS objects to SQLite', async (t) => {
     related: {
       create: {
         id: 2,
-        timestamp: date2
-      }
-    }
+        timestamp: date2,
+      },
+    },
   }
 
   const createRes = await tbl.create({
     data: row1,
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   const expected = {
@@ -449,7 +471,7 @@ test.serial('delete transforms JS objects to SQLite', async (t) => {
     timestamp: date1,
     related: {
       id: 2,
-      timestamp: date2
+      timestamp: date2,
     },
     relatedId: 2,
   }
@@ -458,19 +480,19 @@ test.serial('delete transforms JS objects to SQLite', async (t) => {
 
   const deleteRes = await tbl.delete({
     where: {
-      timestamp: date1
+      timestamp: date1,
     },
     include: {
-      related: true
-    }
+      related: true,
+    },
   })
 
   t.deepEqual(deleteRes, expected)
 
   const fetchRes = await tbl.findUnique({
     where: {
-      id: 1
-    }
+      id: 1,
+    },
   })
 
   t.is(fetchRes, null)
@@ -490,14 +512,14 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
     id: 2,
     timestamp: date2,
   }
-  
+
   const o3 = {
     id: 3,
     timestamp: date3,
   }
 
   const { count } = await tbl.createMany({
-    data: [ o1, o2, o3 ]
+    data: [o1, o2, o3],
   })
 
   t.is(count, 3)
@@ -505,9 +527,9 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
   const deleteRes = await tbl.deleteMany({
     where: {
       timestamp: {
-        in: [ o1.timestamp, o2.timestamp ]
-      }
-    }
+        in: [o1.timestamp, o2.timestamp],
+      },
+    },
   })
 
   t.is(deleteRes.count, 2)
@@ -519,6 +541,6 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
       ...dateNulls,
       ...o3,
       relatedId: null,
-    }
+    },
   ])
 })
