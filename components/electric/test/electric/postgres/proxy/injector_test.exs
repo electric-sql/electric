@@ -329,41 +329,45 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           )
         end
 
-        @tag sql_generation: true
         @tag non_electrified_migration: true
         test "non-electrified ALTER object", cxt do
-          objects =
-            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP INDEX LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TEXT TEXT TEXT TEXT TRIGGER TYPE USER USERVIEW)
+          # just some representative (but valid) statement that we should pass-through as-is
+          query = ~s[ALTER SEQUENCE IF EXISTS  "something" INCREMENT BY 2 START WITH 100]
 
-          for object <- objects do
-            query = ~s[ALTER #{object} "something" DO SOMETHING]
-
-            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
-          end
+          cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
         end
 
-        @tag sql_generation: true
         @tag non_electrified_migration: true
         test "non-electrified CREATE object", cxt do
-          objects =
-            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TEXT TEXT TEXT TEXT TRIGGER TYPE USER USERVIEW)
+          # just some representative (but valid) statement that we should pass-through as-is
+          query = """
+          CREATE OPERATOR === (
+            LEFTARG = box,
+            RIGHTARG = box,
+            FUNCTION = area_equal_function,
+            COMMUTATOR = ===,
+            NEGATOR = !==,
+            RESTRICT = area_restriction_function,
+            JOIN = area_join_function,
+            HASHES, MERGES
+          )
+          """
 
-          for object <- objects do
-            query = ~s[CREATE #{object} "something" DO SOMETHING]
-
-            cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
-          end
+          cxt.scenario.assert_non_electrified_migration(
+            cxt.injector,
+            cxt.framework,
+            String.trim(query)
+          )
         end
 
-        @tag sql_generation: true
         @tag non_electrified_migration: true
         test "non-electrified DROP object", cxt do
+          # just some representative (but valid) statements that we should pass-through as-is
           objects =
-            ~w(AGGREGATE COLLATION CONVERSION DATABASE DEFAULT DOMAIN EVENT EXTENSION FOREIGN FOREIGN FUNCTION GROUP LANGUAGE LARGE MATERIALIZED OPERATOR OPERATOR OPERATOR POLICY PROCEDURE PUBLICATION ROLE ROUTINE RULE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION SYSTEM TABLESPACE TRIGGER TYPE USER USERVIEW)
+            ~w(EXTENSION FUNCTION GROUP LANGUAGE PROCEDURE PUBLICATION ROLE ROUTINE SCHEMA SEQUENCE SERVER STATISTICS SUBSCRIPTION TABLESPACE TYPE USER)
 
           for object <- objects do
             query = ~s[DROP #{object} "something"]
-            IO.puts(query)
 
             cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
           end

@@ -3,7 +3,7 @@ if System.get_env("INTEGRATION") do
 else
   ExUnit.configure(
     capture_log: true,
-    exclude: [:integration, :sql_generation],
+    exclude: [:integration],
     timeout: 15_000
   )
 
