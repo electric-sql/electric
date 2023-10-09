@@ -32,9 +32,14 @@ export class ExtendedDMMFDatamodel {
 
   private _getExtendedModels(models: DMMF.Model[], prismaSchema: string) {
     const parsedModels = parseModels(prismaSchema)
-    const modelsDct = new Map(parsedModels.map(m => [ m.name, m ]))
+    const modelsDct = new Map(parsedModels.map((m) => [m.name, m]))
     return models.map(
-      (model) => new ExtendedDMMFModel(this.generatorConfig, model, modelsDct.get(model.name)!)
+      (model) =>
+        new ExtendedDMMFModel(
+          this.generatorConfig,
+          model,
+          modelsDct.get(model.name)!
+        )
     )
   }
 

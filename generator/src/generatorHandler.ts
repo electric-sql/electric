@@ -22,7 +22,7 @@ generatorHandler({
         ...getPrismaClientProvider(generatorOptions),
       },
       dmmf: generatorOptions.dmmf,
-      datamodel: generatorOptions.datamodel
+      datamodel: generatorOptions.datamodel,
     })
   },
 })

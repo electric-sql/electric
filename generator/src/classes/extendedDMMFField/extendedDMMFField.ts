@@ -90,7 +90,6 @@ export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
    */
   readonly zodType: string
 
-
   /**
    * Array of type attributes specified for this field
    */
@@ -140,14 +139,19 @@ export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
 
 export class ExtendedDMMFFieldClass
   extends ExtendedDMMFFieldZodType
-  implements ExtendedDMMFField {
-    // Extend the DMMF further with the type attributes
-    // that are defined on model fields in the Prisma schema
+  implements ExtendedDMMFField
+{
+  // Extend the DMMF further with the type attributes
+  // that are defined on model fields in the Prisma schema
   readonly attributes: Attribute[]
 
-  constructor(field: DMMF.Field, generatorConfig: GeneratorConfig, modelName: string, parsedField: Field) {
+  constructor(
+    field: DMMF.Field,
+    generatorConfig: GeneratorConfig,
+    modelName: string,
+    parsedField: Field
+  ) {
     super(field, generatorConfig, modelName)
     this.attributes = parsedField.attributes
   }
 }
-
