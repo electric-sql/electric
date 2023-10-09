@@ -112,8 +112,8 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       sql = Electric.DDLX.command_to_postgres(grant1)
 
-      query(conn, sql)
-      query(conn, sql)
+      {:ok, _, _} = query(conn, sql)
+      {:ok, _, _} = query(conn, sql)
     end
 
     test_tx "adding a grant with multiple grant columns", fn conn ->
