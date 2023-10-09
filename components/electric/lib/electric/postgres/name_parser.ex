@@ -13,7 +13,7 @@ defmodule Electric.Postgres.NameParser do
       )
       |> ignore(string(~s("))),
       # unquoted identifier
-      repeat(utf8_char([?a..?z, ?0..?9, ?_]))
+      repeat_while(utf8_char([]), {:unquoted_name, []})
     ])
 
   namespaced =
@@ -46,4 +46,14 @@ defmodule Electric.Postgres.NameParser do
         raise ArgumentError, message: "Failed to parse name #{inspect(name)}: #{inspect(error)}"
     end
   end
+
+  # used to find the end of an unquoted name, so allows the parser to continue
+  # until it hits whitespace, or a quote
+  defp unquoted_name(<<w::8, _::binary>>, context, _, _) when w in [?\s, ?\r, ?\n, ?\t],
+    do: {:halt, context}
+
+  defp unquoted_name(<<?., _::binary>>, context, _, _), do: {:halt, context}
+  defp unquoted_name(<<?", _::binary>>, context, _, _), do: {:halt, context}
+  defp unquoted_name(<<?', _::binary>>, context, _, _), do: {:halt, context}
+  defp unquoted_name(_, context, _, _), do: {:cont, context}
 end

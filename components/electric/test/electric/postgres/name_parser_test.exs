@@ -13,6 +13,10 @@ defmodule Electric.Postgres.NameParserTest do
     end
   end
 
+  test "unquoted unicode names" do
+    assert {:ok, {"thing", "Köln_en$ts"}} = NameParser.parse("thing.Köln_en$ts")
+  end
+
   defp extract_name({{_, schema}, {_, name}}, _default_schema) do
     {schema, name}
   end
