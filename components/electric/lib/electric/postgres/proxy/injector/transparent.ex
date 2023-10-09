@@ -1,4 +1,5 @@
 defmodule Electric.Postgres.Proxy.Injector.Transparent do
+  # need a struct in order to implement the Operation protocol
   defstruct []
 
   alias Electric.Postgres.Proxy.{
