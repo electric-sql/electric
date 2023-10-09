@@ -42,7 +42,7 @@ defmodule Electric.Postgres.Proxy.Injector do
         |> default_capture_mode()
         |> initialise_capture_mode(connection)
 
-      debug("Initialising injector in capture mode #{inspect(capture || "default")}")
+      Logger.debug("Initialising injector in capture mode #{inspect(capture || "default")}")
 
       {:ok,
        {
@@ -120,13 +120,13 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   @spec capture_ddl_query(String.t(), String.t() | nil) :: String.t()
-  def capture_ddl_query(query, quote \\ nil) do
-    ~s|CALL electric.capture_ddl(#{quote_query(query, quote)})|
+  def capture_ddl_query(query, quote_delimiter \\ nil) do
+    ~s|CALL electric.capture_ddl(#{quote_query(query, quote_delimiter)})|
   end
 
   @spec capture_version_query(String.t(), String.t() | nil) :: String.t()
-  def capture_version_query(version, quote \\ nil) do
-    ~s|CALL electric.migration_version(#{quote_query(version, quote)})|
+  def capture_version_query(version, quote_delimiter \\ nil) do
+    ~s|CALL electric.migration_version(#{quote_query(version, quote_delimiter)})|
   end
 
   def alter_shadow_table_query(alteration) do
@@ -144,22 +144,18 @@ defmodule Electric.Postgres.Proxy.Injector do
     ~s|CALL electric.alter_shadow_table(#{args})|
   end
 
-  defp quote_query(query, quote) do
-    quote = quote || random_quote()
+  defp quote_query(query, delimiter) do
+    delimiter = delimiter || random_delimiter()
 
-    quote <> to_string(query) <> quote
+    delimiter <> to_string(query) <> delimiter
   end
 
-  defp random_quote do
+  defp random_delimiter do
     "$__" <> (:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)) <> "__$"
   end
 
   def migration_version do
     DateTime.utc_now()
     |> Calendar.strftime("%Y%m%d%H%M%S_%f")
-  end
-
-  def debug(msg) do
-    Logger.debug(msg, component: Electric.Postgres.Proxy)
   end
 end
