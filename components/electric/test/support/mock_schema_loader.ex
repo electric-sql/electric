@@ -410,7 +410,6 @@ defmodule Electric.Postgres.MockSchemaLoader do
         # we only use the txid which MUST be set to the version because
         # the mocking system has no way to propagate transaction ids through
         # -- the txid/txts stuff is an implementation detail of the proxy system
-        # FIXME: re-factor the proxy impl to cache actions until it has a version
         case Enum.find(
                versions,
                &(to_integer(&1.txid) == to_integer(txid) &&

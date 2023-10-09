@@ -71,7 +71,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       {:ok, producer} = start_supervised({FakeProducer, producer_name})
 
-      # txid = "749"
       version = "20220421"
 
       # provide fake oids for the new tables
@@ -89,10 +88,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       pks = %{
         {"public", "mistakes"} => ["id"]
       }
-
-      # txids = %{
-      #   txid => version
-      # }
 
       backend =
         MockSchemaLoader.start_link([oids: oids, pks: pks], name: __MODULE__.Loader)

@@ -970,8 +970,6 @@ defmodule Operation.BindExecuteElectric do
           ),
           state
         }
-
-        # {op.commands ++ [%Operation.FakeExecute{msgs: msgs, tag: tag}], state}
       else
         {op, state}
       end

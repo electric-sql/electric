@@ -81,16 +81,6 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def capture_notice(_query) do
     M.NoticeResponse
-    # {:ok, {sname, tname}} = Parser.table_name(query)
-    #
-    # struct(M.NoticeResponse,
-    #   severity: "NOTICE",
-    #   code: "00000",
-    #   message: "Migration affecting electrified table #{inspect(sname)}.#{inspect(tname)}",
-    #   detail: "Capturing migration: #{query}",
-    #   schema: sname,
-    #   table: tname
-    # )
   end
 
   def parse_describe(sql, name \\ nil) do

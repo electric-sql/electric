@@ -325,7 +325,6 @@ defmodule Electric.Satellite.SerializationTest do
               "query" => "create table something_else (id uuid primary key);",
               "txid" => "100",
               "txts" => "200"
-              # "version" => version
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -337,7 +336,6 @@ defmodule Electric.Satellite.SerializationTest do
               "query" => "create table other_thing (id uuid primary key);",
               "txid" => "100",
               "txts" => "200"
-              # "version" => version
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -349,7 +347,6 @@ defmodule Electric.Satellite.SerializationTest do
               "query" => "create table yet_another_thing (id uuid primary key);",
               "txid" => "100",
               "txts" => "200"
-              # "version" => version
             },
             tags: ["postgres_1@1682019749178"]
           }

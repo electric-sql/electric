@@ -45,7 +45,6 @@ defmodule Electric.Replication.InitialSyncTest do
       assert is_integer(xid)
       assert %DateTime{} = timestamp
 
-      # migration_version = Map.fetch!(migration.record, "version")
       migration_relation = Extension.ddl_relation()
 
       assert %NewRecord{
