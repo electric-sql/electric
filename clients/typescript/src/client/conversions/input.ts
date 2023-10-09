@@ -21,60 +21,6 @@ type Swap<T, Input, Props extends keyof Input> = Omit<T, Props> &
   Pick<Input, Props>
 
 /**
- * Transforms the values of an input object to SQLite values.
- * @param i The input object.
- * @param fields Type information about the table's fields.
- * @param op The type of operation that received this input.
- * @returns The transformed input object.
- */
-/*
-export function transform(i: CreateInput, fields: Fields, op: DALOp.CREATE): CreateInput
-export function transform(i: CreateManyInput, fields: Fields, op: DALOp.CREATE_MANY): CreateManyInput
-export function transform(i: UpdateInput, fields: Fields, op: DALOp.UPDATE): UpdateInput
-export function transform(i: UpdateManyInput, fields: Fields, op: DALOp.UPDATE_MANY): UpdateManyInput
-export function transform(i: UpsertInput, fields: Fields, op: DALOp.UPSERT): UpsertInput
-export function transform(i: DeleteInput, fields: Fields, op: DALOp.DELETE): DeleteInput
-export function transform(i: DeleteManyInput, fields: Fields, op: DALOp.DELETE_MANY): DeleteManyInput
-export function transform(i: object, fields: Fields, op: DALOp): object {
-  switch (op) {
-    case DALOp.CREATE:
-      return transformCreate(i as CreateInput, fields)
-    case DALOp.CREATE_MANY:
-      return transformCreateMany(i as CreateManyInput, fields)
-    case DALOp.UPDATE:
-      return transformUpdate(i as UpdateInput, fields)
-    case DALOp.UPDATE_MANY:
-      return transformUpdateMany(i as UpdateManyInput, fields)
-    case DALOp.UPSERT:
-      return transformUpsert(i as UpsertInput, fields)
-    case DALOp.DELETE:
-      return transformDelete(i as DeleteInput, fields)
-    case DALOp.DELETE_MANY:
-      return transformDeleteMany(i as DeleteManyInput, fields)
-  }
-}
-*/
-
-/**
- * Takes a schema for a `create` operation and adds a transformation
- * that converts the JS values to their corresponding SQLite values.
- * e.g. JS `Date` objects are converted into strings.
- * @param schema The schema of the `create` operation
- * @param fields The table's fields.
- */
-/*
-export function transformCreateSchema<Data extends object, Select, Include>(schema: z.ZodType<CreateInput<Data, Select, Include>>, fields: Map<FieldName, PgType>) {
-  return schema.transform((createInput) => {
-    const transformedData = transformFields(createInput.data, fields)
-    return {
-      ...createInput,
-      data: transformedData,
-    }
-  })
-}
-*/
-
-/**
  * Takes the data input of a `create` operation and
  * converts the JS values to their corresponding SQLite values.
  * e.g. JS `Date` objects are converted into strings.

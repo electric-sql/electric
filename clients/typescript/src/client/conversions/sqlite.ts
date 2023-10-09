@@ -1,9 +1,4 @@
-//import { SqlValue } from "../../util"
-
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-
-//type SqliteValue = string | number | null
-//type PgValue = string | number | null
 
 /**
  * This module takes care of converting TypeScript values for Postgres-specific types to a SQLite storeable value and back.
@@ -34,7 +29,6 @@ export enum PgDateType {
 
 export type PgType = PgBasicType | PgDateType
 
-//export function toSqlite(v: Date, pgType: PgDateType): string
 export function toSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
@@ -51,7 +45,6 @@ export function toSqlite(v: any, pgType: PgType): any {
   }
 }
 
-//export function fromSqlite(v: string, pgType: PgDateType): Date
 export function fromSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
