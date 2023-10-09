@@ -28,8 +28,8 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
       );
       """,
       """
-      CREATE INDEX #{Extension.electrified_tracking_relation()}_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
-      CREATE INDEX #{Extension.electrified_tracking_relation()}_oid_idx ON #{electrified_tracking_table} (oid);
+      CREATE INDEX electrified_tracking_table_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
+      CREATE INDEX electrified_tracking_table_name_oid ON #{electrified_tracking_table} (oid);
       """,
       Extension.add_table_to_publication_sql(electrified_tracking_table),
       # This function definition is included here because it is referenced in the definition of the electrify() function
