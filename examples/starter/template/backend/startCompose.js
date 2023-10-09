@@ -1,19 +1,16 @@
-const shell = require('shelljs')
-const path = require('path')
+const { dockerCompose } = require('../util/util.js')
+const process = require('process')
 
-const envrcFile = path.join(__dirname, 'compose', '.envrc')
-const composeFile = path.join(__dirname, 'compose', 'docker-compose.yaml')
+const cliArguments = process.argv.slice(2)
 
-const cliArguments = process.argv.slice(2).join(' ')
-
-const res = shell.exec(`docker compose --env-file ${envrcFile} -f ${composeFile} up ${cliArguments}`)
-
-if (res.code !== 0 && res.stderr.includes('port is already allocated')) {
-  // inform the user that they should change ports
-  console.error(
-    '\x1b[31m',
-    'Could not start Electric because the port seems to be taken.\n' +
-    'To run Electric on another port execute `yarn ports:configure`',
-    '\x1b[0m'
-  )
-}
+dockerCompose('up', cliArguments, (code) => {
+  if (code !== 0) {
+    console.error(
+      '\x1b[31m',
+      'Failed to start the Electric backend. Check the output from `docker compose` above.\n' +
+      'If the error message mentions a port already being allocated or address being already in use,\n' +
+      'execute `yarn ports:configure` to run Electric on another port.',
+      '\x1b[0m'
+    )
+  }
+})
