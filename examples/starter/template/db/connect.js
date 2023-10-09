@@ -1,6 +1,6 @@
-const { DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
-const { spawn } = require('child_process')
+const { dockerCompose } = require('../util/util.js')
+const { PUBLIC_DATABASE_URL } = require('./util.js')
 
 console.info(`Connecting to postgres at ${PUBLIC_DATABASE_URL}`)
 
-spawn("psql", [DATABASE_URL], { cwd: __dirname, stdio: 'inherit' })
+dockerCompose('exec', ['-it', 'postgres', 'psql', '-U', 'postgres'])
