@@ -47,7 +47,6 @@ defmodule Electric.Postgres.Proxy.Parser do
   require Logger
 
   @default_schema "public"
-  @wspc ~c"\t\n\r "
 
   @spec table_name(binary() | struct(), Keyword.t()) ::
           {:table | :index, {String.t(), String.t()}} | {nil, nil} | no_return
@@ -159,186 +158,11 @@ defmodule Electric.Postgres.Proxy.Parser do
 
   def string_node_val(%PgQuery.String{sval: sval}), do: sval
 
-  def column_map(sql) when is_binary(sql) do
-    with {:ok, [{_msg, ast}]} <- parse(%M.Query{query: sql}) do
-      column_map(ast)
-    end
-  end
-
-  def column_map(%PgQuery.InsertStmt{} = ast) do
-    cols =
-      ast.cols
-      |> Enum.map(fn %{node: {:res_target, %{name: name}}} -> name end)
-      |> Enum.with_index()
-      |> Enum.into(%{})
-
-    {:ok, cols}
-  end
-
-  def column_map(ast) do
-    {:error, "Not an INSERT statement: #{inspect(ast)}"}
-  end
-
-  def column_values_map(%PgQuery.InsertStmt{} = ast) do
-    {:ok, column_map} = column_map(ast)
-
-    names =
-      column_map
-      |> Enum.sort_by(fn {_name, index} -> index end, :asc)
-      |> Enum.map(&elem(&1, 0))
-
-    %{select_stmt: %{node: {:select_stmt, select}}} = ast
-    %{values_lists: [%{node: {:list, %{items: column_values}}}]} = select
-
-    values = Enum.map(column_values, fn %{node: {:a_const, %{val: val}}} -> decode_val(val) end)
-
-    {:ok, Map.new(Enum.zip(names, values))}
-  end
-
-  defp decode_val({:sval, %{sval: s}}), do: s
-  defp decode_val({:fval, %{fval: s}}), do: String.to_integer(s)
-
   defp blank(e, opts) when e in [nil, ""] do
     Keyword.get(opts, :default_schema, @default_schema)
   end
 
   defp blank(e, _), do: e
-
-  def insert?(<<w::8, rest::binary>>) when w in @wspc and byte_size(rest) > 6 do
-    insert?(rest)
-  end
-
-  defkeyword :insert?, "INSERT" do
-    true
-  end
-
-  def insert?(_), do: false
-
-  def capture?(<<w::8, rest::binary>>) when w in @wspc do
-    capture?(rest)
-  end
-
-  defkeyword :capture?, "BEGIN", trailing: false do
-    {true, :begin}
-  end
-
-  defkeyword :capture?, "ALTER" do
-    case object(rest) do
-      "table" ->
-        {true, {:alter, "table"}}
-
-      _other ->
-        false
-    end
-  end
-
-  defkeyword :capture?, "CREATE" do
-    case object(rest) do
-      "table" ->
-        false
-
-      "index" ->
-        {true, {:create, "index"}}
-
-      _other ->
-        false
-    end
-  end
-
-  defkeyword :capture?, "DROP" do
-    case object(rest) do
-      "index" ->
-        {true, {:drop, "index"}}
-
-      "table" ->
-        {true, {:drop, "table"}}
-
-      _other ->
-        false
-    end
-  end
-
-  defkeyword :capture?, "COMMIT", trailing: false do
-    {true, :commit}
-  end
-
-  defkeyword :capture?, "ROLLBACK", trailing: false do
-    {true, :rollback}
-  end
-
-  defkeyword :capture?, "ELECTRIC" do
-    # we absorb the :error/:ok because errors return a %Command.Error{}
-    {_, command} = ddlx(rest)
-    {true, {:electric, command}}
-  end
-
-  defkeyword :capture?, "CALL" do
-    {true, {:call, "electrify"}}
-  end
-
-  def capture?(_stmt) do
-    false
-  end
-
-  defp ddlx(stmt) do
-    Electric.DDLX.Parse.Parser.parse("ELECTRIC " <> stmt)
-  end
-
-  def object(<<w::8, rest::binary>>) when w in @wspc do
-    object(rest)
-  end
-
-  defkeyword :object, "TABLE" do
-    "table"
-  end
-
-  defkeyword :object, "INDEX" do
-    "index"
-  end
-
-  def electric_electrify(<<w::8, rest::binary>>) when w in @wspc do
-    electric_electrify(rest)
-  end
-
-  def electric_electrify("electric.electrify(" <> _rest), do: true
-  def electric_electrify(_), do: false
-
-  @split_ws Enum.map(@wspc, &IO.iodata_to_binary([&1]))
-  def object(other) do
-    [type, _rest] = :binary.split(other, @split_ws)
-    String.downcase(type)
-  end
-
-  def table_modifications(sql) when is_binary(sql) do
-    sql
-    |> Electric.Postgres.parse!()
-    |> Enum.flat_map(&analyse_modifications_query/1)
-  end
-
-  defp analyse_modifications_query(%PgQuery.AlterTableStmt{} = stmt) do
-    {:table, {_schema, _name} = table} = table_name(stmt)
-
-    Enum.map(stmt.cmds, fn %{node: {:alter_table_cmd, cmd}} ->
-      Map.new([{:action, modification_action(cmd)}, {:table, table} | column_definition(cmd.def)])
-    end)
-  end
-
-  # we're currently only interested in alter table statements
-  defp analyse_modifications_query(_stmt) do
-    []
-  end
-
-  defp modification_action(%{subtype: :AT_AddColumn}), do: :add
-  defp modification_action(%{subtype: :AT_DropColumn}), do: :drop
-  defp modification_action(_), do: :modify
-
-  defp column_definition(%{node: {:column_def, def}}) do
-    [column: def.colname, type: Electric.Postgres.Dialect.Postgresql.map_type(def.type_name)]
-  end
-
-  defp column_definition(nil) do
-    []
-  end
 
   @type analyse_options() :: [loader: SchemaLoader.t(), default_schema: String.t()]
 
@@ -373,6 +197,12 @@ defmodule Electric.Postgres.Proxy.Parser do
         {:ok, stmts}
 
       {:error, error} ->
+        # if the query contains DDLX, eg. ELECTRIC GRANT etc, then the pg
+        # parser will error on the non-valid syntax smuggle_electric_syntax
+        # wraps the DDLX statements in a function call with the statement
+        # string as an argument so that the entire query can be parsed -- the
+        # ddlx statments are recognised and extracted from the special `CALL`
+        # statements by the `QueryAnalyser` code.
         smuggle_electric_syntax(query, type, error)
     end
   end

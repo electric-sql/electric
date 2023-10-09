@@ -63,6 +63,39 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
   def sql_table(%{table: {schema, table}}) do
     ~s["#{schema}"."#{table}"]
   end
+
+  def column_map(%PgQuery.InsertStmt{} = ast) do
+    cols =
+      ast.cols
+      |> Enum.map(fn %{node: {:res_target, %{name: name}}} -> name end)
+      |> Enum.with_index()
+      |> Enum.into(%{})
+
+    {:ok, cols}
+  end
+
+  def column_map(ast) do
+    {:error, "Not an INSERT statement: #{inspect(ast)}"}
+  end
+
+  def column_values_map(%PgQuery.InsertStmt{} = ast) do
+    {:ok, column_map} = column_map(ast)
+
+    names =
+      column_map
+      |> Enum.sort_by(fn {_name, index} -> index end, :asc)
+      |> Enum.map(&elem(&1, 0))
+
+    %{select_stmt: %{node: {:select_stmt, select}}} = ast
+    %{values_lists: [%{node: {:list, %{items: column_values}}}]} = select
+
+    values = Enum.map(column_values, fn %{node: {:a_const, %{val: val}}} -> decode_val(val) end)
+
+    {:ok, Map.new(Enum.zip(names, values))}
+  end
+
+  defp decode_val({:sval, %{sval: s}}), do: s
+  defp decode_val({:fval, %{fval: s}}), do: String.to_integer(s)
 end
 
 defprotocol Electric.Postgres.Proxy.QueryAnalyser do
@@ -323,7 +356,7 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
       ["inserted_at", "version"] ->
         case analysis.mode do
           :extended ->
-            {:ok, columns} = Parser.column_map(stmt)
+            {:ok, columns} = column_map(stmt)
 
             %{
               analysis
@@ -331,7 +364,7 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
             }
 
           :simple ->
-            {:ok, columns} = Parser.column_values_map(stmt)
+            {:ok, columns} = column_values_map(stmt)
             {:ok, version} = Map.fetch(columns, "version")
 
             %{
