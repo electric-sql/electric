@@ -30,7 +30,11 @@ export const generator = async (config: GeneratorConfig) => {
   }
 
   // extend the DMMF with custom functionality - see "classes" folder
-  const extendedDMMF = new ExtendedDMMF(config.dmmf, config.config, config.datamodel)
+  const extendedDMMF = new ExtendedDMMF(
+    config.dmmf,
+    config.config,
+    config.datamodel
+  )
 
   // If data is present in the output directory, delete it.
   DirectoryHelper.removeDir(output.value)

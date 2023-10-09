@@ -89,7 +89,10 @@ export function writeFieldsMap(
     (f) => model.relationFields.indexOf(f) === -1
   )
   const fieldArray = JSON.stringify(
-    fieldsWithoutRelations.map((field) => [field.name, pgType(field, model.name)]),
+    fieldsWithoutRelations.map((field) => [
+      field.name,
+      pgType(field, model.name),
+    ]),
     null,
     2
   )
@@ -101,31 +104,35 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
   const attributes = field.attributes
   switch (prismaType) {
     // BigInt, Boolean, Bytes, DateTime, Decimal, Float, Int, JSON, String
-    case "String":
+    case 'String':
       return stringToPg(attributes)
-    case "Int":
-      return "INT4"
-    case "Boolean":
-      return "BOOLEAN"
-    case "DateTime":
+    case 'Int':
+      return 'INT4'
+    case 'Boolean':
+      return 'BOOLEAN'
+    case 'DateTime':
       return dateTimeToPg(attributes, field.name, modelName)
-    case "BigInt":
-      return "INT8"
-    case "Bytes":
-      return "BYTEA"
-    case "Decimal":
-      return "DECIMAL"
-    case "Float":
-      return "FLOAT8"
-    case "JSON":
-      return "JSON"
+    case 'BigInt':
+      return 'INT8'
+    case 'Bytes':
+      return 'BYTEA'
+    case 'Decimal':
+      return 'DECIMAL'
+    case 'Float':
+      return 'FLOAT8'
+    case 'JSON':
+      return 'JSON'
     default:
-      return "UNRECOGNIZED PRISMA TYPE"
+      return 'UNRECOGNIZED PRISMA TYPE'
   }
 }
 
-function dateTimeToPg(attributes: Array<Attribute>, field: string, model: string): string {
-  const a = attributes.find(a => a.type.startsWith('@db'))
+function dateTimeToPg(
+  attributes: Array<Attribute>,
+  field: string,
+  model: string
+): string {
+  const a = attributes.find((a) => a.type.startsWith('@db'))
   const type = a?.type
   const mapping = new Map([
     ['@db.Timestamptz', 'TIMESTAMPTZ'],
@@ -141,24 +148,24 @@ function dateTimeToPg(attributes: Array<Attribute>, field: string, model: string
     // i.e. Prisma does not add the type attribute
     //      if the PG type is `timestamp`
     return 'TIMESTAMP'
-  }
-  else {
+  } else {
     const pgType = mapping.get(type)
     if (!pgType) {
-      throw new Error(`Unrecognized type attribute '${type}' for field '${field}' in model '${model}'.`)
+      throw new Error(
+        `Unrecognized type attribute '${type}' for field '${field}' in model '${model}'.`
+      )
     }
     return pgType
   }
 }
 
 function stringToPg(attributes: Array<Attribute>) {
-  const pgTypeAttribute = attributes.find(a => a.type.startsWith('@db'))
+  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
   if (!pgTypeAttribute || pgTypeAttribute.type === '@db.Text') {
     // If Prisma does not add a type attribute then the PG type was TEXT
-    return "TEXT"
-  }
-  else {
-    return "VARCHAR"
+    return 'TEXT'
+  } else {
+    return 'VARCHAR'
   }
 }
 
