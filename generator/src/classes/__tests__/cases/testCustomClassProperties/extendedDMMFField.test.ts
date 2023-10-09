@@ -26,8 +26,8 @@ export const DEFAULT_GENERATOR_CONFIG: GeneratorConfig = {
 }
 
 describe('testSimpleModelNoValidators', async () => {
-  const dmmf = await loadDMMF(`${__dirname}/extendedDMMFField.prisma`)
-  const extendedDMMF = new ExtendedDMMF(dmmf, {})
+  const [dmmf, datamodel] = await loadDMMF(`${__dirname}/extendedDMMFField.prisma`)
+  const extendedDMMF = new ExtendedDMMF(dmmf, {}, datamodel)
 
   const fields = extendedDMMF.datamodel.models[0].fields
 

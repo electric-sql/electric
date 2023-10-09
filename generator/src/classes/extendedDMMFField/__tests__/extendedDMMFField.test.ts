@@ -8,7 +8,8 @@ const getField = (field?: Partial<DMMF.Field>) =>
   new ExtendedDMMFFieldClass(
     { ...FIELD_BASE, ...field },
     DEFAULT_GENERATOR_CONFIG,
-    'ModelName'
+    'ModelName',
+    { field: field?.name ?? 'dummy', type: field?.type?? 'TEXT', attributes: [] }
   )
 
 // BASE TESTS
