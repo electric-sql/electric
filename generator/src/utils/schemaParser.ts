@@ -60,7 +60,9 @@ function parseFields(body: string): Array<Field> {
 function parseAttributes(attributes: string): Array<Attribute> {
   // Matches each attribute in a string of attributes
   // e.g. @id @db.Timestamp(2)
-  const attributeRegex = /(?<type>@[\w\.]+)(?<args>\(.+\))?/g
+  // The optional args capture group matches anything
+  // but not @or newline because that would be the start of a new attribute
+  const attributeRegex = /(?<type>@[\w\.]+)(?<args>\([^@\n\r]+\))?/g
   const matches = [...attributes.matchAll(attributeRegex)]
   return matches.map(m => {
     const { type, args } = m.groups! as { type: string, args?: string }
