@@ -14,6 +14,9 @@ const DEFAULT_URL = `postgresql://postgres:password@localhost:${pgPort}/${appNam
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
+const urlComponents = DATABASE_URL.split('/')
+const DATABASE_NAME = urlComponents[urlComponents.length-1]
+
 function error(err) {
   console.error('\x1b[31m', err, '\x1b[0m')
   process.exit(1)
@@ -65,4 +68,5 @@ function fetchAppName() {
 
 exports.DATABASE_URL = DATABASE_URL
 exports.PUBLIC_DATABASE_URL = PUBLIC_DATABASE_URL
+exports.DATABASE_NAME = DATABASE_NAME
 exports.fetchHostPortElectric = fetchHostPortElectric
