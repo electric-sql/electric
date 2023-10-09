@@ -1,8 +1,8 @@
 //import { SqlValue } from "../../util"
 
-import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 
-//type SqliteValue = string | number | null 
+//type SqliteValue = string | number | null
 //type PgValue = string | number | null
 
 /**
@@ -14,22 +14,22 @@ import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
  */
 
 export enum PgBasicType {
-  PG_BOOL = "BOOLEAN",
-  PG_SMALLINT = "INT2",
-  PG_INT = "INT4",
-  PG_FLOAT = "FLOAT8",
-  PG_TEXT = "TEXT",
+  PG_BOOL = 'BOOLEAN',
+  PG_SMALLINT = 'INT2',
+  PG_INT = 'INT4',
+  PG_FLOAT = 'FLOAT8',
+  PG_TEXT = 'TEXT',
 }
 
 /**
  * Union type of all Pg types that are represented by a `Date` in JS/TS.
  */
 export enum PgDateType {
-  PG_TIMESTAMP = "TIMESTAMP",
-  PG_TIMESTAMPTZ = "TIMESTAMPTZ",
-  PG_DATE = "DATE",
-  PG_TIME = "TIME",
-  PG_TIMETZ = "TIMETZ",
+  PG_TIMESTAMP = 'TIMESTAMP',
+  PG_TIMESTAMPTZ = 'TIMESTAMPTZ',
+  PG_DATE = 'DATE',
+  PG_TIME = 'TIME',
+  PG_TIMETZ = 'TIMETZ',
 }
 
 export type PgType = PgBasicType | PgDateType
@@ -39,14 +39,14 @@ export function toSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
-  }
-  else if (isPgDateType(pgType)) {
+  } else if (isPgDateType(pgType)) {
     if (!(v instanceof Date))
-      throw new InvalidArgumentError(`Unexpected value ${v}. Expected a Date object.`)
-    
+      throw new InvalidArgumentError(
+        `Unexpected value ${v}. Expected a Date object.`
+      )
+
     return serialiseDate(v, pgType as PgDateType)
-  }
-  else {
+  } else {
     return v
   }
 }
@@ -56,12 +56,10 @@ export function fromSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
-  }
-  else if (isPgDateType(pgType)) {
+  } else if (isPgDateType(pgType)) {
     // it's a serialised date
     return deserialiseDate(v, pgType as PgDateType)
-  }
-  else {
+  } else {
     return v
   }
 }
@@ -72,19 +70,19 @@ function serialiseDate(v: Date, pgType: PgDateType): string {
     case PgDateType.PG_TIMESTAMP:
       // Returns local timestamp
       return ignoreTimeZone(v).toISOString().replace('T', ' ').replace('Z', '')
-    
+
     case PgDateType.PG_TIMESTAMPTZ:
       // Returns UTC timestamp
       return v.toISOString().replace('T', ' ')
-    
+
     case PgDateType.PG_DATE:
       // Returns the local date
       return extractDateAndTime(ignoreTimeZone(v)).date
-    
+
     case PgDateType.PG_TIME:
       // Returns the local time
       return extractDateAndTime(ignoreTimeZone(v)).time
-    
+
     case PgDateType.PG_TIMETZ:
       // Returns UTC time
       return extractDateAndTime(v).time
@@ -96,9 +94,8 @@ function deserialiseDate(v: string, pgType: PgDateType): Date {
   const parse = (v: any) => {
     const millis = Date.parse(v)
     if (isNaN(millis))
-        throw new Error(`Could not parse date, invalid format: ${v}`)
-      else
-        return new Date(millis)
+      throw new Error(`Could not parse date, invalid format: ${v}`)
+    else return new Date(millis)
   }
 
   switch (pgType) {
@@ -106,16 +103,14 @@ function deserialiseDate(v: string, pgType: PgDateType): Date {
     case PgDateType.PG_TIMESTAMPTZ:
     case PgDateType.PG_DATE:
       return parse(v)
-    
+
     case PgDateType.PG_TIME:
       // interpret as local time
-      const timestamp = `1970-01-01 ${v}`
-      return parse(timestamp)
-    
+      return parse(`1970-01-01 ${v}`)
+
     case PgDateType.PG_TIMETZ:
       // interpret as UTC time
-      const ts = `1970-01-01 ${v}+00`
-      return parse(ts)
+      return parse(`1970-01-01 ${v}+00`)
   }
 }
 
@@ -133,10 +128,14 @@ function ignoreTimeZone(v: Date): Date {
   return new Date(v.getTime() - offsetInMs)
 }
 
-type ExtractedDateTime = { date: string, time: string }
+type ExtractedDateTime = { date: string; time: string }
 function extractDateAndTime(v: Date): ExtractedDateTime {
   const regex = /([0-9-]*)T([0-9:.]*)Z/g
-  const [_, date, time] = regex.exec(v.toISOString())! as unknown as [string, string, string]
+  const [_, date, time] = regex.exec(v.toISOString())! as unknown as [
+    string,
+    string,
+    string
+  ]
   return { date, time }
 }
 

@@ -1028,7 +1028,6 @@ function deserializeColumnData(
   const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
     case 'CHAR':
-    case 'DATE':
     case 'TEXT':
     case 'UUID':
     case 'VARCHAR':

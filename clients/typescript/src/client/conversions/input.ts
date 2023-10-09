@@ -1,23 +1,24 @@
 import mapValues from 'lodash.mapvalues'
-import { FieldName, Fields } from "../model/schema"
-import { PgDateType, PgType, fromSqlite, toSqlite } from "./sqlite"
-import { InvalidArgumentError } from "../validation/errors/invalidArgumentError"
+import { FieldName, Fields } from '../model/schema'
+import { PgDateType, PgType, fromSqlite, toSqlite } from './sqlite'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { mapObject } from '../util/functions'
 
 export enum Transformation {
   Js2Sqlite,
-  Sqlite2Js
+  Sqlite2Js,
 }
 
-type UpdateInput = { data: object, where: object }
-type UpdateManyInput = { data: object, where?: object }
+type UpdateInput = { data: object; where: object }
+type UpdateManyInput = { data: object; where?: object }
 type CreateInput = { data: object }
 type CreateManyInput = { data: Array<object> }
-type UpsertInput = { update: object, create: object, where: object }
+type UpsertInput = { update: object; create: object; where: object }
 type WhereUniqueInput = { where: object }
 type WhereInput = { where?: object }
 
-type Swap<T, Input, Props extends keyof Input> = Omit<T, Props> & Pick<Input, Props>
+type Swap<T, Input, Props extends keyof Input> = Omit<T, Props> &
+  Pick<Input, Props>
 
 /**
  * Transforms the values of an input object to SQLite values.
@@ -105,7 +106,7 @@ export function transformCreateMany<T extends CreateManyInput>(
 ): Swap<T, CreateManyInput, 'data'> {
   return {
     ...i,
-    data: i.data.map(o => transformFields(o, fields)),
+    data: i.data.map((o) => transformFields(o, fields)),
   }
 }
 
@@ -236,17 +237,21 @@ function transformWhereInput<T extends WhereInput>(
  * @param transformation Which transformation to execute.
  * @returns An object with the values converted to SQLite.
  */
-export function transformFields(o: object, fields: Fields, transformation: Transformation = Transformation.Js2Sqlite): object {
+export function transformFields(
+  o: object,
+  fields: Fields,
+  transformation: Transformation = Transformation.Js2Sqlite
+): object {
   // only transform fields that are part of this table and not related fields
   // as those will be transformed later when the query on the related field is processed.
   const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
-  const fieldsAndTransformedValues = fieldsAndValues.map(entry => {
+  const fieldsAndTransformedValues = fieldsAndValues.map((entry) => {
     const [field, value] = entry
     return transformField(field, value, o, fields, transformation)
   })
   return {
     ...o,
-    ...Object.fromEntries(fieldsAndTransformedValues)
+    ...Object.fromEntries(fieldsAndTransformedValues),
   }
 }
 
@@ -260,18 +265,26 @@ export function transformFields(o: object, fields: Fields, transformation: Trans
  * @param transformation Which transformation to execute.
  * @returns The transformed field.
  */
-function transformField(field: FieldName, value: any, o: object, fields: Fields, transformation: Transformation = Transformation.Js2Sqlite): any {
+function transformField(
+  field: FieldName,
+  value: any,
+  o: object,
+  fields: Fields,
+  transformation: Transformation = Transformation.Js2Sqlite
+): any {
   const pgType = fields.get(field)
 
   if (!pgType)
-    throw new InvalidArgumentError(`Unknown field ${field} in object ${JSON.stringify(o)}`)
+    throw new InvalidArgumentError(
+      `Unknown field ${field} in object ${JSON.stringify(o)}`
+    )
 
   const transformedValue =
     transformation === Transformation.Js2Sqlite
       ? toSqlite(value, pgType)
       : fromSqlite(value, pgType)
 
-  return [ field, transformedValue ]
+  return [field, transformedValue]
 }
 
 function transformWhere(o: object, fields: Fields): object {
@@ -289,23 +302,36 @@ function transformWhere(o: object, fields: Fields): object {
   }
 }
 
-function transformBooleanConnectors(o: { AND?: object | object[], OR?: object | object[], NOT?: object | object[] }, fields: Fields): object {
+function transformBooleanConnectors(
+  o: {
+    AND?: object | object[]
+    OR?: object | object[]
+    NOT?: object | object[]
+  },
+  fields: Fields
+): object {
   // Within a `where` object, boolean connectors AND/OR/NOT will contain
   // a nested `where` object or an array of nested `where` objects
   // if it is a single `where` object we wrap it in an array
   // and we map `transformWhere` to recursively handle all nested objects
-  const makeArray = (v: any) => Array.isArray(v) ? v : [v]
-  const andObj = o.AND ? { AND: makeArray(o.AND).map(x => transformWhere(x, fields)) } : {}
-  const orObj = o.OR ? { OR: makeArray(o.OR).map(x => transformWhere(x, fields)) } : {}
-  const notObj = o.NOT ? { NOT: makeArray(o.NOT).map(x => transformWhere(x, fields)) } : {}
+  const makeArray = (v: any) => (Array.isArray(v) ? v : [v])
+  const andObj = o.AND
+    ? { AND: makeArray(o.AND).map((x) => transformWhere(x, fields)) }
+    : {}
+  const orObj = o.OR
+    ? { OR: makeArray(o.OR).map((x) => transformWhere(x, fields)) }
+    : {}
+  const notObj = o.NOT
+    ? { NOT: makeArray(o.NOT).map((x) => transformWhere(x, fields)) }
+    : {}
 
   // we use spread syntax such that the filter is not included if it is undefined
   // we cannot set it to undefined because then it appears in `hasOwnProperty`
   // and the query builder will try to write `undefined` to the database.
   return {
-    ...(andObj),
-    ...(orObj),
-    ...(notObj),
+    ...andObj,
+    ...orObj,
+    ...notObj,
   }
 }
 
@@ -328,7 +354,7 @@ function transformWhereFields(o: object, fields: Fields): object {
 
   return {
     ...o,
-    ...transformedObj
+    ...transformedObj,
   }
 }
 
@@ -341,11 +367,14 @@ function transformWhereFields(o: object, fields: Fields): object {
  * @param fields Type information about the fields of this table.
  * @returns The transformed value.
  */
-function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fields): any {
+function transformFieldsAllowingFilters(
+  field: FieldName,
+  value: any,
+  fields: Fields
+): any {
   const pgType = fields.get(field)
 
-  if (!pgType)
-    throw new InvalidArgumentError(`Unknown field ${field}`)
+  if (!pgType) throw new InvalidArgumentError(`Unknown field ${field}`)
 
   switch (pgType) {
     // Types that require transformations
@@ -357,8 +386,7 @@ function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fi
       if (value instanceof Date) {
         // transform it
         return toSqlite(value, pgType)
-      }
-      else {
+      } else {
         // it must be an object containing filters
         // transform the values that are nested in those filters
         return transformFilterObject(field, value, pgType, fields)
@@ -387,17 +415,26 @@ function transformFieldsAllowingFilters(field: FieldName, value: any, fields: Fi
  * @param fields Type information about the fields of this table.
  * @returns A transformed filter object.
  */
-function transformFilterObject(field: FieldName, o: any, pgType: PgType, fields: Fields) {
-  const simpleFilters = new Set([ 'equals', 'lt', 'lte', 'gt', 'gte' ]) // filters whose value is an optional value of type `pgType`
+function transformFilterObject(
+  field: FieldName,
+  o: any,
+  pgType: PgType,
+  fields: Fields
+) {
+  const simpleFilters = new Set(['equals', 'lt', 'lte', 'gt', 'gte']) // filters whose value is an optional value of type `pgType`
   const arrayFilters = new Set(['in', 'notIn']) // filters whose value is an optional array of values of type `pgType`
 
   // Handle the simple filters
   const simpleFilterObj = filterKeys(o, simpleFilters)
-  const transformedSimpleFilterObj = mapValues(simpleFilterObj, (v: any) => toSqlite(v, pgType))
+  const transformedSimpleFilterObj = mapValues(simpleFilterObj, (v: any) =>
+    toSqlite(v, pgType)
+  )
 
   // Handle the array filters
   const arrayFilterObj = filterKeys(o, arrayFilters)
-  const transformedArrayFilterObj = mapValues(arrayFilterObj, arr => arr.map((v: any) => toSqlite(v, pgType)))
+  const transformedArrayFilterObj = mapValues(arrayFilterObj, (arr) =>
+    arr.map((v: any) => toSqlite(v, pgType))
+  )
 
   // Handle `not` filter
   // `not` is a special one as it accepts a value or a nested object of filters
@@ -411,7 +448,7 @@ function transformFilterObject(field: FieldName, o: any, pgType: PgType, fields:
   return {
     ...transformedSimpleFilterObj,
     ...transformedArrayFilterObj,
-    ...transformedNotFilterObj
+    ...transformedNotFilterObj,
   }
 }
 
@@ -433,5 +470,7 @@ function keepTableFieldsOnly(o: object, fields: Fields) {
  * @returns A filtered object.
  */
 function filterKeys(o: object, keys: Set<string>) {
-  return Object.fromEntries(Object.entries(o).filter(entry => keys.has(entry[0])))
+  return Object.fromEntries(
+    Object.entries(o).filter((entry) => keys.has(entry[0]))
+  )
 }

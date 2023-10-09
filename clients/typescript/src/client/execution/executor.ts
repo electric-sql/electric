@@ -7,7 +7,11 @@ import { Notifier } from '../../notifiers'
 import { Fields } from '../model/schema'
 
 export class Executor {
-  constructor(private _adapter: DatabaseAdapter, private _notifier: Notifier, private _fields: Fields) {}
+  constructor(
+    private _adapter: DatabaseAdapter,
+    private _notifier: Notifier,
+    private _fields: Fields
+  ) {}
 
   async runInTransaction(
     qs: QueryBuilder[],

@@ -8,13 +8,14 @@ export function notNullNotUndefined<T>(v: T): v is NonNullable<T> {
  * @param f The function to map over the object's entries.
  * @returns Object containing the mapped values.
  */
-export function mapObject<V, W, T extends Record<string, V>>(obj: T, f: (key: string, value: V) => W): Record<string, W> {
+export function mapObject<V, W, T extends Record<string, V>>(
+  obj: T,
+  f: (key: string, value: V) => W
+): Record<string, W> {
   return Object.fromEntries(
-    Object
-      .entries(obj)
-      .map(entry => {
-        const [key, value] = entry
-        return [key, f(key, value)]
-      })
+    Object.entries(obj).map((entry) => {
+      const [key, value] = entry
+      return [key, f(key, value)]
+    })
   )
 }
