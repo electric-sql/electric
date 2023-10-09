@@ -7,14 +7,13 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
   right order. Once `flush/1` has been called any attempt to append messages
   will raise an exception.
   """
-  defstruct flush: false, locked: false, client: [], server: []
+  defstruct flush: false, client: [], server: []
 
   alias PgProtocol.Message, as: M
 
   @type msgs() :: M.t() | [M.t()]
   @type t() :: %__MODULE__{
           flush: boolean(),
-          locked: boolean(),
           client: [M.t()],
           server: [M.t()]
         }
@@ -48,10 +47,6 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
     raise "Cannot send to a flushed channel"
   end
 
-  def client(%__MODULE__{locked: true} = send, _msg) do
-    send
-  end
-
   def client(%__MODULE__{} = send, msgs) when is_list(msgs) do
     Enum.reduce(msgs, send, &client(&2, &1))
   end
@@ -68,10 +63,6 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
 
   def server(%__MODULE__{flush: true}, _msg) do
     raise "Cannot send to a flushed channel"
-  end
-
-  def server(%__MODULE__{locked: true} = send, _msg) do
-    send
   end
 
   def server(%__MODULE__{} = send, msgs) when is_list(msgs) do
@@ -95,10 +86,6 @@ defmodule Electric.Postgres.Proxy.Injector.Send do
 
   def flush(%__MODULE__{flush: true} = send) do
     send
-  end
-
-  def lock(%__MODULE__{} = send) do
-    %{send | locked: true}
   end
 
   def pending(%__MODULE__{} = send, side) when side in [:client, :server] do
