@@ -1,4 +1,24 @@
 defmodule Electric.Postgres.Proxy.Parser.Macros do
+  @doc """
+  Produces a function head that matches a string in a case insensitive way.
+
+  E.g.
+
+       defkeyword :in?, "IN" do
+          :ok
+       end
+
+  produces the code:
+
+       def in?(<<c0::8, c1::8, rest::binary>> = stmt) when c0 in [?i, ?I] and c1 in [?n, ?N] do
+         :ok
+       end
+
+  ## Options
+
+  - `trailing` - should the keyword be followed by whitespace, defaults to `true`. 
+
+  """
   defmacro defkeyword(function, keyword, opts \\ [], do: block) do
     chars =
       keyword
@@ -20,12 +40,14 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
     end
   end
 
+  # <<c0::8, c1::8, ..., rest::binary>>
   defp build_match(chars) do
     {:<<>>, [],
      Enum.map(chars, fn {_c, i} -> {:"::", [], [{:"c#{i}", [], Elixir}, 8]} end) ++
        [{:"::", [], [{:var!, [], [{:rest, [], Elixir}]}, {:binary, [], Elixir}]}]}
   end
 
+  # c0 in [?c, ?C]
   defp build_guards([{c, i}]) do
     {:in, [], [{:"c#{i}", [], Elixir}, c]}
   end
