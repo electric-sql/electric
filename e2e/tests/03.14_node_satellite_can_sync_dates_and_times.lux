@@ -29,13 +29,13 @@
     ??INSERT 0 3
 
 [shell satellite_1]
-    [invoke node_await_read_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
-    [invoke node_await_read_datetime "002" "0001-01-01" "1970-01-01 00:59:03.110"]
-    [invoke node_await_read_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
+    [invoke node_await_assert_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
+    [invoke node_await_assert_datetime "002" "0001-01-01" "1970-01-01 00:59:03.110"]
+    [invoke node_await_assert_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
 
-    !await client.write_datetime(db, { id: '004', d: new Date('1999-12-31'), t: new Date('1999-12-31 14:46:05.42') })
+    !await client.write_datetime(db, { id: '004', d: new Date('1999-12-31'), t: new Date('1996-02-23 14:46:05.42') })
     ?$node
-    !await client.write_datetime(db, { id: '005', d: new Date('2023-09-26'), t: new Date('2023-09-26 00:00:00.000') })
+    !await client.write_datetime(db, { id: '005', d: new Date('2023-09-26'), t: new Date('2022-11-12 00:00:00.000') })
     ?$node
 
 [shell pg_1]
@@ -55,11 +55,11 @@
     [invoke node_await_table "datetimes"]
     [invoke node_sync_table "datetimes"]
 
-    [invoke node_await_read_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
-    [invoke node_await_read_datetime "002" "0001-01-01" "1970-01-01 00:59:03.11"]
-    [invoke node_await_read_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
-    [invoke node_await_read_datetime "004" "1999-12-31" "1970-01-01 14:46:05.42"]
-    [invoke node_await_read_datetime "005" "2023-09-26" "1970-01-01 00:00:00.000"]
+    [invoke node_await_assert_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
+    [invoke node_await_assert_datetime "002" "0001-01-01" "1970-01-01 00:59:03.11"]
+    [invoke node_await_assert_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
+    [invoke node_await_assert_datetime "004" "1999-12-31" "1970-01-01 14:46:05.42"]
+    [invoke node_await_assert_datetime "005" "2023-09-26" "1970-01-01 00:00:00.000"]
 
 [cleanup]
   [invoke teardown]
