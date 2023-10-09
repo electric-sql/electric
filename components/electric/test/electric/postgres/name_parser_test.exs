@@ -1,8 +1,8 @@
-defmodule Electric.Postgres.Proxy.Injector.NameParserTest do
+defmodule Electric.Postgres.NameParserTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias Electric.Postgres.Proxy.NameParser
+  alias Electric.Postgres.NameParser
 
   property "parse/2" do
     check all generated_name <- table_name(), {false, default_schema} <- unquoted_name() do

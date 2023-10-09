@@ -420,7 +420,8 @@ defimpl QueryAnalyser, for: PgQuery.DoStmt do
 end
 
 defimpl QueryAnalyser, for: PgQuery.CallStmt do
-  alias Electric.Postgres.Proxy.{NameParser, Parser}
+  alias Electric.Postgres.NameParser
+  alias Electric.Postgres.Proxy.Parser
   alias Electric.DDLX
 
   def analyse(stmt, analysis, state) do

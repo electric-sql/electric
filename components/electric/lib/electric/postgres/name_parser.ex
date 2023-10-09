@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.Proxy.NameParser do
+defmodule Electric.Postgres.NameParser do
   import NimbleParsec
 
   identifier =

@@ -58,7 +58,7 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
 end
 
 defmodule Electric.Postgres.Proxy.Parser do
-  alias Electric.Postgres.Proxy.NameParser
+  alias Electric.Postgres.NameParser
   alias Electric.Postgres.Proxy.Injector.State
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Proxy.{QueryAnalyser, QueryAnalysis}
