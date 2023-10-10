@@ -93,7 +93,7 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
-    !make docker-prisma
+    !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?SH-PROMPT:
 
     # this exact comparison is too fussy

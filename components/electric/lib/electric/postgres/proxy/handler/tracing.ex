@@ -1,11 +1,8 @@
 defmodule Electric.Postgres.Proxy.Handler.Tracing do
-  @trace Mix.env() in [:dev]
+  def do_trace(action, side, session_id, msgs) do
+    config = config()
 
-  if @trace do
-    def do_trace(_action, _side, _session_id, []) do
-    end
-
-    def do_trace(action, side, session_id, msgs) do
+    if tracing_enabled?(config) do
       {label, colour} =
         case {action, side} do
           {:send, :client} -> {"[#{session_id}] 🠞 #{side} ", :green}
@@ -14,39 +11,46 @@ defmodule Electric.Postgres.Proxy.Handler.Tracing do
           {:recv, :server} -> {"[#{session_id}] #{side} 🠞 ", :yellow}
         end
 
-      IO.puts(IO.ANSI.format([colour, label, :reset, PgProtocol.Message.inspect(msgs)]))
-    end
-
-    defmacro trace_recv(source, session_id, msgs) do
-      quote do
-        Electric.Postgres.Proxy.Handler.Tracing.do_trace(
-          :recv,
-          unquote(source),
-          unquote(session_id),
-          unquote(msgs)
+      IO.puts(
+        IO.ANSI.format(
+          [colour, label, :reset, PgProtocol.Message.inspect(msgs)],
+          colour?(config) && IO.ANSI.enabled?()
         )
-      end
+      )
     end
+  end
 
-    defmacro trace_send(source, session_id, msgs) do
-      quote do
-        Electric.Postgres.Proxy.Handler.Tracing.do_trace(
-          :send,
-          unquote(source),
-          unquote(session_id),
-          unquote(msgs)
-        )
-      end
+  defmacro trace_recv(source, session_id, msgs) do
+    quote do
+      Electric.Postgres.Proxy.Handler.Tracing.do_trace(
+        :recv,
+        unquote(source),
+        unquote(session_id),
+        unquote(msgs)
+      )
     end
-  else
-    defmacro trace_recv(_source, _session_id, _msgs) do
-      nil
-    end
+  end
 
-    defmacro trace_send(source, session_id, msgs) do
-      quote do
-        {_, _, _} = {unquote(source), unquote(session_id), unquote(msgs)}
-      end
+  defmacro trace_send(source, session_id, msgs) do
+    quote do
+      Electric.Postgres.Proxy.Handler.Tracing.do_trace(
+        :send,
+        unquote(source),
+        unquote(session_id),
+        unquote(msgs)
+      )
     end
+  end
+
+  def tracing_enabled?(config) do
+    Keyword.get(config, :enable, false)
+  end
+
+  def colour?(config) do
+    Keyword.get(config, :colour, true)
+  end
+
+  defp config do
+    Application.get_env(:electric, __MODULE__, enable: false)
   end
 end

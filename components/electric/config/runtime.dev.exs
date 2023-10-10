@@ -39,3 +39,7 @@ config :electric, Electric.Replication.Connectors,
       log_level: :info
     ]
   ]
+
+enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
+
+config :electric, Electric.Postgres.Proxy.Handler.Tracing, enable: enable_proxy_tracing?

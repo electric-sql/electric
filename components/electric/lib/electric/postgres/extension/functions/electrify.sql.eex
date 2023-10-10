@@ -11,7 +11,7 @@ DECLARE
     _create_sql text;
 BEGIN
     SELECT
-        table_name, schema_name, table_oid 
+        table_name, schema_name, table_oid
     INTO
         _table, _schema, _oid
     FROM <%= @schema %>.__resolve_table_from_names(name1, name2);
@@ -19,33 +19,31 @@ BEGIN
     _quoted_name := format('%I.%I', _schema, _table);
     _oid := (SELECT _quoted_name::regclass);
 
-    RAISE NOTICE 'Electrify table %', _quoted_name;
-
     IF NOT EXISTS (SELECT pc.oid FROM pg_class pc WHERE pc.oid = _oid AND pc.relkind = 'r') THEN
         RAISE EXCEPTION '% is not an ordinary table', _quoted_name;
     END IF;
 
-    PERFORM <%= @schema %>.__validate_table_column_types(_quoted_name);
-
-    EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
-
-    INSERT INTO <%= @electrified_tracking_table %> (schema_name, table_name, oid)
-    VALUES (_schema, _table, _oid) 
-    ON CONFLICT ON CONSTRAINT unique_table_name
-    DO NOTHING;
-
-    -- insert the required ddl into the migrations table
-    SELECT <%= @schema %>.ddlgen_create(_oid) INTO _create_sql; 
-
-    RAISE DEBUG '%', _create_sql;
-
-    CALL <%= @schema %>.capture_ddl(_create_sql);
-
     IF NOT EXISTS (
-        SELECT pr.oid FROM pg_publication_rel pr
-            INNER JOIN pg_publication pp ON pr.prpubid = pp.oid
-            WHERE pp.pubname = '<%= @publication_name %>' AND pr.prrelid = _oid
+        SELECT oid FROM <%= @electrified_tracking_table %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
         ) THEN
+        RAISE NOTICE 'Electrify table %', _quoted_name;
+
+        PERFORM <%= @schema %>.__validate_table_column_types(_quoted_name);
+
+        -- insert the required ddl into the migrations table
+        SELECT <%= @schema %>.ddlgen_create(_oid) INTO _create_sql;
+
+        RAISE DEBUG '%', _create_sql;
+
+        CALL <%= @schema %>.capture_ddl(_create_sql);
+
+        EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
+
+        INSERT INTO <%= @electrified_tracking_table %>
+            (schema_name, table_name, oid)
+          VALUES
+            (_schema, _table, _oid);
+
         EXECUTE format('<%= publication_sql %>;', _schema, _table);
 
         -- We want to disable any possible hooks from `CREATE TABLE` statements

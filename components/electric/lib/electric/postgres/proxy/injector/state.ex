@@ -74,17 +74,24 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   """
   @spec electrify(t()) :: t()
   def electrify(%__MODULE__{} = state) do
-    Map.update!(state, :tx, &Map.put(&1, :electrified, true))
+    maybe_update_tx(state, &Map.put(&1, :electrified, true))
   end
 
   @spec electrify(t(), {String.t(), String.t()}) :: t()
   def electrify(%__MODULE__{} = state, {_schema, _name} = table) do
     electrify(state)
-    |> Map.update!(:tx, &Tx.electrify_table(&1, table))
+    |> maybe_update_tx(&Tx.electrify_table(&1, table))
   end
 
   def electrified?(%__MODULE__{tx: %Tx{electrified: electrified?}}), do: electrified?
   def electrified?(%__MODULE__{}), do: false
+
+  defp maybe_update_tx(state, update_fun) do
+    Map.update!(state, :tx, fn
+      nil -> nil
+      tx when is_map(tx) -> update_fun.(tx)
+    end)
+  end
 
   @doc """
   Wrapper around the SchemaLoader.table_electrified?/2 behaviour callback.
@@ -132,7 +139,7 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   """
   @spec tx_version(t(), integer() | String.t()) :: t()
   def tx_version(%__MODULE__{} = state, version) do
-    Map.update!(state, :tx, &Map.put(&1, :version, to_string(version)))
+    maybe_update_tx(state, &Map.put(&1, :version, to_string(version)))
   end
 
   @doc """
@@ -148,5 +155,11 @@ defmodule Electric.Postgres.Proxy.Injector.State do
 
   def assign_version_metadata(%__MODULE__{} = state, version) do
     Map.update!(state, :metadata, &Map.put(&1, :version, to_string(version)))
+  end
+
+  def retrieve_version_metadata(%__MODULE__{} = state) do
+    Map.get_and_update!(state, :metadata, fn m ->
+      {Map.fetch(m, :version), Map.delete(m, :version)}
+    end)
   end
 end

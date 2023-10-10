@@ -5,6 +5,8 @@ RUN mkdir /app
 WORKDIR /app
 
 COPY ./src .
+COPY ./migrations-1 ./migrations-1
+
 RUN pnpm fetch
 
 RUN pnpm install

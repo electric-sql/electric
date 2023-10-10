@@ -1,0 +1,19 @@
+[doc Prisma migration version is captured]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[newshell developer]
+    # apply the baseline migration
+    !make docker-prisma ARGS='--workdir /app/migrations-1 prisma_example_1 prisma migrate resolve --applied 0_init'
+    ?SH-PROMPT:
+    !make docker-prisma ARGS='--workdir /app/migrations-1 prisma_example_1 prisma migrate deploy'
+    ?SH-PROMPT:
+
+[shell electric]
+    ?? [info] Applying migration 20230915175207
+    ?? [info] Applying migration 20230916212444
+
+[cleanup]
+    [invoke teardown]
+

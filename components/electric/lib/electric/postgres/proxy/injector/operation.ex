@@ -347,7 +347,15 @@ end
 
 # FIXME: better name!
 defmodule Operation.Wait do
-  defstruct [:msgs, signal: M.ReadyForQuery]
+  defstruct [:msgs, :tx, signal: M.ReadyForQuery]
+
+  def new(msgs, state, signal \\ M.ReadyForQuery) do
+    %__MODULE__{
+      msgs: List.wrap(msgs),
+      signal: signal,
+      tx: if(State.tx?(state), do: :tx, else: :idle)
+    }
+  end
 
   defimpl Operation do
     use Operation.Impl
@@ -367,12 +375,12 @@ defmodule Operation.Wait do
       {op, state, Send.server(send, op.msgs)}
     end
 
-    def recv_server(%{signal: signal}, %signal{} = msg, state, send) do
-      {nil, state, Send.client(send, msg)}
+    def recv_server(%{signal: signal} = op, %signal{} = msg, state, send) do
+      {nil, state, Send.client(send, msg, op.tx)}
     end
 
     def recv_server(op, msg, state, send) do
-      {op, state, Send.client(send, msg)}
+      {op, state, Send.client(send, msg, op.tx)}
     end
   end
 end
@@ -433,7 +441,7 @@ defmodule Operation.Between do
     end
 
     defp execute(op, msgs, state, send) do
-      msgs = Enum.map(msgs, &tx_status(&1, op.status))
+      msgs = Enum.map(msgs, &Send.status(&1, op.status))
       Operation.activate(op.commands ++ [Operation.Pass.client(msgs)], state, send)
     end
 
@@ -452,18 +460,6 @@ defmodule Operation.Between do
 
     def send_error(op, state, send) do
       Operation.send_error(op.commands, state, send)
-    end
-
-    defp tx_status(m, nil) do
-      m
-    end
-
-    defp tx_status(%M.ReadyForQuery{}, status) do
-      %M.ReadyForQuery{status: status}
-    end
-
-    defp tx_status(m, _status) do
-      m
     end
   end
 end
@@ -539,7 +535,7 @@ defmodule Operation.AssignMigrationVersion do
 
     def activate(op, state, send) do
       if State.electrified?(state) do
-        version = migration_version(op, state)
+        {version, state} = migration_version(op, state)
         query_generator = Map.fetch!(state, :query_generator)
         sql = query_generator.capture_version_query(version)
         {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
@@ -549,12 +545,18 @@ defmodule Operation.AssignMigrationVersion do
     end
 
     defp migration_version(%Operation.AssignMigrationVersion{version: nil}, state) do
-      generate_version(state)
+      case State.retrieve_version_metadata(state) do
+        {{:ok, version}, state} ->
+          {version, state}
+
+        {:error, state} ->
+          {generate_version(state), state}
+      end
     end
 
-    defp migration_version(%Operation.AssignMigrationVersion{version: version}, _state)
+    defp migration_version(%Operation.AssignMigrationVersion{version: version}, state)
          when is_binary(version) do
-      version
+      {version, state}
     end
 
     defp generate_version(state) do
@@ -565,7 +567,7 @@ defmodule Operation.AssignMigrationVersion do
 end
 
 defmodule Operation.Simple do
-  defstruct [:stmts, :op, complete: [], ready: nil]
+  defstruct [:stmts, :op, :tx?, complete: [], ready: nil]
 
   defimpl Operation do
     use Operation.Impl
@@ -575,7 +577,7 @@ defmodule Operation.Simple do
     end
 
     def activate(op, state, send) do
-      if State.tx?(state) || has_tx?(op) do
+      if !op.tx? || (State.tx?(state) || has_tx?(op)) do
         next(op, state, send)
       else
         ops = [
@@ -793,17 +795,17 @@ defmodule Operation.Disallowed do
 end
 
 defmodule Operation.SyntaxError do
-  defstruct [:error]
+  defstruct [:error, :msg]
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      msgs = [error_response(op.error), %M.ReadyForQuery{status: :failed}]
+      msgs = [error_response(op.error, op.msg), %M.ReadyForQuery{status: :failed}]
       {nil, state, Send.client(send, msgs)}
     end
 
-    defp error_response(%Electric.DDLX.Command.Error{} = error) do
+    defp error_response(%Electric.DDLX.Command.Error{} = error, _msg) do
       %M.ErrorResponse{
         code: "00000",
         severity: "ERROR",
@@ -814,7 +816,7 @@ defmodule Operation.SyntaxError do
       }
     end
 
-    defp error_response(%QueryAnalysis{error: error} = analysis) do
+    defp error_response(%QueryAnalysis{error: error} = analysis, _msg) do
       struct(
         %M.ErrorResponse{
           code: "EX000",
@@ -824,6 +826,16 @@ defmodule Operation.SyntaxError do
         },
         error
       )
+    end
+
+    defp error_response(%{cursorpos: cursorpos, message: message}, %{query: query}) do
+      %M.ErrorResponse{
+        code: "42601",
+        severity: "ERROR",
+        message: message,
+        position: cursorpos,
+        query: query
+      }
     end
   end
 end
@@ -853,13 +865,15 @@ defmodule Operation.FakeExecute do
 end
 
 defmodule Operation.AutoTx do
-  defstruct [:ops]
+  defstruct [:ops, :tx?]
+
+  @type t() :: %__MODULE__{ops: Operation.t()}
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      if State.tx?(state) do
+      if State.tx?(state) || !op.tx? do
         Operation.activate(op.ops, state, send)
       else
         ops = [
@@ -896,6 +910,12 @@ defmodule Operation.BindExecute do
         {[Operation.Pass.server(msgs), op], state}
       end
     end
+
+    # while we're waiting for the bind, execute stanza from the client
+    # forward on any messages from the server
+    def recv_server(op, msg, state, send) do
+      {op, state, Send.client(send, msg)}
+    end
   end
 end
 
@@ -906,6 +926,12 @@ defmodule Operation.BindExecuteMigration do
     use Operation.Impl
 
     require Logger
+
+    # while we're waiting for the bind, execute stanza from the client
+    # forward on any messages from the server
+    def recv_server(op, msg, state, send) do
+      {op, state, Send.client(send, msg)}
+    end
 
     def recv_client(op, msgs, state) do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
@@ -929,24 +955,51 @@ defmodule Operation.BindExecuteMigration do
         |> Enum.find(&is_struct(&1, M.Bind))
         |> assign_version(op.framework)
 
-      case {State.tx?(state), State.electrified?(state)} do
-        {_, false} ->
-          {[], state}
+      Logger.debug("Assigning version #{version} to current migration")
 
+      case {State.tx?(state), State.electrified?(state)} do
         {true, true} ->
           {[%Operation.AssignMigrationVersion{version: version}], state}
 
-        {false, true} ->
+        {true, false} ->
+          {[], state}
+
+        # although we aren't in a tx and may not have any electrified
+        # statements we still want to grab the version into some persistent
+        # state field because e.g. prisma assigns the migration version before
+        # actually running any ddl statements
+        {false, _} ->
           {[], State.assign_version_metadata(state, version)}
       end
     end
 
     defp assign_version(%M.Bind{} = msg, %{framework: {:ecto, 1}} = v) do
+      Logger.debug("Detected ecto migration")
+
       <<version::integer-big-signed-64>> =
         Enum.at(msg.parameters, Map.fetch!(v.columns, "version"))
 
-      Logger.debug("Assigning version #{version} to current migration")
       {:ok, to_string(version)}
+    end
+
+    defp assign_version(%M.Bind{} = msg, %{framework: {:prisma, 1}} = v) do
+      Logger.debug("Detected prisma migration")
+
+      name =
+        Enum.at(msg.parameters, Map.fetch!(v.columns, "migration_name"))
+
+      [version, _rest] = String.split(name, "_", parts: 2)
+
+      {:ok, to_string(version)}
+    end
+
+    defp assign_version(%M.Bind{} = msg, %{framework: {:atdatabases, 1}} = v) do
+      Logger.debug("Detected @databases migration")
+
+      version =
+        Enum.at(msg.parameters, Map.fetch!(v.columns, "index"))
+
+      {:ok, version}
     end
   end
 end

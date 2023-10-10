@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.Proxy.QueryAnalysis do
-  @derive {Inspect, except: [:ast]}
+  @derive {Inspect, except: [:ast, :error]}
   defstruct [
     :action,
     :table,
@@ -9,14 +9,12 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
     :source,
     mode: :simple,
     electrified?: false,
+    tx?: false,
     allowed?: true,
     capture?: false,
     valid?: true,
     error: nil
   ]
-
-  @type error_code() ::
-          :rename | :invalid_type | :drop | :rename | :alter
 
   @type t() :: %__MODULE__{
           action: atom() | {atom(), binary()} | {:electric, Electric.DDLX.Command.t()},
@@ -27,10 +25,11 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
           mode: :simple | :extended,
           source: Electric.Postgres.PgQuery.t(),
           electrified?: boolean,
+          tx?: boolean,
           allowed?: boolean,
           capture?: boolean,
           valid?: boolean,
-          error: nil | {error_code(), String.t() | {String.t(), String.t()}}
+          error: nil | %{message: String.t(), detail: String.t(), code: String.t()}
         }
 end
 
@@ -129,7 +128,10 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   def analyse(stmt, %QueryAnalysis{} = analysis, _state) do
     stmt.cmds
     |> Enum.map(&unwrap_node/1)
-    |> Enum.reduce_while(%{analysis | action: {:alter, "table"}}, &analyse_alter_table_cmd/2)
+    |> Enum.reduce_while(
+      %{analysis | tx?: true, action: {:alter, "table"}},
+      &analyse_alter_table_cmd/2
+    )
   end
 
   def validate(_stmt) do
@@ -212,7 +214,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.CreateStmt do
   def analyse(_stmt, analysis, _state) do
-    %{analysis | action: {:create, "table"}}
+    %{analysis | action: {:create, "table"}, tx?: true}
   end
 
   def validate(_stmt) do
@@ -222,7 +224,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.IndexStmt do
   def analyse(_stmt, analysis, _state) do
-    %{analysis | action: {:create, "index"}, capture?: analysis.electrified?}
+    %{analysis | action: {:create, "index"}, tx?: true, capture?: analysis.electrified?}
   end
 
   def validate(_stmt) do
@@ -234,7 +236,7 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
   import QueryAnalyser.Impl
 
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
-    %{analysis | action: action(stmt)}
+    %{analysis | action: action(stmt), tx?: true}
   end
 
   def analyse(stmt, %QueryAnalysis{electrified?: true} = analysis, _state) do
@@ -242,6 +244,7 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
       analysis
       | action: action(stmt),
         allowed?: false,
+        tx?: true,
         error: error(stmt, analysis)
     }
   end
@@ -301,7 +304,7 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
   import QueryAnalyser.Impl
 
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
-    %{analysis | action: action(stmt)}
+    %{analysis | action: action(stmt), tx?: tx?(stmt)}
   end
 
   def analyse(stmt, %QueryAnalysis{electrified?: true} = analysis, _state) do
@@ -309,6 +312,7 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
       analysis
       | allowed?: allowed?(stmt),
         capture?: allowed?(stmt),
+        tx?: true,
         action: action(stmt),
         error: error(stmt, analysis)
     }
@@ -333,6 +337,13 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
 
   defp allowed?(%{remove_type: :OBJECT_INDEX}), do: true
   defp allowed?(%{remove_type: :OBJECT_TABLE}), do: false
+
+  # there are a lot of things you can drop, but we only care about tables and
+  # indexes other things that we might want to capture, like dropping
+  # constraints, are expressed as alter table statements.
+  defp tx?(%{remove_type: :OBJECT_INDEX}), do: true
+  defp tx?(%{remove_type: :OBJECT_TABLE}), do: true
+  defp tx?(_stmt), do: false
 
   defp error(%{remove_type: :OBJECT_INDEX}, _analysis), do: nil
 
@@ -360,7 +371,8 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
 
             %{
               analysis
-              | action: {:migration_version, %{framework: {:ecto, 1}, columns: columns}}
+              | action: {:migration_version, %{framework: {:ecto, 1}, columns: columns}},
+                tx?: false
             }
 
           :simple ->
@@ -369,7 +381,8 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
 
             %{
               analysis
-              | action: {:migration_version, %{framework: {:ecto, 1}, version: version}}
+              | action: {:migration_version, %{framework: {:ecto, 1}, version: version}},
+                tx?: false
             }
         end
 
@@ -379,8 +392,75 @@ defimpl QueryAnalyser, for: PgQuery.InsertStmt do
     end
   end
 
+  def analyse(stmt, %{table: {"public", "_prisma_migrations"}} = analysis, _state) do
+    case column_names(stmt) do
+      ["checksum", "finished_at", "id", "logs", "migration_name", "started_at"] ->
+        prisma_migration(stmt, analysis)
+
+      ["checksum", "id", "migration_name", "started_at"] ->
+        prisma_migration(stmt, analysis)
+
+      other ->
+        Logger.warning("Insert to _prisma_migrations with unrecognised columns #{inspect(other)}")
+        %{analysis | action: :insert}
+    end
+  end
+
+  def analyse(stmt, %{table: {"public", "atdatabases_migrations_applied"}} = analysis, _state) do
+    case column_names(stmt) do
+      ["applied_at", "ignored_error", "index", "name", "obsolete", "script"] ->
+        case analysis.mode do
+          :extended ->
+            {:ok, columns} = column_map(stmt)
+
+            %{
+              analysis
+              | action: {:migration_version, %{framework: {:atdatabases, 1}, columns: columns}},
+                tx?: false
+            }
+
+          :simple ->
+            {:ok, columns} = column_values_map(stmt)
+            {:ok, version} = Map.fetch(columns, "migration_name")
+
+            %{
+              analysis
+              | action: {:migration_version, %{framework: {:atdatabases, 1}, version: version}},
+                tx?: false
+            }
+        end
+
+      other ->
+        Logger.warning("Insert to _prisma_migrations with unrecognised columns #{inspect(other)}")
+        %{analysis | action: :insert}
+    end
+  end
+
   def analyse(_stmt, analysis, _state) do
     %{analysis | action: :insert}
+  end
+
+  defp prisma_migration(stmt, analysis) do
+    case analysis.mode do
+      :extended ->
+        {:ok, columns} = column_map(stmt)
+
+        %{
+          analysis
+          | action: {:migration_version, %{framework: {:prisma, 1}, columns: columns}},
+            tx?: false
+        }
+
+      :simple ->
+        {:ok, columns} = column_values_map(stmt)
+        {:ok, version} = Map.fetch(columns, "migration_name")
+
+        %{
+          analysis
+          | action: {:migration_version, %{framework: {:ecto, 1}, version: version}},
+            tx?: false
+        }
+    end
   end
 
   def validate(_stmt) do
@@ -398,6 +478,16 @@ end
 defimpl QueryAnalyser, for: PgQuery.DeleteStmt do
   def analyse(_stmt, analysis, _state) do
     %{analysis | action: :delete}
+  end
+
+  def validate(_stmt) do
+    :ok
+  end
+end
+
+defimpl QueryAnalyser, for: PgQuery.SelectStmt do
+  def analyse(_stmt, analysis, _state) do
+    %{analysis | action: :select}
   end
 
   def validate(_stmt) do
@@ -442,6 +532,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
                 table: table,
                 ast: command,
                 electrified?: true,
+                tx?: true,
                 capture?: true
             }
         end
@@ -458,6 +549,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
             table: table,
             ast: cmd,
             electrified?: true,
+            tx?: true,
             capture?: true
         }
 

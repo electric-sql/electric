@@ -1,0 +1,27 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PROXY_URL")
+}
+
+// baseline:
+// https://www.prisma.io/docs/guides/migrate/developing-with-prisma-migrate/add-prisma-migrate-to-a-project#baseline-your-production-environment
+
+model entries {
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  content   String  @db.VarChar
+  content_b String?
+}
+
+model owned_entries {
+  id               String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  electric_user_id String
+  content          String @db.VarChar
+}
+

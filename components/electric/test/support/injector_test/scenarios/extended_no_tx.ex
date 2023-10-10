@@ -28,6 +28,17 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     |> idle!()
   end
 
+  def assert_injector_passthrough(injector, _framework, query) do
+    tag = random_tag()
+
+    injector
+    |> client(parse_describe(query))
+    |> server(parse_describe_complete())
+    |> client(bind_execute())
+    |> server(bind_execute_complete(tag, :idle))
+    |> idle!()
+  end
+
   def assert_electrified_migration(injector, _framework, query) do
     {query, opts} =
       case query do
