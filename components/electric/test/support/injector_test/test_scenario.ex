@@ -13,8 +13,20 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.capture_ddl_query(query, "$query$")
     end
 
-    def capture_version_query(version \\ migration_version()) do
-      Injector.capture_version_query(version, "$query$")
+    def capture_version_query() do
+      capture_version_query(migration_version(), 0)
+    end
+
+    def capture_version_query(priority) when is_integer(priority) do
+      capture_version_query(migration_version(), priority)
+    end
+
+    def capture_version_query(version) when is_binary(version) do
+      capture_version_query(version, 0)
+    end
+
+    def capture_version_query(version, priority) do
+      Injector.capture_version_query(version, priority, "$query$")
     end
 
     def alter_shadow_table_query(alteration) do
@@ -197,8 +209,12 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     query(MockInjector.capture_version_query())
   end
 
-  def capture_version_query(version) do
-    query(MockInjector.capture_version_query(to_string(version)))
+  def capture_version_query(version_or_priority) do
+    query(MockInjector.capture_version_query(version_or_priority))
+  end
+
+  def capture_version_query(version, priority) do
+    query(MockInjector.capture_version_query(to_string(version), priority))
   end
 
   def capture_ddl_query(sql) do
@@ -439,7 +455,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def random_version do
-    :rand.uniform(999_999_999_999)
+    :rand.uniform(999_999_999_999) |> to_string()
   end
 
   def execute_tx_sql(sql, injector, mode) when is_binary(sql) do

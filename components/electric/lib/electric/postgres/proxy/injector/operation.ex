@@ -535,9 +535,9 @@ defmodule Operation.AssignMigrationVersion do
 
     def activate(op, state, send) do
       if State.electrified?(state) do
-        {version, state} = migration_version(op, state)
+        {version, priority, state} = migration_version(op, state)
         query_generator = Map.fetch!(state, :query_generator)
-        sql = query_generator.capture_version_query(version)
+        sql = query_generator.capture_version_query(version, priority)
         {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
       else
         {nil, state, send}
@@ -547,16 +547,23 @@ defmodule Operation.AssignMigrationVersion do
     defp migration_version(%Operation.AssignMigrationVersion{version: nil}, state) do
       case State.retrieve_version_metadata(state) do
         {{:ok, version}, state} ->
-          {version, state}
+          # this version is coming from some previous query, outside the
+          # current transaction so give it a priority < the priority of any tx
+          # assigned version.
+          {version, 2, state}
 
         {:error, state} ->
-          {generate_version(state), state}
+          # priority 0 will only be used if the automatic version assignment
+          # wasn't called for some reason
+          {generate_version(state), 0, state}
       end
     end
 
     defp migration_version(%Operation.AssignMigrationVersion{version: version}, state)
          when is_binary(version) do
-      {version, state}
+      # this version is coming from the current transaction, so give it the
+      # highest priority of all these options
+      {version, 4, state}
     end
 
     defp generate_version(state) do

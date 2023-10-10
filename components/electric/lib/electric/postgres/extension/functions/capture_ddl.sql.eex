@@ -11,5 +11,7 @@ BEGIN
     INSERT INTO <%= @ddl_table %> (query)
         VALUES (_query)
         ON CONFLICT ON CONSTRAINT ddl_table_unique_migrations DO NOTHING;
+
+    CALL <%= @schema %>.assign_default_version();
 END;
 $function$ LANGUAGE PLPGSQL;

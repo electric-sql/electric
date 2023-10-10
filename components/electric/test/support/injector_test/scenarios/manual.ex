@@ -60,7 +60,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
         capture_notice(query)
       ]
     )
-    |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
+    |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query(0))
     |> server(capture_version_complete(), server: commit())
     |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
     |> idle!()
