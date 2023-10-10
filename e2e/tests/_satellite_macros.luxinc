@@ -39,6 +39,10 @@
     [invoke wait-for "await client.get_rows(db, '${table}')" "${match}" 10 $node]
 [endmacro]
 
+[macro node_await_get_bool id expected_bool]
+    [invoke wait-for "await client.get_bool(db, '${id}')" "${expected_bool}" 10 $node]
+[endmacro]
+
 [macro node_await_get_timestamps match]
     [invoke wait-for "await client.get_timestamps(db)" "${match}" 10 $node]
 [endmacro]

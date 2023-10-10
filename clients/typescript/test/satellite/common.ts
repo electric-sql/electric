@@ -16,6 +16,34 @@ import { Satellite, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 
+export const dbDescription = new DbSchema(
+  {
+    child: {
+      fields: new Map([
+        ['id', PgBasicType.PG_INTEGER],
+        ['parent', PgBasicType.PG_INTEGER],
+      ]),
+      relations: [],
+    },
+    parent: {
+      fields: new Map([
+        ['id', PgBasicType.PG_INTEGER],
+        ['value', PgBasicType.PG_INTEGER],
+        ['other', PgBasicType.PG_INTEGER],
+      ]),
+      relations: [],
+    },
+    another: {
+      fields: new Map([['id', PgBasicType.PG_INTEGER]]),
+      relations: [],
+    },
+  } as unknown as Record<
+    string,
+    TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+  >,
+  []
+)
+
 export const relations = {
   child: {
     id: 0,
@@ -83,6 +111,9 @@ import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
 import { AuthState } from '../../src/auth'
 import { OplogEntry } from '../../src/satellite/oplog'
+import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { PgBasicType } from '../../src/client/conversions/types'
+import { HKT } from '../../src/client/util/hkt'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {

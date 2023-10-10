@@ -20,6 +20,7 @@ import {
   SUBSCRIPTION_ERROR,
   SubscriptionData,
 } from './types'
+import { DbSchema } from '../../client/model/schema'
 
 type SubscriptionId = string
 type RequestId = string
@@ -36,12 +37,14 @@ export class SubscriptionsDataCache extends EventEmitter {
   remainingShapes: Set<RequestId>
   currentShapeRequestId?: RequestId
   inDelivery?: SubscriptionDataInternal
+  dbDescription: DbSchema<any>
 
-  constructor() {
+  constructor(dbDescription: DbSchema<any>) {
     super()
 
     this.requestedSubscriptions = {}
     this.remainingShapes = new Set()
+    this.dbDescription = dbDescription
   }
 
   isDelivering(): boolean {
@@ -276,7 +279,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       )
     }
 
-    const record = deserializeRow(rowData, relation)
+    const record = deserializeRow(rowData, relation, this.dbDescription)
 
     if (!record) {
       this.internalError(

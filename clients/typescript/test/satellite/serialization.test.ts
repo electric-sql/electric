@@ -2,6 +2,9 @@ import { SatRelation_RelationType } from '../../src/_generated/protocol/satellit
 import { serializeRow, deserializeRow } from '../../src/satellite/client'
 import test from 'ava'
 import { Relation, Record } from '../../src/util/types'
+import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { PgBasicType } from '../../src/client/conversions/types'
+import { HKT } from '../../src/client/util/hkt'
 
 test('serialize/deserialize row data', async (t) => {
   const rel: Relation = {
@@ -23,6 +26,38 @@ test('serialize/deserialize row data', async (t) => {
     ],
   }
 
+  const dbDescription = new DbSchema(
+    {
+      table: {
+        fields: new Map([
+          ['name1', PgBasicType.PG_TEXT],
+          ['name2', PgBasicType.PG_TEXT],
+          ['name3', PgBasicType.PG_TEXT],
+          ['int1', PgBasicType.PG_INTEGER],
+          ['int2', PgBasicType.PG_INTEGER],
+          ['float1', PgBasicType.PG_REAL],
+          ['float2', PgBasicType.PG_FLOAT4],
+          ['bool1', PgBasicType.PG_BOOL],
+          ['bool2', PgBasicType.PG_BOOL],
+          ['bool3', PgBasicType.PG_BOOL],
+        ]),
+        relations: [],
+      } as unknown as TableSchema<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        HKT
+      >,
+    },
+    []
+  )
+
   const record: Record = {
     name1: 'Hello',
     name2: 'World!',
@@ -36,13 +71,13 @@ test('serialize/deserialize row data', async (t) => {
     bool3: null,
   }
 
-  const s_row = serializeRow(record, rel)
+  const s_row = serializeRow(record, rel, dbDescription)
   t.deepEqual(
     s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
     ['Hello', 'World!', '', '1', '-30', '1.0', '-30.3', 't', 'f', '']
   )
 
-  const d_row = deserializeRow(s_row, rel)
+  const d_row = deserializeRow(s_row, rel, dbDescription)
   t.deepEqual(record, d_row)
 })
 
@@ -65,6 +100,37 @@ test('Null mask uses bits as if they were a list', async (t) => {
     ],
   }
 
+  const dbDescription = new DbSchema(
+    {
+      table: {
+        fields: new Map([
+          ['bit0', PgBasicType.PG_TEXT],
+          ['bit1', PgBasicType.PG_TEXT],
+          ['bit2', PgBasicType.PG_TEXT],
+          ['bit3', PgBasicType.PG_TEXT],
+          ['bit4', PgBasicType.PG_TEXT],
+          ['bit5', PgBasicType.PG_TEXT],
+          ['bit6', PgBasicType.PG_TEXT],
+          ['bit7', PgBasicType.PG_TEXT],
+          ['bit8', PgBasicType.PG_TEXT],
+        ]),
+        relations: [],
+      } as unknown as TableSchema<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        HKT
+      >,
+    },
+    []
+  )
+
   const record: Record = {
     bit0: null,
     bit1: null,
@@ -76,7 +142,7 @@ test('Null mask uses bits as if they were a list', async (t) => {
     bit7: 'Filled',
     bit8: null,
   }
-  const s_row = serializeRow(record, rel)
+  const s_row = serializeRow(record, rel, dbDescription)
 
   const mask = [...s_row.nullsBitmask].map((x) => x.toString(2)).join('')
 

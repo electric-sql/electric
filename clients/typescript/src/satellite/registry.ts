@@ -16,6 +16,7 @@ import {
 import { SatelliteProcess } from './process'
 import { SocketFactory } from '../sockets'
 import { SatelliteClient } from './client'
+import { DbSchema } from '../client/model'
 
 export abstract class BaseRegistry implements Registry {
   satellites: {
@@ -37,6 +38,7 @@ export abstract class BaseRegistry implements Registry {
 
   abstract startProcess(
     dbName: DbName,
+    dbDescription: DbSchema<any>,
     adapter: DatabaseAdapter,
     migrator: Migrator,
     notifier: Notifier,
@@ -47,6 +49,7 @@ export abstract class BaseRegistry implements Registry {
 
   async ensureStarted(
     dbName: DbName,
+    dbDescription: DbSchema<any>,
     adapter: DatabaseAdapter,
     migrator: Migrator,
     notifier: Notifier,
@@ -63,6 +66,7 @@ export abstract class BaseRegistry implements Registry {
       return stopping.then(() =>
         this.ensureStarted(
           dbName,
+          dbDescription,
           adapter,
           migrator,
           notifier,
@@ -97,6 +101,7 @@ export abstract class BaseRegistry implements Registry {
     // Otherwise we need to fire it up!
     const startingPromise = this.startProcess(
       dbName,
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -182,6 +187,7 @@ export abstract class BaseRegistry implements Registry {
 export class GlobalRegistry extends BaseRegistry {
   async startProcess(
     dbName: DbName,
+    dbDescription: DbSchema<any>,
     adapter: DatabaseAdapter,
     migrator: Migrator,
     notifier: Notifier,
@@ -202,6 +208,7 @@ export class GlobalRegistry extends BaseRegistry {
 
     const client = new SatelliteClient(
       dbName,
+      dbDescription,
       socketFactory,
       notifier,
       satelliteClientOpts

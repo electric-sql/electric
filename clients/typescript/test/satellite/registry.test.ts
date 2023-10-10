@@ -6,9 +6,11 @@ import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { SocketFactory } from '../../src/sockets'
+import { DbSchema } from '../../src/client/model'
 
 const dbName = 'test.db'
 
+const dbDescription = {} as DbSchema<any>
 const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
@@ -20,6 +22,7 @@ const config: ElectricConfig = {
 }
 const args = [
   dbName,
+  dbDescription,
   adapter,
   migrator,
   notifier,
@@ -38,6 +41,7 @@ test('starting multiple satellite processes works', async (t) => {
   const mockRegistry = new MockRegistry()
   const s1 = await mockRegistry.startProcess(
     'a.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -46,6 +50,7 @@ test('starting multiple satellite processes works', async (t) => {
   )
   const s2 = await mockRegistry.startProcess(
     'b.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -54,6 +59,7 @@ test('starting multiple satellite processes works', async (t) => {
   )
   const s3 = await mockRegistry.startProcess(
     'c.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -77,6 +83,7 @@ test('ensure starting multiple satellite processes works', async (t) => {
   const mockRegistry = new MockRegistry()
   const s1 = await mockRegistry.ensureStarted(
     'a.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -85,6 +92,7 @@ test('ensure starting multiple satellite processes works', async (t) => {
   )
   const s2 = await mockRegistry.ensureStarted(
     'b.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -93,6 +101,7 @@ test('ensure starting multiple satellite processes works', async (t) => {
   )
   const s3 = await mockRegistry.ensureStarted(
     'c.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -173,6 +182,7 @@ test('stopAll works', async (t) => {
   const [_s1, _s2, _s3] = await Promise.all([
     mockRegistry.ensureStarted(
       'a.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -181,6 +191,7 @@ test('stopAll works', async (t) => {
     ),
     mockRegistry.ensureStarted(
       'b.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -189,6 +200,7 @@ test('stopAll works', async (t) => {
     ),
     mockRegistry.ensureStarted(
       'c.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -206,6 +218,7 @@ test('stopAll works even when starting', async (t) => {
   const startPromises = [
     mockRegistry.ensureStarted(
       'a.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -214,6 +227,7 @@ test('stopAll works even when starting', async (t) => {
     ),
     mockRegistry.ensureStarted(
       'b.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -222,6 +236,7 @@ test('stopAll works even when starting', async (t) => {
     ),
     mockRegistry.ensureStarted(
       'c.db',
+      dbDescription,
       adapter,
       migrator,
       notifier,
@@ -241,6 +256,7 @@ test('stopAll works across running, stopping and starting', async (t) => {
   const mockRegistry = new MockRegistry()
   await mockRegistry.ensureStarted(
     'a.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -249,6 +265,7 @@ test('stopAll works across running, stopping and starting', async (t) => {
   )
   await mockRegistry.ensureStarted(
     'b.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -257,6 +274,7 @@ test('stopAll works across running, stopping and starting', async (t) => {
   )
   const p1 = mockRegistry.ensureStarted(
     'c.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,
@@ -265,6 +283,7 @@ test('stopAll works across running, stopping and starting', async (t) => {
   )
   const p2 = mockRegistry.ensureStarted(
     'd.db',
+    dbDescription,
     adapter,
     migrator,
     notifier,

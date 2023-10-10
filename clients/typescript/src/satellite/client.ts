@@ -88,6 +88,8 @@ import { SubscriptionsDataCache } from './shapes/cache'
 import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
 import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
+import { DbSchema } from '../client/model'
+import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
 
 type IncomingHandler = (msg: any) => void
 
@@ -120,6 +122,8 @@ export class SatelliteClient extends EventEmitter implements Client {
   private incomingMutex: Mutex = new Mutex()
   private allowedMutexedRpcResponses: Array<keyof Root> = []
 
+  private dbDescription: DbSchema<any>
+
   private handlerForMessageType: { [k: string]: IncomingHandler } =
     Object.fromEntries(
       Object.entries({
@@ -143,6 +147,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   constructor(
     _dbName: string,
+    dbDescription: DbSchema<any>,
     socketFactory: SocketFactory,
     _notifier: Notifier,
     opts: SatelliteClientOpts
@@ -154,8 +159,9 @@ export class SatelliteClient extends EventEmitter implements Client {
 
     this.inbound = this.resetReplication()
     this.outbound = this.resetReplication()
+    this.dbDescription = dbDescription
 
-    this.subscriptionsDataCache = new SubscriptionsDataCache()
+    this.subscriptionsDataCache = new SubscriptionsDataCache(dbDescription)
     this.rpcClient = new RPC(
       this.sendMessage.bind(this),
       this.opts.timeout,
@@ -503,10 +509,10 @@ export class SatelliteClient extends EventEmitter implements Client {
       const relation = this.outbound.relations.get(change.relation.id)!
       const tags = change.tags
       if (change.oldRecord) {
-        oldRecord = serializeRow(change.oldRecord, relation)
+        oldRecord = serializeRow(change.oldRecord, relation, this.dbDescription)
       }
       if (change.record) {
-        record = serializeRow(change.record, relation)
+        record = serializeRow(change.record, relation, this.dbDescription)
       }
       switch (change.type) {
         case DataChangeType.DELETE:
@@ -867,7 +873,7 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = {
           relation: rel,
           type: DataChangeType.INSERT,
-          record: deserializeRow(op.insert.rowData!, rel),
+          record: deserializeRow(op.insert.rowData!, rel, this.dbDescription),
           tags: op.insert.tags,
         }
 
@@ -887,8 +893,12 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = {
           relation: rel,
           type: DataChangeType.UPDATE,
-          record: deserializeRow(op.update.rowData!, rel),
-          oldRecord: deserializeRow(op.update.oldRowData, rel),
+          record: deserializeRow(op.update.rowData!, rel, this.dbDescription),
+          oldRecord: deserializeRow(
+            op.update.oldRowData,
+            rel,
+            this.dbDescription
+          ),
           tags: op.update.tags,
         }
 
@@ -908,7 +918,11 @@ export class SatelliteClient extends EventEmitter implements Client {
         const change = {
           relation: rel,
           type: DataChangeType.DELETE,
-          oldRecord: deserializeRow(op.delete.oldRowData!, rel),
+          oldRecord: deserializeRow(
+            op.delete.oldRowData!,
+            rel,
+            this.dbDescription
+          ),
           tags: op.delete.tags,
         }
 
@@ -968,7 +982,43 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 }
 
-export function serializeRow(rec: Record, relation: Relation): SatOpRow {
+/**
+ * Fetches the PG type of the given column in the given table.
+ * @param dbDescription Database description object
+ * @param table Name of the table
+ * @param column Name of the column
+ * @returns The PG type of the column
+ */
+function getColumnType(
+  dbDescription: DbSchema<any>,
+  table: string,
+  column: RelationColumn
+): PgType {
+  if (
+    dbDescription.hasTable(table) &&
+    dbDescription.getFields(table).has(column.name)
+  ) {
+    // The table and column are known in the DB description
+    return dbDescription.getFields(table).get(column.name)!
+  } else {
+    // The table or column is not known.
+    // There must have been a migration that added it to the DB while the app was running.
+    // i.e., it was not known at the time the Electric client for this app was generated
+    //       so it is not present in the bundled DB description.
+    // Thus, we return the column type that is stored in the relation.
+    // Note that it is fine to fetch the column type from the relation
+    // because it was received at runtime and thus will have the PG type
+    // (which would not be the case for bundled relations fetched
+    //  from the endpoint because the endpoint maps PG types to SQLite types).
+    return column.type.toUpperCase() as PgType
+  }
+}
+
+export function serializeRow(
+  rec: Record,
+  relation: Relation,
+  dbDescription: DbSchema<any>
+): SatOpRow {
   let recordNumColumn = 0
   const recordNullBitMask = new Uint8Array(
     calculateNumBytes(relation.columns.length)
@@ -976,7 +1026,8 @@ export function serializeRow(rec: Record, relation: Relation): SatOpRow {
   const recordValues = relation!.columns.reduce(
     (acc: Uint8Array[], c: RelationColumn) => {
       if (rec[c.name] != null) {
-        acc.push(serializeColumnData(rec[c.name]!, c))
+        const pgColumnType = getColumnType(dbDescription, relation.table, c)
+        acc.push(serializeColumnData(rec[c.name]!, pgColumnType))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -994,18 +1045,20 @@ export function serializeRow(rec: Record, relation: Relation): SatOpRow {
 
 export function deserializeRow(
   row: SatOpRow | undefined,
-  relation: Relation
+  relation: Relation,
+  dbDescription: DbSchema<any>
 ): Record | undefined {
   if (row == undefined) {
     return undefined
   }
   return Object.fromEntries(
-    relation!.columns.map((c, i) => {
+    relation.columns.map((c, i) => {
       let value
       if (getMaskBit(row.nullsBitmask, i) == 1) {
         value = null
       } else {
-        value = deserializeColumnData(row.values[i], c)
+        const pgColumnType = getColumnType(dbDescription, relation.table, c)
+        value = deserializeColumnData(row.values[i], pgColumnType)
       }
       return [c.name, value]
     })
@@ -1023,53 +1076,53 @@ function calculateNumBytes(column_num: number): number {
 
 function deserializeColumnData(
   column: Uint8Array,
-  columnInfo: RelationColumn
+  columnType: PgType
 ): string | number {
-  const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
-    case 'CHAR':
-    case 'DATE':
-    case 'TEXT':
-    case 'TIME':
-    case 'TIMESTAMP':
-    case 'TIMESTAMPTZ':
-    case 'UUID':
-    case 'VARCHAR':
+    case PgBasicType.PG_CHAR:
+    case PgBasicType.PG_TEXT:
+    case PgBasicType.PG_UUID:
+    case PgBasicType.PG_VARCHAR:
+    case PgDateType.PG_DATE:
+    case PgDateType.PG_TIME:
+    case PgDateType.PG_TIMESTAMP:
+    case PgDateType.PG_TIMESTAMPTZ:
       return typeDecoder.text(column)
-    case 'BOOL':
+    case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
-    case 'FLOAT4':
-    case 'FLOAT8':
-    case 'INT':
-    case 'INT2':
-    case 'INT4':
-    case 'INT8':
-    case 'INTEGER':
-    case 'REAL':
+    case PgBasicType.PG_REAL:
+    case PgBasicType.PG_FLOAT4:
+    case PgBasicType.PG_FLOAT8:
+    case PgBasicType.PG_INT:
+    case PgBasicType.PG_INT2:
+    case PgBasicType.PG_INT4:
+    case PgBasicType.PG_INT8:
+    case PgBasicType.PG_INTEGER:
       return Number(typeDecoder.text(column))
-    case 'TIMETZ':
+    case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
+    default:
+      // should not occur
+      throw new SatelliteError(
+        SatelliteErrorCode.UNKNOWN_DATA_TYPE,
+        `can't deserialize ${columnType}`
+      )
   }
-  throw new SatelliteError(
-    SatelliteErrorCode.UNKNOWN_DATA_TYPE,
-    `can't deserialize ${columnInfo.type}`
-  )
 }
 
 // All values serialized as textual representation
 function serializeColumnData(
   columnValue: string | number,
-  columnInfo: RelationColumn
+  columnType: PgType
 ): Uint8Array {
-  const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
-    case 'BOOL':
+    case PgBasicType.PG_BOOL:
       return typeEncoder.bool(columnValue as number)
-    case 'REAL':
-    case 'FLOAT4':
-    case 'FLOAT8':
+    case PgBasicType.PG_REAL:
+    case PgBasicType.PG_FLOAT4:
+    case PgBasicType.PG_FLOAT8:
       return typeEncoder.real(columnValue as number)
-    case 'TIMETZ':
+    case PgDateType.PG_TIMETZ:
       return typeEncoder.timetz(columnValue as string)
     default:
       return typeEncoder.text(columnValue as string)
