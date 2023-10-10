@@ -11,13 +11,16 @@ default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
+default_pg_proxy_port = "65432"
 
 ###
+
+log_level = System.get_env("LOG_LEVEL", default_log_level) |> String.to_existing_atom()
 
 config :logger,
   handle_otp_reports: true,
   handle_sasl_reports: false,
-  level: System.get_env("LOG_LEVEL", default_log_level) |> String.to_existing_atom()
+  level: log_level
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
@@ -55,7 +58,8 @@ config :logger, :console,
     # :remote_ip,
     :request_id,
     :sq_client,
-    :user_id
+    :user_id,
+    :proxy_session_id
   ]
 
 pg_server_port =
@@ -95,7 +99,13 @@ if config_env() == :prod do
 
   pg_server_host =
     System.get_env("LOGICAL_PUBLISHER_HOST") ||
-      raise("Env variable LOGICAL_PUBLISHER_HOST is not set")
+      raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
+
+  proxy_port = System.get_env("PG_PROXY_PORT", default_pg_proxy_port) |> String.to_integer()
+
+  proxy_password =
+    System.get_env("PG_PROXY_PASSWORD") ||
+      raise("Required environment variable PG_PROXY_PASSWORD is not set")
 
   connectors = [
     {"postgres_1",
@@ -108,6 +118,15 @@ if config_env() == :prod do
          dbname: "electric",
          connect_timeout: postgresql_connection[:timeout]
        ]
+     ],
+     proxy: [
+       # listen opts are ThousandIsland.options()
+       # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
+       listen: [
+         port: proxy_port
+       ],
+       password: proxy_password,
+       log_level: log_level
      ]}
   ]
 
@@ -123,6 +142,12 @@ if config_env() == :prod do
     end
 
   config :electric, :telemetry, telemetry
+
+  enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
+
+  config :electric, Electric.Postgres.Proxy.Handler.Tracing,
+    enable: enable_proxy_tracing?,
+    colour: false
 else
   config :electric, :telemetry, :disabled
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)

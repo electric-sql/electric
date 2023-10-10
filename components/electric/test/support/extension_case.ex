@@ -67,12 +67,18 @@ defmodule Electric.Extension.Case.Helpers do
   end
 
   def save_migration_version(conn, version) do
+    # use the version as the txid because in our tests all migrations run in a
+    # single tx, which means the "real" txid never changes (in real life the tx
+    # id would increase between migrations).
     {:ok, 1} =
-      :epgsql.equery(conn, "INSERT INTO electric.migration_versions VALUES ($1, $2, $3)", [
-        String.to_integer(version),
-        Extension.encode_epgsql_timestamp(DateTime.utc_now()),
-        version
-      ])
+      :epgsql.equery(
+        conn,
+        "INSERT INTO #{Extension.version_table()} (txid, version) VALUES ($1, $2)",
+        [
+          String.to_integer(version),
+          version
+        ]
+      )
 
     :ok
   end
@@ -80,20 +86,62 @@ end
 
 defmodule Electric.Extension.Case do
   defmacro __using__(opts) do
+    case_opts = Keyword.take(opts, [:async])
+    extension_opts = Keyword.take(opts, [:proxy])
+    proxy_opts = Keyword.get(extension_opts, :proxy, false)
+    proxy? = proxy_opts not in [false, nil]
+
+    proxy_opts =
+      Keyword.put_new(if(is_list(proxy_opts), do: proxy_opts, else: []), :password, "password")
+
     quote do
-      use ExUnit.Case, unquote(opts)
+      use ExUnit.Case, unquote(case_opts)
 
       alias Electric.{Postgres, Postgres.Extension}
 
       import Electric.Extension.Case.Helpers
 
-      setup do
-        pg_config = Electric.Postgres.TestConnection.config()
+      setup [:db_connect]
 
-        {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
+      def db_connect(cxt) do
+        origin = "my-origin"
 
-        {:ok, conn: conn}
+        if unquote(proxy?) do
+          pg_config = Electric.Postgres.TestConnection.config()
+          conn_config = [origin: origin, connection: pg_config, proxy: unquote(proxy_opts)]
+
+          handler_config = Keyword.get(unquote(proxy_opts), :handler_config, [])
+
+          {:ok, _pid} =
+            start_supervised(
+              {Electric.Postgres.Proxy,
+               [
+                 conn_config: conn_config,
+                 handler_config: handler_config
+               ]}
+            )
+
+          {:ok, _pid} = start_supervised({Extension.SchemaCache, conn_config})
+        end
+
+        {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config()))
+
+        {:ok, conn: conn, origin: origin}
       end
+
+      if unquote(proxy?) do
+        def pg_config do
+          pg_config = Electric.Postgres.TestConnection.config()
+          port = Keyword.get(unquote(proxy_opts), :port, 65432)
+          Keyword.merge(pg_config, port: port)
+        end
+      else
+        def pg_config do
+          Electric.Postgres.TestConnection.config()
+        end
+      end
+
+      defoverridable pg_config: 0
     end
   end
 end

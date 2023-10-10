@@ -12,7 +12,7 @@
         !make log_dev_env
 
     [newshell pg_1]
-        [invoke start_psql pg_1]
+        [invoke start_psql pg_1 5432]
         -$fail_pattern
         [timeout 2]
 
@@ -25,7 +25,17 @@
 
     [shell postgres_logs]
         ?logical replication apply worker for subscription "postgres_1" has started
+        # [@magnetised 2023-10-05] Prisma does stuff that causes errors, such
+        # as trying to insert into non-existant tables (then creating the table
+        # if it gets an error), so if I leave this fail_pattern match here the
+        # test fails even though our code is working as intended.
+        #-$fail_pattern
+
+    [newshell proxy_1]
+        [invoke start_proxy pg_1 electric_1]
         -$fail_pattern
+        [timeout 2]
+
 [endmacro]
 
 [macro teardown]
@@ -101,7 +111,7 @@
     [invoke log "run migration ${version} on postgres"]
     """!
     BEGIN;
-    SELECT electric.migration_version('$version');
+    CALL electric.migration_version('$version');
     ${ddl}
     COMMIT;
     """
@@ -123,7 +133,8 @@
             intvalue_null integer,
             intvalue_null_default integer DEFAULT 10
         );
-        CALL electric.electrify('public.items');
+        -- CALL electric.electrify('public.items');
+        ALTER TABLE public.items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]

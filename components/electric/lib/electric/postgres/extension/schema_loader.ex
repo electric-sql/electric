@@ -16,11 +16,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type pk_result() :: {:ok, [name()]} | {:error, term()}
   @type oid_loader() :: (rel_type(), schema(), name() -> oid_result())
   @type table() :: Electric.Postgres.Replication.Table.t()
+  @type t() :: {module(), state()}
+  @type tx_fk_row() :: %{binary() => integer() | binary()}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
   @callback load(state()) :: {:ok, version(), Schema.t()}
   @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
-  @callback save(state(), version(), Schema.t(), [String.t()]) :: {:ok, state()}
+  @callback save(state(), version(), Schema.t(), [String.t()]) ::
+              {:ok, state()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback primary_keys(state(), relation()) :: pk_result()
@@ -29,6 +32,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
   @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
+  @callback table_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
+  @callback index_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
+  @callback tx_version(state(), tx_fk_row()) :: {:ok, version()} | {:error, term()}
 
   @default_backend {__MODULE__.Epgsql, []}
 
@@ -37,7 +43,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
       module when is_atom(module) ->
         {module, []}
 
-      {module, opts} when is_atom(module) and is_list(opts) ->
+      {module, opts} when is_atom(module) ->
         {module, opts}
     end
   end
@@ -97,5 +103,17 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
        |> Schema.table_info()
        |> Enum.count(&(not is_extension_relation({&1.schema, &1.name})))}
     end
+  end
+
+  def table_electrified?({module, state}, relation) do
+    module.table_electrified?(state, relation)
+  end
+
+  def index_electrified?({module, state}, relation) do
+    module.index_electrified?(state, relation)
+  end
+
+  def tx_version({module, state}, row) do
+    module.tx_version(state, row)
   end
 end

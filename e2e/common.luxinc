@@ -56,10 +56,21 @@
     [endloop]
 [endmacro]
 
-[macro start_psql name]
+[macro start_psql name port]
     [loop iter 1..10]
         @electric=#
-        !make docker-psql-${name}
+        !make docker-psql-${name} PG_PORT=${port}
+        ?SH-PROMPT:
+        [sleep 1]
+    [endloop]
+    !\pset null '<NULL>'
+    !\pset pager off
+[endmacro]
+
+[macro start_proxy pg_host proxy_host]
+    [loop iter 1..10]
+        @electric=#
+        !make docker-proxy PROXY_HOST=${proxy_host} PG_HOST=${pg_host}
         ?SH-PROMPT:
         [sleep 1]
     [endloop]
@@ -108,8 +119,8 @@
     [invoke ok2 $dprompt]
 [endmacro]
 
-[macro electrify_table pg_id table_name]
-    [shell $pg_id]
+[macro electrify_table table_name]
+    [shell proxy_1]
         [invoke electrify_table_tx $table_name]
 
 [endmacro]
@@ -117,7 +128,7 @@
 [macro electrify_table_tx table_name]
     !BEGIN;
     ?electric=\*#
-    !CALL electric.electrify('$table_name');
+    !ALTER TABLE ${table_name} ENABLE ELECTRIC;
     ?electric=\*#
     !COMMIT;
     ?electric=#

@@ -42,6 +42,57 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     end
   end
 
+  defmodule MockVersion do
+    use GenServer
+
+    alias Electric.Postgres.Extension
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args, name: __MODULE__)
+    end
+
+    def txid(conn, version) do
+      GenServer.call(__MODULE__, {:txid, conn, version})
+    end
+
+    def init(_args) do
+      state = %{
+        txid: 1,
+        txts: 10000,
+        ids: %{}
+      }
+
+      {:ok, state}
+    end
+
+    def handle_call({:txid, conn, version}, _from, state) do
+      %{ids: ids} = state
+
+      case Map.fetch(ids, version) do
+        {:ok, {txid, txts}} ->
+          {:reply, {:ok, txid, txts}, state}
+
+        :error ->
+          %{txid: txid, txts: txts} = state
+
+          {:ok, 1} =
+            :epgsql.equery(
+              conn,
+              "INSERT INTO #{Extension.version_table()} (txid, txts, version) VALUES ($1, $2, $3)",
+              [txid, txts, version]
+            )
+
+          {:reply, {:ok, txid, txts},
+           %{
+             state
+             | txid: txid + 1,
+               txts: txts + 1,
+               ids: Map.put(ids, version, {txid, txts})
+           }}
+      end
+    end
+  end
+
   use Electric.Extension.Case, async: false
 
   alias Electric.Replication.Postgres
@@ -56,10 +107,12 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
   @create_a "CREATE TABLE a (aid uuid NOT NULL PRIMARY KEY, avalue text);"
   @create_b "CREATE TABLE b.b (bid1 int4, bid2 int4, bvalue text, PRIMARY KEY (bid1, bid2));"
+  @index_b "CREATE INDEX bidx ON b.b (bid1);"
   @sqls [
     @create_a,
     "CREATE SCHEMA b;",
     @create_b,
+    @index_b,
     "CALL electric.electrify('a');",
     "CALL electric.electrify('b', 'b');"
   ]
@@ -69,8 +122,10 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     # same things here to avoid having to commit the transaction
     migrations = [
       {"20230620160340", [@create_a]},
-      {"20230620162106", [@create_b]}
+      {"20230620162106", [@create_b, @index_b]}
     ]
+
+    {:ok, _pid} = start_supervised({MockVersion, parent: self()})
 
     {:ok, origin: "pg", migrations: migrations, versions: Enum.map(migrations, &elem(&1, 0))}
   end
@@ -88,7 +143,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       replication: []
     ]
 
-    {:ok, _pid} = start_supervised({Extension.SchemaCache, {conn_config, [producer: producer]}})
+    {:ok, _pid} =
+      start_supervised({Extension.SchemaCache, {conn_config, []}})
 
     {:ok, migration_consumer} =
       start_supervised(
@@ -100,7 +156,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
     txs =
       for {version, stmts} <- cxt.migrations do
-        migration_transaction(version, stmts)
+        migration_transaction(conn, version, stmts)
       end
 
     produce_txs(producer, txs)
@@ -114,11 +170,17 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     assert_receive {MockConsumer, :events, ^txs}, 1000
   end
 
-  defp migration_transaction(version, stmts) do
+  defp migration_transaction(conn, version, stmts) do
     changes =
       Enum.map(stmts, fn sql ->
+        {:ok, txid, txts} = MockVersion.txid(conn, version)
+
         %NewRecord{
-          record: %{"txid" => "", "txts" => "", "version" => version, "query" => sql},
+          record: %{
+            "txid" => "#{txid}",
+            "txts" => "#{txts}",
+            "query" => sql
+          },
           relation: Extension.ddl_relation()
         }
       end)
@@ -247,7 +309,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
-      produce_txs(producer, [migration_transaction(version, stmts)])
+      produce_txs(producer, [migration_transaction(conn, version, stmts)])
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
 
@@ -296,7 +358,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
-      produce_txs(producer, [migration_transaction(version3, stmts)])
+      produce_txs(producer, [migration_transaction(conn, version3, stmts)])
 
       assert {:ok, table_info} =
                Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version3)
@@ -397,6 +459,33 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     test_tx "returns true if schema cache is online", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert Extension.SchemaCache.ready?(cxt.origin)
+    end
+  end
+
+  describe "table_electrified?/2" do
+    test_tx "returns true if table present in schema", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"public", "a"})
+      assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "b"})
+    end
+
+    test_tx "returns false if table unknown", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, false} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "c"})
+    end
+  end
+
+  describe "index_electrified?/2" do
+    test_tx "returns true index exists in schema", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+      assert {:ok, true} = Extension.SchemaCache.index_electrified?(cxt.origin, {"b", "bidx"})
+    end
+
+    test_tx "returns false for unknown indexes", fn conn, cxt ->
+      {:ok, _producer} = bootstrap(conn, cxt)
+
+      assert {:ok, false} =
+               Extension.SchemaCache.index_electrified?(cxt.origin, {"public", "aidx"})
     end
   end
 end

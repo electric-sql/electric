@@ -178,6 +178,7 @@ defmodule Electric.Postgres.SQLGenerator do
       |> Stream.reject(&is_nil/1)
       |> Enum.intersperse(join)
       |> IO.iodata_to_binary()
+      |> String.trim()
       |> constant()
     end)
   end

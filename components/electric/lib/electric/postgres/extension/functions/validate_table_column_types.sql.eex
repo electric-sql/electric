@@ -1,16 +1,6 @@
 <%
   valid_column_types =
-    ~w[
-      bool
-      date
-      float8
-      int2 int4
-      text
-      time
-      timestamp timestamptz
-      uuid
-      varchar
-    ]a
+    Electric.Postgres.supported_types()
     |> Enum.map(&"'#{&1}'")
     |> Enum.join(",")
 %>

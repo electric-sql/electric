@@ -29,7 +29,11 @@ defmodule Electric.Replication.PostgresConnectorMng do
               publication: String.t(),
               slot: String.t(),
               subscription: String.t(),
-              electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
+              electric_connection: %{
+                host: String.t(),
+                port: :inet.port_number(),
+                dbname: String.t()
+              }
             },
             state: :init | :subscribe | :ready,
             pg_connector_sup_monitor: reference | nil

@@ -6,6 +6,7 @@ defmodule Electric.Satellite.SerializationTest do
   alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
   alias Electric.Replication.Changes.Transaction
   alias Electric.Satellite.Serialization
+  alias Electric.Postgres.MockSchemaLoader
 
   describe "map_to_row" do
     test "encodes a map into a SatOpRow struct" do
@@ -277,13 +278,12 @@ defmodule Electric.Satellite.SerializationTest do
     setup do
       origin = "postgres_1"
 
-      {:ok, _pid} =
-        start_supervised(
-          {SchemaCache,
-           {[origin: origin], [backend: {Electric.Postgres.MockSchemaLoader, parent: self()}]}}
-        )
+      loader = MockSchemaLoader.start_link([parent: self()], name: __MODULE__.Loader)
 
-      {:ok, origin: origin}
+      {:ok, _pid} =
+        start_supervised({SchemaCache, {[origin: origin], [backend: loader]}})
+
+      {:ok, origin: origin, loader: loader}
     end
 
     def oid_loader(type, schema, name) do
@@ -297,7 +297,10 @@ defmodule Electric.Satellite.SerializationTest do
     defp migrate_schema(tx, version, cxt) do
       {stmts, schema} =
         Enum.flat_map_reduce(tx.changes, Schema.new(), fn
-          %{relation: {"electric", "ddl_commands"}, record: %{"query" => sql}}, schema ->
+          %{relation: {"electric", "ddl_commands"}, record: %{"query" => sql} = record}, schema ->
+            # add the {txid, txts} => version mapping to the shared schema loader instance
+            # ignore the return state as we know this is pointing at a genserver/agent
+            MockSchemaLoader.receive_tx(cxt.loader, record, version)
             {[sql], schema_update(schema, sql)}
 
           _op, schema ->
@@ -320,9 +323,8 @@ defmodule Electric.Satellite.SerializationTest do
             record: %{
               "id" => "6",
               "query" => "create table something_else (id uuid primary key);",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "100",
+              "txts" => "200"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -332,9 +334,8 @@ defmodule Electric.Satellite.SerializationTest do
             record: %{
               "id" => "7",
               "query" => "create table other_thing (id uuid primary key);",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "100",
+              "txts" => "200"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -344,19 +345,8 @@ defmodule Electric.Satellite.SerializationTest do
             record: %{
               "id" => "8",
               "query" => "create table yet_another_thing (id uuid primary key);",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
-            },
-            tags: ["postgres_1@1682019749178"]
-          },
-          %Electric.Replication.Changes.UpdatedRecord{
-            relation: {"electric", "migration_versions"},
-            old_record: nil,
-            record: %{
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "100",
+              "txts" => "200"
             },
             tags: ["postgres_1@1682019749178"]
           }
@@ -439,9 +429,8 @@ defmodule Electric.Satellite.SerializationTest do
               "id" => "6",
               "query" =>
                 "CREATE SUBSCRIPTION \"postgres_2\" CONNECTION 'host=electric_1 port=5433 dbname=test connect_timeout=5000' PUBLICATION \"all_tables\" WITH (connect = false)",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "101",
+              "txts" => "201"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -451,9 +440,8 @@ defmodule Electric.Satellite.SerializationTest do
             record: %{
               "id" => "7",
               "query" => "ALTER SUBSCRIPTION \"postgres_1\" ENABLE",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "101",
+              "txts" => "201"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -464,19 +452,8 @@ defmodule Electric.Satellite.SerializationTest do
               "id" => "8",
               "query" =>
                 "ALTER SUBSCRIPTION \"postgres_1\" REFRESH PUBLICATION WITH (copy_data = false)",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
-            },
-            tags: ["postgres_1@1682019749178"]
-          },
-          %Electric.Replication.Changes.UpdatedRecord{
-            relation: {"electric", "migration_versions"},
-            old_record: nil,
-            record: %{
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "101",
+              "txts" => "201"
             },
             tags: ["postgres_1@1682019749178"]
           }
@@ -505,9 +482,8 @@ defmodule Electric.Satellite.SerializationTest do
             old_record: nil,
             record: %{
               "id" => "6",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "102",
+              "txts" => "202"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -517,9 +493,8 @@ defmodule Electric.Satellite.SerializationTest do
             record: %{
               "id" => "7",
               "query" => "ALTER SUBSCRIPTION \"postgres_1\" ENABLE",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "102",
+              "txts" => "202"
             },
             tags: ["postgres_1@1682019749178"]
           },
@@ -530,9 +505,8 @@ defmodule Electric.Satellite.SerializationTest do
               "id" => "8",
               "query" =>
                 "ALTER SUBSCRIPTION \"postgres_1\" REFRESH PUBLICATION WITH (copy_data = false)",
-              "txid" => "749",
-              "txts" => "2023-04-20 19:41:56.236357+00",
-              "version" => version
+              "txid" => "102",
+              "txts" => "202"
             },
             tags: ["postgres_1@1682019749178"]
           }

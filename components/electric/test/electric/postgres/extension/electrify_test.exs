@@ -48,12 +48,12 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
     assert row[:table] == "buttercup"
     assert row[:schema] == "public"
 
-    assert {:ok, [{_, _, _, query}]} = Extension.ddl_history(conn)
+    assert {:ok, [%{"query" => query}]} = Extension.ddl_history(conn)
 
     assert query =~ ~r/^CREATE TABLE buttercup/
   end
 
-  test_tx "duplicate call raises", fn conn ->
+  test_tx "duplicate call does not raise", fn conn ->
     sql = """
     CREATE TABLE buttercup (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -69,9 +69,7 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
 
     sql = "CALL electric.electrify('buttercup');"
 
-    assert {:error,
-            {:error, :error, _, :raise_exception, "table public.buttercup is already electrified",
-             _}} = :epgsql.squery(conn, sql)
+    assert {:ok, [], []} = :epgsql.squery(conn, sql)
   end
 
   test_tx "handles quoted table names", fn conn ->

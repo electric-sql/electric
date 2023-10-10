@@ -64,18 +64,17 @@ defmodule Electric.Replication.ElectrificationTest do
             }} = wait_for_next_cached_wal_tx(lsn)
 
     # Try electrifying the table again
-    assert {:error,
-            {:error, :error, _, :raise_exception, "table public.foo is already electrified", _}} =
-             :epgsql.squery(conn, "CALL electric.electrify('public.foo')")
+    assert {:ok, [], []} = :epgsql.squery(conn, "CALL electric.electrify('public.foo')")
 
     # Assert that it doesn't propagate the 2nd time around
     assert :timeout == wait_for_next_cached_wal_tx(lsn)
   end
 
   defp create_test_table(conn) do
-    assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}] =
+    assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}] =
              :epgsql.squery(conn, """
              BEGIN;
+             CALL electric.migration_version('20230830173206');
              CREATE TABLE public.foo (id TEXT PRIMARY KEY);
              CALL electric.electrify('public.foo');
              COMMIT;
