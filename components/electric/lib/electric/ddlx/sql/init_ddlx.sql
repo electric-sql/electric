@@ -1,8 +1,5 @@
 -- noinspection SqlNoDataSourceInspectionForFile
 
--- CUT HERE install uuid
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- CUT HERE create the schema
 CREATE SCHEMA IF NOT EXISTS electric;
 
@@ -19,7 +16,7 @@ CREATE TABLE IF NOT EXISTS electric.grants (
 
 -- CUT HERE roles table
 CREATE TABLE IF NOT EXISTS electric.roles (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     role VARCHAR(64) NOT NULL,
     user_id VARCHAR(256) NOT NULL,
     scope_table VARCHAR(64),
@@ -28,7 +25,7 @@ CREATE TABLE IF NOT EXISTS electric.roles (
 
 -- CUT HERE assignments table
 CREATE TABLE IF NOT EXISTS electric.assignments (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     table_name VARCHAR(64) NOT NULL,
     scope_table VARCHAR(64) NOT NULL,
     user_column VARCHAR(64) NOT NULL,
@@ -290,7 +287,7 @@ BEGIN
      */
 
     EXECUTE format('CREATE TABLE IF NOT EXISTS electric.assignment_%s_join (
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id %s,
         assignment_id uuid,
         role_id uuid,

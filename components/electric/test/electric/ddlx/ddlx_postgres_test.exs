@@ -218,7 +218,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -226,7 +226,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -234,7 +234,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       user_id uuid NOT NULL,
@@ -253,7 +253,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -263,7 +263,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -271,7 +271,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       project_name VARCHAR(64) NOT NULL,
@@ -291,7 +291,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound_membership(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -301,7 +301,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -847,7 +847,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign with no scope from string and update", fn conn ->
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -855,7 +855,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
@@ -925,7 +925,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign fails with bad scope", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -933,7 +933,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -941,7 +941,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk

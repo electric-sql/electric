@@ -17,7 +17,6 @@ You can also get them from `Electric.DDLX.init_statements()` as a list of string
 
 Running these statements will:
 
-- install uuid-ossp
 - ensure there is an `electric` schema  
 - create 3 new DDLX tables
     - `electric.grants`

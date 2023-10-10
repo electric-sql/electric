@@ -22,9 +22,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170745_Electr
 
     tables = [
       """
-      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-      """,
-      """
       CREATE TABLE IF NOT EXISTS #{grants_table} (
           privilege VARCHAR(20) NOT NULL,
           on_table VARCHAR(64) NOT NULL,
@@ -38,7 +35,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170745_Electr
       """,
       """
       CREATE TABLE IF NOT EXISTS #{roles_table} (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           role VARCHAR(64) NOT NULL,
           user_id VARCHAR(256) NOT NULL,
           scope_table VARCHAR(64),
@@ -47,7 +44,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170745_Electr
       """,
       """
       CREATE TABLE IF NOT EXISTS #{assignments_table} (
-          id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           table_name VARCHAR(64) NOT NULL,
           scope_table VARCHAR(64) NOT NULL,
           user_column VARCHAR(64) NOT NULL,

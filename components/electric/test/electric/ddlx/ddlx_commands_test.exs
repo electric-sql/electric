@@ -195,7 +195,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       projects_sql = """
       CREATE TABLE projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -203,7 +203,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       users_sql = """
       CREATE TABLE users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -211,7 +211,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         project_id uuid NOT NULL,
         user_id uuid NOT NULL,
@@ -249,7 +249,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
     test_tx "unassign", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -257,7 +257,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -265,7 +265,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         project_id uuid NOT NULL,
         user_id uuid NOT NULL,
