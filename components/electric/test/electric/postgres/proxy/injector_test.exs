@@ -6,8 +6,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.MockSchemaLoader
 
-  @moduletag capture_log: true
-
   setup do
     migrations = [
       {"0001",

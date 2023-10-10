@@ -6,8 +6,6 @@ defmodule Electric.Postgres.ProxyTest do
 
   import Electric.Postgres.TestConnection
 
-  @moduletag capture_log: true
-
   setup do
     context = create_test_db()
 
