@@ -6,7 +6,7 @@ defmodule Electric.DDLX.Parse.ElectrifyParser do
   @keywords ["electrify"]
 
   @elements [
-    %Element{required: true, type: "kv", options: ["electrify"], name: "table", valueType: :name}
+    %Element{required: true, type: "kv", options: ["electrify"], name: "table", value_type: :name}
   ]
 
   use Electric.DDLX.Parse.Common

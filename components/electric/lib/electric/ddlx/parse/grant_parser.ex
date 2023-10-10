@@ -33,23 +33,23 @@ defmodule Electric.DDLX.Parse.GrantParser do
       type: "value",
       options: nil,
       name: "columns",
-      valueType: :collection
+      value_type: :collection
     },
-    %Element{required: true, type: "kv", options: ["on"], name: "table", valueType: :name},
-    %Element{required: true, type: "kv", options: ["to"], name: "role", valueType: :string},
+    %Element{required: true, type: "kv", options: ["on"], name: "table", value_type: :name},
+    %Element{required: true, type: "kv", options: ["to"], name: "role", value_type: :string},
     %Element{
       required: false,
       type: "kv",
       options: ["using"],
       name: "using",
-      valueType: [:name, :path]
+      value_type: [:name, :path]
     },
     %Element{
       required: false,
       type: "kv",
       options: ["check"],
       name: "check",
-      valueType: :collection
+      value_type: :collection
     }
   ]
 

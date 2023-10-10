@@ -11,7 +11,7 @@ defmodule Electric.DDLX.Parse.UnelectrifyParser do
       type: "kv",
       options: ["unelectrify"],
       name: "table",
-      valueType: :name
+      value_type: :name
     }
   ]
 

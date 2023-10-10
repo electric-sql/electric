@@ -11,7 +11,7 @@ defmodule Electric.DDLX.Parse.SQLiteParser do
       type: "kv",
       options: ["electric sqlite"],
       name: "sql",
-      valueType: :string
+      value_type: :string
     }
   ]
 

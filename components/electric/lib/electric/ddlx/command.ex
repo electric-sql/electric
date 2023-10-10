@@ -14,8 +14,7 @@ defimpl Electric.DDLX.Command, for: List do
     Enum.flat_map(commands, &Electric.DDLX.Command.pg_sql/1)
   end
 
-  # only return the first table name - not sure what the right answer is here TBH
-  def table_name([cmd | _commands]) do
+  def table_name([cmd]) do
     Electric.DDLX.Command.table_name(cmd)
   end
 

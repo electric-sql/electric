@@ -95,10 +95,12 @@ start_satellite_client_%:
 		satellite_client_$*
 
 
+# PG_PORT should be passed at the call site, e.g. `make docker-psql-1 PG_PORT=54321`
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-psql-%:
 	docker exec -it -e PGPASSWORD=password ${DOCKER_PREFIX}-$*-1 psql -h $* -p ${PG_PORT} -U postgres -d electric
 
+# PROXY_HOST and PG_HOST should be passed at the call site, e.g. `make docker-proxy PROXY_HOST=electric_1 PG_HOST=pg_1`
 docker-proxy:
 	docker exec -it -e PGPASSWORD=${PG_PROXY_PASSWORD} ${DOCKER_PREFIX}-${PG_HOST}-1 psql -h ${PROXY_HOST} -p ${PG_PROXY_PORT} -U electric -d electric
 

@@ -27,7 +27,13 @@ defmodule Electric.DDLX.Command.Revoke do
     def pg_sql(revoke) do
       [
         """
-        CALL electric.revoke(#{sql_repr(revoke.privilege)}, #{sql_repr(revoke.on_table)}, #{sql_repr(revoke.role)}, #{sql_repr(revoke.column_names)}, #{sql_repr(revoke.scope)});
+        CALL electric.revoke(
+          #{sql_repr(revoke.privilege)},
+          #{sql_repr(revoke.on_table)},
+          #{sql_repr(revoke.role)},
+          #{sql_repr(revoke.column_names)},
+          #{sql_repr(revoke.scope)}
+        );
         """
       ]
     end

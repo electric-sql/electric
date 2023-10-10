@@ -198,7 +198,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  def get_tx_version(_conn, row) do
+  def tx_version(_conn, row) do
     raise ArgumentError,
       message: "invalid tx fk row #{inspect(row)}, expecting %{\"txid\" => _, \"txts\" => _}"
   end

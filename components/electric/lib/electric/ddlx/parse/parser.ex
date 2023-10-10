@@ -1,33 +1,33 @@
 defmodule Electric.DDLX.Parse.Parser do
-  alias Electric.DDLX.Parse.EnableParser
-  alias Electric.DDLX.Parse.ElectrifyParser
-  alias Electric.DDLX.Parse.DisableParser
-  alias Electric.DDLX.Parse.UnelectrifyParser
+  alias Electric.DDLX.Command
   alias Electric.DDLX.Parse.AssignParser
-  alias Electric.DDLX.Parse.UnassignParser
+  alias Electric.DDLX.Parse.DisableParser
+  alias Electric.DDLX.Parse.ElectrifyParser
+  alias Electric.DDLX.Parse.Element
+  alias Electric.DDLX.Parse.EnableParser
+  alias Electric.DDLX.Parse.EnableParser
   alias Electric.DDLX.Parse.GrantParser
   alias Electric.DDLX.Parse.RevokeParser
   alias Electric.DDLX.Parse.SQLiteParser
-  alias Electric.DDLX.Parse.EnableParser
-  alias Electric.DDLX.Parse.Element
-  alias Electric.DDLX.Command
+  alias Electric.DDLX.Parse.UnassignParser
+  alias Electric.DDLX.Parse.UnelectrifyParser
 
   @parsers [
+    AssignParser,
     DisableParser,
     ElectrifyParser,
-    UnelectrifyParser,
-    AssignParser,
-    UnassignParser,
+    EnableParser,
     GrantParser,
     RevokeParser,
     SQLiteParser,
-    EnableParser
+    UnassignParser,
+    UnelectrifyParser
   ]
 
   @quoted_re ~r/\"(?<quoted>[^\"]+)\"/u
 
   def is_ddlx(statement) do
-    !(parser_for_statement(statement) == nil)
+    not is_nil(parser_for_statement(statement))
   end
 
   def parse(statement) do
@@ -35,9 +35,7 @@ defmodule Electric.DDLX.Parse.Parser do
 
     parser = parser_for_statement(statement)
 
-    if parser == nil do
-      nil
-    else
+    if parser do
       tokens = get_tokens(statement, parser.token_regex)
 
       results =

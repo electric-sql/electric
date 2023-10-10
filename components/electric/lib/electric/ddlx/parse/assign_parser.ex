@@ -12,10 +12,10 @@ defmodule Electric.DDLX.Parse.AssignParser do
       type: "kv",
       options: ["assign"],
       name: "role",
-      valueType: [:string, :collection, :name]
+      value_type: [:string, :collection, :name]
     },
-    %Element{required: true, type: "kv", options: ["to"], name: "user", valueType: :name},
-    %Element{required: false, type: "kv", options: ["if"], name: "if", valueType: :collection}
+    %Element{required: true, type: "kv", options: ["to"], name: "user", value_type: :name},
+    %Element{required: false, type: "kv", options: ["if"], name: "if", value_type: :collection}
   ]
 
   use Electric.DDLX.Parse.Common

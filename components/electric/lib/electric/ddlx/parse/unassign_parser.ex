@@ -12,9 +12,9 @@ defmodule Electric.DDLX.Parse.UnassignParser do
       type: "kv",
       options: ["unassign"],
       name: "role",
-      valueType: [:string, :collection, :name]
+      value_type: [:string, :collection, :name]
     },
-    %Element{required: true, type: "kv", options: ["from"], name: "user", valueType: :name}
+    %Element{required: true, type: "kv", options: ["from"], name: "user", value_type: :name}
   ]
 
   use Electric.DDLX.Parse.Common

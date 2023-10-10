@@ -1,4 +1,6 @@
 defmodule Electric.DDLX.Parse.Common do
+  alias Electric.Postgres.NameParser
+
   @doc """
     uses this to template a compiled regex into each parser with the common bits from below and their own keywords
   """
@@ -27,12 +29,7 @@ defmodule Electric.DDLX.Parse.Common do
   end
 
   def schema_and_table(table_name, default_schema) do
-    if String.contains?(table_name, ".") do
-      String.split(table_name, ".")
-      |> List.to_tuple()
-    else
-      {default_schema, table_name}
-    end
+    NameParser.parse!(table_name, default_schema: default_schema)
   end
 
   def expand_privileges(privilege_name) do
@@ -54,28 +51,15 @@ defmodule Electric.DDLX.Parse.Common do
     values_captures = Enum.join(value_types, "|")
     keyword_captures = Enum.join(keywords, "|")
     regexstring = "(?i)(?<keyword>#{keyword_captures})|#{values_captures}"
-    {:ok, re} = Regex.compile(regexstring, "u")
-    re
+    Regex.compile!(regexstring, "u")
   end
 
   def get_value(values, value_name) do
-    case values[value_name] do
-      nil ->
-        nil
-
-      {_, value} ->
-        String.trim(value)
-    end
+    get_in(values, [value_name, Access.elem(1)]) |> maybe_trim()
   end
 
   def get_value_type(values, value_name) do
-    case values[value_name] do
-      nil ->
-        nil
-
-      {value_type, _} ->
-        value_type
-    end
+    get_in(values, [value_name, Access.elem(0)])
   end
 
   defp parse_collection_role_def(role_def, assign_table) do
@@ -182,4 +166,7 @@ defmodule Electric.DDLX.Parse.Common do
       {:error, "You must specify the table and column name for TO seperated by a dot"}
     end
   end
+
+  defp maybe_trim(nil), do: nil
+  defp maybe_trim(str), do: String.trim(str)
 end

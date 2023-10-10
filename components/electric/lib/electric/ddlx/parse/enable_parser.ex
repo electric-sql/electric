@@ -11,7 +11,7 @@ defmodule Electric.DDLX.Parse.EnableParser do
       type: "kv",
       options: ["alter table"],
       name: "table",
-      valueType: :name
+      value_type: :name
     },
     %Element{required: true, type: "keyword", options: ["enable electric"], name: nil}
   ]

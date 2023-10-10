@@ -32,10 +32,10 @@ defmodule Electric.DDLX.Parse.RevokeParser do
       type: "value",
       options: nil,
       name: "columns",
-      valueType: :collection
+      value_type: :collection
     },
-    %Element{required: true, type: "kv", options: ["on"], name: "table", valueType: :name},
-    %Element{required: true, type: "kv", options: ["from"], name: "role", valueType: :string}
+    %Element{required: true, type: "kv", options: ["on"], name: "table", value_type: :name},
+    %Element{required: true, type: "kv", options: ["from"], name: "role", value_type: :string}
   ]
 
   use Electric.DDLX.Parse.Common

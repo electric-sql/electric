@@ -1,10 +1,10 @@
 defmodule Electric.DDLX.Command.Common do
-  def sql_repr(value) when value == nil do
+  def sql_repr(nil) do
     "null"
   end
 
   def sql_repr(value) when is_binary(value) do
-    "'#{escape_quotes(value, [])}'"
+    "'#{escape_quotes(value)}'"
   end
 
   def sql_repr(values) when is_list(values) do
@@ -24,15 +24,7 @@ defmodule Electric.DDLX.Command.Common do
     ~s['"#{schema}"."#{table}"']
   end
 
-  defp escape_quotes(<<>>, acc) do
-    IO.iodata_to_binary(acc)
-  end
-
-  defp escape_quotes(<<?', rest::binary>>, acc) do
-    escape_quotes(rest, [acc, "''"])
-  end
-
-  defp escape_quotes(<<c::binary-1, rest::binary>>, acc) do
-    escape_quotes(rest, [acc, c])
+  defp escape_quotes(value) do
+    :binary.replace(value, "'", "''", [:global])
   end
 end

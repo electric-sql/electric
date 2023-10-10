@@ -7,7 +7,7 @@ defmodule Electric.DDLX.Parse.Element do
           required: boolean,
           options: [String.t()],
           type: String.t(),
-          valueType: element_value_type,
+          value_type: element_value_type,
           name: String.t()
         }
   @enforce_keys [
@@ -21,11 +21,11 @@ defmodule Electric.DDLX.Parse.Element do
     :options,
     :type,
     :name,
-    :valueType
+    :value_type
   ]
 
   def read(element, tokens) do
-    if length(tokens) == 0 do
+    if tokens == [] do
       {:ok, tokens, nil, nil, nil}
     else
       case element.type do
@@ -72,7 +72,7 @@ defmodule Electric.DDLX.Parse.Element do
     with {[{tokenValueType, value}], shorter_tokens} <- Enum.split(tokens, 1),
          true <- tokenValueType != nil and tokenValueType != :keyword do
       if element.name != nil do
-        if check_token_value_type(tokenValueType, element.valueType) do
+        if check_token_value_type(tokenValueType, element.value_type) do
           {:ok, shorter_tokens, element.name, value, tokenValueType}
         else
           {:error, "Something went wrong near #{value}"}
@@ -97,7 +97,7 @@ defmodule Electric.DDLX.Parse.Element do
          {[{tokenValueType, value}], even_shorter_tokens} <- Enum.split(shorter_tokens, 1),
          true <- tokenValueType != nil and tokenValueType != :keyword do
       if element.name != nil do
-        if check_token_value_type(tokenValueType, element.valueType) do
+        if check_token_value_type(tokenValueType, element.value_type) do
           {:ok, even_shorter_tokens, element.name, value, tokenValueType}
         else
           {:error, "Something went wrong near #{value}"}
