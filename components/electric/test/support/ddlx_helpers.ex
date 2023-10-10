@@ -40,13 +40,6 @@ defmodule ElectricTest.DDLXHelpers do
   end
 
   def map_rows(rows) do
-    rows |> Enum.map(&Tuple.to_list/1) |> Enum.map(&null_to_nil/1)
-  end
-
-  def null_to_nil(row) do
-    Enum.map(row, fn
-      :null -> nil
-      value -> value
-    end)
+    Enum.map(rows, &Tuple.to_list/1)
   end
 end

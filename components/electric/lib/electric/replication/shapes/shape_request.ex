@@ -163,13 +163,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
           {[Changes.NewRecord.t()], non_neg_integer()}
   defp rows_to_records_with_tags(rows, col_names, relation, origin) when is_list(rows) do
     Enum.map_reduce(rows, 0, fn row_tuple, count ->
-      [tags | values] =
-        row_tuple
-        |> Tuple.to_list()
-        |> Enum.map(fn
-          :null -> nil
-          other -> other
-        end)
+      [tags | values] = Tuple.to_list(row_tuple)
 
       row =
         Enum.zip(col_names, values)
