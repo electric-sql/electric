@@ -7,18 +7,6 @@
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
-    "backend:down": "docker compose -f dev-app/backend/compose/docker-compose.yaml down --volumes",
-    "backend:start": "docker compose --env-file dev-app/backend/compose/.envrc -f dev-app/backend/compose/docker-compose.yaml up",
-    "backend:stop": "yarn backend:down",
-    "backend:up": "docker compose --env-file dev-app/backend/compose/.envrc -f dev-app/backend/compose/docker-compose.yaml up --detach",
-    "client:generate": "npx electric-sql generate --out ./dev-app/src/generated/client",
-    "client:watch": "npx electric-sql generate --watch",
-    "db:migrate": "node ./dev-app/db/migrate.js",
-    "db:psql": "node ./dev-app/db/connect.js",
-    "electric:start": "node ./dev-app/backend/startElectric.js",
-    "build-dev": "node ./dev-app/copy-wasm-files.js && node dev-app/builder.js",
-    "build-prod": "NODE_ENV=production npm run build-dev",
-    "start": "SERVE=true npm run build-dev",
     "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist",
     "check-styleguide": "prettier --check --loglevel warn .",
     "typecheck": "tsc --noEmit"
@@ -33,22 +21,10 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@databases/pg": "^5.4.1",
-    "@electric-sql/prisma-generator": "latest",
-    "@prisma/client": "4.8.1",
-    "@types/node": ">=16.11.0",
-    "@types/react": "^18.0.18",
-    "@types/react-dom": "^18.0.11",
-    "electric-sql": "latest",
     "esbuild": "^0.16.17",
     "esbuild-plugin-inline-image": "^0.0.9",
-    "fs-extra": "^10.0.0",
     "prettier": "3.0.3",
-    "prisma": "4.8.1",
-    "shelljs": "^0.8.5",
-    "typescript": "^4.4.3",
-    "wa-sqlite": "rhashimoto/wa-sqlite#master",
-    "zod": "^3.21.1"
+    "typescript": "^4.4.3"
   },
   "peerDependencies": {
     "electric-sql": "latest"

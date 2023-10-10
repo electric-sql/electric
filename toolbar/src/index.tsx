@@ -6,44 +6,12 @@ import { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import ToolbarTabs from './tabs'
-import { getApi, setApi } from './client/api'
-import { ToolbarApiBase } from './client/api/api-base'
-import { ToolbarApiDummy } from './client/api/api-dummy'
-import { ToolbarApiTypescript } from './client/api/api-typescript'
-
+import { getApi, setApi } from './api'
+import { ToolbarInterface } from './api/toolbar-interface'
+import { ToolbarTypescript } from './api/toolbar-typescript'
 import { GlobalRegistry } from 'electric-sql/satellite'
 
-declare global {
-  interface Window {
-    toolbarApi: ToolbarApiBase
-  }
-}
-
-export type { ToolbarApiBase } from './client/api/api-base'
-
-export type ToolbarProps = {
-  api: ToolbarApiBase
-}
-
-export class DebugToolbar extends React.Component<ToolbarProps> {
-  private api: ToolbarApiBase
-
-  constructor(props: ToolbarProps) {
-    super(props)
-    this.api = props.api
-  }
-
-  render() {
-    return (
-      <div id="electric-toolbar">
-        <ElectricToolbar api={this.api} />
-      </div>
-    )
-  }
-}
-
-function ElectricToolbar({ api }: ToolbarProps) {
-  setApi(api)
+function ElectricToolbar() {
   const [hidden, setHidden] = useState(true)
   const [dbNames, setDbNames] = useState([''])
   const [dbName, setDbName] = useState('')
@@ -97,16 +65,12 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }
 }
 
-export function TypescriptApi(globalRegistry: GlobalRegistry) {
-  return new ToolbarApiTypescript(globalRegistry)
+export function TypescriptApi(globalRegistry: GlobalRegistry): ToolbarInterface {
+  return new ToolbarTypescript(globalRegistry)
 }
 
-export function DummyApi() {
-  return new ToolbarApiDummy()
-}
-
-export default function AddToolbar(api: ToolbarApiBase) {
-  setApi(api)
+export default function AddToolbar(toolbarApi: ToolbarInterface) {
+  setApi(toolbarApi)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   toolbar_div.setAttribute('class', 'electric-toolbar')
@@ -114,5 +78,5 @@ export default function AddToolbar(api: ToolbarApiBase) {
   const toolbar_root = ReactDOM.createRoot(
     document.getElementById('electric-toolbar') as HTMLElement,
   )
-  toolbar_root.render(<ElectricToolbar api={api} />)
+  toolbar_root.render(<ElectricToolbar />)
 }

@@ -3,7 +3,7 @@ import { UnControlled as CodeMirror } from 'react-codemirror2'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import { getApi } from '../client/api'
+import { getApi } from '../api'
 import { ToolbarTabsProps } from '../tabs'
 
 import './mirror.css'
@@ -17,23 +17,16 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
   const [response, setResponse] = useState('')
   const [history, setHistory] = useState('')
   const [active, setActive] = useState('query')
-  // const { db } = useElectric()
 
   function submitSQL() {
     let cmd = code
     setHistory(history + code + '\n\n')
     getApi()
-      .queryDB(dbName, cmd)
+      .queryDB(dbName, { sql: cmd })
       .then((rows) => {
         setResponse(JSON.stringify(rows, null, 4))
       })
   }
-
-  // function evalTs() {
-  //     let cmd = code
-  //     setHistory(history + code + "\n\n")
-  //     getApi().evalTs(dbName, cmd)
-  // }
 
   function clearResults() {
     setResponse('')

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { getApi } from '../client/api'
+import { getApi } from '../api'
 import { ToolbarTabsProps } from '../tabs'
 
 export default function StatusTab({ dbName }: ToolbarTabsProps): JSX.Element {
