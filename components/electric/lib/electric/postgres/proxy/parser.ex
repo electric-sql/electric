@@ -29,10 +29,10 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
     whitespace = if Keyword.get(opts, :trailing, true), do: [~c"\t\n\r "], else: []
     chars = Enum.with_index(chars ++ whitespace)
     pattern = build_match(chars)
-    guards = build_guards(chars)
+    guard = build_guard(chars)
 
     quote do
-      def unquote(function)(unquote(pattern) = var!(stmt)) when unquote(guards) do
+      def unquote(function)(unquote(pattern) = var!(stmt)) when unquote(guard) do
         _ = var!(rest)
         _ = var!(stmt)
         unquote(block)
@@ -40,20 +40,29 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
     end
   end
 
+  defp match_var(i), do: Macro.var(:"c#{i}", Elixir)
+
   # <<c0::8, c1::8, ..., rest::binary>>
   defp build_match(chars) do
     {:<<>>, [],
-     Enum.map(chars, fn {_c, i} -> {:"::", [], [{:"c#{i}", [], Elixir}, 8]} end) ++
-       [{:"::", [], [{:var!, [], [{:rest, [], Elixir}]}, {:binary, [], Elixir}]}]}
+     Enum.map(chars, fn {_c, i} -> quote(do: unquote(match_var(i)) :: 8) end) ++
+       [quote(do: var!(rest) :: binary)]}
   end
 
-  # c0 in [?c, ?C]
-  defp build_guards([{c, i}]) do
-    {:in, [], [{:"c#{i}", [], Elixir}, c]}
+  defp is_member(chars, i) do
+    quote do
+      unquote(match_var(i)) in unquote(chars)
+    end
   end
 
-  defp build_guards([{c, i} | rest]) do
-    {:and, [], [{:in, [], [{:"c#{i}", [], Elixir}, c]}, build_guards(rest)]}
+  defp build_guard([{chars, i}]) do
+    is_member(chars, i)
+  end
+
+  defp build_guard([{chars, i} | rest]) do
+    quote do
+      unquote(is_member(chars, i)) and unquote(build_guard(rest))
+    end
   end
 end
 

@@ -70,6 +70,28 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     end
   end
 
+  describe "is_electric_keyword?/1" do
+    test "is case insensitive" do
+      values = ~w(electric ELECTRIC ElEcTRiC)
+
+      for v <- values do
+        assert Parser.is_electric_keyword?(v)
+      end
+    end
+
+    test "matches with trailing stuff" do
+      assert Parser.is_electric_keyword?("electric raingoes")
+    end
+
+    test "only matches 'electric'" do
+      values = ~w(scalectric LECTRIC ElEcTRi)
+
+      for v <- values do
+        refute Parser.is_electric_keyword?(v)
+      end
+    end
+  end
+
   def simple(sql), do: %M.Query{query: sql}
   def extended(sql, attrs \\ []), do: struct(M.Parse, Keyword.put(attrs, :query, sql))
 
