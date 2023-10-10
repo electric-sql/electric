@@ -1,5 +1,5 @@
 defmodule DDLXParserTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Electric.DDLX.Parse.Parser
   alias Electric.DDLX.Command.Enable
@@ -32,42 +32,26 @@ defmodule DDLXParserTest do
 
     test "can create tokens with quoted names" do
       re = Common.regex_for_keywords(["hello", "fish", "dog"])
-      input = "hello from stupid.\"old man\";"
-      tokens = Parser.get_tokens(input, re)
 
-      assert tokens == [
-               {:keyword, "hello"},
-               {:name, "from"},
-               {:name, "stupid.old man"}
-             ]
-    end
+      test_inputs = [
+        {"hello from stupid.\"old man\";", "stupid.old man"},
+        {"hello from \"very stupid\".\"old man\";", "very stupid.old man"},
+        {"hello from \"very stupid\".man ;", "very stupid.man"}
+      ]
 
-    test "can create tokens with quoted names2" do
-      re = Common.regex_for_keywords(["hello", "fish", "dog"])
-      input = "hello from \"very stupid\".\"old man\";"
-      tokens = Parser.get_tokens(input, re)
+      Enum.each(test_inputs, fn {input, expected_token} ->
+        tokens = Parser.get_tokens(input, re)
 
-      assert tokens == [
-               {:keyword, "hello"},
-               {:name, "from"},
-               {:name, "very stupid.old man"}
-             ]
-    end
-
-    test "can create tokens with quoted names3" do
-      re = Common.regex_for_keywords(["hello", "fish", "dog"])
-      input = "hello from \"very stupid\".man ;"
-      tokens = Parser.get_tokens(input, re)
-
-      assert tokens == [
-               {:keyword, "hello"},
-               {:name, "from"},
-               {:name, "very stupid.man"}
-             ]
+        assert tokens == [
+                 {:keyword, "hello"},
+                 {:name, "from"},
+                 {:name, expected_token}
+               ]
+      end)
     end
   end
 
-  describe "Can parse electrid ddlx" do
+  describe "Can parse electric ddlx" do
     test "parse grant" do
       sql =
         "ELECTRIC GRANT UPDATE (status, name) ON thing.Köln_en$ts TO 'projects:house.admin' USING issue_id;"
