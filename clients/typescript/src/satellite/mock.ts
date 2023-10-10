@@ -46,6 +46,7 @@ import {
   SatSubsDataError_ShapeReqError_Code,
 } from '../_generated/protocol/satellite'
 import { ShapeSubscription } from './process'
+import { DbSchema } from '../client/model/schema'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INTERNAL_ERROR = 27
@@ -100,6 +101,7 @@ export class MockSatelliteProcess implements Satellite {
 export class MockRegistry extends BaseRegistry {
   async startProcess(
     dbName: DbName,
+    _dbDescription: DbSchema<any>,
     adapter: DatabaseAdapter,
     migrator: Migrator,
     notifier: Notifier,

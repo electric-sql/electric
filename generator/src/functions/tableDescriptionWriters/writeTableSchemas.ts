@@ -109,7 +109,7 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
     case 'Int':
       return 'INT4'
     case 'Boolean':
-      return 'BOOLEAN'
+      return 'BOOL'
     case 'DateTime':
       return dateTimeToPg(attributes, field.name, modelName)
     case 'BigInt':

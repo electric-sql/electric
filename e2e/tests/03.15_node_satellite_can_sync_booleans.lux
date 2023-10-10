@@ -26,18 +26,13 @@
     ??INSERT 0 3
 
 [shell satellite_1]
-    [invoke node_await_get_from_table "bools" "003"]
+    [invoke node_await_get_bool "001" "true"]
+    [invoke node_await_get_bool "002" "false"]
+    [invoke node_await_get_bool "003" "null"]
 
-    ??id: '001'
-    ??b: 1
-
-    ??id: '002'
-    ??b: 0
-
-    ??id: '003'
-    ??b: null
-
-    [invoke node_await_insert_extended_into "bools" "{id: '004', b: 1}"]
+    !await client.write_bool(db, '004', true)
+    ?{ id: '004', b: true }
+    ?$node
 
 [shell pg_1]
     [invoke wait-for "SELECT * FROM public.bools;" "004" 10 $psql]
@@ -55,18 +50,10 @@
     [invoke node_await_table "bools"]
     [invoke node_sync_table "bools"]
 
-    [invoke node_await_get_from_table "bools" "004"]
-    ??id: '001'
-    ??b: 1
-
-    ??id: '002'
-    ??b: 0
-
-    ??id: '003'
-    ??b: null
-
-    ??id: '004'
-    ??b: 1
+    [invoke node_await_get_bool "001" "true"]
+    [invoke node_await_get_bool "002" "false"]
+    [invoke node_await_get_bool "003" "null"]
+    [invoke node_await_get_bool "004" "true"]
 
 [cleanup]
   [invoke teardown]

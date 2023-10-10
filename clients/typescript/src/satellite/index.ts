@@ -25,6 +25,7 @@ import {
   UnsubscribeResponse,
 } from './shapes/types'
 import { ShapeSubscription } from './process'
+import { DbSchema } from '../client/model/schema'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
@@ -34,6 +35,7 @@ export type { ShapeSubscription } from './process'
 export interface Registry {
   ensureStarted(
     dbName: DbName,
+    dbDescription: DbSchema<any>,
     adapter: DatabaseAdapter,
     migrator: Migrator,
     notifier: Notifier,

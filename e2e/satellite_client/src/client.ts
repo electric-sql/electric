@@ -136,6 +136,24 @@ export const check_datetime = (datetime: Datetime | undefined, expectedDate: str
     datetime!.t.getTime() === new Date(expectedTime).getTime()
 }
 
+export const write_bool = (electric: Electric, id: string, b: boolean) => {
+  return electric.db.bools.create({
+    data: {
+      id,
+      b
+    }
+  })
+}
+
+export const get_bool = async (electric: Electric, id: string): Promise<boolean> => {
+  const row = await electric.db.bools.findUnique({
+    where: {
+      id: id
+    },
+  })
+  return row.b
+}
+
 export const get_datetimes = (electric: Electric) => {
   return electric.db.datetimes.findMany()
 }
