@@ -128,21 +128,23 @@ See [our official docs](https://electric-sql.com/docs/usage/auth) to learn about
 
 ## Migrations
 
-Migrations are semi-automatically managed by the Postgres source. Once Postgres has been initialized by Electric (i.e. Electric had connected to it at least once), you will have two functions available in your SQL:
+Migrations are semi-automatically managed by the Postgres source via a proxy implementation that intercepts your migrations and captures any relevant DDL statements.
 
-1. `CALL electric.migration_version(migration_version);`, where `migration_version` should be a monotonically growing value of your choice
-2. `CALL electric.electrify(table_name);`, where `table_name` is a string containing a schema-qualified name of the table you want electrified.
+In order to run migrations (both in production and in development) you need to configure your application to connect to the electric application on the `PG_PROXY_PORT` specified above.
 
-When you want to do a migration (i.e. create a table), you need to run the `electric.migration_version` at the beginning of the transaction, and `electric.electrify` for every new table. Electrified tables and changes to them
-will reach the clients and be created there as well. For example:
+The proxy will detect any modifications to electrified tables and ensure they are propagated to all satellite clients. It also allows the use of our [extended DDLX syntax](https://electric-sql.com/docs/api/ddlx).
+
+We use various heuristics to recognise the migration framework in use in order to keep the migration version applied to the satellite clients in sync with the version applied by the framework. If your framework isn't currently supported or you would like to override the assigned version then use the `electric.migration_version` procedure:
 
 ```sql
 BEGIN;
 CALL electric.migration_version('20230920_114900');
 CREATE TABLE public.mtable1 (id uuid PRIMARY KEY);
-CALL electric.electrify('public.mtable1');
+-- DDLX to electrify table
+ALTER TABLE public.mtable1 ENABLE ELECTRIC;
 COMMIT;
-```
+
+Note that this procedure **MUST** be called within the same transaction as the migration.
 
 ## OSX
 
