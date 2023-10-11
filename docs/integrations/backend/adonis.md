@@ -7,7 +7,7 @@ sidebar_position: 71
 
 ## Migrations
 
-Use the [`raw` method on the `Schema Builder`]([https://laravel.com/docs/10.x#databases-and-migrations](https://docs.adonisjs.com/reference/database/schema-builder#raw)).
+Use the [`raw` method on the `Schema Builder`](https://docs.adonisjs.com/reference/database/schema-builder#raw).
 
 First, create a migration:
 
