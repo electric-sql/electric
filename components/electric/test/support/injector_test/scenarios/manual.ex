@@ -66,7 +66,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_injector_error(injector, _framework, query, error_details) do
+  def assert_injector_error(injector, query, error_details) do
     injector
     |> client(query(query), client: [error(error_details), ready(:failed)])
     |> idle!()

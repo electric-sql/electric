@@ -59,6 +59,17 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     end
   end
 
+  @scenarios [
+    __MODULE__.Framework,
+    __MODULE__.FrameworkSimple,
+    __MODULE__.Manual,
+    __MODULE__.AdHoc,
+    __MODULE__.ManualTx,
+    __MODULE__.ExtendedNoTx
+  ]
+
+  def scenarios, do: @scenarios
+
   def query(sql) do
     %M.Query{query: sql}
   end
