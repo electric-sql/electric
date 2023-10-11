@@ -1,19 +1,12 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import {
-  ConnectivityState,
-  DataTransaction,
-  Relation,
-  RelationsCache,
-  SqlValue,
-  randomValue,
-} from '../../src/util'
+import { randomValue } from '../../src/util'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
-import { Satellite, SatelliteProcess } from '../../src/satellite'
+import { SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
@@ -165,7 +158,6 @@ export const relations = {
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
 import { AuthState } from '../../src/auth'
-import { OplogEntry } from '../../src/satellite/oplog'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
