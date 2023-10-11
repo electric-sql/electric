@@ -24,7 +24,7 @@ import { electrify } from 'electric-sql/expo'
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define your config with an least an auth token.
+// Define your config with at least an auth token.
 // See Usage -> Authentication for more details.
 const config = {
   auth: {
