@@ -172,6 +172,9 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Introspect the created DB to update the Prisma schema
     await introspectDB(prismaSchema)
 
+    // Add custom validators (such as uuid) to the Prisma schema
+    await addValidators(prismaSchema)
+
     // Modify snake_case table names to PascalCase
     await pascalCaseTableNames(prismaSchema)
 
@@ -324,6 +327,29 @@ async function introspectDB(prismaSchema: string): Promise<void> {
     `npx prisma db pull --schema="${prismaSchema}"`,
     'Introspection script exited with error code: '
   )
+}
+
+/**
+ * Adds validators to the Prisma schema.
+ * @param prismaSchema Path to the Prisma schema
+ */
+async function addValidators(prismaSchema: string): Promise<void> {
+  const lines = await getFileLines(prismaSchema)
+  const newLines = lines.map(addValidator)
+  // Write the modified Prisma schema to the file
+  await fs.writeFile(prismaSchema, newLines.join('\n'))
+}
+
+/**
+ * Adds a validator to the Prisma schema line if needed.
+ * @param ln A line from the Prisma schema
+ */
+function addValidator(ln: string): string {
+  if (ln.includes('@db.Uuid')) {
+    return ln + ' /// @zod.string.uuid()'
+  } else {
+    return ln
+  }
 }
 
 async function generateElectricClient(prismaSchema: string): Promise<void> {
