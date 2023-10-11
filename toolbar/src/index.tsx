@@ -6,18 +6,21 @@ import { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import ToolbarTabs from './tabs'
-import { getApi, setApi } from './api'
 import { ToolbarInterface } from './api/toolbar-interface'
 import { ToolbarTypescript } from './api/toolbar-typescript'
 import { GlobalRegistry } from 'electric-sql/satellite'
 
-function ElectricToolbar() {
+export type ToolbarProps = {
+  api: ToolbarInterface
+}
+
+function ElectricToolbar({ api }: ToolbarProps) {
   const [hidden, setHidden] = useState(true)
   const [dbNames, setDbNames] = useState([''])
   const [dbName, setDbName] = useState('')
 
   useEffect(() => {
-    let names = getApi().getSatelliteNames()
+    let names = api.getSatelliteNames()
     setDbNames(names)
     setDbName(names[0])
   }, [])
@@ -58,19 +61,20 @@ function ElectricToolbar() {
             ))}
           </select>
         </header>
-        <ToolbarTabs dbName={dbName} />
+        <ToolbarTabs dbName={dbName} api={api} />
       </div>
       // </div>
     )
   }
 }
 
-export function TypescriptApi(globalRegistry: GlobalRegistry): ToolbarInterface {
+export function typescriptApi(
+  globalRegistry: GlobalRegistry,
+): ToolbarInterface {
   return new ToolbarTypescript(globalRegistry)
 }
 
-export default function AddToolbar(toolbarApi: ToolbarInterface) {
-  setApi(toolbarApi)
+export default function addToolbar(toolbarApi: ToolbarInterface) {
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   toolbar_div.setAttribute('class', 'electric-toolbar')
@@ -78,5 +82,5 @@ export default function AddToolbar(toolbarApi: ToolbarInterface) {
   const toolbar_root = ReactDOM.createRoot(
     document.getElementById('electric-toolbar') as HTMLElement,
   )
-  toolbar_root.render(<ElectricToolbar />)
+  toolbar_root.render(<ElectricToolbar api={toolbarApi} />)
 }

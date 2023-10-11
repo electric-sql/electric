@@ -21,6 +21,10 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": ">=16.11.0",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "electric-sql": "latest",
     "esbuild": "^0.16.17",
     "esbuild-plugin-inline-image": "^0.0.9",
     "prettier": "3.0.3",

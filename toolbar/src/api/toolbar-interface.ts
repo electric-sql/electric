@@ -1,6 +1,4 @@
-import { Row as RowLocal, Statement as StatementLocal} from "electric-sql/dist/util"
-export type Row = RowLocal
-export type Statement = StatementLocal
+import { Row, Statement } from './types'
 
 export interface ToolbarInterface {
   getSatelliteNames(): string[]

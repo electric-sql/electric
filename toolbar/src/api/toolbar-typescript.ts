@@ -1,4 +1,5 @@
-import {ToolbarInterface, Row, Statement} from './toolbar-interface'
+import { ToolbarInterface } from './toolbar-interface'
+import { Row, Statement, ConnectivityState } from './types'
 import { GlobalRegistry } from 'electric-sql/satellite'
 
 export class ToolbarTypescript implements ToolbarInterface {
@@ -12,18 +13,9 @@ export class ToolbarTypescript implements ToolbarInterface {
     return Object.keys(this.globalRegistry.satellites)
   }
 
-  getSatelliteStatus(name: string): string {
-    let sat = this.globalRegistry.satellites[name]
-    if (sat === undefined) {
-      return ''
-    } else {
-      let state = sat['connectivityState']
-      if (state === undefined) {
-        return ''
-      } else {
-        return state
-      }
-    }
+  getSatelliteStatus(name: string): ConnectivityState | 'Not found' {
+    const sat = this.globalRegistry.satellites[name]
+    return sat?.connectivityState ?? 'Not found'
   }
 
   resetDB(dbName: string): void {
@@ -37,13 +29,8 @@ export class ToolbarTypescript implements ToolbarInterface {
     window.location.reload()
   }
 
-  async queryDB(dbName: string, statement: Statement): Promise<Row[]> {
-    let sat = this.globalRegistry.satellites[dbName]
-    if (sat === undefined) {
-      return []
-    } else {
-      return sat.adapter.query(statement)
-    }
+  queryDB(dbName: string, statement: Statement): Promise<Row[]> {
+    const sat = this.globalRegistry.satellites[dbName]
+    return sat?.adapter.query(statement) ?? Promise.resolve([])
   }
-
 }

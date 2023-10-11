@@ -13,7 +13,7 @@ import { Electric } from './generated/client'
 
 // toolbar imports
 import { globalRegistry } from "electric-sql/satellite";
-import AddToolbar, { TypescriptApi } from '@electric-sql/debug-toolbar'
+import addToolbar, { typescriptApi } from '@electric-sql/debug-toolbar'
 import '@electric-sql/debug-toolbar/dist/index.cjs.css'
 
 interface MenuContextInterface {
@@ -50,7 +50,7 @@ const App = () => {
         const client = await initElectric()
 
         // Add the debug toolbar
-        AddToolbar(TypescriptApi(globalRegistry))
+        addToolbar(typescriptApi(globalRegistry))
 
         setElectric(client)
 
@@ -92,9 +92,7 @@ const App = () => {
       <Route path="/issue/:id" element={<Issue />} />
     </Routes>
   )
-
-
-
+  
   return (
     <ElectricProvider db={electric}>
       <MenuContext.Provider value={{ showMenu, setShowMenu }}>

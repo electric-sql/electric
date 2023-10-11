@@ -3,12 +3,11 @@ import { UnControlled as CodeMirror } from 'react-codemirror2'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import { getApi } from '../api'
 import { ToolbarTabsProps } from '../tabs'
 
 import './mirror.css'
 
-export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
+export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(
     'SELECT name FROM sqlite_schema\n' +
       "WHERE type='table'\n" +
@@ -21,11 +20,9 @@ export default function SQLTab({ dbName }: ToolbarTabsProps): JSX.Element {
   function submitSQL() {
     let cmd = code
     setHistory(history + code + '\n\n')
-    getApi()
-      .queryDB(dbName, { sql: cmd })
-      .then((rows) => {
-        setResponse(JSON.stringify(rows, null, 4))
-      })
+    api.queryDB(dbName, { sql: cmd }).then((rows) => {
+      setResponse(JSON.stringify(rows, null, 4))
+    })
   }
 
   function clearResults() {

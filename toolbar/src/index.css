@@ -1,3 +1,5 @@
+@import url('https://fonts.cdnfonts.com/css/open-sauce-one');
+
 #electric-toolbar {
   all: revert;
   position: absolute;
@@ -16,7 +18,7 @@
   border-style: solid;
   border-radius: 5px;
   height: fit-content;
-  font-family: OpenSauceOne, 'Segoe UI', Inter, Helvetica, Arial, sans-serif;
+  font-family: 'open sauce one', 'Segoe UI', Inter, Helvetica, Arial, sans-serif;
   font-size: 16px;
   text-align: left;
   -webkit-font-smoothing: antialiased;

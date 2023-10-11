@@ -19,7 +19,7 @@ build({
   format: 'esm',
   outfile: './dist/index.esm.js',
   target: ['esnext', 'node12.22.0'],
-  plugins: [inlineImage()]
+  plugins: [inlineImage()],
 })
 
 build({
@@ -27,5 +27,5 @@ build({
   format: 'cjs',
   outfile: './dist/index.cjs.js',
   target: ['esnext', 'node12.22.0'],
-  plugins: [inlineImage()]
+  plugins: [inlineImage()],
 })
