@@ -164,6 +164,8 @@ function stringToPg(attributes: Array<Attribute>) {
   if (!pgTypeAttribute || pgTypeAttribute.type === '@db.Text') {
     // If Prisma does not add a type attribute then the PG type was TEXT
     return 'TEXT'
+  } else if (pgTypeAttribute.type === '@db.Uuid') {
+    return 'UUID'
   } else {
     return 'VARCHAR'
   }
