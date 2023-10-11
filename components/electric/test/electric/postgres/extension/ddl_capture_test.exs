@@ -7,7 +7,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     async: false,
     proxy: [
       listen: [
-        port: 65432
+        port: 55555
       ],
       handler_config: [
         # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
