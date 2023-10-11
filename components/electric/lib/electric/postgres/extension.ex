@@ -177,7 +177,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1 and txts = $2 LIMIT 1"
+  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1::#{@txid_type} and txts = $2::#{@txts_type} LIMIT 1"
 
   @doc """
   Given a db row which points to a compound transaction id, returns the version
@@ -187,7 +187,7 @@ defmodule Electric.Postgres.Extension do
           {:ok, String.t()} | {:error, term()}
   def tx_version(conn, %{"txid" => txid, "txts" => txts}) do
     with {:ok, _cols, rows} <-
-           :epgsql.equery(conn, @tx_version_query, [txid, to_integer(txts)]) do
+           :epgsql.equery(conn, @tx_version_query, [to_integer(txid), to_integer(txts)]) do
       case rows do
         [] ->
           {:error, "No version found for tx txid: #{txid}, txts: #{txts}"}
@@ -311,7 +311,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
       Migrations.Migration_20230921161045_DropEventTriggers,
       Migrations.Migration_20230921161418_ProxyCompatibility,
-      Migrations.Migration20231010123118_AddPriorityToVersion
+      Migrations.Migration_20231009121515_AllowLargeMigrations,
+      Migrations.Migration_20231010123118_AddPriorityToVersion
     ]
   end
 

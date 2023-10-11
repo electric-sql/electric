@@ -243,4 +243,32 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assign_version.(version, 8)
     assert {:ok, ^version} = Extension.tx_version(conn, migration)
   end
+
+  test_tx "capturing very large migrations", fn conn ->
+    sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql2 = "CALL electric.electrify('buttercup')"
+
+    random_comments =
+      Stream.repeatedly(fn -> :crypto.strong_rand_bytes(128) end)
+      |> Stream.map(&Base.encode16/1)
+      |> Stream.map(fn s -> "-- " <> s end)
+      |> Enum.take(100)
+      |> Enum.join("\n")
+
+    sql3 = random_comments <> "\nALTER TABLE buttercup ADD COLUMN petal text"
+
+    for sql <- [sql1, sql2, sql3] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [ddl1, ddl2]} = Extension.ddl_history(conn)
+
+    assert %{"id" => 1, "query" => "CREATE TABLE buttercup" <> _} = ddl1
+    assert %{"id" => 2, "query" => ^sql3} = ddl2
+
+    # verify that the unique constraint is behaving as expected
+    {:ok, _, _} = :epgsql.equery(conn, "CALL electric.capture_ddl($1)", [sql3])
+
+    assert {:ok, [_ddl1, _ddl2]} = Extension.ddl_history(conn)
+  end
 end

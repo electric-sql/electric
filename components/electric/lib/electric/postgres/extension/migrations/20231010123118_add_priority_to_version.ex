@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.Extension.Migrations.Migration20231010123118_AddPriorityToVersion do
+defmodule Electric.Postgres.Extension.Migrations.Migration_20231010123118_AddPriorityToVersion do
   alias Electric.Postgres.Extension
 
   @behaviour Extension.Migration
