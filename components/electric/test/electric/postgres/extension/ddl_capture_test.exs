@@ -1,4 +1,5 @@
 defmodule Electric.Postgres.Extension.DDLCaptureTest do
+  alias Postgrex.Extension
   alias Electric.Postgres.MockSchemaLoader
   alias Electric.Replication.Postgres.MigrationConsumer
 
@@ -6,7 +7,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     async: false,
     proxy: [
       listen: [
-        port: 65432
+        port: 55555
       ],
       handler_config: [
         # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]
@@ -175,5 +176,71 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     {:error, _} = :epgsql.squery(conn, sql3)
 
     assert {:ok, [_]} = Extension.ddl_history(conn)
+  end
+
+  test_tx "ddl capture assigns automatic migration version", fn conn ->
+    sql1 =
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
+
+    sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
+
+    for sql <- [sql1, sql2] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [migration]} = Extension.ddl_history(conn)
+    assert {:ok, _version} = Extension.tx_version(conn, migration)
+  end
+
+  test_tx "user assigned version gets priority over automatic assign", fn conn ->
+    sql1 =
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
+
+    sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
+    sql3 = "CALL electric.migration_version('1234')"
+
+    for sql <- [sql1, sql2, sql3] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [migration]} = Extension.ddl_history(conn)
+    assert {:ok, "1234"} = Extension.tx_version(conn, migration)
+  end
+
+  test_tx "version priority is honoured", fn conn ->
+    sql1 =
+      "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
+
+    sql2 = "ALTER TABLE buttercup ENABLE ELECTRIC"
+
+    for sql <- [sql1, sql2] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [migration]} = Extension.ddl_history(conn)
+    assert {:ok, version} = Extension.tx_version(conn, migration)
+
+    assign_version = fn version, priority ->
+      {:ok, _cols, _rows} =
+        :epgsql.equery(conn, "CALL electric.assign_migration_version($1, $2)", [version, priority])
+    end
+
+    assign_version.("1111", 0)
+    assert {:ok, ^version} = Extension.tx_version(conn, migration)
+
+    version = "1111"
+    assign_version.(version, 1)
+    assert {:ok, ^version} = Extension.tx_version(conn, migration)
+
+    version = "2222"
+    assign_version.(version, 2)
+    assert {:ok, ^version} = Extension.tx_version(conn, migration)
+
+    assign_version.("3333", 2)
+    assert {:ok, ^version} = Extension.tx_version(conn, migration)
+
+    version = "4444"
+    assign_version.(version, 8)
+    assert {:ok, ^version} = Extension.tx_version(conn, migration)
   end
 end

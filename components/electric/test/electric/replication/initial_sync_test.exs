@@ -8,7 +8,7 @@ defmodule Electric.Replication.InitialSyncTest do
   alias Electric.Replication.InitialSync
 
   @origin "initial-sync-test"
-  @sleep_timeout 50
+  @sleep_timeout 500
 
   describe "migrations_since" do
     setup ctx, do: Map.put(ctx, :origin, @origin)
@@ -123,7 +123,7 @@ defmodule Electric.Replication.InitialSyncTest do
       {:ok, [], []} = :epgsql.squery(tx_conn, "CALL electric.electrify('#{name}')")
 
       {:ok, [], []} =
-        :epgsql.squery(tx_conn, "CALL electric.assign_migration_version('#{version}')")
+        :epgsql.squery(tx_conn, "CALL electric.migration_version('#{version}')")
     end)
 
     :ok
@@ -164,7 +164,7 @@ defmodule Electric.Replication.InitialSyncTest do
     receive do
       {:cached_wal_notification, ^ref, :new_segments_available} -> :ok
     after
-      @sleep_timeout * 10 ->
+      @sleep_timeout ->
         flunk(
           "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position())}"
         )

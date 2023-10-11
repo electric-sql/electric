@@ -7,7 +7,7 @@ defmodule Electric.Proxy.InjectorTest.EctoFramework do
   def capture_migration_version(injector, version) do
     injector
     |> bind_execute_version_query(version)
-    |> server(bind_execute_complete("INSERT 0 1"), server: [capture_version_query(version)])
+    |> server(bind_execute_complete("INSERT 0 1"), server: [capture_version_query(version, 4)])
     |> server(capture_version_complete(), client: bind_execute_complete("INSERT 0 1"))
   end
 

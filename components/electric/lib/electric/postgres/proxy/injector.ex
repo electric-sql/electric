@@ -18,7 +18,7 @@ defmodule Electric.Postgres.Proxy.Injector do
   @type t :: module()
 
   @callback capture_ddl_query(query :: binary()) :: binary()
-  @callback capture_version_query(version :: binary()) :: binary()
+  @callback capture_version_query(version :: binary(), priority :: integer()) :: binary()
   @callback alter_shadow_table_query(table_modification()) :: binary()
   @callback migration_version() :: binary()
 
@@ -125,9 +125,10 @@ defmodule Electric.Postgres.Proxy.Injector do
     ~s|CALL electric.capture_ddl(#{quote_query(query, quote_delimiter)})|
   end
 
-  @spec capture_version_query(String.t(), String.t() | nil) :: String.t()
-  def capture_version_query(version, quote_delimiter \\ nil) do
-    ~s|CALL electric.migration_version(#{quote_query(version, quote_delimiter)})|
+  @spec capture_version_query(String.t(), integer(), String.t() | nil) :: String.t()
+  def capture_version_query(version, priority, quote_delimiter \\ nil)
+      when is_integer(priority) do
+    ~s|CALL electric.assign_migration_version(#{quote_query(version, quote_delimiter)}, #{priority})|
   end
 
   def alter_shadow_table_query(alteration) do

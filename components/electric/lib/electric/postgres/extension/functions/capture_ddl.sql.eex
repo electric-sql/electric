@@ -6,10 +6,13 @@ BEGIN
         _query := current_query();
     END IF;
 
+    CALL <%= @schema %>.assign_default_version();
+
     RAISE DEBUG 'capture migration: %', _query;
 
     INSERT INTO <%= @ddl_table %> (query)
         VALUES (_query)
         ON CONFLICT ON CONSTRAINT ddl_table_unique_migrations DO NOTHING;
+
 END;
 $function$ LANGUAGE PLPGSQL;

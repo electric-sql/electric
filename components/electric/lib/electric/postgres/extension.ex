@@ -310,7 +310,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
       Migrations.Migration_20230921161045_DropEventTriggers,
-      Migrations.Migration_20230921161418_ProxyCompatibility
+      Migrations.Migration_20230921161418_ProxyCompatibility,
+      Migrations.Migration20231010123118_AddPriorityToVersion
     ]
   end
 

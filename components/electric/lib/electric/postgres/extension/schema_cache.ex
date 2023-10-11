@@ -408,6 +408,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   defp load_tx_version(state, row) do
+    Logger.debug(
+      "Loading tx: #{row["txid"]}/#{row["txts"]} version using #{inspect(state.backend)}"
+    )
+
     {:ok, version} = SchemaLoader.tx_version(state.backend, row)
     Logger.debug("Loaded version #{inspect(version)} for tx: #{row["txid"]}/#{row["txts"]}")
     version

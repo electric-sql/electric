@@ -497,7 +497,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           })
         ]
       )
-      |> server(alter_shadow_table_complete(), server: capture_version_query(version))
+      |> server(alter_shadow_table_complete(), server: capture_version_query(version, 2))
       |> server(capture_version_complete(), server: commit())
       |> server(complete_ready("COMMIT", :idle),
         client: [
@@ -654,7 +654,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           %M.ReadyForQuery{status: :tx}
         ],
         client: [],
-        server: [capture_version_query("99")]
+        server: [capture_version_query("99", 4)]
       )
       |> server(capture_version_complete(),
         client: [

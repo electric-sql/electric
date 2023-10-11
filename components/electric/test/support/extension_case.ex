@@ -115,10 +115,9 @@ defmodule Electric.Extension.Case do
           {:ok, _pid} =
             start_supervised(
               {Electric.Postgres.Proxy,
-               [
-                 conn_config: conn_config,
-                 handler_config: handler_config
-               ]}
+               Keyword.merge(unquote(proxy_opts),
+                 conn_config: conn_config
+               )}
             )
 
           {:ok, _pid} = start_supervised({Extension.SchemaCache, conn_config})
@@ -132,7 +131,7 @@ defmodule Electric.Extension.Case do
       if unquote(proxy?) do
         def pg_config do
           pg_config = Electric.Postgres.TestConnection.config()
-          port = Keyword.get(unquote(proxy_opts), :port, 65432)
+          port = get_in(unquote(proxy_opts), [:listen, :port]) || 65432
           Keyword.merge(pg_config, port: port)
         end
       else
