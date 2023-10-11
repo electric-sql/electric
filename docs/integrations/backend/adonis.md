@@ -1,5 +1,5 @@
 ---
-title: Adonis JS
+title: AdonisJS
 description: >-
   A fully featured web framework for Node.js
 sidebar_position: 71
