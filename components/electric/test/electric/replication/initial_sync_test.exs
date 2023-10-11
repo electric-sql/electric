@@ -123,7 +123,7 @@ defmodule Electric.Replication.InitialSyncTest do
       {:ok, [], []} = :epgsql.squery(tx_conn, "CALL electric.electrify('#{name}')")
 
       {:ok, [], []} =
-        :epgsql.squery(tx_conn, "CALL electric.assign_migration_version('#{version}')")
+        :epgsql.squery(tx_conn, "CALL electric.migration_version('#{version}')")
     end)
 
     :ok
