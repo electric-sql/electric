@@ -1786,7 +1786,7 @@ test.serial('connection backoff success', async (t) => {
   t.plan(3)
   const { client, satellite } = t.context
 
-  client.close()
+  client.disconnect()
 
   const retry = (_e: any, a: number) => {
     if (a > 0) {

@@ -136,8 +136,9 @@ export class MockRegistry extends BaseRegistry {
 }
 
 export class MockSatelliteClient extends EventEmitter implements Client {
+  isDown = false
   replicating = false
-  closed = true
+  disconnected = true
   inboundAck: Uint8Array = DEFAULT_LOG_POS
 
   outboundSent: Uint8Array = DEFAULT_LOG_POS
@@ -255,19 +256,27 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.removeListener('error', cb)
   }
 
-  isClosed(): boolean {
-    return this.closed
+  isDisconnected(): boolean {
+    return this.disconnected
+  }
+
+  shutdown(): void {
+    this.isDown = true
   }
 
   getLastSentLsn(): Uint8Array {
     return this.outboundSent
   }
   connect(): Promise<void> {
-    this.closed = false
+    if (this.isDown) {
+      throw new SatelliteError(SatelliteErrorCode.UNEXPECTED_STATE, 'FAKE DOWN')
+    }
+
+    this.disconnected = false
     return Promise.resolve()
   }
-  close(): Promise<void> {
-    this.closed = true
+  disconnect(): Promise<void> {
+    this.disconnected = true
     for (const t of this.timeouts) {
       clearTimeout(t)
     }

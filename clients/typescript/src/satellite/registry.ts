@@ -158,7 +158,7 @@ export abstract class BaseRegistry implements Registry {
     const satellites = this.satellites
     const satellite = satellites[dbName]
     if (satellite !== undefined) {
-      const stoppingPromise = satellite.stop().then(() => {
+      const stoppingPromise = satellite.stop(true).then(() => {
         delete satellites[dbName]
         delete stoppingPromises[dbName]
       })
