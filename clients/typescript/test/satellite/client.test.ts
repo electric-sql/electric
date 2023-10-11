@@ -333,10 +333,13 @@ test.serial('receive transaction over multiple messages', async (t) => {
   server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: DataTransaction) => {
-      t.is(transaction.changes.length, 3)
-      res()
-    })
+    client.subscribeToTransactions(
+      (transaction: Transaction) =>
+        new Promise(() => {
+          t.is(transaction.changes.length, 3)
+          res()
+        })
+    )
 
     await client.startReplication()
   })
@@ -409,23 +412,26 @@ test.serial('migration transaction contains all information', async (t) => {
   server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: Transaction) => {
-      t.is(transaction.migrationVersion, migrationVersion)
-      t.deepEqual(transaction, {
-        commit_timestamp: commit.commitTimestamp,
-        lsn: begin.lsn,
-        changes: [
-          {
-            migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
-            table: migrate.table,
-            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
-          },
-        ],
-        origin: begin.origin,
-        migrationVersion: migrationVersion,
-      })
-      res()
-    })
+    client.subscribeToTransactions(
+      (transaction: Transaction) =>
+        new Promise(() => {
+          t.is(transaction.migrationVersion, migrationVersion)
+          t.deepEqual(transaction, {
+            commit_timestamp: commit.commitTimestamp,
+            lsn: begin.lsn,
+            changes: [
+              {
+                migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
+                table: migrate.table,
+                sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+              },
+            ],
+            origin: begin.origin,
+            migrationVersion: migrationVersion,
+          })
+          res()
+        })
+    )
 
     await client.startReplication()
   })
@@ -457,14 +463,17 @@ test.serial('acknowledge lsn', async (t) => {
   server.nextRpcResponse('stopReplication', [stop])
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (_t: DataTransaction, ack: any) => {
-      const lsn0 = client['inbound'].last_lsn
-      t.is(lsn0, undefined)
-      ack()
-      const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
-      t.is(lsn1, 'FAKE')
-      res()
-    })
+    client['emitter'].on(
+      'transaction',
+      (_t: DataTransaction, ack: () => void) => {
+        const lsn0 = client['inbound'].last_lsn
+        t.is(lsn0, undefined)
+        ack()
+        const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
+        t.is(lsn1, 'FAKE')
+        res()
+      }
+    )
 
     await client.startReplication()
   })
@@ -713,18 +722,22 @@ test.serial('default and null test', async (t) => {
   t.plan(3)
 
   await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: any) => {
-      t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
-      t.is(
-        record['content'] as any,
-        transaction.changes[0].record['content'] as any
-      )
-      t.is(
-        record['text_null'] as any,
-        transaction.changes[0].record['text_null'] as any
-      )
-      res()
-    })
+    client.subscribeToTransactions(
+      // FIXME
+      (transaction: any) =>
+        new Promise(() => {
+          t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
+          t.is(
+            record['content'] as any,
+            transaction.changes[0].record['content'] as any
+          )
+          t.is(
+            record['text_null'] as any,
+            transaction.changes[0].record['text_null'] as any
+          )
+          res()
+        })
+    )
 
     await client.startReplication()
   })

@@ -61,6 +61,10 @@ import {
   StartReplicationResponse,
   StopReplicationResponse,
   ErrorCallback,
+  RelationCallback,
+  IncomingTransactionCallback,
+  OutboundStartedCallback,
+  TransactionCallback,
 } from '../util/types'
 import {
   base64,
@@ -102,8 +106,32 @@ const subscriptionError = [
   SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
 ]
 
-export class SatelliteClient extends EventEmitter implements Client {
+interface SafeEventEmitter {
+  on(event: 'error', callback: ErrorCallback): this
+  on(event: 'relation', callback: RelationCallback): this
+  on(event: 'transaction', callback: IncomingTransactionCallback): this
+  on(event: 'outbound_started', callback: OutboundStartedCallback): this
+
+  emit(event: 'error', error: SatelliteError): boolean
+  emit(event: 'relation', relation: Relation): boolean
+  emit(
+    event: 'transaction',
+    transaction: Transaction,
+    ackCb: () => void
+  ): boolean
+  emit(event: 'outbound_started', lsn: LSN): boolean
+
+  removeListener(event: 'error', callback: ErrorCallback): void
+  removeListener(event: 'outbound_started', callback: () => void): void
+  // TODO: missing removeListeners
+
+  listenerCount(event: 'error'): number
+}
+
+export class SatelliteClient implements Client {
   private opts: Required<SatelliteClientOpts>
+
+  private emitter: SafeEventEmitter
 
   private socketFactory: SocketFactory
   private socket?: Socket
@@ -152,7 +180,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     _notifier: Notifier,
     opts: SatelliteClientOpts
   ) {
-    super()
+    this.emitter = new EventEmitter() as SafeEventEmitter
 
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
@@ -212,20 +240,20 @@ export class SatelliteClient extends EventEmitter implements Client {
 
         this.socket.onMessage(this.socketHandler)
         this.socket.onError((error) => {
-          if (this.listenerCount('error') === 0) {
+          if (this.emitter.listenerCount('error') === 0) {
             this.close()
             Log.error(
               `socket error but no listener is attached: ${error.message}`
             )
           }
-          this.emit('error', error)
+          this.emitter.emit('error', error)
         })
         this.socket.onClose(() => {
           this.close()
-          if (this.listenerCount('error') === 0) {
+          if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
-          this.emit(
+          this.emitter.emit(
             'error',
             new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
           )
@@ -335,18 +363,14 @@ export class SatelliteClient extends EventEmitter implements Client {
       .then(this.handleAuthResp.bind(this))
   }
 
-  subscribeToTransactions(
-    callback: (transaction: Transaction) => Promise<void>
-  ) {
-    this.on('transaction', async (txn, ackCb) => {
-      // move callback execution outside the message handling path
-      await callback(txn)
-      ackCb()
+  subscribeToTransactions(callback: TransactionCallback) {
+    this.emitter.on('transaction', (txn, ackCb) => {
+      callback(txn).then(() => ackCb())
     })
   }
 
-  subscribeToRelations(callback: (relation: Relation) => void) {
-    this.on('relation', callback)
+  subscribeToRelations(callback: RelationCallback) {
+    this.emitter.on('relation', callback)
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -382,19 +406,19 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   subscribeToError(callback: ErrorCallback): void {
-    this.on('error', callback)
+    this.emitter.on('error', callback)
   }
 
   unsubscribeToError(callback: ErrorCallback): void {
-    this.removeListener('error', callback)
+    this.emitter.removeListener('error', callback)
   }
 
   subscribeToOutboundEvent(_event: 'started', callback: () => void): void {
-    this.on('outbound_started', callback)
+    this.emitter.on('outbound_started', callback)
   }
 
   unsubscribeToOutboundEvent(_event: 'started', callback: () => void) {
-    this.removeListener('outbound_started', callback)
+    this.emitter.removeListener('outbound_started', callback)
   }
 
   subscribeToSubscriptionEvents(
@@ -640,10 +664,10 @@ export class SatelliteClient extends EventEmitter implements Client {
         { leading: true, trailing: true }
       )
 
-      this.emit('outbound_started', message.lsn)
+      this.emitter.emit('outbound_started', message.lsn)
       return SatInStartReplicationResp.create()
     } else {
-      this.emit(
+      this.emitter.emit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -668,7 +692,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       return SatInStopReplicationResp.create()
     } else {
-      this.emit(
+      this.emitter.emit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -698,7 +722,7 @@ export class SatelliteClient extends EventEmitter implements Client {
 
   private handleRelation(message: SatRelation) {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
-      this.emit(
+      this.emitter.emit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -724,7 +748,7 @@ export class SatelliteClient extends EventEmitter implements Client {
     }
 
     this.inbound.relations.set(relation.id, relation)
-    this.emit('relation', relation)
+    this.emitter.emit('relation', relation)
   }
 
   private handleTransaction(message: SatOpLog) {
@@ -742,7 +766,7 @@ export class SatelliteClient extends EventEmitter implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    this.emit('error', serverErrorToSatelliteError(error))
+    this.emitter.emit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
@@ -819,7 +843,7 @@ export class SatelliteClient extends EventEmitter implements Client {
       if (error instanceof SatelliteError) {
         // subscription errors are emitted through specific event
         if (!subscriptionError.includes(error.code)) {
-          this.emit('error', error)
+          this.emitter.emit('error', error)
         }
       } else {
         // This is an unexpected runtime error
@@ -852,7 +876,7 @@ export class SatelliteClient extends EventEmitter implements Client {
           origin,
           migrationVersion,
         }
-        this.emit(
+        this.emitter.emit(
           'transaction',
           transaction,
           () => (this.inbound.last_lsn = transaction.lsn)

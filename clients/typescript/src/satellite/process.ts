@@ -632,14 +632,6 @@ export class SatelliteProcess implements Satellite {
   _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     this._disconnect()
 
-    if (!error) {
-      const e = new SatelliteError(
-        SatelliteErrorCode.INTERNAL,
-        'received an error event without an error code'
-      )
-      throw wrapFatalError(e)
-    }
-
     if (isThrowable(error)) {
       throw error
     }
