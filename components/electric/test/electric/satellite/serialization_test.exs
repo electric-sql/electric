@@ -1,5 +1,7 @@
 defmodule Electric.Satellite.SerializationTest do
-  use ExUnit.Case, async: true
+  # has to be async: false because this calls to SchemaCache.Global
+  # which will sometimes belong to other tests
+  use ExUnit.Case, async: false
 
   use Electric.Satellite.Protobuf
 
