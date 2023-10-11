@@ -533,6 +533,10 @@ defmodule Operation.AssignMigrationVersion do
   defimpl Operation do
     use Operation.Impl
 
+    @generated_version_priority 0
+    @session_version_priority 2
+    @tx_version_priority 4
+
     def activate(op, state, send) do
       if State.electrified?(state) do
         {version, priority, state} = migration_version(op, state)
@@ -550,12 +554,12 @@ defmodule Operation.AssignMigrationVersion do
           # this version is coming from some previous query, outside the
           # current transaction so give it a priority < the priority of any tx
           # assigned version.
-          {version, 2, state}
+          {version, @session_version_priority, state}
 
         {:error, state} ->
           # priority 0 will only be used if the automatic version assignment
           # wasn't called for some reason
-          {generate_version(state), 0, state}
+          {generate_version(state), @generated_version_priority, state}
       end
     end
 
@@ -563,7 +567,7 @@ defmodule Operation.AssignMigrationVersion do
          when is_binary(version) do
       # this version is coming from the current transaction, so give it the
       # highest priority of all these options
-      {version, 4, state}
+      {version, @tx_version_priority, state}
     end
 
     defp generate_version(state) do
