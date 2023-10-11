@@ -225,7 +225,7 @@ export class SatelliteClient implements Client {
         'client has already shutdown'
       )
     }
-    if (!this.isDisconnected()) {
+    if (this.isConnected()) {
       this.disconnect()
     }
 
@@ -292,8 +292,8 @@ export class SatelliteClient implements Client {
     }
   }
 
-  isDisconnected(): boolean {
-    return !this.socketHandler
+  isConnected(): boolean {
+    return this.socketHandler !== undefined
   }
 
   shutdown(): void {
@@ -993,7 +993,7 @@ export class SatelliteClient implements Client {
 
   private sendMessage<T extends SatPbMsg>(request: T) {
     if (Log.getLevel() <= 1) Log.debug(`[proto] send: ${msgToString(request)}`)
-    if (!this.socket || this.isDisconnected()) {
+    if (!this.socket || !this.isConnected()) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
         'trying to send message, but client is closed'

@@ -75,7 +75,7 @@ export interface Client {
   disconnect(): void
   shutdown(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
-  isDisconnected(): boolean
+  isConnected(): boolean
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,

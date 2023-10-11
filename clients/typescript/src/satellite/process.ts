@@ -940,7 +940,7 @@ export class SatelliteProcess implements Satellite {
 
       if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
 
-      if (!this.client.isDisconnected()) {
+      if (this.client.isConnected()) {
         const enqueued = this.client.getLastSentLsn()
         const enqueuedLogPos = bytesToNumber(enqueued)
 
@@ -992,7 +992,7 @@ export class SatelliteProcess implements Satellite {
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
     // TODO: Don't try replicating when outbound is inactive
-    if (this.client.isDisconnected()) {
+    if (!this.client.isConnected()) {
       return
     }
 
