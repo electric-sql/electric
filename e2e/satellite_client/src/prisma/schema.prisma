@@ -48,3 +48,7 @@ model Bools {
   id String @id
   b  Boolean?
 }
+
+model Uuids {
+  id String @id @db.Uuid /// @zod.string.uuid()
+}

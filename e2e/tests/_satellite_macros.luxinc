@@ -43,6 +43,16 @@
     [invoke wait-for "await client.get_bool(db, '${id}')" "${expected_bool}" 10 $node]
 [endmacro]
 
+[macro node_await_get_uuid id]
+    [invoke wait-for "await client.get_uuid(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_get_uuid id]
+    !await client.get_uuid(db, '${id}')
+    ?{ id: '${id}' }
+    ?$node
+[endmacro]
+
 [macro node_await_get_timestamps match]
     [invoke wait-for "await client.get_timestamps(db)" "${match}" 10 $node]
 [endmacro]
