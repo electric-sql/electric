@@ -9,6 +9,7 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { schema } from '../generated'
+import { ZodError } from 'zod'
 
 const db = new Database(':memory:')
 const electric = await electrify(
@@ -30,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'relatedId' int);"
   )
 }
 
@@ -251,6 +252,77 @@ test.serial('support null value for timestamptz type', async (t) => {
     select: {
       id: true,
       timestamptz: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support boolean type', async (t) => {
+  // Check that we can store booleans
+  const res = await tbl.createMany({
+    data: [
+      {
+        id: 1,
+        bool: true,
+      },
+      {
+        id: 2,
+        bool: false,
+      },
+    ],
+  })
+
+  t.deepEqual(res, {
+    count: 2
+  })
+
+  const rows = await tbl.findMany({})
+
+  rows.some(r => r.id === 1 && r.bool === true)
+  rows.some(r => r.id === 2 && r.bool === false)
+
+  // Check that it rejects invalid values
+  await t.throwsAsync(
+    tbl.create({
+      data: {
+        id: 3,
+        bool: 'true',
+      },
+    }),
+    {
+      instanceOf: ZodError,
+      message: /Expected boolean, received string/
+    }
+  )
+})
+
+test.serial('support null value for boolean type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    bool: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      bool: null,
+    },
+    select: {
+      id: true,
+      bool: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      bool: true,
     },
   })
 
