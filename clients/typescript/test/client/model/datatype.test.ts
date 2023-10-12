@@ -287,6 +287,7 @@ test.serial('support boolean type', async (t) => {
     tbl.create({
       data: {
         id: 3,
+        // @ts-ignore
         bool: 'true',
       },
     }),
