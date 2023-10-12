@@ -21,7 +21,7 @@ defmodule Electric.DDLX.Parse.SQLiteParser do
     String.starts_with?(statement, "electric sqlite")
   end
 
-  def make_from_values(values) do
+  def make_from_values(values, _sql) do
     {
       :ok,
       [

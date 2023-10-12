@@ -22,7 +22,7 @@ defmodule Electric.DDLX.Parse.DisableParser do
     String.contains?(statement, "disable electric")
   end
 
-  def make_from_values(values) do
+  def make_from_values(values, _sql) do
     {schema_name, table_name} = schema_and_table(get_value(values, "table"), @default_schema)
 
     {

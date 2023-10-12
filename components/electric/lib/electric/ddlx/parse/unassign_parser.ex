@@ -23,7 +23,7 @@ defmodule Electric.DDLX.Parse.UnassignParser do
     String.starts_with?(statement, "electric unassign")
   end
 
-  def make_from_values(values) do
+  def make_from_values(values, sql) do
     to_def = get_value(values, "user")
     role_def = get_value(values, "role")
     role_def_type = get_value_type(values, "role")
@@ -44,6 +44,8 @@ defmodule Electric.DDLX.Parse.UnassignParser do
           }
         ]
       }
+    else
+      {:error, message} -> error(message, sql)
     end
   end
 end

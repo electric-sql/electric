@@ -44,7 +44,7 @@ defmodule Electric.DDLX.Parse.RevokeParser do
     String.starts_with?(statement, "electric revoke")
   end
 
-  def make_from_values(values) do
+  def make_from_values(values, _sql) do
     privilege = get_value(values, "privilege")
     columns = get_value(values, "columns")
     scope_role = get_value(values, "role")
