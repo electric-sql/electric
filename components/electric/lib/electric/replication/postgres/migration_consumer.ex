@@ -22,8 +22,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   require Logger
 
-  import Electric.Postgres.Extension,
-    only: [is_ddl_relation: 1, is_acked_client_lsn_relation: 1, is_extension_relation: 1]
+  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
 
   @spec name(Connectors.config()) :: Electric.reg_name()
   def name(conn_config) when is_list(conn_config) do
@@ -111,18 +110,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         %{relation: relation} when is_ddl_relation(relation) ->
           true
 
-        %{relation: relation} = change when is_acked_client_lsn_relation(relation) ->
-          %{"client_id" => client_id, "lsn" => encoded_client_lsn} = change.record
-
-          with {:ok, client_pid} <- Electric.Satellite.ClientManager.fetch_client(client_id) do
-            client_lsn = Electric.Postgres.Bytea.from_postgres_hex(encoded_client_lsn)
-            send(client_pid, {:lsn_ack, client_lsn})
-            Logger.info("acknowledged lsn: #{inspect(client_lsn)} for #{client_id}")
-          end
-
-          Logger.debug("---- Filtering #{inspect(change)}")
-          false
-
         %{relation: relation} = change when is_extension_relation(relation) ->
           Logger.debug("---- Filtering #{inspect(change)}")
           false
@@ -157,7 +144,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   defp apply_migrations(state, transactions) do
     transactions
-    |> Enum.flat_map(&transaction_changes_to_migrations/1)
+    |> Enum.flat_map(&transaction_changes_to_migrations(&1, state))
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Enum.reduce(state, &perform_migration/2)
   end
@@ -179,38 +166,16 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     state
   end
 
-  defp transaction_changes_to_migrations(%Transaction{changes: changes}) do
+  defp transaction_changes_to_migrations(%Transaction{changes: changes}, state) do
     for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
-      {:ok, version, sql} = Extension.extract_ddl_version(record)
+      {:ok, version} = SchemaLoader.tx_version(state.loader, record)
+      {:ok, sql} = Extension.extract_ddl_sql(record)
       {version, sql}
     end
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, old_version, schema} = load_schema(state)
-
-    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
-
-    oid_loader = &SchemaLoader.relation_oid(state.loader, &1, &2, &3)
-
-    schema =
-      stmts
-      |> Enum.reduce(schema, fn stmt, schema ->
-        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
-        Schema.update(schema, stmt, oid_loader: oid_loader)
-      end)
-      |> Schema.add_shadow_tables(oid_loader: oid_loader)
-
-    save_schema(state, version, schema, stmts)
-  end
-
-  defp load_schema(state) do
-    SchemaLoader.load(state.loader)
-  end
-
-  defp save_schema(state, version, schema, stmts) do
-    Logger.info("Saving schema version #{version} /#{inspect(state.loader)}/")
-    {:ok, loader} = SchemaLoader.save(state.loader, version, schema, stmts)
+    {:ok, loader} = apply_migration(version, stmts, state.loader)
 
     {:ok, table_count} = SchemaLoader.count_electrified_tables(loader)
 
@@ -250,5 +215,30 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         min_demand: 10,
         max_demand: 50
       )
+  end
+
+  @doc """
+  Apply a migration, composed of a version and a list of DDL statements, to a schema
+  using the given implementation of SchemaLoader.
+  """
+  @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
+          {:ok, SchemaLoader.t()} | {:error, term()}
+  def apply_migration(version, stmts, loader) when is_list(stmts) do
+    {:ok, old_version, schema} = SchemaLoader.load(loader)
+
+    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
+
+    oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
+
+    schema =
+      Enum.reduce(stmts, schema, fn stmt, schema ->
+        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
+        Schema.update(schema, stmt, oid_loader: oid_loader)
+      end)
+      |> Schema.add_shadow_tables(oid_loader: oid_loader)
+
+    Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
+
+    {:ok, _loader} = SchemaLoader.save(loader, version, schema, stmts)
   end
 end

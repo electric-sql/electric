@@ -503,4 +503,12 @@ defmodule Electric.Postgres.Schema do
   def shadow_table_name(schema, table) do
     {@schema, "shadow__#{schema}__#{table}"}
   end
+
+  @doc """
+  Returns the schema and name of the tombstone table for the given table.
+  """
+  @spec tombstone_table_name(name(), name()) :: namespaced_name()
+  def tombstone_table_name(schema, table) do
+    {@schema, "tombstone__#{schema}__#{table}"}
+  end
 end

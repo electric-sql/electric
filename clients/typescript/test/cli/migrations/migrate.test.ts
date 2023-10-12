@@ -46,6 +46,10 @@ model user_profile {
   userId Int    @unique
   user   user?  @relation(fields: [userId], references: [id])
 }
+
+model model {
+  id Int @id
+}
 `
 
 const expectedPrismaSchema = `
@@ -96,6 +100,11 @@ model UserProfile {
   bio    String
   userId Int    @unique
   user   User?  @relation(fields: [userId], references: [id])
+}
+
+model Model {
+  @@map("model")
+  id Int @id
 }
 `
 

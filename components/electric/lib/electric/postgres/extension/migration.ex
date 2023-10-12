@@ -5,15 +5,16 @@ defmodule Electric.Postgres.Extension.Migration do
   @callback replicated_table_ddls() :: [String.t()]
   @optional_callbacks replicated_table_ddls: 0
 
-  @enforce_keys [:version, :schema, :stmts, :txid, :txts]
+  @enforce_keys [:version, :schema, :stmts, :txid, :txts, :timestamp]
 
-  defstruct [:version, :schema, :stmts, :txid, :txts]
+  defstruct [:version, :schema, :stmts, :txid, :txts, :timestamp]
 
   @type t :: %__MODULE__{
           version: binary(),
           schema: Electric.Postgres.Schema.t(),
           stmts: [binary()],
+          timestamp: DateTime.t(),
           txid: integer(),
-          txts: DateTime.t()
+          txts: integer()
         }
 end

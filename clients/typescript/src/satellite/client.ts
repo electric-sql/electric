@@ -837,13 +837,14 @@ export class SatelliteClient extends EventEmitter implements Client {
 
       const lastTxnIdx = replication.transactions.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes, origin } =
+        const { commit_timestamp, lsn, changes, origin, migrationVersion } =
           replication.transactions[lastTxnIdx]
         const transaction: Transaction = {
           commit_timestamp,
           lsn,
           changes,
           origin,
+          migrationVersion,
         }
         this.emit(
           'transaction',
@@ -1037,6 +1038,7 @@ function deserializeColumnData(
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
+    case 'REAL':
     case 'FLOAT4':
     case 'FLOAT8':
     case 'INT':
@@ -1060,6 +1062,10 @@ function serializeColumnData(
   switch (col_type.toUpperCase()) {
     case 'BOOL':
       return typeEncoder.bool(col_val as number)
+    case 'REAL':
+    case 'FLOAT4':
+    case 'FLOAT8':
+      return typeEncoder.real(col_val as number)
     default:
       return typeEncoder.text(col_val as string)
   }

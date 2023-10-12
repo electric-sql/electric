@@ -5,7 +5,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres
   alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.{CachedWal, Proxy}
   alias Electric.Replication.SatelliteCollectorProducer
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
@@ -43,7 +43,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
       {Postgres.SlotServer,
        conn_config: conn_config, producer: SatelliteCollectorProducer.name()},
       # Uses a globally registered name
-      {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]}
+      {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]},
+      {Proxy, conn_config: conn_config}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

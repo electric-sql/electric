@@ -19,8 +19,9 @@ defmodule Electric.Postgres.Dialect.SQLite do
 
   require Logger
 
+  import Electric.Postgres.Dialect.Builder
+
   @behaviour Electric.Postgres.Dialect
-  @indent "  "
 
   @types %{
     json: "TEXT_JSON",
@@ -31,6 +32,7 @@ defmodule Electric.Postgres.Dialect.SQLite do
   }
 
   @int_types Postgres.integer_types()
+  @int_types Postgres.integer_types()
   @float_types Postgres.float_types()
   @text_types Postgres.text_types()
   @binary_types Postgres.binary_types()
@@ -38,6 +40,15 @@ defmodule Electric.Postgres.Dialect.SQLite do
   @json_types Postgres.json_types()
   @bool_types Postgres.bool_types()
   @uuid_types Postgres.uuid_types()
+  @float_types Postgres.float_types()
+  @text_types Postgres.text_types()
+  @binary_types Postgres.binary_types()
+  @datetime_types Postgres.datetime_types()
+  @json_types Postgres.json_types()
+  @bool_types Postgres.bool_types()
+  @uuid_types Postgres.uuid_types()
+
+  @type sql() :: Dialect.sql()
 
   @impl true
   def to_sql(stmt, opts \\ [])
@@ -137,36 +148,6 @@ defmodule Electric.Postgres.Dialect.SQLite do
     )
   end
 
-  @type sql() :: Dialect.sql()
-  @typep stmt() :: [binary() | sql() | nil]
-
-  @spec stmt(stmt()) :: sql()
-  defp stmt(list) do
-    stmt(list, false)
-  end
-
-  @spec stmt(stmt(), binary) :: sql()
-  defp stmt(list, join) when is_binary(join) do
-    stmt(list, join, false)
-  end
-
-  @spec stmt(stmt(), boolean) :: sql()
-  defp stmt(list, indent) when is_boolean(indent) do
-    stmt(list, " ", indent)
-  end
-
-  @spec stmt(stmt(), binary(), boolean()) :: sql()
-  defp stmt([], _join, _indent) do
-    nil
-  end
-
-  defp stmt(list, join, indent) do
-    list
-    |> Enum.reject(&is_nil/1)
-    |> indent(indent)
-    |> Enum.join(join)
-  end
-
   @impl true
   def type_name(%Proto.Column.Type{} = type, _opts \\ []) do
     map_type(type)
@@ -179,32 +160,6 @@ defmodule Electric.Postgres.Dialect.SQLite do
     else
       unquoted_name(name)
     end
-  end
-
-  @spec quote_name(term()) :: sql()
-  defp quote_name(%Proto.RangeVar{name: name}) do
-    quote_name(name)
-  end
-
-  defp quote_name(%Pg.RangeVar{relname: name}) do
-    quote_name(name)
-  end
-
-  defp quote_name(name) when is_binary(name) do
-    ~s("#{name}")
-  end
-
-  @spec unquoted_name(Dialect.name()) :: sql()
-  defp unquoted_name(%Proto.RangeVar{name: name}) do
-    unquoted_name(name)
-  end
-
-  defp unquoted_name(%Pg.RangeVar{relname: name}) do
-    unquoted_name(name)
-  end
-
-  defp unquoted_name(name) when is_binary(name) do
-    name
   end
 
   defp map_column(%Proto.Column{} = col, mode) do
@@ -300,35 +255,6 @@ defmodule Electric.Postgres.Dialect.SQLite do
     if action do
       stmt(["ON", trigger, action])
     end
-  end
-
-  @spec column_list(list()) :: sql()
-  defp column_list(columns) do
-    stmt(Enum.map(columns, &quote_name/1), ", ") |> paren()
-  end
-
-  @spec paren(sql() | nil) :: sql() | nil
-  defp paren(nil), do: nil
-
-  defp paren(stmt) when is_binary(stmt) do
-    "(" <> stmt <> ")"
-  end
-
-  @spec indent([sql()] | sql() | nil, boolean) :: sql() | nil
-  defp indent(nil, _) do
-    nil
-  end
-
-  defp indent(lines, true) when is_list(lines) do
-    Enum.map(lines, &indent(&1, true))
-  end
-
-  defp indent(sql, true) do
-    @indent <> sql
-  end
-
-  defp indent(sql, false) do
-    sql
   end
 
   # map all array types to json -- which requires mapping of the logical replication

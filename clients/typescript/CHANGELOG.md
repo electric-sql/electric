@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.6.4
+
+### Patch Changes
+
+- 5a0f922: Fix the bug where the client would crash/stop working/stop syncing if it received a migration containing a new index creation.
+
 ## 0.6.3
 
 ### Patch Changes

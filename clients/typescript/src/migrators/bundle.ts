@@ -110,8 +110,19 @@ export class BundleMigrator implements Migrator {
     migrations: StmtMigration[],
     existing: MigrationRecord[]
   ) {
+    // `existing` migrations may contain migrations
+    // received at runtime that are not bundled in the app
+    // i.e. those are not present in `migrations`
+    // Thus, `existing` may be longer than `migrations`.
+    // So we should only compare a prefix of `existing`
+    // that has the same length as `migrations`
+
+    // take a slice of `existing` migrations
+    // that will be checked against `migrations`
+    const existingPrefix = existing.slice(0, migrations.length)
+
     // We validate that the existing records are the first migrations.
-    existing.forEach(({ version }, i) => {
+    existingPrefix.forEach(({ version }, i) => {
       const migration = migrations[i]
 
       if (migration.version !== version) {
@@ -123,7 +134,7 @@ export class BundleMigrator implements Migrator {
     })
 
     // Then we can confidently slice and return the non-existing.
-    return migrations.slice(existing.length)
+    return migrations.slice(existingPrefix.length)
   }
 
   async apply({ statements, version }: StmtMigration): Promise<void> {

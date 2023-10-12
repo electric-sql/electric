@@ -168,6 +168,7 @@ defmodule Electric.Postgres.TestConnection do
 
     :epgsql.squery(conn, """
     BEGIN;
+    CALL electric.migration_version('20230830154422');
     CALL electric.electrify('public.users');
     CALL electric.electrify('public.documents');
     CALL electric.electrify('public.my_entries');
@@ -249,6 +250,10 @@ defmodule Electric.Postgres.TestConnection do
           port: 5433,
           dbname: "test"
         ]
+      ],
+      proxy: [
+        listen: [port: 65432],
+        password: "password"
       ]
     ]
   end

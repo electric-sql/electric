@@ -66,7 +66,11 @@ defmodule Electric.MixProject do
       {:thousand_island, "~> 1.0-pre"},
       {:mint_web_socket, "~> 1.0"},
       {:mint, "~> 1.5"},
-      {:req, "~> 0.4"}
+      {:req, "~> 0.4"},
+      {:pg_protocol, github: "electric-sql/pg_protocol"},
+      {:nimble_parsec, "~> 1.3"},
+      {:postgrex, "~> 0.17", only: [:test]},
+      {:ecto_sql, "~> 3.10", only: [:test]}
     ]
   end
 

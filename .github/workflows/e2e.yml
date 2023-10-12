@@ -24,7 +24,7 @@ concurrency:
 jobs:
   e2e_tests:
     name: E2E tests
-    runs-on: ubuntu-latest
+    runs-on: electric-e2e-8-32
     defaults:
       run:
         working-directory: e2e

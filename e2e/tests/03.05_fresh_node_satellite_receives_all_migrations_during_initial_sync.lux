@@ -11,10 +11,10 @@
   !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000002', 'second entry');
   ?INSERT 0 1
 
-[invoke electrify_table pg_1 entries]
+[invoke electrify_table entries]
 
 # Create a new table, electrify it immediately, and then insert a few rows.
-[shell pg_1]
+[shell proxy_1]
   [local sql=
     """
     BEGIN;
@@ -23,7 +23,8 @@
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       content VARCHAR NOT NULL
     );
-    CALL electric.electrify('public.items');
+    -- CALL electric.electrify('public.items');
+    ALTER TABLE public.items ENABLE ELECTRIC;
 
     INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000011', 'first item');
     INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000012', 'second item');

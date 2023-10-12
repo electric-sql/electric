@@ -22,8 +22,11 @@ defmodule Electric.Postgres.Extension do
   @ddl_relation "ddl_commands"
   @schema_relation "schema"
   @electrified_table_relation "electrified"
-  @electrified_index_relation "electrified_idx"
   @acked_client_lsn_relation "acknowledged_client_lsns"
+
+  @grants_relation "grants"
+  @roles_relation "roles"
+  @assignments_relation "assignments"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -32,9 +35,12 @@ defmodule Electric.Postgres.Extension do
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
   @electrified_tracking_table electric.(@electrified_table_relation)
-  @electrified_index_table electric.(@electrified_index_relation)
   @transaction_marker_table electric.("transaction_marker")
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
+
+  @grants_table electric.(@grants_relation)
+  @roles_table electric.(@roles_relation)
+  @assignments_table electric.(@assignments_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -43,14 +49,19 @@ defmodule Electric.Postgres.Extension do
   # that will go away once we stop replicating all tables by default)
   @save_schema_query ~s[INSERT INTO #{@schema_table} ("version", "schema", "migration_ddl") VALUES ($1, $2, $3) ON CONFLICT ("id") DO NOTHING]
   @ddl_history_query "SELECT id, txid, txts, query FROM #{@ddl_table} ORDER BY id ASC;"
-  @event_triggers %{
-    ddl_command_end: "#{@schema}_event_trigger_ddl_end",
-    sql_drop: "#{@schema}_event_trigger_sql_drop"
-  }
 
   @publication_name "electric_publication"
   @slot_name "electric_replication_out"
   @subscription_name "electric_replication_in"
+
+  # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT
+  # pg_current_xact_id() -> xid8
+  # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
+  # does not wrap around during the life of an installation
+  @txid_type "xid8"
+  # use an int8 for the txts timestamp column because epgsql has very poor
+  # support for timestamp columns :(
+  @txts_type "int8"
 
   defp migration_history_query(after_version) do
     where_clause =
@@ -63,11 +74,12 @@ defmodule Electric.Postgres.Extension do
 
     """
     SELECT
-      v.txid,
-      v.txts,
-      v.version,
-      s.schema,
-      s.migration_ddl
+      v.txid::xid8,
+      v.txts::int8,
+      v.version::text,
+      v.inserted_at::timestamptz,
+      s.schema::text,
+      s.migration_ddl::text[]
     FROM
       #{@version_table} v
     JOIN
@@ -90,16 +102,19 @@ defmodule Electric.Postgres.Extension do
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
+  def electrified_tracking_relation, do: @electrified_table_relation
   def electrified_tracking_table, do: @electrified_tracking_table
-  def electrified_index_table, do: @electrified_index_table
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
+
+  def grants_table, do: @grants_table
+  def roles_table, do: @roles_table
+  def assignments_table, do: @assignments_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
-  def event_triggers, do: @event_triggers
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
@@ -114,8 +129,8 @@ defmodule Electric.Postgres.Extension do
   defguard is_acked_client_lsn_relation(relation)
            when relation == {@schema, @acked_client_lsn_relation}
 
-  def extract_ddl_version(%{"txid" => _, "txts" => _, "version" => version, "query" => query}) do
-    {:ok, version, query}
+  def extract_ddl_sql(%{"txid" => _, "txts" => _, "query" => query}) do
+    {:ok, query}
   end
 
   def schema_version(conn, version) do
@@ -162,6 +177,32 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @tx_version_query "SELECT version FROM #{@version_table} WHERE txid = $1::#{@txid_type} and txts = $2::#{@txts_type} LIMIT 1"
+
+  @doc """
+  Given a db row which points to a compound transaction id, returns the version
+  for that transaction.
+  """
+  @spec tx_version(conn(), %{binary() => integer() | binary()}) ::
+          {:ok, String.t()} | {:error, term()}
+  def tx_version(conn, %{"txid" => txid, "txts" => txts}) do
+    with {:ok, _cols, rows} <-
+           :epgsql.equery(conn, @tx_version_query, [to_integer(txid), to_integer(txts)]) do
+      case rows do
+        [] ->
+          {:error, "No version found for tx txid: #{txid}, txts: #{txts}"}
+
+        [{version}] ->
+          {:ok, version}
+      end
+    end
+  end
+
+  def tx_version(_conn, row) do
+    raise ArgumentError,
+      message: "invalid tx fk row #{inspect(row)}, expecting %{\"txid\" => _, \"txts\" => _}"
+  end
+
   @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
   def migration_history(conn, after_version \\ nil)
 
@@ -169,7 +210,7 @@ defmodule Electric.Postgres.Extension do
     query = migration_history_query(after_version)
     param = after_version || :null
 
-    with {:ok, [_, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
+    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
       {:ok, load_migrations(rows)}
     end
   end
@@ -182,11 +223,12 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp load_migrations(rows) do
-    Enum.map(rows, fn {txid_str, txts_tuple, version, schema_json, stmts} ->
+    Enum.map(rows, fn {txid_str, txts, version, timestamp, schema_json, stmts} ->
       %Migration{
         version: version,
         txid: String.to_integer(txid_str),
-        txts: decode_epgsql_timestamp(txts_tuple),
+        txts: txts,
+        timestamp: decode_epgsql_timestamp(timestamp),
         schema: Proto.Schema.json_decode!(schema_json),
         stmts: stmts
       }
@@ -194,38 +236,54 @@ defmodule Electric.Postgres.Extension do
   end
 
   @table_is_electrifed_query "SELECT count(id) AS count FROM #{@electrified_tracking_table} WHERE schema_name = $1 AND table_name = $2 LIMIT 1"
-  @spec electrified?(conn(), String.t(), String.t()) :: boolean()
+
+  @spec electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
   def electrified?(conn, schema \\ "public", table) do
-    {:ok, _, [{count}]} = :epgsql.equery(conn, @table_is_electrifed_query, [schema, table])
-    count == 1
+    with {:ok, _, [{count}]} <- :epgsql.equery(conn, @table_is_electrifed_query, [schema, table]) do
+      {:ok, count == 1}
+    end
   end
 
-  @electrifed_index_query "SELECT id, table_id  FROM #{@electrified_index_table} ORDER BY id ASC"
-  def electrified_indexes(conn) do
-    with {:ok, _, rows} <- :epgsql.equery(conn, @electrifed_index_query, []) do
-      {:ok, rows}
+  @index_electrified_query """
+  SELECT COUNT(pci.oid)
+    FROM pg_class pc
+    INNER JOIN #{@electrified_tracking_table} et ON et.oid = pc.oid
+    INNER JOIN pg_index pi ON pi.indrelid = pc.oid
+    INNER JOIN pg_class pci ON pci.oid = pi.indexrelid
+  WHERE et.schema_name = $1
+    AND pi.indisprimary = false
+    AND pci.relname = $2
+  """
+
+  @spec index_electrified?(conn(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
+  def index_electrified?(conn, schema, name) do
+    with {:ok, _, [{n}]} <- :epgsql.equery(conn, @index_electrified_query, [schema, name]) do
+      {:ok, n == 1}
     end
   end
 
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do
     name = to_string(table_name)
 
-    ddlx_create(conn, name, "ddlx_create")
+    ddlgen_create(conn, name, "ddlgen_create")
   end
 
   def create_index_ddl(conn, %Proto.RangeVar{} = table_name, index_name) do
     name = to_string(%{table_name | name: index_name})
 
-    ddlx_create(conn, name, "ddlx_create")
+    ddlgen_create(conn, name, "ddlgen_create")
   end
 
-  defp ddlx_create(conn, name, function) do
+  defp ddlgen_create(conn, name, function) do
     query = "SELECT #{@schema}.#{function}($1::regclass)"
 
     with {:ok, _cols, [{ddl}]} <- :epgsql.equery(conn, query, [name]) do
       {:ok, ddl}
     end
   end
+
+  def txid_type, do: @txid_type
+  def txts_type, do: @txts_type
 
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
@@ -247,8 +305,14 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230512000000_conflict_resolution_triggers,
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
+      Migrations.Migration_20230814170123_RenameDDLX,
+      Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
-      Migrations.Migration_20230918115714_DDLCommandUniqueConstraint
+      Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
+      Migrations.Migration_20230921161045_DropEventTriggers,
+      Migrations.Migration_20230921161418_ProxyCompatibility,
+      Migrations.Migration_20231009121515_AllowLargeMigrations,
+      Migrations.Migration_20231010123118_AddPriorityToVersion
     ]
   end
 
@@ -275,58 +339,54 @@ defmodule Electric.Postgres.Extension do
       create_schema(txconn)
       create_migration_table(txconn)
 
-      with_migration_lock(txconn, fn ->
-        # NOTE(alco): This is currently called BEFORE running any internal migrations because we're only defining the
-        # type-checking function that the later defined `electrify()` function depends on.
-        #
-        # Once we move all function definitions out of migrations, we should call this AFTER all internal migrations
-        # have been applied.
-        define_functions(txconn)
+      newly_applied_versions =
+        with_migration_lock(txconn, fn ->
+          existing_versions = txconn |> existing_migration_versions() |> MapSet.new()
 
-        existing_migrations = existing_migrations(txconn)
-
-        versions =
           migrations
-          |> Enum.reject(fn {version, _module} -> version in existing_migrations end)
-          |> Enum.reduce([], fn {version, module}, v ->
-            Logger.info("Running extension migration: #{version}")
-
-            disabling_event_triggers(txconn, module, fn ->
-              for sql <- module.up(@schema) do
-                case :epgsql.squery(txconn, sql) do
-                  results when is_list(results) ->
-                    errors = Enum.filter(results, &(elem(&1, 0) == :error))
-
-                    unless(Enum.empty?(errors)) do
-                      raise RuntimeError,
-                        message:
-                          "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-                    end
-
-                    :ok
-
-                  {:ok, _} ->
-                    :ok
-
-                  {:ok, _cols, _rows} ->
-                    :ok
-                end
-              end
-            end)
-
-            {:ok, _count} =
-              :epgsql.squery(
-                txconn,
-                "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
-              )
-
-            [version | v]
+          |> Enum.reject(fn {version, _module} -> version in existing_versions end)
+          |> Enum.map(fn {version, module} ->
+            :ok = apply_migration(txconn, version, module)
+            version
           end)
-          |> Enum.reverse()
+        end)
 
-        {:ok, versions}
-      end)
+      :ok = define_functions(txconn)
+
+      {:ok, newly_applied_versions}
     end)
+  end
+
+  defp apply_migration(txconn, version, module) do
+    Logger.info("Running extension migration: #{version}")
+
+    for sql <- module.up(@schema) do
+      case :epgsql.squery(txconn, sql) do
+        results when is_list(results) ->
+          errors = Enum.filter(results, &(elem(&1, 0) == :error))
+
+          unless(Enum.empty?(errors)) do
+            raise RuntimeError,
+              message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
+          end
+
+          :ok
+
+        {:ok, _} ->
+          :ok
+
+        {:ok, _cols, _rows} ->
+          :ok
+      end
+    end
+
+    {:ok, 1} =
+      :epgsql.squery(
+        txconn,
+        "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
+      )
+
+    :ok
   end
 
   # https://dba.stackexchange.com/a/311714
@@ -362,36 +422,7 @@ defmodule Electric.Postgres.Extension do
     fun.()
   end
 
-  defp disabling_event_triggers(conn, _module, fun) do
-    disable =
-      Enum.flat_map(@event_triggers, fn {_type, name} ->
-        case :epgsql.squery(conn, "SELECT * FROM pg_event_trigger WHERE evtname = '#{name}'") do
-          {:ok, _, [_]} ->
-            [name]
-
-          _ ->
-            []
-        end
-      end)
-
-    Enum.each(disable, &alter_event_trigger(conn, &1, "DISABLE"))
-
-    result = fun.()
-
-    # if there's a problem the tx will be aborted and the event triggers
-    # left in an enabled state, so no need for a try..after..end block
-    Enum.each(disable, &alter_event_trigger(conn, &1, "ENABLE"))
-
-    result
-  end
-
-  defp alter_event_trigger(conn, name, state) do
-    query = ~s|ALTER EVENT TRIGGER "#{name}" #{state}|
-    Logger.debug(query)
-    {:ok, [], []} = :epgsql.squery(conn, query)
-  end
-
-  defp existing_migrations(conn) do
+  defp existing_migration_versions(conn) do
     {:ok, _cols, rows} =
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 
@@ -417,7 +448,11 @@ defmodule Electric.Postgres.Extension do
 
   def ddl_history(conn) do
     with {:ok, _cols, rows} <- :epgsql.equery(conn, @ddl_history_query, []) do
-      {:ok, rows}
+      {:ok,
+       for(
+         {id, txid, txts, query} <- rows,
+         do: %{"id" => id, "txid" => to_integer(txid), "txts" => txts, "query" => query}
+       )}
     end
   end
 
@@ -539,4 +574,7 @@ defmodule Electric.Postgres.Extension do
     RETURNING content->>0;
     """)
   end
+
+  defp to_integer(i) when is_integer(i), do: i
+  defp to_integer(s) when is_binary(s), do: String.to_integer(s)
 end

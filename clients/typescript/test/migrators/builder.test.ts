@@ -113,6 +113,32 @@ test('generate migration from meta data', (t) => {
   )
 })
 
+test('generate index creation migration from meta data', (t) => {
+  const metaData = parseMetadata({
+    format: 'SatOpMigrate',
+    ops: [
+      encodeSatOpMigrateMsg(
+        SatOpMigrate.fromPartial({
+          version: '20230613112725_814',
+          stmts: [
+            SatOpMigrate_Stmt.create({
+              type: SatOpMigrate_Type.CREATE_INDEX,
+              sql: 'CREATE INDEX idx_stars_username ON stars(username);',
+            }),
+          ],
+        })
+      ),
+    ],
+    protocol_version: 'Electric.Satellite',
+    version: '20230613112725_814',
+  })
+  const migration = makeMigration(metaData)
+  t.assert(migration.version === migrationMetaData.version)
+  t.deepEqual(migration.statements, [
+    'CREATE INDEX idx_stars_username ON stars(username);',
+  ])
+})
+
 const migrationsFolder = path.join('./test/migrators/support/migrations')
 
 test('read migration meta data', async (t) => {

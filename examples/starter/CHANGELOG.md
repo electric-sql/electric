@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.1.6
+
+### Patch Changes
+
+- a42ee2c: Pull latest Electric and TS dependencies in starter and freeze them.
+
 ## 0.1.5
 
 ### Patch Changes

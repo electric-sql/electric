@@ -1,4 +1,5 @@
 defmodule Electric.Satellite.Serialization do
+  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{Extension, Replication}
   alias Electric.Replication.Changes
 
@@ -94,7 +95,8 @@ defmodule Electric.Satellite.Serialization do
     state =
       case(record) do
         ddl when is_ddl_relation(ddl.relation) ->
-          {:ok, v, sql} = Extension.extract_ddl_version(ddl.record)
+          {:ok, v} = SchemaCache.tx_version(origin, ddl.record)
+          {:ok, sql} = Extension.extract_ddl_sql(ddl.record)
 
           Logger.info("Serializing migration #{inspect(v)}: #{inspect(sql)}")
 

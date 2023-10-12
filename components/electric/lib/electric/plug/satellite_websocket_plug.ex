@@ -41,6 +41,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       )
     else
       {:error, code, body} ->
+        Logger.debug("Clients WebSocket connection failed with reason: #{body}")
         send_resp(conn, code, body)
     end
   end

@@ -197,4 +197,25 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       end)
     end)
   end
+
+  @impl true
+  def table_electrified?(pool, {schema, name}) do
+    checkout!(pool, fn conn ->
+      Extension.electrified?(conn, schema, name)
+    end)
+  end
+
+  @impl true
+  def index_electrified?(pool, {schema, name}) do
+    checkout!(pool, fn conn ->
+      Extension.index_electrified?(conn, schema, name)
+    end)
+  end
+
+  @impl true
+  def tx_version(pool, row) do
+    checkout!(pool, fn conn ->
+      Extension.tx_version(conn, row)
+    end)
+  end
 end

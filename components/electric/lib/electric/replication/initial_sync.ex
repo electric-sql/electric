@@ -49,7 +49,7 @@ defmodule Electric.Replication.InitialSync do
       %Transaction{
         xid: migration.txid,
         changes: records,
-        commit_timestamp: migration.txts,
+        commit_timestamp: migration.timestamp,
         origin: origin,
         publication: publication,
         lsn: lsn,

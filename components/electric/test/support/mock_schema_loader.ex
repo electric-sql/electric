@@ -32,14 +32,40 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
     {versions, _schema} =
       migrations
-      |> Enum.map(fn {version, stmts} -> {version, List.wrap(stmts)} end)
-      |> Enum.map_reduce(Schema.new(), fn {version, stmts}, schema ->
+      |> Enum.map(fn {opts, stmts} -> {opts, List.wrap(stmts)} end)
+      |> Enum.map_reduce(Schema.new(), fn {opts, stmts}, schema ->
         schema = Enum.reduce(stmts, schema, &schema_update(&2, &1, oid_loader))
-        {mock_version(version, schema, stmts), schema}
+        {mock_version(opts, schema, stmts), schema}
       end)
 
     # we need versions in reverse order, with the latest migration first
     Enum.reverse(versions)
+  end
+
+  def start_link(opts, args \\ []) do
+    {module, spec} = agent_spec(opts, args)
+    {:ok, state} = connect([], spec)
+    {module, state}
+  end
+
+  @doc """
+  Use this if you need a schema loader that's shared between multiple processes
+  It replaces the loader state with an Agent instance and calls the various
+  loader functions via that. Passing a `:name` in the args allows for this
+  loader to be called via this registered name.
+  """
+  def agent_spec(opts, args \\ []) do
+    {module, state} = backend_spec(opts)
+
+    {module, {:agent, state, args}}
+  end
+
+  @doc """
+  Gives the SchemaLoader instance that allows you to share a single agent-based
+  mock loader via a registered name.
+  """
+  def agent_id(name) when is_atom(name) do
+    {__MODULE__, {:agent, name}}
   end
 
   def backend_spec(opts) do
@@ -48,8 +74,21 @@ defmodule Electric.Postgres.MockSchemaLoader do
     versions = migrate_versions(Keyword.get(opts, :migrations, []), oid_loader)
     parent = Keyword.get(opts, :parent, self())
     pks = Keyword.get(opts, :pks, nil)
+    txids = Keyword.get(opts, :txids, %{})
+    # allow for having a shortcut to set electrified tables and indexes
+    indexes = Keyword.get(opts, :indexes, %{})
+    tables = Keyword.get(opts, :tables, %{})
 
-    {__MODULE__, [parent: parent, versions: versions, oid_loader: oid_loader, pks: pks]}
+    {__MODULE__,
+     [
+       parent: parent,
+       versions: versions,
+       oid_loader: oid_loader,
+       pks: pks,
+       txids: txids,
+       indexes: indexes,
+       tables: tables
+     ]}
   end
 
   defp make_oid_loader(fun) when is_function(fun, 3) do
@@ -67,19 +106,89 @@ defmodule Electric.Postgres.MockSchemaLoader do
     end
   end
 
-  defp mock_version(version, schema, stmts) do
+  defp mock_version(version, schema, stmts) when is_binary(version) do
+    mock_version([version: version], schema, stmts)
+  end
+
+  defp mock_version(opts, schema, stmts) do
+    version = Keyword.fetch!(opts, :version)
+
     %Migration{
-      txid: String.to_integer(version),
-      txts: DateTime.utc_now(),
+      txid: Keyword.get(opts, :txid, to_integer(version)),
+      txts: Keyword.get(opts, :txts, to_integer(version)),
       version: version,
       schema: schema,
-      stmts: stmts
+      stmts: stmts,
+      timestamp: Keyword.get(opts, :timestamp, DateTime.utc_now())
     }
+  end
+
+  defp to_integer(i) when is_integer(i), do: i
+  defp to_integer(s) when is_binary(s), do: String.to_integer(s)
+
+  @doc """
+  Update the mock loader with a new {txid, txts} => version mapping
+  Returns the updated state
+  """
+  def receive_tx({__MODULE__, state}, tx, version) do
+    {__MODULE__, receive_tx(state, tx, version)}
+  end
+
+  def receive_tx({:agent, pid}, %{"txid" => _txid, "txts" => _txts} = tx, version) do
+    :ok = Agent.update(pid, &receive_tx(&1, tx, version))
+    {:agent, pid}
+  end
+
+  def receive_tx({versions, opts}, %{"txid" => _txid, "txts" => _txts} = row, version) do
+    key = tx_key(row)
+    {versions, Map.update(opts, :txids, %{key => version}, &Map.put(&1, key, version))}
+  end
+
+  # ignore rows that don't define a txid, txts key
+  def receive_tx({versions, opts}, _row, _version) do
+    {versions, opts}
+  end
+
+  def electrify_table({__MODULE__, state}, {schema, table}) do
+    {__MODULE__, electrify_table(state, {schema, table})}
+  end
+
+  def electrify_table({:agent, pid}, {schema, table}) do
+    :ok = Agent.update(pid, &electrify_table(&1, {schema, table}))
+    {:agent, pid}
+  end
+
+  def electrify_table({versions, opts}, {schema, table}) do
+    {versions,
+     Map.update(opts, :tables, %{{schema, table} => true}, &Map.put(&1, {schema, table}, true))}
+  end
+
+  defp tx_key(%{"txid" => txid, "txts" => txts}) do
+    {to_integer(txid), to_integer(txts)}
   end
 
   @behaviour SchemaLoader
 
   @impl true
+  def connect(_conn_config, {:agent, pid}) do
+    {:ok, {:agent, pid}}
+  end
+
+  def connect(conn_config, {:agent, opts, args}) do
+    name = Keyword.get(args, :name)
+    pid = name && GenServer.whereis(name)
+
+    if pid && Process.alive?(pid) do
+      # use existing agent
+      {:ok, {:agent, name}}
+    else
+      with {:ok, conn} <- connect(conn_config, opts),
+           {:ok, pid} <- Agent.start_link(fn -> conn end, args) do
+        {:ok, {:agent, name || pid}}
+      end
+    end
+  end
+
   def connect(conn_config, opts) do
     {versions, opts} =
       opts
@@ -91,6 +200,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def load({:agent, pid}) do
+    Agent.get(pid, &load/1)
+  end
+
   def load({[], opts}) do
     notify(opts, :load)
     {:ok, nil, Schema.new()}
@@ -102,6 +215,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def load({:agent, pid}, version) do
+    Agent.get(pid, &load(&1, version))
+  end
+
   def load({versions, opts}, version) do
     case Enum.find(versions, &(&1.version == version)) do
       %Migration{schema: schema} ->
@@ -115,6 +232,16 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def save({:agent, pid}, version, schema, stmts) do
+    with :ok <-
+           Agent.update(pid, fn state ->
+             {:ok, state} = save(state, version, schema, stmts)
+             state
+           end) do
+      {:ok, {:agent, pid}}
+    end
+  end
+
   def save({versions, opts}, version, schema, stmts) do
     notify(opts, {:save, version, schema, stmts})
 
@@ -122,6 +249,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def relation_oid({:agent, pid}, type, schema, name) do
+    Agent.get(pid, &relation_oid(&1, type, schema, name))
+  end
+
   def relation_oid({_versions, %{oid_loader: oid_loader}}, type, schema, name)
       when is_function(oid_loader, 3) do
     oid_loader.(type, schema, name)
@@ -139,6 +270,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def primary_keys({:agent, pid}, schema, name) do
+    Agent.get(pid, &primary_keys(&1, schema, name))
+  end
+
   def primary_keys({_versions, %{pks: pks} = opts}, schema, name) when is_map(pks) do
     notify(opts, {:primary_keys, schema, name})
 
@@ -161,17 +296,29 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def primary_keys({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &primary_keys(&1, {schema, name}))
+  end
+
   def primary_keys({_versions, _opts} = state, {schema, name}) do
     primary_keys(state, schema, name)
   end
 
   @impl true
+  def refresh_subscription({:agent, pid}, name) do
+    Agent.get(pid, &refresh_subscription(&1, name))
+  end
+
   def refresh_subscription({_versions, opts}, name) do
     notify(opts, {:refresh_subscription, name})
     :ok
   end
 
   @impl true
+  def migration_history({:agent, pid}, after_version) do
+    Agent.get(pid, &migration_history(&1, after_version))
+  end
+
   def migration_history({versions, opts}, after_version) do
     notify(opts, {:migration_history, after_version})
 
@@ -188,6 +335,10 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
+  def known_migration_version?({:agent, pid}, version) do
+    Agent.get(pid, &known_migration_version?(&1, version))
+  end
+
   def known_migration_version?({versions, opts}, version) do
     notify(opts, {:known_migration_version?, version})
 
@@ -199,7 +350,80 @@ defmodule Electric.Postgres.MockSchemaLoader do
     Schema.new()
   end
 
+  def electrified_tables({:agent, pid}) do
+    Agent.get(pid, &electrified_tables/1)
+  end
+
+  def electrified_tables({[version | _versions], _opts}) do
+    {:ok, Schema.table_info(version.schema)}
+  end
+
+  def electrified_tables(_state) do
+    {:ok, []}
+  end
+
+  @impl true
+  def table_electrified?({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &table_electrified?(&1, {schema, name}))
+  end
+
+  def table_electrified?({_versions, opts} = state, {schema, name}) do
+    if Map.get(opts.tables, {schema, name}) do
+      {:ok, true}
+    else
+      with {:ok, tables} <- electrified_tables(state) do
+        {:ok, Enum.any?(tables, &(&1.schema == schema && &1.name == name))}
+      end
+    end
+  end
+
+  @impl true
+  def index_electrified?({:agent, pid}, {schema, name}) do
+    Agent.get(pid, &index_electrified?(&1, {schema, name}))
+  end
+
+  def index_electrified?({[version | _versions], _opts}, {schema, name}) do
+    {:ok,
+     Enum.any?(
+       Schema.indexes(version.schema, include_constraints: false),
+       &(&1.table.schema == schema && &1.name == name)
+     )}
+  end
+
   defp notify(%{parent: parent}, msg) when is_pid(parent) do
     send(parent, {__MODULE__, msg})
+  end
+
+  @impl true
+  def tx_version({:agent, pid}, row) do
+    Agent.get(pid, &tx_version(&1, row))
+  end
+
+  def tx_version({versions, opts}, %{"txid" => txid, "txts" => txts} = row) do
+    notify(opts, {:tx_version, txid, txts})
+
+    key = tx_key(row)
+
+    # we may not explicitly configure the mock loader with txids
+    case Map.fetch(opts[:txids] || %{}, key) do
+      :error ->
+        # we only use the txid which MUST be set to the version because
+        # the mocking system has no way to propagate transaction ids through
+        # -- the txid/txts stuff is an implementation detail of the proxy system
+        case Enum.find(
+               versions,
+               &(to_integer(&1.txid) == to_integer(txid) &&
+                   to_integer(&1.txts) == to_integer(txts))
+             ) do
+          %Migration{version: version} ->
+            {:ok, version}
+
+          _other ->
+            {:error, "#{__MODULE__}: No migration matching #{txid}"}
+        end
+
+      {:ok, version} ->
+        {:ok, version}
+    end
   end
 end

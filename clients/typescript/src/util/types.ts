@@ -46,6 +46,7 @@ export enum SatelliteErrorCode {
   UNKNOWN_DATA_TYPE,
   SOCKET_ERROR,
   UNRECOGNIZED,
+  FATAL_ERROR,
 
   // auth errors
   AUTH_ERROR,
@@ -181,8 +182,4 @@ export enum ReplicationStatus {
 
 export type ErrorCallback = (error: SatelliteError) => void
 
-export type ConnectivityState =
-  | 'available'
-  | 'connected'
-  | 'disconnected'
-  | 'error'
+export type ConnectivityState = 'available' | 'connected' | 'disconnected'

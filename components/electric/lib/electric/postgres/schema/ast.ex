@@ -113,6 +113,12 @@ defmodule Electric.Postgres.Schema.AST do
     }
   end
 
+  def constraint(%{contype: :CONSTR_IDENTITY} = _identity, _table, _keys, _opts) do
+    %Proto.Constraint{
+      constraint: {:identity, %Proto.Constraint.Identity{}}
+    }
+  end
+
   defp constraint_keys(conkeys, colkeys, opts) do
     case {conkeys, colkeys} do
       {[], [_ | _]} -> colkeys
@@ -154,6 +160,9 @@ defmodule Electric.Postgres.Schema.AST do
 
     case con.contype do
       :CONSTR_NULL ->
+        {table, column}
+
+      :CONSTR_IDENTITY ->
         {table, column}
 
       col_con when col_con in [:CONSTR_NOTNULL] ->

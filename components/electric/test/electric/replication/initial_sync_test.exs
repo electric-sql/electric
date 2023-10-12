@@ -8,7 +8,7 @@ defmodule Electric.Replication.InitialSyncTest do
   alias Electric.Replication.InitialSync
 
   @origin "initial-sync-test"
-  @sleep_timeout 50
+  @sleep_timeout 500
 
   describe "migrations_since" do
     setup ctx, do: Map.put(ctx, :origin, @origin)
@@ -21,9 +21,12 @@ defmodule Electric.Replication.InitialSyncTest do
       :ok = create_users_table(conn)
       :ok = create_documents_table(conn)
 
+      version_1 = "20230830140000"
+      version_2 = "20230830140100"
+
       assert [] == InitialSync.migrations_since(nil, pg_connector_opts)
 
-      :ok = electrify_table(conn, "public.users")
+      :ok = electrify_table(conn, "public.users", version_1)
 
       # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
@@ -42,19 +45,18 @@ defmodule Electric.Replication.InitialSyncTest do
       assert is_integer(xid)
       assert %DateTime{} = timestamp
 
-      migration_version = Map.fetch!(migration.record, "version")
       migration_relation = Extension.ddl_relation()
 
       assert %NewRecord{
                relation: ^migration_relation,
                record: %{
                  "query" => "CREATE TABLE users" <> _,
-                 "version" => ^migration_version
+                 "version" => ^version_1
                },
                tags: []
              } = migration
 
-      :ok = electrify_table(conn, "public.documents")
+      :ok = electrify_table(conn, "public.documents", version_2)
 
       # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
@@ -116,8 +118,14 @@ defmodule Electric.Replication.InitialSyncTest do
     Lsn.from_string(lsn_str) |> Lsn.to_integer()
   end
 
-  defp electrify_table(conn, name) do
-    {:ok, [], []} = :epgsql.squery(conn, "CALL electric.electrify('#{name}')")
+  defp electrify_table(conn, name, version) do
+    :epgsql.with_transaction(conn, fn tx_conn ->
+      {:ok, [], []} = :epgsql.squery(tx_conn, "CALL electric.electrify('#{name}')")
+
+      {:ok, [], []} =
+        :epgsql.squery(tx_conn, "CALL electric.migration_version('#{version}')")
+    end)
+
     :ok
   end
 
@@ -156,7 +164,7 @@ defmodule Electric.Replication.InitialSyncTest do
     receive do
       {:cached_wal_notification, ^ref, :new_segments_available} -> :ok
     after
-      @sleep_timeout * 10 ->
+      @sleep_timeout ->
         flunk(
           "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position())}"
         )

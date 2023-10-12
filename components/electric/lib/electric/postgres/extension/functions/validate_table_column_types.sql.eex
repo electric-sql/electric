@@ -1,21 +1,11 @@
 <%
   valid_column_types =
-    ~w[
-      bool
-      date
-      float8
-      int2 int4
-      text
-      time
-      timestamp timestamptz
-      uuid
-      varchar
-    ]a
+    Electric.Postgres.supported_types()
     |> Enum.map(&"'#{&1}'")
     |> Enum.join(",")
 %>
 
-CREATE OR REPLACE FUNCTION electric.__validate_table_column_types(table_name text)
+CREATE OR REPLACE FUNCTION <%= @schema %>.__validate_table_column_types(table_name text)
 RETURNS VOID AS $function$
 DECLARE
     _col_name text;

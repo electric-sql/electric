@@ -1,4 +1,8 @@
 import { AuthConfig } from '../auth/index'
+import {
+  ConnectionBackoffOptions as ConnectionBackOffOptions,
+  satelliteDefaults,
+} from '../satellite/config'
 
 export interface ElectricConfig {
   auth: AuthConfig
@@ -24,6 +28,10 @@ export interface ElectricConfig {
    * Defaults to `false`.
    */
   debug?: boolean
+  /**
+   * Optional backoff options for connecting with Electric
+   */
+  connectionBackOffOptions?: ConnectionBackOffOptions
 }
 
 export type HydratedConfig = {
@@ -34,6 +42,7 @@ export type HydratedConfig = {
     ssl: boolean
   }
   debug: boolean
+  connectionBackOffOptions: ConnectionBackOffOptions
 }
 
 export type InternalElectricConfig = {
@@ -44,6 +53,7 @@ export type InternalElectricConfig = {
     ssl: boolean
   }
   debug?: boolean
+  connectionBackOffOptions?: ConnectionBackOffOptions
 }
 
 export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
@@ -68,9 +78,30 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     ssl: sslEnabled,
   }
 
+  const {
+    delayFirstAttempt,
+    jitter,
+    maxDelay,
+    numOfAttempts,
+    startingDelay,
+    timeMultiple,
+  } =
+    config.connectionBackOffOptions ??
+    satelliteDefaults.connectionBackOffOptions
+
+  const connectionBackOffOptions = {
+    delayFirstAttempt,
+    jitter,
+    maxDelay,
+    numOfAttempts,
+    startingDelay,
+    timeMultiple,
+  }
+
   return {
     auth,
     replication,
     debug,
+    connectionBackOffOptions,
   }
 }

@@ -481,7 +481,7 @@ defmodule Electric.Postgres.ExtensionTest do
                |> String.trim()
     end
 
-    test_tx "electrified?/2", fn conn ->
+    test_tx "electrified?/3", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -490,11 +490,11 @@ defmodule Electric.Postgres.ExtensionTest do
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
       end
 
-      assert Extension.electrified?(conn, "buttercup")
-      assert Extension.electrified?(conn, "public", "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
 
-      refute Extension.electrified?(conn, "daisy")
-      refute Extension.electrified?(conn, "public", "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
     end
   end
 

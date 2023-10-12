@@ -133,6 +133,29 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     |> Schema.table_info()
   end
 
+  @impl SchemaLoader
+  def table_electrified?(_origin, {"electric", _name}) do
+    {:ok, false}
+  end
+
+  def table_electrified?(origin, {schema, name}) do
+    call(origin, {:table_electrified?, schema, name})
+  end
+
+  @impl SchemaLoader
+  def index_electrified?(_origin, {"electric", _name}) do
+    {:ok, false}
+  end
+
+  def index_electrified?(origin, {schema, name}) do
+    call(origin, {:index_electrified?, schema, name})
+  end
+
+  @impl SchemaLoader
+  def tx_version(origin, row) do
+    call(origin, {:tx_version, row})
+  end
+
   def relation(origin, oid) when is_integer(oid) do
     call(origin, {:relation, oid})
   end
@@ -214,10 +237,11 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       opts: opts,
       current: nil,
       refresh_task: nil,
-      internal_schema: nil
+      internal_schema: nil,
+      tx_version_cache: %{}
     }
 
-    {:ok, state, {:continue, :init}}
+    {:ok, state}
   end
 
   @impl GenServer
@@ -267,40 +291,47 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call(:internal_schema, _from, state) do
+    state = load_internal_schema(state)
     {:reply, state.internal_schema, state}
   end
 
   def handle_call(:electrified_tables, _from, state) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {{:ok, Schema.table_info(schema)}, state}
-      else
-        error -> {error, state}
-      end
+    load_and_reply(state, fn schema ->
+      {:ok, Schema.table_info(schema)}
+    end)
+  end
 
-    {:reply, result, state}
+  def handle_call({:table_electrified?, sname, tname}, _from, state) do
+    # delegate this call directly to the extension metadata tables to avoid race conditions
+    # that can happen between an 'electrify table' call and the receipt of the
+    # migration via the replication stream - it's important that this function 
+    # be consistent with the state of the db, not our slightly laggy view on it
+    {:reply, SchemaLoader.table_electrified?(state.backend, {sname, tname}), state}
+  end
+
+  def handle_call({:index_electrified?, sname, iname}, _from, state) do
+    {:reply, SchemaLoader.index_electrified?(state.backend, {sname, iname}), state}
+  end
+
+  def handle_call({:tx_version, %{"txid" => txid, "txts" => txts} = row}, _from, state) do
+    # TODO: replace simple map with some size-bounded implementation for tx version cache
+    tx_version_cache =
+      Map.put_new_lazy(state.tx_version_cache, {txid, txts}, fn -> load_tx_version(state, row) end)
+
+    {:reply, Map.fetch(tx_version_cache, {txid, txts}),
+     %{state | tx_version_cache: tx_version_cache}}
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {Schema.table_info(schema, oid), state}
-      else
-        error -> {error, state}
-      end
-
-    {:reply, result, state}
+    load_and_reply(state, fn schema ->
+      Schema.table_info(schema, oid)
+    end)
   end
 
   def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
-    {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {Schema.table_info(schema, relation), state}
-      else
-        error -> {error, state}
-      end
-
-    {:reply, result, state}
+    load_and_reply(state, fn schema ->
+      Schema.table_info(schema, relation)
+    end)
   end
 
   def handle_call({:relation, relation, version}, _from, state) do
@@ -368,8 +399,22 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:noreply, state}
   end
 
-  def handle_continue(:init, state) do
-    {:noreply, %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}}
+  defp load_internal_schema(%{internal_schema: nil} = state) do
+    %{state | internal_schema: SchemaLoader.internal_schema(state.backend)}
+  end
+
+  defp load_internal_schema(state) do
+    state
+  end
+
+  defp load_tx_version(state, row) do
+    Logger.debug(
+      "Loading tx: #{row["txid"]}/#{row["txts"]} version using #{inspect(state.backend)}"
+    )
+
+    {:ok, version} = SchemaLoader.tx_version(state.backend, row)
+    Logger.debug("Loaded version #{inspect(version)} for tx: #{row["txid"]}/#{row["txts"]}")
+    version
   end
 
   defp current_schema(%{current: nil} = state) do
@@ -388,5 +433,16 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       error ->
         {error, state}
     end
+  end
+
+  defp load_and_reply(state, process) when is_function(process, 1) do
+    {result, state} =
+      with {{:ok, _version, schema}, state} <- current_schema(state) do
+        {process.(schema), state}
+      else
+        error -> {error, state}
+      end
+
+    {:reply, result, state}
   end
 end

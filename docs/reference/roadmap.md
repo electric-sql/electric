@@ -89,11 +89,11 @@ By understanding and acknowledging these constraints, you can leverage ElectricS
 
 ### Uniqueness constraints
 
-#### Primary keys need to be globally unique
+#### Primary keys need to be unique
 
-In centralised databases, the creation of two rows with the same primary key causes one of the transactions to abort. In local-first applications, that conflict would only be detected after-the-fact, leaving the state of clients unreconcilable. In ElectricSQL, we require that each key can only be created by a single client at any point in time, ensuring that primary keys are globally unique.
+In centralised databases, the creation of two rows with the same primary key causes one of the transactions to abort. In local-first applications, that conflict would only be detected after-the-fact, leaving the state of clients unreconcilable. In ElectricSQL, we require that each key can only be created by a single client at any point in time, ensuring that primary keys are unique (to their table -- rows in different tables can have the same primary key value).
 
-To ensure that primary keys are globally unique, you can use:
+To ensure that primary keys are unique, you can use:
 
 - UUIDs are typically a safe approach (be aware of limitation with some browsers and devices [REF])
 - Unique data about the client for generating the value safely. E.g., use the clientId in a composed primary-key.
@@ -162,4 +162,4 @@ Why: maintaining foreign key integrity requires write permissions on referred ro
 
 **Roadmap**:
 
-Currently, if a user tries to replicate a shape that does not include all reachable tables following the foreign key relations, an error is throws. We are looking into solutions for optimising the amount of data that needs to be replicated into the client, while maintaining foreign keys and enforcing write permissions.
+Currently, if a user tries to replicate a shape that does not include all reachable tables following the foreign key relations, an error is thrown. We are looking into solutions for optimising the amount of data that needs to be replicated into the client, while maintaining foreign keys and enforcing write permissions.
