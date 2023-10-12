@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'relatedId' int);"
   )
 }
 
@@ -340,6 +340,73 @@ test.serial('support null value for boolean type', async (t) => {
     select: {
       id: true,
       bool: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support uuid type', async (t) => {
+  const uuid = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      uuid: uuid,
+    },
+  })
+
+  t.assert(res.id === 1 && res.uuid === uuid)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.is(fetchRes?.uuid, uuid)
+
+  // Check that it rejects invalid uuids
+  await t.throwsAsync(
+    tbl.create({
+      data: {
+        id: 2,
+        // the UUID below has 1 character too much in the last group
+        uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a111',
+      },
+    }),
+    {
+      instanceOf: ZodError,
+      message: /Invalid uuid/
+    }
+  )
+})
+
+test.serial('support null value for uuid type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    uuid: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      uuid: null,
+    },
+    select: {
+      id: true,
+      uuid: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      uuid: true,
     },
   })
 
