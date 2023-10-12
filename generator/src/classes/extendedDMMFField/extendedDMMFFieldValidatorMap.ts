@@ -96,7 +96,7 @@ export const STRING_VALIDATOR_STRING_AND_MESSAGE_REGEX =
 // ----------------------------------------
 
 export const NUMBER_VALIDATOR_NUMBER_AND_MESSAGE_REGEX =
-  /.(?<validator>gt|gte|lt|lte|multipleOf)(?<number>\([\d]+([,][ ]?)?(?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/
+  /.(?<validator>gt|gte|lt|lte|multipleOf)(?<number>\(-?[\d]+([,][ ]?)?(?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/
 
 export const NUMBER_VALIDATOR_MESSAGE_REGEX =
   /.(?<validator>int|positive|nonnegative|negative|nonpositive|finite|noDefault)(\((?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/
