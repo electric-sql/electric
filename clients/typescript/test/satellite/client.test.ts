@@ -2,7 +2,6 @@ import anyTest, { TestFn } from 'ava'
 import Long from 'long'
 import * as Proto from '../../src/_generated/protocol/satellite'
 import { AuthState } from '../../src/auth'
-import { MockNotifier } from '../../src/notifiers'
 import {
   deserializeRow,
   SatelliteClient,
@@ -37,21 +36,13 @@ test.beforeEach((t) => {
   const server = new SatelliteWSServerStub(t)
   server.start()
 
-  const dbName = 'dbName'
-
-  const client = new SatelliteClient(
-    dbName,
-    dbDescription,
-    WebSocketNode,
-    new MockNotifier(dbName),
-    {
-      host: '127.0.0.1',
-      port: 30002,
-      timeout: 10000,
-      ssl: false,
-      pushPeriod: 100,
-    }
-  )
+  const client = new SatelliteClient(dbDescription, WebSocketNode, {
+    host: '127.0.0.1',
+    port: 30002,
+    timeout: 10000,
+    ssl: false,
+    pushPeriod: 100,
+  })
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
 
   t.context = {

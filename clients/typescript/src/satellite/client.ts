@@ -75,7 +75,6 @@ import {
 } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
-import { Notifier } from '../notifiers'
 import Log from 'loglevel'
 import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
@@ -177,10 +176,8 @@ export class SatelliteClient implements Client {
   }
 
   constructor(
-    _dbName: string,
     dbDescription: DbSchema<any>,
     socketFactory: SocketFactory,
-    _notifier: Notifier,
     opts: SatelliteClientOpts
   ) {
     this.emitter = new EventEmitter() as SafeEventEmitter

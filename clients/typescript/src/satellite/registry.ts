@@ -210,10 +210,8 @@ export class GlobalRegistry extends BaseRegistry {
     }
 
     const client = new SatelliteClient(
-      dbName,
       dbDescription,
       socketFactory,
-      notifier,
       satelliteClientOpts
     )
 
