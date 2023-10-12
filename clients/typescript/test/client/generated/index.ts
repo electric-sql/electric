@@ -1,7 +1,12 @@
-import { z } from 'zod';
-import type { Prisma } from 'client';
-import { TableSchema, DbSchema, Relation, ElectricClient, HKT } from 'electric-sql/client/model';
-import migrations from './migrations';
+import { z } from 'zod'
+import type { Prisma } from '../generated/client'
+import {
+  TableSchema,
+  DbSchema,
+  Relation,
+  ElectricClient,
+  HKT,
+} from '../../../src/client/model'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -2299,12 +2304,16 @@ export const UserDeleteManyArgsSchema: z.ZodType<Prisma.UserDeleteManyArgs> = z.
   where: UserWhereInputSchema.optional(),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostCreateArgsSchema: z.ZodType<Prisma.PostCreateArgs> = z.object({
   select: PostSelectSchema.optional(),
   include: PostIncludeSchema.optional(),
   data: z.union([ PostCreateInputSchema,PostUncheckedCreateInputSchema ]),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostUpsertArgsSchema: z.ZodType<Prisma.PostUpsertArgs> = z.object({
   select: PostSelectSchema.optional(),
   include: PostIncludeSchema.optional(),
@@ -2324,6 +2333,8 @@ export const PostDeleteArgsSchema: z.ZodType<Prisma.PostDeleteArgs> = z.object({
   where: PostWhereUniqueInputSchema,
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const PostUpdateArgsSchema: z.ZodType<Prisma.PostUpdateArgs> = z.object({
   select: PostSelectSchema.optional(),
   include: PostIncludeSchema.optional(),
@@ -2340,12 +2351,16 @@ export const PostDeleteManyArgsSchema: z.ZodType<Prisma.PostDeleteManyArgs> = z.
   where: PostWhereInputSchema.optional(),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileCreateArgsSchema: z.ZodType<Prisma.ProfileCreateArgs> = z.object({
   select: ProfileSelectSchema.optional(),
   include: ProfileIncludeSchema.optional(),
   data: z.union([ ProfileCreateInputSchema,ProfileUncheckedCreateInputSchema ]),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileUpsertArgsSchema: z.ZodType<Prisma.ProfileUpsertArgs> = z.object({
   select: ProfileSelectSchema.optional(),
   include: ProfileIncludeSchema.optional(),
@@ -2365,6 +2380,8 @@ export const ProfileDeleteArgsSchema: z.ZodType<Prisma.ProfileDeleteArgs> = z.ob
   where: ProfileWhereUniqueInputSchema,
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const ProfileUpdateArgsSchema: z.ZodType<Prisma.ProfileUpdateArgs> = z.object({
   select: ProfileSelectSchema.optional(),
   include: ProfileIncludeSchema.optional(),
@@ -2381,12 +2398,16 @@ export const ProfileDeleteManyArgsSchema: z.ZodType<Prisma.ProfileDeleteManyArgs
   where: ProfileWhereInputSchema.optional(),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const DataTypesCreateArgsSchema: z.ZodType<Prisma.DataTypesCreateArgs> = z.object({
   select: DataTypesSelectSchema.optional(),
   include: DataTypesIncludeSchema.optional(),
   data: z.union([ DataTypesCreateInputSchema,DataTypesUncheckedCreateInputSchema ]),
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const DataTypesUpsertArgsSchema: z.ZodType<Prisma.DataTypesUpsertArgs> = z.object({
   select: DataTypesSelectSchema.optional(),
   include: DataTypesIncludeSchema.optional(),
@@ -2406,6 +2427,8 @@ export const DataTypesDeleteArgsSchema: z.ZodType<Prisma.DataTypesDeleteArgs> = 
   where: DataTypesWhereUniqueInputSchema,
 }).strict()
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 export const DataTypesUpdateArgsSchema: z.ZodType<Prisma.DataTypesUpdateArgs> = z.object({
   select: DataTypesSelectSchema.optional(),
   include: DataTypesIncludeSchema.optional(),
