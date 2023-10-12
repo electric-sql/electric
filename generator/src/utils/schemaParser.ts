@@ -47,8 +47,9 @@ export function parseModels(prismaSchema: string): Array<Model> {
 function parseFields(body: string): Array<Field> {
   // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
   // It uses named captured groups to capture the field name, its type, and optional attributes
+  // the type can be `type` or `type?` or `type[]`
   const fieldRegex =
-    /^\s*(?<field>\w+)\s+(?<type>[\w\?]+)\s*(?<attributes>((@[\w\.]+\s*)|(@[\w\.]+\(.*\)+\s*))+)?\s*$/gm // /^\s*(?<field>\w+)\s+(?<type>[\w\?]+)\s*(?<attributes> ((@[\w\.]+\s*)|(@[\w\.]\([\w\,\.]\)+\s*))+)?\s*$/gm
+    /^\s*(?<field>\w+)\s+(?<type>[\w]+(\?|(\[]))?)\s*(?<attributes>((@[\w\.]+\s*)|(@[\w\.]+\(.*\)+\s*))+)?\s*$/gm
   const fieldMatches = [...body.matchAll(fieldRegex)]
   const fs = fieldMatches.map(
     (match) =>
