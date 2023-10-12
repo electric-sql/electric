@@ -44,6 +44,8 @@ defmodule Electric.Features do
     GenServer.start_link(__MODULE__, args)
   end
 
+  def default_key, do: @default_key
+
   @doc """
   Is a given feature enabled?
   """

@@ -515,76 +515,85 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
   alias Electric.DDLX
 
   def analyse(stmt, analysis, state) do
-    case extract_electric(stmt) do
-      {:electric, command_sql} ->
-        analysis = %{analysis | sql: command_sql}
+    case extract_electric(stmt, analysis) do
+      {:electric, command, analysis} ->
+        {:ok, table} =
+          parse_table_name(DDLX.Command.table_name(command), default_schema: state.default_schema)
 
-        case Electric.DDLX.Parse.Parser.parse(command_sql) do
-          {:ok, [command]} ->
-            {:ok, table} =
-              NameParser.parse(DDLX.Command.table_name(command),
-                default_schema: state.default_schema
-              )
-
-            %{
-              analysis
-              | action: {:electric, command},
-                table: table,
-                ast: command,
-                electrified?: true,
-                tx?: true,
-                capture?: true
-            }
-        end
-
-      {:electrify, table} ->
-        # convert a function call to electric.electrify() to the equivalent
-        # command so that it goes through the same mechanisms as if you used
-        # the `ALTER TABLE .. ENABLE ELECTRIC` syntax
-        cmd = %DDLX.Command.Enable{table_name: table}
-
-        %{
+        analysis = %{
           analysis
-          | action: {:electric, cmd},
+          | action: {:electric, command},
             table: table,
-            ast: cmd,
+            ast: command,
             electrified?: true,
             tx?: true,
             capture?: true
         }
 
-      :call ->
+        if command_enabled?(command) do
+          analysis
+        else
+          %{
+            analysis
+            | allowed?: false,
+              error: %{
+                message: "#{DDLX.Command.tag(command)} is currently unsupported",
+                detail:
+                  "We are working on implementing access controls -- when these features are completed then this command will work",
+                query: analysis.sql,
+                code: "EX900"
+              }
+          }
+        end
+
+      {:call, analysis} ->
         %{analysis | action: :call}
     end
   end
 
   def validate(stmt) do
-    case extract_electric(stmt) do
-      {:electric, command_sql} ->
-        with {:ok, _} <- Electric.DDLX.Parse.Parser.parse(command_sql) do
-          :ok
-        end
+    case extract_electric(stmt, %QueryAnalysis{}) do
+      {:electric, %Electric.DDLX.Command.Error{} = error, _analysis} ->
+        {:error, error}
 
-      {:electrify, _table} ->
+      {:electric, _command, _analysis} ->
         :ok
 
-      :call ->
+      {:call, _analysis} ->
         :ok
     end
   end
 
-  defp extract_electric(stmt) do
+  defp parse_table_name({_schema, _name} = table_name, _opts), do: {:ok, table_name}
+  defp parse_table_name(name, opts) when is_binary(name), do: NameParser.parse(name, opts)
+
+  defp extract_electric(stmt, analysis) do
     case function_name(stmt) do
       ["electric", "__smuggle__"] ->
         [command_sql] = function_args(stmt)
-        {:electric, command_sql}
+
+        # FIXME: [VAX-1220] fix the ddlx parser to cope with statements that don't end with a ;
+        sql =
+          case String.at(command_sql, -1) do
+            ";" -> command_sql
+            _ -> command_sql <> ";"
+          end
+
+        case Electric.DDLX.Parse.Parser.parse(sql) do
+          {:ok, [command]} ->
+            {:electric, command, %{analysis | sql: command_sql}}
+
+          {:error, error} ->
+            {:electric, error, %{analysis | allowed?: false}}
+        end
 
       ["electric", "electrify"] ->
         {:table, table} = Parser.table_name(stmt)
-        {:electrify, table}
+        command = %DDLX.Command.Enable{table_name: table}
+        {:electric, command, analysis}
 
       _ ->
-        :call
+        {:call, analysis}
     end
   end
 
@@ -594,5 +603,24 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
 
   defp function_name(%PgQuery.CallStmt{funccall: %{funcname: funcname}}) do
     Enum.map(funcname, &Parser.string_node_val/1)
+  end
+
+  defp command_enabled?(%DDLX.Command.Enable{}), do: true
+
+  defp command_enabled?(cmd) do
+    cmd
+    |> feature_flag()
+    |> Electric.Features.enabled?()
+  end
+
+  @feature_flags %{
+    DDLX.Command.Grant => :proxy_ddlx_grant,
+    DDLX.Command.Revoke => :proxy_ddlx_revoke,
+    DDLX.Command.Assign => :proxy_ddlx_assign,
+    DDLX.Command.Unassign => :proxy_ddlx_unassign
+  }
+
+  defp feature_flag(%cmd{}) do
+    @feature_flags[cmd] || Electric.Features.default_key()
   end
 end

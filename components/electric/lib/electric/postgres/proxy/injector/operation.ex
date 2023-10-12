@@ -791,15 +791,19 @@ defmodule Operation.Disallowed do
           }
 
         _ ->
-          %M.ErrorResponse{
-            code: "EX100",
-            severity: "ERROR",
-            message: "Invalid destructive migration on Electrified table #{table_name(analysis)}",
-            detail:
-              "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
-            schema: schema,
-            table: table
-          }
+          struct(
+            %M.ErrorResponse{
+              code: "EX100",
+              severity: "ERROR",
+              message:
+                "Invalid destructive migration on Electrified table #{table_name(analysis)}",
+              detail:
+                "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
+              schema: schema,
+              table: table
+            },
+            analysis.error
+          )
       end
     end
   end

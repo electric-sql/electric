@@ -89,13 +89,10 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
   end
 
   describe "disabling ddlx via feature flags" do
-    # the injector tests override the default feature flags to ensure that 
-    # all ddlx features are enabled, so we need tests that validate 
-    # the behaviour when the features are disabled
-    import Electric.Postgres.Proxy.TestScenario
-    alias Electric.DDLX
-
     setup do
+      # the injector tests override the default feature flags to ensure that 
+      # all ddlx features are enabled, so we need tests that validate 
+      # the behaviour when the features are disabled
       Electric.Features.process_override(
         proxy_ddlx_grant: false,
         proxy_ddlx_revoke: false,
@@ -145,7 +142,7 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       end
 
       test "#{scenario.description()} ELECTRIC ASSIGN", cxt do
-        query = "ELECTRIC ASSIGN 'admin' TO admin_users.user_id;"
+        query = "ELECTRIC ASSIGN (NULL, user_roles.role_name) TO user_roles.user_id;"
         cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
       end
 

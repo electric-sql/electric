@@ -230,6 +230,14 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     end
 
     setup do
+      # enable all the optional ddlx features
+      Electric.Features.process_override(
+        proxy_ddlx_grant: true,
+        proxy_ddlx_revoke: true,
+        proxy_ddlx_assign: true,
+        proxy_ddlx_unassign: true
+      )
+
       migrations = [
         {"0001",
          [
