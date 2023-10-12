@@ -605,6 +605,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
     Enum.map(funcname, &Parser.string_node_val/1)
   end
 
+  # shortcut the enable command, which has to be enabled
   defp command_enabled?(%DDLX.Command.Enable{}), do: true
 
   defp command_enabled?(cmd) do
@@ -620,6 +621,8 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
     DDLX.Command.Unassign => :proxy_ddlx_unassign
   }
 
+  # either we have a specific flag for the command or we fallback to the
+  # default setting for the features module, which is `false`
   defp feature_flag(%cmd{}) do
     @feature_flags[cmd] || Electric.Features.default_key()
   end

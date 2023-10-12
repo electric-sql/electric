@@ -20,3 +20,9 @@ config :electric, Electric.Satellite.Auth, provider: {Auth.Secure, auth_config}
 config :electric, disable_listeners: true
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, enable: false
+
+config :electric, Electric.Features,
+  proxy_ddlx_grant: false,
+  proxy_ddlx_revoke: false,
+  proxy_ddlx_assign: false,
+  proxy_ddlx_unassign: false

@@ -31,6 +31,7 @@ services:
       <<: *preshared-auth-variables
       DATABASE_URL: postgresql://postgres:password@postgres_1:5432/electric
       LOGICAL_PUBLISHER_HOST: electric_1
+      ELECTRIC_FEATURES:
     ports:
       - 5133:5133
     volumes:
