@@ -107,7 +107,7 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
     case 'String':
       return stringToPg(attributes)
     case 'Int':
-      return 'INT4'
+      return intToPg(attributes)
     case 'Boolean':
       return 'BOOL'
     case 'DateTime':
@@ -168,6 +168,15 @@ function stringToPg(attributes: Array<Attribute>) {
     return 'UUID'
   } else {
     return 'VARCHAR'
+  }
+}
+
+function intToPg(attributes: Array<Attribute>) {
+  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
+  if (pgTypeAttribute?.type === '@db.SmallInt') {
+    return 'INT2'
+  } else {
+    return 'INT4'
   }
 }
 
