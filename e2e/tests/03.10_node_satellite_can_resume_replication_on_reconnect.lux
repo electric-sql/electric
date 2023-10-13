@@ -8,9 +8,9 @@
 [global migration2_vsn=20230719_02]
 
 # Create two migrations with electrified tables on the server.
-[shell pg_1]
-  [invoke migrate_pg $migration1_vsn "CREATE TABLE public.foo (id TEXT PRIMARY KEY);CALL electric.electrify('public.foo');"]
-  [invoke migrate_pg $migration2_vsn "CREATE TABLE public.bar (id TEXT PRIMARY KEY);CALL electric.electrify('public.bar');"]
+[shell proxy_1]
+  [invoke migrate_pg $migration1_vsn "CREATE TABLE public.foo (id TEXT PRIMARY KEY);ALTER TABLE public.foo ENABLE ELECTRIC;"]
+  [invoke migrate_pg $migration2_vsn "CREATE TABLE public.bar (id TEXT PRIMARY KEY);ALTER TABLE public.bar ENABLE ELECTRIC;"]
 
 [invoke setup_client 1 "electric_1" 5133]
 

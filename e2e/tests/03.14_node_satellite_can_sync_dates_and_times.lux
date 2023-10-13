@@ -4,7 +4,7 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.datetimes (
@@ -12,7 +12,7 @@
             d DATE,
             t TIME
         );
-        CALL electric.electrify('public.datetimes');
+        ALTER TABLE public.datetimes ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230913 $sql]
 

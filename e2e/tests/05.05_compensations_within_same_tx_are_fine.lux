@@ -3,7 +3,7 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.items (
@@ -15,8 +15,8 @@
             content TEXT NOT NULL,
             item_id TEXT REFERENCES public.items(id)
         );
-        CALL electric.electrify('public.items');
-        CALL electric.electrify('public.other_items');
+        ALTER TABLE public.items ENABLE ELECTRIC;
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 11111 $sql]
 
