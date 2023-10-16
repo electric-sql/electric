@@ -8,7 +8,7 @@
 
 # PREPARATION: Set up dependent tables and add a row that will be referenced
 
-[shell pg_1]
+[shell proxy_1]
     [invoke migrate_items_table 001]
 
     [local sql=
@@ -18,7 +18,7 @@
             content TEXT NOT NULL,
             item_id UUID REFERENCES public.items(id)
         );
-        CALL electric.electrify('public.other_items');
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 002 $sql]
 
