@@ -123,7 +123,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = received[request_id]
 
         {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", ["WRONG"])
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
+            uuid4(),
+            "WRONG"
+          ])
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
@@ -196,7 +199,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert [] = received[request_id2]
 
         {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", [
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
+            uuid4(),
             "Correct"
           ])
 
@@ -229,8 +233,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
     end
 
     @tag with_sql: """
-         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
-         INSERT INTO public.my_entries (content) VALUES ('Old');
+         INSERT INTO public.users (id, name) VALUES (gen_random_uuid(), 'John');
+         INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'Old');
          """
     test "The client can connect and subscribe, and that works with multiple subscriptions",
          %{conn: pg_conn} = ctx do
@@ -282,7 +286,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert [%SatOpInsert{row_data: %{values: [_, "Old", _]}}] = received[request_id2]
 
         {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (content) VALUES ($1)", [
+          :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
+            uuid4(),
             "Correct"
           ])
 

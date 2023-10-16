@@ -28,7 +28,8 @@ BEGIN
         ) THEN
         RAISE NOTICE 'Electrify table %', _quoted_name;
 
-        PERFORM <%= @schema %>.__validate_table_column_types(_quoted_name);
+        CALL <%= @schema %>.__validate_table_column_types(_quoted_name);
+        CALL <%= @schema %>.__validate_table_column_defaults(_quoted_name);
 
         -- insert the required ddl into the migrations table
         SELECT <%= @schema %>.ddlgen_create(_oid) INTO _create_sql;

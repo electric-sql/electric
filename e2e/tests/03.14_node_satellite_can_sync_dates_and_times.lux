@@ -8,7 +8,7 @@
     [local sql=
         """
         CREATE TABLE public.datetimes (
-            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id TEXT PRIMARY KEY,
             d DATE,
             t TIME
         );

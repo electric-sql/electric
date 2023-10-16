@@ -39,7 +39,7 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
     setup :load_schema
 
     @tag with_sql: """
-         INSERT INTO public.my_entries (content) VALUES ('test content');
+         INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test content');
          """
     test "should be able to fulfill full-table request", %{
       origin: origin,
@@ -84,7 +84,7 @@ defmodule Electric.Replication.Shapes.ShapeRequestTest do
     end
 
     @tag with_sql: """
-         INSERT INTO public.my_entries (content) VALUES ('test content');
+         INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test content');
          """
     test "should not fulfill full-table requests if the table has already been sent", %{
       origin: origin,

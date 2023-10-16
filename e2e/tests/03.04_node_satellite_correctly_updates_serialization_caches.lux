@@ -47,7 +47,7 @@
 [shell pg_1]
     # And insert data which affect the new column
     [invoke log "Insert data into new column"]
-    !INSERT INTO public.items (content, increment) VALUES ('${migration_version_2}/content', '${migration_version_2}/increment');
+    !INSERT INTO public.items (id, content, increment) VALUES ('00000000-0000-0000-0000-000000000001', '${migration_version_2}/content', '${migration_version_2}/increment');
     ?$psql
 
 [invoke log "Verify that pg insert has reached both Satellites"]
