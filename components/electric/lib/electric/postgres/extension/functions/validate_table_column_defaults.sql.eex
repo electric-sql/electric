@@ -1,8 +1,8 @@
 -- This function validates each column of the table that's being electrified
 -- and aborts electrification if any column has DEFAULT expression.
 
-CREATE OR REPLACE FUNCTION <%= @schema %>.__validate_table_column_defaults(table_name text)
-RETURNS VOID AS $function$
+CREATE OR REPLACE PROCEDURE <%= @schema %>.__validate_table_column_defaults(table_name text)
+SECURITY DEFINER AS $function$
 DECLARE
     _col_name text;
     _col_has_default boolean;
