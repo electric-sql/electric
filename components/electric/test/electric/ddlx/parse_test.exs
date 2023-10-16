@@ -54,7 +54,7 @@ defmodule DDLXParserTest do
   describe "Can parse electric ddlx" do
     test "parse grant" do
       sql =
-        "ELECTRIC GRANT UPDATE (status, name) ON thing.Köln_en$ts TO 'projects:house.admin' USING issue_id;"
+        "ELECTRIC GRANT UPDATE (status, name) ON thing.\"Köln_en$ts\" TO 'projects:house.admin' USING issue_id;"
 
       {:ok, result} = Parser.parse(sql)
 
@@ -232,7 +232,31 @@ defmodule DDLXParserTest do
 
       assert result == [
                %Enable{
-                 table_name: "public.things"
+                 table_name: {"public", "things"}
+               }
+             ]
+    end
+
+    test "parse enable with quoted names" do
+      sql = ~s[ALTER TABLE "Private"."Items" ENABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == [
+               %Enable{
+                 table_name: {"Private", "Items"}
+               }
+             ]
+    end
+
+    test "parse enable with unquoted uppercase names" do
+      sql = ~s[ALTER TABLE Private.Items ENABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == [
+               %Enable{
+                 table_name: {"private", "items"}
                }
              ]
     end
@@ -243,7 +267,7 @@ defmodule DDLXParserTest do
 
       assert result == [
                %Disable{
-                 table_name: "public.things"
+                 table_name: {"public", "things"}
                }
              ]
     end
