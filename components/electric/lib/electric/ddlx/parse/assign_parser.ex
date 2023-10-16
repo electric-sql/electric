@@ -24,12 +24,13 @@ defmodule Electric.DDLX.Parse.AssignParser do
     String.starts_with?(statement, "electric assign")
   end
 
-  def make_from_values(values) do
+  def make_from_values(values, sql) do
     to_def = get_value(values, "user")
     role_def = get_value(values, "role")
     role_def_type = get_value_type(values, "role")
 
-    with {:ok, schema_name, table_name, user_column} <- parse_to_def(to_def, @default_schema),
+    with {:ok, schema_name, table_name, user_column} <-
+           parse_to_def(to_def, @default_schema),
          {:ok, scope, role_name, role_column} <-
            parse_role_def(role_def, role_def_type, table_name) do
       {
@@ -46,6 +47,8 @@ defmodule Electric.DDLX.Parse.AssignParser do
           }
         ]
       }
+    else
+      {:error, message} -> {:error, error(message, sql)}
     end
   end
 end

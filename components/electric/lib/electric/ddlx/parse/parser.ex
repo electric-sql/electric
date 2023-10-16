@@ -61,7 +61,7 @@ defmodule Electric.DDLX.Parse.Parser do
         )
 
       case results.status do
-        :ok -> parser.make_from_values(results.values)
+        :ok -> parser.make_from_values(results.values, statement)
         :error -> {:error, %Command.Error{sql: statement, message: results.message}}
       end
     end

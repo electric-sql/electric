@@ -5,6 +5,7 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
   alias Electric.Postgres.Extension.SchemaLoader
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.{Injector, Parser}
+  alias Electric.Postgres.Proxy.TestScenario
 
   def simple(sql), do: %M.Query{query: sql}
 
@@ -85,6 +86,80 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       """
 
       assert Injector.Electric.requires_tx?(analyse(sql, cxt))
+    end
+  end
+
+  describe "disabling ddlx via feature flags" do
+    setup do
+      # the injector tests override the default feature flags to ensure that 
+      # all ddlx features are enabled, so we need tests that validate 
+      # the behaviour when the features are disabled
+      Electric.Features.process_override(
+        proxy_ddlx_grant: false,
+        proxy_ddlx_revoke: false,
+        proxy_ddlx_assign: false,
+        proxy_ddlx_unassign: false
+      )
+
+      migrations = [
+        {"0001",
+         [
+           "CREATE TABLE public.items (id uuid PRIMARY KEY, value text)",
+           "CREATE INDEX items_idx ON public.items (value)"
+         ]}
+      ]
+
+      spec = MockSchemaLoader.backend_spec(migrations: migrations)
+
+      {:ok, loader} =
+        SchemaLoader.connect(spec, [])
+
+      {:ok, injector} =
+        Injector.new(
+          [loader: loader, query_generator: TestScenario.MockInjector],
+          username: "electric",
+          database: "electric"
+        )
+
+      {:ok, injector: injector}
+    end
+
+    for scenario <- TestScenario.scenarios() do
+      setup do
+        {:ok, scenario: unquote(scenario)}
+      end
+
+      test "#{scenario.description()} ELECTRIC ENABLE", cxt do
+        query =
+          "ALTER TABLE public.items ENABLE ELECTRIC;"
+
+        for framework <- TestScenario.frameworks() do
+          cxt.scenario.assert_valid_electric_command(cxt.injector, framework, query)
+        end
+      end
+
+      test "#{scenario.description()} ELECTRIC GRANT", cxt do
+        query =
+          "ELECTRIC GRANT UPDATE ON public.items TO 'projects:house.admin' USING project_id CHECK (name = Paul);"
+
+        cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
+      end
+
+      test "#{scenario.description()} ELECTRIC REVOKE", cxt do
+        query = ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
+
+        cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
+      end
+
+      test "#{scenario.description()} ELECTRIC ASSIGN", cxt do
+        query = "ELECTRIC ASSIGN (NULL, user_roles.role_name) TO user_roles.user_id;"
+        cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
+      end
+
+      test "#{scenario.description()} ELECTRIC UNASSIGN", cxt do
+        query = "ELECTRIC UNASSIGN 'record.reader' FROM user_permissions.user_id;"
+        cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
+      end
     end
   end
 end

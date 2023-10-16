@@ -59,6 +59,22 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     end
   end
 
+  @scenarios [
+    __MODULE__.Framework,
+    __MODULE__.FrameworkSimple,
+    __MODULE__.Manual,
+    __MODULE__.AdHoc,
+    __MODULE__.ManualTx,
+    __MODULE__.ExtendedNoTx
+  ]
+
+  @frameworks [
+    Electric.Proxy.InjectorTest.EctoFramework
+  ]
+
+  def scenarios, do: @scenarios
+  def frameworks, do: @frameworks
+
   def query(sql) do
     %M.Query{query: sql}
   end
@@ -257,10 +273,6 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     flunk(
       "Message sequence ended with pending capture state:\ncapture: #{inspect(capture)}\ntx: #{inspect(state.tx)}, expected #{inspect(op)}"
     )
-  end
-
-  def frameworks() do
-    [Electric.Proxy.InjectorTest.EctoFramework]
   end
 
   @doc """

@@ -8,6 +8,14 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   alias Electric.Postgres.MockSchemaLoader
 
   setup do
+    # enable all the optional ddlx features
+    Electric.Features.process_override(
+      proxy_ddlx_grant: true,
+      proxy_ddlx_revoke: true,
+      proxy_ddlx_assign: true,
+      proxy_ddlx_unassign: true
+    )
+
     migrations = [
       {"0001",
        [
@@ -83,21 +91,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     end
   end
 
-  @scenarios [
-    TestScenario.Framework,
-    TestScenario.FrameworkSimple,
-    TestScenario.Manual,
-    TestScenario.AdHoc,
-    TestScenario.ManualTx,
-    TestScenario.ExtendedNoTx
-  ]
-
-  @frameworks [
-    Electric.Proxy.InjectorTest.EctoFramework
-  ]
-
-  for s <- @scenarios do
-    for f <- @frameworks do
+  for s <- TestScenario.scenarios() do
+    for f <- TestScenario.frameworks() do
       describe "#{s.description()} |#{f.description()}|:" do
         @describetag Keyword.merge(s.tags(), f.tags())
 
@@ -214,7 +209,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "drop electrified table raises error", cxt do
           query = ~s[DROP TABLE "truths"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message: "Cannot DROP Electrified table \"public\".\"truths\"",
             schema: "public",
             table: "truths"
@@ -232,7 +227,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "drop column on electrified table raises error", cxt do
           query = ~s[ALTER TABLE "truths" DROP "value"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message:
               "Invalid destructive migration on Electrified table \"public\".\"truths\": ALTER TABLE \"truths\" DROP \"value\"",
             detail:
@@ -253,7 +248,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "rename column on electrified table raises error", cxt do
           query = ~s[ALTER TABLE "truths" RENAME "value" TO "worthless"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message:
               "Invalid destructive migration on Electrified table \"public\".\"truths\": ALTER TABLE \"truths\" RENAME \"value\" TO \"worthless\"",
             detail:
@@ -294,7 +289,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "ALTER TABLE ADD invalid column type", cxt do
           query = ~s[ALTER TABLE "truths" ADD COLUMN addr cidr]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             code: "00000",
             message: "Cannot add column of type \"cidr\"",
             query: query
@@ -311,7 +306,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "invalid electric command", cxt do
           query = "ELECTRIC GRANT JUNK ON \"thing.Köln_en$ts\" TO 'projects:house.admin'"
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             code: "00000",
             detail: "Something went wrong near JUNK",
             query: "ELECTRIC GRANT JUNK ON thing.Köln_en$ts TO 'projects:house.admin'"

@@ -62,6 +62,10 @@ defmodule Electric.DDLX.Parse.Common do
     get_in(values, [value_name, Access.elem(0)])
   end
 
+  def error(message, sql) do
+    %Electric.DDLX.Command.Error{message: message, sql: sql}
+  end
+
   defp parse_collection_role_def(role_def, assign_table) do
     if String.contains?(role_def, ",") do
       parts = String.split(role_def, ",")
