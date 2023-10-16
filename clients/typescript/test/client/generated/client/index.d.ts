@@ -68,6 +68,14 @@ export type DataTypes = {
    * @zod.string.uuid()
    */
   uuid: string | null
+  /**
+   * @zod.number.int().gte(-32768).lte(32767)
+   */
+  int2: number | null
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
+  int4: number | null
   relatedId: number | null
 }
 
@@ -4787,11 +4795,15 @@ export namespace Prisma {
 
   export type DataTypesAvgAggregateOutputType = {
     id: number | null
+    int2: number | null
+    int4: number | null
     relatedId: number | null
   }
 
   export type DataTypesSumAggregateOutputType = {
     id: number | null
+    int2: number | null
+    int4: number | null
     relatedId: number | null
   }
 
@@ -4804,6 +4816,8 @@ export namespace Prisma {
     timestamptz: Date | null
     bool: boolean | null
     uuid: string | null
+    int2: number | null
+    int4: number | null
     relatedId: number | null
   }
 
@@ -4816,6 +4830,8 @@ export namespace Prisma {
     timestamptz: Date | null
     bool: boolean | null
     uuid: string | null
+    int2: number | null
+    int4: number | null
     relatedId: number | null
   }
 
@@ -4828,6 +4844,8 @@ export namespace Prisma {
     timestamptz: number
     bool: number
     uuid: number
+    int2: number
+    int4: number
     relatedId: number
     _all: number
   }
@@ -4835,11 +4853,15 @@ export namespace Prisma {
 
   export type DataTypesAvgAggregateInputType = {
     id?: true
+    int2?: true
+    int4?: true
     relatedId?: true
   }
 
   export type DataTypesSumAggregateInputType = {
     id?: true
+    int2?: true
+    int4?: true
     relatedId?: true
   }
 
@@ -4852,6 +4874,8 @@ export namespace Prisma {
     timestamptz?: true
     bool?: true
     uuid?: true
+    int2?: true
+    int4?: true
     relatedId?: true
   }
 
@@ -4864,6 +4888,8 @@ export namespace Prisma {
     timestamptz?: true
     bool?: true
     uuid?: true
+    int2?: true
+    int4?: true
     relatedId?: true
   }
 
@@ -4876,6 +4902,8 @@ export namespace Prisma {
     timestamptz?: true
     bool?: true
     uuid?: true
+    int2?: true
+    int4?: true
     relatedId?: true
     _all?: true
   }
@@ -4976,6 +5004,8 @@ export namespace Prisma {
     timestamptz: Date | null
     bool: boolean | null
     uuid: string | null
+    int2: number | null
+    int4: number | null
     relatedId: number | null
     _count: DataTypesCountAggregateOutputType | null
     _avg: DataTypesAvgAggregateOutputType | null
@@ -5007,6 +5037,8 @@ export namespace Prisma {
     timestamptz?: boolean
     bool?: boolean
     uuid?: boolean
+    int2?: boolean
+    int4?: boolean
     relatedId?: boolean
     related?: boolean | DummyArgs
   }
@@ -6752,6 +6784,8 @@ export namespace Prisma {
     timestamptz: 'timestamptz',
     bool: 'bool',
     uuid: 'uuid',
+    int2: 'int2',
+    int4: 'int4',
     relatedId: 'relatedId'
   };
 
@@ -7011,6 +7045,8 @@ export namespace Prisma {
     timestamptz?: DateTimeNullableFilter | Date | string | null
     bool?: BoolNullableFilter | boolean | null
     uuid?: UuidNullableFilter | string | null
+    int2?: IntNullableFilter | number | null
+    int4?: IntNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
     related?: XOR<DummyRelationFilter, DummyWhereInput> | null
   }
@@ -7024,6 +7060,8 @@ export namespace Prisma {
     timestamptz?: SortOrder
     bool?: SortOrder
     uuid?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
     related?: DummyOrderByWithRelationInput
   }
@@ -7042,6 +7080,8 @@ export namespace Prisma {
     timestamptz?: SortOrder
     bool?: SortOrder
     uuid?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
     _count?: DataTypesCountOrderByAggregateInput
     _avg?: DataTypesAvgOrderByAggregateInput
@@ -7062,6 +7102,8 @@ export namespace Prisma {
     timestamptz?: DateTimeNullableWithAggregatesFilter | Date | string | null
     bool?: BoolNullableWithAggregatesFilter | boolean | null
     uuid?: UuidNullableWithAggregatesFilter | string | null
+    int2?: IntNullableWithAggregatesFilter | number | null
+    int4?: IntNullableWithAggregatesFilter | number | null
     relatedId?: IntNullableWithAggregatesFilter | number | null
   }
 
@@ -7285,6 +7327,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
     related?: DummyCreateNestedOneWithoutDatatypeInput
   }
 
@@ -7297,6 +7341,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
     relatedId?: number | null
   }
 
@@ -7309,6 +7355,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
     related?: DummyUpdateOneWithoutDatatypeNestedInput
   }
 
@@ -7321,6 +7369,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -7333,6 +7383,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
     relatedId?: number | null
   }
 
@@ -7345,6 +7397,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateManyInput = {
@@ -7356,6 +7410,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -7690,11 +7746,15 @@ export namespace Prisma {
     timestamptz?: SortOrder
     bool?: SortOrder
     uuid?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
   }
 
   export type DataTypesAvgOrderByAggregateInput = {
     id?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7707,6 +7767,8 @@ export namespace Prisma {
     timestamptz?: SortOrder
     bool?: SortOrder
     uuid?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7719,11 +7781,15 @@ export namespace Prisma {
     timestamptz?: SortOrder
     bool?: SortOrder
     uuid?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
   }
 
   export type DataTypesSumOrderByAggregateInput = {
     id?: SortOrder
+    int2?: SortOrder
+    int4?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -8382,6 +8448,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
   }
 
   export type DataTypesUncheckedCreateWithoutRelatedInput = {
@@ -8393,6 +8461,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
   }
 
   export type DataTypesCreateOrConnectWithoutRelatedInput = {
@@ -8433,6 +8503,8 @@ export namespace Prisma {
     timestamptz?: DateTimeNullableFilter | Date | string | null
     bool?: BoolNullableFilter | boolean | null
     uuid?: UuidNullableFilter | string | null
+    int2?: IntNullableFilter | number | null
+    int4?: IntNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
   }
 
@@ -8473,6 +8545,8 @@ export namespace Prisma {
     timestamptz?: Date | string | null
     bool?: boolean | null
     uuid?: string | null
+    int2?: number | null
+    int4?: number | null
   }
 
   export type DataTypesUpdateWithoutRelatedInput = {
@@ -8484,6 +8558,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateWithoutRelatedInput = {
@@ -8495,6 +8571,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateManyWithoutDatatypeInput = {
@@ -8506,6 +8584,8 @@ export namespace Prisma {
     timestamptz?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     bool?: NullableBoolFieldUpdateOperationsInput | boolean | null
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
+    int2?: NullableIntFieldUpdateOperationsInput | number | null
+    int4?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
 
