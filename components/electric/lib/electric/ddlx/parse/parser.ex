@@ -36,11 +36,11 @@ defmodule Electric.DDLX.Parse.Parser do
     parser = parser_for_statement(statement)
 
     if parser do
-      tokens = get_tokens(statement, parser.token_regex)
+      tokens = get_tokens(statement, parser.token_regex())
 
       results =
         Enum.reduce_while(
-          parser.elements,
+          parser.elements(),
           %{status: :ok, tokens: tokens, values: %{}, message: ""},
           fn element, acc ->
             case Element.read(element, acc.tokens) do

@@ -208,9 +208,8 @@ defmodule Electric.Postgres.Extension do
 
   def migration_history(conn, after_version) do
     query = migration_history_query(after_version)
-    param = after_version || :null
 
-    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
+    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [after_version]) do
       {:ok, load_migrations(rows)}
     end
   end

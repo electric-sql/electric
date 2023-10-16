@@ -99,10 +99,6 @@ defmodule Electric.Postgres.Dialect.Postgresql do
     v.value
   end
 
-  # def expression(%Expression.Value{type: :STRING, value: nil}) do
-  #   "''"
-  # end
-
   def expression(%Expression.Value{type: :STRING, value: v}) do
     "'" <> v <> "'"
   end

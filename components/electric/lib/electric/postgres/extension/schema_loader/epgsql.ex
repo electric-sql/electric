@@ -27,6 +27,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
           :error ->
             conn_config
             |> Connectors.get_connection_opts(replication: false)
+            |> Electric.Utils.epgsql_config()
             |> :epgsql.connect()
         end
 

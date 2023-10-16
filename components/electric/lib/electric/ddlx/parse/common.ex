@@ -2,7 +2,7 @@ defmodule Electric.DDLX.Parse.Common do
   alias Electric.Postgres.NameParser
 
   @doc """
-    uses this to template a compiled regex into each parser with the common bits from below and their own keywords
+  Use this to template a compiled regex into each parser with the common bits from below and their own keywords
   """
   defmacro __using__(_) do
     quote do
@@ -20,11 +20,9 @@ defmodule Electric.DDLX.Parse.Common do
   end
 
   def scope_and_role(role_name) do
-    if String.contains?(role_name, ":") do
-      String.split(role_name, ":")
-      |> List.to_tuple()
-    else
-      {"__global__", role_name}
+    case String.split(role_name, ":") do
+      [schema, role] -> {schema, role}
+      [role] -> {"__global__", role}
     end
   end
 

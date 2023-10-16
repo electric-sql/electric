@@ -1,5 +1,6 @@
 defmodule Electric.DDLX.DDLXCommandsTest do
   use Electric.Extension.Case, async: false
+  import ElectricTest.DDLXHelpers
 
   alias Electric.DDLX
   alias Electric.DDLX.Command
@@ -19,41 +20,6 @@ defmodule Electric.DDLX.DDLXCommandsTest do
   @moduletag ddlx: true
 
   @electric_grants "electric.grants"
-
-  def query(conn, query) do
-    with {:ok, cols, rows} <- :epgsql.equery(conn, query, []) do
-      {:ok, cols, Enum.map(rows, &Tuple.to_list/1) |> Enum.map(&null_to_nil/1)}
-    end
-  end
-
-  defp null_to_nil(row) do
-    Enum.map(row, fn
-      :null -> nil
-      value -> value
-    end)
-  end
-
-  def assert_rows(conn, table_name, expected_rows) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
-  end
-
-  def assert_rows_slice(conn, table_name, expected_rows, range) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    rows =
-      rows
-      |> Enum.map(&Enum.slice(&1, range))
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
-  end
 
   describe "checking statements" do
     test "check grant" do
@@ -229,7 +195,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       projects_sql = """
       CREATE TABLE projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -237,7 +203,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       users_sql = """
       CREATE TABLE users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -245,7 +211,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         project_id uuid NOT NULL,
         user_id uuid NOT NULL,
@@ -283,7 +249,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
     test_tx "unassign", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -291,7 +257,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -299,7 +265,7 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         project_id uuid NOT NULL,
         user_id uuid NOT NULL,

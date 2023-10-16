@@ -1,34 +1,8 @@
 defmodule Electric.DDLX.DDLXPostgresTest do
   use Electric.Extension.Case, async: false
+  import ElectricTest.DDLXHelpers
 
   @moduletag ddlx: true
-
-  def query(conn, query, params \\ []) do
-    case :epgsql.equery(conn, query, params) do
-      {:ok, _n, cols, rows} ->
-        {:ok, cols, map_rows(rows)}
-
-      {:ok, cols, rows} ->
-        {:ok, cols, map_rows(rows)}
-
-      {:ok, n} when is_integer(n) ->
-        {:ok, [], []}
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  defp map_rows(rows) do
-    rows |> Enum.map(&Tuple.to_list/1) |> Enum.map(&null_to_nil/1)
-  end
-
-  defp null_to_nil(row) do
-    Enum.map(row, fn
-      :null -> nil
-      value -> value
-    end)
-  end
 
   def list_tables(conn, schema \\ "public") do
     {:ok, _cols, rows} =
@@ -78,28 +52,6 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       {column_name, attrs}
     end
-  end
-
-  def assert_rows(conn, table_name, expected_rows) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
-  end
-
-  def assert_rows_slice(conn, table_name, expected_rows, range) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    rows =
-      rows
-      |> Enum.map(&Enum.slice(&1, range))
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
   end
 
   def get_foreign_keys(conn, table_name) do
@@ -266,7 +218,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -274,7 +226,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -282,7 +234,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       user_id uuid NOT NULL,
@@ -301,7 +253,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -311,7 +263,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -319,7 +271,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       project_name VARCHAR(64) NOT NULL,
@@ -339,7 +291,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound_membership(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -349,7 +301,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -895,7 +847,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign with no scope from string and update", fn conn ->
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -903,7 +855,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
@@ -973,7 +925,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign fails with bad scope", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -981,7 +933,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -989,7 +941,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
