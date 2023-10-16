@@ -49,7 +49,7 @@ function parseFields(body: string): Array<Field> {
   // It uses named captured groups to capture the field name, its type, and optional attributes
   // the type can be `type` or `type?` or `type[]`
   const fieldRegex =
-    /^\s*(?<field>\w+)\s+(?<type>[\w]+(\?|(\[]))?)\s*(?<attributes>((@[\w\.]+\s*)|(@[\w\.]+\(.*\)+\s*))+)?\s*$/gm
+    /^\s*(?<field>\w+)\s+(?<type>[\w]+(\?|(\[]))?)\s*(?<attributes>((@[\w.]+\s*)|(@[\w.]+\(.*\)+\s*))+)?\s*$/gm
   const fieldMatches = [...body.matchAll(fieldRegex)]
   const fs = fieldMatches.map(
     (match) =>
