@@ -274,13 +274,13 @@ test.serial('support boolean type', async (t) => {
   })
 
   t.deepEqual(res, {
-    count: 2
+    count: 2,
   })
 
   const rows = await tbl.findMany({})
 
-  rows.some(r => r.id === 1 && r.bool === true)
-  rows.some(r => r.id === 2 && r.bool === false)
+  rows.some((r) => r.id === 1 && r.bool === true)
+  rows.some((r) => r.id === 2 && r.bool === false)
 
   // Check that it rejects invalid values
   await t.throwsAsync(
@@ -293,7 +293,7 @@ test.serial('support boolean type', async (t) => {
     }),
     {
       instanceOf: ZodError,
-      message: /Expected boolean, received string/
+      message: /Expected boolean, received string/,
     }
   )
 })
