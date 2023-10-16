@@ -91,12 +91,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     end
   end
 
-  @frameworks [
-    Electric.Proxy.InjectorTest.EctoFramework
-  ]
-
   for s <- TestScenario.scenarios() do
-    for f <- @frameworks do
+    for f <- TestScenario.frameworks() do
       describe "#{s.description()} |#{f.description()}|:" do
         @describetag Keyword.merge(s.tags(), f.tags())
 

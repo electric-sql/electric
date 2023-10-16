@@ -5,6 +5,7 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
   alias Electric.Postgres.Extension.SchemaLoader
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.{Injector, Parser}
+  alias Electric.Postgres.Proxy.TestScenario
 
   def simple(sql), do: %M.Query{query: sql}
 
@@ -123,9 +124,18 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       {:ok, injector: injector}
     end
 
-    for scenario <- Electric.Postgres.Proxy.TestScenario.scenarios() do
+    for scenario <- TestScenario.scenarios() do
       setup do
         {:ok, scenario: unquote(scenario)}
+      end
+
+      test "#{scenario.description()} ELECTRIC ENABLE", cxt do
+        query =
+          "ALTER TABLE public.items ENABLE ELECTRIC;"
+
+        for framework <- TestScenario.frameworks() do
+          cxt.scenario.assert_valid_electric_command(cxt.injector, framework, query)
+        end
       end
 
       test "#{scenario.description()} ELECTRIC GRANT", cxt do
