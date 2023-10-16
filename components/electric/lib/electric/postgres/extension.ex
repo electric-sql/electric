@@ -366,22 +366,15 @@ defmodule Electric.Postgres.Extension do
     Logger.info("Running extension migration: #{version}")
 
     for sql <- module.up(@schema) do
-      case :epgsql.squery(txconn, sql) do
-        results when is_list(results) ->
-          errors = Enum.filter(results, &(elem(&1, 0) == :error))
+      results = :epgsql.squery(txconn, sql) |> List.wrap()
+      errors = Enum.filter(results, &(elem(&1, 0) == :error))
 
-          unless(Enum.empty?(errors)) do
-            raise RuntimeError,
-              message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-          end
-
-          :ok
-
-        {:ok, _} ->
-          :ok
-
-        {:ok, _cols, _rows} ->
-          :ok
+      if errors == [] do
+        :ok
+      else
+        raise RuntimeError,
+          message:
+            "Migration #{version}/#{inspect(module)} returned errors:\n#{inspect(errors, pretty: true)}"
       end
     end
 

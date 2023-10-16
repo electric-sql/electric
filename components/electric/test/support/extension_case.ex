@@ -33,7 +33,7 @@ defmodule Electric.Extension.Case.Helpers do
   end
 
   def tx(fun, cxt) do
-    ExUnit.Assertions.assert_raise(RollbackError, fn ->
+    try do
       :epgsql.with_transaction(
         cxt.conn,
         fn tx ->
@@ -42,7 +42,9 @@ defmodule Electric.Extension.Case.Helpers do
         end,
         reraise: true
       )
-    end)
+    rescue
+      RollbackError -> :ok
+    end
   end
 
   def migrate(conn, opts \\ []) do
