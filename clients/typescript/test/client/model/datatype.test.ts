@@ -376,7 +376,7 @@ test.serial('support uuid type', async (t) => {
     }),
     {
       instanceOf: ZodError,
-      message: /Invalid uuid/
+      message: /Invalid uuid/,
     }
   )
 })

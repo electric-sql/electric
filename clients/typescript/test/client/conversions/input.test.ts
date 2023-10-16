@@ -215,7 +215,7 @@ const dateNulls = {
   timestamp: null,
   timestamptz: null,
   bool: null,
-  uuid: null
+  uuid: null,
 }
 
 const nulls = {
@@ -543,5 +543,5 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
     },
   })
 
-  t.deepEqual(fetchRes, [ o3 ])
+  t.deepEqual(fetchRes, [o3])
 })
