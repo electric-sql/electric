@@ -94,6 +94,7 @@ exports.Prisma.DataTypesScalarFieldEnum = {
   timestamp: 'timestamp',
   timestamptz: 'timestamptz',
   bool: 'bool',
+  uuid: 'uuid',
   relatedId: 'relatedId'
 };
 
