@@ -71,8 +71,9 @@ defmodule Electric.Features do
   end
 
   @doc """
-  Configure the feature flags for the current proceess, overriding any
-  existing values for the given flags.
+  Configure the feature flags for the current process, overriding any
+  existing values for the given flags at the application- or
+  process-level.
   """
   @spec process_override([{flag(), boolean()}], name()) :: :ok
   def process_override(features, name \\ __MODULE__) do
