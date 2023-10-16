@@ -504,7 +504,7 @@ export type Field = {
  * It does not remove comments starting with `///`.
  */
 function removeComments(str: string): string {
-  const commentRegex = /(?<=[^\/])\/\/(?=[^\/]).*$/g // matches // until end of the line (does not match more than 2 slashes)
+  const commentRegex = /(?<=[^/])\/\/(?=[^/]).*$/g // matches // until end of the line (does not match more than 2 slashes)
   return str.replaceAll(commentRegex, '')
 }
 
@@ -518,7 +518,7 @@ function parseFields(body: string): Array<Field> {
   // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
   // It uses named captured groups to capture the field name, its type, and optional attributes
   const fieldRegex =
-    /^\s*(?<field>\w+)\s+(?<type>[\w\?]+)\s*(?<attributes>((@[\w\.]+\s*)|(@[\w\.]+\(.*\)+\s*))+)?\s*$/gm
+    /^\s*(?<field>\w+)\s+(?<type>[\w?]+)\s*(?<attributes>((@[\w.]+\s*)|(@[\w.]+\(.*\)+\s*))+)?\s*$/gm
   const fieldMatches = [...body.matchAll(fieldRegex)]
   const fs = fieldMatches.map(
     (match) =>
@@ -542,7 +542,7 @@ function parseAttributes(attributes: string): Array<Attribute> {
   // e.g. @id @db.Timestamp(2)
   // The optional args capture group matches anything
   // but not @or newline because that would be the start of a new attribute
-  const attributeRegex = /(?<type>@[\w\.]+)(?<args>\([^@\n\r]+\))?/g
+  const attributeRegex = /(?<type>@[\w.]+)(?<args>\([^@\n\r]+\))?/g
   const matches = [...attributes.matchAll(attributeRegex)]
   return matches.map((m) => {
     const { type, args } = m.groups! as { type: string; args?: string }

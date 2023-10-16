@@ -429,12 +429,12 @@ test.serial('support int2 type', async (t) => {
       {
         id: 2,
         int2: validInt2,
-      }
-    ]
+      },
+    ],
   })
 
   t.deepEqual(res, {
-    count: 2
+    count: 2,
   })
 
   // Check that it rejects invalid integers
@@ -446,11 +446,12 @@ test.serial('support int2 type', async (t) => {
         data: {
           id: id++,
           int2: invalidInt,
-        }
+        },
       }),
       {
         instanceOf: ZodError,
-        message: /(Number must be less than or equal to 32767)|(Number must be greater than or equal to -32768)/,
+        message:
+          /(Number must be less than or equal to 32767)|(Number must be greater than or equal to -32768)/,
       }
     )
   }
@@ -504,12 +505,12 @@ test.serial('support int4 type', async (t) => {
       {
         id: 2,
         int4: validInt2,
-      }
-    ]
+      },
+    ],
   })
 
   t.deepEqual(res, {
-    count: 2
+    count: 2,
   })
 
   // Check that it rejects invalid integers
@@ -521,11 +522,12 @@ test.serial('support int4 type', async (t) => {
         data: {
           id: id++,
           int4: invalidInt,
-        }
+        },
       }),
       {
         instanceOf: ZodError,
-        message: /(Number must be less than or equal to 2147483647)|(Number must be greater than or equal to -2147483648)/,
+        message:
+          /(Number must be less than or equal to 2147483647)|(Number must be greater than or equal to -2147483648)/,
       }
     )
   }
