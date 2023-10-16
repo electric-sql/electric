@@ -368,6 +368,7 @@ function addValidator(ln: string): string {
       const typeValidatorMapping = new Map([
         ['Int', intValidator],
         ['Int?', intValidator],
+        ['Int[]', intValidator],
       ])
       const typeValidator = typeValidatorMapping.get(field.type)
 
