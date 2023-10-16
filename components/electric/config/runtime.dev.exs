@@ -43,19 +43,3 @@ config :electric, Electric.Replication.Connectors,
 enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, enable: enable_proxy_tracing?
-
-# disable all ddlx commands apart from `ENABLE`
-# override these using the `ELECTRIC_FEATURES` environment variable, e.g.
-# to add a flag enabling `ELECTRIC GRANT` use:
-#
-#     export ELECTRIC_FEATURES="proxy_ddlx_grant=true:${ELECTRIC_FEATURES:-}"
-#
-# or if you want to just set flags, ignoring any previous env settings
-#
-#     export ELECTRIC_FEATURES="proxy_ddlx_grant=true:proxy_ddlx_assign=true"
-#
-config :electric, Electric.Features,
-  proxy_ddlx_grant: false,
-  proxy_ddlx_revoke: false,
-  proxy_ddlx_assign: false,
-  proxy_ddlx_unassign: false
