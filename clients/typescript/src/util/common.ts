@@ -72,7 +72,7 @@ export function numberToBytes(i: number) {
 
 export function realToBytes(num: number) {
   let num_str = num.toString()
-  if (Math.trunc(num) === num) {
+  if (Number.isFinite(num) && Math.trunc(num) === num) {
     // num is an integer, we need to explicitly append the ".0" to it.
     num_str += '.0'
   }
