@@ -1783,12 +1783,26 @@ test.serial('connection backoff success', async (t) => {
   )
 })
 
-// TODO: implement reconnect protocol
+// check that performing snapshot doesn't throw without resetting the performing snapshot assertions
+test('(regression) performSnapshot handles exceptions gracefully', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await runMigrations()
+  await satellite._setAuthState(authState)
 
-// test('resume out of window clears subscriptions and clears oplog after ack', async (t) => {})
+  const error = 'FAKE TRANSACTION'
 
-// test('not possible to subscribe while oplog is not pushed', async (t) => {})
+  const txnFn = adapter.transaction
+  adapter.transaction = () => {
+    throw new Error(error)
+  }
 
-// test('process restart loads previous subscriptions', async (t) => {})
+  try {
+    await satellite._performSnapshot()
+  } catch (e: any) {
+    t.is(e.message, error)
+    adapter.transaction = txnFn
+  }
 
-// test('oplog messages allowed between SatSubsRep and SatSubsDataBegin', async (t) => {})
+  await satellite._performSnapshot()
+  t.pass()
+})
