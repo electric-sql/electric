@@ -22,6 +22,7 @@ export const typeDecoder = {
   number: bytesToNumber,
   text: bytesToString,
   timetz: bytesToTimetzString,
+  float: bytesToFloat,
 }
 
 export const typeEncoder = {
@@ -99,6 +100,23 @@ export function bytesToString(bytes: Uint8Array) {
 function bytesToTimetzString(bytes: Uint8Array) {
   const str = bytesToString(bytes)
   return str.replace('+00', '')
+}
+
+/**
+ * Converts a PG string of type `float4` or `float8` to an equivalent SQLite number.
+ * Since SQLite does not recognise `NaN` we turn it into the string `'NaN'` instead.
+ * cf. https://github.com/WiseLibs/better-sqlite3/issues/1088
+ * @param bytes Data for this `float4` or `float8` column.
+ * @returns The SQLite value.
+ */
+function bytesToFloat(bytes: Uint8Array) {
+  const text = typeDecoder.text(bytes)
+  if (text === 'NaN') {
+    return 'NaN'
+  }
+  else {
+    return Number(text)
+  }
 }
 
 /**
