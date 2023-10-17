@@ -9,13 +9,14 @@ import {
   LSN,
   SatelliteError,
   DataTransaction,
-  Transaction,
   Relation,
   SatelliteErrorCode,
   RelationsCache,
   Record as DataRecord,
   StartReplicationResponse,
   StopReplicationResponse,
+  OutboundStartedCallback,
+  TransactionCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -148,7 +149,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   relations: RelationsCache = {}
   relationsCb?: (relation: Relation) => void
-  transactionsCb?: (tx: Transaction) => void
+  transactionsCb?: TransactionCallback
 
   relationData: Record<string, DataRecord[]> = {}
 
@@ -156,12 +157,6 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.relations = relations
     if (this.relationsCb) {
       Object.values(relations).forEach(this.relationsCb)
-    }
-  }
-
-  setTransactions(transactions: Transaction[]): void {
-    if (this.transactionsCb) {
-      transactions.forEach(this.transactionsCb)
     }
   }
 
@@ -322,21 +317,28 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.relationsCb = callback
   }
 
-  subscribeToTransactions(
-    callback: (transaction: Transaction) => Promise<void>
-  ): void {
+  unsubscribeToRelations(): void {
+    this.relationsCb = undefined
+  }
+
+  subscribeToTransactions(callback: TransactionCallback): void {
     this.transactionsCb = callback
+  }
+
+  unsubscribeToTransactions(): void {
+    throw new Error('Method not implemented.')
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
     this.outboundSent = transaction.lsn
   }
 
-  subscribeToOutboundEvent(_event: 'started', callback: () => void): void {
+  subscribeToOutboundStarted(callback: OutboundStartedCallback): void {
     this.on('outbound_started', callback)
   }
-  unsubscribeToOutboundEvent(_event: 'started', callback: () => void): void {
-    this.removeListener('outbound_started', callback)
+
+  unsubscribeToOutboundStarted(): void {
+    throw new Error('Method not implemented.')
   }
 
   sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {

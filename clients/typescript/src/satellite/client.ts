@@ -121,8 +121,12 @@ interface SafeEventEmitter {
   emit(event: 'outbound_started', lsn: LSN): boolean
 
   removeListener(event: 'error', callback: ErrorCallback): void
-  removeListener(event: 'outbound_started', callback: () => void): void
-  // TODO: missing removeListeners
+  removeListener(event: 'relation', callback: RelationCallback): void
+  removeListener(event: 'transaction', callback: TransactionCallback): void
+  removeListener(
+    event: 'outbound_started',
+    callback: OutboundStartedCallback
+  ): void
 
   removeAllListeners(): void
 
@@ -381,8 +385,16 @@ export class SatelliteClient implements Client {
     })
   }
 
+  unsubscribeToTransactions(callback: TransactionCallback) {
+    this.emitter.removeListener('transaction', callback)
+  }
+
   subscribeToRelations(callback: RelationCallback) {
     this.emitter.on('relation', callback)
+  }
+
+  unsubscribeToRelations(callback: RelationCallback) {
+    this.emitter.removeListener('relation', callback)
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -425,11 +437,11 @@ export class SatelliteClient implements Client {
     this.emitter.removeListener('error', callback)
   }
 
-  subscribeToOutboundEvent(_event: 'started', callback: () => void): void {
+  subscribeToOutboundStarted(callback: OutboundStartedCallback): void {
     this.emitter.on('outbound_started', callback)
   }
 
-  unsubscribeToOutboundEvent(_event: 'started', callback: () => void) {
+  unsubscribeToOutboundStarted(callback: OutboundStartedCallback) {
     this.emitter.removeListener('outbound_started', callback)
   }
 
