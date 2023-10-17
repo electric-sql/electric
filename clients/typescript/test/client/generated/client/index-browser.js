@@ -97,6 +97,7 @@ exports.Prisma.DataTypesScalarFieldEnum = {
   uuid: 'uuid',
   int2: 'int2',
   int4: 'int4',
+  float8: 'float8',
   relatedId: 'relatedId'
 };
 
