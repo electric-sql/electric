@@ -129,6 +129,29 @@ defmodule Electric.Satellite.SerializationTest do
              } == Serialization.decode_record!(row, columns)
     end
 
+    test "decodes non-numeric float values" do
+      row = %SatOpRow{
+        nulls_bitmask: <<0>>,
+        values: [
+          "Infinity",
+          "-Infinity",
+          "NaN"
+        ]
+      }
+
+      columns = [
+        %{name: "f1", type: :float8},
+        %{name: "f2", type: :float8},
+        %{name: "f3", type: :float8}
+      ]
+
+      assert %{
+               "f1" => "Infinity",
+               "f2" => "-Infinity",
+               "f3" => "NaN"
+             } == Serialization.decode_record!(row, columns)
+    end
+
     test "raises when the row contains an invalid value for its type" do
       test_data = [
         {"1.0", :int4},

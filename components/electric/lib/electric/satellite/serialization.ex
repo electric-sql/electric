@@ -492,6 +492,8 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
+  def decode_column_value!(val, :float8) when val in ["Infinity", "-Infinity", "NaN"], do: val
+
   def decode_column_value!(val, :float8) do
     _ = String.to_float(val)
     val
