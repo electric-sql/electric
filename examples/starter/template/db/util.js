@@ -9,7 +9,7 @@ shell.config.silent = true // don't log output of child processes
 // that intend to use the DDLX syntax extension of SQL.
 const appName = fetchAppName() ?? 'electric'
 const proxyPort = fetchHostProxyPortElectric() ?? 65432
-const DEFAULT_URL = `postgresql://postgres:password@${appName}.localhost:${proxyPort}/electric`
+const DEFAULT_URL = `postgresql://electric:password@localhost:${proxyPort}/${appName}`
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
