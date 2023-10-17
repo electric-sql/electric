@@ -587,8 +587,8 @@ test.serial('support float8 type', async (t) => {
     },
     {
       id: 5,
-      float8: NaN
-    }
+      float8: NaN,
+    },
   ]
 
   const res = await tbl.createMany({
@@ -607,7 +607,7 @@ test.serial('support float8 type', async (t) => {
     },
     orderBy: {
       id: 'asc',
-    }
+    },
   })
 
   t.deepEqual(fetchRes, floats)

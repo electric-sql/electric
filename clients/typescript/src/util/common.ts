@@ -113,8 +113,7 @@ function bytesToFloat(bytes: Uint8Array) {
   const text = typeDecoder.text(bytes)
   if (text === 'NaN') {
     return 'NaN'
-  }
-  else {
+  } else {
     return Number(text)
   }
 }

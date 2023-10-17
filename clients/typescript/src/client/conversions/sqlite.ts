@@ -44,7 +44,10 @@ export function fromSqlite(v: any, pgType: PgType): any {
   } else if (pgType === PgBasicType.PG_BOOL) {
     // it's a serialised boolean
     return deserialiseBoolean(v)
-  } else if (v === 'NaN' && (pgType === PgBasicType.PG_FLOAT8 || pgType === PgBasicType.PG_FLOAT4)) {
+  } else if (
+    v === 'NaN' &&
+    (pgType === PgBasicType.PG_FLOAT8 || pgType === PgBasicType.PG_FLOAT4)
+  ) {
     // it's a serialised NaN
     return NaN
   } else {
