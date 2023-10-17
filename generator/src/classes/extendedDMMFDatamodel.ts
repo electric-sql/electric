@@ -3,7 +3,7 @@ import { DMMF } from '@prisma/generator-helper'
 import { ExtendedDMMFEnum } from './extendedDMMFEnum'
 import { ExtendedDMMFModel } from './extendedDMMFModel'
 import { GeneratorConfig } from '../schemas'
-import { parseModels } from '../utils/schemaParser'
+import { parseModels } from '@electric-sql/wires/parser'
 
 export interface ExtendedDMMFDatamodelOptions {
   datamodel: DMMF.Datamodel

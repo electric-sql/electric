@@ -1,0 +1,10 @@
+{
+  "git": {
+    "commitMessage": "chore(components/wires): Release v${version}",
+    "tagName": "components/wires@${version}"
+  },
+  "github": {
+    "release": true,
+    "draft": true
+  }
+}

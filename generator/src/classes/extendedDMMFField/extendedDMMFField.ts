@@ -4,7 +4,7 @@ import { OmitFieldMode } from './extendedDMMFFieldOmitField'
 import { ExtendedDMMFFieldZodType } from './extendedDMMFFieldZodType'
 import { GeneratorConfig } from '../../schemas'
 import { FormattedNames } from '../formattedNames'
-import { Attribute, Field } from 'src/utils/schemaParser'
+import { Attribute, Field } from '@electric-sql/wires/parser'
 
 export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
   /**

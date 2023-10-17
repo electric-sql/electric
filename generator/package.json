@@ -51,8 +51,10 @@
     "vitest": "^0.24.5"
   },
   "dependencies": {
+    "@electric-sql/wires": "file:/Users/kevin/Documents/Electric/development/electric/components/wires/electric-sql-wires-0.0.1.tgz",
     "@prisma/generator-helper": "^4.11.0",
     "code-block-writer": "^11.0.3",
+    "esbuild": "^0.18.17",
     "lodash": "^4.17.21",
     "zod": "^3.21.1"
   }

@@ -1,0 +1,100 @@
+{
+  "version": "0.0.1",
+  "name": "@electric-sql/wires",
+  "description": "ElectricSQL utility package providing commonly used TypeScript functions.",
+  "repository": "https://github.com/electric-sql/electric/tree/main/components/wires",
+  "author": "Electric DB Limited",
+  "homepage": "https://electric-sql.com",
+  "license": "Apache-2.0",
+  "keywords": [
+    "absurd-sql",
+    "active",
+    "android",
+    "better-sqlite3",
+    "capacitor",
+    "cordova",
+    "crdt",
+    "crdts",
+    "database",
+    "db",
+    "electric",
+    "electric-sql",
+    "expo",
+    "ios",
+    "local-first",
+    "local-first-sql",
+    "node",
+    "offline",
+    "offline-first",
+    "react-native",
+    "sql",
+    "sql.js",
+    "sqlite",
+    "sqlite3",
+    "sync",
+    "web"
+  ],
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "main": "dist/index.js",
+  "type": "module",
+  "platform": "node",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./dist/index.js",
+    "./*": "./dist/*/index.js"
+  },
+  "typesVersions": {
+    "*": {
+      "parser": [
+        "./dist/parser/index.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "dev": "tsmodule dev",
+    "build": "rm -rf ./dist && tsc && tsmodule build",
+    "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",
+    "test": "ava",
+    "typecheck": "tsc -p tsconfig.tests.json",
+    "posttest": "npm run typecheck",
+    "prepublishOnly": "pnpm run build",
+    "lint": "eslint src --fix",
+    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
+    "format": "prettier --write --loglevel warn ."
+  },
+  "ava": {
+    "timeout": "10m",
+    "files": [
+      "test/**/*.test.ts"
+    ],
+    "extensions": {
+      "ts": "module",
+      "tsx": "module"
+    },
+    "nodeArguments": [
+      "--no-warnings",
+      "--loader=@tsmodule/tsmodule/loader"
+    ],
+    "workerThreads": false
+  },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tsmodule/tsmodule": "42",
+    "@typescript-eslint/eslint-plugin": "^5.34.0",
+    "@typescript-eslint/parser": "^5.34.0",
+    "ava": "^4.3.1",
+    "eslint": "^8.22.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.1.0",
+    "typescript": "^4.9"
+  }
+}

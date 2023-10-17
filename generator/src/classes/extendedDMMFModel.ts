@@ -10,7 +10,7 @@ import {
   IMPORT_STATEMENT_REGEX_PATTERN,
 } from '../constants'
 import { GeneratorConfig } from '../schemas'
-import { Model } from 'src/utils/schemaParser'
+import { Model } from '@electric-sql/wires/parser'
 
 /////////////////////////////////////////////////
 // TYPES  INTERFACE

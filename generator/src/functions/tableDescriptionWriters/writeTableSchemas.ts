@@ -1,4 +1,4 @@
-import { Attribute } from 'src/utils/schemaParser'
+import { Attribute } from '@electric-sql/wires/parser'
 import {
   CreateFileOptions,
   ExtendedDMMF,

@@ -19,7 +19,7 @@ export type Model = {
  */
 export function parseModels(prismaSchema: string): Array<Model> {
   // Remove comments
-  const commentRegex = /\/\/.*$/gm // matches // until end of the line
+  const commentRegex = /\/\/.*$/gm // matches // until end of the line (also matches field validators added with ///)
   const schema = prismaSchema.replaceAll(commentRegex, '')
 
   // Match models defined in the schema
@@ -44,7 +44,7 @@ export function parseModels(prismaSchema: string): Array<Model> {
  * @param body Body of a model
  * @returns Fields defined by the model
  */
-function parseFields(body: string): Array<Field> {
+export function parseFields(body: string): Array<Field> {
   // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
   // It uses named captured groups to capture the field name, its type, and optional attributes
   // the type can be `type` or `type?` or `type[]`
@@ -67,12 +67,12 @@ function parseFields(body: string): Array<Field> {
  * @param attributes String of attributes
  * @returns Array of attributes.
  */
-function parseAttributes(attributes: string): Array<Attribute> {
+export function parseAttributes(attributes: string): Array<Attribute> {
   // Matches each attribute in a string of attributes
   // e.g. @id @db.Timestamp(2)
   // The optional args capture group matches anything
   // but not @or newline because that would be the start of a new attribute
-  const attributeRegex = /(?<type>@[\w\.]+)(?<args>\([^@\n\r]+\))?/g
+  const attributeRegex = /(?<type>@[\w.]+)(?<args>\([^@\n\r]+\))?/g
   const matches = [...attributes.matchAll(attributeRegex)]
   return matches.map((m) => {
     const { type, args } = m.groups! as { type: string; args?: string }
