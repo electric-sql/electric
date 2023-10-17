@@ -58,3 +58,8 @@ model Ints {
   i2 Int? @db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
   i4 Int?              /// @zod.number.int().gte(-2147483648).lte(2147483647)
 }
+
+model Floats {
+  id String @id
+  f8 Float? @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
+}

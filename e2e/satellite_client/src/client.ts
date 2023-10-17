@@ -208,6 +208,23 @@ export const write_int = (electric: Electric, id: string, i2: number, i4: number
   })
 }
 
+export const get_float = (electric: Electric, id: string) => {
+  return electric.db.floats.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_float = (electric: Electric, id: string, f8: number) => {
+  return electric.db.floats.create({
+    data: {
+      id,
+      f8,
+    }
+  })
+}
+
 export const get_item_columns = (electric: Electric, table: string, column: string) => {
   return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
 }
