@@ -134,7 +134,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:DOWN, ref, :process, pid, reason},
         %State{pg_connector_sup_monitor: ref} = state
       ) do
-    if reason not in [:normal, :shutdwon] do
+    if reason not in [:normal, :shutdown] do
       Logger.warning(
         "PostgresConnectorSup #{inspect(pid)} has exited with reason: #{inspect(reason)}"
       )
