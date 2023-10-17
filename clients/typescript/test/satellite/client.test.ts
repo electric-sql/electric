@@ -323,16 +323,13 @@ test.serial('receive transaction over multiple messages', async (t) => {
   ])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
-    client.subscribeToTransactions(
-      (transaction: Transaction) =>
-        new Promise(() => {
-          t.is(transaction.changes.length, 3)
-          res()
-        })
-    )
+  await new Promise<void>((res) => {
+    client.subscribeToTransactions(async (transaction) => {
+      t.is(transaction.changes.length, 3)
+      res()
+    })
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -402,29 +399,26 @@ test.serial('migration transaction contains all information', async (t) => {
   server.nextRpcResponse('startReplication', [start, relation, opLogMsg])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
-    client.subscribeToTransactions(
-      (transaction: Transaction) =>
-        new Promise(() => {
-          t.is(transaction.migrationVersion, migrationVersion)
-          t.deepEqual(transaction, {
-            commit_timestamp: commit.commitTimestamp,
-            lsn: begin.lsn,
-            changes: [
-              {
-                migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
-                table: migrate.table,
-                sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
-              },
-            ],
-            origin: begin.origin,
-            migrationVersion: migrationVersion,
-          })
-          res()
-        })
-    )
+  await new Promise<void>((res) => {
+    client.subscribeToTransactions(async (transaction: Transaction) => {
+      t.is(transaction.migrationVersion, migrationVersion)
+      t.deepEqual(transaction, {
+        commit_timestamp: commit.commitTimestamp,
+        lsn: begin.lsn,
+        changes: [
+          {
+            migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
+            table: migrate.table,
+            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+          },
+        ],
+        origin: begin.origin,
+        migrationVersion: migrationVersion,
+      })
+      res()
+    })
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -453,7 +447,7 @@ test.serial('acknowledge lsn', async (t) => {
   server.nextRpcResponse('startReplication', [start, opLog])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
+  await new Promise<void>((res) => {
     client['emitter'].on(
       'transaction',
       (_t: DataTransaction, ack: () => void) => {
@@ -466,7 +460,7 @@ test.serial('acknowledge lsn', async (t) => {
       }
     )
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -712,25 +706,24 @@ test.serial('default and null test', async (t) => {
 
   t.plan(3)
 
-  await new Promise<void>(async (res) => {
+  await new Promise<void>((res) => {
     client.subscribeToTransactions(
-      // FIXME
-      (transaction: any) =>
-        new Promise(() => {
-          t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
-          t.is(
-            record['content'] as any,
-            transaction.changes[0].record['content'] as any
-          )
-          t.is(
-            record['text_null'] as any,
-            transaction.changes[0].record['text_null'] as any
-          )
-          res()
-        })
+      // FIXME: using any type
+      async (transaction: any) => {
+        t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
+        t.is(
+          record['content'] as any,
+          transaction.changes[0].record['content'] as any
+        )
+        t.is(
+          record['text_null'] as any,
+          transaction.changes[0].record['text_null'] as any
+        )
+        res()
+      }
     )
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 

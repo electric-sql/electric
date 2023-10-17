@@ -136,7 +136,7 @@ export abstract class BaseRegistry implements Registry {
     throw new Error(`Satellite not running for db: ${dbName}`)
   }
 
-  async stop(dbName: DbName, shouldIncludeStarting = true): Promise<void> {
+  stop(dbName: DbName, shouldIncludeStarting = true): Promise<void> {
     // If in the process of starting, wait for it to start and then stop it.
     if (shouldIncludeStarting) {
       const stop = this.stop.bind(this)
@@ -165,6 +165,8 @@ export abstract class BaseRegistry implements Registry {
 
       stoppingPromises[dbName] = stoppingPromise
       return stoppingPromise
+    } else {
+      return Promise.resolve()
     }
   }
 

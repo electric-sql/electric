@@ -64,7 +64,7 @@ export interface Satellite {
   connectivityState?: ConnectivityState
 
   start(authConfig: AuthConfig): Promise<ConnectionWrapper>
-  stop(shutdown: boolean): Promise<void>
+  stop(shutdown?: boolean): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription>

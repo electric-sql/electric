@@ -219,7 +219,7 @@ export class SatelliteClient implements Client {
     }
   }
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
     if (this.isDown) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_STATE,
@@ -294,7 +294,7 @@ export class SatelliteClient implements Client {
   }
 
   isConnected(): boolean {
-    return this.socketHandler !== undefined
+    return !!this.socketHandler
   }
 
   shutdown(): void {
@@ -303,7 +303,7 @@ export class SatelliteClient implements Client {
     this.isDown = true
   }
 
-  async startReplication(
+  startReplication(
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
@@ -380,8 +380,9 @@ export class SatelliteClient implements Client {
   }
 
   subscribeToTransactions(callback: TransactionCallback) {
-    this.emitter.on('transaction', (txn, ackCb) => {
-      callback(txn).then(() => ackCb())
+    this.emitter.on('transaction', async (txn, ackCb) => {
+      await callback(txn)
+      ackCb()
     })
   }
 
