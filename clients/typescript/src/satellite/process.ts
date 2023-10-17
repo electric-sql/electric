@@ -524,7 +524,7 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._enableTriggers([...groupedChanges.keys()]))
 
     // Then do a batched insert for the shadow table
-    const upsertShadowStmt = `INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES `
+    const upsertShadowStmt = `INSERT INTO ${this.opts.shadowTable.toString()} (namespace, tablename, "primaryKey", tags) VALUES `
     stmts.push(
       ...prepareInsertBatchedStatements(
         upsertShadowStmt,
@@ -532,7 +532,7 @@ export class SatelliteProcess implements Satellite {
         allArgsForShadowInsert,
         this.maxSqlParameters,
         `
-        ON CONFLICT (primaryKey) DO UPDATE
+        ON CONFLICT (namespace, tablename, "primaryKey") DO UPDATE
         SET namespace = EXCLUDED.namespace,
           tablename = EXCLUDED.tablename,
           tags = EXCLUDED.tags;
@@ -871,27 +871,30 @@ export class SatelliteProcess implements Satellite {
     const q2: Statement = {
       sql: `
       UPDATE ${oplog}
-      SET clearTags = shadow.tags
+      SET "clearTags" = shadow.tags
       FROM ${shadow} AS shadow
       WHERE ${oplog}.namespace = shadow.namespace
         AND ${oplog}.tablename = shadow.tablename
-        AND ${oplog}.primaryKey = shadow.primaryKey
+        AND ${oplog}."primaryKey" = shadow."primaryKey"
         AND ${oplog}.timestamp = $1
             `,
       args: [timestamp.toISOString()],
     }
 
     // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
+    console.log("TODO: WITH CLAUSE HERE")
+    console.log("TODO: max on rowid here even in postgres")
+    console.log("TODO: Postgres NEW vs EXCLUDED")
+    // TODO: This statement may need to use `WITH` to be correct.
     const q3: Statement = {
       sql: `
-      INSERT INTO ${shadow} (namespace, tablename, primaryKey, tags)
-      SELECT namespace, tablename, primaryKey, $1
+      INSERT INTO ${shadow} (namespace, tablename, "primaryKey", tags)
+      SELECT namespace, tablename, "primaryKey", $1
       FROM ${oplog} AS op
       WHERE timestamp = $2
         AND optype != 'DELETE'
-      ON CONFLICT (namespace, tablename, primaryKey)
-      DO UPDATE SET tags = EXCLUDED.tags;
-                  `,
+      ON CONFLICT (namespace, tablename, "primaryKey")
+      DO UPDATE SET tags = NEW.tags;`,
       args: [encodeTags([newTag]), timestamp.toISOString()],
     }
 
@@ -905,15 +908,13 @@ export class SatelliteProcess implements Satellite {
         INNER JOIN ${shadow} AS shadow
         ON shadow.namespace = op.namespace
         AND shadow.tablename = op.tablename
-        AND shadow.primaryKey = op.primaryKey
+        AND shadow."primaryKey" = op."primaryKey"
         WHERE op.timestamp = $1
         AND op.optype = 'DELETE'
-        GROUP BY shadow.rowid
+        GROUP BY (shadow.namespace, shadow.tablename, shadow."primaryKey")
       )
-
       DELETE FROM ${shadow}
-      WHERE rowid IN (SELECT rowid FROM _to_be_deleted);
-                  `,
+      WHERE rowid IN (SELECT rowid FROM _to_be_deleted);`,
       args: [timestamp.toISOString()],
     }
 
@@ -1061,7 +1062,7 @@ export class SatelliteProcess implements Satellite {
       DELETE FROM ${shadowTable}
       WHERE namespace = $1 AND
             tablename = $2 AND
-            primaryKey = $3;
+            "primaryKey" = $3;
     `
     return {
       sql: deleteRow,
@@ -1072,9 +1073,9 @@ export class SatelliteProcess implements Satellite {
   _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
     const shadowTable = this.opts.shadowTable.toString()
     const updateTags = `
-      INSERT INTO ${shadowTable} (namespace, tablename, primaryKey, tags)
+      INSERT INTO ${shadowTable} (namespace, tablename, "primaryKey", tags)
         VALUES ($1, $2, $3, $4)
-      ON CONFLICT (namespace, tablename, primaryKey) DO UPDATE
+      ON CONFLICT (namespace, tablename, "primaryKey") DO UPDATE
         SET tags = EXCLUDED.tags;
     `
     return {
@@ -1347,25 +1348,32 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _getLocalTableNames(): Promise<{ name: string }[]> {
-    const notIn = [
-      this.opts.metaTable.tablename.toString(),
-      this.opts.migrationsTable.tablename.toString(),
-      this.opts.oplogTable.tablename.toString(),
-      this.opts.triggersTable.tablename.toString(),
-      this.opts.shadowTable.tablename.toString(),
-      'information_schema',
-      'pg_temp',
-    ]
+    // const notIn = [
+    //   this.opts.metaTable.tablename.toString(),
+    //   this.opts.migrationsTable.tablename.toString(),
+    //   this.opts.oplogTable.tablename.toString(),
+    //   this.opts.triggersTable.tablename.toString(),
+    //   this.opts.shadowTable.tablename.toString(),
+    //   'information_schema',
+    //   'pg_temp',
+    // ]
 
-    const tables = `
-      SELECT table_name AS name
-      FROM information_schema.tables
-      WHERE table_type = 'BASE TABLE'
-        AND table_name NOT IN (${notIn.map((_, index) => "$" + (index + 1)).join(',')});
-    `
-    return (await this.adapter.query({ sql: tables, args: notIn })) as {
+    // const tables = `
+    //   SELECT table_name AS name
+    //   FROM information_schema.tables
+    //   WHERE table_type = 'BASE TABLE'
+    //     AND table_name NOT IN (${notIn.map((_, index) => "$" + (index + 1)).join(',')});
+    // `
+    // return (await this.adapter.query({ sql: tables, args: notIn })) as {
+    //   name: string
+    // }[]
+
+    // TODO: This is a big kludge to eliminate postgres and electric tables, but it should work for now.
+    let sql = "select table_name as name from information_schema.tables where table_type = 'BASE TABLE' and table_name not like 'pg_%' and table_name not like 'sql_%' and table_name not like '_electric_%';"
+    return (await this.adapter.query({ sql: sql, args: {} })) as {
       name: string
     }[]
+
   }
 
   // Fetch primary keys from local store and use them to identify incoming ops.
@@ -1376,17 +1384,23 @@ export class SatelliteProcess implements Satellite {
 
     let id = 0
     const schema = 'public' // TODO
+    console.log("XXX: tableNames: ", tableNames)
     for (const table of tableNames) {
       const tableName = table.name
+
+      // TODO: Check for the primary key some other way, but this should work for the demo.
       const sql = `
-      SELECT column_name
-      FROM information_schema.key_column_usage
-      WHERE table_name = $1
-        AND constraint_name = 'PRIMARY KEY';
-      `;
+      SELECT c.column_name as name, c.data_type as type
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+      JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+        AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+      WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = $1;`
 
       const args = [tableName]
+      console.log("XXX: args: ", args)
       const columnsForTable = await this.adapter.query({ sql, args })
+      console.log("XXX: columnsForTable: ", columnsForTable)
       if (columnsForTable.length == 0) {
         continue
       }
@@ -1397,12 +1411,14 @@ export class SatelliteProcess implements Satellite {
         tableType: SatRelation_RelationType.TABLE,
         columns: [],
       }
+
+      // TODO: simplifications here as well, isNullable and primaryKey
       for (const c of columnsForTable) {
         relation.columns.push({
           name: c.name!.toString(),
           type: c.type!.toString(),
-          isNullable: Boolean(!c.notnull!.valueOf()),
-          primaryKey: Boolean(c.pk!.valueOf()),
+          isNullable: false,
+          primaryKey: true,
         })
       }
       relations[`${tableName}`] = relation
@@ -1485,7 +1501,7 @@ function _applyNonDeleteOperation(
 ): Statement {
   const columnNames = Object.keys(fullRow)
   const columnValues = Object.values(fullRow)
-  let insertStmt = `INTO ${tablenameStr}(${columnNames.join(
+  let insertStmt = `INSERT INTO ${tablenameStr}(${columnNames.join(
     ', '
   )}) VALUES (${columnValues.map((_, index) => '$' + (index + 1)).join(',')})`
 
@@ -1501,14 +1517,16 @@ function _applyNonDeleteOperation(
     )
 
   if (updateColumnStmts.values.length > 0) {
+    console.log("XXXX: if")
     insertStmt = `
-                INSERT ${insertStmt}
+                ${insertStmt}
                 ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
               `
     columnValues.push(...updateColumnStmts.values)
   } else {
+    console.log("XXXX: else")
     // no changes, can ignore statement if exists
-    // insertStmt = `INSERT OR IGNORE ${insertStmt}` TODO: postgres: can we ingore this?
+    insertStmt = `INSERT ${insertStmt} ON CONFLICT DO NOTHING`; //TODO: postgres: can we ingore this?
   }
 
   return { sql: insertStmt, args: columnValues }

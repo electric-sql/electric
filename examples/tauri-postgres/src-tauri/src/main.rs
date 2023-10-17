@@ -3,11 +3,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
-
+use futures::stream::StreamExt;
+use sqlx::{PgConnection, Either};
 use sqlx::{postgres::PgArguments, Arguments};
 
 mod tauri_postgres;
-use crate::tauri_postgres::{get_rows_modified, row_to_json};
+use crate::tauri_postgres::row_to_json;
 mod utils;
 
 // General
@@ -76,6 +77,7 @@ struct QueryResult {
 /// This is the global connection to Postgres
 struct DbConnection {
     db: Mutex<Option<PgEmbed>>,
+    conn: Mutex<Option<PgConnection>>
 }
 
 /// App state for the terminal window. TODO: rename to something more sensible
@@ -144,16 +146,19 @@ fn tauri_exec_command(
     sql: &str,
     bind_params: BindParams,
 ) -> QueryResult {
-    println!("RSTrace: tauri_exec_command");
-
     block_on(async {
         if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-          println!("tauri_exec_command: we have the connection");
-            let result = tauri_exec(pg, sql, bind_params).await;
-            println!("{:?}", result);
-            result
+            if let Some(conn) = connection.conn.lock().unwrap().as_mut() {
+                let result = tauri_exec(pg, conn, sql, bind_params).await;
+                result
+            } else {
+                println!("tauri_exec_command: Connection unsuccessful");
+                QueryResult {
+                    rows_modified: 0,
+                    result: "".to_string(),
+                }
+            }
         } else {
-          println!("tauri_exec_command: we do not have the connection");
             QueryResult {
                 rows_modified: 0,
                 result: "".to_string(),
@@ -164,12 +169,12 @@ fn tauri_exec_command(
 
 #[tauri::command]
 fn send_recv_postgres_terminal(connection: State<DbConnection>, data: &str) -> String {
-    debug!("From the terminal, {}", data);
+    println!("From the terminal, {}", data);
 
     block_on(async {
-        match connection.db.lock().unwrap().as_mut() {
-            Some(pg) => {
-                let conn = tauri_pg_connect(pg, "test").await;
+        match connection.conn.lock().unwrap().as_mut() {
+            Some(conn) => {
+                // let conn = tauri_pg_connect(pg, "test").await;
 
                 tauri_pg_query(conn, data).await
             }
@@ -178,6 +183,7 @@ fn send_recv_postgres_terminal(connection: State<DbConnection>, data: &str) -> S
     })
 }
 
+//TODO: This has to be removed after the elixir has been migrated to postgres as well
 fn replace_question_marks(input: &str) -> String {
     let mut output = String::new();
     let mut counter = 1;
@@ -195,64 +201,109 @@ fn replace_question_marks(input: &str) -> String {
     output
 }
 
-async fn tauri_exec(pg: &PgEmbed, sql: &str, bind_params: BindParams) -> QueryResult {
-    println!("RSTrace: tauri_exec");
-    println!("{}", sql);
-    println!("{:?}", bind_params);
+async fn tauri_exec(pg: &mut PgEmbed, conn: &mut PgConnection, sql: &str, bind_params: BindParams) -> QueryResult {
+    println!("Trace: tauri_exec: sql bind_params:\n{}\n{:?}", sql, bind_params);
 
     let sql2 = replace_question_marks(sql);
+    println!("Trace: tauri_exec: AFTER CONVERSION sql bind_params:\n{}\n{:?}", sql2, bind_params);
 
-    let mut conn = tauri_pg_connect(&pg, "test").await;
+    // let mut conn = tauri_pg_connect(&pg, "test").await;
     let mut args1 = PgArguments::default();
-    let mut args2 = PgArguments::default();
+    // let mut args2 = PgArguments::default();
 
     for value in &bind_params.values {
         if let SqlValue::Num(num) = value {
             let num = num.as_i64();
             args1.add(num);
-            args2.add(num);
+            // args2.add(num);
         } else if let SqlValue::Null = value {
             args1.add(None::<String>);
-            args2.add(None::<String>);
+            // args2.add(None::<String>);
         } else if let SqlValue::Uint8Array(array) = value {
             todo!();
         } else if let SqlValue::Str(string) = value {
             args1.add(string);
-            args2.add(string);
+            // args2.add(string);
         }
     }
 
-    let rows_modified = get_rows_modified(pg, sql2.as_str(), args1).await;
+    let mut accumulate_rows = Vec::new();
+    let mut accumulate_rows_modified: u64 = 0;
+    let mut err = 0;
 
-    let rows = sqlx::query_with(sql2.as_str(), args2)
-        .fetch_all(&mut conn)
-        .await
-        .unwrap();
+    {
+        let mut results;
 
-    let mut result = String::new();
-    let mut array_rows = Vec::new();
-    for row in rows {
-        array_rows.push(row_to_json(row));
+        let conn2 = &mut *conn;
+        results = sqlx::query_with(sql2.as_str(), args1)
+        .fetch_many(conn2);
+
+
+    while let Some(result) = results.next().await {
+        let either = match result {
+            Ok(either) => either,
+            Err(_) => {
+                err = 1;
+                break;
+            },
+        };
+        match either {
+            Either::Left(res) => {
+                accumulate_rows_modified += res.rows_affected();
+            }
+            Either::Right(row) => {
+                accumulate_rows_modified += 1;
+                accumulate_rows.push(row);
+            }
+        }
     }
-    result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
+    }
 
-    let retval = QueryResult {
-        rows_modified,
-        result,
-    };
+    if err == 1 {
+        println!("This might just work...");
+        sqlx::query("ROLLBACK;COMMIT;").execute_many(conn).await;
 
-    println!("{:?}", retval);
-    retval
+        return QueryResult {
+            rows_modified: 0,
+            result: String::new(),
+        };
+
+    }
+
+    println!("rows_modified: {}", accumulate_rows_modified);
+
+
+    // .await {
+    // Ok(rows) => {
+        let mut result = String::new();
+        let mut array_rows = Vec::new();
+        for row in accumulate_rows {
+            array_rows.push(row_to_json(row));
+        }
+        result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
+
+        return QueryResult {
+            rows_modified: accumulate_rows_modified,
+            result,
+        };
+    // }
+
+    // Err(err) => {
+    //     eprintln!("We encountered an error executing: {}: {:?}", sql2.as_str(), err);
+
+    // }
+
 }
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(), String> {
-    println!("RSTrace: tauri_init_command");
-
     // Start the postgres when we receive this call
     block_on(async {
-        *connection.db.lock().unwrap() =
-            Some(tauri_pg_init_database(format!("/home/iib/db/{}", name).as_str()).await);
+        let pg = tauri_pg_init_database(format!("/home/iib/db/{}", name).as_str()).await;
+        let conn = tauri_pg_connect(&pg, "test").await;
+
+        *connection.db.lock().unwrap() = Some(pg);
+        *connection.conn.lock().unwrap() = Some(conn);
     });
 
     Ok(())
@@ -288,14 +339,14 @@ fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(),
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_getRowsModified(connection: State<DbConnection>) -> i64 {
-    println!("RSTrace: tauri_getRowsModified");
+    println!("Trace: tauri_getRowsModified");
 
     0
 }
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_stop_postgres(connection: State<DbConnection>) -> i64 {
-    println!("RSTrace: tauri_stop_postgres");
+    println!("Trace: tauri_stop_postgres");
     block_on(async {
         if let Some(mut pg) = connection.db.lock().unwrap().as_mut() {
             pg.stop_db().await;
@@ -307,7 +358,7 @@ fn tauri_stop_postgres(connection: State<DbConnection>) -> i64 {
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_test_postgres(connection: State<DbConnection>) -> i64 {
-    println!("RSTrace: tauri_test_postgres");
+    println!("Trace: tauri_test_postgres");
     block_on(async {
         if let Some(mut pg) = connection.db.lock().unwrap().as_mut() {
             let mut conn = tauri_pg_connect(&pg, "test").await;
@@ -437,6 +488,7 @@ fn main() {
         })
         .manage(DbConnection {
             db: Default::default(),
+            conn: Default::default()
         })
         .setup(|app| {
             // terminal
@@ -468,6 +520,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+
+    use sqlx::Connection;
 
     use super::*;
 
@@ -564,6 +618,7 @@ mod tests {
     /// Postgres test database creation, querying and destructuring
     async fn test_tauri_exec() {
         let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = tauri_pg_connect(&pg, "test").await;
 
         let keys0 = vec![];
         let values0 = vec![];
@@ -585,7 +640,7 @@ mod tests {
         let values5 = vec![];
 
         tauri_exec(
-            &pg,
+            &mut conn,
             "DROP TABLE IF EXISTS testing2",
             BindParams {
                 keys: keys0,
@@ -593,9 +648,9 @@ mod tests {
             },
         )
         .await;
-        tauri_exec(&pg, "CREATE TABLE IF NOT EXISTS testing2 (id BIGSERIAL PRIMARY KEY, description TEXT NOT NULL, number INTEGER)", BindParams{keys: keys1, values: values1}).await;
+        tauri_exec(&mut conn, "CREATE TABLE IF NOT EXISTS testing2 (id BIGSERIAL PRIMARY KEY, description TEXT NOT NULL, number INTEGER)", BindParams{keys: keys1, values: values1}).await;
         let rows_affected = tauri_exec(
-            &pg,
+            &mut conn,
             "INSERT INTO testing2(description, number) VALUES($1, $2)",
             BindParams {
                 keys: keys2,
@@ -606,7 +661,7 @@ mod tests {
         .rows_modified;
         assert_eq!(rows_affected, 1);
         let rows_affected = tauri_exec(
-            &pg,
+            &mut conn,
             "INSERT INTO testing2(description, number) VALUES($1, $2)",
             BindParams {
                 keys: keys3,
@@ -617,7 +672,7 @@ mod tests {
         .rows_modified;
         assert_eq!(rows_affected, 1);
         let rows_affected = tauri_exec(
-            &pg,
+            &mut conn,
             "SELECT * FROM testing2",
             BindParams {
                 keys: keys4,
@@ -629,7 +684,7 @@ mod tests {
         assert_eq!(rows_affected, 2);
 
         tauri_exec(
-            &pg,
+            &mut conn,
             "SELECT 1 FROM \ninformation_schema.tables",
             BindParams {
                 keys: keys5,
@@ -654,25 +709,25 @@ mod tests {
 
         // Setup
         tauri_exec(
-            &pg,
+            &mut conn,
             "DROP TABLE IF EXISTS testing3",
             empty_bind_params.clone(),
         )
         .await;
         tauri_exec(
-            &pg,
+            &mut conn,
             "CREATE TABLE testing3 (description text, number integer)",
             empty_bind_params.clone(),
         )
         .await;
         tauri_exec(
-            &pg,
+            &mut conn,
             "INSERT INTO testing3(description, number) VALUES('desc1', 1)",
             empty_bind_params.clone(),
         )
         .await;
         tauri_exec(
-            &pg,
+            &mut conn,
             "INSERT INTO testing3(description, number) VALUES('desc2', 2)",
             empty_bind_params.clone(),
         )
@@ -694,7 +749,7 @@ mod tests {
         assert_eq!(rows_affected, 2);
 
         let rows_affected = get_rows_modified(
-            &pg,
+            &mut conn,
             "INSERT INTO testing3(description, number) VALUES('desc3', 3)",
             PgArguments::default(),
         )
@@ -755,4 +810,31 @@ mod tests {
 
         ()
     }
+
+    #[tokio::test]
+    /// Postgres test database creation, querying and destructuring
+    async fn test_transactions() {
+        let empty_bind_params = BindParams {
+            keys: vec![],
+            values: vec![],
+        };
+
+        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = tauri_pg_connect(&pg, "test").await;
+
+        let mut tx = conn.begin().await.unwrap();
+
+        tauri_exec(&mut tx, "SELECT 1", empty_bind_params.clone()).await;
+        tauri_exec(&mut tx, "BEGIN", empty_bind_params.clone()).await;
+
+        // tauri_exec(&mut tx, "COMMIT", empty_bind_params.clone()).await;
+
+        tx.commit().await.unwrap();
+
+        let stop = pg.stop_db().await;
+        stop.unwrap();
+
+        assert!(true);
+    }
+
 }

@@ -23,7 +23,7 @@ sqlx = { version = "0.7.0", features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1.29.1", features = ["full"] }
 tauri-plugin-log = { git = "https://github.com/lencx/tauri-plugins-workspace", branch = "dev", features = ["colored"] }
 rustyline = "12.0.0"
-
+futures = { version = "0.3.28", default-features = false }
 
 env_logger = "0.10.0"
 pg-embed = { path = "../../../../tauri-app/src-tauri/crates/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }

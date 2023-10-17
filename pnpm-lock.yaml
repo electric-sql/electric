@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -14,12 +14,12 @@ importers:
 
   clients/typescript:
     dependencies:
-      '@tauri-apps/api':
-        specifier: ^1.4.0
-        version: 1.4.0
       '@capacitor-community/sqlite':
         specifier: '>= 5.2.3'
         version: 5.2.5(@capacitor/core@5.4.2)
+      '@tauri-apps/api':
+        specifier: ^1.4.0
+        version: 1.4.0
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -15209,4 +15209,3 @@ packages:
     resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/a856e82f1f5736892539f6d05abbb569dd59011b}
     name: wa-sqlite
     version: 0.9.5
-    dev: true

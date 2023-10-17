@@ -20,6 +20,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
+use std::cell::RefCell;
+
 pub async fn tauri_pg_setup(
     port: u16,
     database_dir: PathBuf,
@@ -181,9 +183,9 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
     result
 }
 
-pub async fn tauri_pg_query(mut conn: PgConnection, line: &str) -> String {
+pub async fn tauri_pg_query(conn: &mut PgConnection, line: &str) -> String {
     let rows = match sqlx::query(line)
-        .fetch_all(&mut conn)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|_| PgEmbedError {
             error_type: PgEmbedErrorType::SqlQueryError,
@@ -232,25 +234,29 @@ pub async fn tauri_pg_query_sync(mut conn: PgConnection, line: &str) -> String {
 }
 
 /** Get the rows modified, using a transaction, because of lacking sqlx ergonomics */
-pub async fn get_rows_modified(pg: &PgEmbed, sql: &str, bind_params: PgArguments) -> u64 {
-    let mut conn = tauri_pg_connect(pg, "test").await;
+pub async fn get_rows_modified(conn: &mut PgConnection, sql: &str, bind_params: PgArguments) -> u64 {
+    // let mut conn = tauri_pg_connect(pg, "test").await;
 
-    sqlx::query_with("BEGIN", PgArguments::default())
-        .execute(&mut conn)
-        .await
-        .unwrap();
+    // sqlx::query_with("BEGIN", PgArguments::default())
+    //     .execute(&mut *conn)
+    //     .await
+    //     .unwrap();
 
-    let rows_affected = sqlx::query_with(sql, bind_params)
-        .execute(&mut conn)
-        .await
-        .unwrap()
-        .rows_affected();
+    // let mut tx = conn.begin().await.unwrap();
+    // let rows_affected = 1;
+    // let rows_affected = sqlx::query_with(sql, bind_params)
+    //     .execute(&mut *tx)
+    //     .await
+    //     .unwrap()
+    //     .rows_affected();
 
-    sqlx::query_with("ROLLBACK", PgArguments::default())
-        .execute(&mut conn)
-        .await
-        .unwrap();
+    // tx.commit().await.unwrap();
 
+    // sqlx::query_with("ROLLBACK", PgArguments::default())
+    //     .execute(&mut *conn)
+    //     .await
+    //     .unwrap();
+    let rows_affected = 1;
     rows_affected
 }
 

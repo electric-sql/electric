@@ -70,8 +70,8 @@ export function generateOplogTriggers(
         .join('\n')}
       RETURN NEW;
     END;
-    $$ LANGUAGE plpgsql;
-
+    $$ LANGUAGE plpgsql;`,
+    `
     CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
     BEFORE UPDATE ON ${namespace}.${tableName}
     FOR EACH ROW
@@ -91,7 +91,7 @@ export function generateOplogTriggers(
         SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${tableFullName}';
 
         IF flag_value = 1 THEN
-          INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          INSERT INTO _electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
           VALUES (
             '${namespace}',
             '${tableName}',
@@ -106,8 +106,8 @@ export function generateOplogTriggers(
         RETURN NEW;
       END;
     END;
-    $$ LANGUAGE plpgsql;
-
+    $$ LANGUAGE plpgsql;`,
+    `
     CREATE TRIGGER insert_${namespace}_${tableName}_into_oplog
     AFTER INSERT ON ${namespace}.${tableName}
     FOR EACH ROW
@@ -128,7 +128,7 @@ export function generateOplogTriggers(
 
         IF flag_value = 1 THEN
           -- Insert into _electric_oplog
-          INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          INSERT INTO _electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
           VALUES (
             '${namespace}',
             '${tableName}',
@@ -143,8 +143,9 @@ export function generateOplogTriggers(
         RETURN NEW;
       END;
     END;
-    $$ LANGUAGE plpgsql;
+    $$ LANGUAGE plpgsql;`,
 
+    `
     -- Create the trigger on the specified table
     CREATE TRIGGER update_${namespace}_${tableName}_into_oplog
     AFTER UPDATE ON ${namespace}.${tableName}
@@ -164,7 +165,7 @@ export function generateOplogTriggers(
         SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${tableFullName}';
 
         IF flag_value = 1 THEN
-          INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+          INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
           VALUES (
             '${namespace}',
             '${tableName}',
@@ -179,9 +180,9 @@ export function generateOplogTriggers(
         RETURN OLD;
       END;
     END;
-    $$ LANGUAGE plpgsql;
+    $$ LANGUAGE plpgsql;`,
 
-    CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
+    `CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
     AFTER DELETE ON ${namespace}.${tableName}
     FOR EACH ROW
     EXECUTE FUNCTION delete_${namespace}_${tableName}_into_oplog_function();
@@ -238,7 +239,7 @@ function generateCompensationTriggers(
           SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
           IF flag_value = 1 AND meta_value = 1 THEN
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             SELECT
               '${fkTableNamespace}',
               '${fkTableName}',
@@ -254,9 +255,9 @@ function generateCompensationTriggers(
           RETURN NEW;
         END;
       END;
-      $$ LANGUAGE plpgsql;
+      $$ LANGUAGE plpgsql;`,
 
-      CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
+      `CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
       AFTER INSERT ON ${tableFullName}
       FOR EACH ROW
       EXECUTE FUNCTION compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog_function();
@@ -275,7 +276,7 @@ function generateCompensationTriggers(
           SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
           IF flag_value = 1 AND meta_value = 1 THEN
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             SELECT
               '${fkTableNamespace}',
               '${fkTableName}',
@@ -291,9 +292,9 @@ function generateCompensationTriggers(
           RETURN NEW;
         END;
       END;
-      $$ LANGUAGE plpgsql;
+      $$ LANGUAGE plpgsql;`,
 
-      CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
+      `CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
       AFTER UPDATE ON ${namespace}.${tableName}
       FOR EACH ROW
       EXECUTE FUNCTION compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog_function();

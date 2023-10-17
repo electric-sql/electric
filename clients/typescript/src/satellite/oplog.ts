@@ -366,17 +366,20 @@ export const opLogEntryToChange = (
   entry: OplogEntry,
   relations: RelationsCache
 ): DataChange => {
+  console.log("RelationsCache: ", relations)
   let record, oldRecord
   if (entry.newRow != null) {
     record = JSON.parse(entry.newRow)
   }
 
+  console.log("record: ", record)
   if (entry.oldRow != null) {
     oldRecord = JSON.parse(entry.oldRow)
   }
-
+  console.log("oldRecord: ", oldRecord)
   const relation = relations[`${entry.tablename}`]
 
+  console.log("relation: ", relation)
   if (typeof relation === 'undefined') {
     throw new Error(`Could not find relation for ${entry.tablename}`)
   }
