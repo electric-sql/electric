@@ -18,6 +18,10 @@ This is a Tauri example using ElectricSQL, inspired from the [wa-sqlite](https:/
 
 It is also the showcase for a new driver, called `sqlx`.
 
+## Known bugs
+A query is still wrong, the cleanup button does not work properly.
+The project should work on macOS, but I only tested on Ubuntu. Please let me know of any problems on macOS.
+
 ## Instructions
 
 Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
