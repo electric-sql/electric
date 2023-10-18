@@ -11,7 +11,7 @@ As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) 
 
 The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when generating and applying migrations. We then need to tweak the example release migration code to use this proxy repo.
 
-Once this is done, we can create and apply migrations as before without danger of bypassing the proxy and moving the actual Postgres schema out-of-sync with electrics view of it.
+Once this is done, we can create and apply migrations as before without danger of bypassing the proxy and moving the actual Postgres schema out-of-sync with Electric's view of it.
 
 First we add a new repo instance. Note that, unlike the main `Repo` module, we don't start this with the rest of our application.
 
