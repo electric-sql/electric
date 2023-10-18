@@ -16,7 +16,7 @@ const proxyPassword = 'proxy_password'
 const DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'localhost', proxyPort, appName)
 
 // URL to use when connecting to the proxy from a Docker container. This is used when `psql` is exec'd inside the
-// `postgres` service's container to connect to the poxy running the `electric` service's container.
+// `postgres` service's container to connect to the poxy running in the `electric` service's container.
 const CONTAINER_DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'electric', 65432, appName)
 
 // URL to display in the terminal for informational purposes. It omits the password but is still a valid URL that can be
