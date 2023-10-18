@@ -495,7 +495,11 @@ defmodule Electric.Satellite.Serialization do
   def decode_column_value!(val, :float8) when val in ["Infinity", "-Infinity", "NaN"], do: val
 
   def decode_column_value!(val, :float8) do
-    _ = String.to_float(val)
+    case Float.parse(val) do
+      {_, ""} -> :ok
+      _ -> raise "Unexpected value for float8 colum: #{inspect(val)}"
+    end
+
     val
   end
 
