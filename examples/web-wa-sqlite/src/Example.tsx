@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 
+import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
@@ -28,9 +29,9 @@ export const Example = () => {
       }
 
       const { tabId } = uniqueTabId()
-      const tabScopedDbName = `electric-${tabId}.db`
+      const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
 
-      const conn = await ElectricDatabase.init(tabScopedDbName, '')
+      const conn = await ElectricDatabase.init(scopedDbName, '')
       const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {
