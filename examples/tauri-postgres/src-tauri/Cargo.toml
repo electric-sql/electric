@@ -26,10 +26,10 @@ rustyline = "12.0.0"
 futures = { version = "0.3.28", default-features = false }
 
 env_logger = "0.10.0"
-pg-embed = { path = "../../../../tauri-app/src-tauri/crates/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
+pg-embed = { git = "https://github.com/faokunega/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
 
 
-# Can maybe remove?
+# TODO: Can maybe remove?
 log = "0.4.19"
 lazy_static = "1.4.0"
 portable-pty = "0.8.1"

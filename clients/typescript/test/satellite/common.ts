@@ -6,9 +6,8 @@ import {
   RelationsCache,
   SqlValue,
   randomValue,
+  sleepAsync,
 } from '../../src/util'
-// import Database from 'better-sqlite3'
-// import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 
 import { ElectricDatabase as Database } from '../../src/drivers/postgres/database'
 import { DatabaseAdapter } from '../../src/drivers/postgres/adapter'
@@ -180,11 +179,13 @@ export const makeContext = async (
   }
 }
 
-export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
-  // const { dbName } = t.context
+export const clean = async (t: ExecutionContext<{ dbName: string, adapter: any }>) => {
+  const { dbName, adapter } = t.context
 
-  // await removeFile(dbName, { force: true })
-  // await removeFile(`${dbName}-journal`, { force: true })
+  await adapter.stop();
+
+  await removeFile(".tmp", { recursive: true, force: true })
+  await sleepAsync(1);
 }
 
 export const cleanAndStopSatellite = async (

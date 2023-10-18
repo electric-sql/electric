@@ -58,7 +58,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'child', 'INSERT', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), NULL, NULL);
           END IF;
 
@@ -88,7 +88,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'child', 'UPDATE', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
@@ -117,7 +117,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'child', 'DELETE', jsonb_build_object('id', OLD.id), NULL, jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
@@ -147,7 +147,7 @@ export default [
           SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
           IF flag_value = 1 AND meta_value = '1' THEN
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             SELECT 'main', 'parent', 'INSERT', jsonb_build_object('id', id),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
             FROM main.parent WHERE id = NEW."parent";
@@ -182,7 +182,7 @@ export default [
 
           IF flag_value = 1 AND meta_value = '1' THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             SELECT 'main', 'parent', 'UPDATE', jsonb_build_object('id', id),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
             FROM main.parent WHERE id = NEW."parent";
@@ -231,7 +231,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'items', 'INSERT', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), NULL, NULL);
           END IF;
 
@@ -262,7 +262,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'items', 'UPDATE', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
@@ -293,7 +293,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES ('main', 'items', 'DELETE', jsonb_build_object('value', OLD.value), NULL, jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
@@ -343,7 +343,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
               'main',
               'parent',
@@ -383,7 +383,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
               'main',
               'parent',
@@ -423,7 +423,7 @@ export default [
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
               'main',
               'parent',

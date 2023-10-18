@@ -12,9 +12,11 @@
   </picture>
 </a>
 
-# ElectricSQL - Web example
+# ElectricSQL - Tauri example
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
+This is a Tauri example using ElectricSQL, inspired from the [wa-sqlite](https://github.com/rhashimoto/wa-sqlite) example.
+
+It is also the showcase for a new driver, called `sqlx`.
 
 ## Instructions
 
@@ -22,23 +24,29 @@ Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono
 
 ```sh
 git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
+cd electric/examples/tauri-postgres
 ```
 
 ## Pre-reqs
 
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
+
+You cannot, for now, use `yarn`, because we need the `pnpm` workspaces, as we deal with local code.
+
+You also need Rust. You can follow the official instructions from [here](https://www.rust-lang.org/tools/install).
 
 ```shell
-npm -g install yarn
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
+
+On macOS, `brew install rust` should work, if you are using homebrew.
 
 ## Install
 
 Install the dependencies:
 
 ```sh
-yarn
+pnpm install
 ```
 
 ## Setup
@@ -46,26 +54,26 @@ yarn
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-yarn backend:up
+pnpm run backend:up
 # Or `yarn backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-yarn db:psql
+pnpm run db:psql
 ```
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
 ```shell
-yarn db:migrate
+pnpm run db:migrate
 ```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-yarn client:generate
+pnpm run client:generate
 # or `yarn client:watch`` to re-generate whenever the DB schema changes
 ```
 
@@ -74,10 +82,10 @@ yarn client:generate
 Start your app:
 
 ```sh
-yarn start
+pnpm tauri dev
 ```
 
-Open [localhost:3001](http://localhost:3001) in your web browser.
+Due to an unsolved bug, before closing the window, click on the `Stop Postgres` button.
 
 ## Develop
 

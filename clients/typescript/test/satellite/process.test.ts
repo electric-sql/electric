@@ -252,10 +252,10 @@ test('snapshot of INSERT after DELETE', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
   })
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES (1)` })
 
   await satellite._setAuthState(authState)
   await satellite._performSnapshot()

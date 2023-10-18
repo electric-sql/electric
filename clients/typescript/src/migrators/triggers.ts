@@ -91,7 +91,7 @@ export function generateOplogTriggers(
         SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = '${tableFullName}';
 
         IF flag_value = 1 THEN
-          INSERT INTO _electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+          INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
           VALUES (
             '${namespace}',
             '${tableName}',
@@ -128,7 +128,7 @@ export function generateOplogTriggers(
 
         IF flag_value = 1 THEN
           -- Insert into _electric_oplog
-          INSERT INTO _electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+          INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
           VALUES (
             '${namespace}',
             '${tableName}',

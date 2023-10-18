@@ -27,17 +27,12 @@ export class ElectricDatabase implements Database {
     this.mutex = new Mutex()
   }
 
-  async test_tauri(name: SqlValue) {
-    this.invoke("test_tauri", { name });
-  }
-
   async tauri_init(name: string) {
     this.invoke("tauri_init", { name });
   }
 
   async tauri_exec(statement: Statement): Promise<QueryExecResult> {
     let [keys, values] = separateBindParams(statement.args)
-
     return await this.invoke("tauri_exec_command", { sql: statement.sql, bind_params: { keys, values } });
   }
 
@@ -85,16 +80,15 @@ export class ElectricDatabase implements Database {
   }
 
   getRowsModified() {
-    return this.invoke("tauri_getRowsModified");
+    return this.rowsModified;
   }
 
   async stop() {
-    // console.log("Trace: sqlx stop")
+    await this.invoke("tauri_stop_postgres").then();
   }
 
   static async init(dbName: string, invoke: Function) {
     await invoke("tauri_init_command", { name: dbName }).then((result: string) => {
-      // console.log(result)
       result
     });
     return new ElectricDatabase(dbName, invoke)

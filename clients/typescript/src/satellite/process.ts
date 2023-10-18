@@ -894,7 +894,7 @@ export class SatelliteProcess implements Satellite {
       WHERE timestamp = $2
         AND optype != 'DELETE'
       ON CONFLICT (namespace, tablename, "primaryKey")
-      DO UPDATE SET tags = NEW.tags;`,
+      DO UPDATE SET tags = EXCLUDED.tags;`,
       args: [encodeTags([newTag]), timestamp.toISOString()],
     }
 
@@ -911,7 +911,7 @@ export class SatelliteProcess implements Satellite {
         AND shadow."primaryKey" = op."primaryKey"
         WHERE op.timestamp = $1
         AND op.optype = 'DELETE'
-        GROUP BY (shadow.namespace, shadow.tablename, shadow."primaryKey")
+        GROUP BY shadow.rowid
       )
       DELETE FROM ${shadow}
       WHERE rowid IN (SELECT rowid FROM _to_be_deleted);`,
