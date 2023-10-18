@@ -78,7 +78,7 @@ test('serialize/deserialize row data', async (t) => {
   const s_row = serializeRow(record, rel, dbDescription)
   t.deepEqual(
     s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
-    ['Hello', 'World!', '', '1', '-30', '1.0', '-30.3', 't', 'f', '']
+    ['Hello', 'World!', '', '1', '-30', '1', '-30.3', 't', 'f', '']
   )
 
   const d_row = deserializeRow(s_row, rel, dbDescription)
