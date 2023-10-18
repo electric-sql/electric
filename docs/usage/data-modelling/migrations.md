@@ -88,7 +88,7 @@ ALTER TABLE
 
 ### Framework and application integration
 
-The pg proxy is reasonably performant, certainly performant enough to use directly for development. However it is not recommended to connect via the proxy for anything other than applying migrations in production use.
+Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations, you shouldn't connect your application to the proxy endpoint for any other purpose) through the proxy rather than directly to the underlying Postgres database.
 
 As each framework has different requirements for this, example code for each is provided in the [integrations section](../../integrations/backend/index.md)
 
@@ -256,6 +256,12 @@ We only currently support forward migrations. Rollbacks must be implemented as f
 ### Additive migrations
 
 We only currently support additive migrations. This means you can't remove or restrict a field. Instead, you need to create new fields and tables (that are pre-constrained on creation) and switch / mirror data to them.
+
+In practice this means that we only support this subset of DDL actions:
+
+- `CREATE TABLE` and its associated `ALTER TABLE .. ENABLE ELECTRIC` call,
+- `ALTER TABLE electrified_table ADD COLUMN`, and
+- `CREATE INDEX ON electrified_table`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
 
 ### Data types and constraints
 

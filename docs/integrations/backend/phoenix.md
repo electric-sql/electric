@@ -35,7 +35,7 @@ For a Phoenix application this means we need to slightly modify the example migr
 
 In development we need to ensure that migrations are always applied via the proxy, and not directly on the database.
 
-The simplest solution is to create a `ProxyRepo` module that encapsulates the proxy connection and then
+The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then
 use it when running the migrations:
 
 ```elixir
@@ -50,9 +50,7 @@ end
 ```elixir
 # config/config.exs
 
-# override Ecto's list of repos that it applies migrations to
-# alternatively you could remember to always pass `-r MyApp.ProxyRepo`
-# when migrating
+# override Ecto's list of repos that it applies migrations to by default
 config :my_app,
   ecto_repos: [MyApp.ProxyRepo]
 ```
@@ -72,10 +70,11 @@ config :my_app, MyApp.ProxyRepo,
 
 ```elixir
 # config/runtime.exs
+# because we need to apply migrations in production, ensure that
+# the ProxyRepo is included in the runtime.exs configuration.
 config :my_app, MyApp.ProxyRepo,
   ssl: false,
   url: System.get_env("PROXY_URL"),
-  # we only use this repo for migrations
   pool_size: 2,
   priv: "priv/repo"
 ```
@@ -84,7 +83,7 @@ With this infrastructure in place, running `mix ecto.migrate` will correctly app
 
 ### Migrating in production via the Proxy
 
-With the above configuration in place, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work.
+With the above configuration in place, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work and apply migrations through the proxy in development and production.
 
 ## Event sourcing
 
