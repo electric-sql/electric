@@ -54,7 +54,7 @@ Migrations not passed through the proxy endpoint will not be captured by Electri
 
 ### Configuring and connecting to the Postgresql migration proxy
 
-There are two environment variables that configure the proxy:
+There are two environment variables that configure the proxy in Electric:
 
 - `PG_PROXY_PORT` (default `65432`). This is the TCP port that you should connect to in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres, compatible tool, e.g. `psql -U electric -p 65432 electric`
 
