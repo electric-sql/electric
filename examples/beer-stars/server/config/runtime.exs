@@ -59,6 +59,14 @@ if(config_env() == :prod) do
       environment variable DATABASE_URL is missing.
       For example: ecto://USER:PASS@HOST/DATABASE
       """
+
+  proxy_url =
+    System.get_env("PROXY_URL") ||
+      raise """
+      environment variable PROXY_URL is missing.
+      For example: ecto://electric:PASS@HOST:65432/DATABASE
+      """
+
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
   config :beer_stars, BeerStars.Repo,
@@ -71,6 +79,16 @@ if(config_env() == :prod) do
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),
     socket_options: maybe_ipv6
+
+  # the repo we connect to in order to run migrations
+  config :beer_stars, BeerStars.ProxyRepo,
+    # ssl support for the proxy will be supported eventually
+    ssl: false,
+    # ecto requires at least 2 connections for the migrations
+    # but that's it
+    pool_size: 2,
+    url: proxy_url,
+    priv: "priv/repo"
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

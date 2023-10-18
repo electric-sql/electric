@@ -37,8 +37,12 @@ services:
       ELECTRIC_HOST: electric
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
+      PG_PROXY_PASSWORD: proxy-password
+      PG_PROXY_PORT: "65432"
+      PROXY_TRACING_ENABLE: true
     ports:
       - 5133:5133
+      - 65432:65432
     depends_on:
       - postgres
 
@@ -56,7 +60,12 @@ services:
       PHX_SERVER: true
       PORT: 40001
       SECRET_KEY_BASE: "E4NrRTr/ZAPGS5Ubp0DmizfdRrRdAV1vLAC7PDQQOupVucwGTinsuEF2BlkOjBWm"
+      # connect to electric for migrations, connecting to the electric
+      # application container (not postgres) using the value of
+      # `PG_PROXY_PASSWORD` and `PG_PROXY_PORT` for the connection
+      PROXY_URL: "postgresql://electric:proxy-password@electric:65432/beer-stars"
     ports:
       - 40001:40001
     depends_on:
       - postgres
+      - electric

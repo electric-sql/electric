@@ -8,7 +8,8 @@
 import Config
 
 config :beer_stars,
-  ecto_repos: [BeerStars.Repo],
+  # use the ProxyRepo as the destination when running the `ecto.*` mix tasks
+  ecto_repos: [BeerStars.ProxyRepo],
   generators: [binary_id: true]
 
 # Configures the endpoint
