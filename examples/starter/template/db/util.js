@@ -10,7 +10,7 @@ shell.config.silent = true // don't log output of child processes
 const appName = fetchAppName() ?? 'electric'
 const proxyPort = fetchHostProxyPortElectric() ?? 65432
 const DATABASE_URL = `postgresql://electric:proxy_password@localhost:${proxyPort}/${appName}`
-const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
+const PUBLIC_DATABASE_URL = DATABASE_URL.replace(/(?<=postgresql:\/\/[^:]+):[^@]+@/, '@')
 
 function error(err) {
   console.error('\x1b[31m', err, '\x1b[0m')
