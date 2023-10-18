@@ -1090,13 +1090,13 @@ function deserializeColumnData(
       return typeDecoder.text(column)
     case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
-    case PgBasicType.PG_REAL:
     case PgBasicType.PG_INT:
     case PgBasicType.PG_INT2:
     case PgBasicType.PG_INT4:
     case PgBasicType.PG_INT8:
     case PgBasicType.PG_INTEGER:
       return Number(typeDecoder.text(column))
+    case PgBasicType.PG_REAL:
     case PgBasicType.PG_FLOAT4:
     case PgBasicType.PG_FLOAT8:
       return typeDecoder.float(column)

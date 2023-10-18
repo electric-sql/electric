@@ -19,7 +19,6 @@ setGlobalUUID(
 
 export const typeDecoder = {
   bool: bytesToBool,
-  number: bytesToNumber,
   text: bytesToString,
   timetz: bytesToTimetzString,
   float: bytesToFloat,
@@ -27,7 +26,6 @@ export const typeDecoder = {
 
 export const typeEncoder = {
   bool: boolToBytes,
-  number: numberToBytes,
   text: (string: string) => new TextEncoder().encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
