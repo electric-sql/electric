@@ -1119,10 +1119,6 @@ function serializeColumnData(
   switch (columnType) {
     case PgBasicType.PG_BOOL:
       return typeEncoder.bool(columnValue as number)
-    case PgBasicType.PG_REAL:
-    case PgBasicType.PG_FLOAT4:
-    case PgBasicType.PG_FLOAT8:
-      return typeEncoder.real(columnValue as number)
     case PgDateType.PG_TIMETZ:
       return typeEncoder.timetz(columnValue as string)
     default:

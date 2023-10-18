@@ -28,7 +28,6 @@ export const typeDecoder = {
 export const typeEncoder = {
   bool: boolToBytes,
   number: numberToBytes,
-  real: realToBytes,
   text: (string: string) => new TextEncoder().encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
@@ -68,15 +67,6 @@ export function numberToBytes(i: number) {
     (i & 0x0000ff00) >> 8,
     (i & 0x000000ff) >> 0
   )
-}
-
-export function realToBytes(num: number) {
-  let num_str = num.toString()
-  if (Number.isFinite(num) && Math.trunc(num) === num) {
-    // num is an integer, we need to explicitly append the ".0" to it.
-    num_str += '.0'
-  }
-  return new TextEncoder().encode(num_str)
 }
 
 export function bytesToNumber(bytes: Uint8Array) {
