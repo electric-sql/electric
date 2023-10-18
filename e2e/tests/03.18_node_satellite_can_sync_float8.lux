@@ -55,11 +55,11 @@
     !SELECT * FROM public.floats;
     ??row1 |  1.79769313486231e+308
     ??row2 | -1.79769313486231e+308
-    ??row3 |                    5.006
-    ??row4 |                 Infinity
-    ??row5 |                -Infinity
-    ??row6 |                      NaN
-    ??row7 |                        0
+    ??row3 |                  5.006
+    ??row4 |               Infinity
+    ??row5 |              -Infinity
+    ??row6 |                    NaN
+    ??row7 |                      0
 
 # Start a new Satellite client and verify that it receives all rows
 [invoke setup_client 2 electric_1 5133]
