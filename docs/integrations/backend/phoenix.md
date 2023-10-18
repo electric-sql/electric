@@ -67,7 +67,6 @@ With this infrastructure in place, running `mix ecto.migrate` will correctly app
 Optionally you can tweak the way that migrations are generated and ensure that they are correctly named for the base repo rather than the proxy repo by adding an alias to your application's `mix.exs`:
 
 ```elixir
-
   defp aliases do
     [
       # ...
