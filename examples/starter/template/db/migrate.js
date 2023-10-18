@@ -2,7 +2,7 @@ const { DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
 const { spawn } = require('child_process')
 const process = require('process')
 
-console.info(`Connecting to postgres at ${PUBLIC_DATABASE_URL}`)
+console.info(`Connecting to proxy at ${PUBLIC_DATABASE_URL}`)
 
 const args = ["run", "-s", "pg-migrations", "apply", "--database",  DATABASE_URL, "--directory", "./db/migrations"]
 const proc = spawn("yarn", args, { cwd: __dirname, stdio: ['inherit', 'pipe', 'inherit']  })
