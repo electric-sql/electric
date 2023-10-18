@@ -13,9 +13,6 @@ const DEFAULT_URL = `postgresql://electric:proxy_password@localhost:${proxyPort}
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL
 const PUBLIC_DATABASE_URL = DATABASE_URL.split('@')[1]
 
-const urlComponents = DATABASE_URL.split('/')
-const DATABASE_NAME = urlComponents[urlComponents.length-1]
-
 function error(err) {
   console.error('\x1b[31m', err, '\x1b[0m')
   process.exit(1)
