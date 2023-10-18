@@ -5,28 +5,6 @@ description: >-
 sidebar_position: 30
 ---
 
-## Migrations
-
-Use the [`Ecto.Migration.execute/1`](https://hexdocs.pm/ecto_sql/Ecto.Migration.html#execute/1) function.
-
-First, create a migration:
-
-```shell
-mix ecto.gen.migration electrify_items
-```
-
-Then e.g.:
-
-```elixir
-defmodule MyApp.Repo.Migrations.ElectrifyItems do
-  use Ecto.Migration
-
-  def change do
-    execute "ALTER TABLE items ENABLE ELECTRIC"
-  end
-end
-```
-
 ## Migrating via the Proxy
 
 As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) migrations must be applied to the Electrified database via the Electric Postgres proxy.
@@ -35,8 +13,9 @@ For a Phoenix application this means we need to slightly modify the example migr
 
 In development we need to ensure that migrations are always applied via the proxy, and not directly on the database.
 
-The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then
-use it when running the migrations:
+The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when running the migrations:
+
+First we add a new repo instance. Note that, unlike the main `Repo` module, we don't start this with the rest of our application.
 
 ```elixir
 # lib/my_app/proxy_repo.ex
@@ -47,6 +26,8 @@ defmodule MyApp.ProxyRepo do
 end
 ```
 
+Configure Ecto to use the `ProxyRepo` for generating and running migrations. Because in most cases queries through the proxy will just pass unmodified to the backing Postgresql server, it's ok that the proxy repo will be used for other Ecto mix tasks apart from applying migrations.
+
 ```elixir
 # config/config.exs
 
@@ -54,6 +35,8 @@ end
 config :my_app,
   ecto_repos: [MyApp.ProxyRepo]
 ```
+
+Now we need to include configuration for the ProxyRepo in both development and production mode:
 
 ```elixir
 # config/dev.exs
@@ -79,11 +62,47 @@ config :my_app, MyApp.ProxyRepo,
   priv: "priv/repo"
 ```
 
-With this infrastructure in place, running `mix ecto.migrate` will correctly apply the migrations through the proxy.
+With this infrastructure in place, running `mix ecto.migrate` will correctly apply the migrations through the proxy by default.
+
+Optionally you can tweak the way that migrations are generated and ensure that they are correctly named for the base repo rather than the proxy repo by adding an alias to your application's `mix.exs`:
+
+```elixir
+
+  defp aliases do
+    [
+      # ...
+      "ecto.gen.migration": ["ecto.gen.migration -r MyApp.Repo"]
+    ]
+  end
+```
+
+If you don't add this alias then your migrations will be named e.g. `MyApp.ProxyRepo.Migrations.MigrationName` not `MyApp.Repo.Migrations.MigrationName`.
 
 ### Migrating in production via the Proxy
 
-With the above configuration in place, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work and apply migrations through the proxy in development and production.
+Because we've configured Ecto to go via the proxy repo by default, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work and apply migrations through the proxy in development and production.
+
+## Migrations
+
+Use the [`Ecto.Migration.execute/1`](https://hexdocs.pm/ecto_sql/Ecto.Migration.html#execute/1) function.
+
+First, create a migration:
+
+```shell
+mix ecto.gen.migration electrify_items
+```
+
+Then e.g.:
+
+```elixir
+defmodule MyApp.Repo.Migrations.ElectrifyItems do
+  use Ecto.Migration
+
+  def change do
+    execute "ALTER TABLE items ENABLE ELECTRIC"
+  end
+end
+```
 
 ## Event sourcing
 
