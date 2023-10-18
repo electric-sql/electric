@@ -9,11 +9,9 @@ sidebar_position: 30
 
 As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) migrations must be applied to the Electrified database via the Electric Postgres proxy.
 
-For a Phoenix application this means we need to slightly modify the example migration code to use a separate migrations `Repo` which is configured to connect to the proxy rather than directly to the database.
+The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when generating and applying migrations. We then need to tweak the example release migration code to use this proxy repo.
 
-In development we need to ensure that migrations are always applied via the proxy, and not directly on the database.
-
-The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when running the migrations:
+Once this is done, we can create and apply migrations as before without danger of bypassing the proxy and moving the actual Postgres schema out-of-sync with electrics view of it.
 
 First we add a new repo instance. Note that, unlike the main `Repo` module, we don't start this with the rest of our application.
 
@@ -26,17 +24,16 @@ defmodule MyApp.ProxyRepo do
 end
 ```
 
-Configure Ecto to use the `ProxyRepo` for generating and running migrations. Because in most cases queries through the proxy will just pass unmodified to the backing Postgresql server, it's ok that the proxy repo will be used for other Ecto mix tasks apart from applying migrations.
+Configure Ecto to use the `ProxyRepo` for its tasks. Because in most cases queries through the proxy will just pass unmodified to the backing Postgresql server, it's ok that the proxy repo will be used for other Ecto mix tasks apart from applying migrations.
 
 ```elixir
 # config/config.exs
 
-# override Ecto's list of repos that it applies migrations to by default
 config :my_app,
   ecto_repos: [MyApp.ProxyRepo]
 ```
 
-Now we need to include configuration for the ProxyRepo in both development and production mode:
+Now we need to include configuration for the `ProxyRepo` in both development and production mode:
 
 ```elixir
 # config/dev.exs
@@ -67,12 +64,12 @@ With this infrastructure in place, running `mix ecto.migrate` will correctly app
 Optionally you can tweak the way that migrations are generated and ensure that they are correctly named for the base repo rather than the proxy repo by adding an alias to your application's `mix.exs`:
 
 ```elixir
-  defp aliases do
-    [
-      # ...
-      "ecto.gen.migration": ["ecto.gen.migration -r MyApp.Repo"]
-    ]
-  end
+defp aliases do
+  [
+    # ...
+    "ecto.gen.migration": ["ecto.gen.migration -r MyApp.Repo"]
+  ]
+end
 ```
 
 If you don't add this alias then your migrations will be named e.g. `MyApp.ProxyRepo.Migrations.MigrationName` not `MyApp.Repo.Migrations.MigrationName`.
