@@ -36,10 +36,12 @@ services:
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
+      PG_PROXY_PASSWORD: "password"
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
     ports:
       - ${ELECTRIC_PORT:-5133}:5133
+      - ${ELECTRIC_PROXY_PORT:-65432}:65432
     volumes:
       - electric_data:/app/data
     depends_on:
