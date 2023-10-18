@@ -82,7 +82,7 @@ If you don't add this alias then your migrations will be named e.g. `MyApp.Proxy
 
 Because we've configured Ecto to go via the proxy repo by default, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work and apply migrations through the proxy in development and production.
 
-## Migrations
+## Creating and Applying Migrations
 
 Use the [`Ecto.Migration.execute/1`](https://hexdocs.pm/ecto_sql/Ecto.Migration.html#execute/1) function.
 
@@ -103,6 +103,8 @@ defmodule MyApp.Repo.Migrations.ElectrifyItems do
   end
 end
 ```
+
+As above, the Ecto configuration means that these actions are applied via the Electric migration proxy automatically.
 
 ## Event sourcing
 
