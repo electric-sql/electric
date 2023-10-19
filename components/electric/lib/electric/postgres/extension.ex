@@ -357,7 +357,9 @@ defmodule Electric.Postgres.Extension do
           end)
         end)
 
-      :ok = define_functions(txconn)
+      if module == __MODULE__ do
+        :ok = define_functions(txconn)
+      end
 
       {:ok, newly_applied_versions}
     end)
