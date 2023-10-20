@@ -26,7 +26,7 @@ defmodule Electric.Postgres.Proxy.Parser.Macros do
       |> Enum.map(fn char -> [String.downcase(char), String.upcase(char)] end)
       |> Enum.map(fn [<<l::8>>, <<u::8>>] -> [l, u] end)
 
-    whitespace = if Keyword.get(opts, :trailing, true), do: [~c"\t\n\r "], else: []
+    whitespace = if Keyword.get(opts, :trailing, false), do: [~c"\t\n\r "], else: []
     chars = Enum.with_index(chars ++ whitespace)
     pattern = build_match(chars)
     guard = build_guard(chars)
@@ -469,7 +469,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   # case ignoring match of "electric"
-  defkeyword :is_electric_keyword?, "ELECTRIC", trailing: false do
+  defkeyword :is_electric_keyword?, "ELECTRIC" do
     true
   end
 

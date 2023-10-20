@@ -127,6 +127,23 @@ defmodule Electric.Postgres.SQLGenerator do
     "\"" <> name <> "\""
   end
 
+  def quote_name({{_, _} = schema, {_, _} = name}) do
+    "#{quote_name(schema)}.#{quote_name(name)}"
+  end
+
+  def quote_name({false, name}) do
+    name
+  end
+
+  def quote_name({true, name}) do
+    ~s["#{escape_quotes(name)}"]
+  end
+
+  defp escape_quotes(name) when is_binary(name) do
+    name
+    |> :binary.replace(~s["], ~s[""], [:global])
+  end
+
   def esc(str) do
     String.replace(str, "'", "''")
   end
@@ -170,17 +187,33 @@ defmodule Electric.Postgres.SQLGenerator do
   end
 
   def stmt(clauses, join \\ " ") do
+    joiner = joiner(join)
+
     clauses
     |> Enum.map(&string_to_constant/1)
     |> fixed_list()
     |> bind(fn c ->
-      c
-      |> Stream.reject(&is_nil/1)
-      |> Enum.intersperse(join)
+      c = Enum.reject(c, &is_nil/1)
+      joins = Enum.take(joiner, length(c)) ++ [""]
+
+      [c, joins]
+      |> Enum.zip_with(& &1)
       |> IO.iodata_to_binary()
       |> String.trim()
       |> constant()
     end)
+  end
+
+  defp joiner(s) when is_binary(s) do
+    constant(s)
+  end
+
+  defp joiner(s) when is_list(s) do
+    list_of(member_of(s), min_length: 1, max_length: 10)
+  end
+
+  def whitespace do
+    [" ", "\n", "\r\n", "\t"]
   end
 
   defp string_to_constant(clause) when is_binary(clause) do

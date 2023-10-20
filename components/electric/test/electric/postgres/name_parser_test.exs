@@ -24,6 +24,10 @@ defmodule Electric.Postgres.NameParserTest do
     assert {:ok, {"thing", "Captain"}} = NameParser.parse(~s[ThIng."Captain"])
   end
 
+  test "single quotes in name" do
+    assert {:ok, {"thing", "''yeks"}} = NameParser.parse("thing.\"''yeks\"")
+  end
+
   defp extract_name({{_, schema}, {_, name}}, _default_schema) do
     {schema, name}
   end

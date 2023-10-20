@@ -1,5 +1,6 @@
 defmodule DDLXParserTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias Electric.DDLX.Parse.Parser
   alias Electric.DDLX.Command.Enable
@@ -10,6 +11,33 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Command.Unassign
   alias Electric.DDLX.Command.SQLite
   alias Electric.DDLX.Parse.Common
+
+  property "something" do
+    check all(
+            table <- Electric.Postgres.SQLGenerator.DDLX.table_name(),
+            ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
+          ) do
+      IO.puts(ddlx)
+      assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
+      assert cmd.table_name == normalise(table, "my_default")
+    end
+  end
+
+  defp normalise({{_, _} = schema, {_, _} = table}, _default_schema) do
+    {normalise_case(schema), normalise_case(table)}
+  end
+
+  defp normalise({_, _} = table, default_schema) do
+    {default_schema, normalise_case(table)}
+  end
+
+  defp normalise_case({quoted, name}) when is_boolean(quoted) and is_binary(name) do
+    if quoted do
+      name
+    else
+      String.downcase(name)
+    end
+  end
 
   describe "Can parse SQL into tokens" do
     test "can create tokens" do
