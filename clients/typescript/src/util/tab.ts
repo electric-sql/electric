@@ -1,4 +1,4 @@
-import { genUUID } from './random'
+import { uuid } from './common'
 
 interface Storage {
   getItem: (key: string) => any
@@ -117,7 +117,7 @@ export const uniqueTabId = (opts: Options = {}): ReturnValue => {
   }
 
   // Otherwise generate, store and return a new one.
-  const newTabId = genUUID()
+  const newTabId = uuid()
   try {
     storage.setItem(key, newTabId)
   } catch {

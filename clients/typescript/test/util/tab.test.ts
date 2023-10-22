@@ -1,7 +1,7 @@
 import test from 'ava'
 import MemoryStorage from 'memorystorage'
-import { genUUID } from '../../src/util/random'
 import { uniqueTabId } from '../../src/util/tab'
+import { uuid } from '../../src/util/common'
 
 test('returns same tab ID', async (t) => {
   const { tabId, usingExisting } = uniqueTabId()
@@ -13,7 +13,7 @@ test('returns same tab ID', async (t) => {
 })
 
 test('works with passed in storage', async (t) => {
-  const storage = new MemoryStorage(genUUID())
+  const storage = new MemoryStorage(uuid())
 
   const { tabId } = uniqueTabId({ storage: storage })
   const { tabId: tabId2 } = uniqueTabId({ storage: storage })
@@ -38,7 +38,7 @@ test('works when storage errors', async (t) => {
 })
 
 test('handles duplicate tabs', async (t) => {
-  const storage = new MemoryStorage(genUUID())
+  const storage = new MemoryStorage(uuid())
   const navEntries = [{ type: 'back_forward' }]
 
   const { tabId, mayBeDuplicate } = uniqueTabId({
