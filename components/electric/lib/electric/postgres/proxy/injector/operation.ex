@@ -915,6 +915,10 @@ defmodule Operation.BindExecute do
   defimpl Operation do
     use Operation.Impl
 
+    def recv_client(op, [], state) do
+      {op, state}
+    end
+
     def recv_client(op, msgs, state) do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
         {
@@ -946,6 +950,10 @@ defmodule Operation.BindExecuteMigration do
     # forward on any messages from the server
     def recv_server(op, msg, state, send) do
       {op, state, Send.client(send, msg)}
+    end
+
+    def recv_client(op, [], state) do
+      {op, state}
     end
 
     def recv_client(op, msgs, state) do

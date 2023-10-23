@@ -1,4 +1,8 @@
 defmodule Electric.Postgres.Proxy.Handler.Tracing do
+  def do_trace(_action, _side, _session_id, []) do
+    :ok
+  end
+
   def do_trace(action, side, session_id, msgs) do
     config = config()
 
