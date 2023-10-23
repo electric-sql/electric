@@ -12,7 +12,7 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Command.SQLite
   alias Electric.DDLX.Parse.Common
 
-  property "something" do
+  property "enable" do
     check all(
             table <- Electric.Postgres.SQLGenerator.DDLX.table_name(),
             ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
@@ -20,6 +20,12 @@ defmodule DDLXParserTest do
       IO.puts(ddlx)
       assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
       assert cmd.table_name == normalise(table, "my_default")
+    end
+  end
+
+  property "assign" do
+    check all(ddlx <- Electric.Postgres.SQLGenerator.DDLX.Assign.generator()) do
+      IO.puts(ddlx)
     end
   end
 

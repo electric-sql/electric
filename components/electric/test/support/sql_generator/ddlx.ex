@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.SQLGenerator.DDLX do
   use Electric.Postgres.SQLGenerator
+  alias __MODULE__
 
   def unquoted_name() do
     StreamData.tuple(
@@ -41,6 +42,13 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
     table_name() |> Enum.take(1) |> hd
   end
 
+  def column_list do
+    StreamData.one_of([
+      StreamData.constant(nil),
+      StreamData.list_of(quoted_or_unquoted_name(), min_length: 1)
+    ])
+  end
+
   def enable(opts \\ []) do
     table_name =
       Keyword.get_lazy(opts, :table, &table/0)
@@ -57,5 +65,64 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
       ],
       whitespace()
     )
+  end
+
+  def using do
+    StreamData.one_of([
+      StreamData.constant(nil),
+      # TODO: think this needs to also have the column_name/column_name syntax
+      quoted_or_unquoted_name()
+    ])
+  end
+
+  def grant(opts \\ []) do
+    column_names = Keyword.get_lazy(opts, :columns, &column_list/0)
+    using = Keyword.get_lazy(opts, :using, &using/0)
+
+    # TODO: check clause CHECK (column = 'contstant', other_column = 3) etc
+    table_name =
+      Keyword.get_lazy(opts, :table, &table/0)
+  end
+
+  defmodule Assign do
+    import StreamData
+
+    def scope do
+      one_of([
+        constant(nil),
+        DDLX.unquoted_name()
+      ])
+    end
+
+    def role do
+      one_of([
+        DDLX.unquoted_name(),
+        tuple({DDLX.quoted_or_unquoted_name(), DDLX.quoted_or_unquoted_name()})
+        # |> map(fn {table, column} -> "#{quote_name(table)}.#{quote_name(column)}" end)
+      ])
+    end
+
+    def generator(opts \\ []) do
+      scope = Keyword.get_lazy(opts, :scope, &scope/0)
+      role = Keyword.get_lazy(opts, :role, &role/0)
+
+      stmt([
+        "ELECTRIC",
+        "ASSIGN",
+        quote_scope_role(scope, role)
+      ])
+    end
+
+    defp quote_scope(nil), do: "NULL"
+    defp quote_scope(r), do: quote_name(r)
+
+    defp quote_scope_role(scope_gen, role_gen) do
+      bind(scope_gen, fn scope ->
+        bind(role_gen, fn role ->
+          dbg(role)
+          constant("#{quote_scope(scope)}:#{quote_name(role)}")
+        end)
+      end)
+    end
   end
 end
