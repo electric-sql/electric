@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
-    "@electric-sql/debug-toolbar":  "0.1.0",
     "@electric-sql/prisma-generator": "latest",
     "@prisma/client": "4.8.1",
     "@types/node": ">=16.11.0",

@@ -11,11 +11,6 @@ import LeftMenu from './components/LeftMenu'
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
 
-// toolbar imports
-import { globalRegistry } from "electric-sql/satellite";
-import addToolbar, { typescriptApi } from '@electric-sql/debug-toolbar'
-import '@electric-sql/debug-toolbar/dist/index.cjs.css'
-
 interface MenuContextInterface {
   showMenu: boolean
   setShowMenu: (show: boolean) => void
@@ -48,9 +43,6 @@ const App = () => {
     const init = async () => {
       try {
         const client = await initElectric()
-
-        // Add the debug toolbar
-        addToolbar(typescriptApi(globalRegistry))
 
         setElectric(client)
 

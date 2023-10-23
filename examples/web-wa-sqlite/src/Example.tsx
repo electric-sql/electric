@@ -11,11 +11,6 @@ import { Electric, Items as Item, schema } from './generated/client'
 
 import './Example.css'
 
-// toolbar imports
-import { globalRegistry } from "electric-sql/satellite";
-import addToolbar, { typescriptApi } from '@electric-sql/debug-toolbar'
-import '@electric-sql/debug-toolbar/dist/index.cjs.css'
-
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const Example = () => {
@@ -38,9 +33,6 @@ export const Example = () => {
 
       const conn = await ElectricDatabase.init(scopedDbName, '')
       const electric = await electrify(conn, schema, config)
-
-      // Add the debug toolbar
-      addToolbar(typescriptApi(globalRegistry))
 
       if (!isMounted) {
         return
