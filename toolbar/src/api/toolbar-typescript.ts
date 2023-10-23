@@ -1,5 +1,5 @@
 import { ToolbarInterface } from './toolbar-interface'
-import { Row, Statement, ConnectivityState } from './types'
+import { Row, Statement, ConnectivityState } from 'electric-sql/dist/util'
 import { GlobalRegistry } from 'electric-sql/satellite'
 
 export class ToolbarTypescript implements ToolbarInterface {

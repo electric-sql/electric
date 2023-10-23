@@ -1,4 +1,4 @@
-import { Row, Statement } from './types'
+import { Row, Statement} from 'electric-sql/dist/util'
 
 export interface ToolbarInterface {
   getSatelliteNames(): string[]
