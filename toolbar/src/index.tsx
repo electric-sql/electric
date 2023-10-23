@@ -64,9 +64,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }
 }
 
-export function clientApi(
-  globalRegistry: GlobalRegistry,
-): ToolbarInterface {
+export function clientApi(globalRegistry: GlobalRegistry): ToolbarInterface {
   return new ToolbarTypescript(globalRegistry)
 }
 
