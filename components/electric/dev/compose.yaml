@@ -5,13 +5,14 @@ services:
   postgres:
     image: postgres:14-alpine
     environment:
-      POSTGRES_DB: electric
+      POSTGRES_DB: electric_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "54321:5432"
     volumes:
       - ./postgres.conf:/etc/postgresql.conf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     entrypoint:
       - docker-entrypoint.sh
       - -c
