@@ -35,7 +35,6 @@ function ElectricToolbar({ api }: ToolbarProps) {
 
   if (hidden) {
     return (
-      // <div id={'electric-toolbar'}>
       <div className="Toolbar Toolbar-hidden">
         <header className="Toolbar-header Toolbar-header-hidden">
           <img src={logo} className="Toolbar-logo" alt="logo" />
@@ -43,11 +42,9 @@ function ElectricToolbar({ api }: ToolbarProps) {
           <button onClick={handleClick}>SHOW</button>
         </header>
       </div>
-      // </div>
     )
   } else {
     return (
-      // <div id={'electric-toolbar'}>
       <div className="Toolbar">
         <header className="Toolbar-header">
           <img src={logo} className="Toolbar-logo" alt="logo" />
@@ -63,12 +60,11 @@ function ElectricToolbar({ api }: ToolbarProps) {
         </header>
         <ToolbarTabs dbName={dbName} api={api} />
       </div>
-      // </div>
     )
   }
 }
 
-export function typescriptApi(
+export function clientApi(
   globalRegistry: GlobalRegistry,
 ): ToolbarInterface {
   return new ToolbarTypescript(globalRegistry)
