@@ -172,7 +172,7 @@ await fs.writeFile(
   JSON
     .stringify(projectPackageJson, null, 2)
     .replace('http://localhost:5133', `http://localhost:${electricPort}`)
-    .replace('postgresql://prisma:password@localhost:65432/electric', `postgresql://prisma:password@localhost:${electricProxyPort}/electric`)
+    .replace('postgresql://prisma:proxy_password@localhost:65432/electric', `postgresql://prisma:proxy_password@localhost:${electricProxyPort}/electric`)
 )
 
 // Update the project's title in the index.html file
