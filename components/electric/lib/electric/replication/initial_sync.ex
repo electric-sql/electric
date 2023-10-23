@@ -102,7 +102,8 @@ defmodule Electric.Replication.InitialSync do
       origin = Connectors.origin(opts)
       {:ok, _, schema} = Extension.SchemaCache.load(origin)
 
-      :epgsql.with_transaction(
+      Client.with_transaction(
+        "ISOLATION LEVEL REPEATABLE READ READ ONLY",
         conn,
         fn conn ->
           # Do the magic write described in the function docs. It's important that this is
@@ -144,8 +145,7 @@ defmodule Electric.Replication.InitialSync do
             results ->
               send(parent, {:subscription_data, subscription_id, results})
           end
-        end,
-        begin_opts: "ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        end
       )
     end)
   end

@@ -1,6 +1,7 @@
 defmodule Electric.Extension.Case.Helpers do
   alias Electric.Postgres.Extension
 
+  alias Electric.Replication.Postgres.Client
   require ExUnit.Assertions
 
   @doc """
@@ -34,14 +35,10 @@ defmodule Electric.Extension.Case.Helpers do
 
   def tx(fun, cxt) do
     try do
-      :epgsql.with_transaction(
-        cxt.conn,
-        fn tx ->
-          fun.(tx)
-          raise RollbackError, message: "rollback"
-        end,
-        reraise: true
-      )
+      Client.with_transaction(cxt.conn, fn tx ->
+        fun.(tx)
+        raise RollbackError, message: "rollback"
+      end)
     rescue
       RollbackError -> :ok
     end

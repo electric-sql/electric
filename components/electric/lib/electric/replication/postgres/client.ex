@@ -53,6 +53,16 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @doc """
+  Wrapper for :epgsql.with_transaction/3 that always sets `reraise` to `true` by default and makes `begin_opts` a
+  standalone function argument for easier code reading.
+  """
+  def with_transaction(mode \\ "", conn, fun, in_opts \\ [])
+      when is_binary(mode) and is_list(in_opts) do
+    opts = Keyword.merge([reraise: true, begin_opts: mode], in_opts)
+    :epgsql.with_transaction(conn, fun, opts)
+  end
+
   def close(conn) do
     :epgsql.close(conn)
   end
