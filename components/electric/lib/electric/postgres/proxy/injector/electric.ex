@@ -214,9 +214,6 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
         {:ok, [stmt]} ->
           analysis = Parser.analyse(stmt, state)
 
-          # the query analysis sets a tx? flag if the statement should be run 
-          # within a transaction
-          # if Electric.requires_tx?(analysis) do
           case analysis do
             %{allowed?: false} = analysis ->
               {Electric.command_from_analysis([], analysis, state), {electric, state}}
@@ -247,31 +244,39 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
                 framework: framework
               }
 
-              {[Operation.Wait.new(msgs, state, signal), bind], {electric, state}}
+              {stack, state} = bind_execute(bind, msgs, state)
+
+              {[Operation.Wait.new(msgs, state, signal), stack], {electric, state}}
 
             analysis ->
               bind = %Operation.BindExecute{
                 ops: Electric.command_from_analysis([], analysis, state)
               }
 
+              {stack, state} = bind_execute(bind, msgs, state)
+
               {[
                  %Operation.AutoTx{
                    ops: [
                      Operation.Wait.new(msgs, state, signal),
-                     bind
+                     stack
                    ],
                    tx?: Electric.requires_tx?(analysis)
                  }
                ], {electric, state}}
           end
 
-        # else
-        #   {[Operation.Wait.new(msgs, state)], {electric, state}}
-        # end
-
         {:error, error} ->
           {[%Operation.SyntaxError{error: error, msg: msg}], {electric, state}}
       end
+    end
+
+    # handle message groups with the full [parse, [describe], bind, execute] sequence included in 
+    # a single packet (as opposed to a [parse, describe, {sync, flush}], [bind, execute, sync]
+    # sequence which is split over two packets, with a sync/flush between)
+    defp bind_execute(bind, msgs, state) do
+      {_parse_msgs, bind_msgs} = Enum.split_while(msgs, &(!is_struct(&1, M.Bind)))
+      Operation.recv_client(bind, bind_msgs, state)
     end
   end
 end

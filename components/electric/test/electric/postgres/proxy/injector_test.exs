@@ -623,23 +623,120 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(complete_ready("BEGIN", :tx))
       |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
-      |> client(%M.Parse{query: version_query})
-      |> client([
-        %M.Bind{
-          parameter_format_codes: [0, 0, 0, 0, 0, 0],
-          parameters: [
-            "99",
-            "99-something.sql",
-            "ALTER TABLE public.socks ENABLE ELECTRIC;",
-            "2023-10-06T11:43:15.699+01:00",
-            nil,
-            "false"
-          ]
-        },
-        M.Describe,
-        M.Execute,
-        M.Sync
-      ])
+      |> client(%M.Parse{query: version_query}, server: [])
+      |> client(
+        [
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ],
+        server: [
+          %M.Parse{query: version_query},
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ]
+      )
+      |> server(
+        [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ],
+        client: [],
+        server: [capture_version_query("99", 4)]
+      )
+      |> server(capture_version_complete(),
+        client: [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ]
+      )
+      |> client(query("COMMIT"))
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
+
+    test "@databases version capture split packet", cxt do
+      # same as v1 above but the sync message has been split from the parse, bind etc
+      alias Electric.DDLX
+
+      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE public.socks ENABLE ELECTRIC;")
+      [electric] = DDLX.Command.pg_sql(command)
+
+      version_query =
+        "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
+
+      cxt.injector
+      |> client(query("BEGIN"))
+      |> server(complete_ready("BEGIN", :tx))
+      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
+      |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
+      |> client(%M.Parse{query: version_query}, server: [])
+      |> client(
+        [
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute
+        ],
+        server: []
+      )
+      |> client([M.Sync],
+        server: [
+          %M.Parse{query: version_query},
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ]
+      )
       |> server(
         [
           M.ParseComplete,
