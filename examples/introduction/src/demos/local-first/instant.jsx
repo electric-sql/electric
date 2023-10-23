@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 import { useLiveQuery } from 'electric-sql/react'
-import { genUUID } from 'electric-sql/util'
+import { uuid } from 'electric-sql/util'
 
 import api from '../../api'
 import { App, CloudApp, LatencyWidget } from '../../components'
@@ -11,7 +11,7 @@ import { timeResolution } from '../../util'
 
 const newItem = (demo) => {
   return {
-    id: genUUID(),
+    id: uuid(),
     inserted_at: `${Date.now()}`,
     demo_id: demo.id,
     demo_name: demo.name,

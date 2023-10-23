@@ -156,8 +156,6 @@ const item = await db.items.create({
 Writes automatically cause any relevant live queries to update. For example, if you take the following component:
 
 ```tsx
-import { genUUID } from 'electric-sql/util'
-
 const MyComponent = () => {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
@@ -167,7 +165,7 @@ const MyComponent = () => {
   const add = async () => (
     await db.items.create({
       data: {
-        value: genUUID()
+        value: uuid()
       }
     })
   )

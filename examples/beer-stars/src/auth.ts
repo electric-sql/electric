@@ -1,7 +1,7 @@
 import { insecureAuthToken } from 'electric-sql/auth'
-import { genUUID } from 'electric-sql/util'
+import { uuid } from 'electric-sql/util'
 
-const dummyUserId = genUUID()
+const dummyUserId = uuid()
 
 export const authToken = () => {
   const claims = {

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 
 import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
-import { genUUID, uniqueTabId } from 'electric-sql/util'
+import { uuid, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 
 import { authToken } from './auth'
@@ -80,7 +80,7 @@ const ExampleComponent = () => {
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: genUUID(),
+        value: uuid(),
       }
     })
   }

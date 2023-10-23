@@ -6,7 +6,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { TouchBackend } from 'react-dnd-touch-backend'
 
 import { useLiveQuery } from 'electric-sql/react'
-import { QualifiedTablename, genUUID } from 'electric-sql/util'
+import { QualifiedTablename, uuid } from 'electric-sql/util'
 
 import { App, ConnectivityControl, PlayersWidget, TournamentWidget } from '../../components'
 import { useElectric } from '../../electric'
@@ -20,7 +20,7 @@ const newTournament = (name, demo) => {
   const ts = `${Date.now()}`
 
   return {
-    id: genUUID(),
+    id: uuid(),
     name: name,
     demo_id: demo.id,
     demo_name: demo.name,

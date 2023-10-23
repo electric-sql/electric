@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react'
 
-import { genUUID, sleepAsync } from 'electric-sql/util'
+import { uuid, sleepAsync } from 'electric-sql/util'
 
 import api from './api'
 import cache from './cache'
@@ -53,7 +53,7 @@ export const getCachedSessionId = () => {
 }
 
 export const ensureSessionId = () => {
-  getOrCreateSessionId(genUUID())
+  getOrCreateSessionId(uuid())
 
   return
 }
@@ -97,7 +97,7 @@ export const getOrCreateDemo = async (db: DB, sessionId: string, name: string, b
   else {
     demo = await db.demos.create({
       data: {
-        id: genUUID(),
+        id: uuid(),
         name: name,
         inserted_at: ts,
         updated_at: ts,
@@ -111,7 +111,7 @@ export const getOrCreateDemo = async (db: DB, sessionId: string, name: string, b
 
       for (let i = 0; i < bootstrapItems; i++) {
         items.push({
-          id: genUUID(),
+          id: uuid(),
           inserted_at: `${t1 + i}`,
           demo_id: demo.id,
           demo_name: demo.name,
@@ -181,7 +181,7 @@ export const boostrapSlider = async (db: DB, demo: Demo) => {
 
   const newSlider = await db.sliders.create({
     data: {
-      id: genUUID(),
+      id: uuid(),
       demo_id: demo.id,
       demo_name: demo.name,
       electric_user_id: demo.electric_user_id,
@@ -209,7 +209,7 @@ export const boostrapPlayers = async (db: DB, demo: Demo, colors: string[]) => {
 
   const t1 = Date.now()
   const newItems = colors.map((color, index) => ({
-    id: genUUID(),
+    id: uuid(),
     color: color,
     inserted_at: `${t1 + index}`,
     updated_at: `${t1 + index}`,
@@ -242,7 +242,7 @@ export const boostrapTournament = async (db: DB, demo: Demo, name: string) => {
   const ts = `${Date.now()}`
   await db.tournaments.create({
     data: {
-      id: genUUID(),
+      id: uuid(),
       name: name,
       inserted_at: ts,
       updated_at: ts,

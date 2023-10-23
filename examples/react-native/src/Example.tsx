@@ -5,7 +5,7 @@ import SQLite from 'react-native-sqlite-storage'
 
 import { electrify } from 'electric-sql/react-native'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
-import { genUUID } from 'electric-sql/util'
+import { uuid } from 'electric-sql/util'
 
 import { authToken } from './auth'
 import { DEBUG_MODE, ELECTRIC_URL } from './config'
@@ -85,7 +85,7 @@ const ExampleComponent = () => {
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: genUUID(),
+        value: uuid(),
       }
     })
   }

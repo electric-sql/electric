@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import React, { useState } from 'react'
 
 import { useLiveQuery } from 'electric-sql/react'
-import { genUUID } from 'electric-sql/util'
+import { uuid } from 'electric-sql/util'
 
 import { App, ItemsWidget, SliderInput } from '../../components'
 import { useElectric } from '../../electric'
@@ -10,7 +10,7 @@ import { boostrapSlider, useDemoContext } from '../../session'
 
 const newItem = (demo) => {
   return {
-    id: genUUID(),
+    id: uuid(),
     inserted_at: `${Date.now()}`,
     demo_id: demo.id,
     demo_name: demo.name,

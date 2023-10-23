@@ -1,6 +1,6 @@
 import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext } from 'electric-sql/react'
-import { uniqueTabId, genUUID } from 'electric-sql/util'
+import { uniqueTabId, uuid } from 'electric-sql/util'
 import { insecureAuthToken } from 'electric-sql/auth'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { Electric, schema } from './generated/client'
@@ -36,7 +36,7 @@ export const initElectric = async () => {
 
   const config = {
     auth: {
-      token: insecureAuthToken({ user_id: genUUID() }),
+      token: insecureAuthToken({ user_id: uuid() }),
     },
     url: electricUrl,
     debug: DEBUG,
