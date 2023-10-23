@@ -87,13 +87,13 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161418_ProxyC
       """,
       # functions that are being re-defined as procedures:
       """
-      DROP FUNCTION IF EXISTS capture_ddl;
+      DROP FUNCTION IF EXISTS #{schema}.capture_ddl;
       """,
       """
-      DROP FUNCTION IF EXISTS create_active_migration;
+      DROP FUNCTION IF EXISTS #{schema}.create_active_migration;
       """,
       """
-      DROP FUNCTION IF EXISTS migration_version;
+      DROP FUNCTION IF EXISTS #{schema}.migration_version;
       """,
       # we don't track indexes within pg anymore
       """
