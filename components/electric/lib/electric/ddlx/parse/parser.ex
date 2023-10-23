@@ -154,7 +154,7 @@ defmodule Electric.DDLX.Parse.Parser do
     parser = parser_for_statement(statement)
 
     if parser do
-      tokens = get_tokens(statement, parser.token_regex())
+      tokens = get_tokens(statement, parser.token_regex()) |> dbg
 
       results =
         Enum.reduce_while(
@@ -188,7 +188,8 @@ defmodule Electric.DDLX.Parse.Parser do
   def get_tokens(input, regex) do
     with_rockets = add_rockets(input)
     names = Regex.names(regex)
-    captures = Regex.scan(regex, with_rockets, capture: :all_names)
+    dbg(regex)
+    captures = Regex.scan(regex, with_rockets, capture: :all_names) |> dbg
 
     for capture <- captures do
       index = Enum.find_index(capture, fn x -> x != "" end)
@@ -240,6 +241,10 @@ defmodule Electric.DDLX.Parse.Parser do
   defguardp is_alpha(char) when char in ?A..?Z or char in ?a..?z
 
   @whitespace [?\s, ?\n, ?\r, ?\n, ?\t]
+
+  defp token_out(%{acc: []} = _state) do
+    []
+  end
 
   defp token_out(state) do
     [{IO.iodata_to_binary(state.acc), state.k}]
@@ -297,10 +302,6 @@ defmodule Electric.DDLX.Parse.Parser do
     {token_out(state), {rest, %{token_start(%{state | acc: []}) | p: state.p + 1}}}
   end
 
-  defp token_next(<<";", rest::binary>>, %{acc: []} = state) do
-    {[], {:halt, %{state | p: state.p + 1}}}
-  end
-
   defp token_next(<<";", rest::binary>>, %{acc: acc} = state) do
     {token_out(state), {:halt, %{state | p: state.p + 1, acc: []}}}
   end
@@ -319,6 +320,7 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<c::utf8, rest::binary>>, %{acc: acc} = state) do
-    {token_out(%{state | acc: [acc, <<c::utf8>>]}), {rest, %{state | p: state.p + 1, acc: []}}}
+    {token_out(%{state | acc: acc}) ++ [{<<c::utf8>>, state.p}],
+     {rest, %{state | p: state.p + 1, acc: []}}}
   end
 end

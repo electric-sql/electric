@@ -29,6 +29,12 @@ defmodule DDLXParserTest do
     end
   end
 
+  test "temp" do
+    Parser.tokens("hello from \"old man\" with dog ( fish, toad, cow ) in his 'house';")
+    |> Enum.to_list()
+    |> dbg
+  end
+
   defp normalise({{_, _} = schema, {_, _} = table}, _default_schema) do
     {normalise_case(schema), normalise_case(table)}
   end
@@ -334,7 +340,7 @@ defmodule DDLXParserTest do
   describe "Can do assign" do
     test "parse assign global named role role" do
       sql = "ELECTRIC ASSIGN 'admin' TO admin_users.user_id;"
-      {:ok, result} = Parser.parse(sql)
+      {:ok, result} = Parser.old_parse(sql)
 
       assert result == [
                %Assign{
@@ -349,7 +355,7 @@ defmodule DDLXParserTest do
              ]
 
       sql = "ELECTRIC ASSIGN (NULL, 'admin') TO admin_users.user_id;"
-      {:ok, result} = Parser.parse(sql)
+      {:ok, result} = Parser.old_parse(sql)
 
       assert result == [
                %Assign{
