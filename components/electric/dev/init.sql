@@ -1,0 +1,1 @@
+CREATE ROLE min_privilege REPLICATION LOGIN PASSWORD 'password';

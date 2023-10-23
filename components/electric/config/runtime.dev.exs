@@ -16,8 +16,8 @@ config :electric, Electric.Replication.Connectors,
     connection: [
       host: ~c"localhost",
       port: 54321,
-      database: ~c"electric",
-      username: ~c"postgres",
+      database: ~c"electric_dev",
+      username: ~c"min_privilege",
       password: ~c"password",
       replication: ~c"database",
       ssl: false
