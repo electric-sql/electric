@@ -8,7 +8,7 @@
     [local sql=
         """
         CREATE TABLE public.bools (
-            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id TEXT PRIMARY KEY,
             b BOOLEAN
         );
         CALL electric.electrify('public.bools');

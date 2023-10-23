@@ -14,7 +14,9 @@ defmodule Electric.Replication.Postgres.Client do
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(%{} = config) do
-    :epgsql.connect(config)
+    config
+    |> Electric.Utils.epgsql_config()
+    |> :epgsql.connect()
   end
 
   @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
@@ -32,7 +34,7 @@ defmodule Electric.Replication.Postgres.Client do
 
     {:ok, conn} = :epgsql_sock.start_link()
 
-    case :epgsql.connect(conn, host, username, password, config) do
+    case :epgsql.connect(conn, host, username, password, Electric.Utils.epgsql_config(config)) do
       {:ok, ^conn} ->
         try do
           fun.(conn)
@@ -233,7 +235,7 @@ defmodule Electric.Replication.Postgres.Client do
           "Unable to retrieve oid for #{inspect([rel_type, schema, table])}: #{inspect(error)}"
         )
 
-        {:error, :relation_missing}
+        {:error, {:relation_missing, rel_type, schema, table}}
     end
   end
 

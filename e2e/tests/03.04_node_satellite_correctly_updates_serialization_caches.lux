@@ -11,7 +11,7 @@
 [global migration_version_2=20230505100008]
 [global migration_version_3=20230622101323]
 
-[shell pg_1]
+[shell proxy_1]
     [invoke migrate_items_table 20230504114018]
     !\d electric.shadow__public__items
     !\d items
@@ -40,12 +40,14 @@
 [shell satellite_2]
     [invoke node_await_get "00000000-0000-0000-0000-000000000000"]
 
-[shell pg_1]
+[shell proxy_1]
     # Migrate to a second version
     [invoke migrate_pg $migration_version_2 "ALTER TABLE public.items ADD COLUMN increment text;"]
+
+[shell pg_1]
     # And insert data which affect the new column
     [invoke log "Insert data into new column"]
-    !INSERT INTO public.items (content, increment) VALUES ('${migration_version_2}/content', '${migration_version_2}/increment');
+    !INSERT INTO public.items (id, content, increment) VALUES ('00000000-0000-0000-0000-000000000001', '${migration_version_2}/content', '${migration_version_2}/increment');
     ?$psql
 
 [invoke log "Verify that pg insert has reached both Satellites"]
@@ -59,7 +61,7 @@
     [invoke node_await_column_value items content '${migration_version_2}/content']
     [invoke node_await_column_value items increment '${migration_version_2}/increment']
 
-[shell pg_1]
+[shell proxy_1]
     # Migrate to a third version
     [invoke migrate_pg $migration_version_3 "ALTER TABLE public.items ADD COLUMN another text;"]
 

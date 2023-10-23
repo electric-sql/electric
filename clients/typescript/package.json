@@ -223,7 +223,7 @@
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
-    "@capacitor-community/sqlite": ">= 5.2.3",
+    "@capacitor-community/sqlite": ">= 5.4.1",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 10.0.0",
     "react": ">= 16.8.0",

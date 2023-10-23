@@ -6,7 +6,7 @@
 
 [invoke setup_client 1 "electric_1" 5133]
 
-[shell pg_1]
+[shell proxy_1]
   [invoke migrate_items_table 20230504114018]
 
 [shell satellite_1]

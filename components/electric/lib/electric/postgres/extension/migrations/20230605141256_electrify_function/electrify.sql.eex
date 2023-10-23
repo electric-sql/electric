@@ -30,6 +30,31 @@ $function$ LANGUAGE PLPGSQL;
 
 -------------------------------------------------
 
+CREATE OR REPLACE FUNCTION <%= schema %>.create_active_migration(
+    _txid xid8;
+    _txts timestamptz,
+    _version text,
+    _query text DEFAULT NULL
+) RETURNS int8 AS
+$function$
+DECLARE
+    trid int8;
+BEGIN
+    IF _query IS NULL THEN
+        _query := current_query();
+    END IF;
+    RAISE NOTICE 'capture migration: % => %', _version, _query;
+    INSERT INTO "<%= schema %>"."ddl_commands" (txid, txts, version, query) VALUES
+          (_txid, _txts, _version, _query)
+        ON CONFLICT ON CONSTRAINT ddl_table_unique_migrations DO NOTHING
+        RETURNING id INTO trid;
+    RETURN trid;
+END;
+$function$
+LANGUAGE PLPGSQL;
+
+-------------------------------------------------
+
 CREATE OR REPLACE FUNCTION <%= schema %>.capture_ddl(query text DEFAULT NULL) RETURNS int8 AS $function$
 DECLARE
     _txid xid8;

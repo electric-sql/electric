@@ -15,8 +15,8 @@ importers:
   clients/typescript:
     dependencies:
       '@capacitor-community/sqlite':
-        specifier: '>= 5.2.3'
-        version: 5.2.5(@capacitor/core@5.4.2)
+        specifier: '>= 5.4.1'
+        version: 5.4.1(@capacitor/core@5.4.2)
       '@tauri-apps/api':
         specifier: ^1.4.0
         version: 1.4.0
@@ -1945,8 +1945,8 @@ packages:
       '@babel/helper-validator-identifier': 7.19.1
       to-fast-properties: 2.0.0
 
-  /@capacitor-community/sqlite@5.2.5(@capacitor/core@5.4.2):
-    resolution: {integrity: sha512-WyLBmI1zxoiGnd+oBTBdEe1A+o/gEhcvVx9qNVpmdPXqcGxguNRfdlVqVe67e2n7E5NI+9iyueU2yJneTFtSig==}
+  /@capacitor-community/sqlite@5.4.1(@capacitor/core@5.4.2):
+    resolution: {integrity: sha512-N2OKk4ja8tpcN6YJZ7JwRGLlZRpZi+zi7Plve/dRennIk7GXok13NlbHRlthwS+mmC8/SAHlQ0ZW2UGoEisgww==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
       '@capacitor/core': ^5.0.0

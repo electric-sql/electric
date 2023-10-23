@@ -3,7 +3,7 @@
 [include _shared.luxinc]
 
 [invoke setup]
-[invoke electrify_table pg_1 entries ]
+[invoke electrify_table entries ]
 
 [global user_id_1=1]
 [newshell user_1_ws1]

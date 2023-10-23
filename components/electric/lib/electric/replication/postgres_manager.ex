@@ -29,7 +29,11 @@ defmodule Electric.Replication.PostgresConnectorMng do
               publication: String.t(),
               slot: String.t(),
               subscription: String.t(),
-              electric_connection: %{host: String.t(), port: pos_integer, dbname: String.t()}
+              electric_connection: %{
+                host: String.t(),
+                port: :inet.port_number(),
+                dbname: String.t()
+              }
             },
             state: :init | :subscribe | :ready,
             pg_connector_sup_monitor: reference | nil
@@ -130,9 +134,11 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:DOWN, ref, :process, pid, reason},
         %State{pg_connector_sup_monitor: ref} = state
       ) do
-    Logger.warning(
-      "PostgresConnectorSup #{inspect(pid)} has exited with reason: #{inspect(reason)}"
-    )
+    if reason not in [:normal, :shutdown] do
+      Logger.warning(
+        "PostgresConnectorSup #{inspect(pid)} has exited with reason: #{inspect(reason)}"
+      )
+    end
 
     {:noreply, schedule_retry(:init, reset_state(state))}
   end
@@ -144,11 +150,16 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   # -----------------------------------------------------------------------------
 
-  defp schedule_retry(msg, %State{backoff: {backoff, _}} = state) do
-    {time, backoff} = :backoff.fail(backoff)
-    tref = :erlang.start_timer(time, self(), msg)
-    Logger.info("schedule retry: #{inspect(time)}")
-    %State{state | backoff: {backoff, tref}}
+  if Mix.env() == :test do
+    # When running unit tests, PostgresConnectorSup is started on demand and does not need to be monitored for restarts.
+    defp schedule_retry(_, state), do: state
+  else
+    defp schedule_retry(msg, %State{backoff: {backoff, _}} = state) do
+      {time, backoff} = :backoff.fail(backoff)
+      tref = :erlang.start_timer(time, self(), msg)
+      Logger.info("schedule retry: #{inspect(time)}")
+      %State{state | backoff: {backoff, tref}}
+    end
   end
 
   defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do

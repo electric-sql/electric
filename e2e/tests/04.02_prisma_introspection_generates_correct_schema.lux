@@ -1,0 +1,135 @@
+[doc Prisma introspection via proxy returns valid schema]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20230504114018]
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+      CREATE TABLE public.with_constraint (
+        id text PRIMARY KEY,
+        value TEXT NOT NULL,
+        limited int4 CONSTRAINT limited_check CHECK (limited < 100)
+      );
+
+      CREATE INDEX with_constraint_idx ON public.with_constraint (value);
+
+      ALTER TABLE public.with_constraint ENABLE ELECTRIC;
+    COMMIT;
+    """
+    ?$psql
+
+[global migration_version_2=20230608134524]
+[shell proxy_1]
+    [invoke log "run migration $migration_version_2 on postgres"]
+    """!
+    BEGIN;
+        CALL electric.migration_version('$migration_version_2');
+
+        CREATE TABLE public.checked (
+            id text PRIMARY KEY,
+            value TEXT NOT NULL,
+            count int4 CONSTRAINT count_check CHECK ((count < 100) AND (count > 10)),
+            number int4,
+            CONSTRAINT combined CHECK (number + count < 200)
+        );
+
+        CREATE SCHEMA IF NOT EXISTS other;
+
+        CREATE TABLE other.with_constraint (id text PRIMARY KEY, value TEXT NOT NULL, limited int4 CHECK (limited < 100));
+
+        CREATE TABLE public.interesting (
+            id uuid PRIMARY KEY,
+            value varchar(255) DEFAULT 'something',
+            iii int8[][3] NOT NULL,
+            big int8, 
+            small int2, 
+            nn numeric(12, 6),
+            ts timestamptz DEFAULT now(),
+            updated timestamptz(3)
+        );
+
+        CREATE UNIQUE INDEX interesting_idx ON public.interesting USING btree (value DESC NULLS LAST, ts);
+
+        CREATE TABLE public.pointy (
+            id text PRIMARY KEY,
+            checked_id text NOT NULL REFERENCES public.checked (id)
+        );
+
+        CREATE UNIQUE INDEX checked_fk_idx ON public.checked (id, value);
+
+        CREATE TABLE public.pointy2 (
+            id text PRIMARY KEY,
+            checked_id text NOT NULL,
+            checked_value text NOT NULL,
+            amount smallint,
+            code smallint,
+            FOREIGN KEY (checked_id, checked_value) REFERENCES public.checked (id, value),
+            UNIQUE (amount, code)
+        );
+
+        ALTER TABLE public.checked ENABLE ELECTRIC;
+        ALTER TABLE public.pointy ENABLE ELECTRIC;
+        ALTER TABLE public.pointy2 ENABLE ELECTRIC;
+        -- TODO: reenable electrifying this table once we have support for more types
+        -- ALTER TABLE public.interesting ENABLE ELECTRIC;
+    COMMIT;
+    """
+    ?$psql
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+    ?? [info] Applying migration $migration_version_2
+
+
+[newshell developer]
+    !docker ps
+    ?SH-PROMPT:
+    !mkdir -p ../prisma_example/prisma/
+    ?SH-PROMPT:
+    !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
+    ?SH-PROMPT:
+    !make docker-prisma ARGS='prisma_example_1 prisma db pull'
+    ?SH-PROMPT:
+
+    # this exact comparison is too fussy
+    #!cmp ../prisma_example/prisma/schema.prisma ../prisma_example/expected-schema.prisma || echo "error: schema files differ"
+    #-error:
+
+    # so instead just check for key features
+    !cat ../prisma_example/prisma/schema.prisma
+
+    ?model checked
+    ?^ +id +String +@id
+    ?^ +pointy +pointy\[\]
+    ?^ +pointy2 +pointy2\[\]
+    ?^ +@@unique\(\[id, value\], map: "checked_fk_idx"\)
+
+    ?model pointy
+    ?^ +id +String +@id
+    ?^ +checked_id +String
+    ?^ +checked +checked +@relation\(fields: \[checked_id\], references: \[id\], onDelete: NoAction, onUpdate: NoAction\)
+
+    ?model pointy2
+    ?^ +id +String +@id
+    ?^ +checked_id +String
+    ?^ +checked_value +String
+    ?^ +amount +Int\? +@db\.SmallInt
+    ?^ +code +Int\? +@db\.SmallInt
+    ?^ +checked +checked +@relation\(fields: \[checked_id, checked_value\], references: \[id, value\], onDelete: NoAction, onUpdate: NoAction\)
+    ?^ +@@unique\(\[amount, code\]\)
+
+    ?model with_constraint
+    ?^ +id +String +@id
+    ?^ +value +String
+    ?^ +limited +Int\?
+    ?^ +@@index\(\[value\], map: "with_constraint_idx"\)
+
+    ?SH-PROMPT:
+
+[cleanup]
+    [invoke teardown]

@@ -9,7 +9,9 @@ defmodule Electric.Application do
   def start(_type, _args) do
     children = [
       Electric.Telemetry,
+      Electric.Features,
       Electric.Postgres.OidDatabase,
+      Electric.Postgres.Proxy.SASL.SCRAMLockedCache,
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
       Electric.Replication.Connectors,

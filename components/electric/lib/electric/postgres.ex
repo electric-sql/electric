@@ -38,16 +38,19 @@ defmodule Electric.Postgres do
 
   # these are pg column types
   @int_types ["smallint", "int2", "integer", "int", "int4", "bigint", "int8"]
-  @float_types [
+  @arbitrary_precision_types [
     "decimal",
-    "numeric",
-    "real",
-    "float",
-    "float4",
-    "double precision",
-    "float8",
-    "money"
+    "numeric"
   ]
+  @float_types @arbitrary_precision_types ++
+                 [
+                   "real",
+                   "float",
+                   "float4",
+                   "double precision",
+                   "float8",
+                   "money"
+                 ]
   @text_types ["character varying", "varchar", "character", "char", "text", "bpchar"]
   @binary_types ["bytea"]
   @date_types ["date"]
@@ -67,6 +70,7 @@ defmodule Electric.Postgres do
   # which we can just ignore probably
 
   def integer_types, do: @int_types
+  def arbitrary_precision_types, do: @arbitrary_precision_types
   def float_types, do: @float_types
   def text_types, do: @text_types
   def binary_types, do: @binary_types
@@ -75,4 +79,18 @@ defmodule Electric.Postgres do
   def json_types, do: @json_types
   def bool_types, do: @bool_types
   def uuid_types, do: @uuid_types
+
+  def supported_types do
+    ~w[
+      bool
+      date
+      float8
+      int2 int4
+      text
+      time
+      timestamp timestamptz
+      uuid
+      varchar
+    ]a
+  end
 end

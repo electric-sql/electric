@@ -6,6 +6,9 @@ services:
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: integration-tests-signing-key-example
       ELECTRIC_TELEMETRY: disabled
+      PG_PROXY_PASSWORD:
+      PG_PROXY_PORT:
+      ELECTRIC_FEATURES:
     init: true
     privileged: true
 

@@ -1,0 +1,4 @@
+CREATE OR REPLACE FUNCTION <%= @schema %>.__pg_version() RETURNS integer SECURITY DEFINER AS $function$
+    SELECT setting::int FROM pg_settings WHERE name = 'server_version_num'
+$function$ LANGUAGE SQL;
+

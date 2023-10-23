@@ -3,7 +3,7 @@
 [include _satellite_macros.luxinc]
 
 [invoke setup]
-[invoke electrify_table pg_1 entries]
+[invoke electrify_table entries]
 
 [invoke setup_client 1 "electric_1" 5133]
 

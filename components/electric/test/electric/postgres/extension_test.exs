@@ -456,11 +456,11 @@ defmodule Electric.Postgres.ExtensionTest do
                  id UUID PRIMARY KEY,
                  c1 CHARACTER,
                  c2 CHARACTER(11),
-                 c3 VARCHAR(11),
+                 "C3" VARCHAR(11),
                  num8a INT8,
                  num8b BIGINT,
                  real4a FLOAT4,
-                 real4b REAL,
+                 "Real4b" REAL,
                  created_at TIMETZ
                );
                CALL electric.electrify('public.t1');
@@ -469,19 +469,19 @@ defmodule Electric.Postgres.ExtensionTest do
       assert error_msg ==
                """
                Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
-                 "c1" character(1)
-                 "c2" character(11)
-                 "c3" character varying(11)
-                 "num8a" bigint
-                 "num8b" bigint
-                 "real4a" real
-                 "real4b" real
-                 "created_at" time with time zone
+                 c1 character(1)
+                 c2 character(11)
+                 "C3" character varying(11)
+                 num8a bigint
+                 num8b bigint
+                 real4a real
+                 "Real4b" real
+                 created_at time with time zone
                """
                |> String.trim()
     end
 
-    test_tx "electrified?/2", fn conn ->
+    test_tx "electrified?/3", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -490,11 +490,36 @@ defmodule Electric.Postgres.ExtensionTest do
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
       end
 
-      assert Extension.electrified?(conn, "buttercup")
-      assert Extension.electrified?(conn, "public", "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "buttercup")
+      assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
 
-      refute Extension.electrified?(conn, "daisy")
-      refute Extension.electrified?(conn, "public", "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "daisy")
+      assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
+    end
+
+    test_tx "table electrification rejects default column expressions", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (
+                 id UUID PRIMARY KEY,
+                 t1 TEXT DEFAULT '',
+                 num INTEGER NOT NULL,
+                 "Ts" TIMESTAMP DEFAULT now(),
+                 name VARCHAR
+               );
+               CALL electric.electrify('public.t1');
+               """)
+
+      assert error_msg ==
+               """
+               Cannot electrify "public.t1" because some of its columns have DEFAULT expression which is not currently supported by Electric:
+                 t1
+                 "Ts"
+               """
+               |> String.trim()
     end
   end
 

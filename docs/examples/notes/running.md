@@ -3,7 +3,7 @@ title: Running the examples
 description: Notes on how to run the ElectricSQL examples.
 ---
 
-Source code for the example applications is in [electric-sql/examples](https://github.com/electric-sql/examples). Each application has a `README.md` that you can follow, with the primary steps as follows:
+Source code for the example applications is in [electric-sql/electric/examples](https://github.com/electric-sql/electric/tree/main/examples). Each application has a `README.md` that you can follow, with the primary steps as follows:
 
 Install dependencies:
 

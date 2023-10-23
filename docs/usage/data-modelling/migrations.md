@@ -37,6 +37,10 @@ ELECTRIC GRANT SELECT
 See the [Limitations](#limitations) section below and the [Roadmap](../../reference/roadmap.md) page for more context.
 :::
 
+## Migration Proxy
+
+TODO
+
 ## Creating a data model
 
 If you have your own Postgres-backed application, use the data model from that and continue using whatever method you're currently using to define the database schema.

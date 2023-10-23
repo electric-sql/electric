@@ -27,6 +27,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
           :error ->
             conn_config
             |> Connectors.get_connection_opts(replication: false)
+            |> Electric.Utils.epgsql_config()
             |> :epgsql.connect()
         end
 
@@ -195,6 +196,27 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       Enum.reduce(Extension.replicated_table_ddls(), Schema.new(), fn ddl, schema ->
         Schema.update(schema, ddl, oid_loader: oid_loader)
       end)
+    end)
+  end
+
+  @impl true
+  def table_electrified?(pool, {schema, name}) do
+    checkout!(pool, fn conn ->
+      Extension.electrified?(conn, schema, name)
+    end)
+  end
+
+  @impl true
+  def index_electrified?(pool, {schema, name}) do
+    checkout!(pool, fn conn ->
+      Extension.index_electrified?(conn, schema, name)
+    end)
+  end
+
+  @impl true
+  def tx_version(pool, row) do
+    checkout!(pool, fn conn ->
+      Extension.tx_version(conn, row)
     end)
   end
 end

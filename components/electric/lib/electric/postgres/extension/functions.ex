@@ -34,12 +34,6 @@ defmodule Electric.Postgres.Extension.Functions do
 
   @function_names function_names
 
-  # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT
-  # pg_current_xact_id() -> xid8
-  # The internal transaction ID type .. xid8 ... [id] a 64-bit type xid8 that
-  # does not wrap around during the life of an installation
-  @txid_type "xid8"
-
   @doc """
   Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).
 
@@ -70,7 +64,11 @@ defmodule Electric.Postgres.Extension.Functions do
     %{
       schema: Extension.schema(),
       ddl_table: Extension.ddl_table(),
-      txid_type: @txid_type
+      txid_type: Extension.txid_type(),
+      txts_type: Extension.txts_type(),
+      version_table: Extension.version_table(),
+      electrified_tracking_table: Extension.electrified_tracking_table(),
+      publication_name: Extension.publication_name()
     }
   end
 end

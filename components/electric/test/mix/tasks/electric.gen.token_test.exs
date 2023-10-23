@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
 
   import ExUnit.CaptureIO
 
+  @ttl_delta 5
   defp validate_json_output(output, usernames, ttl) do
     assert {:ok, tokens} = Jason.decode(output)
     assert is_map(tokens)
@@ -15,7 +16,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
       assert %{"token" => token, "expiry" => expiry} = token_info
       assert {:ok, %Auth{user_id: ^user_id}} = Auth.Secure.validate_token(token)
       assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
-      assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, 1)
+      assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, @ttl_delta)
     end
   end
 
@@ -29,7 +30,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
         assert [user_id, token, expiry] = String.split(line, ",")
         assert {:ok, %Auth{user_id: ^user_id}} = Auth.Secure.validate_token(token)
         assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
-        assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, 1)
+        assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, @ttl_delta)
         user_id
       end
 

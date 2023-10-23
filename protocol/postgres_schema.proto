@@ -92,6 +92,8 @@ message Constraint {
 
   message Default { Expression expr = 1; }
 
+  message Identity { }
+
   oneof constraint {
     NotNull not_null = 1;
     PrimaryKey primary = 2;
@@ -100,6 +102,7 @@ message Constraint {
     Check check = 5;
     Generated generated = 6;
     Default default = 7;
+    Identity identity = 8;
   }
 }
 
