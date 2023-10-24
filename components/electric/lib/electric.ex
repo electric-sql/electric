@@ -99,4 +99,14 @@ defmodule Electric do
   def vsn do
     @current_vsn
   end
+
+  def streaming_write_mode? do
+    write_mode() == :streaming
+  end
+
+  def immediate_write_mode? do
+    write_mode() == :immediate
+  end
+
+  def write_mode, do: Application.fetch_env!(:electric, :write_mode)
 end

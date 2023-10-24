@@ -86,8 +86,8 @@ The Electric application is configured using environment variables. Everything t
 | `DATABASE_USE_IPV6`      | `false`    | Set to `yes` or `true` if your database is only accessible over IPv6. This is the case with Fly Postgres, for example.                                                                                                                                                                                                                                                                        |
 |                          |            |                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ELECTRIC_USE_IPV6`      | `false`    | Set to `yes` or `true` to make Electric listen on `::` instead of `0.0.0.0`. On Linux this allows inbound connections over both IPv6 and IPv4. On Windows and some BSD systems inbound connections will only be accepted over IPv6 when this setting is enabled.                                                                                                                              |
-| `LOGICAL_PUBLISHER_HOST` |            | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`.                                                                                                                                                                                                                                |
-| `LOGICAL_PUBLISHER_PORT` | `5433`     | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                                                                                     |
+| `LOGICAL_PUBLISHER_HOST` |            | <p>Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`.</p><p>(unused when `ELECTRIC_WRITE_MODE=immediate`)</p>                                                                                                                                                                     |
+| `LOGICAL_PUBLISHER_PORT` | `5433`     | <p>Port number to use for reverse connections from Postgres.</p><p>(unused when `ELECTRIC_WRITE_MODE=immediate`)</p>                                                                                                                                                                                                                                                                          |
 | `HTTP_PORT`              | `5133`     | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`.                                                                                                                                                                                                                                                                                     |
 |                          |            |                                                                                                                                                                                                                                                                                                                                                                                               |
 | `PG_PROXY_PORT`          | `65432`    | Port number for connections to the [Postgres migration proxy](https://electric-sql.com/docs/usage/data-modelling/migrations).                                                                                                                                                                                                                                                                 |
@@ -153,14 +153,16 @@ Note that this procedure **MUST** be called within the same transaction as the m
 Note that if, when running on OSX, you get errors like:
 
 ```
+
 could not connect to the publisher: connection to server at \"host.docker.internal\" (192.168.65.2), port 5433 failed
-```
+
+````
 
 You may need to adjust your docker networking or run Electric within docker. To run within Docker, you can build the docker image locally:
 
 ```sh
 make docker-build
-```
+````
 
 And then run with the right env vars, e.g.:
 
