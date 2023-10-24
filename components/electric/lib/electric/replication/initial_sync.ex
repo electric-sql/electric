@@ -98,7 +98,7 @@ defmodule Electric.Replication.InitialSync do
         connection: opts,
         telemetry_span: span
       ) do
-    Client.with_conn(Connectors.get_connection_opts(opts, replication: false), fn conn ->
+    Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
       origin = Connectors.origin(opts)
       {:ok, _, schema} = Extension.SchemaCache.load(origin)
 
@@ -151,7 +151,8 @@ defmodule Electric.Replication.InitialSync do
   end
 
   defp perform_magic_write(opts, subscription_id) do
-    Connectors.get_connection_opts(opts, replication: false)
+    opts
+    |> Connectors.get_connection_opts()
     |> Client.with_conn(
       &Extension.update_transaction_marker(&1, "subscription:" <> subscription_id)
     )
