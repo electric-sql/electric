@@ -152,3 +152,28 @@ test.serial('timestamptz is converted correctly to SQLite', async (t) => {
   })
   t.is(rawRes2[0].timestamptz, '2023-08-07 15:28:35.421Z')
 })
+
+test.serial('booleans are converted correctly to SQLite', async (t) => {
+  await tbl.createMany({
+    data: [
+      {
+        id: 1,
+        bool: true,
+      },
+      {
+        id: 2,
+        bool: false,
+      },
+    ],
+  })
+
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT id, bool FROM DataTypes ORDER BY id ASC',
+    args: [],
+  })
+
+  t.deepEqual(rawRes, [
+    { id: 1, bool: 1 },
+    { id: 2, bool: 0 },
+  ])
+})
