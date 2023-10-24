@@ -4,13 +4,13 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.uuids (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4()
+            id UUID PRIMARY KEY
         );
-        CALL electric.electrify('public.uuids');
+        ALTER TABLE public.uuids ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230908 $sql]
 
@@ -20,7 +20,7 @@
     [invoke node_await_table "uuids"]
     [invoke node_sync_table "uuids"]
 
-[shell pg_1]
+[shell proxy_1]
     !INSERT INTO public.uuids (id) VALUES ('02c0c547-7e2c-4afb-aa40-38413fd91dc4'), ('67b2db7d-7a4e-4ead-8883-01bf4946fec2');
     ??INSERT 0 2
 
@@ -36,7 +36,7 @@
     ?{ id: '09e3e433-e9f1-46b4-a18f-1e4e0b6c6278' }
     ?$node
 
-[shell pg_1]
+[shell proxy_1]
     [invoke wait-for "SELECT * FROM public.uuids;" "09e3e433-e9f1-46b4-a18f-1e4e0b6c6278" 10 $psql]
 
     !SELECT * FROM public.uuids;
@@ -60,16 +60,16 @@
     # Reset the failure pattern because we don't want it to match the error below
     -
     # Can't write invalid uuids to the DB
-    # the uuid below has one digit too much in the last part
+    # the uuid below has one digit too many in the last part
     !await client.write_uuid(db, '09e3e433-e9f1-46b4-a18f-1e4e0b6c62789')
-    """?
+    """??
     Uncaught:
-    \[
-      \{
+    [
+      {
         "validation": "uuid",
         "code": "invalid_string",
         "message": "Invalid uuid",
-        "path": \[
+        "path": [
           "data",
           "id"
         ]
@@ -79,5 +79,3 @@
 
 [cleanup]
   [invoke teardown]
-
-# TODO: test that Zod validation fails on writing invalid UUID
