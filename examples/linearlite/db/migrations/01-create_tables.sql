@@ -31,6 +31,6 @@ CREATE TABLE  IF NOT EXISTS "comment" (
 
 -- ⚡
 -- Electrify the tables
-CALL electric.electrify('issue');
--- CALL electric.electrify('user');
-CALL electric.electrify('comment');
+ALTER TABLE issue ENABLE ELECTRIC;
+-- ALTER TABLE user ENABLE ELECTRIC;
+ALTER TABLE comment ENABLE ELECTRIC;
