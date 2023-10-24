@@ -96,9 +96,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:ok, sup_pid} = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
 
-        ref = Process.monitor(sup_pid)
-        state = %State{state | state: :subscribe, pg_connector_sup_monitor: ref}
-        {:noreply, state, {:continue, :subscribe}}
+        state = %State{state | pg_connector_sup_monitor: Process.monitor(sup_pid)}
+
+        if Connectors.streaming_write_mode?(state.config) do
+          state = %State{state | state: :subscribe}
+          {:noreply, state, {:continue, :subscribe}}
+        else
+          state = %State{state | state: :ready}
+          {:noreply, state}
+        end
 
       error ->
         Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
@@ -180,10 +186,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   def initialize_postgres(%State{origin: origin, repl_config: repl_config, config: config}) do
-    publication = Map.fetch!(repl_config, :publication)
-    subscription = Map.fetch!(repl_config, :subscription)
-    electric_connection = Map.fetch!(repl_config, :electric_connection)
-
     # get a config configuration without the replication parameter set
     # so that we can use extended query syntax
     conn_config = Connectors.get_connection_opts(config, replication: false)
@@ -194,8 +196,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Client.with_conn(conn_config, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
-           {:ok, _} <-
-             Client.create_subscription(conn, subscription, publication, electric_connection),
+           :ok <- maybe_create_subscription(conn, config, repl_config),
            {:ok, oids} <- Client.query_oids(conn),
            :ok <- OidDatabase.save_oids(oids) do
         Logger.info(
@@ -205,5 +206,20 @@ defmodule Electric.Replication.PostgresConnectorMng do
         :ok
       end
     end)
+  end
+
+  defp maybe_create_subscription(conn, config, replication_config) do
+    subscription = Map.fetch!(replication_config, :subscription)
+    publication = Map.fetch!(replication_config, :publication)
+    electric_connection = Map.fetch!(replication_config, :electric_connection)
+
+    if Connectors.streaming_write_mode?(config) do
+      with {:ok, _name} <-
+             Client.create_subscription(conn, subscription, publication, electric_connection) do
+        :ok
+      end
+    else
+      :ok
+    end
   end
 end

@@ -120,6 +120,16 @@ defmodule Electric.Replication.Connectors do
     |> Map.new()
   end
 
+  @spec streaming_write_mode?(config()) :: boolean
+  def streaming_write_mode?(config) do
+    write_mode(config) == :streaming
+  end
+
+  @spec write_mode(config()) :: Electric.write_mode()
+  def write_mode(config) do
+    Keyword.get(config, :write_mode, Electric.write_mode())
+  end
+
   defp new_map_with_charlists(list) do
     Map.new(list, fn
       {k, v} when is_binary(v) -> {k, String.to_charlist(v)}

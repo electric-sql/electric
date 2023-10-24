@@ -2,6 +2,7 @@ defmodule Electric do
   @moduledoc false
 
   @type reg_name :: {:via, :gproc, {:n, :l, term()}}
+  @type write_mode :: :streaming | :immediate
 
   @doc """
   Register process with the given name
@@ -99,4 +100,15 @@ defmodule Electric do
   def vsn do
     @current_vsn
   end
+
+  def streaming_write_mode? do
+    write_mode() == :streaming
+  end
+
+  def immediate_write_mode? do
+    write_mode() == :immediate
+  end
+
+  @spec write_mode :: write_mode
+  def write_mode, do: Application.fetch_env!(:electric, :write_mode)
 end

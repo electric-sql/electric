@@ -41,7 +41,9 @@ defmodule Electric.Application do
     |> Enum.each(fn {name, config} ->
       Connectors.start_connector(
         PostgresConnector,
-        Keyword.put(config, :origin, to_string(name))
+        config
+        |> Keyword.put(:origin, to_string(name))
+        |> Keyword.put(:write_mode, Electric.write_mode())
       )
     end)
 
