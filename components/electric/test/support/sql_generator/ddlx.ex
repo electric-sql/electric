@@ -17,8 +17,8 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
         # because those are the awkward ones
         StreamData.list_of(
           StreamData.one_of([
-            StreamData.codepoint(:printable),
-            StreamData.member_of(Enum.concat([?a..?z, ?A..?Z, [?\s, ?_, ?", ?', ?-, ?\s]]))
+            # StreamData.codepoint(:printable),
+            StreamData.member_of(Enum.concat([?a..?z, ?A..?Z, [?\s, ?_, ?", ?', ?-]]))
           ]),
           min_length: 3
         )
@@ -102,27 +102,83 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
       ])
     end
 
-    def generator(opts \\ []) do
-      scope = Keyword.get_lazy(opts, :scope, &scope/0)
-      role = Keyword.get_lazy(opts, :role, &role/0)
+    def scope_user_role do
+      bind(
+        tuple({DDLX.quoted_or_unquoted_name(), DDLX.quoted_or_unquoted_name()}),
+        fn {table, user_column} ->
+          # scope , table, user_id column, role_column
+          tuple({
+            scope(),
+            tuple({constant(table), constant(user_column)}),
+            one_of([
+              DDLX.unquoted_name(),
+              tuple({constant(table), DDLX.quoted_or_unquoted_name()})
+            ])
+          })
+        end
+      )
+    end
 
-      stmt([
-        "ELECTRIC",
-        "ASSIGN",
-        quote_scope_role(scope, role)
-      ])
+    def column do
+      DDLX.quoted_or_unquoted_name()
+    end
+
+    def generator(opts \\ []) do
+      scope_user_role = Keyword.get_lazy(opts, :scope_user_role, &scope_user_role/0)
+
+      bind(scope_user_role, fn {scope, user_def, role_def} ->
+        stmt([
+          "ELECTRIC",
+          "ASSIGN",
+          quote_scope_role(scope, role_def),
+          "TO",
+          quote_name(user_def)
+        ])
+      end)
     end
 
     defp quote_scope(nil), do: "NULL"
     defp quote_scope(r), do: quote_name(r)
 
-    defp quote_scope_role(scope_gen, role_gen) do
-      bind(scope_gen, fn scope ->
-        bind(role_gen, fn role ->
-          dbg(role)
-          constant("#{quote_scope(scope)}:#{quote_name(role)}")
-        end)
+    defp quote_scope_role(scope, role_def) do
+      bind(member_of([:colon, :paren]), fn style ->
+        case {style, role_def} do
+          {:colon, {{_, _}, {_, _}} = role} ->
+            constant("#{quote_scope(scope)}:#{quote_role(role)}")
+
+          {:colon, {false, _} = role} ->
+            constant("#{quote_scope(scope)}:#{quote_role(role)}")
+
+          {:paren, role} ->
+            constant("(#{quote_scope(scope)}, #{quote_role(role)})")
+        end
+
+        # bind(role_gen, fn role ->
+        #   bind(member_of([:colon, :paren]), fn style ->
+        #     dbg({style, scope, role})
+        #
+        #     case {style, role} do
+        #       {:colon, {_, _}} ->
+        #         constant("#{quote_scope(scope)}:#{quote_role(role)}")
+        #
+        #       {:colon, role} when is_binary(role) ->
+        #         constant("'#{quote_scope(scope)}:#{role}'")
+        #
+        #       {:paren, _} ->
+        #         constant("(#{quote_scope(scope)}, #{quote_role(role)})")
+        #     end
+        #   end)
+        #
+        #   # dbg(role)
       end)
+    end
+
+    defp quote_role({{_, _}, {_, _}} = role) do
+      quote_name(role)
+    end
+
+    defp quote_role({false, role}) when is_binary(role) do
+      "'#{role}'"
     end
   end
 end

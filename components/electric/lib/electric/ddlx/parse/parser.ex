@@ -19,7 +19,7 @@ defmodule Electric.DDLX.Parse.Macros do
   - `trailing` - should the keyword be followed by whitespace, defaults to `true`. 
 
   """
-  defmacro defkeyword(function, keyword, opts \\ [], do: block) do
+  defmacro deftoken(function, keyword, _opts \\ [], do: block) do
     chars =
       keyword
       |> to_string()
@@ -27,14 +27,12 @@ defmodule Electric.DDLX.Parse.Macros do
       |> Enum.map(fn char -> [String.downcase(char), String.upcase(char)] end)
       |> Enum.map(fn [<<l::8>>, <<u::8>>] -> [l, u] end)
 
-    whitespace = if Keyword.get(opts, :trailing, false), do: [~c"\t\n\r "], else: []
-    chars = Enum.with_index(chars ++ whitespace)
+    chars = Enum.with_index(chars)
     pattern = build_match(chars)
     guard = build_guard(chars)
 
     quote do
       def unquote(function)(unquote(pattern) = var!(stmt)) when unquote(guard) do
-        _ = var!(rest)
         _ = var!(stmt)
         unquote(block)
       end
@@ -43,11 +41,9 @@ defmodule Electric.DDLX.Parse.Macros do
 
   defp match_var(i), do: Macro.var(:"c#{i}", Elixir)
 
-  # <<c0::8, c1::8, ..., rest::binary>>
+  # <<c0::8, c1::8, ...>>
   defp build_match(chars) do
-    {:<<>>, [],
-     Enum.map(chars, fn {_c, i} -> quote(do: unquote(match_var(i)) :: 8) end) ++
-       [quote(do: var!(rest) :: binary)]}
+    {:<<>>, [], Enum.map(chars, fn {_c, i} -> quote(do: unquote(match_var(i)) :: 8) end)}
   end
 
   defp is_member(chars, i) do
@@ -72,10 +68,13 @@ defmodule Electric.DDLX.Parse.Tokens do
 
   @keywords ~w(alter table electric enable)a
 
-  defkeyword(:token, "ALTER", [], do: :ALTER)
-  defkeyword(:token, "TABLE", [], do: :TABLE)
-  defkeyword(:token, "ELECTRIC", [], do: :ELECTRIC)
-  defkeyword(:token, "ENABLE", [], do: :ENABLE)
+  deftoken(:token, "ALTER", [], do: :alter)
+  deftoken(:token, "TABLE", [], do: :table)
+  deftoken(:token, "ELECTRIC", [], do: :electric)
+  deftoken(:token, "ENABLE", [], do: :enable)
+  deftoken(:token, "ASSIGN", [], do: :assign)
+  deftoken(:token, "NULL", [], do: :null)
+  deftoken(:token, "TO", [], do: :to)
   def token(s), do: s
 end
 
@@ -101,6 +100,7 @@ defmodule Electric.DDLX.Parse.Parser do
   alias Electric.DDLX.Parse.UnassignParser
   alias Electric.DDLX.Parse.UnelectrifyParser
   alias Electric.DDLX.Parse.Build
+  alias Electric.DDLX.Parse.Tokens
 
   @parsers [
     AssignParser,
@@ -125,10 +125,7 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   def statement(stmt) do
-    tokens =
-      stmt
-      |> tokens()
-      |> Enum.to_list()
+    tokens = tokens(stmt)
 
     %Statement{stmt: stmt, tokens: tokens, cmd: cmd_for_tokens(tokens)}
   end
@@ -140,7 +137,22 @@ defmodule Electric.DDLX.Parse.Parser do
   def parse(ddlx, opts \\ []) do
     ddlx
     |> statement()
-    |> build(opts)
+    |> do_parse()
+    |> build_cmd(opts)
+  end
+
+  defp do_parse(stmt) do
+    :ddlx.parse(stmt.tokens)
+  end
+
+  defp build_cmd({:ok, {module, attrs}}, opts) do
+    # FIXME: pass in default schema stuff
+    module.build(attrs, opts)
+    # {:ok, struct(module, attrs)}
+  end
+
+  defp build_cmd({:error, {{_line, position, _}, :ddlx, messages}}, _opts) do
+    {:error, %{position: position, message: IO.iodata_to_binary(messages)}}
   end
 
   def build(stmt, opts) do
@@ -154,7 +166,7 @@ defmodule Electric.DDLX.Parse.Parser do
     parser = parser_for_statement(statement)
 
     if parser do
-      tokens = get_tokens(statement, parser.token_regex()) |> dbg
+      tokens = get_tokens(statement, parser.token_regex())
 
       results =
         Enum.reduce_while(
@@ -188,8 +200,7 @@ defmodule Electric.DDLX.Parse.Parser do
   def get_tokens(input, regex) do
     with_rockets = add_rockets(input)
     names = Regex.names(regex)
-    dbg(regex)
-    captures = Regex.scan(regex, with_rockets, capture: :all_names) |> dbg
+    captures = Regex.scan(regex, with_rockets, capture: :all_names)
 
     for capture <- captures do
       index = Enum.find_index(capture, fn x -> x != "" end)
@@ -224,14 +235,17 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   def tokens(str) do
+    str
+    |> token_stream()
+    |> Enum.to_list()
+  end
+
+  def token_stream(str) do
     Stream.resource(
       fn -> {str, %{p: 0, k: 0, acc: [], sq: false, dq: false, cm: false}} end,
       &token_next/1,
       fn _ -> :ok end
     )
-    |> Stream.map(fn {t, p} ->
-      {Electric.DDLX.Parse.Tokens.token(t), p}
-    end)
   end
 
   defguardp not_quoted(state) when not state.sq and not state.dq
@@ -246,9 +260,39 @@ defmodule Electric.DDLX.Parse.Parser do
     []
   end
 
-  defp token_out(state) do
-    [{IO.iodata_to_binary(state.acc), state.k}]
+  defp token_out(state) when is_squoted(state) do
+    s = IO.iodata_to_binary(state.acc)
+    [{:string, {1, state.k, nil}, s}]
   end
+
+  defp token_out(state) when is_dquoted(state) do
+    s = IO.iodata_to_binary(state.acc)
+    [{:ident, {1, state.k, nil}, s}]
+  end
+
+  defp token_out(state) do
+    s = IO.iodata_to_binary(state.acc)
+
+    case Tokens.token(s) do
+      keyword when is_atom(keyword) ->
+        [{keyword, {1, state.k, nil}}]
+
+      string when is_binary(string) ->
+        [{:ident, {1, state.k, nil}, s}]
+    end
+  end
+
+  defp token_out(token, state) when is_atom(token) do
+    [{token, {1, state.p, nil}}]
+  end
+
+  # defp token_out(%{acc: []}, _type) do
+  #   []
+  # end
+  #
+  # defp token_out(state, type) do
+  #   [{type, state.k, IO.iodata_to_binary(state.acc)}]
+  # end
 
   defp token_start(%{acc: []} = state) do
     %{state | k: state.p}
@@ -266,11 +310,17 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<?", rest::binary>>, state) when not_quoted(state) do
-    token_next(rest, %{token_start(state) | p: state.p + 1, dq: true, acc: [state.acc, ?"]})
+    {
+      token_out(state) ++ token_out(:"\"", state),
+      {rest, %{token_start(%{state | p: state.p + 1}) | dq: true, acc: []}}
+    }
   end
 
   defp token_next(<<?', rest::binary>>, state) when not_quoted(state) do
-    token_next(rest, %{token_start(state) | p: state.p + 1, sq: true, acc: [?']})
+    {
+      token_out(state) ++ token_out(:"'", state),
+      {rest, %{token_start(%{state | p: state.p + 1}) | sq: true, acc: []}}
+    }
   end
 
   defp token_next(<<?", ?", rest::binary>>, state) when is_dquoted(state) do
@@ -278,7 +328,10 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<?", rest::binary>>, state) when is_dquoted(state) do
-    token_next(rest, %{state | p: state.p + 1, dq: false, acc: [state.acc, ?"]})
+    {
+      token_out(state) ++ token_out(:"\"", state),
+      {rest, %{token_start(%{state | p: state.p + 1}) | dq: false, acc: []}}
+    }
   end
 
   defp token_next(<<?', ?', rest::binary>>, state) when is_squoted(state) do
@@ -286,8 +339,10 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<?', rest::binary>>, state) when is_squoted(state) do
-    {token_out(%{state | acc: [state.acc, ?']}),
-     {rest, %{state | p: state.p + 1, sq: false, acc: []}}}
+    {
+      token_out(state) ++ token_out(:"'", state),
+      {rest, %{token_start(%{state | p: state.p + 1}) | sq: false, acc: []}}
+    }
   end
 
   defp token_next(<<s::8, rest::binary>>, state) when is_quoted(state) do
@@ -314,13 +369,19 @@ defmodule Electric.DDLX.Parse.Parser do
     token_next(rest, %{state | p: state.p + 1, acc: [acc, c]})
   end
 
-  # . is a word-char so we keep dotted.names together
-  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?., ?_] do
+  defp token_next(<<?., rest::binary>>, %{acc: acc} = state) do
+    {
+      token_out(state) ++ token_out(:., state),
+      {rest, %{token_start(%{state | p: state.p + 1}) | acc: []}}
+    }
+  end
+
+  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?_] do
     token_next(rest, %{state | p: state.p + 1, acc: [acc, c]})
   end
 
-  defp token_next(<<c::utf8, rest::binary>>, %{acc: acc} = state) do
-    {token_out(%{state | acc: acc}) ++ [{<<c::utf8>>, state.p}],
+  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?,, ?(, ?), ?:] do
+    {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<c::8>>), state),
      {rest, %{state | p: state.p + 1, acc: []}}}
   end
 end
