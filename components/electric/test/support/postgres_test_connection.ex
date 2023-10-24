@@ -95,7 +95,11 @@ defmodule Electric.Postgres.TestConnection do
     origin = Map.fetch!(context, :origin)
 
     # Initialize the test DB to the state which Electric can work with.
-    setup_fun = fn _conn -> nil end
+    setup_fun = fn conn ->
+      init_sql = File.read!("dev/init.sql")
+      results = :epgsql.squery(conn, init_sql) |> List.wrap()
+      assert Enum.all?(results, fn result -> is_tuple(result) and elem(result, 0) == :ok end)
+    end
 
     # Dropping the subscription is necessary before the test DB can be removed.
     teardown_fun = fn conn ->
@@ -126,7 +130,7 @@ defmodule Electric.Postgres.TestConnection do
     [
       host: System.get_env("PG_HOST", "localhost"),
       port: System.get_env("PG_PORT", "54321") |> String.to_integer(),
-      database: System.get_env("PG_DB", "electric"),
+      database: System.get_env("PG_DB", "electric_dev"),
       username: System.get_env("PG_USERNAME", "postgres"),
       password: System.get_env("PGPASSWORD", "password"),
       ipv6: false
