@@ -4,7 +4,7 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.ints (
@@ -12,7 +12,7 @@
             i2 SMALLINT,
             i4 INTEGER
         );
-        CALL electric.electrify('public.ints');
+        ALTER TABLE public.ints ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230908 $sql]
 
@@ -22,7 +22,7 @@
     [invoke node_await_table "ints"]
     [invoke node_sync_table "ints"]
 
-[shell pg_1]
+[shell proxy_1]
     !INSERT INTO public.ints (id, i2, i4) VALUES ('row1', -32768, -2147483648), ('row2', 32767, 2147483647);
     ??INSERT 0 2
 
@@ -35,16 +35,16 @@
 
     # Can write valid ints to the DB
     !await client.write_int(db, 'row3', 0, 0)
-    ?{ id: 'row3', i2: 0, i4: 0 }
+    ??{ id: 'row3', i2: 0, i4: 0 }
     ?$node
 
-[shell pg_1]
+[shell proxy_1]
     [invoke wait-for "SELECT * FROM public.ints;" "row3" 10 $psql]
 
     !SELECT * FROM public.ints;
-    ?row1|-32768|-2147483648
-    ?row2|32767|2147483647
-    ?row3|0|0
+    ??row1 | -32768 | -2147483648
+    ??row2 |  32767 |  2147483647
+    ??row3 |      0 |           0
 
 # Start a new Satellite client and verify that it receives all rows
 [invoke setup_client 2 electric_1 5133]
@@ -64,10 +64,10 @@
     -
     # Can't write invalid ints to the DB
     !await client.write_int(db, 'row4', 32768, 5)
-    ?Number must be less than or equal to 32767
+    ??Number must be less than or equal to 32767
 
     !await client.write_int(db, 'row4', 5, 2147483648)
-    ?Number must be less than or equal to 2147483647
+    ??Number must be less than or equal to 2147483647
 
 [cleanup]
   [invoke teardown]
