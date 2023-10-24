@@ -163,12 +163,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case Client.with_conn(
-           conn_config,
-           fn conn ->
-             Client.start_subscription(conn, rep_conf.subscription)
-           end
-         ) do
+    case Client.with_conn(conn_config, fn conn ->
+           Client.start_subscription(conn, rep_conf.subscription)
+         end) do
       :ok ->
         Logger.notice("subscription started for #{state.origin}")
         :ok

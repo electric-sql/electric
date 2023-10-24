@@ -81,21 +81,24 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   def start_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
-         {:ok, _, _} <-
-           squery(
-             conn,
-             ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
-           ) do
-      :ok
+    with {:ok, _, _} <- :epgsql.equery(conn, "CALL electric.enable_subscription($1)", [name]) do
+      refresh_subscription(conn, name)
     end
   end
 
-  @spec stop_subscription(connection, String.t()) :: :ok
-  def stop_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
-            DISABLE|) do
-      :ok
+  def refresh_subscription(conn, name) do
+    case :epgsql.equery(conn, "CALL electric.refresh_subscription($1)", [name]) do
+      {:ok, [], []} ->
+        :ok
+
+      # "ALTER SUBSCRIPTION ... REFRESH is not allowed for disabled subscriptions"
+      # ignore this as it's due to race conditions with the rest of the system
+      {:error, {:error, :error, "55000", :object_not_in_prerequisite_state, _, _}} ->
+        Logger.warning("Unable to refresh DISABLED subscription #{name}")
+        :ok
+
+      error ->
+        error
     end
   end
 
@@ -124,11 +127,10 @@ defmodule Electric.Replication.Postgres.Client do
 
   def create_subscription(conn, name, publication_name, connection_params) do
     connection_string = Enum.map_join(connection_params, " ", fn {k, v} -> "#{k}=#{v}" end)
+    query = "CALL electric.create_subscription($1, $2, $3)"
+    params = [name, publication_name, connection_string]
 
-    case squery(
-           conn,
-           ~s|CREATE SUBSCRIPTION "#{name}" CONNECTION '#{connection_string}' PUBLICATION "#{publication_name}" WITH (connect = false)|
-         ) do
+    case :epgsql.equery(conn, query, params) do
       {:ok, _, _} -> {:ok, name}
       # TODO: Verify that the subscription references the correct publication
       {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
