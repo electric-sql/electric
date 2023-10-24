@@ -55,7 +55,7 @@ function IssuePage() {
     db.issue.update({
       data: {
         status: status,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,
@@ -67,7 +67,7 @@ function IssuePage() {
     db.issue.update({
       data: {
         priority: priority,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,
@@ -79,7 +79,7 @@ function IssuePage() {
     await db.issue.update({
       data: {
         title: title,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,
@@ -101,7 +101,7 @@ function IssuePage() {
       await db.issue.update({
         data: {
           description: description,
-          modified: new Date().toISOString(),
+          modified: new Date(),
         },
         where: {
           id: issue.id,

@@ -43,7 +43,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
     })
     const kanbanorder = generateKeyBetween(lastIssue?.kanbanorder, null)
 
-    const date = new Date().toISOString()
+    const date = new Date()
     db.issue.create({
       data: {
         id: uuidv4(),

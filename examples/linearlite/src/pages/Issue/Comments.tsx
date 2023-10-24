@@ -64,7 +64,7 @@ function Comments({ issue }: CommentsProps) {
         id: uuidv4(),
         issue_id: issue.id,
         body: newCommentBody,
-        created_at: new Date().toISOString(),
+        created_at: new Date(),
         username: 'testuser',
       },
     })
