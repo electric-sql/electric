@@ -69,8 +69,6 @@ services:
     ports:
       - 5133:5133
     restart: always
-    volumes:
-      - electric_data:/app/data
 ```
 
 ### Build
