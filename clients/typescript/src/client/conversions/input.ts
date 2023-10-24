@@ -234,12 +234,7 @@ function transformField(
 }
 
 function transformWhere(o: object, fields: Fields): object {
-  // for fields of type DateTime
-  //   --> can be the value itself --> transform it
-  //   --> can be equals, in, notIn, lt, lte, gt, gte, not
-  //         --> traverse and call transform
-  //const filteredObj = keepTableFieldsOnly(o, fields)
-  const transformedFields = transformWhereFields(o, fields) // still doesn't handle lt, lte, etc.
+  const transformedFields = transformWhereFields(o, fields)
   const transformedBooleanConnectors = transformBooleanConnectors(o, fields)
   return {
     ...o,

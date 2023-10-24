@@ -1028,17 +1028,16 @@ function deserializeColumnData(
   const columnType = columnInfo.type.toUpperCase()
   switch (columnType) {
     case 'CHAR':
-    case 'TEXT':
-    case 'UUID':
-    case 'VARCHAR':
     case 'DATE':
+    case 'TEXT':
     case 'TIME':
     case 'TIMESTAMP':
     case 'TIMESTAMPTZ':
+    case 'UUID':
+    case 'VARCHAR':
       return typeDecoder.text(column)
     case 'BOOL':
       return typeDecoder.bool(column)
-    case 'REAL':
     case 'FLOAT4':
     case 'FLOAT8':
     case 'INT':
@@ -1046,6 +1045,7 @@ function deserializeColumnData(
     case 'INT4':
     case 'INT8':
     case 'INTEGER':
+    case 'REAL':
       return Number(typeDecoder.text(column))
     case 'TIMETZ':
       return typeDecoder.timetz(column)

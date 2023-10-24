@@ -84,27 +84,27 @@ function serialiseDate(v: Date, pgType: PgDateType): string {
 
 // Deserialises a SQLite compatible date string into a `Date` object
 function deserialiseDate(v: string, pgType: PgDateType): Date {
-  const parse = (v: any) => {
-    const millis = Date.parse(v)
-    if (isNaN(millis))
-      throw new Error(`Could not parse date, invalid format: ${v}`)
-    else return new Date(millis)
-  }
-
   switch (pgType) {
+    case PgDateType.PG_DATE:
     case PgDateType.PG_TIMESTAMP:
     case PgDateType.PG_TIMESTAMPTZ:
-    case PgDateType.PG_DATE:
-      return parse(v)
+      return parseDate(v)
 
     case PgDateType.PG_TIME:
       // interpret as local time
-      return parse(`1970-01-01 ${v}`)
+      return parseDate(`1970-01-01 ${v}`)
 
     case PgDateType.PG_TIMETZ:
       // interpret as UTC time
-      return parse(`1970-01-01 ${v}+00`)
+      return parseDate(`1970-01-01 ${v}+00`)
   }
+}
+
+function parseDate(v: string) {
+  const millis = Date.parse(v)
+  if (isNaN(millis))
+    throw new Error(`Could not parse date, invalid format: ${v}`)
+  else return new Date(millis)
 }
 
 /**

@@ -25,11 +25,6 @@ export class Builder {
     private shapeManager: IShapeManager
   ) {}
 
-  // TODO: in create, updateInternal, deleteInternal, and findWhere
-  //       call a function that does the transformation
-  //       that function iterates over the object's keys and values
-  //       and for every key fetches the type of that field
-  //       and calls the transformation function passing along the field type
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
     const query = squelPostgres.insert().into(this._tableName).setFields(i.data)
