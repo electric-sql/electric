@@ -341,7 +341,6 @@ defmodule Electric.Postgres.Extension do
     if Enum.empty?(migrations), do: raise(Error, message: "no migrations defined in #{module}")
 
     ensure_transaction(conn, fn txconn ->
-      create_schema(txconn)
       create_migration_table(txconn)
 
       newly_applied_versions =
@@ -395,10 +394,6 @@ defmodule Electric.Postgres.Extension do
       {:ok, _cols, [{"t"}]} -> fun.(conn)
       {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun)
     end
-  end
-
-  def create_schema(conn) do
-    {:ok, [], []} = :epgsql.squery(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
   end
 
   @create_migration_table_sql """

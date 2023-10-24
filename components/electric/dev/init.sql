@@ -45,3 +45,6 @@ DO $$ BEGIN
 END $$;
 
 GRANT CREATE, USAGE ON SCHEMA electric TO min_privilege;
+
+CREATE PUBLICATION electric_publication;
+ALTER PUBLICATION electric_publication OWNER TO min_privilege;
