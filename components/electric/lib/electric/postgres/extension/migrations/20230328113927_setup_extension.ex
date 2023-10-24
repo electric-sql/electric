@@ -11,7 +11,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
     ddl_table = Extension.ddl_table()
     schema_table = Extension.schema_table()
     version_table = Extension.version_table()
-    publication_name = Extension.publication_name()
     txid_type = Extension.txid_type()
 
     [
@@ -49,10 +48,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       ##################
       """
       CREATE UNIQUE INDEX electric_schema_version_idx ON #{schema_table} (version);
-      """,
-      ##################
-      """
-      CREATE PUBLICATION "#{publication_name}";
       """,
       Extension.add_table_to_publication_sql(ddl_table)
     ]

@@ -5,3 +5,10 @@ DO $$ BEGIN
     CREATE ROLE min_privilege REPLICATION LOGIN PASSWORD 'password';
   END IF;
 END $$;
+
+CREATE SCHEMA electric;
+GRANT CREATE, USAGE ON SCHEMA electric TO min_privilege;
+--ALTER SCHEMA electric OWNER TO min_privilege;
+
+CREATE PUBLICATION electric_publication;
+ALTER PUBLICATION electric_publication OWNER TO min_privilege;

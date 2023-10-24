@@ -47,7 +47,7 @@ defmodule Electric.Postgres.TestConnection do
     end)
   end
 
-  def create_test_db(setup_fun \\ fn _ -> nil end, teardown_fun \\ fn _ -> nil end) do
+  def create_test_db(setup_fun \\ nil, teardown_fun \\ fn _ -> nil end) do
     db_name = "electric_postgres_test_#{DateTime.utc_now() |> DateTime.to_unix()}"
     config = config() |> Keyword.delete(:database)
 
@@ -66,6 +66,7 @@ defmodule Electric.Postgres.TestConnection do
     conn_opts = conn_opts(pg_config)
     {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(conn_opts))
 
+    setup_fun = setup_fun || (&precreate_schema_and_publication/1)
     setup_fun.(conn)
 
     on_exit(fn ->
@@ -77,6 +78,15 @@ defmodule Electric.Postgres.TestConnection do
     end)
 
     %{db: db_name, pg_config: pg_config, conn_opts: conn_opts, conn: conn}
+  end
+
+  defp precreate_schema_and_publication(conn) do
+    sql = """
+    CREATE SCHEMA IF NOT EXISTS #{Extension.schema()};
+    CREATE PUBLICATION #{Extension.publication_name()}
+    """
+
+    [{:ok, [], []}, {:ok, [], []}] = :epgsql.squery(conn, sql)
   end
 
   def terminate_all_connections(conn, db_name) do
