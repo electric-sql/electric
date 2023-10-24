@@ -177,3 +177,37 @@ test.serial('booleans are converted correctly to SQLite', async (t) => {
     { id: 2, bool: 0 },
   ])
 })
+
+test.serial('floats are converted correctly to SQLite', async (t) => {
+  await tbl.createMany({
+    data: [
+      {
+        id: 1,
+        float8: 1.234,
+      },
+      {
+        id: 2,
+        float8: NaN,
+      },
+      {
+        id: 3,
+        float8: +Infinity,
+      },
+      {
+        id: 4,
+        float8: -Infinity,
+      },
+    ],
+  })
+
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT id, float8 FROM DataTypes ORDER BY id ASC',
+    args: [],
+  })
+  t.deepEqual(rawRes, [
+    { id: 1, float8: 1.234 },
+    { id: 2, float8: 'NaN' },
+    { id: 3, float8: Infinity },
+    { id: 4, float8: -Infinity },
+  ])
+})
