@@ -60,7 +60,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       |> SchemaLoader.get(:backend, SchemaCache)
       |> SchemaLoader.connect(conn_config)
 
-    refresh_sub? = Keyword.get(opts, :refresh_subscription, true)
+    refresh_sub? = Keyword.get(opts, :refresh_subscription, false)
 
     Logger.info("Starting #{__MODULE__} using #{elem(loader, 0)} backend")
 

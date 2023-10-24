@@ -5,3 +5,5 @@ DO $$ BEGIN
     CREATE ROLE min_privilege REPLICATION LOGIN PASSWORD 'password';
   END IF;
 END $$;
+
+GRANT CREATE ON DATABASE electric_dev TO min_privilege;

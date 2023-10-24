@@ -52,7 +52,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       """,
       ##################
       """
-      CREATE PUBLICATION "#{publication_name}"; 
+      CREATE PUBLICATION "#{publication_name}";
       """,
       Extension.add_table_to_publication_sql(ddl_table)
     ]

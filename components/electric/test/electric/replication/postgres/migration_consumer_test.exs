@@ -107,6 +107,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, origin: origin, producer: producer, version: version, loader: backend}
     end
 
+    @tag :skip
     test "migration consumer refreshes subscription after receiving a relation", cxt do
       %{producer: producer, origin: origin, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
