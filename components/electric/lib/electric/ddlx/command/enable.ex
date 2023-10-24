@@ -1,6 +1,6 @@
 defmodule Electric.DDLX.Command.Enable do
   alias Electric.DDLX.Command
-  alias Electric.DDLX.Parse.Build
+  import Electric.DDLX.Parse.Build
 
   @type t() :: %__MODULE__{
           table_name: String.t()
@@ -14,21 +14,11 @@ defmodule Electric.DDLX.Command.Enable do
 
   defstruct @keys
 
-  def matches_tokens(tokens) do
-    case tokens do
-      [{:ALTER, _}, {:TABLE, _}, _, {:ENABLE, _}, {:ELECTRIC, _}] ->
-        true
-
-      _ ->
-        false
+  def build(params, opts) do
+    with {:ok, table_schema} <- fetch_attr(params, :table_schema, default_schema(opts)),
+         {:ok, table_name} <- fetch_attr(params, :table_name) do
+      {:ok, struct(__MODULE__, table_name: {table_schema, table_name})}
     end
-  end
-
-  def builder() do
-    Build.new()
-    |> Build.expect([:ALTER, :TABLE])
-    |> Build.property(:table_name, &Electric.Postgres.NameParser.parse(&1, &2))
-    |> Build.expect([:ENABLE, :ELECTRIC])
   end
 
   defimpl Command do

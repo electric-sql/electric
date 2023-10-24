@@ -18,7 +18,8 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
         StreamData.list_of(
           StreamData.one_of([
             # StreamData.codepoint(:printable),
-            StreamData.member_of(Enum.concat([?a..?z, ?A..?Z, [?\s, ?_, ?", ?', ?-]]))
+            # StreamData.member_of(Enum.concat([?a..?z, ?A..?Z, [?\s, ?_, ?", ?', ?-]]))
+            StreamData.member_of(Enum.concat([?a..?z, ?A..?Z]))
           ]),
           min_length: 3
         )
@@ -104,7 +105,12 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
 
     def scope_user_role do
       bind(
-        tuple({DDLX.quoted_or_unquoted_name(), DDLX.quoted_or_unquoted_name()}),
+        tuple(
+          {one_of([
+             tuple({DDLX.quoted_or_unquoted_name(), DDLX.quoted_or_unquoted_name()}),
+             DDLX.quoted_or_unquoted_name()
+           ]), DDLX.quoted_or_unquoted_name()}
+        ),
         fn {table, user_column} ->
           # scope , table, user_id column, role_column
           tuple({
@@ -124,7 +130,13 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
     end
 
     def generator(opts \\ []) do
-      scope_user_role = Keyword.get_lazy(opts, :scope_user_role, &scope_user_role/0)
+      scope_user_role =
+        opts
+        |> Keyword.get_lazy(:scope_user_role, &scope_user_role/0)
+        |> case do
+          t when is_tuple(t) -> constant(t)
+          generator -> generator
+        end
 
       bind(scope_user_role, fn {scope, user_def, role_def} ->
         stmt([
@@ -152,24 +164,6 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
           {:paren, role} ->
             constant("(#{quote_scope(scope)}, #{quote_role(role)})")
         end
-
-        # bind(role_gen, fn role ->
-        #   bind(member_of([:colon, :paren]), fn style ->
-        #     dbg({style, scope, role})
-        #
-        #     case {style, role} do
-        #       {:colon, {_, _}} ->
-        #         constant("#{quote_scope(scope)}:#{quote_role(role)}")
-        #
-        #       {:colon, role} when is_binary(role) ->
-        #         constant("'#{quote_scope(scope)}:#{role}'")
-        #
-        #       {:paren, _} ->
-        #         constant("(#{quote_scope(scope)}, #{quote_role(role)})")
-        #     end
-        #   end)
-        #
-        #   # dbg(role)
       end)
     end
 

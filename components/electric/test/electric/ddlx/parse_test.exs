@@ -10,6 +10,7 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Command.Assign
   alias Electric.DDLX.Command.Unassign
   alias Electric.DDLX.Command.SQLite
+  alias Electric.DDLX.Command
   alias Electric.DDLX.Parse.Common
 
   property "enable" do
@@ -18,9 +19,9 @@ defmodule DDLXParserTest do
             ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
           ) do
       IO.puts(ddlx)
-      assert {:ok, _} = Parser.parse(ddlx, default_schema: "my_default") |> dbg
-      # assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
-      # assert cmd.table_name == normalise(table, "my_default")
+      # assert {:ok, _} = Parser.parse(ddlx, default_schema: "my_default") |> dbg
+      assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default") |> dbg
+      assert cmd.table_name == normalise(table, "my_default") |> dbg
     end
   end
 
@@ -28,9 +29,7 @@ defmodule DDLXParserTest do
     test "www example 1" do
       assert {:ok,
               %Assign{
-                # FIXME: default schema application
-                # schema_name: "my_default",
-                table_name: "admin_users",
+                table_name: {"my_default", "admin_users"},
                 user_column: "user_id",
                 scope: nil,
                 role_name: "admin",
@@ -40,12 +39,10 @@ defmodule DDLXParserTest do
                Parser.parse("ELECTRIC ASSIGN 'admin' TO admin_users.user_id;",
                  default_schema: "my_default"
                )
-               |> dbg
 
       assert {:ok,
               %Assign{
-                schema_name: "application",
-                table_name: "admin_users",
+                table_name: {"application", "admin_users"},
                 user_column: "user_id",
                 scope: nil,
                 role_name: "admin",
@@ -60,8 +57,6 @@ defmodule DDLXParserTest do
     test "www example 2" do
       assert {:ok,
               %Assign{
-                # FIXME: default schema application
-                # schema_name: "my_default",
                 table_name: {"my_default", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -72,7 +67,6 @@ defmodule DDLXParserTest do
                Parser.parse("ELECTRIC ASSIGN user_roles.role_name TO user_roles.user_id;",
                  default_schema: "my_default"
                )
-               |> dbg
 
       assert {:ok,
               %Assign{
@@ -154,7 +148,7 @@ defmodule DDLXParserTest do
                 role_name: nil,
                 role_column: "role",
                 if_statement: nil
-              }} =
+              } = assign} =
                Parser.parse(
                  "ELECTRIC ASSIGN ( auth.projects, application.project_members.role) TO application.project_members.user_id;",
                  default_schema: "my_default"
@@ -171,41 +165,171 @@ defmodule DDLXParserTest do
       ]
 
       for ddlx <- stmts do
-        assert match?({:error, _}, Parser.parse(ddlx) |> dbg),
+        assert match?({:error, _}, Parser.parse(ddlx)),
                "expected #{inspect(ddlx)} to return an error"
       end
     end
 
+    test "scope extraction" do
+      assert {:ok, %{scope: {"my_default", "bslaiqzpkkrql_ugfjog"}}} =
+               Parser.parse(
+                 ~s[ELECTRIC ASSIGN (bslaiqzpkkrql_ugfjog, 'mscuqqjmltikiblihlbizrdwfgxxbkzhiqznwnguehipzktiecxbw') TO lfqtmmgnkcawqqtayufujumxmkwsz_nbj_odyzhxjxomc_jicpmi_dzkkgozlednrqsspibjspgyabumzxoxhccnomssuzqf."BKxHbrgtmXdAeebwgDiGuLWt"."wGUBAoaXNAAxYJqtItIHckiflTvyKmCebTUYsYtbFxpekYhCKRyJMfbUaeiRnNHrOfKrrYIkdB"],
+                 default_schema: "my_default"
+               )
+
+      assert {:ok, %{scope: {"my_default", "aaa"}}} =
+               Parser.parse(
+                 ~s[ELECTRIC ASSIGN aaa:'gzp' TO "pTw"."cjd".twi],
+                 default_schema: "my_default"
+               )
+    end
+
     property "generated" do
-      check all(ddlx <- Electric.Postgres.SQLGenerator.DDLX.Assign.generator()) do
+      alias Electric.Postgres.SQLGenerator.DDLX.Assign
+
+      check all(
+              {scope, user_def, role_def} = scope_user_role <- Assign.scope_user_role(),
+              ddlx <- Assign.generator(scope_user_role: scope_user_role)
+            ) do
         IO.puts(ddlx)
-        # IO.inspect(Parser.tokens(ddlx))
-        # |> dbg
-        assert {:ok, _} = Parser.parse(ddlx, default_schema: "my_default")
-        # Parser.parse(ddlx, default_schema: "my_default") |> dbg
+        assert {:ok, assign} = Parser.parse(ddlx, default_schema: "my_default")
+
+        {user_table, user_column} = user_def
+
+        assert assign.table_name == normalise(user_table, "my_default")
+        assert assign.user_column == normalise(user_column)
+
+        case role_def do
+          {{_, _} = _table, {_, _} = column} ->
+            assert assign.role_column == normalise(column)
+
+          {_, _} = name ->
+            assert assign.role_name == normalise(name)
+        end
+
+        assert assign.scope == normalise(scope, "my_default")
       end
+    end
+
+    test "parse assign global named role" do
+      sql = "ELECTRIC ASSIGN 'admin' TO admin_users.user_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result ==
+               %Assign{
+                 table_name: {"public", "admin_users"},
+                 user_column: "user_id",
+                 scope: nil,
+                 role_name: "admin",
+                 role_column: nil,
+                 if_statement: nil
+               }
+
+      sql = "ELECTRIC ASSIGN (NULL, 'admin') TO admin_users.user_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "admin_users"},
+               user_column: "user_id",
+               scope: nil,
+               role_name: "admin",
+               role_column: nil,
+               if_statement: nil
+             }
+
+      sql = "ELECTRIC ASSIGN (NULL, admin) TO admin_users.user_id;"
+      {:error, _} = Parser.parse(sql)
+    end
+
+    test "parse assign global role with column name" do
+      sql = "ELECTRIC ASSIGN user_roles.role_name TO user_roles.user_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "user_roles"},
+               user_column: "user_id",
+               scope: nil,
+               role_name: nil,
+               role_column: "role_name",
+               if_statement: nil
+             }
+
+      sql = "ELECTRIC ASSIGN (NULL, user_roles.role_name) TO user_roles.user_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "user_roles"},
+               user_column: "user_id",
+               scope: nil,
+               role_name: nil,
+               role_column: "role_name",
+               if_statement: nil
+             }
+    end
+
+    test "parse assign scoped role with column name" do
+      sql = "ELECTRIC ASSIGN ( projects, project_members.role ) TO project_members.user_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "project_members"},
+               user_column: "user_id",
+               scope: {"public", "projects"},
+               role_name: nil,
+               role_column: "role",
+               if_statement: nil
+             }
+    end
+
+    test "parse assign scoped role with name" do
+      sql = "ELECTRIC ASSIGN 'deliveries:driver' TO deliveries.driver_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "deliveries"},
+               user_column: "driver_id",
+               scope: {"public", "deliveries"},
+               role_name: "driver",
+               role_column: nil,
+               if_statement: nil
+             }
+
+      sql = "ELECTRIC ASSIGN 'other.deliveries:driver' TO other.deliveries.driver_id;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"other", "deliveries"},
+               user_column: "driver_id",
+               scope: {"other", "deliveries"},
+               role_name: "driver",
+               role_column: nil,
+               if_statement: nil
+             }
+
+      sql = "ELECTRIC ASSIGN deliveries:driver TO deliveries.driver_id;"
+
+      {:error, _msg} = Parser.parse(sql)
+    end
+
+    test "parse assign global named role with if function" do
+      sql =
+        "ELECTRIC ASSIGN 'record.reader' TO user_permissions.user_id IF ( can_read_records() )"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Assign{
+               table_name: {"public", "user_permissions"},
+               user_column: "user_id",
+               scope: nil,
+               role_name: "record.reader",
+               role_column: nil,
+               if_statement: "can_read_records()"
+             }
     end
   end
 
-  test "temp" do
-    Parser.tokens("ELECTRIC ASSIGN NULL:\"rK\".dmz TO tonpnrryzaseqxyn.zuilhqbdihqhwhjlvfy")
-    |> :ddlx.parse()
-    |> dbg
-
-    # Parser.tokens("ALTER TABLE \"old \"\"man\" with dog ( fish, toad, cow ) in his 'house';")
-    # |> :ddlx.parse()
-    # |> dbg
-    #
-    # Parser.tokens("alter Table \"old man\".\"Something\" enable ELECTRIC;")
-    # |> :ddlx.parse()
-    # |> dbg
-    #
-    # Parser.tokens("alter Table old man.Something enable ELECTRIC;")
-    # |> :ddlx.parse()
-    # |> dbg
-    #
-    # Parser.tokens("hello from old_man.something with dog ( fish, toad, cow ) in his 'house';")
-    # |> dbg
+  defp normalise(nil, _default_schema) do
+    nil
   end
 
   defp normalise({{_, _} = schema, {_, _} = table}, _default_schema) do
@@ -214,6 +338,14 @@ defmodule DDLXParserTest do
 
   defp normalise({_, _} = table, default_schema) do
     {default_schema, normalise_case(table)}
+  end
+
+  defp normalise(nil) do
+    nil
+  end
+
+  defp normalise({_, _} = column) do
+    normalise_case(column)
   end
 
   defp normalise_case({quoted, name}) when is_boolean(quoted) and is_binary(name) do
@@ -511,128 +643,6 @@ defmodule DDLXParserTest do
   end
 
   describe "Can do assign" do
-    test "parse assign global named role role" do
-      sql = "ELECTRIC ASSIGN 'admin' TO admin_users.user_id;"
-      {:ok, result} = Parser.old_parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "admin_users",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: "admin",
-                 role_column: nil,
-                 if_statement: nil
-               }
-             ]
-
-      sql = "ELECTRIC ASSIGN (NULL, 'admin') TO admin_users.user_id;"
-      {:ok, result} = Parser.old_parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "admin_users",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: "admin",
-                 role_column: nil,
-                 if_statement: nil
-               }
-             ]
-
-      sql = "ELECTRIC ASSIGN (NULL, admin) TO admin_users.user_id;"
-      {:error, _} = Parser.parse(sql)
-    end
-
-    test "parse assign global role with column name" do
-      sql = "ELECTRIC ASSIGN user_roles.role_name TO user_roles.user_id;"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "user_roles",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: nil,
-                 role_column: "role_name",
-                 if_statement: nil
-               }
-             ]
-
-      sql = "ELECTRIC ASSIGN (NULL, user_roles.role_name) TO user_roles.user_id;"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "user_roles",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: nil,
-                 role_column: "role_name",
-                 if_statement: nil
-               }
-             ]
-    end
-
-    test "parse assign scoped role with column name" do
-      sql = "ELECTRIC ASSIGN ( projects, project_members.role ) TO project_members.user_id;"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "project_members",
-                 user_column: "user_id",
-                 scope: "projects",
-                 role_name: nil,
-                 role_column: "role",
-                 if_statement: nil
-               }
-             ]
-    end
-
-    test "parse assign scoped role with name" do
-      sql = "ELECTRIC ASSIGN 'deliveries:driver' TO deliveries.driver_id;"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "deliveries",
-                 user_column: "driver_id",
-                 scope: "deliveries",
-                 role_name: "driver",
-                 role_column: nil,
-                 if_statement: nil
-               }
-             ]
-
-      sql = "ELECTRIC ASSIGN deliveries:driver TO deliveries.driver_id;"
-
-      {:error, _msg} = Parser.parse(sql)
-    end
-
-    test "parse assign global named role with if function" do
-      sql = "ELECTRIC ASSIGN 'record.reader' TO user_permissions.user_id IF ( can_read_records )"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Assign{
-                 schema_name: "public",
-                 table_name: "user_permissions",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: "record.reader",
-                 role_column: nil,
-                 if_statement: "can_read_records"
-               }
-             ]
-    end
-
     test "parse unassign " do
       sql = "ELECTRIC UNASSIGN 'record.reader' FROM user_permissions.user_id;"
       {:ok, result} = Parser.parse(sql)

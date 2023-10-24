@@ -75,6 +75,7 @@ defmodule Electric.DDLX.Parse.Tokens do
   deftoken(:token, "ASSIGN", [], do: :assign)
   deftoken(:token, "NULL", [], do: :null)
   deftoken(:token, "TO", [], do: :to)
+  deftoken(:token, "IF", [], do: :if)
   def token(s), do: s
 end
 
@@ -127,7 +128,7 @@ defmodule Electric.DDLX.Parse.Parser do
   def statement(stmt) do
     tokens = tokens(stmt)
 
-    %Statement{stmt: stmt, tokens: tokens, cmd: cmd_for_tokens(tokens)}
+    %Statement{stmt: stmt, tokens: tokens, cmd: nil}
   end
 
   def cmd_for_tokens(tokens) do
@@ -137,6 +138,7 @@ defmodule Electric.DDLX.Parse.Parser do
   def parse(ddlx, opts \\ []) do
     ddlx
     |> statement()
+    |> dbg
     |> do_parse()
     |> build_cmd(opts)
   end
@@ -252,7 +254,7 @@ defmodule Electric.DDLX.Parse.Parser do
   defguardp is_quoted(state) when state.sq or state.dq
   defguardp is_squoted(state) when state.sq
   defguardp is_dquoted(state) when state.dq
-  defguardp is_alpha(char) when char in ?A..?Z or char in ?a..?z
+  defguardp is_alpha(char) when char in ?A..?Z or char in ?a..?z or char in [?_]
 
   @whitespace [?\s, ?\n, ?\r, ?\n, ?\t]
 
@@ -275,7 +277,7 @@ defmodule Electric.DDLX.Parse.Parser do
 
     case Tokens.token(s) do
       keyword when is_atom(keyword) ->
-        [{keyword, {1, state.k, nil}}]
+        [{keyword, {1, state.k, nil}, s}]
 
       string when is_binary(string) ->
         [{:ident, {1, state.k, nil}, s}]
@@ -376,11 +378,12 @@ defmodule Electric.DDLX.Parse.Parser do
     }
   end
 
-  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?_] do
-    token_next(rest, %{state | p: state.p + 1, acc: [acc, c]})
+  defp token_next(<<a::8, ?=, rest::binary>>, %{acc: acc} = state) when a in [?>, ?<] do
+    {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<a::8, ?=>>), state),
+     {rest, %{state | p: state.p + 2, acc: []}}}
   end
 
-  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?,, ?(, ?), ?:] do
+  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?,, ?(, ?), ?:, ?=] do
     {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<c::8>>), state),
      {rest, %{state | p: state.p + 1, acc: []}}}
   end

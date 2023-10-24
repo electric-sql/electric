@@ -1,73 +1,48 @@
 defmodule Electric.DDLX.Parse.Build do
-  defstruct steps: [], cmd: nil
-
-  def new() do
-    %__MODULE__{}
+  def default_schema(opts) do
+    Keyword.get(opts, :default_schema, "public")
   end
 
-  def expect(build, tokens) do
-    %{build | steps: [{:expect, tokens} | build.steps]}
+  def fetch_attr(params, name, default) do
+    {:ok, Keyword.get(params, name, default)}
   end
 
-  def property(build, attr_name, fun) do
-    %{build | steps: [{:property, {attr_name, fun}} | build.steps]}
+  def fetch_attr(params, name) do
+    case Keyword.fetch(params, name) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, "missing #{name} attribute"}
+    end
   end
 
-  def run(build, stmt, opts \\ []) do
-    steps = Enum.reverse([:done | build.steps])
-
-    steps
-    |> Enum.reduce_while({stmt.tokens, %{}}, &process_step(&1, &2, opts))
-    |> build_cmd(stmt)
-  end
-
-  defp build_cmd({:ok, attrs}, stmt) do
-    {:ok, stmt.cmd.__struct__(attrs)}
-  end
-
-  defp build_cmd({:error, _} = error, _stmt) do
-    error
-  end
-
-  defp process_step(:done, {[], cmd}, _opts) do
-    {:halt, {:ok, cmd}}
-  end
-
-  defp process_step(:done, {tokens, cmd}, _opts) do
-    raise "run out of steps with #{inspect(tokens)} remaining"
-  end
-
-  defp process_step(steps, {[], cmd}, _opts) do
-    raise "run out of tokens with #{inspect(steps)} remaining"
-  end
-
-  defp process_step({:expect, keywords}, {tokens, cmd}, _opts) do
-    {t, tokens} = Enum.split(tokens, length(keywords))
-    match = Enum.zip(keywords, t)
-
-    if Enum.all?(match, fn {expected, {received, pos}} -> expected == received end) do
-      {:cont, {tokens, cmd}}
+  def attrs_equal(name1, value1, name2, value2) do
+    if value1 == value2 do
+      {:ok, value1}
     else
-      {expected, {token, pos}} =
-        Enum.find(match, fn {expected, {received, pos}} -> expected != received end)
-
-      # FIXME: replace with a {:halt, {:error, msg}}
-      raise "got unexpected token: #{token} at position #{pos} (was expecting #{expected})"
+      {:error,
+       "#{name1} must equal #{name2}: got #{name1}: #{inspect(value1)} #{name2}: #{inspect(value2)}"}
     end
   end
 
-  defp process_step({:property, {attr, value_fun}}, {[{token, pos} | tokens], cmd}, opts) do
-    case value_fun.(token, opts) do
-      {:ok, value} ->
-        {:cont, {tokens, Map.put(cmd, attr, value)}}
+  def split_role_def(role_def, opts) do
+    # TODO: validate that none of these are the empty string
+    case String.split(role_def, ":", parts: 2) do
+      [scope, role] ->
+        if blank?(scope) || blank?(role) do
+          {:error, "invalid role assignment #{inspect(role_def)}"}
+        else
+          {:ok, scope} = Electric.Postgres.NameParser.parse(scope, opts)
+          {:ok, scope: scope, role_name: role}
+        end
 
-      {:error, reason} ->
-        # FIXME: replace with a {:halt, {:error, msg}}
-        raise "unable to extract property #{attr} from #{inspect(token)}: got #{inspect(reason)}"
+      [role] ->
+        if blank?(role) do
+          {:error, "invalid role assignment #{inspect(role_def)}"}
+        else
+          {:ok, scope: nil, role_name: role}
+        end
     end
   end
 
-  # defp process_step(step, {tokens, cmd}) do
-  #   db
-  # end
+  defp blank?(s) when s in [""], do: true
+  defp blank?(_), do: false
 end

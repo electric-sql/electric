@@ -1,0 +1,2 @@
+# ignore .erl generated from the .yrl
+ddlx.erl

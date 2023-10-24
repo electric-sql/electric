@@ -11,12 +11,19 @@ Nonterminals
    role
    column_ident
    namespaced_name
+   if_expr
+   expr
+   op
+   const
+   func_args
+
    .
 
 Terminals 
    '"' '\'' '.' '(' ')' ',' ':'
-   alter table enable electric null assign to
-   string  ident int
+   alter table enable electric null assign to if
+   string  ident int float
+   '=' '>' '<' '<=' '>='
    .
 
 
@@ -30,10 +37,11 @@ stmt -> assign_stmt : '$1'.
 
 enable_stmt -> alter table table_ident enable electric : enable_cmd('$3').
 
-assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3', '$5').
+assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3' ++ '$5').
+assign_stmt -> electric assign scoped_role to column_ident if if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
 
-table_ident -> name : '$1'.
-table_ident -> namespaced_name : '$1'.
+table_ident -> name : [{table_name, '$1'}].
+table_ident -> name '.' name : [{table_schema, '$1'}, {table_name, '$3'}].
 
 name -> quoted_ident : '$1'.
 name -> unquoted_ident : '$1'.
@@ -42,7 +50,7 @@ quoted_ident -> '"' ident '"' : unwrap_ident('$2').
 unquoted_ident -> ident : downcase('$1').
 
 scoped_role -> role : [{scope, nil}] ++ '$1'.
-scoped_role -> scope ':' role : [{scope, '$1'}] ++ '$3'.
+scoped_role -> scope ':' role : '$1' ++ '$3'.
 scoped_role -> '(' scope ',' role ')' : '$2' ++ '$4'.
 
 role -> '\'' string '\'' : [{role_name, unwrap('$2')}].
@@ -59,6 +67,31 @@ column_ident -> name '.' name '.' name : [{user_table_schema, '$1'}, {user_table
 
 namespaced_name -> name '.' name : {'$1', '$3'}.
 
+%% don't want to get into parsing expressions, so just reproduce the expression
+%% as a binary for parsing somewhere else
+
+if_expr -> '(' expr ')' : [{'if', erlang:iolist_to_binary('$2')}].
+
+expr -> '(' expr ')' : ["(", '$2', ")"].
+expr -> expr op expr : ['$1', " ", '$2', " ", '$3']. %[{expr, [{op, '$2'}, {left, '$1'}, {right, '$3'}]}].
+expr -> name '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
+expr -> name : ['$1']. % [{name, '$1'}].
+expr -> const : ['$1']. % [{const, '$1'}].
+
+op -> '=' : ["="].
+op -> '>' : [">"].
+op -> '<' : ["<"].
+op -> '<=' : ["<="].
+op -> '>=' : [">="].
+
+const -> '\'' string '\'' : ["'", '$2', "'"]. % {string, unwrap('$2')}.
+const -> int : erlang:integer_to_list(unwrap('$1')). % {int, unwrap('$1')}.
+const -> float : erlang:float_to_list(unwrap('$1')). % {float, unwrap('$1')}.
+
+func_args -> '$empty' : [].
+func_args -> expr : ['$1'].
+func_args -> expr ',' func_args : ['$1', "," , '$3'].
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Erlang code.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -69,9 +102,9 @@ unwrap_ident({ident, _, V}) -> V.
 unwrap({_, _, V}) -> V.
 
 enable_cmd(TableName) ->
-  {'Elixir.Electric.DDLX.Command.Enable', [ {table_name, TableName} ]}.
+  {'Elixir.Electric.DDLX.Command.Enable', TableName}.
 
-assign_cmd(Role, Column) ->
-  {'Elixir.Electric.DDLX.Command.Assign', Role ++ Column}.
+assign_cmd(Attrs) ->
+  {'Elixir.Electric.DDLX.Command.Assign', Attrs}.
 
 downcase(String) -> 'Elixir.String':downcase(unwrap(String)).
