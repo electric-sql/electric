@@ -169,7 +169,10 @@ projectPackageJson.name = projectName
 
 await fs.writeFile(
   packageJsonFile,
-  JSON.stringify(projectPackageJson, null, 2).replace('http://localhost:5133', `http://localhost:${electricPort}`)
+  JSON
+    .stringify(projectPackageJson, null, 2)
+    .replace('http://localhost:5133', `http://localhost:${electricPort}`)
+    .replace('postgresql://prisma:proxy_password@localhost:65432/electric', `postgresql://prisma:proxy_password@localhost:${electricProxyPort}/electric`)
 )
 
 // Update the project's title in the index.html file

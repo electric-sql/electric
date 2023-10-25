@@ -60,6 +60,10 @@ async function init() {
   
   // Update port in package.json file
   await findAndReplaceInFile(`http://localhost:${oldElectricPort}`, `http://localhost:${electricPort}`, packageJsonFile)
+  await findAndReplaceInFile(
+    `postgresql://prisma:proxy_password@localhost:${oldElectricProxyPort}/electric`,
+    `postgresql://prisma:proxy_password@localhost:${electricProxyPort}/electric`, packageJsonFile
+  )
   
   // Update the port on which Electric runs in the builder.js file
   await findAndReplaceInFile(`ws://localhost:${oldElectricPort}`, `ws://localhost:${electricPort}`, builderFile)

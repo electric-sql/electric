@@ -7,7 +7,7 @@
     "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
     "backend:up": "yarn backend:start --detach",
     "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
-    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133",
+    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
     "client:watch": "yarn client:generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",
@@ -25,7 +25,7 @@
     "electric-sql": "latest",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#master"
+    "wa-sqlite": "rhashimoto/wa-sqlite"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
