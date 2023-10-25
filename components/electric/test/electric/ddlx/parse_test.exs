@@ -13,6 +13,52 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Command
   alias Electric.DDLX.Parse.Common
 
+  describe "tokens/1" do
+    test "string" do
+      delims = ~w[' $$ $delim$]
+
+      strings = [
+        "my string",
+        "my ' string"
+      ]
+
+      for d <- delims do
+        for s <- strings do
+          quoted = if(d == "'", do: :binary.replace(s, "'", "''", [:global]), else: s)
+          source = "#{d}#{quoted}#{d}"
+          tokens = Parser.tokens("ELECTRIC SQLITE #{source};")
+
+          dbg(source)
+
+          assert match?(
+                   [
+                     {:electric, {1, 0, nil}, _},
+                     {:sqlite, {1, 9, nil}, _},
+                     {:string, {1, 16, ^source}, ^s}
+                   ],
+                   tokens
+                 ),
+                 "string #{inspect(s)} not matched with delim #{inspect(d)}: #{inspect(tokens)}"
+        end
+      end
+
+      tokens =
+        Parser.tokens("ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin'")
+
+      assert [
+               {:electric, {1, 0, nil}, "ELECTRIC"},
+               {:grant, {1, 9, nil}, "GRANT"},
+               {:update, {1, 15, nil}, "UPDATE"},
+               {:on, {1, 22, nil}, "ON"},
+               {:ident, {1, 25, nil}, "thing"},
+               {:., {1, 30, nil}},
+               {:ident, {1, 31, nil}, "Köln_en$ts"},
+               {:to, {1, 42, nil}, "TO"},
+               {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
+             ] = tokens
+    end
+  end
+
   describe "ENABLE ELECTRIC" do
     test "parse enable" do
       sql = "ALTER TABLE things ENABLE ELECTRIC;"
@@ -386,92 +432,6 @@ defmodule DDLXParserTest do
     end
   end
 
-  describe "tokens/1" do
-    test "string" do
-      delims = ~w[' $$ $delim$]
-
-      strings = [
-        "my string",
-        "my ' string"
-      ]
-
-      for d <- delims do
-        for s <- strings do
-          quoted = if(d == "'", do: :binary.replace(s, "'", "''", [:global]), else: s)
-          source = "#{d}#{quoted}#{d}"
-          tokens = Parser.tokens("ELECTRIC SQLITE #{source};")
-
-          dbg(source)
-
-          assert match?(
-                   [
-                     {:electric, {1, 0, nil}, _},
-                     {:sqlite, {1, 9, nil}, _},
-                     {:string, {1, 16, ^source}, ^s}
-                   ],
-                   tokens
-                 ),
-                 "string #{inspect(s)} not matched with delim #{inspect(d)}: #{inspect(tokens)}"
-        end
-      end
-
-      tokens =
-        Parser.tokens("ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin'")
-
-      assert [
-               {:electric, {1, 0, nil}, "ELECTRIC"},
-               {:grant, {1, 9, nil}, "GRANT"},
-               {:update, {1, 15, nil}, "UPDATE"},
-               {:on, {1, 22, nil}, "ON"},
-               {:ident, {1, 25, nil}, "thing"},
-               {:., {1, 30, nil}},
-               {:ident, {1, 31, nil}, "Köln_en$ts"},
-               {:to, {1, 42, nil}, "TO"},
-               {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
-             ] = tokens
-    end
-  end
-
-  # describe "Can parse SQL into tokens" do
-  #   test "can create tokens" do
-  #     re = Common.regex_for_keywords(["hello", "fish", "dog"])
-  #     input = "hello from \"old man\" with dog ( fish, toad, cow ) in his 'house';"
-  #     tokens = Parser.get_tokens(input, re)
-  #
-  #     assert tokens == [
-  #              {:keyword, "hello"},
-  #              {:name, "from"},
-  #              {:name, "old man"},
-  #              {:name, "with"},
-  #              {:keyword, "dog"},
-  #              {:collection, " fish, toad, cow "},
-  #              {:name, "in"},
-  #              {:name, "his"},
-  #              {:string, "house"}
-  #            ]
-  #   end
-  #
-  #   test "can create tokens with quoted names" do
-  #     re = Common.regex_for_keywords(["hello", "fish", "dog"])
-  #
-  #     test_inputs = [
-  #       {"hello from stupid.\"old man\";", "stupid.old man"},
-  #       {"hello from \"very stupid\".\"old man\";", "very stupid.old man"},
-  #       {"hello from \"very stupid\".man ;", "very stupid.man"}
-  #     ]
-  #
-  #     Enum.each(test_inputs, fn {input, expected_token} ->
-  #       tokens = Parser.get_tokens(input, re)
-  #
-  #       assert tokens == [
-  #                {:keyword, "hello"},
-  #                {:name, "from"},
-  #                {:name, expected_token}
-  #              ]
-  #     end)
-  #   end
-  # end
-
   describe "ELECTRIC GRANT" do
     test "parse grant" do
       sql =
@@ -678,11 +638,11 @@ defmodule DDLXParserTest do
     end
 
     test "parse sqlite with $ delim" do
-      sql = "ELECTRIC SQLITE $sqlite$select 'this';$sqlite$;"
+      sql = "ELECTRIC SQLITE $sqlite$-- comment\nselect 'this';$sqlite$;"
       {:ok, result} = Parser.parse(sql)
 
       assert result == %SQLite{
-               sqlite_statement: "select 'this';"
+               sqlite_statement: "-- comment\nselect 'this';"
              }
     end
   end
