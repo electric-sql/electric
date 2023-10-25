@@ -55,7 +55,14 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   def handle_continue({:connect, params}, state) do
     host = Map.get(params, :host, "localhost")
     port = Map.get(params, :port, 5432)
-    {:ok, conn} = :gen_tcp.connect(host, port, [active: true], 1000)
+
+    extra_options =
+      case Map.get(params, :ipv6) do
+        true -> [:inet6]
+        _ -> []
+      end
+
+    {:ok, conn} = :gen_tcp.connect(host, port, [active: true] ++ extra_options, 1000)
     {:noreply, %{state | conn: conn}, {:continue, {:authenticate, params}}}
   end
 
