@@ -1,7 +1,7 @@
 defmodule Electric.DDLX.Command.Revoke do
   alias Electric.DDLX.Command
 
-  import Electric.DDLX.Parse.Build, except: [validate_scope_information: 2]
+  import Electric.DDLX.Parser.Build, except: [validate_scope_information: 2]
 
   @type t() :: %__MODULE__{
           privileges: [String.t()],
@@ -57,17 +57,17 @@ defmodule Electric.DDLX.Command.Revoke do
     import Electric.DDLX.Command.Common
 
     def pg_sql(revoke) do
-      [
+      for privilege <- revoke.privileges do
         """
         CALL electric.revoke(
-          #{sql_repr(revoke.privileges)},
+          #{sql_repr(privilege)},
           #{sql_repr(revoke.on_table)},
           #{sql_repr(revoke.role)},
           #{sql_repr(revoke.column_names)},
           #{sql_repr(revoke.scope)}
         );
         """
-      ]
+      end
     end
 
     def table_name(%{on_table: table_name}) do

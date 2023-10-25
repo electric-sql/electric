@@ -1,7 +1,7 @@
 defmodule Electric.DDLX.Command.Unassign do
   alias Electric.DDLX.Command
 
-  import Electric.DDLX.Parse.Build
+  import Electric.DDLX.Parser.Build
 
   @type t() :: %__MODULE__{
           table_name: String.t(),
@@ -48,7 +48,7 @@ defmodule Electric.DDLX.Command.Unassign do
       [
         """
         CALL electric.unassign(
-          assign_table => #{sql_repr(unassign.table_name)},
+          assign_table_full_name => #{sql_repr(unassign.table_name)},
           scope => #{sql_repr(unassign.scope)},
           user_column_name => #{sql_repr(unassign.user_column)},
           role_name_string => #{sql_repr(unassign.role_name)},

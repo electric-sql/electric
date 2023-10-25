@@ -1,4 +1,4 @@
-defmodule Electric.DDLX.Parse.Macros do
+defmodule Electric.DDLX.Parser.Macros do
   @doc """
   Produces a function head that matches a string in a case insensitive way.
 

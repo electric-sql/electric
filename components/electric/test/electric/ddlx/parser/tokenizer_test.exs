@@ -1,7 +1,7 @@
-defmodule Electric.DDLX.Parse.TokenizerTest do
+defmodule Electric.DDLX.Parser.TokenizerTest do
   use ExUnit.Case, async: true
 
-  alias Electric.DDLX.Parse.Tokenizer
+  alias Electric.DDLX.Parser.Tokenizer
 
   describe "tokens/1" do
     test "string" do
@@ -40,7 +40,7 @@ defmodule Electric.DDLX.Parse.TokenizerTest do
                {:on, {1, 22, nil}, "ON"},
                {:unquoted_identifier, {1, 25, nil}, "thing"},
                {:., {1, 30, nil}},
-               {:unquoted_identifier, {1, 31, nil}, "köln_en$ts"},
+               {:unquoted_identifier, {1, 31, nil}, "Köln_en$ts"},
                {:to, {1, 42, nil}, "TO"},
                {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
              ] = tokens
@@ -55,7 +55,7 @@ defmodule Electric.DDLX.Parse.TokenizerTest do
       assert [
                {:unquoted_identifier, {1, 0, nil}, "identifier"},
                {:quoted_identifier, {1, 11, "\"quoted identifier\""}, "quoted identifier"},
-               {:unquoted_identifier, {1, 31, nil}, "unquotedidentifier"},
+               {:unquoted_identifier, {1, 31, nil}, "UnquotedIdentifier"},
                {:quoted_identifier, {1, 50, "\"Quoted \"\" Identifier\""},
                 "Quoted \"\" Identifier"}
              ] = tokens
@@ -74,7 +74,7 @@ defmodule Electric.DDLX.Parse.TokenizerTest do
                {:quoted_identifier, {1, 27, "\"Köln_en$ts\""}, "Köln_en$ts"},
                {:unquoted_identifier, {1, 40, nil}, "thing"},
                {:., {1, 45, nil}},
-               {:unquoted_identifier, {1, 46, nil}, "köln_en$ts"},
+               {:unquoted_identifier, {1, 46, nil}, "Köln_en$ts"},
                {:unquoted_identifier, {1, 57, nil}, "this"},
                {:-, {1, 61, nil}},
                {:unquoted_identifier, {1, 62, nil}, "that"}

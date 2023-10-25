@@ -77,11 +77,11 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
   end
 
   def grant(opts \\ []) do
-    column_names = Keyword.get_lazy(opts, :columns, &column_list/0)
-    using = Keyword.get_lazy(opts, :using, &using/0)
+    _column_names = Keyword.get_lazy(opts, :columns, &column_list/0)
+    _using = Keyword.get_lazy(opts, :using, &using/0)
 
     # TODO: check clause CHECK (column = 'contstant', other_column = 3) etc
-    table_name =
+    _table_name =
       Keyword.get_lazy(opts, :table, &table/0)
   end
 

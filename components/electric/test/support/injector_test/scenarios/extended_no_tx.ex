@@ -79,7 +79,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
   end
 
   def assert_valid_electric_command(injector, _framework, query) do
-    {:ok, command} = DDLX.ddlx_to_commands(query)
+    {:ok, command} = DDLX.parse(query)
 
     injector
     |> client(parse_describe(query), server: begin())
@@ -102,7 +102,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
 
   def assert_electrify_server_error(injector, _framework, query, error_details) do
     # assert that the electrify command only generates a single query
-    {:ok, command} = DDLX.ddlx_to_commands(query)
+    {:ok, command} = DDLX.parse(query)
     [electrify] = Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1)
 
     injector

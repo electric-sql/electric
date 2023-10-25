@@ -1,4 +1,4 @@
-defmodule Electric.DDLX.Parse.Build do
+defmodule Electric.DDLX.Parser.Build do
   def default_schema(opts) do
     Keyword.get(opts, :default_schema, "public")
   end
@@ -75,7 +75,7 @@ defmodule Electric.DDLX.Parse.Build do
            ),
          {:ok, table_name} <-
            attrs_equal(:role_table_name, role_table_name, :user_table_name, user_table_name) do
-      {:ok, role_table: {role_table_schema, role_table_name}, role_column: role_column}
+      {:ok, role_table: {schema_name, table_name}, role_column: role_column}
     end
   end
 

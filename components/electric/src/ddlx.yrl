@@ -85,7 +85,7 @@ sqlite_stmt -> electric sqlite string : sqlite_cmd(unwrap('$3')).
 table_ident -> identifier : [{table_name, '$1'}].
 table_ident -> identifier '.' identifier : [{table_schema, '$1'}, {table_name, '$3'}].
 
-identifier -> unquoted_identifier : unwrap('$1').
+identifier -> unquoted_identifier : unquoted_identifier('$1').
 identifier -> quoted_identifier : unwrap('$1').
 
 scoped_role -> role : [{scope, nil}] ++ '$1'.
@@ -187,3 +187,5 @@ revoke_cmd(Attrs) ->
 sqlite_cmd(Stmt) ->
   {'Elixir.Electric.DDLX.Command.SQLite', [{statement, Stmt}]}.
 
+unquoted_identifier({_, _, Ident}) ->
+  'Elixir.String':downcase(Ident).

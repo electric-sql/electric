@@ -5,55 +5,35 @@ defmodule Electric.DDLX.DDLXCommandsTest do
   alias Electric.DDLX
   alias Electric.DDLX.Command
 
-  alias Electric.DDLX.Command.{
-    Grant,
-    Revoke,
-    Assign,
-    Unassign
-    # "enable" is just `electrify` so covered by other tests
-    # Enable,
-    ## Disabled for the moment until we work on support
-    # Disable,
-    # SQLite
-  }
-
   @moduletag ddlx: true
 
   @electric_grants "electric.grants"
-
-  describe "checking statements" do
-    test "check grant" do
-      assert DDLX.is_ddlx("ELECTRIC GRANT then any old rubbish")
-      assert DDLX.is_ddlx("ELECTRIC REVOKE then any old rubbish")
-      assert not DDLX.is_ddlx("ELECTRIC ELEPHANT then any old rubbish")
-    end
-  end
 
   describe "parsing statements" do
     test "parse success" do
       sql =
         "ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = Paul);"
 
-      {:ok, _} = DDLX.ddlx_to_commands(sql)
+      {:ok, _} = DDLX.parse(sql)
     end
 
     test "parse fail" do
       sql =
         "ELECTRIC GRANT JUNK ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = Paul);"
 
-      {:error, %Command.Error{sql: ^sql, message: "Something went wrong near JUNK"}} =
-        DDLX.ddlx_to_commands(sql)
+      {:error, %Command.Error{sql: ^sql, message: "syntax error before: <<\"JUNK\">>"}} =
+        DDLX.parse(sql)
     end
   end
 
   describe "creating rows in postgres from command structs" do
     test_tx "adding a grant from electric", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: nil,
         check_fn: nil
       }
@@ -61,17 +41,25 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       query(conn, Electric.DDLX.command_to_postgres(grant1))
 
       assert_rows(conn, @electric_grants, [
-        ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
+        [
+          "update",
+          quote_table(grant1.on_table),
+          "house.admin",
+          "*",
+          quote_table(grant1.scope),
+          nil,
+          nil
+        ]
       ])
     end
 
     test_tx "adding a grant from electric twice", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: nil,
         check_fn: nil
       }
@@ -83,12 +71,12 @@ defmodule Electric.DDLX.DDLXCommandsTest do
     end
 
     test_tx "adding a grant with multiple grant columns", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["name", "description"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: nil,
         check_fn: nil
       }
@@ -99,19 +87,35 @@ defmodule Electric.DDLX.DDLXCommandsTest do
         conn,
         @electric_grants,
         [
-          ["update", "thing.Köln_en$ts", "house.admin", "name", "projects", nil, nil],
-          ["update", "thing.Köln_en$ts", "house.admin", "description", "projects", nil, nil]
+          [
+            "update",
+            quote_table(grant1.on_table),
+            "house.admin",
+            "name",
+            quote_table(grant1.scope),
+            nil,
+            nil
+          ],
+          [
+            "update",
+            quote_table(grant1.on_table),
+            "house.admin",
+            "description",
+            quote_table(grant1.scope),
+            nil,
+            nil
+          ]
         ]
       )
     end
 
     test_tx "adding and delete a grant", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: nil,
         check_fn: nil
       }
@@ -119,15 +123,23 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       query(conn, Electric.DDLX.command_to_postgres(grant1))
 
       assert_rows(conn, @electric_grants, [
-        ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
+        [
+          "update",
+          quote_table(grant1.on_table),
+          "house.admin",
+          "*",
+          quote_table(grant1.scope),
+          nil,
+          nil
+        ]
       ])
 
-      revoke = %Revoke{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      revoke = %Command.Revoke{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects"
+        scope: {"public", "projects"}
       }
 
       query(conn, Command.pg_sql(revoke))
@@ -139,13 +151,17 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       )
     end
 
+    def quote_table({schema, table}) do
+      ~s["#{schema}"."#{table}"]
+    end
+
     test_tx "adding and delete a grant no op", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: nil,
         check_fn: nil
       }
@@ -153,31 +169,47 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       query(conn, Electric.DDLX.command_to_postgres(grant1))
 
       assert_rows(conn, @electric_grants, [
-        ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
+        [
+          "update",
+          quote_table(grant1.on_table),
+          "house.admin",
+          "*",
+          quote_table(grant1.scope),
+          nil,
+          nil
+        ]
       ])
 
-      revoke = %Revoke{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      revoke = %Command.Revoke{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["name"],
-        scope: "projects"
+        scope: {"public", "projects"}
       }
 
       query(conn, Electric.DDLX.command_to_postgres(revoke))
 
       assert_rows(conn, @electric_grants, [
-        ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", nil, nil]
+        [
+          "update",
+          quote_table(grant1.on_table),
+          "house.admin",
+          "*",
+          quote_table(grant1.scope),
+          nil,
+          nil
+        ]
       ])
     end
 
     test_tx "adding a grant with using path", fn conn ->
-      grant1 = %Grant{
-        privilege: "update",
-        on_table: "thing.Köln_en$ts",
+      grant1 = %Command.Grant{
+        privileges: ["update"],
+        on_table: {"thing", "Köln_en$ts"},
         role: "house.admin",
         column_names: ["*"],
-        scope: "projects",
+        scope: {"public", "projects"},
         using_path: "project_id",
         check_fn: nil
       }
@@ -185,7 +217,15 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       query(conn, Electric.DDLX.command_to_postgres(grant1))
 
       assert_rows(conn, @electric_grants, [
-        ["update", "thing.Köln_en$ts", "house.admin", "*", "projects", "project_id", nil]
+        [
+          "update",
+          quote_table(grant1.on_table),
+          "house.admin",
+          "*",
+          quote_table(grant1.scope),
+          "project_id",
+          nil
+        ]
       ])
     end
 
@@ -226,11 +266,10 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
       query(conn, memberships_sql)
 
-      assign = %Assign{
-        schema_name: "public",
-        table_name: "memberships",
+      assign = %Command.Assign{
+        table_name: {"public", "memberships"},
         user_column: "user_id",
-        scope: "projects",
+        scope: {"public", "projects"},
         role_name: nil,
         role_column: "role",
         if_statement: "hello"
@@ -241,7 +280,16 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       assert_rows_slice(
         conn,
         "electric.assignments",
-        [["public.memberships", "projects", "user_id", "__none__", "role", "hello"]],
+        [
+          [
+            quote_table(assign.table_name),
+            quote_table(assign.scope),
+            "user_id",
+            "__none__",
+            "role",
+            "hello"
+          ]
+        ],
         1..6
       )
     end
@@ -271,20 +319,19 @@ defmodule Electric.DDLX.DDLXCommandsTest do
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
           FOREIGN KEY(user_id)
-          REFERENCES users(id),
+          REFERENCES public.users(id),
         CONSTRAINT project_fk
           FOREIGN KEY(project_id)
-          REFERENCES projects(id)
+          REFERENCES public.projects(id)
       );
       """
 
       query(conn, memberships_sql)
 
-      assign = %Assign{
-        schema_name: "public",
-        table_name: "memberships",
+      assign = %Command.Assign{
+        table_name: {"public", "memberships"},
         user_column: "user_id",
-        scope: "projects",
+        scope: {"public", "projects"},
         role_name: nil,
         role_column: "role",
         if_statement: "hello"
@@ -295,15 +342,23 @@ defmodule Electric.DDLX.DDLXCommandsTest do
       assert_rows_slice(
         conn,
         "electric.assignments",
-        [["public.memberships", "projects", "user_id", "__none__", "role", "hello"]],
+        [
+          [
+            quote_table(assign.table_name),
+            quote_table(assign.scope),
+            "user_id",
+            "__none__",
+            "role",
+            "hello"
+          ]
+        ],
         1..6
       )
 
-      unassign = %Unassign{
-        schema_name: "public",
-        table_name: "memberships",
+      unassign = %Command.Unassign{
+        table_name: {"public", "memberships"},
         user_column: "user_id",
-        scope: "projects",
+        scope: {"public", "projects"},
         role_name: nil,
         role_column: "role"
       }

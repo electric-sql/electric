@@ -1,7 +1,7 @@
 defmodule Electric.DDLX.Command.SQLite do
   alias Electric.DDLX.Command
 
-  import Electric.DDLX.Parse.Build
+  import Electric.DDLX.Parser.Build
 
   @type t() :: %__MODULE__{
           sqlite_statement: String.t()

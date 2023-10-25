@@ -1,7 +1,7 @@
 defmodule Electric.DDLX.Command.Grant do
   alias Electric.DDLX.Command
 
-  import Electric.DDLX.Parse.Build, except: [validate_scope_information: 2]
+  import Electric.DDLX.Parser.Build, except: [validate_scope_information: 2]
 
   @type t() :: %__MODULE__{
           privileges: [String.t()],
@@ -65,7 +65,7 @@ defmodule Electric.DDLX.Command.Grant do
     import Electric.DDLX.Command.Common
 
     def pg_sql(grant) do
-      for privilege <- grant.privilege do
+      for privilege <- grant.privileges do
         """
         CALL electric.grant(privilege_name => #{sql_repr(privilege)},
           on_table_name => #{sql_repr(grant.on_table)},

@@ -1,8 +1,8 @@
-defmodule Electric.DDLX.Parse.ParserTest do
+defmodule Electric.DDLX.ParserTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias Electric.DDLX.Parse.Parser
+  alias Electric.DDLX.Parser
   alias Electric.DDLX.Command
 
   describe "ENABLE ELECTRIC" do
@@ -142,7 +142,7 @@ defmodule Electric.DDLX.Parse.ParserTest do
                 if_statement: nil
               }} =
                Parser.parse(
-                 "ELECTRIC ASSIGN (NuLl, Application.user_roles.role_name) TO application.user_roles.user_id;",
+                 "ELECTRIC ASSIGN (NuLl, Application.User_roles.Role_name) TO Application.user_roles.User_id;",
                  default_schema: "my_default"
                )
     end
@@ -170,7 +170,7 @@ defmodule Electric.DDLX.Parse.ParserTest do
                 role_name: nil,
                 role_column: "role",
                 if_statement: nil
-              } = assign} =
+              }} =
                Parser.parse(
                  "ELECTRIC ASSIGN ( auth.projects, application.project_members.role) TO application.project_members.user_id;",
                  default_schema: "my_default"

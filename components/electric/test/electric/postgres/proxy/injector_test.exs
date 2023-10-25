@@ -425,7 +425,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
       """
 
-      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE something ENABLE ELECTRIC")
+      {:ok, command} = DDLX.parse("ALTER TABLE something ENABLE ELECTRIC")
       [electric] = DDLX.Command.pg_sql(command)
       version = "20230915175206"
 
@@ -612,7 +612,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     test "@databases version capture", cxt do
       alias Electric.DDLX
 
-      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE public.socks ENABLE ELECTRIC;")
+      {:ok, command} = DDLX.parse("ALTER TABLE public.socks ENABLE ELECTRIC;")
       [electric] = DDLX.Command.pg_sql(command)
 
       version_query =

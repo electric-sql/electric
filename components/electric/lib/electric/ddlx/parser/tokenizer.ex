@@ -1,5 +1,5 @@
-defmodule Electric.DDLX.Parse.Tokenizer.Tokens do
-  import Electric.DDLX.Parse.Macros
+defmodule Electric.DDLX.Parser.Tokenizer.Tokens do
+  import Electric.DDLX.Parser.Macros
 
   deftoken(:token, "ALL", [], do: :all)
   deftoken(:token, "ALTER", [], do: :alter)
@@ -29,8 +29,8 @@ defmodule Electric.DDLX.Parse.Tokenizer.Tokens do
   def token(s), do: s
 end
 
-defmodule Electric.DDLX.Parse.Tokenizer do
-  alias Electric.DDLX.Parse.Tokenizer.Tokens
+defmodule Electric.DDLX.Parser.Tokenizer do
+  alias Electric.DDLX.Parser.Tokenizer.Tokens
 
   @type position() :: {integer(), integer(), nil | String.t()}
   @type t() :: {atom, position()} | {atom, position(), String.t()}
@@ -67,7 +67,7 @@ defmodule Electric.DDLX.Parse.Tokenizer do
         [{keyword, {1, state.k, nil}, s}]
 
       string when is_binary(string) ->
-        [{:unquoted_identifier, {1, state.k, nil}, String.downcase(string)}]
+        [{:unquoted_identifier, {1, state.k, nil}, string}]
     end
   end
 
