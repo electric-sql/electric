@@ -1,12 +1,57 @@
 body {
-  margin: 0;
-  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  --fg: rgb(232, 234, 240);
+  --bg: rgb(19, 21, 23);
+  --electric-green: rgb(0, 210, 160);
+  --electric-green-bark: rgb(16, 171, 135);
+
+  font-family: OpenSauceOne, 'Segoe UI', Inter, Helvetica, Arial, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #1c1e20;
+  margin: 0;
+  background: var(--bg);
   min-width: 360px;
+  color: var(--fg);
+}
+
+a {
+  color: var(--electric-green);
+}
+
+a:hover {
+  color: var(--electric-green-bark);
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.button {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 88%;
+  text-align: center;
+  padding: 0.8em 1em;
+  border-radius: 0.5em;
+  background-color: var(--bg);
+  border: 1px solid var(--fg);
+  color: var(--fg);
+  --border-color-hover: rgb(210, 212, 220);
+}
+
+.button:hover {
+  color: var(--border-color-hover);
+  border-color: var(--border-color-hover);
+}
+
+.button__primary {
+  color: var(--bg);
+  background-color: var(--fg);
+}
+
+.button__primary:hover {
+  color: var(--bg);
+  background-color: var(--border-color-hover);
 }

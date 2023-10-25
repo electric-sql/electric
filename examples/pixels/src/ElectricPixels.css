@@ -1,0 +1,74 @@
+.electric-pixels {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  background-color: rgb(28, 29, 33);
+  --grid-size: calc(min(90vw, 80vh, 800px) - 100px);
+  --square-size: calc(var(--grid-size) / 32);
+  --border: 0.5px solid #333;
+  padding: var(--square-size);
+  border-radius: var(--square-size);
+}
+
+.electric-pixels__grid {
+  position: relative;
+  display: grid;
+  gap: 0;
+  width: var(--grid-size);
+  height: var(--grid-size);
+  border: var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.electric-pixels__pixel {
+  width: 100%;
+  height: 100%;
+  border: var(--border);
+  margin: -0.5px;
+}
+
+.electric-pixels__color-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  border: var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-right: var(--square-size);
+}
+
+.electric-pixels__color-picker__color {
+  border: var(--border);
+  margin: -0.5px;
+  width: var(--square-size);
+  height: var(--square-size);
+}
+
+.electric-pixels__reset-button {
+  border: var(--border);
+  background-color: #222;
+  border-radius: 5px;
+  padding: 0;
+  margin-top: calc(var(--square-size) / 2);
+  width: var(--square-size);
+  height: var(--square-size);
+  color: #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.electric-pixels__reset-button > svg {
+  width: 75%;
+  height: 75%;
+  display: block;
+}
+
+.electric-pixels__reset-button:hover {
+  background-color: #333;
+}
+
+.electric-pixels__grid-wrapper {
+  position: relative;
+}

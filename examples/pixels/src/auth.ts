@@ -8,7 +8,7 @@ const dummyUserId = genUUID()
 // Generate an insecure authentication JWT.
 // See https://electric-sql.com/docs/usage/auth for more details.
 export const authToken = () => {
-  const claims = {'user_id': dummyUserId}
+  const claims = { user_id: dummyUserId }
 
   return insecureAuthToken(claims)
 }
