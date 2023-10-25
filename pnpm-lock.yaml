@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -199,8 +199,8 @@ importers:
         specifier: ^8.22.0
         version: 8.41.0
       expo-sqlite:
-        specifier: ^11.0.0
-        version: 11.1.1(expo@48.0.19)
+        specifier: ^11.7.0
+        version: 11.7.0(expo@48.0.19)
       husky:
         specifier: ^8.0.3
         version: 8.0.3
@@ -236,7 +236,7 @@ importers:
         version: 4.9.5
       wa-sqlite:
         specifier: git+https://github.com/rhashimoto/wa-sqlite#master
-        version: github.com/rhashimoto/wa-sqlite/a856e82f1f5736892539f6d05abbb569dd59011b
+        version: github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -7244,8 +7244,8 @@ packages:
       invariant: 2.2.4
     dev: true
 
-  /expo-sqlite@11.1.1(expo@48.0.19):
-    resolution: {integrity: sha512-93KQ4Bc4+xQF2nOZC2jcJ+d0K1ooQSEYganLukw4Sp2LuxUtBsPXYTyOeisSxQSMMaz9nHiTqag8DEC1MiB7Xw==}
+  /expo-sqlite@11.7.0(expo@48.0.19):
+    resolution: {integrity: sha512-z/YudIROUJFO46TWCyEqrWH31o17xMO0ALEobsIovBk6oM/HZmWXUdEKJeWvrdM1fBvoBZ8mVa//n3B5qBLdtQ==}
     peerDependencies:
       expo: '*'
     dependencies:
@@ -14358,8 +14358,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/a856e82f1f5736892539f6d05abbb569dd59011b:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/a856e82f1f5736892539f6d05abbb569dd59011b}
+  github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0}
     name: wa-sqlite
-    version: 0.9.5
+    version: 0.9.6
     dev: true

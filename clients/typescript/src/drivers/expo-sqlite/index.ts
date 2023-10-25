@@ -32,7 +32,7 @@ import { DbSchema } from '../../client/model/schema'
 import { WebSocketReactNative } from '../../sockets/react-native'
 
 export { DatabaseAdapter }
-export type { Database }
+export { Database }
 
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
@@ -40,7 +40,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   config: ElectricConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
-  const dbName: DbName = db._name!
+  const dbName: DbName = db.name
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || WebSocketReactNative
 

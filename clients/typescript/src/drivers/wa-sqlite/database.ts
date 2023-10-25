@@ -11,20 +11,13 @@ import * as SQLite from 'wa-sqlite'
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
 import { SqlValue, Statement } from '../../util'
-import { QueryExecResult } from '../util/results'
+import { Row } from '../../util/types'
+import { Database } from '../generic'
 
 import { Mutex } from 'async-mutex'
+import { resultToRows } from '../util/results'
 
-const emptyResult = {
-  columns: [],
-  values: [],
-}
-
-export interface Database {
-  name: string
-  exec(statement: Statement): Promise<QueryExecResult>
-  getRowsModified(): number
-}
+export type { Database }
 
 export class ElectricDatabase implements Database {
   mutex: Mutex
@@ -39,7 +32,7 @@ export class ElectricDatabase implements Database {
     this.mutex = new Mutex()
   }
 
-  async exec(statement: Statement): Promise<QueryExecResult> {
+  async exec(statement: Statement): Promise<Row[]> {
     // Uses a mutex to ensure that the execution of SQL statements is not interleaved
     // otherwise wa-sqlite may encounter problems such as indices going out of bounds
     const release = await this.mutex.acquire()
@@ -57,7 +50,7 @@ export class ElectricDatabase implements Database {
 
     if (prepared === null) {
       release()
-      return emptyResult
+      return []
     }
 
     const stmt = prepared.stmt
@@ -80,10 +73,11 @@ export class ElectricDatabase implements Database {
         rows.push(row)
       }
 
-      return {
+      const res = {
         columns: cols,
         values: rows,
       }
+      return resultToRows(res)
     } finally {
       await this.sqlite3.finalize(stmt)
       release()

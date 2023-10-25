@@ -1,23 +1,27 @@
-import { DatabaseAdapter } from '../generic'
-export { DatabaseAdapter }
-
-/*
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
+  TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Database } from './database'
-import { parseTableNames, QualifiedTablename, Row, Statement } from '../../util'
-import { resultToRows } from '../util/results'
+import { Database } from '.'
+import { Row, Statement } from '../../util'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 import { Mutex } from 'async-mutex'
 
-export class DatabaseAdapter implements DatabaseAdapterInterface {
+/**
+ * A generic adapter that manages transactions manually by executing `BEGIN` and `COMMIT`/`ROLLBACK` commands.
+ * Uses a mutex to ensure that transactions are not interleaved.
+ */
+export class DatabaseAdapter
+  extends TableNameImpl
+  implements DatabaseAdapterInterface
+{
   db: Database
   txMutex: Mutex
 
   constructor(db: Database) {
+    super()
     this.db = db
     this.txMutex = new Mutex()
   }
@@ -35,7 +39,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
         await this.db.exec(stmt)
         if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
           // Fetch the number of rows affected by the last insert, update, or delete
-          rowsAffected += await this.db.getRowsModified()
+          rowsAffected += this.db.getRowsModified()
         }
       }
       return {
@@ -120,12 +124,7 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   // Do not use this uncoordinated version directly!
   // It is only meant to be used within transactions.
   async _queryUncoordinated(stmt: Statement): Promise<Row[]> {
-    const res = await this.db.exec(stmt)
-    return resultToRows([res])
-  }
-
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
+    return await this.db.exec(stmt)
   }
 }
 
@@ -183,4 +182,3 @@ class Transaction implements Tx {
     this.invokeCallback(prom, successCallback, errorCallback)
   }
 }
-*/

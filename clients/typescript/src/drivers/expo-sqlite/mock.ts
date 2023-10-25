@@ -1,58 +1,33 @@
-import { DbName, Row } from '../../util/types'
-import type {
-  Database,
-  SQLTransactionCallback,
-  SQLTransactionErrorCallback,
-  WebSQLDatabase,
-  SQLiteCallback,
-  Query,
-} from 'expo-sqlite'
+import { Row } from '../../util/types'
 import {
+  Query,
   SQLResultSet as ResultSet,
   SQLStatementCallback,
   SQLStatementErrorCallback,
+  SQLiteCallback,
   SQLTransaction as Transaction,
 } from 'expo-sqlite/src/SQLite.types'
+import { OriginalDatabase } from './database'
 
-export class MockDatabase implements Database {
-  _name: DbName
-  version: string
+export class MockDatabase implements OriginalDatabase {
+  constructor(public _name: string) {}
 
-  constructor(dbName: DbName) {
-    this._name = dbName
-    this.version = '1.0'
-  }
-
-  transaction(
-    _txFn: SQLTransactionCallback,
-    _error?: SQLTransactionErrorCallback,
-    successCallback?: () => void
+  execRawQuery(
+    _queries: Query[],
+    _readOnly: boolean,
+    callback: SQLiteCallback
   ): void {
-    _txFn(new MockTransaction())
-    if (successCallback !== undefined) {
-      successCallback()
-    }
+    callback(null, [
+      {
+        rowsAffected: 0,
+        rows: [],
+      },
+    ])
   }
 
-  readTransaction(
-    _txFn: SQLTransactionCallback,
-    _error?: SQLTransactionErrorCallback,
-    successCallback?: () => void
-  ): void {
-    _txFn(new MockTransaction())
-    if (successCallback !== undefined) {
-      successCallback()
-    }
+  getRowsModified() {
+    return 0
   }
-}
-
-export class MockWebSQLDatabase extends MockDatabase implements WebSQLDatabase {
-  exec(_queries: Query[], _readOnly: boolean, callback: SQLiteCallback): void {
-    callback(null, [{ rowsAffected: 0, rows: [] }])
-  }
-
-  closeAsync(): void {}
-  async deleteAsync(): Promise<void> {}
 }
 
 export class MockTransaction implements Transaction {

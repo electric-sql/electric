@@ -1,3 +1,7 @@
+import { DatabaseAdapter } from '../generic'
+export { DatabaseAdapter }
+
+/*
 import { AnyFunction, Row, Statement } from '../../util/types'
 
 import { Results, rowsFromResults } from '../util/results'
@@ -122,3 +126,4 @@ class WrappedTx implements Tx {
     )
   }
 }
+*/
