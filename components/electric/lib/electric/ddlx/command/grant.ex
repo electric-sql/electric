@@ -1,5 +1,6 @@
 defmodule Electric.DDLX.Command.Grant do
   alias Electric.DDLX.Command
+  import Electric.DDLX.Parse.Build
 
   @type t() :: %__MODULE__{
           privilege: String.t(),
@@ -24,6 +25,40 @@ defmodule Electric.DDLX.Command.Grant do
   @enforce_keys @keys
 
   defstruct @keys
+
+  def build(params, opts) do
+    dbg(params)
+
+    with {:ok, table_schema} <- fetch_attr(params, :table_schema, default_schema(opts)),
+         {:ok, table_name} <- fetch_attr(params, :table_name),
+         {:ok, column_names} <- fetch_attr(params, :column_names, ["*"]),
+         {:ok, role_attrs} <- validate_scope_information(params, opts),
+         {:ok, privilege} <- fetch_attr(params, :privilege),
+         {:ok, using_path} <- fetch_attr(params, :using, nil),
+         {:ok, check_fn} <- fetch_attr(params, :check, nil) do
+      {role, role_attrs} = Keyword.pop!(role_attrs, :role_name)
+      scope = Keyword.get(role_attrs, :scope, nil) || "__global__"
+
+      {:ok,
+       struct(
+         __MODULE__,
+         on_table: {table_schema, table_name},
+         column_names: column_names,
+         role: role,
+         scope: scope,
+         privilege: Enum.map(privilege, &to_string/1),
+         using_path: if(is_list(using_path), do: Enum.map(using_path, &to_string/1), else: nil),
+         check_fn: check_fn
+       )}
+    end
+  end
+
+  defp validate_scope_information(params, opts) do
+    with {:ok, role_name} <- fetch_attr(params, :role_name),
+         {:ok, attrs} <- split_role_def(role_name, opts) do
+      {:ok, attrs}
+    end
+  end
 
   defimpl Command do
     import Electric.DDLX.Command.Common

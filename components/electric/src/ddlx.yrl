@@ -2,6 +2,7 @@ Nonterminals
    stmt
    enable_stmt
    assign_stmt
+   grant_stmt
    table_ident
    name
    quoted_ident
@@ -16,12 +17,23 @@ Nonterminals
    op
    const
    func_args
-
+   grant_perms
+   grant_privs
+   using_clause
+   scope_path
+   column_list
+   columns
+   check_clause
    .
 
+% terminals are the outputs of the tokeniser, so e.g. the terminal
+% `electric` is output from the tokeniser as `{:electric, {line, char, nil}, "ELECTRIC"}`
+% the first element of the tuple is the terminal and the last element is the original
+% expression in the source, used for error msgs
 Terminals 
-   '"' '\'' '.' '(' ')' ',' ':'
+   '"' '\'' '.' '(' ')' ',' ':' '/'
    alter table enable electric null assign to if
+   grant on using select insert update delete all read write check
    string  ident int float
    '=' '>' '<' '<=' '>='
    .
@@ -34,11 +46,14 @@ Rootsymbol stmt.
 
 stmt -> enable_stmt : '$1'.
 stmt -> assign_stmt : '$1'.
+stmt -> grant_stmt : '$1'.
 
 enable_stmt -> alter table table_ident enable electric : enable_cmd('$3').
 
 assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3' ++ '$5').
 assign_stmt -> electric assign scoped_role to column_ident if if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
+
+grant_stmt -> electric grant grant_perms on table_ident to scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
 table_ident -> name : [{table_name, '$1'}].
 table_ident -> name '.' name : [{table_schema, '$1'}, {table_name, '$3'}].
@@ -84,13 +99,40 @@ op -> '<' : ["<"].
 op -> '<=' : ["<="].
 op -> '>=' : [">="].
 
-const -> '\'' string '\'' : ["'", '$2', "'"]. % {string, unwrap('$2')}.
-const -> int : erlang:integer_to_list(unwrap('$1')). % {int, unwrap('$1')}.
-const -> float : erlang:float_to_list(unwrap('$1')). % {float, unwrap('$1')}.
+const -> '\'' string '\'' : ["'", unwrap('$2'), "'"]. 
+const -> int : erlang:integer_to_list(unwrap('$1')). 
+const -> float : erlang:float_to_list(unwrap('$1')). 
 
 func_args -> '$empty' : [].
 func_args -> expr : ['$1'].
 func_args -> expr ',' func_args : ['$1', "," , '$3'].
+
+grant_perms -> grant_privs column_list : [{privilege, '$1'}] ++ '$2'.
+
+grant_privs -> select : ["select"].
+grant_privs -> insert : ["insert"].
+grant_privs -> update : ["update"].
+grant_privs -> delete : ["delete"].
+grant_privs -> all :  ["select", "insert", "update", "delete"].
+grant_privs -> read :  ["select"].
+grant_privs -> write :  ["insert", "update", "delete"].
+
+column_list -> '$empty' : [].
+column_list -> '(' columns ')' : [{column_names, '$2'}] .
+
+% columns -> '$empty' : [].
+columns -> name : ['$1'].
+columns -> name ',' columns : ['$1' | '$3'].
+
+using_clause -> '$empty' : [].
+using_clause -> using scope_path : [{using, '$2'}].
+
+scope_path -> '$empty' : [].
+scope_path -> name : ['$1'].
+scope_path -> name '/' scope_path : ['$1' | '$3'].
+
+check_clause -> '$empty' : [].
+check_clause -> check '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Erlang code.
@@ -106,5 +148,8 @@ enable_cmd(TableName) ->
 
 assign_cmd(Attrs) ->
   {'Elixir.Electric.DDLX.Command.Assign', Attrs}.
+
+grant_cmd(Attrs) ->
+  {'Elixir.Electric.DDLX.Command.Grant', Attrs}.
 
 downcase(String) -> 'Elixir.String':downcase(unwrap(String)).

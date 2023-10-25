@@ -68,14 +68,26 @@ defmodule Electric.DDLX.Parse.Tokens do
 
   @keywords ~w(alter table electric enable)a
 
+  deftoken(:token, "ALL", [], do: :all)
   deftoken(:token, "ALTER", [], do: :alter)
-  deftoken(:token, "TABLE", [], do: :table)
+  deftoken(:token, "ASSIGN", [], do: :assign)
+  deftoken(:token, "CHECK", [], do: :check)
+  deftoken(:token, "DELETE", [], do: :delete)
   deftoken(:token, "ELECTRIC", [], do: :electric)
   deftoken(:token, "ENABLE", [], do: :enable)
-  deftoken(:token, "ASSIGN", [], do: :assign)
-  deftoken(:token, "NULL", [], do: :null)
-  deftoken(:token, "TO", [], do: :to)
+  deftoken(:token, "GRANT", [], do: :grant)
   deftoken(:token, "IF", [], do: :if)
+  deftoken(:token, "INSERT", [], do: :insert)
+  deftoken(:token, "NULL", [], do: :null)
+  deftoken(:token, "ON", [], do: :on)
+  deftoken(:token, "PRIVILEGES", [], do: :privileges)
+  deftoken(:token, "READ", [], do: :read)
+  deftoken(:token, "SELECT", [], do: :select)
+  deftoken(:token, "TABLE", [], do: :table)
+  deftoken(:token, "TO", [], do: :to)
+  deftoken(:token, "UPDATE", [], do: :update)
+  deftoken(:token, "USING", [], do: :using)
+  deftoken(:token, "WRITE", [], do: :write)
   def token(s), do: s
 end
 
@@ -138,7 +150,6 @@ defmodule Electric.DDLX.Parse.Parser do
   def parse(ddlx, opts \\ []) do
     ddlx
     |> statement()
-    |> dbg
     |> do_parse()
     |> build_cmd(opts)
   end
@@ -148,9 +159,7 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp build_cmd({:ok, {module, attrs}}, opts) do
-    # FIXME: pass in default schema stuff
     module.build(attrs, opts)
-    # {:ok, struct(module, attrs)}
   end
 
   defp build_cmd({:error, {{_line, position, _}, :ddlx, messages}}, _opts) do
@@ -386,5 +395,9 @@ defmodule Electric.DDLX.Parse.Parser do
   defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?,, ?(, ?), ?:, ?=] do
     {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<c::8>>), state),
      {rest, %{state | p: state.p + 1, acc: []}}}
+  end
+
+  defp token_next(<<c::utf8, rest::binary>>, %{acc: acc} = state) do
+    token_next(rest, %{state | p: state.p + byte_size(<<c::utf8>>), acc: [acc, <<c::utf8>>]})
   end
 end

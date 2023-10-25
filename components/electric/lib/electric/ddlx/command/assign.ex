@@ -76,8 +76,6 @@ defmodule Electric.DDLX.Command.Assign do
   end
 
   defp validate_scope_information(params, opts) do
-    dbg(validate_scope_information: params)
-
     with {:ok, scope_schema_name} <- fetch_attr(params, :scope_schema_name, default_schema(opts)),
          {:ok, scope_table_name} <- fetch_attr(params, :scope_table_name) do
       {:ok, scope: {scope_schema_name, scope_table_name}}

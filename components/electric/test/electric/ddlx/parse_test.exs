@@ -13,15 +13,16 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Command
   alias Electric.DDLX.Parse.Common
 
-  property "enable" do
-    check all(
-            table <- Electric.Postgres.SQLGenerator.DDLX.table_name(),
-            ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
-          ) do
-      IO.puts(ddlx)
-      # assert {:ok, _} = Parser.parse(ddlx, default_schema: "my_default") |> dbg
-      assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default") |> dbg
-      assert cmd.table_name == normalise(table, "my_default") |> dbg
+  describe "ENABLE ELECTRIC" do
+    property "enable" do
+      check all(
+              table <- Electric.Postgres.SQLGenerator.DDLX.table_name(),
+              ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
+            ) do
+        # IO.puts(ddlx)
+        assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
+        assert cmd.table_name == normalise(table, "my_default")
+      end
     end
   end
 
@@ -356,146 +357,113 @@ defmodule DDLXParserTest do
     end
   end
 
-  describe "Can parse SQL into tokens" do
-    test "can create tokens" do
-      re = Common.regex_for_keywords(["hello", "fish", "dog"])
-      input = "hello from \"old man\" with dog ( fish, toad, cow ) in his 'house';"
-      tokens = Parser.get_tokens(input, re)
+  # describe "Can parse SQL into tokens" do
+  #   test "can create tokens" do
+  #     re = Common.regex_for_keywords(["hello", "fish", "dog"])
+  #     input = "hello from \"old man\" with dog ( fish, toad, cow ) in his 'house';"
+  #     tokens = Parser.get_tokens(input, re)
+  #
+  #     assert tokens == [
+  #              {:keyword, "hello"},
+  #              {:name, "from"},
+  #              {:name, "old man"},
+  #              {:name, "with"},
+  #              {:keyword, "dog"},
+  #              {:collection, " fish, toad, cow "},
+  #              {:name, "in"},
+  #              {:name, "his"},
+  #              {:string, "house"}
+  #            ]
+  #   end
+  #
+  #   test "can create tokens with quoted names" do
+  #     re = Common.regex_for_keywords(["hello", "fish", "dog"])
+  #
+  #     test_inputs = [
+  #       {"hello from stupid.\"old man\";", "stupid.old man"},
+  #       {"hello from \"very stupid\".\"old man\";", "very stupid.old man"},
+  #       {"hello from \"very stupid\".man ;", "very stupid.man"}
+  #     ]
+  #
+  #     Enum.each(test_inputs, fn {input, expected_token} ->
+  #       tokens = Parser.get_tokens(input, re)
+  #
+  #       assert tokens == [
+  #                {:keyword, "hello"},
+  #                {:name, "from"},
+  #                {:name, expected_token}
+  #              ]
+  #     end)
+  #   end
+  # end
 
-      assert tokens == [
-               {:keyword, "hello"},
-               {:name, "from"},
-               {:name, "old man"},
-               {:name, "with"},
-               {:keyword, "dog"},
-               {:collection, " fish, toad, cow "},
-               {:name, "in"},
-               {:name, "his"},
-               {:string, "house"}
-             ]
-    end
-
-    test "can create tokens with quoted names" do
-      re = Common.regex_for_keywords(["hello", "fish", "dog"])
-
-      test_inputs = [
-        {"hello from stupid.\"old man\";", "stupid.old man"},
-        {"hello from \"very stupid\".\"old man\";", "very stupid.old man"},
-        {"hello from \"very stupid\".man ;", "very stupid.man"}
-      ]
-
-      Enum.each(test_inputs, fn {input, expected_token} ->
-        tokens = Parser.get_tokens(input, re)
-
-        assert tokens == [
-                 {:keyword, "hello"},
-                 {:name, "from"},
-                 {:name, expected_token}
-               ]
-      end)
-    end
-  end
-
-  describe "Can parse electric ddlx" do
+  describe "ELECTRIC GRANT" do
     test "parse grant" do
       sql =
         "ELECTRIC GRANT UPDATE (status, name) ON thing.\"Köln_en$ts\" TO 'projects:house.admin' USING issue_id;"
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Grant{
-                 privilege: "update",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["status", "name"],
-                 scope: "projects",
-                 using_path: "issue_id",
-                 check_fn: nil
-               }
-             ]
+      assert result == %Grant{
+               privilege: ["update"],
+               on_table: {"thing", "Köln_en$ts"},
+               role: "house.admin",
+               column_names: ["status", "name"],
+               scope: {"public", "projects"},
+               using_path: ["issue_id"],
+               check_fn: nil
+             }
     end
 
     test "parse grant with no columns" do
-      sql = "ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin';"
+      sql = "ELECTRIC GRANT UPDATE ON thing.\"Köln_en$ts\" TO 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Grant{
-                 privilege: "update",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects",
-                 using_path: nil,
-                 check_fn: nil
-               }
-             ]
+      assert result == %Grant{
+               privilege: ["update"],
+               on_table: {"thing", "Köln_en$ts"},
+               role: "house.admin",
+               column_names: ["*"],
+               scope: {"public", "projects"},
+               using_path: nil,
+               check_fn: nil
+             }
     end
 
     test "parse grant with check" do
       sql =
-        "ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = Paul);"
+        "ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = 'Paul');"
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Grant{
-                 check_fn: "name = Paul",
-                 column_names: ["*"],
-                 on_table: "thing.Köln_en$ts",
-                 privilege: "update",
-                 role: "house.admin",
-                 scope: "projects",
-                 using_path: "project_id"
-               }
-             ]
+      assert result == %Grant{
+               check_fn: "name = 'Paul'",
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privilege: ["update"],
+               role: "house.admin",
+               scope: {"public", "projects"},
+               using_path: ["project_id"]
+             }
     end
 
     test "parse grant with all" do
       sql = "ELECTRIC GRANT ALL ON thing.Köln_en$ts TO 'house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Grant{
-                 check_fn: nil,
-                 column_names: ["*"],
-                 on_table: "thing.Köln_en$ts",
-                 privilege: "select",
-                 role: "house.admin",
-                 scope: "__global__",
-                 using_path: nil
-               },
-               %Grant{
-                 check_fn: nil,
-                 column_names: ["*"],
-                 on_table: "thing.Köln_en$ts",
-                 privilege: "update",
-                 role: "house.admin",
-                 scope: "__global__",
-                 using_path: nil
-               },
-               %Grant{
-                 privilege: "insert",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "__global__",
-                 using_path: nil,
-                 check_fn: nil
-               },
-               %Grant{
-                 check_fn: nil,
-                 column_names: ["*"],
-                 on_table: "thing.Köln_en$ts",
-                 privilege: "delete",
-                 role: "house.admin",
-                 scope: "__global__",
-                 using_path: nil
-               }
-             ]
+      assert result == %Grant{
+               check_fn: nil,
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privilege: ["select", "insert", "update", "delete"],
+               role: "house.admin",
+               scope: "__global__",
+               using_path: nil
+             }
     end
+  end
 
+  describe "Can parse electric ddlx" do
     test "parse revoke" do
       sql = "ELECTRIC REVOKE UPDATE ON thing.Köln_en$ts FROM 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
