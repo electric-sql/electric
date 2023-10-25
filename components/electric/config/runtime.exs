@@ -104,12 +104,15 @@ if config_env() == :prod do
   require_ssl? =
     String.downcase(System.get_env("DATABASE_REQUIRE_SSL", "false")) in ["yes", "true"]
 
+  use_ipv6? = String.downcase(System.get_env("DATABASE_USE_IPV6", "false")) in ["yes", "true"]
+
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
     |> PostgresqlUri.parse()
     |> then(&Keyword.put(&1, :host, &1[:hostname]))
     |> Keyword.delete(:hostname)
     |> Keyword.put_new(:ssl, require_ssl?)
+    |> Keyword.put(:ipv6, use_ipv6?)
     |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
     |> Keyword.put(:replication, "database")
 
