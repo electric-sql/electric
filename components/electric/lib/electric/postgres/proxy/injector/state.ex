@@ -1,4 +1,6 @@
 defmodule Electric.Postgres.Proxy.Injector.State do
+  alias PgProtocol.Message, as: M
+
   defmodule Tx do
     @moduledoc false
     # holds information about the current transaction
@@ -23,7 +25,8 @@ defmodule Electric.Postgres.Proxy.Injector.State do
             default_schema: "public",
             tx: nil,
             session_id: nil,
-            metadata: %{}
+            metadata: %{},
+            pending_messages: []
 
   @type loader() :: {module(), term()}
   @type query_generator() :: module()
@@ -33,7 +36,8 @@ defmodule Electric.Postgres.Proxy.Injector.State do
           default_schema: String.t(),
           session_id: integer(),
           tx: nil | Tx.t(),
-          metadata: map()
+          metadata: map(),
+          pending_messages: [M.t()]
         }
 
   @doc """

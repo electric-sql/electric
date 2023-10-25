@@ -1,5 +1,5 @@
-const { fetchHostPortElectric } = require('./db/util.js')
-const { fetchConfiguredElectricPort } = require('./util/util.js')
+const { fetchHostPortElectric, fetchHostProxyPortElectric } = require('./db/util.js')
+const { fetchConfiguredElectricPort, fetchConfiguredElectricProxyPort } = require('./util/util.js')
 
 async function checkElectricIsRunning() {
   const port = fetchHostPortElectric() // will raise an error if Electric is not running
@@ -14,9 +14,21 @@ async function checkElectricIsRunning() {
       `Your application is configured to connect to Electric on port ${configuredPort} ` +
       `but your instance of Electric is running on port ${port}`,
       '\x1b[0m'
-      )
-      process.exit(1)
-    }
+    )
+    process.exit(1)
+  }
+
+  // Also check that the proxy port is configured correctly
+  const proxyPort = fetchHostProxyPortElectric()
+  const configuredProxyPort = await fetchConfiguredElectricProxyPort()
+  if (configuredProxyPort !== proxyPort) {
+    console.error(
+      '\x1b[31m',
+      `Your application is configured to connect to Electric's DB proxy on port ${configuredProxyPort} ` +
+      `but your instance of Electric is running the DB proxy on port ${proxyPort}`,
+      '\x1b[0m'
+    )
+  }
 }
 
 checkElectricIsRunning()
