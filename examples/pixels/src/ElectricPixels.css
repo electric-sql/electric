@@ -72,3 +72,40 @@
 .electric-pixels__grid-wrapper {
   position: relative;
 }
+
+.electric-pixels__presence {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.electric-pixels__presence__item {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  transition: transform 110ms linear;
+}
+
+.electric-pixels__presence__item__icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-80%, -20%);
+}
+
+.electric-pixels__presence__item__color {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-27px, 13px);
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1.5px solid #fff;
+}

@@ -15,6 +15,16 @@ CREATE TABLE IF NOT EXISTS pixels (
   color TEXT NOT NULL
 );
 
+-- Create a table to track the presence of users.
+CREATE TABLE IF NOT EXISTS presence (
+  id TEXT PRIMARY KEY NOT NULL,
+  x TEXT NOT NULL,
+  y TEXT NOT NULL,
+  color TEXT NOT NULL,
+  last_seen TIMESTAMPTZ NOT NULL
+);
+
 -- ⚡
 -- Electrify the tables
 ALTER TABLE pixels ENABLE ELECTRIC;
+ALTER TABLE presence ENABLE ELECTRIC;

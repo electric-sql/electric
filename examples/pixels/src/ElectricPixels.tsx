@@ -12,6 +12,8 @@ import './ElectricPixels.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
+const PRESENCE_UPDATE_INTERVAL = 100
+
 interface PixelMap {
   [coord: string]: string
 }
@@ -91,13 +93,37 @@ export const ElectricPixels = ({
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
       const pixelsShape = await db.pixels.sync()
+      const presenceShape = await db.presence.sync()
 
       // Resolves when the data has been synced into the local database.
       await pixelsShape.synced
+      await presenceShape.synced
     }
 
     syncItems()
   }, [])
+
+  const updatePresence = useCallback(
+    throttle(async (x: number, y: number) => {
+      const update = {
+        x: x.toString(),
+        y: y.toString(),
+        color: selectedColor,
+        last_seen: new Date().toISOString(),
+      }
+      await db.presence.upsert({
+        where: {
+          id: clientId,
+        },
+        create: {
+          id: clientId,
+          ...update,
+        },
+        update,
+      })
+    }, PRESENCE_UPDATE_INTERVAL),
+    [selectedColor, clientId]
+  )
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -106,12 +132,13 @@ export const ElectricPixels = ({
         canvasEl.current!.getBoundingClientRect()
       const x = (e.clientX - left) / width
       const y = (e.clientY - top) / height
+      updatePresence(x, y)
     }
     document.addEventListener('mousemove', onMouseMove)
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
     }
-  }, [])
+  }, [updatePresence])
 
   const pixels = useMemo(() => {
     const pixels: PixelMap = { ...defaultPixels }
@@ -184,6 +211,7 @@ export const ElectricPixels = ({
         </button>
       </div>
       <div className="electric-pixels__grid-wrapper">
+        <Presence />
         <div
           ref={canvasEl}
           className="electric-pixels__grid"
@@ -240,6 +268,59 @@ const Pixel = ({
         backgroundColor: color,
       }}
     />
+  )
+}
+
+const Presence = () => {
+  const { db, satellite } = useElectric()!
+
+  const { results } = useLiveQuery(
+    db.presence.liveMany({
+      orderBy: { last_seen: 'asc' },
+      where: {
+        last_seen: {
+          gt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+        },
+        NOT: [
+          {
+            id: (satellite as any)._authState.clientId,
+          },
+        ],
+      },
+    })
+  )
+
+  return (
+    <div className="electric-pixels__presence">
+      {results?.map((presence) => (
+        <div
+          key={presence.id}
+          className="electric-pixels__presence__item"
+          style={{
+            transform: `translate(${parseFloat(presence.x) * 100}%, ${
+              parseFloat(presence.y) * 100
+            }%)`,
+          }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            fill="#fff"
+            viewBox="0 0 16 16"
+            className="electric-pixels__presence__item__icon"
+          >
+            <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103zM2.25 8.184l3.897 1.67a.5.5 0 0 1 .262.263l1.67 3.897L12.743 3.52 2.25 8.184z" />
+          </svg>
+          <div
+            className="electric-pixels__presence__item__color"
+            style={{
+              backgroundColor: presence.color,
+            }}
+          />
+        </div>
+      ))}
+    </div>
   )
 }
 
