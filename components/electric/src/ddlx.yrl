@@ -8,14 +8,11 @@ Nonterminals
    unassign_stmt
    sqlite_stmt
    table_ident
-   name
-   quoted_ident
-   unquoted_ident
+   identifier
    scoped_role
    scope
    role
    column_ident
-   namespaced_name
    if_expr
    expr
    op
@@ -35,12 +32,13 @@ Nonterminals
 % the first element of the tuple is the terminal and the last element is the original
 % expression in the source, used for error msgs
 Terminals 
-   '"' '\'' '.' '(' ')' ',' ':' '/'
+   '.' '(' ')' ',' ':' '/'
    alter table disable enable electric null unassign assign to if
    grant on using select insert update delete all read write check
    revoke from sqlite
-   string  ident int float
-   '=' '>' '<' '<=' '>='
+   string  int float
+   unquoted_identifier quoted_identifier
+   '=' '>' '<' '<=' '>=' '!=' '<>'
    .
 
 
@@ -57,50 +55,55 @@ stmt -> disable_stmt : '$1'.
 stmt -> unassign_stmt : '$1'.
 stmt -> sqlite_stmt : '$1'.
 
+% ALTER TABLE ENABLE ELECTRIC
 enable_stmt -> alter table table_ident enable electric : enable_cmd('$3').
 enable_stmt -> electric enable table_ident : enable_cmd('$3').
 
+% ALTER TABLE DISABLE ELECTRIC
 disable_stmt -> alter table table_ident disable electric : disable_cmd('$3').
 disable_stmt -> electric disable table_ident : disable_cmd('$3').
 
+% ELECTRIC ASSIGN
 assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3' ++ '$5').
 assign_stmt -> electric assign scoped_role to column_ident if if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
 
+% ELECTRIC UNASSIGN
 unassign_stmt -> electric unassign scoped_role from column_ident : unassign_cmd('$3' ++ '$5').
 
+% ELECTRIC GRANT
 grant_stmt -> electric grant permissions on table_ident to scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
+% ELECTRIC REVOKE
 revoke_stmt -> electric revoke permissions on table_ident from scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
 
-
+% ELECTRIC SQLITE
 sqlite_stmt -> electric sqlite string : sqlite_cmd(unwrap('$3')).
 
-table_ident -> name : [{table_name, '$1'}].
-table_ident -> name '.' name : [{table_schema, '$1'}, {table_name, '$3'}].
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-name -> quoted_ident : '$1'.
-name -> unquoted_ident : '$1'.
+table_ident -> identifier : [{table_name, '$1'}].
+table_ident -> identifier '.' identifier : [{table_schema, '$1'}, {table_name, '$3'}].
 
-quoted_ident -> '"' ident '"' : unwrap_ident('$2').
-unquoted_ident -> ident : downcase('$1').
+identifier -> unquoted_identifier : unwrap('$1').
+identifier -> quoted_identifier : unwrap('$1').
 
 scoped_role -> role : [{scope, nil}] ++ '$1'.
 scoped_role -> scope ':' role : '$1' ++ '$3'.
 scoped_role -> '(' scope ',' role ')' : '$2' ++ '$4'.
 
 role -> string : [{role_name, unwrap('$1')}].
-role -> name '.' name : [{role_table_name, '$1'}, {role_table_column, '$3'}].
-role -> name '.' name '.' name : [{role_table_schema, '$1'}, {role_table_name, '$3'}, {role_table_column, '$5'}].
-role -> name : [{role_table_column, '$1'}].
+role -> identifier '.' identifier : [{role_table_name, '$1'}, {role_table_column, '$3'}].
+role -> identifier '.' identifier '.' identifier : [{role_table_schema, '$1'}, {role_table_name, '$3'}, {role_table_column, '$5'}].
+role -> identifier : [{role_table_column, '$1'}].
 
 scope -> null : [{scope, nil}].
-scope -> name : [{scope_table_name, '$1'}].
-scope -> name '.' name : [{scope_schema_name, '$1'}, {scope_table_name, '$3'}].
+scope -> identifier : [{scope_table_name, '$1'}].
+scope -> identifier '.' identifier : [{scope_schema_name, '$1'}, {scope_table_name, '$3'}].
 
-column_ident -> name '.' name : [{user_table_name, '$1'}, {user_table_column, '$3'}].
-column_ident -> name '.' name '.' name : [{user_table_schema, '$1'}, {user_table_name, '$3'}, {user_table_column, '$5'}].
+column_ident -> identifier '.' identifier : [{user_table_name, '$1'}, {user_table_column, '$3'}].
+column_ident -> identifier '.' identifier '.' identifier : [{user_table_schema, '$1'}, {user_table_name, '$3'}, {user_table_column, '$5'}].
 
-namespaced_name -> name '.' name : {'$1', '$3'}.
 
 %% don't want to get into parsing expressions, so just reproduce the expression
 %% as a binary for parsing somewhere else
@@ -109,8 +112,8 @@ if_expr -> '(' expr ')' : [{'if', erlang:iolist_to_binary('$2')}].
 
 expr -> '(' expr ')' : ["(", '$2', ")"].
 expr -> expr op expr : ['$1', " ", '$2', " ", '$3']. %[{expr, [{op, '$2'}, {left, '$1'}, {right, '$3'}]}].
-expr -> name '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
-expr -> name : ['$1']. % [{name, '$1'}].
+expr -> identifier '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
+expr -> identifier : ['$1']. % [{name, '$1'}].
 expr -> const : ['$1']. % [{const, '$1'}].
 
 op -> '=' : ["="].
@@ -118,6 +121,8 @@ op -> '>' : [">"].
 op -> '<' : ["<"].
 op -> '<=' : ["<="].
 op -> '>=' : [">="].
+op -> '<>' : ["<>"].
+op -> '!=' : ["!="].
 
 const -> string : ["'", unwrap('$1'), "'"]. 
 const -> int : erlang:integer_to_list(unwrap('$1')). 
@@ -141,15 +146,15 @@ column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .
 
 % columns -> '$empty' : [].
-columns -> name : ['$1'].
-columns -> name ',' columns : ['$1' | '$3'].
+columns -> identifier : ['$1'].
+columns -> identifier ',' columns : ['$1' | '$3'].
 
 using_clause -> '$empty' : [].
 using_clause -> using scope_path : [{using, '$2'}].
 
 scope_path -> '$empty' : [].
-scope_path -> name : ['$1'].
-scope_path -> name '/' scope_path : ['$1' | '$3'].
+scope_path -> identifier : ['$1'].
+scope_path -> identifier '/' scope_path : ['$1' | '$3'].
 
 check_clause -> '$empty' : [].
 check_clause -> check '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
@@ -158,8 +163,6 @@ check_clause -> check '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
 Erlang code.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
-unwrap_ident({ident, _, V}) -> V.
 
 unwrap({_, _, V}) -> V.
 
@@ -184,4 +187,3 @@ revoke_cmd(Attrs) ->
 sqlite_cmd(Stmt) ->
   {'Elixir.Electric.DDLX.Command.SQLite', [{statement, Stmt}]}.
 
-downcase(String) -> 'Elixir.String':downcase(unwrap(String)).

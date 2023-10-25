@@ -1,70 +1,16 @@
-defmodule DDLXParserTest do
+defmodule Electric.DDLX.Parse.ParserTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
   alias Electric.DDLX.Parse.Parser
-  alias Electric.DDLX.Command.Enable
-  alias Electric.DDLX.Command.Disable
-  alias Electric.DDLX.Command.Grant
-  alias Electric.DDLX.Command.Revoke
-  alias Electric.DDLX.Command.Assign
-  alias Electric.DDLX.Command.Unassign
-  alias Electric.DDLX.Command.SQLite
   alias Electric.DDLX.Command
-  alias Electric.DDLX.Parse.Common
-
-  describe "tokens/1" do
-    test "string" do
-      delims = ~w[' $$ $delim$]
-
-      strings = [
-        "my string",
-        "my ' string"
-      ]
-
-      for d <- delims do
-        for s <- strings do
-          quoted = if(d == "'", do: :binary.replace(s, "'", "''", [:global]), else: s)
-          source = "#{d}#{quoted}#{d}"
-          tokens = Parser.tokens("ELECTRIC SQLITE #{source};")
-
-          dbg(source)
-
-          assert match?(
-                   [
-                     {:electric, {1, 0, nil}, _},
-                     {:sqlite, {1, 9, nil}, _},
-                     {:string, {1, 16, ^source}, ^s}
-                   ],
-                   tokens
-                 ),
-                 "string #{inspect(s)} not matched with delim #{inspect(d)}: #{inspect(tokens)}"
-        end
-      end
-
-      tokens =
-        Parser.tokens("ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin'")
-
-      assert [
-               {:electric, {1, 0, nil}, "ELECTRIC"},
-               {:grant, {1, 9, nil}, "GRANT"},
-               {:update, {1, 15, nil}, "UPDATE"},
-               {:on, {1, 22, nil}, "ON"},
-               {:ident, {1, 25, nil}, "thing"},
-               {:., {1, 30, nil}},
-               {:ident, {1, 31, nil}, "Köln_en$ts"},
-               {:to, {1, 42, nil}, "TO"},
-               {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
-             ] = tokens
-    end
-  end
 
   describe "ENABLE ELECTRIC" do
     test "parse enable" do
       sql = "ALTER TABLE things ENABLE ELECTRIC;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Enable{
+      assert result == %Command.Enable{
                table_name: {"public", "things"}
              }
     end
@@ -74,7 +20,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Enable{
+      assert result == %Command.Enable{
                table_name: {"Private", "Items"}
              }
     end
@@ -84,7 +30,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Enable{
+      assert result == %Command.Enable{
                table_name: {"private", "items"}
              }
     end
@@ -95,7 +41,7 @@ defmodule DDLXParserTest do
               ddlx <- Electric.Postgres.SQLGenerator.DDLX.enable(table: table)
             ) do
         # IO.puts(ddlx)
-        assert {:ok, %Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
+        assert {:ok, %Command.Enable{} = cmd} = Parser.parse(ddlx, default_schema: "my_default")
         assert cmd.table_name == normalise(table, "my_default")
       end
     end
@@ -104,7 +50,7 @@ defmodule DDLXParserTest do
   describe "ELECTRIC ASSIGN" do
     test "www example 1" do
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"my_default", "admin_users"},
                 user_column: "user_id",
                 scope: nil,
@@ -117,7 +63,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"application", "admin_users"},
                 user_column: "user_id",
                 scope: nil,
@@ -132,7 +78,7 @@ defmodule DDLXParserTest do
 
     test "www example 2" do
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"my_default", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -145,7 +91,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"application", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -159,7 +105,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"application", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -173,7 +119,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"Application", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -187,7 +133,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"application", "user_roles"},
                 user_column: "user_id",
                 scope: nil,
@@ -203,7 +149,7 @@ defmodule DDLXParserTest do
 
     test "www example 3" do
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"my_default", "project_members"},
                 user_column: "user_id",
                 scope: {"my_default", "projects"},
@@ -217,7 +163,7 @@ defmodule DDLXParserTest do
                )
 
       assert {:ok,
-              %Assign{
+              %Command.Assign{
                 table_name: {"application", "project_members"},
                 user_column: "user_id",
                 scope: {"auth", "projects"},
@@ -292,7 +238,7 @@ defmodule DDLXParserTest do
       {:ok, result} = Parser.parse(sql)
 
       assert result ==
-               %Assign{
+               %Command.Assign{
                  table_name: {"public", "admin_users"},
                  user_column: "user_id",
                  scope: nil,
@@ -304,7 +250,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN (NULL, 'admin') TO admin_users.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "admin_users"},
                user_column: "user_id",
                scope: nil,
@@ -321,7 +267,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN user_roles.role_name TO user_roles.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "user_roles"},
                user_column: "user_id",
                scope: nil,
@@ -333,7 +279,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN (NULL, user_roles.role_name) TO user_roles.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "user_roles"},
                user_column: "user_id",
                scope: nil,
@@ -347,7 +293,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN ( projects, project_members.role ) TO project_members.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "project_members"},
                user_column: "user_id",
                scope: {"public", "projects"},
@@ -361,7 +307,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN 'deliveries:driver' TO deliveries.driver_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "deliveries"},
                user_column: "driver_id",
                scope: {"public", "deliveries"},
@@ -373,7 +319,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ASSIGN 'other.deliveries:driver' TO other.deliveries.driver_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"other", "deliveries"},
                user_column: "driver_id",
                scope: {"other", "deliveries"},
@@ -393,7 +339,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Assign{
+      assert result == %Command.Assign{
                table_name: {"public", "user_permissions"},
                user_column: "user_id",
                scope: nil,
@@ -439,7 +385,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Grant{
+      assert result == %Command.Grant{
                privileges: ["update"],
                on_table: {"thing", "Köln_en$ts"},
                role: "house.admin",
@@ -454,7 +400,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC GRANT UPDATE ON thing.\"Köln_en$ts\" TO 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Grant{
+      assert result == %Command.Grant{
                privileges: ["update"],
                on_table: {"thing", "Köln_en$ts"},
                role: "house.admin",
@@ -471,7 +417,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Grant{
+      assert result == %Command.Grant{
                check_fn: "name = 'Paul'",
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
@@ -486,7 +432,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC GRANT ALL ON thing.Köln_en$ts TO 'house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Grant{
+      assert result == %Command.Grant{
                check_fn: nil,
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
@@ -503,7 +449,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC REVOKE UPDATE ON \"Thing\".\"Köln_en$ts\" FROM 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Revoke{
+      assert result == %Command.Revoke{
                privileges: ["update"],
                on_table: {"Thing", "Köln_en$ts"},
                role: "house.admin",
@@ -516,7 +462,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC REVOKE ALL ON thing.Köln_en$ts FROM 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Revoke{
+      assert result == %Command.Revoke{
                privileges: ["select", "insert", "update", "delete"],
                on_table: {"thing", "köln_en$ts"},
                role: "house.admin",
@@ -536,7 +482,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Revoke{
+      assert result == %Command.Revoke{
                privileges: ["update"],
                on_table: {"thing", "köln_en$ts"},
                role: "house.admin",
@@ -551,7 +497,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Revoke{
+      assert result == %Command.Revoke{
                privileges: ["update"],
                on_table: {"thing", "köln_en$ts"},
                role: "house.admin",
@@ -566,7 +512,7 @@ defmodule DDLXParserTest do
       sql = "ALTER TABLE things DISABLE ELECTRIC;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Disable{
+      assert result == %Command.Disable{
                table_name: {"public", "things"}
              }
     end
@@ -576,7 +522,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Disable{
+      assert result == %Command.Disable{
                table_name: {"Private", "Items"}
              }
     end
@@ -586,7 +532,7 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Disable{
+      assert result == %Command.Disable{
                table_name: {"private", "items"}
              }
     end
@@ -597,7 +543,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC ENABLE things;"
       {:ok, result} = Parser.parse(sql, default_schema: "application")
 
-      assert result == %Enable{
+      assert result == %Command.Enable{
                table_name: {"application", "things"}
              }
     end
@@ -606,7 +552,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC DISABLE application.things;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Disable{
+      assert result == %Command.Disable{
                table_name: {"application", "things"}
              }
     end
@@ -617,7 +563,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC UNASSIGN 'record.reader' FROM user_permissions.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %Unassign{
+      assert result == %Command.Unassign{
                table_name: {"public", "user_permissions"},
                user_column: "user_id",
                scope: nil,
@@ -632,7 +578,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC SQLITE '-- a comment;';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %SQLite{
+      assert result == %Command.SQLite{
                sqlite_statement: "-- a comment;"
              }
     end
@@ -641,7 +587,7 @@ defmodule DDLXParserTest do
       sql = "ELECTRIC SQLITE $sqlite$-- comment\nselect 'this';$sqlite$;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == %SQLite{
+      assert result == %Command.SQLite{
                sqlite_statement: "-- comment\nselect 'this';"
              }
     end

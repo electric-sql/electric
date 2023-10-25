@@ -32,13 +32,21 @@ end
 defmodule Electric.DDLX.Parse.Tokenizer do
   alias Electric.DDLX.Parse.Tokenizer.Tokens
 
-  defguardp not_quoted(state) when not state.sq and not state.dq
-  defguardp is_quoted(state) when state.sq or state.dq
-  defguardp is_squoted(state) when state.sq
-  defguardp is_dquoted(state) when state.dq
+  @type position() :: {integer(), integer(), nil | String.t()}
+  @type t() :: {atom, position()} | {atom, position(), String.t()}
+
   defguardp is_alpha(char) when char in ?A..?Z or char in ?a..?z or char in [?_]
 
   @whitespace [?\s, ?\n, ?\r, ?\n, ?\t]
+  @non_ident [?., ?,, ?(, ?), ?:, ?=, ?-, ?<, ?>]
+  @operators [{?<, ?>}, {?<, ?=}, {?>, ?=}, {?!, ?=}]
+
+  def tokens(str) do
+    str
+    |> token_stream()
+    |> Enum.to_list()
+  end
+
   def token_stream(str) do
     Stream.resource(
       fn -> {str, %{p: 0, k: 0, acc: [], sq: false, dq: false, s: nil, cm: false}} end,
@@ -51,16 +59,6 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     []
   end
 
-  defp token_out(state) when is_squoted(state) do
-    s = IO.iodata_to_binary(state.acc)
-    [{:string, {1, state.k, nil}, s}]
-  end
-
-  defp token_out(state) when is_dquoted(state) do
-    s = IO.iodata_to_binary(state.acc)
-    [{:ident, {1, state.k, nil}, s}]
-  end
-
   defp token_out(state) do
     s = IO.iodata_to_binary(state.acc)
 
@@ -69,7 +67,7 @@ defmodule Electric.DDLX.Parse.Tokenizer do
         [{keyword, {1, state.k, nil}, s}]
 
       string when is_binary(string) ->
-        [{:ident, {1, state.k, nil}, s}]
+        [{:unquoted_identifier, {1, state.k, nil}, String.downcase(string)}]
     end
   end
 
@@ -77,12 +75,8 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     [{token, {1, state.k, nil}}]
   end
 
-  defp token_out(token, value, state) when is_atom(token) do
-    token_out(token, value, nil, state)
-  end
-
   defp token_out(token, value, source, state) when is_atom(token) do
-    [{token, {1, state.k, source}, value}]
+    [{token, {1, state.k, source}, IO.iodata_to_binary(value)}]
   end
 
   defp token_start(%{acc: []} = state) do
@@ -93,6 +87,10 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     state
   end
 
+  defp token_start!(state) do
+    %{state | k: state.p}
+  end
+
   defp token_next({:halt, state}), do: {:halt, state}
   defp token_next({str, state}), do: token_next(str, state)
 
@@ -100,49 +98,19 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     {token_out(state), {:halt, state}}
   end
 
-  defp token_next(<<?", rest::binary>>, state) when not_quoted(state) do
-    {
-      token_out(state) ++ token_out(:"\"", state),
-      {rest, %{token_start(%{state | p: state.p + 1}) | dq: true, acc: []}}
-    }
+  defp token_next(<<?", rest::binary>>, state) do
+    consume_quoted_identifier(rest, %{token_start(state) | p: state.p + 1})
   end
 
-  defp token_next(<<?', rest::binary>>, state) when not_quoted(state) do
+  defp token_next(<<?', rest::binary>>, state) do
     consume_string(rest, %{token_start(state) | s: ?', p: state.p + 1})
   end
 
-  defp token_next(<<?$, rest::binary>>, state) when not_quoted(state) do
+  defp token_next(<<?$, rest::binary>>, state) do
     consume_delimiter(
       rest,
-      {rest, %{state | p: state.p + 1, acc: [state.acc, ?$]}},
       %{token_start(state) | p: state.p + 1, s: [?$]}
     )
-  end
-
-  defp token_next(<<?", ?", rest::binary>>, state) when is_dquoted(state) do
-    token_next(rest, %{state | p: state.p + 2, acc: [state.acc, ?", ?"]})
-  end
-
-  defp token_next(<<?", rest::binary>>, state) when is_dquoted(state) do
-    {
-      token_out(state) ++ token_out(:"\"", state),
-      {rest, %{token_start(%{state | p: state.p + 1}) | dq: false, acc: []}}
-    }
-  end
-
-  defp token_next(<<?', ?', rest::binary>>, state) when is_squoted(state) do
-    token_next(rest, %{state | p: state.p + 2, acc: [state.acc, ?', ?']})
-  end
-
-  defp token_next(<<?', rest::binary>>, state) when is_squoted(state) do
-    {
-      token_out(state) ++ token_out(:"'", state),
-      {rest, %{token_start(%{state | p: state.p + 1}) | sq: false, acc: []}}
-    }
-  end
-
-  defp token_next(<<s::8, rest::binary>>, state) when is_quoted(state) do
-    token_next(rest, %{state | p: state.p + 1, acc: [state.acc, s]})
   end
 
   defp token_next(<<s::8, rest::binary>>, %{acc: []} = state) when s in @whitespace do
@@ -153,37 +121,32 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     {token_out(state), {rest, %{token_start(%{state | acc: []}) | p: state.p + 1}}}
   end
 
-  defp token_next(<<";", _rest::binary>>, %{acc: acc} = state) do
+  defp token_next(<<";", _rest::binary>>, state) do
     {token_out(state), {:halt, %{state | p: state.p + 1, acc: []}}}
   end
 
-  defp token_next(<<c::8, rest::binary>>, %{acc: []} = state) when is_alpha(c) do
-    token_next(rest, %{state | k: state.p, p: state.p + 1, acc: [c]})
+  for {c1, c2} <- @operators do
+    op = String.to_atom(<<c1, c2>>)
+
+    defp token_next(<<unquote(c1)::8, unquote(c2)::8, rest::binary>>, %{acc: acc} = state) do
+      {token_out(%{state | acc: acc}) ++ token_out(unquote(op), token_start!(state)),
+       {rest, token_start(%{state | p: state.p + 2, acc: []})}}
+    end
   end
 
-  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when is_alpha(c) do
-    token_next(rest, %{state | p: state.p + 1, acc: [acc, c]})
-  end
-
-  defp token_next(<<?., rest::binary>>, state) do
+  defp token_next(<<c::8, rest::binary>>, state) when c in @non_ident do
     {
-      token_out(state) ++ token_out(:., token_start(%{state | acc: []})),
-      {rest, %{token_start(%{state | p: state.p + 1}) | acc: []}}
+      token_out(state) ++ token_out(String.to_atom(<<c::8>>), token_start(%{state | acc: []})),
+      {rest, token_start(%{state | p: state.p + 1, acc: []})}
     }
   end
 
-  defp token_next(<<a::8, ?=, rest::binary>>, %{acc: acc} = state) when a in [?>, ?<] do
-    {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<a::8, ?=>>), state),
-     {rest, %{state | p: state.p + 2, acc: []}}}
-  end
-
-  defp token_next(<<c::8, rest::binary>>, %{acc: acc} = state) when c in [?,, ?(, ?), ?:, ?=] do
-    {token_out(%{state | acc: acc}) ++ token_out(String.to_atom(<<c::8>>), state),
-     {rest, %{state | p: state.p + 1, acc: []}}}
-  end
-
-  defp token_next(<<c::utf8, rest::binary>>, %{acc: acc} = state) do
-    token_next(rest, %{state | p: state.p + String.length(<<c::utf8>>), acc: [acc, <<c::utf8>>]})
+  defp token_next(<<c::utf8, rest::binary>>, %{acc: []} = state) do
+    consume_identifier(rest, %{
+      token_start(state)
+      | p: state.p + String.length(<<c::utf8>>),
+        acc: [<<c::utf8>>]
+    })
   end
 
   defp consume_string(<<?', ?', rest::binary>>, %{s: ?'} = state) do
@@ -218,26 +181,56 @@ defmodule Electric.DDLX.Parse.Tokenizer do
     end
   end
 
-  defp consume_string(<<c::utf8, rest::binary>>, state) do
-    consume_string(rest, %{
-      state
-      | p: state.p + byte_size(<<c::utf8>>),
-        acc: [state.acc, <<c::utf8>>]
-    })
-  end
-
-  defp consume_delimiter(<<?$, rest::binary>>, _restore, state) do
+  defp consume_delimiter(<<?$, rest::binary>>, state) do
     delim = IO.iodata_to_binary([state.s, ?$])
     consume_string(rest, %{state | p: state.p + 1, s: delim})
   end
 
-  defp consume_delimiter(<<c::8, rest::binary>>, restore, state) when is_alpha(c) do
-    consume_delimiter(rest, restore, %{state | p: state.p + 1, s: [state.s, c]})
+  defp consume_delimiter(<<c::8, rest::binary>>, state) when is_alpha(c) do
+    consume_delimiter(rest, %{state | p: state.p + 1, s: [state.s, c]})
   end
 
-  # stop trying to find the end of the delimiter if we hit any non-alpha char and 
-  # use the restore state to resume where we were
-  defp consume_delimiter(_, {rest, state}, _state) do
-    token_next(rest, state)
+  defp consume_quoted_identifier(<<?", ?", rest::binary>>, state) do
+    consume_quoted_identifier(rest, %{state | p: state.p + 2, acc: [state.acc, ?", ?"]})
+  end
+
+  defp consume_quoted_identifier(<<?", rest::binary>>, state) do
+    # consume_quoted_identifier(rest, %{state | p: state.p + 2, acc: [state.acc, ?", ?"]})
+    ident = IO.iodata_to_binary(state.acc)
+
+    {token_out(:quoted_identifier, ident, "\"" <> ident <> "\"", state),
+     {rest, token_start(%{state | p: state.p + 1, acc: []})}}
+  end
+
+  defp consume_quoted_identifier(<<c::utf8, rest::binary>>, state) do
+    consume_quoted_identifier(rest, %{
+      state
+      | p: state.p + String.length(<<c::utf8>>),
+        acc: [state.acc, <<c::utf8>>]
+    })
+  end
+
+  defp consume_identifier(<<>>, state) do
+    {token_out(state), {:halt, state}}
+  end
+
+  defp consume_identifier(<<?;, _rest::binary>>, state) do
+    {token_out(state), {:halt, state}}
+  end
+
+  defp consume_identifier(<<c::8, _::binary>> = rest, state) when c in @non_ident do
+    {token_out(state), {rest, token_start(%{state | acc: []})}}
+  end
+
+  defp consume_identifier(<<c::8, rest::binary>>, state) when c in @whitespace do
+    {token_out(state), {rest, %{token_start(%{state | acc: []}) | p: state.p + 1}}}
+  end
+
+  defp consume_identifier(<<c::utf8, rest::binary>>, state) do
+    consume_identifier(rest, %{
+      state
+      | p: state.p + String.length(<<c::utf8>>),
+        acc: [state.acc, <<c::utf8>>]
+    })
   end
 end

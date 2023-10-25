@@ -10,14 +10,9 @@ defmodule Electric.DDLX.Parse.Macros do
 
   produces the code:
 
-       def in?(<<c0::8, c1::8, rest::binary>> = stmt) when c0 in [?i, ?I] and c1 in [?n, ?N] do
+       def in?(<<c0::8, c1::8>> = stmt) when c0 in [?i, ?I] and c1 in [?n, ?N] do
          :ok
        end
-
-  ## Options
-
-  - `trailing` - should the keyword be followed by whitespace, defaults to `true`. 
-
   """
   defmacro deftoken(function, keyword, _opts \\ [], do: block) do
     chars =
