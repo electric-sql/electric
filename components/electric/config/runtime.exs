@@ -69,7 +69,9 @@ config :electric,
   # Used in telemetry, and to identify the server to the client
   instance_id: System.get_env("ELECTRIC_INSTANCE_ID", Electric.Utils.uuid4()),
   http_port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer(),
-  pg_server_port: pg_server_port
+  pg_server_port: pg_server_port,
+  listen_on_ipv6?:
+    String.downcase(System.get_env("ELECTRIC_USE_IPV6", "false")) in ["yes", "true"]
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
