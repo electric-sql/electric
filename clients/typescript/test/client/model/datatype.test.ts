@@ -164,6 +164,27 @@ test.serial('support timestamp type', async (t) => {
   t.deepEqual(fetchRes?.timestamp, new Date('2023-08-07 18:28:35.421'))
 })
 
+test.serial('support timestamp type - input date with offset', async (t) => {
+  const date = new Date('2023-08-07 18:28:35.421+05')
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      timestamp: date,
+    },
+  })
+
+  t.deepEqual(res.timestamp, date)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual(fetchRes?.timestamp, date)
+})
+
 test.serial('support timestamptz type', async (t) => {
   // Check that we store the timestamp without taking into account timezones
   // such that upon reading we get the same timestamp even if we are in a different time zone
