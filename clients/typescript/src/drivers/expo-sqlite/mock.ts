@@ -1,15 +1,8 @@
 import { Row } from '../../util/types'
-import {
-  Query,
-  SQLResultSet as ResultSet,
-  SQLStatementCallback,
-  SQLStatementErrorCallback,
-  SQLiteCallback,
-  SQLTransaction as Transaction,
-} from 'expo-sqlite/src/SQLite.types'
-import { OriginalDatabase } from './database'
+import { Query, ResultSet, SQLiteCallback } from 'expo-sqlite/src/SQLite.types'
+import { Database } from './database'
 
-export class MockDatabase implements OriginalDatabase {
+export class MockDatabase implements Database {
   constructor(public _name: string) {}
 
   execRawQuery(
@@ -17,12 +10,7 @@ export class MockDatabase implements OriginalDatabase {
     _readOnly: boolean,
     callback: SQLiteCallback
   ): void {
-    callback(null, [
-      {
-        rowsAffected: 0,
-        rows: [],
-      },
-    ])
+    callback(null, [mockResults([{ i: 0 }])])
   }
 
   getRowsModified() {
@@ -30,25 +18,10 @@ export class MockDatabase implements OriginalDatabase {
   }
 }
 
-export class MockTransaction implements Transaction {
-  executeSql(
-    _sqlStatement: string,
-    _args?: (number | string | null)[],
-    callback?: SQLStatementCallback,
-    _errorCallback?: SQLStatementErrorCallback
-  ): void {
-    if (typeof callback !== 'undefined') callback(this, mockResults([{ i: 0 }]))
-  }
-}
-
 function mockResults(rows: Row[]): ResultSet {
   return {
     insertId: 1,
-    rows: {
-      item: (i: number) => rows[i],
-      length: rows.length,
-      _array: rows,
-    },
+    rows: rows,
     rowsAffected: 0,
   }
 }

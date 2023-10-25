@@ -4,54 +4,57 @@ import {
   TableNameImpl,
   Transaction as Tx,
 } from '../../electric/adapter'
-import { Database } from '.'
 import { Row, Statement } from '../../util'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 import { Mutex } from 'async-mutex'
+import { AnyDatabase } from '..'
 
 /**
  * A generic adapter that manages transactions manually by executing `BEGIN` and `COMMIT`/`ROLLBACK` commands.
  * Uses a mutex to ensure that transactions are not interleaved.
+ * Concrete adapters extending this class must implement the `exec` and `getRowsModified` methods.
  */
-export class DatabaseAdapter
+export abstract class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
-  db: Database
-  txMutex: Mutex
+  abstract readonly db: AnyDatabase
+  #txMutex: Mutex
 
-  constructor(db: Database) {
+  constructor() {
     super()
-    this.db = db
-    this.txMutex = new Mutex()
+    this.#txMutex = new Mutex()
   }
+
+  abstract exec(statement: Statement): Promise<Row[]>
+  abstract getRowsModified(): number
 
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     // Uses a mutex to ensure that transactions are not interleaved.
     // This is needed because transactions are executed manually using `BEGIN` and `COMMIT` commands.
-    const release = await this.txMutex.acquire()
+    const release = await this.#txMutex.acquire()
     let open = false
     let rowsAffected = 0
     try {
-      await this.db.exec({ sql: 'BEGIN' })
+      await this.exec({ sql: 'BEGIN' })
       open = true
       for (const stmt of statements) {
-        await this.db.exec(stmt)
+        await this.exec(stmt)
         if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
           // Fetch the number of rows affected by the last insert, update, or delete
-          rowsAffected += this.db.getRowsModified()
+          rowsAffected += this.getRowsModified()
         }
       }
       return {
         rowsAffected: rowsAffected,
       }
     } catch (error) {
-      await this.db.exec({ sql: 'ROLLBACK' })
+      await this.exec({ sql: 'ROLLBACK' })
       open = false
       throw error // rejects the promise with the reason for the rollback
     } finally {
       if (open) {
-        await this.db.exec({ sql: 'COMMIT' })
+        await this.exec({ sql: 'COMMIT' })
       }
       release()
     }
@@ -60,10 +63,10 @@ export class DatabaseAdapter
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-    const release = await this.txMutex.acquire()
+    const release = await this.#txMutex.acquire()
 
     try {
-      await this.db.exec({ sql: 'BEGIN' })
+      await this.exec({ sql: 'BEGIN' })
     } catch (e) {
       release()
       throw e
@@ -81,8 +84,7 @@ export class DatabaseAdapter
       f(tx, (res) => {
         // Commit the transaction when the user sets the result.
         // This assumes that the user does not execute any more queries after setting the result.
-        this.db
-          .exec({ sql: 'COMMIT' })
+        this.exec({ sql: 'COMMIT' })
           .then(() => {
             release()
             resolve(res)
@@ -98,7 +100,7 @@ export class DatabaseAdapter
   run(stmt: Statement): Promise<RunResult> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
-    return this.txMutex.runExclusive(() => {
+    return this.#txMutex.runExclusive(() => {
       return this._runUncoordinated(stmt)
     })
   }
@@ -106,9 +108,9 @@ export class DatabaseAdapter
   // Do not use this uncoordinated version directly!
   // It is only meant to be used within transactions.
   async _runUncoordinated(stmt: Statement): Promise<RunResult> {
-    await this.db.exec(stmt)
+    await this.exec(stmt)
     return {
-      rowsAffected: this.db.getRowsModified(),
+      rowsAffected: this.getRowsModified(),
     }
   }
 
@@ -116,7 +118,7 @@ export class DatabaseAdapter
   query(stmt: Statement): Promise<Row[]> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
-    return this.txMutex.runExclusive(() => {
+    return this.#txMutex.runExclusive(() => {
       return this._queryUncoordinated(stmt)
     })
   }
@@ -124,7 +126,7 @@ export class DatabaseAdapter
   // Do not use this uncoordinated version directly!
   // It is only meant to be used within transactions.
   async _queryUncoordinated(stmt: Statement): Promise<Row[]> {
-    return await this.db.exec(stmt)
+    return await this.exec(stmt)
   }
 }
 

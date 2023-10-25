@@ -6,7 +6,7 @@ import { parseTableNames } from '../util'
 // A `DatabaseAdapter` adapts a database client to provide the
 // normalised interface defined here.
 export interface DatabaseAdapter {
-  db: AnyDatabase
+  readonly db: AnyDatabase
 
   // Runs the provided sql statement
   run(statement: Statement): Promise<RunResult>

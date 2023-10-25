@@ -1,7 +1,6 @@
-import { Database } from './database'
 import { DbName, Row, Statement } from '../../util'
 
-export class MockDatabase implements Database {
+export class MockDatabase {
   name: DbName
   fail: Error | undefined
 

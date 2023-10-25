@@ -10,7 +10,7 @@ import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
-import { Database, OriginalDatabase as SQLiteDatabase } from './database'
+import { Database } from './database'
 import { MockDatabase } from './mock'
 import { MockSocket } from '../../sockets/mock'
 import { ElectricConfig } from '../../config'
@@ -26,7 +26,7 @@ const testConfig = {
 type RetVal<
   S extends DbSchema<any>,
   N extends Notifier,
-  D extends SQLiteDatabase = SQLiteDatabase
+  D extends Database = Database
 > = Promise<[D, N, ElectricClient<S>]>
 
 export async function initTestable<
@@ -65,7 +65,7 @@ export async function initTestable<
 ): RetVal<S, N> {
   const db = new MockDatabase(dbName)
 
-  const adapter = opts?.adapter || new DatabaseAdapter(new Database(db))
+  const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator = opts?.migrator || new MockMigrator()
   const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
   const socketFactory = opts?.socketFactory || MockSocket

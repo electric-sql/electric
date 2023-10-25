@@ -12,15 +12,17 @@ import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
 import { SqlValue, Statement } from '../../util'
 import { Row } from '../../util/types'
-import { Database } from '../generic'
 
 import { Mutex } from 'async-mutex'
 import { resultToRows } from '../util/results'
 
-export type { Database }
+export type Database = Pick<
+  ElectricDatabase,
+  'name' | 'exec' | 'getRowsModified'
+>
 
-export class ElectricDatabase implements Database {
-  mutex: Mutex
+export class ElectricDatabase {
+  #mutex: Mutex
 
   // Do not use this constructor directly.
   // Create a Database instance using the static `init` method instead.
@@ -29,13 +31,13 @@ export class ElectricDatabase implements Database {
     private sqlite3: SQLiteAPI,
     private db: number
   ) {
-    this.mutex = new Mutex()
+    this.#mutex = new Mutex()
   }
 
   async exec(statement: Statement): Promise<Row[]> {
     // Uses a mutex to ensure that the execution of SQL statements is not interleaved
     // otherwise wa-sqlite may encounter problems such as indices going out of bounds
-    const release = await this.mutex.acquire()
+    const release = await this.#mutex.acquire()
 
     const str = this.sqlite3.str_new(this.db, statement.sql)
     let prepared
