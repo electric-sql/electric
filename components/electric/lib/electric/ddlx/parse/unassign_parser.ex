@@ -35,7 +35,6 @@ defmodule Electric.DDLX.Parse.UnassignParser do
         :ok,
         [
           %Unassign{
-            schema_name: schema_name,
             table_name: table_name,
             user_column: user_column,
             scope: scope,

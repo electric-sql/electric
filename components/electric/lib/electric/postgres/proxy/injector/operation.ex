@@ -688,8 +688,6 @@ defmodule Operation.Electric do
 
     alias Electric.DDLX
 
-    # FIXME: replace single electric command with multiple queries by
-    # multiple electric commands with single queries
     def activate(op, state, send) do
       [query | queries] = DDLX.Command.pg_sql(op.command)
       op = %{op | queries: queries}

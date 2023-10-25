@@ -1,5 +1,6 @@
 defmodule Electric.DDLX.Command.Enable do
   alias Electric.DDLX.Command
+
   import Electric.DDLX.Parse.Build
 
   @type t() :: %__MODULE__{

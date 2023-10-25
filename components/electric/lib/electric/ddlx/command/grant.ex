@@ -1,9 +1,10 @@
 defmodule Electric.DDLX.Command.Grant do
   alias Electric.DDLX.Command
-  import Electric.DDLX.Parse.Build
+
+  import Electric.DDLX.Parse.Build, except: [validate_scope_information: 2]
 
   @type t() :: %__MODULE__{
-          privilege: String.t(),
+          privileges: [String.t()],
           on_table: String.t(),
           role: String.t(),
           column_names: [String.t()],
@@ -13,7 +14,7 @@ defmodule Electric.DDLX.Command.Grant do
         }
 
   @keys [
-    :privilege,
+    :privileges,
     :on_table,
     :role,
     :column_names,
@@ -33,7 +34,7 @@ defmodule Electric.DDLX.Command.Grant do
          {:ok, table_name} <- fetch_attr(params, :table_name),
          {:ok, column_names} <- fetch_attr(params, :column_names, ["*"]),
          {:ok, role_attrs} <- validate_scope_information(params, opts),
-         {:ok, privilege} <- fetch_attr(params, :privilege),
+         {:ok, privileges} <- fetch_attr(params, :privilege),
          {:ok, using_path} <- fetch_attr(params, :using, nil),
          {:ok, check_fn} <- fetch_attr(params, :check, nil) do
       {role, role_attrs} = Keyword.pop!(role_attrs, :role_name)
@@ -46,7 +47,7 @@ defmodule Electric.DDLX.Command.Grant do
          column_names: column_names,
          role: role,
          scope: scope,
-         privilege: Enum.map(privilege, &to_string/1),
+         privileges: Enum.map(privileges, &to_string/1),
          using_path: if(is_list(using_path), do: Enum.map(using_path, &to_string/1), else: nil),
          check_fn: check_fn
        )}
@@ -64,9 +65,9 @@ defmodule Electric.DDLX.Command.Grant do
     import Electric.DDLX.Command.Common
 
     def pg_sql(grant) do
-      [
+      for privilege <- grant.privilege do
         """
-        CALL electric.grant(privilege_name => #{sql_repr(grant.privilege)},
+        CALL electric.grant(privilege_name => #{sql_repr(privilege)},
           on_table_name => #{sql_repr(grant.on_table)},
           role_name => #{sql_repr(grant.role)},
           columns => #{sql_repr(grant.column_names)},
@@ -74,7 +75,7 @@ defmodule Electric.DDLX.Command.Grant do
           using_path => #{sql_repr(grant.using_path)},
           check_fn => #{sql_repr(grant.check_fn)});
         """
-      ]
+      end
     end
 
     def table_name(%{on_table: table_name}) do

@@ -3,6 +3,10 @@ Nonterminals
    enable_stmt
    assign_stmt
    grant_stmt
+   revoke_stmt
+   disable_stmt
+   unassign_stmt
+   sqlite_stmt
    table_ident
    name
    quoted_ident
@@ -17,8 +21,8 @@ Nonterminals
    op
    const
    func_args
-   grant_perms
-   grant_privs
+   permissions
+   privileges
    using_clause
    scope_path
    column_list
@@ -32,8 +36,9 @@ Nonterminals
 % expression in the source, used for error msgs
 Terminals 
    '"' '\'' '.' '(' ')' ',' ':' '/'
-   alter table enable electric null assign to if
+   alter table disable enable electric null unassign assign to if
    grant on using select insert update delete all read write check
+   revoke from sqlite
    string  ident int float
    '=' '>' '<' '<=' '>='
    .
@@ -47,13 +52,28 @@ Rootsymbol stmt.
 stmt -> enable_stmt : '$1'.
 stmt -> assign_stmt : '$1'.
 stmt -> grant_stmt : '$1'.
+stmt -> revoke_stmt : '$1'.
+stmt -> disable_stmt : '$1'.
+stmt -> unassign_stmt : '$1'.
+stmt -> sqlite_stmt : '$1'.
 
 enable_stmt -> alter table table_ident enable electric : enable_cmd('$3').
+enable_stmt -> electric enable table_ident : enable_cmd('$3').
+
+disable_stmt -> alter table table_ident disable electric : disable_cmd('$3').
+disable_stmt -> electric disable table_ident : disable_cmd('$3').
 
 assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3' ++ '$5').
 assign_stmt -> electric assign scoped_role to column_ident if if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
 
-grant_stmt -> electric grant grant_perms on table_ident to scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+unassign_stmt -> electric unassign scoped_role from column_ident : unassign_cmd('$3' ++ '$5').
+
+grant_stmt -> electric grant permissions on table_ident to scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+
+revoke_stmt -> electric revoke permissions on table_ident from scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
+
+
+sqlite_stmt -> electric sqlite string : sqlite_cmd(unwrap('$3')).
 
 table_ident -> name : [{table_name, '$1'}].
 table_ident -> name '.' name : [{table_schema, '$1'}, {table_name, '$3'}].
@@ -68,7 +88,7 @@ scoped_role -> role : [{scope, nil}] ++ '$1'.
 scoped_role -> scope ':' role : '$1' ++ '$3'.
 scoped_role -> '(' scope ',' role ')' : '$2' ++ '$4'.
 
-role -> '\'' string '\'' : [{role_name, unwrap('$2')}].
+role -> string : [{role_name, unwrap('$1')}].
 role -> name '.' name : [{role_table_name, '$1'}, {role_table_column, '$3'}].
 role -> name '.' name '.' name : [{role_table_schema, '$1'}, {role_table_name, '$3'}, {role_table_column, '$5'}].
 role -> name : [{role_table_column, '$1'}].
@@ -99,7 +119,7 @@ op -> '<' : ["<"].
 op -> '<=' : ["<="].
 op -> '>=' : [">="].
 
-const -> '\'' string '\'' : ["'", unwrap('$2'), "'"]. 
+const -> string : ["'", unwrap('$1'), "'"]. 
 const -> int : erlang:integer_to_list(unwrap('$1')). 
 const -> float : erlang:float_to_list(unwrap('$1')). 
 
@@ -107,15 +127,15 @@ func_args -> '$empty' : [].
 func_args -> expr : ['$1'].
 func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
-grant_perms -> grant_privs column_list : [{privilege, '$1'}] ++ '$2'.
+permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 
-grant_privs -> select : ["select"].
-grant_privs -> insert : ["insert"].
-grant_privs -> update : ["update"].
-grant_privs -> delete : ["delete"].
-grant_privs -> all :  ["select", "insert", "update", "delete"].
-grant_privs -> read :  ["select"].
-grant_privs -> write :  ["insert", "update", "delete"].
+privileges -> select : ["select"].
+privileges -> insert : ["insert"].
+privileges -> update : ["update"].
+privileges -> delete : ["delete"].
+privileges -> all :  ["select", "insert", "update", "delete"].
+privileges -> read :  ["select"].
+privileges -> write :  ["insert", "update", "delete"].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .
@@ -146,10 +166,22 @@ unwrap({_, _, V}) -> V.
 enable_cmd(TableName) ->
   {'Elixir.Electric.DDLX.Command.Enable', TableName}.
 
+disable_cmd(TableName) ->
+  {'Elixir.Electric.DDLX.Command.Disable', TableName}.
+
 assign_cmd(Attrs) ->
   {'Elixir.Electric.DDLX.Command.Assign', Attrs}.
 
+unassign_cmd(Attrs) ->
+  {'Elixir.Electric.DDLX.Command.Unassign', Attrs}.
+
 grant_cmd(Attrs) ->
   {'Elixir.Electric.DDLX.Command.Grant', Attrs}.
+
+revoke_cmd(Attrs) ->
+  {'Elixir.Electric.DDLX.Command.Revoke', Attrs}.
+
+sqlite_cmd(Stmt) ->
+  {'Elixir.Electric.DDLX.Command.SQLite', [{statement, Stmt}]}.
 
 downcase(String) -> 'Elixir.String':downcase(unwrap(String)).

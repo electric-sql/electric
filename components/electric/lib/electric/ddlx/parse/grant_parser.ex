@@ -81,7 +81,7 @@ defmodule Electric.DDLX.Parse.GrantParser do
       :ok,
       for priv <- privileges do
         %Grant{
-          privilege: priv,
+          privileges: priv,
           on_table: "#{schema_name}.#{table_name}",
           role: role,
           scope: scope,

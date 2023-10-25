@@ -1,5 +1,6 @@
 defmodule Electric.DDLX.Command.Assign do
   alias Electric.DDLX.Command
+
   import Electric.DDLX.Parse.Build
 
   @type t() :: %__MODULE__{
@@ -39,48 +40,6 @@ defmodule Electric.DDLX.Command.Assign do
       attrs = Enum.reduce([scope_attrs, user_attrs, role_attrs], [], &Keyword.merge/2)
 
       {:ok, struct(__MODULE__, attrs)}
-    end
-  end
-
-  defp validate_role_information(params, user_table_schema, user_table_name, opts) do
-    # we must have a {role_table_name, role_column}
-    # if the role_name is null then we must have role_table_name and role_column and
-    # {role_table_schema, role_table_name} == {user_table_schema, user_table_name}
-    # if the role name is not null, then we should split it at ":" to get a scope
-    with {:ok, role_name} <- fetch_attr(params, :role_name),
-         {:ok, attrs} <- split_role_def(role_name, opts) do
-      {:ok, attrs}
-    else
-      _ ->
-        validate_dynamic_role(params, user_table_schema, user_table_name, opts)
-    end
-  end
-
-  defp validate_dynamic_role(params, user_table_schema, user_table_name, opts) do
-    with {:ok, role_table_schema} <- fetch_attr(params, :role_table_schema, default_schema(opts)),
-         {:ok, role_table_name} <- fetch_attr(params, :role_table_name),
-         {:ok, role_column} <- fetch_attr(params, :role_table_column),
-         # This is based on the assumption that the dynamic role value *MUST* come from the same table
-         # as the user id
-         {:ok, schema_name} <-
-           attrs_equal(
-             :role_table_schema,
-             role_table_schema,
-             :user_table_schema,
-             user_table_schema
-           ),
-         {:ok, table_name} <-
-           attrs_equal(:role_table_name, role_table_name, :user_table_name, user_table_name) do
-      {:ok, role_table: {role_table_schema, role_table_name}, role_column: role_column}
-    end
-  end
-
-  defp validate_scope_information(params, opts) do
-    with {:ok, scope_schema_name} <- fetch_attr(params, :scope_schema_name, default_schema(opts)),
-         {:ok, scope_table_name} <- fetch_attr(params, :scope_table_name) do
-      {:ok, scope: {scope_schema_name, scope_table_name}}
-    else
-      _ -> {:ok, []}
     end
   end
 

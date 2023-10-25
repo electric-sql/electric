@@ -1,8 +1,9 @@
 defmodule Electric.DDLX.Command.Unassign do
   alias Electric.DDLX.Command
 
+  import Electric.DDLX.Parse.Build
+
   @type t() :: %__MODULE__{
-          schema_name: String.t(),
           table_name: String.t(),
           user_column: String.t(),
           scope: String.t(),
@@ -11,7 +12,6 @@ defmodule Electric.DDLX.Command.Unassign do
         }
 
   @keys [
-    :schema_name,
     :table_name,
     :user_column,
     :scope,
@@ -23,13 +23,31 @@ defmodule Electric.DDLX.Command.Unassign do
 
   defstruct @keys
 
+  def build(params, opts) do
+    with {:ok, user_table_schema} <- fetch_attr(params, :user_table_schema, default_schema(opts)),
+         {:ok, user_table_name} <- fetch_attr(params, :user_table_name),
+         {:ok, user_column} <- fetch_attr(params, :user_table_column),
+         {:ok, role_attrs} <-
+           validate_role_information(params, user_table_schema, user_table_name, opts),
+         {:ok, scope_attrs} <- validate_scope_information(params, opts) do
+      user_attrs = [
+        table_name: {user_table_schema, user_table_name},
+        user_column: user_column
+      ]
+
+      attrs = Enum.reduce([scope_attrs, user_attrs, role_attrs], [], &Keyword.merge/2)
+
+      {:ok, struct(__MODULE__, attrs)}
+    end
+  end
+
   defimpl Command do
     import Electric.DDLX.Command.Common
 
     def pg_sql(unassign) do
       [
         """
-        CALL electric.unassign(assign_schema => #{sql_repr(unassign.schema_name)},
+        CALL electric.unassign(
           assign_table => #{sql_repr(unassign.table_name)},
           scope => #{sql_repr(unassign.scope)},
           user_column_name => #{sql_repr(unassign.user_column)},

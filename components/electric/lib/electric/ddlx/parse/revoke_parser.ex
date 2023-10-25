@@ -67,7 +67,7 @@ defmodule Electric.DDLX.Parse.RevokeParser do
       :ok,
       for priv <- privileges do
         %Revoke{
-          privilege: priv,
+          privileges: priv,
           on_table: "#{schema_name}.#{table_name}",
           role: role,
           scope: scope,

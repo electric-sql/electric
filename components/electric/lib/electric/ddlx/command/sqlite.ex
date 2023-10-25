@@ -1,6 +1,8 @@
 defmodule Electric.DDLX.Command.SQLite do
   alias Electric.DDLX.Command
 
+  import Electric.DDLX.Parse.Build
+
   @type t() :: %__MODULE__{
           sqlite_statement: String.t()
         }
@@ -12,6 +14,12 @@ defmodule Electric.DDLX.Command.SQLite do
   @enforce_keys @keys
 
   defstruct @keys
+
+  def build(params, _opts) do
+    with {:ok, stmt} <- fetch_attr(params, :statement) do
+      {:ok, %__MODULE__{sqlite_statement: stmt}}
+    end
+  end
 
   defimpl Command do
     import Electric.DDLX.Command.Common

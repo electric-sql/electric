@@ -14,6 +14,35 @@ defmodule DDLXParserTest do
   alias Electric.DDLX.Parse.Common
 
   describe "ENABLE ELECTRIC" do
+    test "parse enable" do
+      sql = "ALTER TABLE things ENABLE ELECTRIC;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Enable{
+               table_name: {"public", "things"}
+             }
+    end
+
+    test "parse enable with quoted names" do
+      sql = ~s[ALTER TABLE "Private"."Items" ENABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Enable{
+               table_name: {"Private", "Items"}
+             }
+    end
+
+    test "parse enable with unquoted uppercase names" do
+      sql = ~s[ALTER TABLE Private.Items ENABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Enable{
+               table_name: {"private", "items"}
+             }
+    end
+
     property "enable" do
       check all(
               table <- Electric.Postgres.SQLGenerator.DDLX.table_name(),
@@ -357,6 +386,52 @@ defmodule DDLXParserTest do
     end
   end
 
+  describe "tokens/1" do
+    test "string" do
+      delims = ~w[' $$ $delim$]
+
+      strings = [
+        "my string",
+        "my ' string"
+      ]
+
+      for d <- delims do
+        for s <- strings do
+          quoted = if(d == "'", do: :binary.replace(s, "'", "''", [:global]), else: s)
+          source = "#{d}#{quoted}#{d}"
+          tokens = Parser.tokens("ELECTRIC SQLITE #{source};")
+
+          dbg(source)
+
+          assert match?(
+                   [
+                     {:electric, {1, 0, nil}, _},
+                     {:sqlite, {1, 9, nil}, _},
+                     {:string, {1, 16, ^source}, ^s}
+                   ],
+                   tokens
+                 ),
+                 "string #{inspect(s)} not matched with delim #{inspect(d)}: #{inspect(tokens)}"
+        end
+      end
+
+      tokens =
+        Parser.tokens("ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin'")
+
+      assert [
+               {:electric, {1, 0, nil}, "ELECTRIC"},
+               {:grant, {1, 9, nil}, "GRANT"},
+               {:update, {1, 15, nil}, "UPDATE"},
+               {:on, {1, 22, nil}, "ON"},
+               {:ident, {1, 25, nil}, "thing"},
+               {:., {1, 30, nil}},
+               {:ident, {1, 31, nil}, "Köln_en$ts"},
+               {:to, {1, 42, nil}, "TO"},
+               {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
+             ] = tokens
+    end
+  end
+
   # describe "Can parse SQL into tokens" do
   #   test "can create tokens" do
   #     re = Common.regex_for_keywords(["hello", "fish", "dog"])
@@ -405,7 +480,7 @@ defmodule DDLXParserTest do
       {:ok, result} = Parser.parse(sql)
 
       assert result == %Grant{
-               privilege: ["update"],
+               privileges: ["update"],
                on_table: {"thing", "Köln_en$ts"},
                role: "house.admin",
                column_names: ["status", "name"],
@@ -420,7 +495,7 @@ defmodule DDLXParserTest do
       {:ok, result} = Parser.parse(sql)
 
       assert result == %Grant{
-               privilege: ["update"],
+               privileges: ["update"],
                on_table: {"thing", "Köln_en$ts"},
                role: "house.admin",
                column_names: ["*"],
@@ -440,7 +515,7 @@ defmodule DDLXParserTest do
                check_fn: "name = 'Paul'",
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
-               privilege: ["update"],
+               privileges: ["update"],
                role: "house.admin",
                scope: {"public", "projects"},
                using_path: ["project_id"]
@@ -455,7 +530,7 @@ defmodule DDLXParserTest do
                check_fn: nil,
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
-               privilege: ["select", "insert", "update", "delete"],
+               privileges: ["select", "insert", "update", "delete"],
                role: "house.admin",
                scope: "__global__",
                using_path: nil
@@ -463,61 +538,36 @@ defmodule DDLXParserTest do
     end
   end
 
-  describe "Can parse electric ddlx" do
+  describe "ELECTRIC REVOKE" do
     test "parse revoke" do
-      sql = "ELECTRIC REVOKE UPDATE ON thing.Köln_en$ts FROM 'projects:house.admin';"
+      sql = "ELECTRIC REVOKE UPDATE ON \"Thing\".\"Köln_en$ts\" FROM 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Revoke{
-                 privilege: "update",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects"
-               }
-             ]
-    end
-
-    test "parse revoke fails with string for table" do
-      sql = "ELECTRIC REVOKE UPDATE ON 'thing.Köln_en$ts' FROM 'projects:house.admin';"
-      {:error, _} = Parser.parse(sql)
+      assert result == %Revoke{
+               privileges: ["update"],
+               on_table: {"Thing", "Köln_en$ts"},
+               role: "house.admin",
+               column_names: ["*"],
+               scope: {"public", "projects"}
+             }
     end
 
     test "parse revoke all" do
       sql = "ELECTRIC REVOKE ALL ON thing.Köln_en$ts FROM 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Revoke{
-                 privilege: "select",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects"
-               },
-               %Revoke{
-                 privilege: "update",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects"
-               },
-               %Revoke{
-                 privilege: "insert",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects"
-               },
-               %Revoke{
-                 privilege: "delete",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["*"],
-                 scope: "projects"
-               }
-             ]
+      assert result == %Revoke{
+               privileges: ["select", "insert", "update", "delete"],
+               on_table: {"thing", "köln_en$ts"},
+               role: "house.admin",
+               column_names: ["*"],
+               scope: {"public", "projects"}
+             }
+    end
+
+    test "parse revoke fails with string for table" do
+      sql = "ELECTRIC REVOKE UPDATE ON 'thing.Köln_en$ts' FROM 'projects:house.admin';"
+      {:error, _} = Parser.parse(sql)
     end
 
     test "parse revoke cols" do
@@ -526,116 +576,114 @@ defmodule DDLXParserTest do
 
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Revoke{
-                 privilege: "update",
-                 on_table: "thing.Köln_en$ts",
-                 role: "house.admin",
-                 column_names: ["status", "name"],
-                 scope: "projects"
-               }
-             ]
+      assert result == %Revoke{
+               privileges: ["update"],
+               on_table: {"thing", "köln_en$ts"},
+               role: "house.admin",
+               column_names: ["status", "name"],
+               scope: {"public", "projects"}
+             }
+    end
+
+    test "parse revoke namespaced scope" do
+      sql =
+        "ELECTRIC REVOKE UPDATE (status, name) ON thing.Köln_en$ts FROM 'thing.projects:house.admin';"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Revoke{
+               privileges: ["update"],
+               on_table: {"thing", "köln_en$ts"},
+               role: "house.admin",
+               column_names: ["status", "name"],
+               scope: {"thing", "projects"}
+             }
     end
   end
 
-  describe "Can enable and disable" do
-    test "parse enable" do
-      sql = "ALTER TABLE things ENABLE ELECTRIC;"
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Enable{
-                 table_name: {"public", "things"}
-               }
-             ]
-    end
-
-    test "parse enable with quoted names" do
-      sql = ~s[ALTER TABLE "Private"."Items" ENABLE ELECTRIC;]
-
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Enable{
-                 table_name: {"Private", "Items"}
-               }
-             ]
-    end
-
-    test "parse enable with unquoted uppercase names" do
-      sql = ~s[ALTER TABLE Private.Items ENABLE ELECTRIC;]
-
-      {:ok, result} = Parser.parse(sql)
-
-      assert result == [
-               %Enable{
-                 table_name: {"private", "items"}
-               }
-             ]
-    end
-
-    test "parse disable" do
+  describe "ELECTRIC DISABLE" do
+    test "parses" do
       sql = "ALTER TABLE things DISABLE ELECTRIC;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Disable{
-                 table_name: {"public", "things"}
-               }
-             ]
+      assert result == %Disable{
+               table_name: {"public", "things"}
+             }
+    end
+
+    test "parse disable with quoted names" do
+      sql = ~s[ALTER TABLE "Private"."Items" DISABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Disable{
+               table_name: {"Private", "Items"}
+             }
+    end
+
+    test "parse disable with unquoted uppercase names" do
+      sql = ~s[ALTER TABLE Private.Items DISABLE ELECTRIC;]
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Disable{
+               table_name: {"private", "items"}
+             }
     end
   end
 
-  describe "Can electrify" do
+  describe "ELECTRIC {EN,DIS}ABLE" do
     test "parse electrify" do
-      sql = "ELECTRIFY things;"
-      {:ok, result} = Parser.parse(sql)
+      sql = "ELECTRIC ENABLE things;"
+      {:ok, result} = Parser.parse(sql, default_schema: "application")
 
-      assert result == [
-               %Enable{
-                 table_name: "public.things"
-               }
-             ]
+      assert result == %Enable{
+               table_name: {"application", "things"}
+             }
     end
 
     test "parse unelectrify" do
-      sql = "UNELECTRIFY things;"
+      sql = "ELECTRIC DISABLE application.things;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Disable{
-                 table_name: "public.things"
-               }
-             ]
+      assert result == %Disable{
+               table_name: {"application", "things"}
+             }
     end
   end
 
-  describe "Can do assign" do
+  describe "ELECTRIC UNASSIGN" do
     test "parse unassign " do
       sql = "ELECTRIC UNASSIGN 'record.reader' FROM user_permissions.user_id;"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %Unassign{
-                 schema_name: "public",
-                 table_name: "user_permissions",
-                 user_column: "user_id",
-                 scope: nil,
-                 role_name: "record.reader",
-                 role_column: nil
-               }
-             ]
+      assert result == %Unassign{
+               table_name: {"public", "user_permissions"},
+               user_column: "user_id",
+               scope: nil,
+               role_name: "record.reader",
+               role_column: nil
+             }
     end
+  end
 
+  describe "ELECTRIC SQLITE" do
     test "parse sqlite " do
       sql = "ELECTRIC SQLITE '-- a comment;';"
       {:ok, result} = Parser.parse(sql)
 
-      assert result == [
-               %SQLite{
-                 sqlite_statement: "-- a comment;"
-               }
-             ]
+      assert result == %SQLite{
+               sqlite_statement: "-- a comment;"
+             }
+    end
+
+    test "parse sqlite with $ delim" do
+      sql = "ELECTRIC SQLITE $sqlite$select 'this';$sqlite$;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %SQLite{
+               sqlite_statement: "select 'this';"
+             }
     end
   end
 end

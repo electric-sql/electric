@@ -66,15 +66,15 @@ end
 defmodule Electric.DDLX.Parse.Tokens do
   import Electric.DDLX.Parse.Macros
 
-  @keywords ~w(alter table electric enable)a
-
   deftoken(:token, "ALL", [], do: :all)
   deftoken(:token, "ALTER", [], do: :alter)
   deftoken(:token, "ASSIGN", [], do: :assign)
   deftoken(:token, "CHECK", [], do: :check)
   deftoken(:token, "DELETE", [], do: :delete)
+  deftoken(:token, "DISABLE", [], do: :disable)
   deftoken(:token, "ELECTRIC", [], do: :electric)
   deftoken(:token, "ENABLE", [], do: :enable)
+  deftoken(:token, "FROM", [], do: :from)
   deftoken(:token, "GRANT", [], do: :grant)
   deftoken(:token, "IF", [], do: :if)
   deftoken(:token, "INSERT", [], do: :insert)
@@ -82,9 +82,12 @@ defmodule Electric.DDLX.Parse.Tokens do
   deftoken(:token, "ON", [], do: :on)
   deftoken(:token, "PRIVILEGES", [], do: :privileges)
   deftoken(:token, "READ", [], do: :read)
+  deftoken(:token, "REVOKE", [], do: :revoke)
   deftoken(:token, "SELECT", [], do: :select)
+  deftoken(:token, "SQLITE", [], do: :sqlite)
   deftoken(:token, "TABLE", [], do: :table)
   deftoken(:token, "TO", [], do: :to)
+  deftoken(:token, "UNASSIGN", [], do: :unassign)
   deftoken(:token, "UPDATE", [], do: :update)
   deftoken(:token, "USING", [], do: :using)
   deftoken(:token, "WRITE", [], do: :write)
@@ -253,7 +256,7 @@ defmodule Electric.DDLX.Parse.Parser do
 
   def token_stream(str) do
     Stream.resource(
-      fn -> {str, %{p: 0, k: 0, acc: [], sq: false, dq: false, cm: false}} end,
+      fn -> {str, %{p: 0, k: 0, acc: [], sq: false, dq: false, s: nil, cm: false}} end,
       &token_next/1,
       fn _ -> :ok end
     )
@@ -294,16 +297,16 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_out(token, state) when is_atom(token) do
-    [{token, {1, state.p, nil}}]
+    [{token, {1, state.k, nil}}]
   end
 
-  # defp token_out(%{acc: []}, _type) do
-  #   []
-  # end
-  #
-  # defp token_out(state, type) do
-  #   [{type, state.k, IO.iodata_to_binary(state.acc)}]
-  # end
+  defp token_out(token, value, state) when is_atom(token) do
+    token_out(token, value, nil, state)
+  end
+
+  defp token_out(token, value, source, state) when is_atom(token) do
+    [{token, {1, state.k, source}, value}]
+  end
 
   defp token_start(%{acc: []} = state) do
     %{state | k: state.p}
@@ -316,7 +319,7 @@ defmodule Electric.DDLX.Parse.Parser do
   defp token_next({:halt, state}), do: {:halt, state}
   defp token_next({str, state}), do: token_next(str, state)
 
-  defp token_next(<<>>, %{acc: acc} = state) do
+  defp token_next(<<>>, state) do
     {token_out(state), {:halt, state}}
   end
 
@@ -328,10 +331,15 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<?', rest::binary>>, state) when not_quoted(state) do
-    {
-      token_out(state) ++ token_out(:"'", state),
-      {rest, %{token_start(%{state | p: state.p + 1}) | sq: true, acc: []}}
-    }
+    consume_string(rest, %{token_start(state) | s: ?', p: state.p + 1})
+  end
+
+  defp token_next(<<?$, rest::binary>>, state) when not_quoted(state) do
+    consume_delimiter(
+      rest,
+      {rest, %{state | p: state.p + 1, acc: [state.acc, ?$]}},
+      %{token_start(state) | p: state.p + 1, s: [?$]}
+    )
   end
 
   defp token_next(<<?", ?", rest::binary>>, state) when is_dquoted(state) do
@@ -364,11 +372,11 @@ defmodule Electric.DDLX.Parse.Parser do
     token_next(rest, %{token_start(state) | p: state.p + 1})
   end
 
-  defp token_next(<<s::8, rest::binary>>, %{acc: acc} = state) when s in @whitespace do
+  defp token_next(<<s::8, rest::binary>>, state) when s in @whitespace do
     {token_out(state), {rest, %{token_start(%{state | acc: []}) | p: state.p + 1}}}
   end
 
-  defp token_next(<<";", rest::binary>>, %{acc: acc} = state) do
+  defp token_next(<<";", _rest::binary>>, %{acc: acc} = state) do
     {token_out(state), {:halt, %{state | p: state.p + 1, acc: []}}}
   end
 
@@ -380,9 +388,9 @@ defmodule Electric.DDLX.Parse.Parser do
     token_next(rest, %{state | p: state.p + 1, acc: [acc, c]})
   end
 
-  defp token_next(<<?., rest::binary>>, %{acc: acc} = state) do
+  defp token_next(<<?., rest::binary>>, state) do
     {
-      token_out(state) ++ token_out(:., state),
+      token_out(state) ++ token_out(:., token_start(%{state | acc: []})),
       {rest, %{token_start(%{state | p: state.p + 1}) | acc: []}}
     }
   end
@@ -398,6 +406,61 @@ defmodule Electric.DDLX.Parse.Parser do
   end
 
   defp token_next(<<c::utf8, rest::binary>>, %{acc: acc} = state) do
-    token_next(rest, %{state | p: state.p + byte_size(<<c::utf8>>), acc: [acc, <<c::utf8>>]})
+    token_next(rest, %{state | p: state.p + String.length(<<c::utf8>>), acc: [acc, <<c::utf8>>]})
+  end
+
+  defp consume_string(<<?', ?', rest::binary>>, %{s: ?'} = state) do
+    consume_string(rest, %{state | acc: [state.acc, ?'], p: state.p + 2})
+  end
+
+  defp consume_string(<<?', rest::binary>>, %{s: ?'} = state) do
+    string = IO.iodata_to_binary(state.acc)
+
+    {token_out(
+       :string,
+       string,
+       IO.iodata_to_binary([?', :binary.replace(string, "'", "''"), ?']),
+       state
+     ), {rest, token_start(%{state | p: state.p + 1, s: nil, acc: []})}}
+  end
+
+  defp consume_string(stmt, %{s: d} = state) do
+    case stmt do
+      <<^d::binary-size(byte_size(d)), rest::binary>> ->
+        string = IO.iodata_to_binary(state.acc)
+
+        {token_out(:string, string, d <> string <> d, state),
+         {rest, %{state | p: state.p + String.length(d), s: nil, acc: []}}}
+
+      <<c::utf8, rest::binary>> ->
+        consume_string(rest, %{
+          state
+          | p: state.p + String.length(<<c::utf8>>),
+            acc: [state.acc, <<c::utf8>>]
+        })
+    end
+  end
+
+  defp consume_string(<<c::utf8, rest::binary>>, state) do
+    consume_string(rest, %{
+      state
+      | p: state.p + byte_size(<<c::utf8>>),
+        acc: [state.acc, <<c::utf8>>]
+    })
+  end
+
+  defp consume_delimiter(<<?$, rest::binary>>, _restore, state) do
+    delim = IO.iodata_to_binary([state.s, ?$])
+    consume_string(rest, %{state | p: state.p + 1, s: delim})
+  end
+
+  defp consume_delimiter(<<c::8, rest::binary>>, restore, state) when is_alpha(c) do
+    consume_delimiter(rest, restore, %{state | p: state.p + 1, s: [state.s, c]})
+  end
+
+  # stop trying to find the end of the delimiter if we hit any non-alpha char and 
+  # use the restore state to resume where we were
+  defp consume_delimiter(_, {rest, state}, _state) do
+    token_next(rest, state)
   end
 end
