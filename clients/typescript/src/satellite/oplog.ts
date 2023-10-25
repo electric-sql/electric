@@ -7,6 +7,8 @@ import {
   SqlValue,
   DataTransaction,
   DataChange,
+  Record as Rec,
+  Relation,
 } from '../util/types'
 import { union } from '../util/sets'
 import { numberToBytes } from '../util/common'
@@ -115,7 +117,8 @@ export const stringToOpType = (opTypeStr: string): OpType => {
 // parsing out the changed columns from the oldRow and the newRow.
 export const localEntryToChanges = (
   entry: OplogEntry,
-  tag: Tag
+  tag: Tag,
+  relations: RelationsCache
 ): OplogEntryChanges => {
   const result: OplogEntryChanges = {
     namespace: entry.namespace,
@@ -127,8 +130,14 @@ export const localEntryToChanges = (
     clearTags: decodeTags(entry.clearTags),
   }
 
-  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
-  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
+  const relation = relations[entry.tablename]
+
+  const oldRow: Row = entry.oldRow
+    ? (deserialiseRow(entry.oldRow, relation) as Row)
+    : {}
+  const newRow: Row = entry.newRow
+    ? (deserialiseRow(entry.newRow, relation) as Row)
+    : {}
 
   const timestamp = new Date(entry.timestamp).getTime()
 
@@ -143,9 +152,17 @@ export const localEntryToChanges = (
 
 // Convert an `OplogEntry` to a `ShadowEntryChanges` structure,
 // parsing out the changed columns from the oldRow and the newRow.
-export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
-  const oldRow: Row = entry.oldRow ? JSON.parse(entry.oldRow) : {}
-  const newRow: Row = entry.newRow ? JSON.parse(entry.newRow) : {}
+export const remoteEntryToChanges = (
+  entry: OplogEntry,
+  relations: RelationsCache
+): ShadowEntryChanges => {
+  const relation = relations[entry.tablename]
+  const oldRow: Row = entry.oldRow
+    ? (deserialiseRow(entry.oldRow, relation) as Row)
+    : {}
+  const newRow: Row = entry.newRow
+    ? (deserialiseRow(entry.newRow, relation) as Row)
+    : {}
 
   const result: ShadowEntryChanges = {
     namespace: entry.namespace,
@@ -182,14 +199,16 @@ export const remoteEntryToChanges = (entry: OplogEntry): ShadowEntryChanges => {
  */
 export const localOperationsToTableChanges = (
   operations: OplogEntry[],
-  genTag: (timestamp: Date) => Tag
+  genTag: (timestamp: Date) => Tag,
+  relations: RelationsCache
 ): OplogTableChanges => {
   const initialValue: OplogTableChanges = {}
 
   return operations.reduce((acc, entry) => {
     const entryChanges = localEntryToChanges(
       entry,
-      genTag(new Date(entry.timestamp))
+      genTag(new Date(entry.timestamp)),
+      relations
     )
 
     // Sort for deterministic key generation.
@@ -231,12 +250,13 @@ export const localOperationsToTableChanges = (
 }
 
 export const remoteOperationsToTableChanges = (
-  operations: OplogEntry[]
+  operations: OplogEntry[],
+  relations: RelationsCache
 ): PendingChanges => {
   const initialValue: PendingChanges = {}
 
   return operations.reduce((acc, entry) => {
-    const entryChanges = remoteEntryToChanges(entry)
+    const entryChanges = remoteEntryToChanges(entry, relations)
 
     // Sort for deterministic key generation.
     const primaryKeyStr = primaryKeyToStr(entryChanges.primaryKeyCols)
@@ -264,6 +284,56 @@ export const remoteOperationsToTableChanges = (
   }, initialValue)
 }
 
+/**
+ * Serialises a row that is represented by a record.
+ * `NaN`, `+Inf`, and `-Inf` are transformed to their string equivalent.
+ * @param record The row to serialise.
+ */
+function serialiseRow(row?: Rec): string {
+  return JSON.stringify(row, (_key, value) => {
+    if (typeof value === 'number') {
+      if (Number.isNaN(value)) {
+        return 'NaN'
+      } else if (value === Infinity) {
+        return '+Inf'
+      } else if (value === -Infinity) {
+        return '-Inf'
+      }
+    }
+    return value
+  })
+}
+
+/**
+ * Deserialises a row back into a record.
+ * `"NaN"`, `"+Inf"`, and `"-Inf"` are transformed back into their numeric equivalent
+ * iff the column type is a float.
+ * @param str The row to deserialise.
+ * @param rel The relation for the table to which this row belongs.
+ */
+function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
+  return JSON.parse(str, (key, value) => {
+    const columnType = rel.columns
+      .find((c) => c.name === key)
+      ?.type?.toUpperCase()
+    if (
+      (columnType === 'FLOAT4' ||
+        columnType === 'FLOAT8' ||
+        columnType === 'REAL') &&
+      typeof value === 'string'
+    ) {
+      if (value === 'NaN') {
+        return NaN
+      } else if (value === '+Inf') {
+        return Infinity
+      } else if (value === '-Inf') {
+        return -Infinity
+      }
+    }
+    return value
+  })
+}
+
 export const fromTransaction = (
   transaction: DataTransaction,
   relations: RelationsCache
@@ -282,8 +352,8 @@ export const fromTransaction = (
       namespace: 'main', // TODO: how?
       tablename: t.relation.table,
       optype: stringToOpType(t.type),
-      newRow: JSON.stringify(t.record),
-      oldRow: JSON.stringify(t.oldRecord),
+      newRow: serialiseRow(t.record),
+      oldRow: serialiseRow(t.oldRecord),
       primaryKey: pk,
       rowid: -1, // not required
       timestamp: new Date(
@@ -366,16 +436,16 @@ export const opLogEntryToChange = (
   entry: OplogEntry,
   relations: RelationsCache
 ): DataChange => {
+  const relation = relations[`${entry.tablename}`]
+
   let record, oldRecord
   if (entry.newRow != null) {
-    record = JSON.parse(entry.newRow)
+    record = deserialiseRow(entry.newRow, relation)
   }
 
   if (entry.oldRow != null) {
-    oldRecord = JSON.parse(entry.oldRow)
+    oldRecord = deserialiseRow(entry.oldRow, relation)
   }
-
-  const relation = relations[`${entry.tablename}`]
 
   if (typeof relation === 'undefined') {
     throw new Error(`Could not find relation for ${entry.tablename}`)

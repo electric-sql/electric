@@ -264,9 +264,13 @@ test('snapshot of INSERT after DELETE', async (t) => {
   const entries = await satellite._getEntries()
   const clientId = satellite._authState!.clientId
 
-  const merged = localOperationsToTableChanges(entries, (timestamp: Date) => {
-    return generateTag(clientId, timestamp)
-  })
+  const merged = localOperationsToTableChanges(
+    entries,
+    (timestamp: Date) => {
+      return generateTag(clientId, timestamp)
+    },
+    relations
+  )
   const [_, keyChanges] = merged['main.parent']['{"id":1}']
   const resultingValue = keyChanges.changes.value.value
   t.is(resultingValue, null)
@@ -299,7 +303,13 @@ test('take snapshot and merge local wins', async (t) => {
 
   const local = await satellite._getEntries()
   const localTimestamp = new Date(local[0].timestamp).getTime()
-  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
+  const merged = mergeEntries(
+    clientId,
+    local,
+    'remote',
+    [incomingEntry],
+    relations
+  )
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -353,7 +363,13 @@ test('take snapshot and merge incoming wins', async (t) => {
     }
   )
 
-  const merged = mergeEntries(clientId, local, 'remote', [incomingEntry])
+  const merged = mergeEntries(
+    clientId,
+    local,
+    'remote',
+    [incomingEntry],
+    relations
+  )
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -546,6 +562,9 @@ test('apply incoming with no local', async (t) => {
       otherValue: 1,
     }
   )
+
+  satellite.relations = relations // satellite must be aware of the relations in order to deserialise oplog entries
+
   await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
@@ -695,7 +714,7 @@ test('INSERT wins over DELETE and restored deleted values', async (t) => {
     ),
   ]
 
-  const merged = mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming, relations)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -771,7 +790,7 @@ test('concurrent updates take all changed values', async (t) => {
     ),
   ]
 
-  const merged = mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming, relations)
   const item = merged['main.parent']['{"id":1}']
 
   // The incoming entry modified the value of the `value` column to `'remote'`
@@ -823,7 +842,7 @@ test('merge incoming with empty local', async (t) => {
   ]
 
   const local: OplogEntry[] = []
-  const merged = mergeEntries(clientId, local, 'remote', incoming)
+  const merged = mergeEntries(clientId, local, 'remote', incoming, relations)
   const item = merged['main.parent']['{"id":1}']
 
   t.deepEqual(item, {
@@ -1039,6 +1058,9 @@ test('compensations: using triggers with flag 1', async (t) => {
       }
     ),
   ]
+
+  satellite.relations = relations // satellite must be aware of the relations in order to deserialise oplog entries
+
   await satellite._apply(incoming, 'remote')
   t.pass()
 })

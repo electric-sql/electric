@@ -105,6 +105,26 @@ export const relations = {
       },
     ],
   },
+  floatTable: {
+    id: 3,
+    schema: 'public',
+    table: 'floatTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'INTEGER',
+        isNullable: false,
+        primaryKey: true,
+      },
+      {
+        name: 'value',
+        type: 'REAL',
+        isNullable: true,
+        primaryKey: false,
+      },
+    ],
+  },
 }
 
 import migrations from '../support/migrations/migrations.js'

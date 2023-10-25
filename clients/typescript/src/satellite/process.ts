@@ -1019,7 +1019,8 @@ export class SatelliteProcess implements Satellite {
       this._authState!.clientId,
       local,
       incoming_origin,
-      incoming
+      incoming,
+      this.relations
     )
 
     const stmts: Statement[] = []
