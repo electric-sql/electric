@@ -1,71 +1,3 @@
-defmodule Electric.Postgres.Proxy.Parser.Macros do
-  @doc """
-  Produces a function head that matches a string in a case insensitive way.
-
-  E.g.
-
-       defkeyword :in?, "IN" do
-          :ok
-       end
-
-  produces the code:
-
-       def in?(<<c0::8, c1::8, rest::binary>> = stmt) when c0 in [?i, ?I] and c1 in [?n, ?N] do
-         :ok
-       end
-
-  ## Options
-
-  - `trailing` - should the keyword be followed by whitespace, defaults to `true`. 
-
-  """
-  defmacro defkeyword(function, keyword, opts \\ [], do: block) do
-    chars =
-      keyword
-      |> String.codepoints()
-      |> Enum.map(fn char -> [String.downcase(char), String.upcase(char)] end)
-      |> Enum.map(fn [<<l::8>>, <<u::8>>] -> [l, u] end)
-
-    whitespace = if Keyword.get(opts, :trailing, false), do: [~c"\t\n\r "], else: []
-    chars = Enum.with_index(chars ++ whitespace)
-    pattern = build_match(chars)
-    guard = build_guard(chars)
-
-    quote do
-      def unquote(function)(unquote(pattern) = var!(stmt)) when unquote(guard) do
-        _ = var!(rest)
-        _ = var!(stmt)
-        unquote(block)
-      end
-    end
-  end
-
-  defp match_var(i), do: Macro.var(:"c#{i}", Elixir)
-
-  # <<c0::8, c1::8, ..., rest::binary>>
-  defp build_match(chars) do
-    {:<<>>, [],
-     Enum.map(chars, fn {_c, i} -> quote(do: unquote(match_var(i)) :: 8) end) ++
-       [quote(do: var!(rest) :: binary)]}
-  end
-
-  defp is_member(chars, i) do
-    quote do
-      unquote(match_var(i)) in unquote(chars)
-    end
-  end
-
-  defp build_guard([{chars, i}]) do
-    is_member(chars, i)
-  end
-
-  defp build_guard([{chars, i} | rest]) do
-    quote do
-      unquote(is_member(chars, i)) and unquote(build_guard(rest))
-    end
-  end
-end
-
 defmodule Electric.Postgres.Proxy.Parser do
   alias Electric.Postgres.NameParser
   alias Electric.Postgres.Proxy.Injector.State
@@ -73,7 +5,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   alias Electric.Postgres.Proxy.{QueryAnalyser, QueryAnalysis}
   alias PgProtocol.Message, as: M
 
-  import __MODULE__.Macros
+  import Electric.DDLX.Parser.Macros
 
   require Logger
 
@@ -469,7 +401,7 @@ defmodule Electric.Postgres.Proxy.Parser do
   end
 
   # case ignoring match of "electric"
-  defkeyword :is_electric_keyword?, "ELECTRIC" do
+  deftoken :is_electric_keyword?, "ELECTRIC" do
     true
   end
 

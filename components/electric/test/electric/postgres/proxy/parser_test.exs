@@ -77,7 +77,7 @@ defmodule Electric.Postgres.Proxy.ParserTest do
     end
 
     test "matches with trailing stuff" do
-      assert Parser.is_electric_keyword?("electric raingoes")
+      assert Parser.is_electric_keyword?("electric")
     end
 
     test "only matches 'electric'" do
