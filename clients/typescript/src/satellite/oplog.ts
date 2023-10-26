@@ -120,17 +120,20 @@ export const localEntryToChanges = (
   tag: Tag,
   relations: RelationsCache
 ): OplogEntryChanges => {
+  const relation = relations[entry.tablename]
+
   const result: OplogEntryChanges = {
     namespace: entry.namespace,
     tablename: entry.tablename,
-    primaryKeyCols: JSON.parse(entry.primaryKey),
+    primaryKeyCols: deserialiseRow(entry.primaryKey, relation) as Record<
+      string,
+      string | number
+    >,
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
     tag: entry.optype == OPTYPES.delete ? null : tag,
     clearTags: decodeTags(entry.clearTags),
   }
-
-  const relation = relations[entry.tablename]
 
   const oldRow: Row = entry.oldRow
     ? (deserialiseRow(entry.oldRow, relation) as Row)
@@ -167,7 +170,10 @@ export const remoteEntryToChanges = (
   const result: ShadowEntryChanges = {
     namespace: entry.namespace,
     tablename: entry.tablename,
-    primaryKeyCols: JSON.parse(entry.primaryKey),
+    primaryKeyCols: deserialiseRow(entry.primaryKey, relation) as Record<
+      string,
+      string | number
+    >,
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
     // if it is a delete, then `newRow` is empty so the full row is the old row
@@ -295,7 +301,7 @@ function serialiseRow(row?: Rec): string {
       if (Number.isNaN(value)) {
         return 'NaN'
       } else if (value === Infinity) {
-        return '+Inf'
+        return 'Inf'
       } else if (value === -Infinity) {
         return '-Inf'
       }
@@ -324,10 +330,12 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
     ) {
       if (value === 'NaN') {
         return NaN
-      } else if (value === '+Inf') {
+      } else if (value === 'Inf') {
         return Infinity
       } else if (value === '-Inf') {
         return -Infinity
+      } else {
+        return Number(value)
       }
     }
     return value
@@ -405,15 +413,6 @@ export const toTransactions = (
   )
 }
 
-export const newShadowEntry = (oplogEntry: OplogEntry): ShadowEntry => {
-  return {
-    namespace: oplogEntry.namespace,
-    tablename: oplogEntry.tablename,
-    primaryKey: primaryKeyToStr(JSON.parse(oplogEntry.primaryKey)),
-    tags: shadowTagsDefault,
-  }
-}
-
 export const getShadowPrimaryKey = (
   oplogEntry: OplogEntry | OplogEntryChanges | ShadowEntryChanges
 ): ShadowKey => {
@@ -469,19 +468,18 @@ export const opLogEntryToChange = (
  * @param primaryKeyObj object representing all columns of a primary key
  * @returns a stringified JSON with stable sorting on column names
  */
-export const primaryKeyToStr = (primaryKeyObj: {
-  [key: string]: string | number
-}): string => {
-  const keys = Object.keys(primaryKeyObj).sort()
-  if (keys.length === 0) return '{}'
+export const primaryKeyToStr = <T extends Record<string, string | number>>(
+  primaryKeyObj: T
+): string => {
+  // Sort the keys then insert them in order in a fresh object
+  // cf. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
+  const keys: Array<keyof T> = Object.keys(primaryKeyObj).sort()
+  const sortedObj = keys.reduce((obj, key) => {
+    obj[key] = primaryKeyObj[key]
+    return obj
+  }, {} as T)
 
-  let json = '{'
-  for (const key of keys) {
-    json += JSON.stringify(key) + ':' + JSON.stringify(primaryKeyObj[key]) + ','
-  }
-
-  // Remove the last appended comma and close the object
-  return json.slice(0, -1) + '}'
+  return serialiseRow(sortedObj)
 }
 
 export const generateTag = (

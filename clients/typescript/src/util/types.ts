@@ -132,7 +132,7 @@ export type DataChange = {
 
 // The properties are omitted from columns because they are not currently used.
 export type MigrationTable = Omit<SatOpMigrate_Table, '$type' | 'columns'> & {
-  columns: Omit<SatOpMigrate_Column, '$type' | 'sqliteType' | 'pgType'>[]
+  columns: Omit<SatOpMigrate_Column, '$type' | 'pgType'>[]
 }
 
 export type SchemaChange = {

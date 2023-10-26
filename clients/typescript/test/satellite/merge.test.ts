@@ -11,7 +11,9 @@ import {
   DataTransaction,
 } from '../../src/util'
 import Long from 'long'
-import { relations } from './common'
+import { relations, migrateDb, personTable } from './common'
+import Database from 'better-sqlite3'
+import { satelliteDefaults } from '../../src/satellite/config'
 
 test('merging entries: local no-op updates should cancel incoming delete', (t) => {
   const pk = primaryKeyToStr({ id: 1 })
@@ -99,11 +101,11 @@ test('merge can handle infinity values', (t) => {
   })
 })
 
+const to_commit_timestamp = (timestamp: string): Long =>
+  Long.UZERO.add(new Date(timestamp).getTime())
+
 test('merge can handle NaN values', (t) => {
   const pk = primaryKeyToStr({ id: 1 })
-
-  const to_commit_timestamp = (timestamp: string): Long =>
-    Long.UZERO.add(new Date(timestamp).getTime())
 
   const tx1: DataTransaction = {
     lsn: DEFAULT_LOG_POS,
@@ -142,4 +144,61 @@ test('merge can handle NaN values', (t) => {
   // but the timestamp of tx2 > tx1
   t.like(merged, { 'main.floatTable': { [pk]: { optype: 'UPSERT' } } })
   t.deepEqual(merged['main.floatTable'][pk].fullRow, { id: 1, value: NaN })
+})
+
+test('merge works on oplog entries', (t) => {
+  const db = new Database(':memory:')
+
+  // Migrate the DB with the necessary tables and triggers
+  migrateDb(db, personTable)
+
+  // Insert a row in the table
+  const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi) VALUES (9e999, 'John Doe', 30, 25.5)`
+  db.exec(insertRowSQL)
+
+  // Fetch the oplog entry for the inserted row
+  const oplogRows = db
+    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
+    .all()
+
+  t.is(oplogRows.length, 1)
+
+  const oplogEntry = oplogRows[0] as OplogEntry
+
+  // Define a transaction that happened concurrently
+  // and inserts a row with the same id but different values
+  const tx: DataTransaction = {
+    lsn: DEFAULT_LOG_POS,
+    commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
+    changes: [
+      {
+        relation: relations[personTable.tableName as keyof typeof relations],
+        type: DataChangeType.INSERT,
+        record: { age: 30, bmi: 8e888, id: 9e999, name: 'John Doe' }, // fields must be ordered alphabetically to match the behavior of the triggers
+        tags: [],
+      },
+    ],
+  }
+
+  // Merge the oplog entry with the transaction
+  const merged = mergeEntries(
+    'local',
+    [oplogEntry],
+    'remote',
+    fromTransaction(tx, relations),
+    relations
+  )
+
+  const pk = primaryKeyToStr({ id: 9e999 })
+
+  // the incoming transaction wins
+  t.like(merged, {
+    [`main.${personTable.tableName}`]: { [pk]: { optype: 'UPSERT' } },
+  })
+  t.deepEqual(merged[`main.${personTable.tableName}`][pk].fullRow, {
+    id: 9e999,
+    name: 'John Doe',
+    age: 30,
+    bmi: Infinity,
+  })
 })
