@@ -80,6 +80,10 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     {:noreply, state}
   end
 
+  def handle_info({:tcp_closed, _conn}, state) do
+    {:stop, :normal, %{state | conn: nil}}
+  end
+
   @impl GenServer
   def handle_cast({:upstream, msgs}, state) do
     {:noreply, upstream(msgs, state)}

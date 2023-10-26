@@ -120,6 +120,16 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:noreply, {socket, state}}
   end
 
+  def handle_info({:EXIT, conn, reason}, {socket, state}) do
+    if reason != :normal do
+      Logger.warning(
+        "Upstream connection #{inspect(conn)} shut down with reason #{inspect(reason)}"
+      )
+    end
+
+    {:stop, {:shutdown, :closed}, {socket, state}}
+  end
+
   defp handle_messages([], _socket, state) do
     {:continue, state}
   end
