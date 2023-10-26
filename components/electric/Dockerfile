@@ -26,6 +26,7 @@ COPY config/config.exs /app/config/
 RUN mix deps.compile
 
 COPY lib /app/lib/
+COPY src /app/src/
 COPY config/*runtime.exs /app/config/
 
 ARG ELECTRIC_VERSION=local
