@@ -39,10 +39,21 @@ defmodule Electric.DDLX.Parser.Tokenizer do
   @type position() :: {integer(), integer(), nil | String.t()}
   @type t() :: {atom, position()} | {atom, position(), String.t()}
 
-  @whitespace [?\s, ?\n, ?\r, ?\n, ?\t]
-  @non_ident [?., ?,, ?(, ?), ?:, ?=, ?-, ?<, ?>, ?+, ?*, ?/]
-  @operators [{?<, ?>}, {?<, ?=}, {?>, ?=}, {?!, ?=}]
+  @type state() :: %__MODULE__{
+          l: pos_integer(),
+          p: pos_integer(),
+          k: pos_integer(),
+          acc: iolist(),
+          s: iodata()
+        }
+
+  defstruct l: 1, p: 0, k: 0, acc: [], s: nil
+
+  @whitespace [?\s, ?\t]
+  @non_ident ~c[.,():=-<>+*/]
+  @operators ~w[<> <= >= !=]c
   @integers ?0..?9
+  @line_endings ["\r\n", "\n", "\r"]
 
   defguardp is_alpha(char) when char in ?A..?Z or char in ?a..?z or char in [?_]
   defguardp is_num(char) when char in @integers
@@ -55,7 +66,7 @@ defmodule Electric.DDLX.Parser.Tokenizer do
 
   def token_stream(str) do
     Stream.resource(
-      fn -> {str, %{p: 0, k: 0, acc: [], sq: false, dq: false, s: nil, cm: false}} end,
+      fn -> {str, %__MODULE__{}} end,
       &token_next/1,
       fn _ -> :ok end
     )
@@ -70,24 +81,24 @@ defmodule Electric.DDLX.Parser.Tokenizer do
 
     case Tokens.token(s) do
       keyword when is_atom(keyword) ->
-        [{keyword, {1, state.k, nil}, s}]
+        [{keyword, {state.l, state.k, nil}, s}]
 
       string when is_binary(string) ->
-        [{:unquoted_identifier, {1, state.k, nil}, string}]
+        [{:unquoted_identifier, {state.l, state.k, nil}, string}]
     end
   end
 
   defp token_out(token, state) when is_atom(token) do
-    [{token, {1, state.k, nil}}]
+    [{token, {state.l, state.k, nil}}]
   end
 
   defp token_out(token, value, source, state)
        when is_atom(token) and (is_list(value) or is_binary(value)) do
-    [{token, {1, state.k, IO.iodata_to_binary(source)}, IO.iodata_to_binary(value)}]
+    [{token, {state.l, state.k, IO.iodata_to_binary(source)}, IO.iodata_to_binary(value)}]
   end
 
   defp token_out(token, value, source, state) do
-    [{token, {1, state.k, IO.iodata_to_binary(source)}, value}]
+    [{token, {state.l, state.k, IO.iodata_to_binary(source)}, value}]
   end
 
   defp token_start(%{acc: []} = state) do
@@ -102,11 +113,25 @@ defmodule Electric.DDLX.Parser.Tokenizer do
     %{state | k: state.p}
   end
 
+  defp newline(state) do
+    %{state | l: state.l + 1, p: 0}
+  end
+
   defp token_next({:halt, state}), do: {:halt, state}
   defp token_next({str, state}), do: token_next(str, state)
 
   defp token_next(<<>>, state) do
     {token_out(state), {:halt, state}}
+  end
+
+  for eol <- @line_endings do
+    defp token_next(unquote(eol) <> rest, state) do
+      token_next(rest, newline(state))
+    end
+  end
+
+  defp token_next(<<?-, ?-, rest::binary>>, state) do
+    consume_comment(rest, %{state | p: state.p + 2})
   end
 
   defp token_next(<<?", rest::binary>>, state) do
@@ -136,7 +161,7 @@ defmodule Electric.DDLX.Parser.Tokenizer do
     {token_out(state), {:halt, %{state | p: state.p + 1, acc: []}}}
   end
 
-  for {c1, c2} <- @operators do
+  for [c1, c2] <- @operators do
     op = String.to_atom(<<c1, c2>>)
 
     defp token_next(<<unquote(c1)::8, unquote(c2)::8, rest::binary>>, %{acc: acc} = state) do
@@ -253,6 +278,12 @@ defmodule Electric.DDLX.Parser.Tokenizer do
     {token_out(state), {rest, token_start(%{state | acc: []})}}
   end
 
+  for eol <- @line_endings do
+    defp consume_identifier(unquote(eol) <> rest, state) do
+      {token_out(state), {rest, newline(token_start(%{state | acc: []}))}}
+    end
+  end
+
   defp consume_identifier(<<c::8, rest::binary>>, state) when c in @whitespace do
     {token_out(state), {rest, %{token_start(%{state | acc: []}) | p: state.p + 1}}}
   end
@@ -298,5 +329,15 @@ defmodule Electric.DDLX.Parser.Tokenizer do
        src,
        state
      ), {rest, token_start(%{state | acc: []})}}
+  end
+
+  for eol <- @line_endings do
+    defp consume_comment(unquote(eol) <> rest, state) do
+      token_next(rest, newline(state))
+    end
+  end
+
+  defp consume_comment(<<c::utf8, rest::binary>>, state) do
+    consume_comment(rest, %{state | p: state.p + String.length(<<c::utf8>>)})
   end
 end

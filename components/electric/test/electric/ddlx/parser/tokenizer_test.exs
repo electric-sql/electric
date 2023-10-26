@@ -179,5 +179,38 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
                {:integer, {1, 64, "9"}, 9}
              ] = tokens
     end
+
+    test "comments" do
+      src = """
+      -- this is my first comment
+      ELECTRIC\tASSIGN  -- this is my second comment
+        'admin'
+        TO
+        -- this is my third comment
+        application.admin_users.user_id  -- this is my forth comment
+        ;
+      """
+
+      lines = String.split(src, "\n")
+      endings = ["\n", "\r\n", "\r"]
+
+      for ending <- endings do
+        stmt = Enum.join(lines, ending)
+
+        tokens = Tokenizer.tokens(stmt)
+
+        assert [
+                 {:ELECTRIC, {2, 0, _}, "ELECTRIC"},
+                 {:ASSIGN, {2, 9, _}, "ASSIGN"},
+                 {:string, {3, 2, _}, "admin"},
+                 {:TO, {4, 2, _}, "TO"},
+                 {:unquoted_identifier, {6, 2, _}, "application"},
+                 {:., {6, _, _}},
+                 {:unquoted_identifier, {6, _, _}, "admin_users"},
+                 {:., {6, _, _}},
+                 {:unquoted_identifier, {6, _, _}, "user_id"}
+               ] = tokens
+      end
+    end
   end
 end
