@@ -68,22 +68,24 @@ defmodule Electric.Postgres.TestConnection do
 
     on_exit(fn ->
       {:ok, conn} = :epgsql.connect(pg_config)
-
       teardown_fun.(conn)
-
-      {:ok, _, _} =
-        :epgsql.equery(
-          conn,
-          "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
-          [db_name]
-        )
-
+      terminate_all_connections(conn, db_name)
       :epgsql.close(conn)
-
       dropdb(db_name, config)
     end)
 
     %{db: db_name, pg_config: pg_config, conn: conn}
+  end
+
+  def terminate_all_connections(conn, db_name) do
+    {:ok, _, _} =
+      :epgsql.equery(
+        conn,
+        "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
+        [db_name]
+      )
+
+    :ok
   end
 
   def setup_replicated_db(context) do
