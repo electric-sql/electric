@@ -695,7 +695,7 @@ defmodule Operation.Electric do
       {op, State.electrify(state, op.analysis.table), Send.server(send, query(query))}
     end
 
-    def recv_server(op, %M.ReadyForQuery{} = msg, state, send) do
+    def recv_server(%{queries: []} = op, %M.ReadyForQuery{} = msg, state, send) do
       tag = DDLX.Command.tag(op.command)
 
       reply =
@@ -708,6 +708,10 @@ defmodule Operation.Electric do
         end
 
       {nil, state, Send.client(send, reply)}
+    end
+
+    def recv_server(%{queries: [query | queries]} = op, %M.ReadyForQuery{}, state, send) do
+      {%{op | queries: queries}, state, Send.server(send, query(query))}
     end
 
     def recv_server(op, _msg, state, send) do

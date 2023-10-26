@@ -298,7 +298,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
         test "ELECTRIC REVOKE UPDATE", cxt do
           query =
-            ~s[-- this is my comment\nELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
+            ~s[-- this is my comment\nELECTRIC REVOKE ALL (status, name) ON truths FROM 'projects:house.admin';]
 
           cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query)
         end
