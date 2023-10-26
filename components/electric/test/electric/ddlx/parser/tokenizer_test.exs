@@ -20,8 +20,8 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
 
           assert match?(
                    [
-                     {:electric, {1, 0, nil}, _},
-                     {:sqlite, {1, 9, nil}, _},
+                     {:ELECTRIC, {1, 0, nil}, _},
+                     {:SQLITE, {1, 9, nil}, _},
                      {:string, {1, 16, ^source}, ^s}
                    ],
                    tokens
@@ -31,17 +31,17 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
       end
 
       tokens =
-        Tokenizer.tokens("ELECTRIC GRANT UPDATE ON thing.Köln_en$ts TO 'projects:house.admin'")
+        Tokenizer.tokens("Electric grant updATE ON thing.Köln_en$ts TO 'projects:house.admin'")
 
       assert [
-               {:electric, {1, 0, nil}, "ELECTRIC"},
-               {:grant, {1, 9, nil}, "GRANT"},
-               {:update, {1, 15, nil}, "UPDATE"},
-               {:on, {1, 22, nil}, "ON"},
+               {:ELECTRIC, {1, 0, nil}, "Electric"},
+               {:GRANT, {1, 9, nil}, "grant"},
+               {:UPDATE, {1, 15, nil}, "updATE"},
+               {:ON, {1, 22, nil}, "ON"},
                {:unquoted_identifier, {1, 25, nil}, "thing"},
                {:., {1, 30, nil}},
                {:unquoted_identifier, {1, 31, nil}, "Köln_en$ts"},
-               {:to, {1, 42, nil}, "TO"},
+               {:TO, {1, 42, nil}, "TO"},
                {:string, {1, 45, "'projects:house.admin'"}, "projects:house.admin"}
              ] = tokens
     end
@@ -107,7 +107,7 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
                {:unquoted_identifier, {1, 0, nil}, "this"},
                {:>, {1, 5, nil}},
                {:integer, {1, 7, "10"}, 10},
-               {:and, {1, 10, nil}, "and"},
+               {:AND, {1, 10, nil}, "and"},
                {:unquoted_identifier, {1, 14, nil}, "that"},
                {:<, {1, 19, nil}},
                {:integer, {1, 21, "-12001"}, -12001}
@@ -122,15 +122,15 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
                {:unquoted_identifier, {1, 0, nil}, "this"},
                {:>, {1, 5, nil}},
                {:float, {1, 7, "1.10"}, "1.10"},
-               {:and, {1, 12, nil}, "and"},
+               {:AND, {1, 12, nil}, "and"},
                {:unquoted_identifier, {1, 16, nil}, "that"},
                {:<, {1, 21, nil}},
                {:float, {1, 23, "-12.001"}, "-12.001"},
-               {:and, {1, 31, nil}, "and"},
+               {:AND, {1, 31, nil}, "and"},
                {:unquoted_identifier, {1, 35, nil}, "throw"},
                {:=, {1, 41, nil}},
                {:float, {1, 43, ".01"}, ".01"},
-               {:and, {1, 47, nil}, "and"},
+               {:AND, {1, 47, nil}, "and"},
                {:unquoted_identifier, {1, 51, nil}, "door"},
                {:>, {1, 56, nil}},
                {:float, {1, 58, "-.01"}, "-.01"}
@@ -162,18 +162,18 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
 
       assert [
                {:unquoted_identifier, {1, 0, nil}, "this"},
-               {:is, {1, 5, nil}, "IS"},
-               {:not, {1, 8, nil}, "NOT"},
-               {:null, {1, 12, nil}, "NULL"},
-               {:and, {1, 17, nil}, "AND"},
+               {:IS, {1, 5, nil}, "IS"},
+               {:NOT, {1, 8, nil}, "NOT"},
+               {:NULL, {1, 12, nil}, "NULL"},
+               {:AND, {1, 17, nil}, "AND"},
                {:unquoted_identifier, {1, 21, nil}, "that"},
                {:<=, {1, 26, nil}},
                {:float, {1, 29, "-12.001"}, "-12.001"},
-               {:or, {1, 37, nil}, "OR"},
+               {:OR, {1, 37, nil}, "OR"},
                {:unquoted_identifier, {1, 40, nil}, "throw"},
                {:=, {1, 46, nil}},
                {:float, {1, 48, ".01"}, ".01"},
-               {:and, {1, 52, nil}, "AND"},
+               {:AND, {1, 52, nil}, "AND"},
                {:unquoted_identifier, {1, 56, nil}, "door"},
                {:<>, {1, 61, nil}},
                {:integer, {1, 64, "9"}, 9}

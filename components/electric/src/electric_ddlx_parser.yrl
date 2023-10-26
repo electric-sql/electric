@@ -33,13 +33,13 @@ Nonterminals
 % expression in the source, used for error msgs
 Terminals 
    '.' '(' ')' ',' ':'
-   alter table disable enable electric null unassign assign to if
-   grant on using select insert update delete all read write check
-   revoke from sqlite
+   'ALTER' 'TABLE' 'DISABLE' 'ENABLE' 'ELECTRIC' 'NULL' 'UNASSIGN' 'ASSIGN' 'TO' 'IF'
+   'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'CHECK'
+   'REVOKE' 'FROM' 'SQLITE'
    string  int float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
-   and is not or
+   'AND' 'IS' 'NOT' 'OR'
    .
 
 
@@ -48,9 +48,9 @@ Rootsymbol stmt.
 Left      20 ','.
 Right    100 '=' '!=' '<>'.
 Left     150 '<' '>' '<=' '>='.
-Left     120 'or'.
-Left     130 'and'.
-Left     170 'is' 'not'.
+Left     120 'OR'.
+Left     130 'AND'.
+Left     170 'IS' 'NOT'.
 Left     210 '+' '-'.
 Left     220 '*' '/'.
 
@@ -66,28 +66,28 @@ stmt -> unassign_stmt : '$1'.
 stmt -> sqlite_stmt : '$1'.
 
 % ALTER TABLE ENABLE ELECTRIC
-enable_stmt -> alter table table_ident enable electric : enable_cmd('$3').
-enable_stmt -> electric enable table_ident : enable_cmd('$3').
+enable_stmt -> 'ALTER' 'TABLE' table_ident 'ENABLE' 'ELECTRIC' : enable_cmd('$3').
+enable_stmt -> 'ELECTRIC' 'ENABLE' table_ident : enable_cmd('$3').
 
 % ALTER TABLE DISABLE ELECTRIC
-disable_stmt -> alter table table_ident disable electric : disable_cmd('$3').
-disable_stmt -> electric disable table_ident : disable_cmd('$3').
+disable_stmt -> 'ALTER' 'TABLE' table_ident 'DISABLE' 'ELECTRIC' : disable_cmd('$3').
+disable_stmt -> 'ELECTRIC' 'DISABLE' table_ident : disable_cmd('$3').
 
 % ELECTRIC ASSIGN
-assign_stmt -> electric assign scoped_role to column_ident : assign_cmd('$3' ++ '$5').
-assign_stmt -> electric assign scoped_role to column_ident if if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
+assign_stmt -> 'ELECTRIC' 'ASSIGN' scoped_role 'TO' column_ident : assign_cmd('$3' ++ '$5').
+assign_stmt -> 'ELECTRIC' 'ASSIGN' scoped_role 'TO' column_ident 'IF' if_expr : assign_cmd('$3' ++ '$5' ++ '$7').
 
 % ELECTRIC UNASSIGN
-unassign_stmt -> electric unassign scoped_role from column_ident : unassign_cmd('$3' ++ '$5').
+unassign_stmt -> 'ELECTRIC' 'UNASSIGN' scoped_role 'FROM' column_ident : unassign_cmd('$3' ++ '$5').
 
 % ELECTRIC GRANT
-grant_stmt -> electric grant permissions on table_ident to scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
 % ELECTRIC REVOKE
-revoke_stmt -> electric revoke permissions on table_ident from scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
+revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
 
 % ELECTRIC SQLITE
-sqlite_stmt -> electric sqlite string : sqlite_cmd(unwrap('$3')).
+sqlite_stmt -> 'ELECTRIC' 'SQLITE' string : sqlite_cmd(unwrap('$3')).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -107,7 +107,7 @@ role -> identifier '.' identifier : [{role_table_name, '$1'}, {role_table_column
 role -> identifier '.' identifier '.' identifier : [{role_table_schema, '$1'}, {role_table_name, '$3'}, {role_table_column, '$5'}].
 role -> identifier : [{role_table_column, '$1'}].
 
-scope -> null : [{scope, nil}].
+scope -> 'NULL' : [{scope, nil}].
 scope -> identifier : [{scope_table_name, '$1'}].
 scope -> identifier '.' identifier : [{scope_schema_name, '$1'}, {scope_table_name, '$3'}].
 
@@ -137,10 +137,10 @@ op -> '*' : ["*"].
 op -> '+' : ["+"].
 op -> '/' : ["/"].
 op -> '-' : ["-"].
-op -> and : ["AND"].
-op -> or : ["OR"].
-op -> not : ["NOT"].
-op -> is : ["IS"].
+op -> 'AND' : ["AND"].
+op -> 'OR' : ["OR"].
+op -> 'NOT' : ["NOT"].
+op -> 'IS' : ["IS"].
 
 const -> string : ["'", unwrap('$1'), "'"]. 
 const -> int : erlang:integer_to_list(unwrap('$1')). 
@@ -152,13 +152,13 @@ func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
 permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> select : [<<"select">>].
-privileges -> insert : [<<"insert">>].
-privileges -> update : [<<"update">>].
-privileges -> delete : ["delete"].
-privileges -> all :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> read :  [<<"select">>].
-privileges -> write :  [<<"insert">>, <<"update">>, <<"delete">>].
+privileges -> 'SELECT' : [<<"select">>].
+privileges -> 'INSERT' : [<<"insert">>].
+privileges -> 'UPDATE' : [<<"update">>].
+privileges -> 'DELETE' : ["delete"].
+privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
+privileges -> 'READ' :  [<<"select">>].
+privileges -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .
@@ -168,14 +168,14 @@ columns -> identifier : ['$1'].
 columns -> identifier ',' columns : ['$1' | '$3'].
 
 using_clause -> '$empty' : [].
-using_clause -> using scope_path : [{using, '$2'}].
+using_clause -> 'USING' scope_path : [{using, '$2'}].
 
 scope_path -> '$empty' : [].
 scope_path -> identifier : ['$1'].
 scope_path -> identifier '/' scope_path : ['$1' | '$3'].
 
 check_clause -> '$empty' : [].
-check_clause -> check '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
+check_clause -> 'CHECK' '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Erlang code.
