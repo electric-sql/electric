@@ -155,7 +155,7 @@ permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 privileges -> 'SELECT' : [<<"select">>].
 privileges -> 'INSERT' : [<<"insert">>].
 privileges -> 'UPDATE' : [<<"update">>].
-privileges -> 'DELETE' : ["delete"].
+privileges -> 'DELETE' : [<<"delete">>].
 privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
 privileges -> 'READ' :  [<<"select">>].
 privileges -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
