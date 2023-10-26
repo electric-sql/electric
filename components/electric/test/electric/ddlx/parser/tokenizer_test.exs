@@ -137,9 +137,28 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
              ] = tokens
     end
 
+    test "maths" do
+      tokens =
+        Tokenizer.tokens(~s[((this + 1.10) * 10) / 12])
+
+      assert [
+               {:"(", {1, 0, nil}},
+               {:"(", {1, 1, nil}},
+               {:unquoted_identifier, {1, 2, nil}, "this"},
+               {:+, {1, 7, nil}},
+               {:float, {1, 9, "1.10"}, "1.10"},
+               {:")", {1, 13, nil}},
+               {:*, {1, 15, nil}},
+               {:integer, {1, 17, "10"}, 10},
+               {:")", {1, 19, nil}},
+               {:/, {1, 21, nil}},
+               {:integer, {1, 23, "12"}, 12}
+             ] = tokens
+    end
+
     test "logical operations" do
       tokens =
-        Tokenizer.tokens(~s[this IS NOT NULL AND that <= -12.001 OR throw = .01 ])
+        Tokenizer.tokens(~s[this IS NOT NULL AND that <= -12.001 OR throw = .01 AND door <> 9])
 
       assert [
                {:unquoted_identifier, {1, 0, nil}, "this"},
@@ -153,7 +172,11 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
                {:or, {1, 37, nil}, "OR"},
                {:unquoted_identifier, {1, 40, nil}, "throw"},
                {:=, {1, 46, nil}},
-               {:float, {1, 48, ".01"}, ".01"}
+               {:float, {1, 48, ".01"}, ".01"},
+               {:and, {1, 52, nil}, "AND"},
+               {:unquoted_identifier, {1, 56, nil}, "door"},
+               {:<>, {1, 61, nil}},
+               {:integer, {1, 64, "9"}, 9}
              ] = tokens
     end
   end

@@ -1,2 +1,2 @@
 # ignore .erl generated from the .yrl
-ddlx.erl
+electric_ddlx_parser.erl

@@ -32,18 +32,27 @@ Nonterminals
 % the first element of the tuple is the terminal and the last element is the original
 % expression in the source, used for error msgs
 Terminals 
-   '.' '(' ')' ',' ':' '/'
+   '.' '(' ')' ',' ':'
    alter table disable enable electric null unassign assign to if
    grant on using select insert update delete all read write check
    revoke from sqlite
    string  int float
    unquoted_identifier quoted_identifier
-   '=' '>' '<' '<=' '>=' '!=' '<>'
+   '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
    and is not or
    .
 
 
 Rootsymbol stmt.
+
+Left      20 ','.
+Right    100 '=' '!=' '<>'.
+Left     150 '<' '>' '<=' '>='.
+Left     120 'or'.
+Left     130 'and'.
+Left     170 'is' 'not'.
+Left     210 '+' '-'.
+Left     220 '*' '/'.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -124,6 +133,10 @@ op -> '<=' : ["<="].
 op -> '>=' : [">="].
 op -> '<>' : ["<>"].
 op -> '!=' : ["!="].
+op -> '*' : ["*"].
+op -> '+' : ["+"].
+op -> '/' : ["/"].
+op -> '-' : ["-"].
 op -> and : ["AND"].
 op -> or : ["OR"].
 op -> not : ["NOT"].

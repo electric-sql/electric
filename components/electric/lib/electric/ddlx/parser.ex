@@ -19,18 +19,18 @@ defmodule Electric.DDLX.Parser do
   end
 
   defp do_parse(stmt) do
-    {:ddlx.parse(stmt.tokens), stmt}
+    {:electric_ddlx_parser.parse(stmt.tokens), stmt}
   end
 
   defp build_cmd({{:ok, {module, attrs}}, _stmt}, opts) do
     module.build(attrs, opts)
   end
 
-  defp build_cmd({{:error, {{_line, position, _}, :ddlx, messages}}, stmt}, _opts) do
+  defp build_cmd({{:error, {{_line, position, _}, :electric_ddlx_parser, messages}}, stmt}, _opts) do
     {:error,
      %Command.Error{
        position: position,
-       message: IO.iodata_to_binary(:ddlx.format_error(messages)),
+       message: IO.iodata_to_binary(:electric_ddlx_parser.format_error(messages)),
        sql: stmt.stmt
      }}
   end

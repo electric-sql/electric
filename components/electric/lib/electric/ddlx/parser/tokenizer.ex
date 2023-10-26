@@ -40,7 +40,7 @@ defmodule Electric.DDLX.Parser.Tokenizer do
   @type t() :: {atom, position()} | {atom, position(), String.t()}
 
   @whitespace [?\s, ?\n, ?\r, ?\n, ?\t]
-  @non_ident [?., ?,, ?(, ?), ?:, ?=, ?-, ?<, ?>]
+  @non_ident [?., ?,, ?(, ?), ?:, ?=, ?-, ?<, ?>, ?+, ?*, ?/]
   @operators [{?<, ?>}, {?<, ?=}, {?>, ?=}, {?!, ?=}]
   @integers ?0..?9
 
