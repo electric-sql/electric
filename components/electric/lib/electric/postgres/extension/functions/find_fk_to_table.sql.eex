@@ -1,0 +1,49 @@
+-- vim:ft=sql
+
+CREATE OR REPLACE FUNCTION <%= @schema %>.find_fk_to_table(
+    src_schema text,
+    src_table text,
+    dst_table text
+) RETURNS TABLE (
+    from_schema name,
+    from_table name,
+    from_columns name[10],
+    to_schema name,
+    to_table name,
+    to_columns name[10],
+    to_types information_schema.character_data[10]
+) SECURITY DEFINER AS $$
+    DECLARE
+        dst_schema name;
+        dst_name   name;
+    BEGIN
+        -- dst_table is a quoted, fully qualified table, e.g. '"public"."assignments"'
+        SELECT n[1], n[2] INTO dst_schema, dst_name FROM parse_ident(dst_table) n;
+
+        RETURN QUERY
+        SELECT sch.nspname                               AS "from_schema",
+           tbl.relname                                   AS "from_table",
+           ARRAY_AGG(col.attname ORDER BY u.attposition) AS "from_columns",
+           f_sch.nspname                                 AS "to_schema",
+           f_tbl.relname                                 AS "to_table",
+           ARRAY_AGG(f_col.attname ORDER BY f_u.attposition) AS "to_columns",
+           ARRAY_AGG((SELECT data_type FROM information_schema.columns WHERE table_name = src_table and column_name = col.attname) ORDER BY f_u.attposition) AS "to_types"
+        FROM pg_constraint c
+               LEFT JOIN LATERAL UNNEST(c.conkey) WITH ORDINALITY AS u(attnum, attposition) ON TRUE
+               LEFT JOIN LATERAL UNNEST(c.confkey) WITH ORDINALITY AS f_u(attnum, attposition) ON f_u.attposition = u.attposition
+               JOIN pg_class tbl ON tbl.oid = c.conrelid
+               JOIN pg_namespace sch ON sch.oid = tbl.relnamespace
+               LEFT JOIN pg_attribute col ON (col.attrelid = tbl.oid AND col.attnum = u.attnum)
+               LEFT JOIN pg_class f_tbl ON f_tbl.oid = c.confrelid
+               LEFT JOIN pg_namespace f_sch ON f_sch.oid = f_tbl.relnamespace
+               LEFT JOIN pg_attribute f_col ON (f_col.attrelid = f_tbl.oid AND f_col.attnum = f_u.attnum)
+        WHERE c.contype = 'f'
+          AND tbl.relname = src_table
+          AND f_tbl.relname = dst_name
+          AND sch.nspname = src_schema
+          AND f_sch.nspname = dst_schema
+        GROUP BY "from_schema", "from_table", "to_schema", "to_table"
+        ORDER BY "from_schema", "from_table";
+    END;
+$$ LANGUAGE plpgsql;
+

@@ -495,7 +495,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
           command
 
         :error ->
-          {:ok, command} = DDLX.ddlx_to_commands(query)
+          {:ok, command} = DDLX.parse(query)
           command
       end
 
@@ -534,7 +534,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
           command
 
         :error ->
-          {:ok, command} = DDLX.ddlx_to_commands(query)
+          {:ok, command} = DDLX.parse(query)
           command
       end
 

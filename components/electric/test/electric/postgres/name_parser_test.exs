@@ -5,7 +5,7 @@ defmodule Electric.Postgres.NameParserTest do
   alias Electric.Postgres.NameParser
 
   property "parse/2" do
-    check all generated_name <- table_name(), {false, default_schema} <- unquoted_name() do
+    check all(generated_name <- table_name(), {false, default_schema} <- unquoted_name()) do
       assert {:ok, {schema, name}} =
                NameParser.parse(quote_name(generated_name), default_schema: default_schema)
 
@@ -14,7 +14,18 @@ defmodule Electric.Postgres.NameParserTest do
   end
 
   test "unquoted unicode names" do
-    assert {:ok, {"thing", "Köln_en$ts"}} = NameParser.parse("thing.Köln_en$ts")
+    assert {:ok, {"thing", "köln_en$ts"}} = NameParser.parse("thing.Köln_en$ts")
+  end
+
+  test "unquoted uppercase names" do
+    assert {:ok, {"thing", "captain"}} = NameParser.parse("thing.captain")
+    assert {:ok, {"thing", "captain"}} = NameParser.parse("ThIng.CaPtain")
+    assert {:ok, {"Thing", "CaptAin"}} = NameParser.parse(~s["Thing"."CaptAin"])
+    assert {:ok, {"thing", "Captain"}} = NameParser.parse(~s[ThIng."Captain"])
+  end
+
+  test "single quotes in name" do
+    assert {:ok, {"thing", "''yeks"}} = NameParser.parse("thing.\"''yeks\"")
   end
 
   defp extract_name({{_, schema}, {_, name}}, _default_schema) do

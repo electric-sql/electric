@@ -3,11 +3,15 @@ defmodule Electric.DDLX.Command.Error do
 
   @type t() :: %__MODULE__{
           sql: String.t(),
+          line: pos_integer(),
+          position: pos_integer(),
           message: String.t()
         }
 
   @keys [
     :sql,
+    :line,
+    :position,
     :message
   ]
 

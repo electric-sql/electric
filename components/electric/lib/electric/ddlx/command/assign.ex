@@ -1,8 +1,9 @@
 defmodule Electric.DDLX.Command.Assign do
   alias Electric.DDLX.Command
 
+  import Electric.DDLX.Parser.Build
+
   @type t() :: %__MODULE__{
-          schema_name: String.t(),
           table_name: String.t(),
           user_column: String.t(),
           scope: String.t(),
@@ -11,8 +12,7 @@ defmodule Electric.DDLX.Command.Assign do
           if_statement: String.t()
         }
 
-  @keys [
-    :schema_name,
+  defstruct [
     :table_name,
     :user_column,
     :scope,
@@ -21,9 +21,25 @@ defmodule Electric.DDLX.Command.Assign do
     :if_statement
   ]
 
-  @enforce_keys @keys
+  def build(params, opts) do
+    with {:ok, user_table_schema} <- fetch_attr(params, :user_table_schema, default_schema(opts)),
+         {:ok, user_table_name} <- fetch_attr(params, :user_table_name),
+         {:ok, user_column} <- fetch_attr(params, :user_table_column),
+         {:ok, role_attrs} <-
+           validate_role_information(params, user_table_schema, user_table_name, opts),
+         {:ok, scope_attrs} <- validate_scope_information(params, opts),
+         {:ok, if_statement} <- fetch_attr(params, :if, nil) do
+      user_attrs = [
+        table_name: {user_table_schema, user_table_name},
+        user_column: user_column,
+        if_statement: if_statement
+      ]
 
-  defstruct @keys
+      attrs = Enum.reduce([scope_attrs, user_attrs, role_attrs], [], &Keyword.merge/2)
+
+      {:ok, struct(__MODULE__, attrs)}
+    end
+  end
 
   defimpl Command do
     import Electric.DDLX.Command.Common
@@ -31,13 +47,14 @@ defmodule Electric.DDLX.Command.Assign do
     def pg_sql(assign) do
       [
         """
-        CALL electric.assign(assign_schema => #{sql_repr(assign.schema_name)},
-          assign_table => #{sql_repr(assign.table_name)},
+        CALL electric.assign(
+          assign_table_full_name => #{sql_repr(assign.table_name)},
           scope => #{sql_repr(assign.scope)},
           user_column_name => #{sql_repr(assign.user_column)},
           role_name_string => #{sql_repr(assign.role_name)},
           role_column_name => #{sql_repr(assign.role_column)},
-          if_fn => #{sql_repr(assign.if_statement)});
+          if_fn => #{sql_repr(assign.if_statement)}
+        );
         """
       ]
     end

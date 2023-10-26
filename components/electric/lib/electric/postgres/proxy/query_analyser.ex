@@ -579,8 +579,8 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
             _ -> command_sql <> ";"
           end
 
-        case Electric.DDLX.Parse.Parser.parse(sql) do
-          {:ok, [command]} ->
+        case Electric.DDLX.parse(sql) do
+          {:ok, command} ->
             {:electric, command, %{analysis | sql: command_sql}}
 
           {:error, error} ->
