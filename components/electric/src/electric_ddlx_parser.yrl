@@ -205,5 +205,8 @@ revoke_cmd(Attrs) ->
 sqlite_cmd(Stmt) ->
   {'Elixir.Electric.DDLX.Command.SQLite', [{statement, Stmt}]}.
 
+% this is the last place in the stack that knows whether an identifier is quoted
+% or unquoted, so this is where we match pg's behaviour and downcase unquoted
+% identifiers.
 unquoted_identifier({_, _, Ident}) ->
   'Elixir.String':downcase(Ident).
