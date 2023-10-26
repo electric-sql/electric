@@ -28,7 +28,7 @@ Nonterminals
    .
 
 % terminals are the outputs of the tokeniser, so e.g. the terminal
-% `electric` is output from the tokeniser as `{:electric, {line, char, nil}, "ELECTRIC"}`
+% `ELECTRIC` is output from the tokeniser as `{:ELECTRIC, {line, char, nil}, "ELECTRIC"}`
 % the first element of the tuple is the terminal and the last element is the original
 % expression in the source, used for error msgs
 Terminals 
