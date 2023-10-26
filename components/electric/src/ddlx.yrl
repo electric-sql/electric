@@ -134,13 +134,13 @@ func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
 permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> select : ["select"].
-privileges -> insert : ["insert"].
-privileges -> update : ["update"].
+privileges -> select : [<<"select">>].
+privileges -> insert : [<<"insert">>].
+privileges -> update : [<<"update">>].
 privileges -> delete : ["delete"].
-privileges -> all :  ["select", "insert", "update", "delete"].
-privileges -> read :  ["select"].
-privileges -> write :  ["insert", "update", "delete"].
+privileges -> all :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
+privileges -> read :  [<<"select">>].
+privileges -> write :  [<<"insert">>, <<"update">>, <<"delete">>].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .

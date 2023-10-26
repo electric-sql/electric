@@ -24,8 +24,6 @@ defmodule Electric.DDLX.Command.Revoke do
   defstruct @keys
 
   def build(params, opts) do
-    dbg(params)
-
     with {:ok, table_schema} <- fetch_attr(params, :table_schema, default_schema(opts)),
          {:ok, table_name} <- fetch_attr(params, :table_name),
          {:ok, column_names} <- fetch_attr(params, :column_names, ["*"]),
@@ -41,7 +39,7 @@ defmodule Electric.DDLX.Command.Revoke do
          column_names: column_names,
          role: role,
          scope: scope,
-         privileges: Enum.map(privileges, &to_string/1)
+         privileges: privileges
        )}
     end
   end

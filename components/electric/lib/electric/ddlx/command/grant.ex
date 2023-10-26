@@ -28,8 +28,6 @@ defmodule Electric.DDLX.Command.Grant do
   defstruct @keys
 
   def build(params, opts) do
-    dbg(params)
-
     with {:ok, table_schema} <- fetch_attr(params, :table_schema, default_schema(opts)),
          {:ok, table_name} <- fetch_attr(params, :table_name),
          {:ok, column_names} <- fetch_attr(params, :column_names, ["*"]),
@@ -47,8 +45,8 @@ defmodule Electric.DDLX.Command.Grant do
          column_names: column_names,
          role: role,
          scope: scope,
-         privileges: Enum.map(privileges, &to_string/1),
-         using_path: if(is_list(using_path), do: Enum.map(using_path, &to_string/1), else: nil),
+         privileges: privileges,
+         using_path: using_path,
          check_fn: check_fn
        )}
     end
@@ -67,7 +65,8 @@ defmodule Electric.DDLX.Command.Grant do
     def pg_sql(grant) do
       for privilege <- grant.privileges do
         """
-        CALL electric.grant(privilege_name => #{sql_repr(privilege)},
+        CALL electric.grant(
+          privilege_name => #{sql_repr(privilege)},
           on_table_name => #{sql_repr(grant.on_table)},
           role_name => #{sql_repr(grant.role)},
           columns => #{sql_repr(grant.column_names)},

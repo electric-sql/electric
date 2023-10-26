@@ -9,6 +9,10 @@ defmodule Electric.DDLX.DDLXCommandsTest do
 
   @electric_grants "electric.grants"
 
+  def quote_table({schema, table}) do
+    ~s["#{schema}"."#{table}"]
+  end
+
   describe "parsing statements" do
     test "parse success" do
       sql =
@@ -149,10 +153,6 @@ defmodule Electric.DDLX.DDLXCommandsTest do
         @electric_grants,
         []
       )
-    end
-
-    def quote_table({schema, table}) do
-      ~s["#{schema}"."#{table}"]
     end
 
     test_tx "adding and delete a grant no op", fn conn ->

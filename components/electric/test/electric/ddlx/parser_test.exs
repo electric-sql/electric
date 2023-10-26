@@ -213,7 +213,7 @@ defmodule Electric.DDLX.ParserTest do
               {scope, user_def, role_def} = scope_user_role <- Assign.scope_user_role(),
               ddlx <- Assign.generator(scope_user_role: scope_user_role)
             ) do
-        IO.puts(ddlx)
+        # IO.puts(ddlx)
         assert {:ok, assign} = Parser.parse(ddlx, default_schema: "my_default")
 
         {user_table, user_column} = user_def
