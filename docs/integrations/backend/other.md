@@ -13,6 +13,10 @@ You can use any migrations framework that supports executing arbitrary SQL. This
 
 See the other framework examples in this section for pointers.
 
+:::caution Migrations proxy
+Migrations should be applied via the migrations proxy as detailed in the [migrations guide](../../usage/data-modelling/migrations.md#migrations-proxy).
+:::
+
 :::note
 If you don't have a data model already and you're looking for a tool to define and manage your Postgres database schema, we recommend [using Prisma](./prisma.md).
 :::
