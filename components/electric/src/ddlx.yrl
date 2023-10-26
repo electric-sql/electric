@@ -39,6 +39,7 @@ Terminals
    string  int float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>'
+   and is not or
    .
 
 
@@ -123,6 +124,10 @@ op -> '<=' : ["<="].
 op -> '>=' : [">="].
 op -> '<>' : ["<>"].
 op -> '!=' : ["!="].
+op -> and : ["AND"].
+op -> or : ["OR"].
+op -> not : ["NOT"].
+op -> is : ["IS"].
 
 const -> string : ["'", unwrap('$1'), "'"]. 
 const -> int : erlang:integer_to_list(unwrap('$1')). 
