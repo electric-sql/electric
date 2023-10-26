@@ -16,7 +16,8 @@ use pg_embed::postgres::PgEmbed;
 
 // Tauri
 use tauri::async_runtime::block_on;
-use tauri::State;
+use tauri::{State, AppHandle, WindowEvent};
+use tauri::Manager;
 
 // Tauri plug-ins
 use tauri_plugin_log::LogTarget;
@@ -351,6 +352,18 @@ fn main() {
             async_resize_pty,
             send_recv_postgres_terminal
         ])
+        .on_window_event(move |event| match event.event() {
+            WindowEvent::Destroyed => {
+                let db_connection: State<DbConnection> = event.window().state();
+                let mut db = db_connection.db.lock().unwrap();
+                if let Some(mut connection) = db.take() {
+                    block_on(async {
+                        connection.stop_db().await.unwrap();
+                    })
+                }
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

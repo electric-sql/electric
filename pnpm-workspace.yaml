@@ -5,4 +5,5 @@ packages:
   - 'generator'
   - 'components/electric'
   - 'examples/tauri-postgres'
+  - 'examples/tauri-postgres-from-wa-sqlite'
   - 'examples/web-wa-sqlite'

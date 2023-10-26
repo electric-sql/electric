@@ -2,7 +2,9 @@ import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext } from 'electric-sql/react'
 import { uniqueTabId, genUUID } from 'electric-sql/util'
 import { insecureAuthToken } from 'electric-sql/auth'
-import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
+import { electrify, ElectricDatabase } from 'electric-sql/sqlx'
+import { invoke } from '@tauri-apps/api'
+
 import { Electric, schema } from './generated/client'
 export type { Issue } from './generated/client'
 
@@ -42,7 +44,7 @@ export const initElectric = async () => {
     debug: DEBUG,
   }
 
-  const conn = await ElectricDatabase.init(dbName, distPath)
+  const conn = await ElectricDatabase.init(dbName, invoke)
   if (DEBUG) {
     console.log('initElectric')
     console.log('dbName', dbName)

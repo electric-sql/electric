@@ -1,12 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 body {
-  margin: 0;
-  font-family: 'Helvetica Neue', Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: #1c1e20;
-  min-width: 360px;
+  font-size: 12px;
+  @apply font-medium text-gray-600;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+@font-face {
+  font-family: 'Inter UI';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('assets/fonts/Inter-UI-Regular.woff2') format('woff2'),
+    url('assets/fonts/Inter-UI-Regular.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Inter UI';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('assets/fonts/Inter-UI-Medium.woff2') format('woff2'),
+    url('assets/fonts/Inter-UI-Medium.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Inter UI';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('assets/fonts/Inter-UI-SemiBold.woff2') format('woff2'),
+    url('assets/fonts/Inter-UI-SemiBold.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Inter UI';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('assets/fonts/Inter-UI-ExtraBold.woff2') format('woff2'),
+    url('assets/fonts/Inter-UI-ExtraBold.woff') format('woff');
+}
+
+.modal {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+}
+
+.editor ul {
+  list-style-type: circle;
+}
+.editor ol {
+  list-style-type: decimal;
+}
+
+#root,
+body,
+html {
+  height: 100%;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }

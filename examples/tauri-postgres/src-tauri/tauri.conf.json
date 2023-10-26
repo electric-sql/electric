@@ -1,9 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "yarn build",
-    "beforeDevCommand": "SERVE=true npm run build",
-    "devPath": "http://localhost:3001",
+    "beforeBuildCommand": "pnpm run build-only",
+    "beforeDevCommand": "SERVE=true pnpm run start",
+    "devPath": "http://localhost:5173",
     "distDir": "../dist"
   },
   "package": {
@@ -29,7 +29,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
+      "identifier": "electric-tauri-postgres",
       "longDescription": "",
       "macOS": {
         "entitlements": null,

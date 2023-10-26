@@ -1,8 +1,8 @@
-version: "3.8"
+version: '3.8'
 
 configs:
   postgres_config:
-    file: "./postgres/postgres.conf"
+    file: './postgres/postgres.conf'
 
 volumes:
   pg_data:
@@ -10,7 +10,7 @@ volumes:
 
 services:
   postgres:
-    image: "${POSTGRESQL_IMAGE:-postgres:14-alpine}"
+    image: '${POSTGRESQL_IMAGE:-postgres:14-alpine}'
     environment:
       POSTGRES_DB: ${APP_NAME:-electric}
       POSTGRES_USER: postgres
@@ -22,21 +22,20 @@ services:
       - source: postgres_config
         target: /etc/postgresql.conf
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     ports:
       - 5432
     volumes:
       - pg_data:/var/lib/postgresql/data
 
   electric:
-    image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
+    image: '${ELECTRIC_IMAGE:-electricsql/electric:latest}'
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
       LOGICAL_PUBLISHER_HOST: electric
-      OFFSET_STORAGE_FILE: "/app/data/offset_storage.dat"
       AUTH_MODE: insecure
     ports:
       - 5133:5133

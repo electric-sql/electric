@@ -1,10 +1,30 @@
-dist
-node_modules
-public/wa-sqlite-async.wasm
-public/wa-sqlite-async.mjs
-src/generated
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# We're ignoring the lockfiles here because this example is meant to act like `npx create-electric-app` in that they use latest deps
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+public/wa-sqlite-async.mjs
+public/wa-sqlite-async.wasm
+
+src/generated/
+db/data/
