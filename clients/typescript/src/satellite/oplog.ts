@@ -301,6 +301,8 @@ export const toTransactions = (
   if (opLogEntries.length == 0) {
     return []
   }
+  console.log("YYYY", opLogEntries)
+  console.log("YYYY", relations)
 
   const to_commit_timestamp = (timestamp: string): Long =>
     Long.UZERO.add(new Date(timestamp).getTime())
@@ -373,8 +375,10 @@ export const opLogEntryToChange = (
   }
 
   console.log("record: ", record)
+  console.log("entry.oldRow: ", entry.oldRow)
   if (entry.oldRow != null) {
     oldRecord = JSON.parse(entry.oldRow)
+    // oldRecord = entry.oldRow
   }
   console.log("oldRecord: ", oldRecord)
   const relation = relations[`${entry.tablename}`]

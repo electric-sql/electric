@@ -997,6 +997,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
+    console.log("YYYYY: ", results)
     // TODO: Don't try replicating when outbound is inactive
     if (this.client.isClosed()) {
       return
@@ -1066,6 +1067,7 @@ export class SatelliteProcess implements Satellite {
         ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
+    console.log("YYYYYY: ", rows)
     return rows as unknown as OplogEntry[]
   }
 

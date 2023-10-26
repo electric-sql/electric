@@ -33,7 +33,9 @@ export class ElectricDatabase implements Database {
 
   async tauri_exec(statement: Statement): Promise<QueryExecResult> {
     let [keys, values] = separateBindParams(statement.args)
-    return await this.invoke("tauri_exec_command", { sql: statement.sql, bind_params: { keys, values } });
+    let result = await this.invoke("tauri_exec_command", { sql: statement.sql, bind_params: { keys, values } })
+    console.log("YYYYYYYY: ", result)
+    return result
   }
 
   async exec(statement: Statement): Promise<QueryExecResult> {
@@ -47,7 +49,7 @@ export class ElectricDatabase implements Database {
     }
 
     this.rowsModified = result.rows_modified
-    let rows: Array<Object> = JSON.parse(result.result)
+    let rows: Array<{ [key: string]: any }> = JSON.parse(result.result)
 
     try {
       const values: SqlValue[][] = []
@@ -58,7 +60,9 @@ export class ElectricDatabase implements Database {
       }
 
       rows.forEach((row) => {
-          let vals = Object.values(row)
+          // let vals = Object.values(row)
+          let vals = keys.map(key => row[key])
+
           for (let i = 0; i < vals.length; i++) {
             if (vals[i][0] == "\u0000") {
                 vals[i] = (vals[i].charCodeAt(1) * 2 ** 32 + vals[i].charCodeAt(2) * 2 ** 16 + vals[i].charCodeAt(3) * 1)
