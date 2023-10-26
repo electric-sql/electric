@@ -26,9 +26,10 @@ defmodule Electric.DDLX.Parser do
     module.build(attrs, opts)
   end
 
-  defp build_cmd({{:error, {{_line, position, _}, :electric_ddlx_parser, messages}}, stmt}, _opts) do
+  defp build_cmd({{:error, {{line, position, _}, :electric_ddlx_parser, messages}}, stmt}, _opts) do
     {:error,
      %Command.Error{
+       line: line,
        position: position,
        message: IO.iodata_to_binary(:electric_ddlx_parser.format_error(messages)),
        sql: stmt.stmt
