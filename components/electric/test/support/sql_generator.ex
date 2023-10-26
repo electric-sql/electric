@@ -193,11 +193,9 @@ defmodule Electric.Postgres.SQLGenerator do
     |> Enum.map(&string_to_constant/1)
     |> fixed_list()
     |> bind(fn c ->
-      c = Enum.reject(c, &is_nil/1)
-      joins = Enum.take(joiner, length(c)) ++ [""]
-
-      [c, joins]
-      |> Enum.zip_with(& &1)
+      c
+      |> Stream.reject(&is_nil/1)
+      |> Enum.intersperse(joiner)
       |> IO.iodata_to_binary()
       |> String.trim()
       |> constant()
@@ -205,11 +203,14 @@ defmodule Electric.Postgres.SQLGenerator do
   end
 
   defp joiner(s) when is_binary(s) do
-    constant(s)
+    s
   end
 
   defp joiner(s) when is_list(s) do
-    list_of(member_of(s), min_length: 1, max_length: 10)
+    member_of(s)
+    |> list_of(min_length: 1, max_length: 10)
+    |> Enum.take(1)
+    |> hd()
   end
 
   def whitespace do
