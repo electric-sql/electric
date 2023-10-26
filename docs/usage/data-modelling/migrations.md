@@ -39,7 +39,7 @@ ELECTRIC GRANT SELECT
 See the [Limitations](#limitations) section below and the [Roadmap](../../reference/roadmap.md) page for more context.
 :::
 
-## Migration Proxy
+## Migrations proxy
 
 Postgresql migrations are applied to Postgresql via a proxy server integrated into the Electric application.
 
