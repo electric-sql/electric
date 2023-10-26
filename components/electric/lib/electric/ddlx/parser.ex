@@ -5,7 +5,7 @@ defmodule Electric.DDLX.Parser do
   @type opt() :: {:default_schema, String.t()}
   @type opts() :: [opt()]
 
-  @spec parse(String.t(), Keyword.t()) :: {:ok, Command.t()} | {:error, Command.Error.t()}
+  @spec parse(String.t(), opts()) :: {:ok, Command.t()} | {:error, Command.Error.t()}
   def parse(ddlx, opts \\ []) do
     ddlx
     |> Tokenizer.tokens()
