@@ -2,7 +2,7 @@ import Config
 
 # Configure your database
 config :beer_stars, BeerStars.Repo,
-  url: "postgres://postgres:password@localhost:54321/beer-stars",
+  url: "postgres://postgres:password@localhost:5439/beer-stars",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
