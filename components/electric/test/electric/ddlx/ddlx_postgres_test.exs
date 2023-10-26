@@ -4,10 +4,6 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
   @moduletag ddlx: true
 
-  def quote_table({schema, table}) do
-    ~s["#{schema}"."#{table}"]
-  end
-
   def list_tables(conn, schema \\ "public") do
     {:ok, _cols, rows} =
       query(

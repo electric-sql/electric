@@ -42,4 +42,8 @@ defmodule ElectricTest.DDLXHelpers do
   def map_rows(rows) do
     Enum.map(rows, &Tuple.to_list/1)
   end
+
+  def quote_table({schema, table}) do
+    ~s["#{schema}"."#{table}"]
+  end
 end

@@ -24,7 +24,6 @@ defmodule Electric.DDLX.Parser.Build do
   end
 
   def split_role_def(role_def, opts) do
-    # TODO: validate that none of these are the empty string
     case String.split(role_def, ":", parts: 2) do
       [scope, role] ->
         if blank?(scope) || blank?(role) do
