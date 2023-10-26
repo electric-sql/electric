@@ -689,7 +689,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       # same as v1 above but the sync message has been split from the parse, bind etc
       alias Electric.DDLX
 
-      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE public.socks ENABLE ELECTRIC;")
+      {:ok, command} = DDLX.parse("ALTER TABLE public.socks ENABLE ELECTRIC;")
       [electric] = DDLX.Command.pg_sql(command)
 
       version_query =
