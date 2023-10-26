@@ -48,7 +48,7 @@ This proxy server serves various purposes:
 - It allows the use of the [DDLX syntax](../../api/ddlx.md) for managing your tables and access permissions,
 - It captures migrations applied to Electrified tables in order to propagate those DDL changes to the client schemas,
 - It validates migrations to electrified tables to ensure that changes to the schema are supported by Electric (e.g. validating the types of any added columns, ensuring that only additive migrations are applied, etc), and
-- It provides an endpoint for schema introspection to allow Electric to return it's view of the underlying postgres database to the data access library.
+- It provides an endpoint for schema introspection to allow Electric to return its view of the underlying Postgres database to the data access library.
 
 Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgresql schema will be out of sync with the actual table schema.
 
