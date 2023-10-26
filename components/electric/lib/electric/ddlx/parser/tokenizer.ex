@@ -242,7 +242,7 @@ defmodule Electric.DDLX.Parser.Tokenizer do
     consume_string(rest, %{state | p: state.p + 1, s: delim})
   end
 
-  defp consume_delimiter(<<c::8, rest::binary>>, state) when is_alpha(c) do
+  defp consume_delimiter(<<c::8, rest::binary>>, state) when is_alpha(c) or is_num(c) do
     consume_delimiter(rest, %{state | p: state.p + 1, s: [state.s, c]})
   end
 

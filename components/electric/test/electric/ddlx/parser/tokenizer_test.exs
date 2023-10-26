@@ -5,7 +5,7 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
 
   describe "tokens/1" do
     test "string" do
-      delims = ~w[' $$ $delim$]
+      delims = ~w[' $$ $delim$ $__234987dsdf__$]
 
       strings = [
         "my string",
@@ -49,7 +49,7 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
     test "identifiers" do
       tokens =
         Tokenizer.tokens(
-          ~s[identifier "quoted identifier" UnquotedIdentifier "Quoted "" Identifier";]
+          ~s[identifier "quoted identifier" UnquotedIdentifier "Quoted "" Identifier" _my_83_identifier;]
         )
 
       assert [
@@ -57,7 +57,8 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
                {:quoted_identifier, {1, 11, "\"quoted identifier\""}, "quoted identifier"},
                {:unquoted_identifier, {1, 31, nil}, "UnquotedIdentifier"},
                {:quoted_identifier, {1, 50, "\"Quoted \"\" Identifier\""},
-                "Quoted \"\" Identifier"}
+                "Quoted \"\" Identifier"},
+               {:unquoted_identifier, {1, 73, nil}, "_my_83_identifier"}
              ] = tokens
     end
 
