@@ -8,6 +8,10 @@ import { Database as WASQLiteDatabase } from './wa-sqlite/database'
 
 import { Database as ReactNativeSQLiteStorageDatabase } from './react-native-sqlite-storage/database'
 
+import { Database as SQLXDatabase } from './sqlx/database'
+
+import { Database as PostgresDatabase } from './postgres/database'
+
 import { Database as CapacitorSQLiteDatabase } from './capacitor-sqlite/database'
 
 export type AnyDatabase =
@@ -16,4 +20,6 @@ export type AnyDatabase =
   | ExpoSQLiteDatabase
   | ReactNativeSQLiteStorageDatabase
   | WASQLiteDatabase
+  | SQLXDatabase
+  | PostgresDatabase
   | CapacitorSQLiteDatabase

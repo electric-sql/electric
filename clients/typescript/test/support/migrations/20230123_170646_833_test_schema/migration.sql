@@ -8,18 +8,18 @@ so that ElectricSQL's Satellite component can sync your data.
 
 Write your SQLite migration below.
 */
-CREATE TABLE IF NOT EXISTS items (
+CREATE TABLE IF NOT EXISTS main.items (
   value TEXT PRIMARY KEY NOT NULL
-) WITHOUT ROWID;
+);
 
-CREATE TABLE IF NOT EXISTS parent (
+CREATE TABLE IF NOT EXISTS main.parent (
   id INTEGER PRIMARY KEY NOT NULL,
   value TEXT,
   other INTEGER DEFAULT 0
-) WITHOUT ROWID;
+);
 
-CREATE TABLE IF NOT EXISTS child (
+CREATE TABLE IF NOT EXISTS main.child (
   id INTEGER PRIMARY KEY NOT NULL,
   parent INTEGER NOT NULL,
-  FOREIGN KEY(parent) REFERENCES parent(id)
-) WITHOUT ROWID;
+  FOREIGN KEY(parent) REFERENCES main.parent(id)
+);

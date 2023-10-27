@@ -32,7 +32,8 @@ export interface ElectrifyOptions {
 }
 
 const defaultPrepare = async (connection: DatabaseAdapter) => {
-  await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
+  // await connection.run({ sql: 'PRAGMA foreign_keys = ON;' })
+  console.log(connection) // TODO: connection is unused otherwise
 }
 
 /**
@@ -49,7 +50,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   config: ElectricConfig,
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
-  setLogLevel(config.debug ? 'TRACE' : 'WARN')
+  setLogLevel(config.debug ? 'DEBUG' : 'DEBUG')
   const prepare = opts?.prepare ?? defaultPrepare
   await prepare(adapter)
 

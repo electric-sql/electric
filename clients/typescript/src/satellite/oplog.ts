@@ -301,6 +301,8 @@ export const toTransactions = (
   if (opLogEntries.length == 0) {
     return []
   }
+  console.log("YYYY", opLogEntries)
+  console.log("YYYY", relations)
 
   const to_commit_timestamp = (timestamp: string): Long =>
     Long.UZERO.add(new Date(timestamp).getTime())
@@ -366,17 +368,22 @@ export const opLogEntryToChange = (
   entry: OplogEntry,
   relations: RelationsCache
 ): DataChange => {
+  console.log("RelationsCache: ", relations)
   let record, oldRecord
   if (entry.newRow != null) {
     record = JSON.parse(entry.newRow)
   }
 
+  console.log("record: ", record)
+  console.log("entry.oldRow: ", entry.oldRow)
   if (entry.oldRow != null) {
     oldRecord = JSON.parse(entry.oldRow)
+    // oldRecord = entry.oldRow
   }
-
+  console.log("oldRecord: ", oldRecord)
   const relation = relations[`${entry.tablename}`]
 
+  console.log("relation: ", relation)
   if (typeof relation === 'undefined') {
     throw new Error(`Could not find relation for ${entry.tablename}`)
   }

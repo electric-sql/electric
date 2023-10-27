@@ -58,6 +58,7 @@
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
+    "./sqlx": "./dist/drivers/sqlx/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     ".": "./dist/index.js",
@@ -145,6 +146,7 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@tauri-apps/api": "^1.4.0",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
@@ -203,6 +205,7 @@
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
+    "embedded-postgres": "15.4.0-beta.9",
     "eslint": "^8.22.0",
     "expo-sqlite": "^11.0.0",
     "husky": "^8.0.3",
