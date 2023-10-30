@@ -1,4 +1,3 @@
-
 import { SatRelation_RelationType } from '../_generated/protocol/satellite'
 import { DatabaseAdapter } from '../electric/adapter'
 import { SatelliteOpts } from '../satellite/config'

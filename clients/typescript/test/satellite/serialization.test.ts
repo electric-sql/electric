@@ -218,3 +218,45 @@ test('Prioritize PG types in the schema before inferred SQLite types', async (t)
 
   t.deepEqual(deserializedRow, { id: 5, b: 1 })
 })
+
+test('Use incoming Relation types if not found in the schema', async (t) => {
+  const db = new Database(':memory:')
+  t.teardown(() => db.close())
+
+  const adapter = new DatabaseAdapter(db)
+
+  const sqliteInferredRelations = await inferRelationsFromSQLite(
+    adapter,
+    satelliteDefaults
+  )
+  // Empty database
+  t.is(Object.keys(sqliteInferredRelations).length, 0)
+
+  // Empty Db schema
+  const testDbDescription = new DbSchema({}, [])
+
+  const newTableRelation: Relation = {
+    id: 1,
+    schema: 'schema',
+    table: 'new_table',
+    tableType: SatRelation_RelationType.TABLE,
+    columns: [{ name: 'value', type: 'INTEGER', isNullable: true }],
+  }
+
+  const satOpRow = serializeRow(
+    { value: 6 },
+    newTableRelation,
+    testDbDescription
+  )
+
+  // Encoded values ["6"]
+  t.deepEqual(satOpRow.values, [new Uint8Array(['6'.charCodeAt(0)])])
+
+  const deserializedRow = deserializeRow(
+    satOpRow,
+    newTableRelation,
+    testDbDescription
+  )
+
+  t.deepEqual(deserializedRow, { value: 6 })
+})
