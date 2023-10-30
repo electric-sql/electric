@@ -688,8 +688,6 @@ defmodule Operation.Electric do
 
     alias Electric.DDLX
 
-    # FIXME: replace single electric command with multiple queries by
-    # multiple electric commands with single queries
     def activate(op, state, send) do
       [query | queries] = DDLX.Command.pg_sql(op.command)
       op = %{op | queries: queries}
@@ -697,7 +695,7 @@ defmodule Operation.Electric do
       {op, State.electrify(state, op.analysis.table), Send.server(send, query(query))}
     end
 
-    def recv_server(op, %M.ReadyForQuery{} = msg, state, send) do
+    def recv_server(%{queries: []} = op, %M.ReadyForQuery{} = msg, state, send) do
       tag = DDLX.Command.tag(op.command)
 
       reply =
@@ -710,6 +708,10 @@ defmodule Operation.Electric do
         end
 
       {nil, state, Send.client(send, reply)}
+    end
+
+    def recv_server(%{queries: [query | queries]} = op, %M.ReadyForQuery{}, state, send) do
+      {%{op | queries: queries}, state, Send.server(send, query(query))}
     end
 
     def recv_server(op, _msg, state, send) do
@@ -791,15 +793,19 @@ defmodule Operation.Disallowed do
           }
 
         _ ->
-          %M.ErrorResponse{
-            code: "EX100",
-            severity: "ERROR",
-            message: "Invalid destructive migration on Electrified table #{table_name(analysis)}",
-            detail:
-              "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
-            schema: schema,
-            table: table
-          }
+          struct(
+            %M.ErrorResponse{
+              code: "EX100",
+              severity: "ERROR",
+              message:
+                "Invalid destructive migration on Electrified table #{table_name(analysis)}",
+              detail:
+                "Electric currently only supports additive migrations (ADD COLUMN, ADD INDEX)",
+              schema: schema,
+              table: table
+            },
+            analysis.error
+          )
       end
     end
   end
@@ -911,6 +917,10 @@ defmodule Operation.BindExecute do
   defimpl Operation do
     use Operation.Impl
 
+    def recv_client(op, [], state) do
+      {op, state}
+    end
+
     def recv_client(op, msgs, state) do
       if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
         {
@@ -942,6 +952,10 @@ defmodule Operation.BindExecuteMigration do
     # forward on any messages from the server
     def recv_server(op, msg, state, send) do
       {op, state, Send.client(send, msg)}
+    end
+
+    def recv_client(op, [], state) do
+      {op, state}
     end
 
     def recv_client(op, msgs, state) do

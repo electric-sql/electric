@@ -11,7 +11,6 @@ services:
     ports:
       - "54321:5432"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres.conf:/etc/postgresql.conf:ro
     entrypoint:
       - docker-entrypoint.sh

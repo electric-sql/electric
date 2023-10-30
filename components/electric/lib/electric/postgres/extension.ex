@@ -208,9 +208,8 @@ defmodule Electric.Postgres.Extension do
 
   def migration_history(conn, after_version) do
     query = migration_history_query(after_version)
-    param = after_version || :null
 
-    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [param]) do
+    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [after_version]) do
       {:ok, load_migrations(rows)}
     end
   end
@@ -289,8 +288,12 @@ defmodule Electric.Postgres.Extension do
   def define_functions(conn) do
     Enum.each(Functions.list(), fn {name, sql} ->
       case :epgsql.squery(conn, sql) do
-        {:ok, [], []} -> :ok
-        error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
+        {:ok, [], []} ->
+          Logger.debug("Successfully (re)defined SQL function/procedure '#{name}'")
+          :ok
+
+        error ->
+          raise "Failed to define function '#{name}' with error: #{inspect(error)}"
       end
     end)
   end
@@ -312,7 +315,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230921161045_DropEventTriggers,
       Migrations.Migration_20230921161418_ProxyCompatibility,
       Migrations.Migration_20231009121515_AllowLargeMigrations,
-      Migrations.Migration_20231010123118_AddPriorityToVersion
+      Migrations.Migration_20231010123118_AddPriorityToVersion,
+      Migrations.Migration_20231016141000_ConvertFunctionToProcedure
     ]
   end
 
@@ -361,22 +365,15 @@ defmodule Electric.Postgres.Extension do
     Logger.info("Running extension migration: #{version}")
 
     for sql <- module.up(@schema) do
-      case :epgsql.squery(txconn, sql) do
-        results when is_list(results) ->
-          errors = Enum.filter(results, &(elem(&1, 0) == :error))
+      results = :epgsql.squery(txconn, sql) |> List.wrap()
+      errors = Enum.filter(results, &(elem(&1, 0) == :error))
 
-          unless(Enum.empty?(errors)) do
-            raise RuntimeError,
-              message: "Migration #{version}/#{module} returned errors: #{inspect(errors)}"
-          end
-
-          :ok
-
-        {:ok, _} ->
-          :ok
-
-        {:ok, _cols, _rows} ->
-          :ok
+      if errors == [] do
+        :ok
+      else
+        raise RuntimeError,
+          message:
+            "Migration #{version}/#{inspect(module)} returned errors:\n#{inspect(errors, pretty: true)}"
       end
     end
 

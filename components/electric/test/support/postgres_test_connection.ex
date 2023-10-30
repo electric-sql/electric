@@ -91,11 +91,7 @@ defmodule Electric.Postgres.TestConnection do
     origin = Map.fetch!(context, :origin)
 
     # Initialize the test DB to the state which Electric can work with.
-    setup_fun = fn conn ->
-      init_sql = File.read!("dev/init.sql")
-      results = :epgsql.squery(conn, init_sql) |> List.wrap()
-      assert Enum.all?(results, fn result -> is_tuple(result) and elem(result, 0) == :ok end)
-    end
+    setup_fun = fn _conn -> nil end
 
     # Dropping the subscription is necessary before the test DB can be removed.
     teardown_fun = fn conn ->
@@ -159,7 +155,7 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.my_entries (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id UUID PRIMARY KEY,
         content VARCHAR NOT NULL,
         content_b TEXT
       );
@@ -228,7 +224,7 @@ defmodule Electric.Postgres.TestConnection do
   def childspec(config) do
     %{
       id: :epgsql,
-      start: {:epgsql, :connect, [config]}
+      start: {:epgsql, :connect, [Electric.Utils.epgsql_config(config)]}
     }
   end
 

@@ -17,13 +17,14 @@ const spinner = ora('Validating arguments').start()
 
 const error = (err: string) => {
   spinner.stop()
-  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--webserver-port <port>]', '\x1b[0m')
+  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--electric-proxy-port <port>] [--webserver-port <port>]', '\x1b[0m')
   process.exit(1)
 }
 
 let projectName = process.argv[2]
 let args = process.argv.slice(3)
 let electricPort = 5133 // default port for Electric
+let electricProxyPort = 65432 // default port for Electric proxy
 let webserverPort = 3001 // default port for the webserver
 
 // Validate the provided command line arguments
@@ -44,6 +45,10 @@ while (args.length > 0) {
     case '--electric-port':
       checkValue()
       electricPort = parsePort(value)
+      break
+    case '--electric-proxy-port':
+      checkValue()
+      electricProxyPort = parsePort(value)
       break
     case '--webserver-port':
       checkValue()
@@ -85,6 +90,13 @@ if (typeof projectName === 'undefined') {
         message: 'Port should be between 0 and 65535.',
         default: electricPort
       },
+      electricProxyPort: {
+        description: "Port on which to run Electric's DB proxy",
+        type: 'number',
+        pattern: portRegex,
+        message: 'Port should be between 0 and 65535.',
+        default: electricProxyPort
+      },
       webserverPort: {
         description: 'Port on which to run the webserver',
         type: 'number',
@@ -93,11 +105,12 @@ if (typeof projectName === 'undefined') {
         default: webserverPort
       },
     }
-  })) as { appName: string, electricPort: number, webserverPort: number }
+  })) as { appName: string, electricPort: number, electricProxyPort: number, webserverPort: number }
 
   spinner.start()
   projectName = userInput.appName
   electricPort = userInput.electricPort
+  electricProxyPort = userInput.electricProxyPort
   webserverPort = userInput.webserverPort
 }
 
@@ -108,6 +121,7 @@ if (!appNameRegex.test(projectName)) {
 }
 
 electricPort = await checkPort(electricPort, 'Electric', 5133)
+electricProxyPort = await checkPort(electricProxyPort, "Electric's proxy", 65432)
 webserverPort = await checkPort(webserverPort, 'the web server', 3001)
 
 spinner.text = 'Creating project structure'
@@ -155,7 +169,10 @@ projectPackageJson.name = projectName
 
 await fs.writeFile(
   packageJsonFile,
-  JSON.stringify(projectPackageJson, null, 2).replace('http://localhost:5133', `http://localhost:${electricPort}`)
+  JSON
+    .stringify(projectPackageJson, null, 2)
+    .replace('http://localhost:5133', `http://localhost:${electricPort}`)
+    .replace('postgresql://prisma:proxy_password@localhost:65432/electric', `postgresql://prisma:proxy_password@localhost:${electricProxyPort}/electric`)
 )
 
 // Update the project's title in the index.html file
@@ -166,9 +183,10 @@ await findAndReplaceInFile('ElectricSQL starter template', projectName, indexFil
 const builderFile = path.join(projectDir, 'builder.js')
 await findAndReplaceInFile('ws://localhost:5133', `ws://localhost:${electricPort}`, builderFile)
 
-// Update the port on which Electric runs in startElectric.js file
+// Update the port on which Electric and its proxy run in startElectric.js file
 const startElectricFile = path.join(projectDir, 'backend', 'startElectric.js')
 await findAndReplaceInFile('5133', `${electricPort}`, startElectricFile)
+await findAndReplaceInFile('65432', `${electricProxyPort}`, startElectricFile)
 
 // Update the port of the web server of the example in the builder.js file
 await findAndReplaceInFile("listen(3001)", `listen(${webserverPort})`, builderFile)
@@ -188,6 +206,7 @@ if (name) {
 
 // Also write the port for Electric to .envrc
 await fs.appendFile(envrcFile, `export ELECTRIC_PORT=${electricPort}\n`)
+await fs.appendFile(envrcFile, `export ELECTRIC_PROXY_PORT=${electricProxyPort}\n`)
 
 // Run `yarn install` in the project directory to install the dependencies
 // Also run `yarn upgrade` to replace `electric-sql: latest` by `electric-sql: x.y.z`

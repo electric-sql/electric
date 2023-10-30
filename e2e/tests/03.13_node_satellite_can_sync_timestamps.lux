@@ -8,9 +8,9 @@
     [local sql=
         """
         CREATE TABLE public.timestamps (
-            id TEXT PRIMARY KEY DEFAULT uuid_generate_v4(),
-            created_at TIMESTAMP NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            id TEXT PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL
         );
         CALL electric.electrify('public.timestamps');
         """]
@@ -23,7 +23,7 @@
     [invoke node_sync_table "timestamps"]
 
 [shell pg_1]
-    !INSERT INTO public.timestamps (id) VALUES ('00000000-0000-0000-0000-000000000001');
+    !INSERT INTO public.timestamps (id, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000001', now(), now());
     ??INSERT 0 1
 
 [shell satellite_1]

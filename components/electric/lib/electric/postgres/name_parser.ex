@@ -11,9 +11,12 @@ defmodule Electric.Postgres.NameParser do
           utf8_char(not: ?")
         ])
       )
-      |> ignore(string(~s("))),
+      |> ignore(string(~s(")))
+      |> tag(:quoted),
       # unquoted identifier
-      repeat_while(utf8_char([]), {:unquoted_name, []})
+      utf8_char([])
+      |> repeat_while({:unquoted_name, []})
+      |> tag(:unquoted)
     ])
 
   namespaced =
@@ -32,9 +35,18 @@ defmodule Electric.Postgres.NameParser do
   def parse(name, opts \\ []) do
     with {:ok, parsed, "", _, _, _} <- parse_namespaced(name),
          {:ok, name} <- Keyword.fetch(parsed, :name),
-         schema = Keyword.get(parsed, :schema, Keyword.get(opts, :default_schema, "public")) do
-      {:ok, {to_string(schema), to_string(name)}}
+         schema =
+           Keyword.get(parsed, :schema, quoted: Keyword.get(opts, :default_schema, "public")) do
+      {:ok, {identifier(schema), identifier(name)}}
     end
+  end
+
+  defp identifier([{:quoted, ident}]) do
+    to_string(ident)
+  end
+
+  defp identifier([{:unquoted, ident}]) do
+    String.downcase(to_string(ident))
   end
 
   def parse!(name, opts \\ []) do

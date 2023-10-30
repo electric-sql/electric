@@ -139,7 +139,7 @@ defmodule Electric.Satellite.ClientManager do
     {{_client_ref, client_name}, clients} = Map.pop!(state.clients, client_pid)
     {{^client_pid, sup_pid}, reverse} = Map.pop!(state.reverse, client_name)
 
-    Logger.info("cleaning resources for #{inspect(client_name)} #{inspect(client_pid)}")
+    Logger.debug("cleaning resources for #{inspect(client_name)} #{inspect(client_pid)}")
 
     resources =
       case Map.pop(state.resources, sup_pid) do

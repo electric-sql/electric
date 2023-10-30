@@ -1,5 +1,3 @@
--- https://linear.app/electric-sql/issue/VAX-1172/ddlx-parser-fails-to-parse-table-name-publicitems
--- re-enable after this fix:
--- ALTER TABLE "public"."Items" ENABLE ELECTRIC;
-
-CALL electric.electrify('public."Items"');
+-- some random comment to test that we can
+-- handle comments..
+ALTER TABLE public."Items" ENABLE ELECTRIC;

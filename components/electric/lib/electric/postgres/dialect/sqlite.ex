@@ -32,14 +32,6 @@ defmodule Electric.Postgres.Dialect.SQLite do
   }
 
   @int_types Postgres.integer_types()
-  @int_types Postgres.integer_types()
-  @float_types Postgres.float_types()
-  @text_types Postgres.text_types()
-  @binary_types Postgres.binary_types()
-  @datetime_types Postgres.datetime_types()
-  @json_types Postgres.json_types()
-  @bool_types Postgres.bool_types()
-  @uuid_types Postgres.uuid_types()
   @float_types Postgres.float_types()
   @text_types Postgres.text_types()
   @binary_types Postgres.binary_types()

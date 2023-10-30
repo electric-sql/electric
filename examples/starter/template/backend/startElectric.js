@@ -2,6 +2,7 @@ const shell = require('shelljs')
 
 let db = process.env.DATABASE_URL
 let electricPort = process.env.ELECTRIC_PORT ?? 5133
+let electricProxyPort = process.env.ELECTRIC_PROXY_PORT ?? 65432
 
 let args = process.argv.slice(2)
 
@@ -25,20 +26,24 @@ while (args.length > 0) {
       break
     case '--electric-port':
       checkValue()
-      parseElectricPort(value)
+      electricPort = parsePort(value)
+      break
+    case '--electric-proxy-port':
+      checkValue()
+      electricProxyPort = parsePort(value)
       break
     default:
       error(`Unrecognized option: '${flag}'.`)
   }
 }
 
-function parseElectricPort(port) {
+function parsePort(port) {
   // checks that the number is between 0 and 65535
   const portRegex = /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
   if (!portRegex.test(port)) {
     error(`Invalid port '${port}. Port should be between 0 and 65535.'`)
   }
-  electricPort = port
+  return port
 }
 
 if (db === undefined) {
@@ -56,6 +61,7 @@ const res = shell.exec(
       -e "LOGICAL_PUBLISHER_HOST=localhost" \
       -e "AUTH_MODE=insecure" \
       -p ${electricPort}:5133 \
+      -p ${electricProxyPort}:65432 \
       -p 5433:5433 ${electric}`
 )
 
@@ -70,6 +76,6 @@ if (res.code !== 0 && res.stderr.includes('port is already allocated')) {
 }
 
 function error(err) {
-  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [-p <Electric port>]', '\x1b[0m')
+  console.error('\x1b[31m', err + '\nyarn electric:start [-db <Postgres connection url>] [--electric-port <port>] [--electric-proxy-port <port>]', '\x1b[0m')
   process.exit(1)
 }

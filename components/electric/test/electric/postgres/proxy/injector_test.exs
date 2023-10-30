@@ -8,6 +8,14 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   alias Electric.Postgres.MockSchemaLoader
 
   setup do
+    # enable all the optional ddlx features
+    Electric.Features.process_override(
+      proxy_ddlx_grant: true,
+      proxy_ddlx_revoke: true,
+      proxy_ddlx_assign: true,
+      proxy_ddlx_unassign: true
+    )
+
     migrations = [
       {"0001",
        [
@@ -83,21 +91,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     end
   end
 
-  @scenarios [
-    TestScenario.Framework,
-    TestScenario.FrameworkSimple,
-    TestScenario.Manual,
-    TestScenario.AdHoc,
-    TestScenario.ManualTx,
-    TestScenario.ExtendedNoTx
-  ]
-
-  @frameworks [
-    Electric.Proxy.InjectorTest.EctoFramework
-  ]
-
-  for s <- @scenarios do
-    for f <- @frameworks do
+  for s <- TestScenario.scenarios() do
+    for f <- TestScenario.frameworks() do
       describe "#{s.description()} |#{f.description()}|:" do
         @describetag Keyword.merge(s.tags(), f.tags())
 
@@ -214,7 +209,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "drop electrified table raises error", cxt do
           query = ~s[DROP TABLE "truths"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message: "Cannot DROP Electrified table \"public\".\"truths\"",
             schema: "public",
             table: "truths"
@@ -232,7 +227,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "drop column on electrified table raises error", cxt do
           query = ~s[ALTER TABLE "truths" DROP "value"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message:
               "Invalid destructive migration on Electrified table \"public\".\"truths\": ALTER TABLE \"truths\" DROP \"value\"",
             detail:
@@ -253,7 +248,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "rename column on electrified table raises error", cxt do
           query = ~s[ALTER TABLE "truths" RENAME "value" TO "worthless"]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             message:
               "Invalid destructive migration on Electrified table \"public\".\"truths\": ALTER TABLE \"truths\" RENAME \"value\" TO \"worthless\"",
             detail:
@@ -294,7 +289,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "ALTER TABLE ADD invalid column type", cxt do
           query = ~s[ALTER TABLE "truths" ADD COLUMN addr cidr]
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             code: "00000",
             message: "Cannot add column of type \"cidr\"",
             query: query
@@ -302,7 +297,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
 
         test "ELECTRIC REVOKE UPDATE", cxt do
-          query = ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
+          query =
+            ~s[-- this is my comment\nELECTRIC REVOKE ALL (status, name) ON truths FROM 'projects:house.admin';]
 
           cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query)
         end
@@ -311,7 +307,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         test "invalid electric command", cxt do
           query = "ELECTRIC GRANT JUNK ON \"thing.Köln_en$ts\" TO 'projects:house.admin'"
 
-          cxt.scenario.assert_injector_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_injector_error(cxt.injector, query,
             code: "00000",
             detail: "Something went wrong near JUNK",
             query: "ELECTRIC GRANT JUNK ON thing.Köln_en$ts TO 'projects:house.admin'"
@@ -430,7 +426,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
       """
 
-      {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE something ENABLE ELECTRIC")
+      {:ok, command} = DDLX.parse("ALTER TABLE something ENABLE ELECTRIC")
       [electric] = DDLX.Command.pg_sql(command)
       version = "20230915175206"
 
@@ -617,6 +613,82 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     test "@databases version capture", cxt do
       alias Electric.DDLX
 
+      {:ok, command} = DDLX.parse("ALTER TABLE public.socks ENABLE ELECTRIC;")
+      [electric] = DDLX.Command.pg_sql(command)
+
+      version_query =
+        "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
+
+      cxt.injector
+      |> client(query("BEGIN"))
+      |> server(complete_ready("BEGIN", :tx))
+      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
+      |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
+      |> client(%M.Parse{query: version_query}, server: [])
+      |> client(
+        [
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ],
+        server: [
+          %M.Parse{query: version_query},
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ]
+      )
+      |> server(
+        [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ],
+        client: [],
+        server: [capture_version_query("99", 4)]
+      )
+      |> server(capture_version_complete(),
+        client: [
+          M.ParseComplete,
+          M.BindComplete,
+          M.NoData,
+          %M.CommandComplete{tag: "INSERT 0 1"},
+          %M.ReadyForQuery{status: :tx}
+        ]
+      )
+      |> client(query("COMMIT"))
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
+
+    test "@databases version capture split packet", cxt do
+      # same as v1 above but the sync message has been split from the parse, bind etc
+      alias Electric.DDLX
+
       {:ok, [command]} = DDLX.ddlx_to_commands("ALTER TABLE public.socks ENABLE ELECTRIC;")
       [electric] = DDLX.Command.pg_sql(command)
 
@@ -628,23 +700,44 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(complete_ready("BEGIN", :tx))
       |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
-      |> client(%M.Parse{query: version_query})
-      |> client([
-        %M.Bind{
-          parameter_format_codes: [0, 0, 0, 0, 0, 0],
-          parameters: [
-            "99",
-            "99-something.sql",
-            "ALTER TABLE public.socks ENABLE ELECTRIC;",
-            "2023-10-06T11:43:15.699+01:00",
-            nil,
-            "false"
-          ]
-        },
-        M.Describe,
-        M.Execute,
-        M.Sync
-      ])
+      |> client(%M.Parse{query: version_query}, server: [])
+      |> client(
+        [
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute
+        ],
+        server: []
+      )
+      |> client([M.Sync],
+        server: [
+          %M.Parse{query: version_query},
+          %M.Bind{
+            parameter_format_codes: [0, 0, 0, 0, 0, 0],
+            parameters: [
+              "99",
+              "99-something.sql",
+              "ALTER TABLE public.socks ENABLE ELECTRIC;",
+              "2023-10-06T11:43:15.699+01:00",
+              nil,
+              "false"
+            ]
+          },
+          M.Describe,
+          M.Execute,
+          M.Sync
+        ]
+      )
       |> server(
         [
           M.ParseComplete,

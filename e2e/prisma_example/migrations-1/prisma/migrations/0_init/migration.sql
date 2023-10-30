@@ -2,7 +2,7 @@
 -- https://www.prisma.io/docs/guides/migrate/developing-with-prisma-migrate/add-prisma-migrate-to-a-project#baseline-your-production-environment
 -- CreateTable
 CREATE TABLE "entries" (
-    "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "content" VARCHAR NOT NULL,
     "content_b" TEXT,
 
@@ -11,7 +11,7 @@ CREATE TABLE "entries" (
 
 -- CreateTable
 CREATE TABLE "owned_entries" (
-    "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "electric_user_id" TEXT NOT NULL,
     "content" VARCHAR NOT NULL,
 

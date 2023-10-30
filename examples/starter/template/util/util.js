@@ -20,6 +20,13 @@ async function fetchConfiguredElectricPort() {
   return Number.parseInt(port)
 }
 
+async function fetchConfiguredElectricProxyPort() {
+  const proxyPortRegex = /export ELECTRIC_PROXY_PORT=([0-9]+)/
+  const builderFile = path.join(__dirname, '..', 'backend', 'compose', '.envrc')
+  const port = await findFirstMatchInFile(proxyPortRegex, builderFile, "Could not find Electric's current proxy port in .envrc")
+  return Number.parseInt(port)
+}
+
 const envrcFile = path.join(__dirname, '../backend/compose/.envrc')
 const composeFile = path.join(__dirname, '../backend/compose/docker-compose.yaml')
 
@@ -31,4 +38,5 @@ function dockerCompose(command, userArgs, callback) {
 
 exports.findFirstMatchInFile = findFirstMatchInFile
 exports.fetchConfiguredElectricPort = fetchConfiguredElectricPort
+exports.fetchConfiguredElectricProxyPort = fetchConfiguredElectricProxyPort
 exports.dockerCompose = dockerCompose

@@ -1,34 +1,8 @@
 defmodule Electric.DDLX.DDLXPostgresTest do
   use Electric.Extension.Case, async: false
+  import ElectricTest.DDLXHelpers
 
   @moduletag ddlx: true
-
-  def query(conn, query, params \\ []) do
-    case :epgsql.equery(conn, query, params) do
-      {:ok, _n, cols, rows} ->
-        {:ok, cols, map_rows(rows)}
-
-      {:ok, cols, rows} ->
-        {:ok, cols, map_rows(rows)}
-
-      {:ok, n} when is_integer(n) ->
-        {:ok, [], []}
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  defp map_rows(rows) do
-    rows |> Enum.map(&Tuple.to_list/1) |> Enum.map(&null_to_nil/1)
-  end
-
-  defp null_to_nil(row) do
-    Enum.map(row, fn
-      :null -> nil
-      value -> value
-    end)
-  end
 
   def list_tables(conn, schema \\ "public") do
     {:ok, _cols, rows} =
@@ -78,28 +52,6 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       {column_name, attrs}
     end
-  end
-
-  def assert_rows(conn, table_name, expected_rows) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
-  end
-
-  def assert_rows_slice(conn, table_name, expected_rows, range) do
-    {:ok, _cols, rows} = query(conn, "select * from #{table_name}")
-
-    rows =
-      rows
-      |> Enum.map(&Enum.slice(&1, range))
-
-    assert(
-      rows == expected_rows,
-      "Row assertion failed on #{table_name}, #{inspect(rows)} != #{inspect(expected_rows)}\n"
-    )
   end
 
   def get_foreign_keys(conn, table_name) do
@@ -266,7 +218,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -274,7 +226,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -282,7 +234,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       user_id uuid NOT NULL,
@@ -301,7 +253,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -311,7 +263,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -319,7 +271,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     memberships_sql = """
     CREATE TABLE public.memberships(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       role VARCHAR(64) NOT NULL,
       project_id uuid NOT NULL,
       project_name VARCHAR(64) NOT NULL,
@@ -339,7 +291,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
   def set_up_assignment_compound_membership(conn) do
     projects_sql = """
     CREATE TABLE public.projects(
-      id uuid DEFAULT uuid_generate_v4(),
+      id uuid DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL,
       PRIMARY KEY (id, name)
     );
@@ -349,7 +301,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     users_sql = """
     CREATE TABLE public.users(
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(64) NOT NULL);
     """
 
@@ -394,7 +346,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
     test_tx "removing a grant", fn conn ->
       pg_sql = """
-      CALL electric.grant('update', 'things', 'admin' , ARRAY['one', 'two'], 'project', 'project_id', 'function body')
+      CALL electric.grant('update', '"public"."things"', 'admin' , ARRAY['one', 'two'], '"public"."project"', 'project_id', 'function body')
       """
 
       query(conn, pg_sql)
@@ -403,13 +355,29 @@ defmodule Electric.DDLX.DDLXPostgresTest do
         conn,
         "electric.grants",
         [
-          ["update", "things", "admin", "one", "project", "project_id", "function body"],
-          ["update", "things", "admin", "two", "project", "project_id", "function body"]
+          [
+            "update",
+            ~s["public"."things"],
+            "admin",
+            "one",
+            ~s["public"."project"],
+            "project_id",
+            "function body"
+          ],
+          [
+            "update",
+            ~s["public"."things"],
+            "admin",
+            "two",
+            ~s["public"."project"],
+            "project_id",
+            "function body"
+          ]
         ]
       )
 
       pg_sql2 = """
-      CALL electric.revoke('update', 'things', 'admin' , ARRAY['one'], 'project')
+      CALL electric.revoke('update', '"public"."things"', 'admin' , ARRAY['one'], '"public"."project"')
       """
 
       query(conn, pg_sql2)
@@ -417,7 +385,17 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       assert_rows(
         conn,
         "electric.grants",
-        [["update", "things", "admin", "two", "project", "project_id", "function body"]]
+        [
+          [
+            "update",
+            ~s["public"."things"],
+            "admin",
+            "two",
+            ~s["public"."project"],
+            "project_id",
+            "function body"
+          ]
+        ]
       )
     end
 
@@ -425,9 +403,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -439,7 +417,16 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       assert_rows_slice(
         conn,
         "electric.assignments",
-        [["public.memberships", "projects", "user_id", "__none__", "role", "hello"]],
+        [
+          [
+            ~s["public"."memberships"],
+            ~s["public"."projects"],
+            "user_id",
+            "__none__",
+            "role",
+            "hello"
+          ]
+        ],
         1..6
       )
     end
@@ -448,9 +435,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -464,8 +451,8 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       row = List.first(rows)
 
       assert Enum.slice(row, 1..6) == [
-               "public.memberships",
-               "projects",
+               ~s["public"."memberships"],
+               ~s["public"."projects"],
                "user_id",
                "__none__",
                "role",
@@ -546,9 +533,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -610,9 +597,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -653,7 +640,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
           [
             "admin",
             person_id,
-            "projects",
+            ~s["public"."projects"],
             "#{project_id}, project_1"
           ]
         ],
@@ -665,9 +652,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound_membership(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -708,7 +695,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
           [
             "admin",
             person_id,
-            "projects",
+            ~s["public"."projects"],
             "#{project_id}, project_1"
           ]
         ],
@@ -720,9 +707,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -732,9 +719,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       {:ok, _, _rows} = query(conn, pg_sql)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -749,9 +736,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -794,7 +781,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
           [
             "admin",
             person_id,
-            "projects",
+            ~s["public"."projects"],
             "#{project_id}, project_1"
           ]
         ],
@@ -814,7 +801,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
           [
             "member",
             person_id,
-            "projects",
+            ~s["public"."projects"],
             "#{project_id}, project_1"
           ]
         ],
@@ -826,9 +813,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => 'admin',
         role_column_name => null,
@@ -871,7 +858,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
           [
             "admin",
             person_id,
-            "projects",
+            ~s["public"."projects"],
             "#{project_id}, project_1"
           ]
         ],
@@ -895,7 +882,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign with no scope from string and update", fn conn ->
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -903,7 +890,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
@@ -915,8 +902,8 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       query(conn, memberships_sql)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
         scope => null,
         user_column_name => 'user_id',
         role_name_string => null,
@@ -929,7 +916,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       assert_rows_slice(
         conn,
         "electric.assignments",
-        [["public.memberships", "__none__", "user_id", "__none__", "role", nil]],
+        [[~s["public"."memberships"], "__none__", "user_id", "__none__", "role", nil]],
         1..6
       )
 
@@ -973,7 +960,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign fails with bad scope", fn conn ->
       projects_sql = """
       CREATE TABLE public.projects(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -981,7 +968,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       users_sql = """
       CREATE TABLE public.users(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(64) NOT NULL);
       """
 
@@ -989,7 +976,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       memberships_sql = """
       CREATE TABLE public.memberships(
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         role VARCHAR(64) NOT NULL,
         user_id uuid NOT NULL,
         CONSTRAINT user_fk
@@ -1001,9 +988,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       query(conn, memberships_sql)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => 'member',
         role_column_name => null,
@@ -1017,9 +1004,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       set_up_assignment_compound(conn)
 
       pg_sql = """
-      CALL electric.assign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.assign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
@@ -1032,8 +1019,8 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       row = List.first(rows)
 
       assert Enum.slice(row, 1..6) == [
-               "public.memberships",
-               "projects",
+               ~s["public"."memberships"],
+               ~s["public"."projects"],
                "user_id",
                "__none__",
                "role",
@@ -1081,9 +1068,9 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       assert ["electric_update_role_#{uuid_string}"] in rows
 
       pg_sql = """
-      CALL electric.unassign(assign_schema => 'public',
-        assign_table => 'memberships',
-        scope => 'projects',
+      CALL electric.unassign(
+        assign_table_full_name => '"public"."memberships"',
+        scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role');

@@ -2,7 +2,7 @@ defprotocol Electric.DDLX.Command do
   @spec pg_sql(t()) :: [String.t()]
   def pg_sql(command)
 
-  @spec table_name(t()) :: String.t()
+  @spec table_name(t()) :: String.t() | {String.t(), String.t()}
   def table_name(command)
 
   @spec tag(t()) :: String.t()

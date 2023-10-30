@@ -79,7 +79,34 @@ defmodule Electric.Postgres.Proxy.Injector do
     inspect(Enum.map(stack, fn %op{} -> op end))
   end
 
+  @spec client_messages_in([M.t()], State.t()) :: {[M.t()], State.t()}
+  defp client_messages_in(msgs, state) do
+    case state do
+      %{pending_messages: []} -> {msgs, state}
+      %{pending_messages: pending} -> {pending ++ msgs, %{state | pending_messages: []}}
+    end
+    |> sync_messages()
+  end
+
+  defp sync_messages({msgs, state}) do
+    {out, pending} =
+      Enum.flat_map_reduce(msgs, [], fn %type{} = msg, buf ->
+        if type in [M.Sync, M.Flush, M.Query] do
+          {[Enum.reverse([msg | buf])], []}
+        else
+          {[], [msg | buf]}
+        end
+      end)
+
+    {List.flatten(out), %{state | pending_messages: Enum.reverse(pending)}}
+  end
+
   def recv_client({stack, state}, msgs) do
+    # combat tcp packet fragmentation by grouping messages as they would
+    # probably be grouped by the client, i.e. the extended protocol messages
+    # would include a Sync or Flush message
+    {msgs, state} = client_messages_in(msgs, state)
+
     Logger.debug("recv_client: #{inspect_stack(stack)}")
 
     {stack, state} = Operation.recv_client(stack, msgs, state)

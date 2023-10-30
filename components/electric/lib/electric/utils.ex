@@ -193,4 +193,6 @@ defmodule Electric.Utils do
   defp c(?e), do: ?e
   defp c(?f), do: ?f
   defp c(_), do: throw(:error)
+
+  def epgsql_config(config), do: config |> Map.new() |> Map.put(:nulls, [nil, :null, :undefined])
 end

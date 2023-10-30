@@ -307,7 +307,7 @@ defmodule Electric.Postgres.TableTest do
       {
         """
         CREATE TABLE "t1" (
-          c1 uuid default uuid_generate_v4()
+          c1 uuid default gen_random_uuid()
         );
         """,
         %{
@@ -326,7 +326,7 @@ defmodule Electric.Postgres.TableTest do
                          expr: %Proto.Expression{
                            expr:
                              {:function,
-                              %Proto.Expression.Function{name: "uuid_generate_v4", args: []}}
+                              %Proto.Expression.Function{name: "gen_random_uuid", args: []}}
                          }
                        }}
                   }
@@ -385,7 +385,7 @@ defmodule Electric.Postgres.TableTest do
       {
         """
         CREATE TABLE "t1" (
-          c1 int default length(uuid_generate_v4()::text)
+          c1 int default length(gen_random_uuid()::text)
         );
         """,
         %{
@@ -420,7 +420,7 @@ defmodule Electric.Postgres.TableTest do
                                            expr:
                                              {:function,
                                               %Proto.Expression.Function{
-                                                name: "uuid_generate_v4",
+                                                name: "gen_random_uuid",
                                                 args: []
                                               }}
                                          }

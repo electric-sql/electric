@@ -126,12 +126,12 @@
     [local sql=
         """
         CREATE TABLE public.items (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            id UUID PRIMARY KEY,
             content VARCHAR NOT NULL,
             content_text_null VARCHAR,
-            content_text_null_default VARCHAR DEFAULT '',
+            content_text_null_default VARCHAR,
             intvalue_null integer,
-            intvalue_null_default integer DEFAULT 10
+            intvalue_null_default integer
         );
         -- CALL electric.electrify('public.items');
         ALTER TABLE public.items ENABLE ELECTRIC;
