@@ -3,6 +3,7 @@ defmodule Electric.Postgres.ProxyTest do
 
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Proxy.UpstreamConnection
 
   import Electric.Postgres.TestConnection
 
@@ -80,5 +81,27 @@ defmodule Electric.Postgres.ProxyTest do
     assert {:ok, [_, _, _, _, %{"query" => ^query}]} = Extension.ddl_history(cxt.conn)
 
     assert {:ok, false} = Extension.index_electrified?(cxt.conn, "meadow", "daisy_id_idx")
+  end
+
+  test "gracefully handles upstream connection closure", cxt do
+    cxt.repo.checkout(fn ->
+      # The test Ecto repo is configured with pool size = 2. So we're expecting the proxy to establish two upstream
+      # connections.
+      [{pid1, mon1}, {pid2, mon2}] =
+        for session_id <- Electric.reg_names(UpstreamConnection) do
+          name = UpstreamConnection.name(session_id)
+          pid = Electric.lookup_pid(name)
+          {pid, Process.monitor(pid)}
+        end
+
+      # Terminate active backends in Postgres, causing it to close the TCP connections from the Proxy.
+      terminate_all_connections(cxt.conn, cxt.db)
+
+      # Verify that both upstream connections have shut down without errors.
+      assert_receive {:DOWN, ^mon1, :process, ^pid1, :normal}
+      assert_receive {:DOWN, ^mon2, :process, ^pid2, :normal}
+
+      Process.sleep(1000)
+    end)
   end
 end
