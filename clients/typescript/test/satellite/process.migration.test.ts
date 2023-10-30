@@ -119,7 +119,11 @@ test.serial('setup populates DB', async (t) => {
 const createTable: SchemaChange = {
   table: {
     name: 'NewTable',
-    columns: [{ name: 'id' }, { name: 'foo' }, { name: 'bar' }],
+    columns: [
+      { name: 'id', sqliteType: 'TEXT' },
+      { name: 'foo', sqliteType: 'INTEGER' },
+      { name: 'bar', sqliteType: 'TEXT' },
+    ],
     fks: [],
     pks: ['id'],
   },
@@ -136,10 +140,10 @@ const addColumn: SchemaChange = {
   table: {
     name: 'parent',
     columns: [
-      { name: 'id' },
-      { name: 'value' },
-      { name: 'other' },
-      { name: 'baz' },
+      { name: 'id', sqliteType: 'INTEGER' },
+      { name: 'value', sqliteType: 'TEXT' },
+      { name: 'other', sqliteType: 'INTEGER' },
+      { name: 'baz', sqliteType: 'TEXT' },
     ],
     fks: [],
     pks: ['id'],
@@ -685,7 +689,7 @@ const migrationWithFKs: SchemaChange[] = [
     `,
     table: {
       name: 'test_items',
-      columns: [{ name: 'id' }],
+      columns: [{ name: 'id', sqliteType: 'TEXT' }],
       fks: [],
       pks: ['id'],
     },
@@ -702,7 +706,10 @@ const migrationWithFKs: SchemaChange[] = [
     `,
     table: {
       name: 'test_other_items',
-      columns: [{ name: 'id' }, { name: 'item_id' }],
+      columns: [
+        { name: 'id', sqliteType: 'TEXT' },
+        { name: 'item_id', sqliteType: 'TEXT' },
+      ],
       fks: [
         {
           $type: 'Electric.Satellite.SatOpMigrate.ForeignKey',

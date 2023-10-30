@@ -1080,25 +1080,26 @@ function deserializeColumnData(
 ): string | number {
   switch (columnType) {
     case PgBasicType.PG_CHAR:
-    case PgBasicType.PG_TEXT:
-    case PgBasicType.PG_UUID:
-    case PgBasicType.PG_VARCHAR:
     case PgDateType.PG_DATE:
+    case PgBasicType.PG_TEXT:
     case PgDateType.PG_TIME:
     case PgDateType.PG_TIMESTAMP:
     case PgDateType.PG_TIMESTAMPTZ:
+    case PgBasicType.PG_UUID:
+    case PgBasicType.PG_VARCHAR:
       return typeDecoder.text(column)
     case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
-    case PgBasicType.PG_REAL:
-    case PgBasicType.PG_FLOAT4:
-    case PgBasicType.PG_FLOAT8:
     case PgBasicType.PG_INT:
     case PgBasicType.PG_INT2:
     case PgBasicType.PG_INT4:
     case PgBasicType.PG_INT8:
     case PgBasicType.PG_INTEGER:
       return Number(typeDecoder.text(column))
+    case PgBasicType.PG_FLOAT4:
+    case PgBasicType.PG_FLOAT8:
+    case PgBasicType.PG_REAL:
+      return typeDecoder.float(column)
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
     default:
@@ -1118,10 +1119,6 @@ function serializeColumnData(
   switch (columnType) {
     case PgBasicType.PG_BOOL:
       return typeEncoder.bool(columnValue as number)
-    case PgBasicType.PG_REAL:
-    case PgBasicType.PG_FLOAT4:
-    case PgBasicType.PG_FLOAT8:
-      return typeEncoder.real(columnValue as number)
     case PgDateType.PG_TIMETZ:
       return typeEncoder.timetz(columnValue as string)
     default:

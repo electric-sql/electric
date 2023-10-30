@@ -24,6 +24,7 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'int2', type: 'INTEGER', isNullable: true },
       { name: 'float1', type: 'REAL', isNullable: true },
       { name: 'float2', type: 'FLOAT4', isNullable: true },
+      { name: 'float3', type: 'FLOAT8', isNullable: true },
       { name: 'bool1', type: 'BOOL', isNullable: true },
       { name: 'bool2', type: 'BOOL', isNullable: true },
       { name: 'bool3', type: 'BOOL', isNullable: true },
@@ -41,6 +42,7 @@ test('serialize/deserialize row data', async (t) => {
           ['int2', PgBasicType.PG_INTEGER],
           ['float1', PgBasicType.PG_REAL],
           ['float2', PgBasicType.PG_FLOAT4],
+          ['float3', PgBasicType.PG_FLOAT8],
           ['bool1', PgBasicType.PG_BOOL],
           ['bool2', PgBasicType.PG_BOOL],
           ['bool3', PgBasicType.PG_BOOL],
@@ -70,6 +72,7 @@ test('serialize/deserialize row data', async (t) => {
     int2: -30,
     float1: 1.0,
     float2: -30.3,
+    float3: 5e234,
     bool1: 1,
     bool2: 0,
     bool3: null,
@@ -78,11 +81,50 @@ test('serialize/deserialize row data', async (t) => {
   const s_row = serializeRow(record, rel, dbDescription)
   t.deepEqual(
     s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
-    ['Hello', 'World!', '', '1', '-30', '1.0', '-30.3', 't', 'f', '']
+    ['Hello', 'World!', '', '1', '-30', '1', '-30.3', '5e+234', 't', 'f', '']
   )
 
   const d_row = deserializeRow(s_row, rel, dbDescription)
-  t.deepEqual(record, d_row)
+  t.deepEqual(d_row, record)
+
+  // Test edge cases for floats such as NaN, Infinity, -Infinity
+  const record2: Record = {
+    name1: 'Edge cases for Floats',
+    name2: null,
+    name3: null,
+    int1: null,
+    int2: null,
+    float1: NaN,
+    float2: Infinity,
+    float3: -Infinity,
+    bool1: null,
+    bool2: null,
+    bool3: null,
+  }
+
+  const s_row2 = serializeRow(record2, rel, dbDescription)
+  t.deepEqual(
+    s_row2.values.map((bytes) => new TextDecoder().decode(bytes)),
+    [
+      'Edge cases for Floats',
+      '',
+      '',
+      '',
+      '',
+      'NaN',
+      'Infinity',
+      '-Infinity',
+      '',
+      '',
+      '',
+    ]
+  )
+
+  const d_row2 = deserializeRow(s_row2, rel, dbDescription)
+  t.deepEqual(d_row2, {
+    ...record2,
+    float1: 'NaN', // SQLite does not support NaN so we deserialise it into the string 'NaN'
+  })
 })
 
 test('Null mask uses bits as if they were a list', async (t) => {

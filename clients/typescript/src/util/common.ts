@@ -19,15 +19,13 @@ setGlobalUUID(
 
 export const typeDecoder = {
   bool: bytesToBool,
-  number: bytesToNumber,
   text: bytesToString,
   timetz: bytesToTimetzString,
+  float: bytesToFloat,
 }
 
 export const typeEncoder = {
   bool: boolToBytes,
-  number: numberToBytes,
-  real: realToBytes,
   text: (string: string) => new TextEncoder().encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
@@ -69,15 +67,6 @@ export function numberToBytes(i: number) {
   )
 }
 
-export function realToBytes(num: number) {
-  let num_str = num.toString()
-  if (Math.trunc(num) === num) {
-    // num is an integer, we need to explicitly append the ".0" to it.
-    num_str += '.0'
-  }
-  return new TextEncoder().encode(num_str)
-}
-
 export function bytesToNumber(bytes: Uint8Array) {
   let n = 0
   for (const byte of bytes.values()) {
@@ -99,6 +88,22 @@ export function bytesToString(bytes: Uint8Array) {
 function bytesToTimetzString(bytes: Uint8Array) {
   const str = bytesToString(bytes)
   return str.replace('+00', '')
+}
+
+/**
+ * Converts a PG string of type `float4` or `float8` to an equivalent SQLite number.
+ * Since SQLite does not recognise `NaN` we turn it into the string `'NaN'` instead.
+ * cf. https://github.com/WiseLibs/better-sqlite3/issues/1088
+ * @param bytes Data for this `float4` or `float8` column.
+ * @returns The SQLite value.
+ */
+function bytesToFloat(bytes: Uint8Array) {
+  const text = typeDecoder.text(bytes)
+  if (text === 'NaN') {
+    return 'NaN'
+  } else {
+    return Number(text)
+  }
 }
 
 /**

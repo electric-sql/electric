@@ -1019,7 +1019,8 @@ export class SatelliteProcess implements Satellite {
       this._authState!.clientId,
       local,
       incoming_origin,
-      incoming
+      incoming,
+      this.relations
     )
 
     const stmts: Statement[] = []
@@ -1476,6 +1477,9 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
         parentKey: fk.pkCols[0],
       }
     }),
+    columnTypes: Object.fromEntries(
+      tbl.columns.map((col) => [col.name, col.sqliteType.toUpperCase()])
+    ),
   }
   const fullTableName = table.namespace + '.' + table.tableName
   return generateTableTriggers(fullTableName, table)

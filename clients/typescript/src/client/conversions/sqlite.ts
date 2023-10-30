@@ -24,6 +24,11 @@ export function toSqlite(v: any, pgType: PgType): any {
     return serialiseDate(v, pgType as PgDateType)
   } else if (pgType === PgBasicType.PG_BOOL) {
     return serialiseBoolean(v)
+  } else if (Number.isNaN(v)) {
+    // Since SQLite does not support `NaN` we serialise `NaN` into the string`'NaN'`
+    // and deserialise it back to `NaN` when reading from the DB.
+    // cf. https://github.com/WiseLibs/better-sqlite3/issues/1088
+    return 'NaN'
   } else {
     return v
   }
@@ -39,6 +44,12 @@ export function fromSqlite(v: any, pgType: PgType): any {
   } else if (pgType === PgBasicType.PG_BOOL) {
     // it's a serialised boolean
     return deserialiseBoolean(v)
+  } else if (
+    v === 'NaN' &&
+    (pgType === PgBasicType.PG_FLOAT8 || pgType === PgBasicType.PG_FLOAT4)
+  ) {
+    // it's a serialised NaN
+    return NaN
   } else {
     return v
   }

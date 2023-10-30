@@ -76,6 +76,10 @@ export type DataTypes = {
    * @zod.number.int().gte(-2147483648).lte(2147483647)
    */
   int4: number | null
+  /**
+   * @zod.custom.use(z.number().or(z.nan()))
+   */
+  float8: number | null
   relatedId: number | null
 }
 
@@ -4797,6 +4801,7 @@ export namespace Prisma {
     id: number | null
     int2: number | null
     int4: number | null
+    float8: number | null
     relatedId: number | null
   }
 
@@ -4804,6 +4809,7 @@ export namespace Prisma {
     id: number | null
     int2: number | null
     int4: number | null
+    float8: number | null
     relatedId: number | null
   }
 
@@ -4818,6 +4824,7 @@ export namespace Prisma {
     uuid: string | null
     int2: number | null
     int4: number | null
+    float8: number | null
     relatedId: number | null
   }
 
@@ -4832,6 +4839,7 @@ export namespace Prisma {
     uuid: string | null
     int2: number | null
     int4: number | null
+    float8: number | null
     relatedId: number | null
   }
 
@@ -4846,6 +4854,7 @@ export namespace Prisma {
     uuid: number
     int2: number
     int4: number
+    float8: number
     relatedId: number
     _all: number
   }
@@ -4855,6 +4864,7 @@ export namespace Prisma {
     id?: true
     int2?: true
     int4?: true
+    float8?: true
     relatedId?: true
   }
 
@@ -4862,6 +4872,7 @@ export namespace Prisma {
     id?: true
     int2?: true
     int4?: true
+    float8?: true
     relatedId?: true
   }
 
@@ -4876,6 +4887,7 @@ export namespace Prisma {
     uuid?: true
     int2?: true
     int4?: true
+    float8?: true
     relatedId?: true
   }
 
@@ -4890,6 +4902,7 @@ export namespace Prisma {
     uuid?: true
     int2?: true
     int4?: true
+    float8?: true
     relatedId?: true
   }
 
@@ -4904,6 +4917,7 @@ export namespace Prisma {
     uuid?: true
     int2?: true
     int4?: true
+    float8?: true
     relatedId?: true
     _all?: true
   }
@@ -5006,6 +5020,7 @@ export namespace Prisma {
     uuid: string | null
     int2: number | null
     int4: number | null
+    float8: number | null
     relatedId: number | null
     _count: DataTypesCountAggregateOutputType | null
     _avg: DataTypesAvgAggregateOutputType | null
@@ -5039,6 +5054,7 @@ export namespace Prisma {
     uuid?: boolean
     int2?: boolean
     int4?: boolean
+    float8?: boolean
     relatedId?: boolean
     related?: boolean | DummyArgs
   }
@@ -6786,6 +6802,7 @@ export namespace Prisma {
     uuid: 'uuid',
     int2: 'int2',
     int4: 'int4',
+    float8: 'float8',
     relatedId: 'relatedId'
   };
 
@@ -7047,6 +7064,7 @@ export namespace Prisma {
     uuid?: UuidNullableFilter | string | null
     int2?: IntNullableFilter | number | null
     int4?: IntNullableFilter | number | null
+    float8?: FloatNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
     related?: XOR<DummyRelationFilter, DummyWhereInput> | null
   }
@@ -7062,6 +7080,7 @@ export namespace Prisma {
     uuid?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
     related?: DummyOrderByWithRelationInput
   }
@@ -7082,6 +7101,7 @@ export namespace Prisma {
     uuid?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
     _count?: DataTypesCountOrderByAggregateInput
     _avg?: DataTypesAvgOrderByAggregateInput
@@ -7104,6 +7124,7 @@ export namespace Prisma {
     uuid?: UuidNullableWithAggregatesFilter | string | null
     int2?: IntNullableWithAggregatesFilter | number | null
     int4?: IntNullableWithAggregatesFilter | number | null
+    float8?: FloatNullableWithAggregatesFilter | number | null
     relatedId?: IntNullableWithAggregatesFilter | number | null
   }
 
@@ -7329,6 +7350,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
     related?: DummyCreateNestedOneWithoutDatatypeInput
   }
 
@@ -7343,6 +7365,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
     relatedId?: number | null
   }
 
@@ -7357,6 +7380,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
     related?: DummyUpdateOneWithoutDatatypeNestedInput
   }
 
@@ -7371,6 +7395,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -7385,6 +7410,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
     relatedId?: number | null
   }
 
@@ -7399,6 +7425,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateManyInput = {
@@ -7412,6 +7439,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -7732,6 +7760,17 @@ export namespace Prisma {
     not?: NestedUuidNullableFilter | string | null
   }
 
+  export type FloatNullableFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | number | null
+    notIn?: Enumerable<number> | number | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedFloatNullableFilter | number | null
+  }
+
   export type DummyRelationFilter = {
     is?: DummyWhereInput | null
     isNot?: DummyWhereInput | null
@@ -7748,6 +7787,7 @@ export namespace Prisma {
     uuid?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7755,6 +7795,7 @@ export namespace Prisma {
     id?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7769,6 +7810,7 @@ export namespace Prisma {
     uuid?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7783,6 +7825,7 @@ export namespace Prisma {
     uuid?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7790,6 +7833,7 @@ export namespace Prisma {
     id?: SortOrder
     int2?: SortOrder
     int4?: SortOrder
+    float8?: SortOrder
     relatedId?: SortOrder
   }
 
@@ -7828,6 +7872,22 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter
     _min?: NestedStringNullableFilter
     _max?: NestedStringNullableFilter
+  }
+
+  export type FloatNullableWithAggregatesFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | number | null
+    notIn?: Enumerable<number> | number | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedFloatNullableWithAggregatesFilter | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedFloatNullableFilter
+    _min?: NestedFloatNullableFilter
+    _max?: NestedFloatNullableFilter
   }
 
   export type DataTypesListRelationFilter = {
@@ -8005,6 +8065,14 @@ export namespace Prisma {
 
   export type NullableBoolFieldUpdateOperationsInput = {
     set?: boolean | null
+  }
+
+  export type NullableFloatFieldUpdateOperationsInput = {
+    set?: number | null
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
   }
 
   export type DummyUpdateOneWithoutDatatypeNestedInput = {
@@ -8260,6 +8328,22 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter
   }
 
+  export type NestedFloatNullableWithAggregatesFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | number | null
+    notIn?: Enumerable<number> | number | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedFloatNullableWithAggregatesFilter | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedFloatNullableFilter
+    _min?: NestedFloatNullableFilter
+    _max?: NestedFloatNullableFilter
+  }
+
   export type PostCreateWithoutAuthorInput = {
     id: number
     title: string
@@ -8450,6 +8534,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
   }
 
   export type DataTypesUncheckedCreateWithoutRelatedInput = {
@@ -8463,6 +8548,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
   }
 
   export type DataTypesCreateOrConnectWithoutRelatedInput = {
@@ -8505,6 +8591,7 @@ export namespace Prisma {
     uuid?: UuidNullableFilter | string | null
     int2?: IntNullableFilter | number | null
     int4?: IntNullableFilter | number | null
+    float8?: FloatNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
   }
 
@@ -8547,6 +8634,7 @@ export namespace Prisma {
     uuid?: string | null
     int2?: number | null
     int4?: number | null
+    float8?: number | null
   }
 
   export type DataTypesUpdateWithoutRelatedInput = {
@@ -8560,6 +8648,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateWithoutRelatedInput = {
@@ -8573,6 +8662,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type DataTypesUncheckedUpdateManyWithoutDatatypeInput = {
@@ -8586,6 +8676,7 @@ export namespace Prisma {
     uuid?: NullableStringFieldUpdateOperationsInput | string | null
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
+    float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
 

@@ -8,6 +8,7 @@ import {
   randomValue,
 } from '../../src/util'
 import Database from 'better-sqlite3'
+import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
@@ -15,6 +16,8 @@ import { MockSatelliteClient } from '../../src/satellite/mock'
 import { Satellite, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
+import { Table, generateTableTriggers } from '../../src/migrators/triggers'
+import { data as initialMigration } from '../../src/migrators/schema'
 
 export const dbDescription = new DbSchema(
   {
@@ -102,6 +105,58 @@ export const relations = {
         type: 'INTEGER',
         isNullable: false,
         primaryKey: true,
+      },
+    ],
+  },
+  floatTable: {
+    id: 3,
+    schema: 'public',
+    table: 'floatTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'INTEGER',
+        isNullable: false,
+        primaryKey: true,
+      },
+      {
+        name: 'value',
+        type: 'REAL',
+        isNullable: true,
+        primaryKey: false,
+      },
+    ],
+  },
+  personTable: {
+    id: 4,
+    schema: 'public',
+    table: 'personTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'id',
+        type: 'REAL',
+        isNullable: false,
+        primaryKey: true,
+      },
+      {
+        name: 'name',
+        type: 'TEXT',
+        isNullable: true,
+        primaryKey: false,
+      },
+      {
+        name: 'age',
+        type: 'INTEGER',
+        isNullable: true,
+        primaryKey: false,
+      },
+      {
+        name: 'bmi',
+        type: 'REAL',
+        isNullable: true,
+        primaryKey: false,
       },
     ],
   },
@@ -220,4 +275,39 @@ export const cleanAndStopSatellite = async (
   const { satellite } = t.context
   await satellite.stop()
   await clean(t)
+}
+
+export function migrateDb(db: SqliteDB, table: Table) {
+  const tableName = table.tableName
+  // Create the table in the database
+  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL)`
+  db.exec(createTableSQL)
+
+  // Apply the initial migration on the database
+  const migration = initialMigration.migrations[0].statements
+  migration.forEach((stmt) => {
+    db.exec(stmt)
+  })
+
+  // Generate the table triggers
+  const triggers = generateTableTriggers(tableName, table)
+
+  // Apply the triggers on the database
+  triggers.forEach((trigger) => {
+    db.exec(trigger.sql)
+  })
+}
+
+export const personTable: Table = {
+  namespace: 'main',
+  tableName: 'personTable',
+  columns: ['id', 'name', 'age', 'bmi'],
+  primary: ['id'],
+  foreignKeys: [],
+  columnTypes: {
+    id: 'REAL',
+    name: 'TEXT',
+    age: 'INTEGER',
+    bmi: 'REAL',
+  },
 }

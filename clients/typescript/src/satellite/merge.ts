@@ -11,7 +11,7 @@ import {
   OPTYPES,
 } from './oplog'
 import { difference, union } from '../util/sets'
-import { Row } from '../util'
+import { RelationsCache, Row } from '../util'
 
 /**
  * Merge server-sent operation with local pending oplog to arrive at the same row state the server is at.
@@ -25,15 +25,20 @@ export function mergeEntries(
   localOrigin: string,
   local: OplogEntry[],
   incomingOrigin: string,
-  incoming: OplogEntry[]
+  incoming: OplogEntry[],
+  relations: RelationsCache
 ): PendingChanges {
   const localTableChanges = localOperationsToTableChanges(
     local,
     (timestamp: Date) => {
       return generateTag(localOrigin, timestamp)
-    }
+    },
+    relations
   )
-  const incomingTableChanges = remoteOperationsToTableChanges(incoming)
+  const incomingTableChanges = remoteOperationsToTableChanges(
+    incoming,
+    relations
+  )
 
   for (const [tablename, incomingMapping] of Object.entries(
     incomingTableChanges

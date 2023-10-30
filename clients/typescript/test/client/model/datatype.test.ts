@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -559,6 +559,86 @@ test.serial('support null values for int4 type', async (t) => {
     select: {
       id: true,
       int4: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support float8 type', async (t) => {
+  const validFloat1 = 1.7976931348623157e308
+  const validFloat2 = -1.7976931348623157e308
+  const floats = [
+    {
+      id: 1,
+      float8: validFloat1,
+    },
+    {
+      id: 2,
+      float8: validFloat2,
+    },
+    {
+      id: 3,
+      float8: +Infinity,
+    },
+    {
+      id: 4,
+      float8: -Infinity,
+    },
+    {
+      id: 5,
+      float8: NaN,
+    },
+  ]
+
+  const res = await tbl.createMany({
+    data: floats,
+  })
+
+  t.deepEqual(res, {
+    count: 5,
+  })
+
+  // Check that we can read the floats back
+  const fetchRes = await tbl.findMany({
+    select: {
+      id: true,
+      float8: true,
+    },
+    orderBy: {
+      id: 'asc',
+    },
+  })
+
+  t.deepEqual(fetchRes, floats)
+})
+
+test.serial('support null values for float8 type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    float8: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      float8: null,
+    },
+    select: {
+      id: true,
+      float8: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      float8: true,
     },
   })
 
