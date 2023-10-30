@@ -51,6 +51,9 @@ model DataTypes {
   timestamp   DateTime? @unique @db.Timestamp(3)
   timestamptz DateTime? @db.Timestamptz(3)
   bool        Boolean?
+  uuid        String?   @db.Uuid     /// @zod.string.uuid()
+  int2        Int?      @db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
+  int4        Int?                   /// @zod.number.int().gte(-2147483648).lte(2147483647)
   relatedId   Int?
   related     Dummy?    @relation(fields: [relatedId], references: [id])
 }

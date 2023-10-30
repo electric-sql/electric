@@ -17,7 +17,7 @@ import {
 // ENUMS
 /////////////////////////////////////////
 
-export const DataTypesScalarFieldEnumSchema = z.enum(['id','date','time','timetz','timestamp','timestamptz','bool','relatedId']);
+export const DataTypesScalarFieldEnumSchema = z.enum(['id','date','time','timetz','timestamp','timestamptz','bool','uuid','int2','int4','relatedId']);
 
 export const DummyScalarFieldEnumSchema = z.enum(['id','timestamp']);
 
@@ -98,6 +98,9 @@ export const DataTypesSchema = z.object({
   timestamp: z.coerce.date().nullish(),
   timestamptz: z.coerce.date().nullish(),
   bool: z.boolean().nullish(),
+  uuid: z.string().uuid().nullish(),
+  int2: z.number().int().gte(-32768).lte(32767).nullish(),
+  int4: z.number().int().gte(-2147483648).lte(2147483647).nullish(),
   relatedId: z.number().int().nullish(),
 })
 
@@ -216,6 +219,9 @@ export const DataTypesSelectSchema: z.ZodType<Prisma.DataTypesSelect> = z.object
   timestamp: z.boolean().optional(),
   timestamptz: z.boolean().optional(),
   bool: z.boolean().optional(),
+  uuid: z.boolean().optional(),
+  int2: z.boolean().optional(),
+  int4: z.boolean().optional(),
   relatedId: z.boolean().optional(),
   related: z.union([z.boolean(),z.lazy(() => DummyArgsSchema)]).optional(),
 }).strict()
@@ -430,6 +436,9 @@ export const DataTypesWhereInputSchema: z.ZodType<Prisma.DataTypesWhereInput> = 
   timestamp: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
   timestamptz: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
   bool: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
+  uuid: z.union([ z.lazy(() => UuidNullableFilterSchema),z.string() ]).optional().nullable(),
+  int2: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
+  int4: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
   relatedId: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
   related: z.union([ z.lazy(() => DummyRelationFilterSchema),z.lazy(() => DummyWhereInputSchema) ]).optional().nullable(),
 }).strict();
@@ -442,6 +451,9 @@ export const DataTypesOrderByWithRelationInputSchema: z.ZodType<Prisma.DataTypes
   timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   bool: z.lazy(() => SortOrderSchema).optional(),
+  uuid: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional(),
   related: z.lazy(() => DummyOrderByWithRelationInputSchema).optional()
 }).strict();
@@ -459,6 +471,9 @@ export const DataTypesOrderByWithAggregationInputSchema: z.ZodType<Prisma.DataTy
   timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   bool: z.lazy(() => SortOrderSchema).optional(),
+  uuid: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => DataTypesCountOrderByAggregateInputSchema).optional(),
   _avg: z.lazy(() => DataTypesAvgOrderByAggregateInputSchema).optional(),
@@ -478,6 +493,9 @@ export const DataTypesScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Dat
   timestamp: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
   timestamptz: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema),z.coerce.date() ]).optional().nullable(),
   bool: z.union([ z.lazy(() => BoolNullableWithAggregatesFilterSchema),z.boolean() ]).optional().nullable(),
+  uuid: z.union([ z.lazy(() => UuidNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
+  int2: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
+  int4: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
   relatedId: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
 }).strict();
 
@@ -700,6 +718,9 @@ export const DataTypesCreateInputSchema: z.ZodType<Prisma.DataTypesCreateInput> 
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
   bool: z.boolean().optional().nullable(),
+  uuid: z.string().uuid().optional().nullable(),
+  int2: z.number().int().gte(-32768).lte(32767).optional().nullable(),
+  int4: z.number().int().gte(-2147483648).lte(2147483647).optional().nullable(),
   related: z.lazy(() => DummyCreateNestedOneWithoutDatatypeInputSchema).optional()
 }).strict();
 
@@ -711,6 +732,9 @@ export const DataTypesUncheckedCreateInputSchema: z.ZodType<Prisma.DataTypesUnch
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
   bool: z.boolean().optional().nullable(),
+  uuid: z.string().uuid().optional().nullable(),
+  int2: z.number().int().gte(-32768).lte(32767).optional().nullable(),
+  int4: z.number().int().gte(-2147483648).lte(2147483647).optional().nullable(),
   relatedId: z.number().int().optional().nullable()
 }).strict();
 
@@ -722,6 +746,9 @@ export const DataTypesUpdateInputSchema: z.ZodType<Prisma.DataTypesUpdateInput> 
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string().uuid(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number().int().gte(-32768).lte(32767),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number().int().gte(-2147483648).lte(2147483647),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   related: z.lazy(() => DummyUpdateOneWithoutDatatypeNestedInputSchema).optional()
 }).strict();
 
@@ -733,6 +760,9 @@ export const DataTypesUncheckedUpdateInputSchema: z.ZodType<Prisma.DataTypesUnch
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string().uuid(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number().int().gte(-32768).lte(32767),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number().int().gte(-2147483648).lte(2147483647),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   relatedId: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
@@ -744,6 +774,9 @@ export const DataTypesCreateManyInputSchema: z.ZodType<Prisma.DataTypesCreateMan
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
   bool: z.boolean().optional().nullable(),
+  uuid: z.string().uuid().optional().nullable(),
+  int2: z.number().int().gte(-32768).lte(32767).optional().nullable(),
+  int4: z.number().int().gte(-2147483648).lte(2147483647).optional().nullable(),
   relatedId: z.number().int().optional().nullable()
 }).strict();
 
@@ -755,6 +788,9 @@ export const DataTypesUpdateManyMutationInputSchema: z.ZodType<Prisma.DataTypesU
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string().uuid(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number().int().gte(-32768).lte(32767),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number().int().gte(-2147483648).lte(2147483647),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesUncheckedUpdateManyInputSchema: z.ZodType<Prisma.DataTypesUncheckedUpdateManyInput> = z.object({
@@ -765,6 +801,9 @@ export const DataTypesUncheckedUpdateManyInputSchema: z.ZodType<Prisma.DataTypes
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string().uuid(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number().int().gte(-32768).lte(32767),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number().int().gte(-2147483648).lte(2147483647),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   relatedId: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
@@ -1073,6 +1112,18 @@ export const BoolNullableFilterSchema: z.ZodType<Prisma.BoolNullableFilter> = z.
   not: z.union([ z.boolean(),z.lazy(() => NestedBoolNullableFilterSchema) ]).optional().nullable(),
 }).strict();
 
+export const UuidNullableFilterSchema: z.ZodType<Prisma.UuidNullableFilter> = z.object({
+  equals: z.string().optional().nullable(),
+  in: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  lt: z.string().optional(),
+  lte: z.string().optional(),
+  gt: z.string().optional(),
+  gte: z.string().optional(),
+  mode: z.lazy(() => QueryModeSchema).optional(),
+  not: z.union([ z.string(),z.lazy(() => NestedUuidNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
 export const DummyRelationFilterSchema: z.ZodType<Prisma.DummyRelationFilter> = z.object({
   is: z.lazy(() => DummyWhereInputSchema).optional().nullable(),
   isNot: z.lazy(() => DummyWhereInputSchema).optional().nullable()
@@ -1086,11 +1137,16 @@ export const DataTypesCountOrderByAggregateInputSchema: z.ZodType<Prisma.DataTyp
   timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   bool: z.lazy(() => SortOrderSchema).optional(),
+  uuid: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const DataTypesAvgOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypesAvgOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -1102,6 +1158,9 @@ export const DataTypesMaxOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypes
   timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   bool: z.lazy(() => SortOrderSchema).optional(),
+  uuid: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -1113,11 +1172,16 @@ export const DataTypesMinOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypes
   timestamp: z.lazy(() => SortOrderSchema).optional(),
   timestamptz: z.lazy(() => SortOrderSchema).optional(),
   bool: z.lazy(() => SortOrderSchema).optional(),
+  uuid: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const DataTypesSumOrderByAggregateInputSchema: z.ZodType<Prisma.DataTypesSumOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
+  int2: z.lazy(() => SortOrderSchema).optional(),
+  int4: z.lazy(() => SortOrderSchema).optional(),
   relatedId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -1141,6 +1205,21 @@ export const BoolNullableWithAggregatesFilterSchema: z.ZodType<Prisma.BoolNullab
   _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
   _min: z.lazy(() => NestedBoolNullableFilterSchema).optional(),
   _max: z.lazy(() => NestedBoolNullableFilterSchema).optional()
+}).strict();
+
+export const UuidNullableWithAggregatesFilterSchema: z.ZodType<Prisma.UuidNullableWithAggregatesFilter> = z.object({
+  equals: z.string().optional().nullable(),
+  in: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  lt: z.string().optional(),
+  lte: z.string().optional(),
+  gt: z.string().optional(),
+  gte: z.string().optional(),
+  mode: z.lazy(() => QueryModeSchema).optional(),
+  not: z.union([ z.string(),z.lazy(() => NestedUuidNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedStringNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedStringNullableFilterSchema).optional()
 }).strict();
 
 export const DataTypesListRelationFilterSchema: z.ZodType<Prisma.DataTypesListRelationFilter> = z.object({
@@ -1526,6 +1605,17 @@ export const NestedBoolNullableFilterSchema: z.ZodType<Prisma.NestedBoolNullable
   not: z.union([ z.boolean(),z.lazy(() => NestedBoolNullableFilterSchema) ]).optional().nullable(),
 }).strict();
 
+export const NestedUuidNullableFilterSchema: z.ZodType<Prisma.NestedUuidNullableFilter> = z.object({
+  equals: z.string().optional().nullable(),
+  in: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  lt: z.string().optional(),
+  lte: z.string().optional(),
+  gt: z.string().optional(),
+  gte: z.string().optional(),
+  not: z.union([ z.string(),z.lazy(() => NestedUuidNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
 export const NestedDateTimeNullableWithAggregatesFilterSchema: z.ZodType<Prisma.NestedDateTimeNullableWithAggregatesFilter> = z.object({
   equals: z.coerce.date().optional().nullable(),
   in: z.union([ z.coerce.date().array(),z.coerce.date() ]).optional().nullable(),
@@ -1546,6 +1636,20 @@ export const NestedBoolNullableWithAggregatesFilterSchema: z.ZodType<Prisma.Nest
   _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
   _min: z.lazy(() => NestedBoolNullableFilterSchema).optional(),
   _max: z.lazy(() => NestedBoolNullableFilterSchema).optional()
+}).strict();
+
+export const NestedUuidNullableWithAggregatesFilterSchema: z.ZodType<Prisma.NestedUuidNullableWithAggregatesFilter> = z.object({
+  equals: z.string().optional().nullable(),
+  in: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  notIn: z.union([ z.string().array(),z.string() ]).optional().nullable(),
+  lt: z.string().optional(),
+  lte: z.string().optional(),
+  gt: z.string().optional(),
+  gte: z.string().optional(),
+  not: z.union([ z.string(),z.lazy(() => NestedUuidNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedStringNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedStringNullableFilterSchema).optional()
 }).strict();
 
 export const PostCreateWithoutAuthorInputSchema: z.ZodType<Prisma.PostCreateWithoutAuthorInput> = z.object({
@@ -1734,7 +1838,10 @@ export const DataTypesCreateWithoutRelatedInputSchema: z.ZodType<Prisma.DataType
   timetz: z.coerce.date().optional().nullable(),
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
-  bool: z.boolean().optional().nullable()
+  bool: z.boolean().optional().nullable(),
+  uuid: z.string().optional().nullable(),
+  int2: z.number().optional().nullable(),
+  int4: z.number().optional().nullable()
 }).strict();
 
 export const DataTypesUncheckedCreateWithoutRelatedInputSchema: z.ZodType<Prisma.DataTypesUncheckedCreateWithoutRelatedInput> = z.object({
@@ -1744,7 +1851,10 @@ export const DataTypesUncheckedCreateWithoutRelatedInputSchema: z.ZodType<Prisma
   timetz: z.coerce.date().optional().nullable(),
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
-  bool: z.boolean().optional().nullable()
+  bool: z.boolean().optional().nullable(),
+  uuid: z.string().optional().nullable(),
+  int2: z.number().optional().nullable(),
+  int4: z.number().optional().nullable()
 }).strict();
 
 export const DataTypesCreateOrConnectWithoutRelatedInputSchema: z.ZodType<Prisma.DataTypesCreateOrConnectWithoutRelatedInput> = z.object({
@@ -1784,6 +1894,9 @@ export const DataTypesScalarWhereInputSchema: z.ZodType<Prisma.DataTypesScalarWh
   timestamp: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
   timestamptz: z.union([ z.lazy(() => DateTimeNullableFilterSchema),z.coerce.date() ]).optional().nullable(),
   bool: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
+  uuid: z.union([ z.lazy(() => UuidNullableFilterSchema),z.string() ]).optional().nullable(),
+  int2: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
+  int4: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
   relatedId: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
 }).strict();
 
@@ -1822,7 +1935,10 @@ export const DataTypesCreateManyRelatedInputSchema: z.ZodType<Prisma.DataTypesCr
   timetz: z.coerce.date().optional().nullable(),
   timestamp: z.coerce.date().optional().nullable(),
   timestamptz: z.coerce.date().optional().nullable(),
-  bool: z.boolean().optional().nullable()
+  bool: z.boolean().optional().nullable(),
+  uuid: z.string().uuid().optional().nullable(),
+  int2: z.number().int().gte(-32768).lte(32767).optional().nullable(),
+  int4: z.number().int().gte(-2147483648).lte(2147483647).optional().nullable()
 }).strict();
 
 export const DataTypesUpdateWithoutRelatedInputSchema: z.ZodType<Prisma.DataTypesUpdateWithoutRelatedInput> = z.object({
@@ -1833,6 +1949,9 @@ export const DataTypesUpdateWithoutRelatedInputSchema: z.ZodType<Prisma.DataType
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesUncheckedUpdateWithoutRelatedInputSchema: z.ZodType<Prisma.DataTypesUncheckedUpdateWithoutRelatedInput> = z.object({
@@ -1843,6 +1962,9 @@ export const DataTypesUncheckedUpdateWithoutRelatedInputSchema: z.ZodType<Prisma
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const DataTypesUncheckedUpdateManyWithoutDatatypeInputSchema: z.ZodType<Prisma.DataTypesUncheckedUpdateManyWithoutDatatypeInput> = z.object({
@@ -1853,6 +1975,9 @@ export const DataTypesUncheckedUpdateManyWithoutDatatypeInputSchema: z.ZodType<P
   timestamp: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   timestamptz: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bool: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  uuid: z.union([ z.string().uuid(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int2: z.union([ z.number().int().gte(-32768).lte(32767),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  int4: z.union([ z.number().int().gte(-2147483648).lte(2147483647),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 /////////////////////////////////////////
@@ -2714,6 +2839,18 @@ export const tableSchemas = {
       [
         "bool",
         "BOOL"
+      ],
+      [
+        "uuid",
+        "UUID"
+      ],
+      [
+        "int2",
+        "INT2"
+      ],
+      [
+        "int4",
+        "INT4"
       ],
       [
         "relatedId",

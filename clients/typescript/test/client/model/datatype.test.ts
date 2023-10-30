@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'relatedId' int);"
   )
 }
 
@@ -340,6 +340,225 @@ test.serial('support null value for boolean type', async (t) => {
     select: {
       id: true,
       bool: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support uuid type', async (t) => {
+  const uuid = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      uuid: uuid,
+    },
+  })
+
+  t.assert(res.id === 1 && res.uuid === uuid)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.is(fetchRes?.uuid, uuid)
+
+  // Check that it rejects invalid uuids
+  await t.throwsAsync(
+    tbl.create({
+      data: {
+        id: 2,
+        // the UUID below has 1 character too much in the last group
+        uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a111',
+      },
+    }),
+    {
+      instanceOf: ZodError,
+      message: /Invalid uuid/,
+    }
+  )
+})
+
+test.serial('support null value for uuid type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    uuid: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      uuid: null,
+    },
+    select: {
+      id: true,
+      uuid: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      uuid: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support int2 type', async (t) => {
+  const validInt1 = 32767
+  const invalidInt1 = 32768
+
+  const validInt2 = -32768
+  const invalidInt2 = -32769
+
+  const res = await tbl.createMany({
+    data: [
+      {
+        id: 1,
+        int2: validInt1,
+      },
+      {
+        id: 2,
+        int2: validInt2,
+      },
+    ],
+  })
+
+  t.deepEqual(res, {
+    count: 2,
+  })
+
+  // Check that it rejects invalid integers
+  const invalidInts = [invalidInt1, invalidInt2]
+  let id = 3
+  for (const invalidInt of invalidInts) {
+    await t.throwsAsync(
+      tbl.create({
+        data: {
+          id: id++,
+          int2: invalidInt,
+        },
+      }),
+      {
+        instanceOf: ZodError,
+        message:
+          /(Number must be less than or equal to 32767)|(Number must be greater than or equal to -32768)/,
+      }
+    )
+  }
+})
+
+test.serial('support null values for int2 type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    int2: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      int2: null,
+    },
+    select: {
+      id: true,
+      int2: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      int2: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support int4 type', async (t) => {
+  const validInt1 = 2147483647
+  const invalidInt1 = 2147483648
+
+  const validInt2 = -2147483648
+  const invalidInt2 = -2147483649
+
+  const res = await tbl.createMany({
+    data: [
+      {
+        id: 1,
+        int4: validInt1,
+      },
+      {
+        id: 2,
+        int4: validInt2,
+      },
+    ],
+  })
+
+  t.deepEqual(res, {
+    count: 2,
+  })
+
+  // Check that it rejects invalid integers
+  const invalidInts = [invalidInt1, invalidInt2]
+  let id = 3
+  for (const invalidInt of invalidInts) {
+    await t.throwsAsync(
+      tbl.create({
+        data: {
+          id: id++,
+          int4: invalidInt,
+        },
+      }),
+      {
+        instanceOf: ZodError,
+        message:
+          /(Number must be less than or equal to 2147483647)|(Number must be greater than or equal to -2147483648)/,
+      }
+    )
+  }
+})
+
+test.serial('support null values for int4 type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    int4: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      int4: null,
+    },
+    select: {
+      id: true,
+      int4: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      int4: true,
     },
   })
 

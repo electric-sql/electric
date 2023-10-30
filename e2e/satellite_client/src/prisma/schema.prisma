@@ -48,3 +48,13 @@ model Bools {
   id String @id
   b  Boolean?
 }
+
+model Uuids {
+  id String @id @db.Uuid /// @zod.string.uuid()
+}
+
+model Ints {
+  id String @id
+  i2 Int? @db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
+  i4 Int?              /// @zod.number.int().gte(-2147483648).lte(2147483647)
+}

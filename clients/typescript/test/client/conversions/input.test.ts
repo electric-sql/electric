@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'relatedId' int);"
   )
 
   db.exec('DROP TABLE IF EXISTS Dummy')
@@ -215,6 +215,9 @@ const dateNulls = {
   timestamp: null,
   timestamptz: null,
   bool: null,
+  int2: null,
+  int4: null,
+  uuid: null,
 }
 
 const nulls = {
@@ -535,13 +538,12 @@ test.serial('deleteMany transforms JS objects to SQLite', async (t) => {
 
   t.is(deleteRes.count, 2)
 
-  const fetchRes = await tbl.findMany()
-
-  t.deepEqual(fetchRes, [
-    {
-      ...dateNulls,
-      ...o3,
-      relatedId: null,
+  const fetchRes = await tbl.findMany({
+    select: {
+      id: true,
+      timestamp: true,
     },
-  ])
+  })
+
+  t.deepEqual(fetchRes, [o3])
 })

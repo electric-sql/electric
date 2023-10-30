@@ -159,13 +159,51 @@ export const get_datetimes = (electric: Electric) => {
 }
 
 export const get_items = (electric: Electric) => {
-  return electric.db.items.findMany({})
+  return electric.db.items.findMany()
 }
 
 export const get_item_ids = (electric: Electric) => {
   return electric.db.items.findMany({
     select: {
       id: true
+    }
+  })
+}
+
+export const get_uuid = (electric: Electric, id: string) => {
+  return electric.db.uuids.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const get_uuids = (electric: Electric) => {
+  return electric.db.uuids.findMany()
+}
+
+export const write_uuid = (electric: Electric, id: string) => {
+  return electric.db.uuids.create({
+    data: {
+      id: id
+    }
+  })
+}
+
+export const get_int = (electric: Electric, id: string) => {
+  return electric.db.ints.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_int = (electric: Electric, id: string, i2: number, i4: number) => {
+  return electric.db.ints.create({
+    data: {
+      id,
+      i2,
+      i4,
     }
   })
 }

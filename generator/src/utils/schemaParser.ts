@@ -19,7 +19,7 @@ export type Model = {
  */
 export function parseModels(prismaSchema: string): Array<Model> {
   // Remove comments
-  const commentRegex = /\/\/.*$/gm // matches // until end of the line
+  const commentRegex = /\/\/.*$/gm // matches // until end of the line (also matches field validators added with ///)
   const schema = prismaSchema.replaceAll(commentRegex, '')
 
   // Match models defined in the schema
@@ -44,7 +44,7 @@ export function parseModels(prismaSchema: string): Array<Model> {
  * @param body Body of a model
  * @returns Fields defined by the model
  */
-function parseFields(body: string): Array<Field> {
+export function parseFields(body: string): Array<Field> {
   // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
   // It uses named captured groups to capture the field name, its type, and optional attributes
   // the type can be `type` or `type?` or `type[]`
