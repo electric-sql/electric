@@ -47,10 +47,6 @@ import {
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { deserializeRow, serializeRow } from '../../src/satellite/client'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { HKT } from '../../src/client/util/hkt'
 
 const parentRecord = {
   id: 1,
@@ -1785,61 +1781,6 @@ test.serial('connection backoff success', async (t) => {
       (p) => p?.catch(() => t.pass())
     )
   )
-})
-
-test('serialize correctly to the satellite protocol using pg types', async (t) => {
-  const { satellite, authState, adapter } = t.context
-
-  await adapter.run({
-    sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
-  })
-
-  await satellite.start(authState)
-
-  const sqliteInferredRelations = satellite.relations
-  const boolsInferredRelation = sqliteInferredRelations['bools']
-
-  // Inferred types only support SQLite types, so the bool column is INTEGER
-  const boolColumn = boolsInferredRelation.columns[1]
-  t.is(boolColumn.name, 'b')
-  t.is(boolColumn.type, 'INTEGER')
-
-  // Db schema holds the correct Postgres types
-  const boolsDbDescription = new DbSchema(
-    {
-      bools: {
-        fields: new Map([
-          ['id', PgBasicType.PG_INTEGER],
-          ['b', PgBasicType.PG_BOOL],
-        ]),
-        relations: [],
-      },
-    } as unknown as Record<
-      string,
-      TableSchema<any, any, any, any, any, any, any, any, any, HKT>
-    >,
-    []
-  )
-
-  const satOpRow = serializeRow(
-    { id: 5, b: 1 },
-    boolsInferredRelation,
-    boolsDbDescription
-  )
-
-  // Encoded values ["5", "t"]
-  t.deepEqual(satOpRow.values, [
-    new Uint8Array(['5'.charCodeAt(0)]),
-    new Uint8Array(['t'.charCodeAt(0)]),
-  ])
-
-  const deserializedRow = deserializeRow(
-    satOpRow,
-    boolsInferredRelation,
-    boolsDbDescription
-  )
-
-  t.deepEqual(deserializedRow, { id: 5, b: 1 })
 })
 
 // TODO: implement reconnect protocol

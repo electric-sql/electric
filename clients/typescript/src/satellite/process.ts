@@ -72,6 +72,7 @@ import {
 import { backOff } from 'exponential-backoff'
 import { chunkBy } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
+import { inferRelationsFromSQLite } from '../util/relations'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -1350,63 +1351,8 @@ export class SatelliteProcess implements Satellite {
     return clientId
   }
 
-  private async _getLocalTableNames(): Promise<{ name: string }[]> {
-    const notIn = [
-      this.opts.metaTable.tablename.toString(),
-      this.opts.migrationsTable.tablename.toString(),
-      this.opts.oplogTable.tablename.toString(),
-      this.opts.triggersTable.tablename.toString(),
-      this.opts.shadowTable.tablename.toString(),
-      'sqlite_schema',
-      'sqlite_sequence',
-      'sqlite_temp_schema',
-    ]
-
-    const tables = `
-      SELECT name FROM sqlite_master
-        WHERE type = 'table'
-          AND name NOT IN (${notIn.map(() => '?').join(',')})
-    `
-    return (await this.adapter.query({ sql: tables, args: notIn })) as {
-      name: string
-    }[]
-  }
-
-  // Fetch primary keys from local store and use them to identify incoming ops.
-  // TODO: Improve this code once with Migrator and consider simplifying oplog.
   private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
-    const tableNames = await this._getLocalTableNames()
-    const relations: RelationsCache = {}
-
-    let id = 0
-    const schema = 'public' // TODO
-    for (const table of tableNames) {
-      const tableName = table.name
-      const sql = 'SELECT * FROM pragma_table_info(?)'
-      const args = [tableName]
-      const columnsForTable = await this.adapter.query({ sql, args })
-      if (columnsForTable.length == 0) {
-        continue
-      }
-      const relation: Relation = {
-        id: id++,
-        schema: schema,
-        table: tableName,
-        tableType: SatRelation_RelationType.TABLE,
-        columns: [],
-      }
-      for (const c of columnsForTable) {
-        relation.columns.push({
-          name: c.name!.toString(),
-          type: c.type!.toString(),
-          isNullable: Boolean(!c.notnull!.valueOf()),
-          primaryKey: Boolean(c.pk!.valueOf()),
-        })
-      }
-      relations[`${tableName}`] = relation
-    }
-
-    return Promise.resolve(relations)
+    return inferRelationsFromSQLite(this.adapter, this.opts)
   }
 
   private _generateTag(timestamp: Date): string {
