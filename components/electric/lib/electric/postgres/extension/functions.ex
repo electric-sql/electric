@@ -12,15 +12,18 @@ defmodule Electric.Postgres.Extension.Functions do
     |> Path.expand(__DIR__)
     |> Path.wildcard()
 
-  function_names =
+  function_paths =
     for path <- sql_files do
       @external_resource path
 
+      fpath = Path.relative_to(path, Path.expand("./functions", __DIR__))
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
       _ = EEx.function_from_file(:def, name, path, [])
 
-      name
+      {fpath, name}
     end
+
+  function_names = for {_fpath, name} <- function_paths, do: name
 
   fn_name_type =
     Enum.reduce(function_names, fn name, code ->
@@ -31,8 +34,9 @@ defmodule Electric.Postgres.Extension.Functions do
 
   @typep name :: unquote(fn_name_type)
   @typep sql :: String.t()
-  @type function_list :: [{name, sql}]
+  @type function_list :: [{binary, sql}]
 
+  @function_paths function_paths
   @function_names function_names
 
   @doc """
@@ -44,8 +48,8 @@ defmodule Electric.Postgres.Extension.Functions do
   # here. See VAX-1016 for details.
   @spec list :: function_list
   def list do
-    for name <- @function_names do
-      {name, by_name(name)}
+    for {path, name} <- @function_paths do
+      {path, by_name(name)}
     end
   end
 

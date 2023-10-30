@@ -287,14 +287,14 @@ defmodule Electric.Postgres.Extension do
 
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
-    Enum.each(Functions.list(), fn {name, sql} ->
+    Enum.each(Functions.list(), fn {path, sql} ->
       conn
       |> :epgsql.squery(sql)
       |> List.wrap()
       |> Enum.find(&(not match?({:ok, [], []}, &1)))
       |> case do
-        nil -> Logger.debug("Successfully (re)defined SQL function/procedure '#{name}'")
-        error -> raise "Failed to define function '#{name}' with error: #{inspect(error)}"
+        nil -> Logger.debug("Successfully (re)defined SQL routine from '#{path}'")
+        error -> raise "Failed to define SQL routine from '#{path}' with error: #{inspect(error)}"
       end
     end)
   end
