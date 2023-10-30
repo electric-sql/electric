@@ -334,7 +334,7 @@ async function introspectDB(prismaSchema: string): Promise<void> {
  * @param prismaSchema Path to the Prisma schema
  */
 async function addValidators(prismaSchema: string): Promise<void> {
-  const lines = await getFileLines(prismaSchema)
+  const lines = await getFileLines(removeComments(prismaSchema))
   const newLines = lines.map(addValidator)
   // Write the modified Prisma schema to the file
   await fs.writeFile(prismaSchema, newLines.join('\n'))
@@ -345,8 +345,39 @@ async function addValidators(prismaSchema: string): Promise<void> {
  * @param ln A line from the Prisma schema
  */
 function addValidator(ln: string): string {
-  if (ln.includes('@db.Uuid')) {
-    return ln + ' /// @zod.string.uuid()'
+  const field = parseFields(ln)[0] // try to parse a field (the line could be something else than a field)
+
+  if (field) {
+    const intValidator = '@zod.number.int().gte(-2147483648).lte(2147483647)'
+
+    // Map attributes to validators
+    const attributeValidatorMapping = new Map([
+      ['@db.Uuid', '@zod.string.uuid()'],
+      ['@db.SmallInt', '@zod.number.int().gte(-32768).lte(32767)'],
+      ['@db.Int', intValidator],
+    ])
+    const attribute = field.attributes
+      .map((a) => a.type)
+      .find((a) => attributeValidatorMapping.has(a))
+
+    if (attribute) {
+      return ln + ' /// ' + attributeValidatorMapping.get(attribute)!
+    } else {
+      // No attribute validators,
+      // check if the field's type requires a validator
+      const typeValidatorMapping = new Map([
+        ['Int', intValidator],
+        ['Int?', intValidator],
+        ['Int[]', intValidator],
+      ])
+      const typeValidator = typeValidatorMapping.get(field.type)
+
+      if (typeValidator) {
+        return ln + ' /// ' + typeValidator
+      } else {
+        return ln
+      }
+    }
   } else {
     return ln
   }
@@ -451,4 +482,77 @@ function isSnakeCased(name: string): boolean {
  */
 function snake2PascalCase(name: string): string {
   return name.split('_').map(capitaliseFirstLetter).join('')
+}
+
+// The below is duplicated code from the generator
+// TODO: move it to a separate helper package
+//       also move the model parsing to the package
+//       also move the removing comments function
+
+export type Attribute = {
+  type: `@${string}`
+  args: Array<string>
+}
+export type Field = {
+  field: string
+  type: string
+  attributes: Array<Attribute>
+}
+
+/**
+ * Removes all line comments from a string.
+ * A line comment is a comment that starts with *exactly* `//`.
+ * It does not remove comments starting with `///`.
+ */
+function removeComments(str: string): string {
+  const commentRegex = /(?<=[^/])\/\/(?=[^/]).*$/g // matches // until end of the line (does not match more than 2 slashes)
+  return str.replaceAll(commentRegex, '')
+}
+
+/**
+ * Takes the body of a model and returns
+ * an array of fields defined by the model.
+ * @param body Body of a model
+ * @returns Fields defined by the model
+ */
+function parseFields(body: string): Array<Field> {
+  // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
+  // It uses named captured groups to capture the field name, its type, and optional attributes
+  // the type can be `type` or `type?` or `type[]`
+  const fieldRegex =
+    /^\s*(?<field>\w+)\s+(?<type>[\w]+(\?|(\[]))?)\s*(?<attributes>((@[\w.]+\s*)|(@[\w.]+\(.*\)+\s*))+)?\s*$/gm
+  const fieldMatches = [...body.matchAll(fieldRegex)]
+  const fs = fieldMatches.map(
+    (match) =>
+      match.groups as { field: string; type: string; attributes?: string }
+  )
+
+  return fs.map((f) => ({
+    ...f,
+    attributes: parseAttributes(f.attributes ?? ''),
+  }))
+}
+
+/**
+ * Takes a string of attributes, e.g. `@id @db.Timestamp(2)`,
+ * and returns an array of attributes, e.g. `['@id', '@db.Timestamp(2)]`.
+ * @param attributes String of attributes
+ * @returns Array of attributes.
+ */
+function parseAttributes(attributes: string): Array<Attribute> {
+  // Matches each attribute in a string of attributes
+  // e.g. @id @db.Timestamp(2)
+  // The optional args capture group matches anything
+  // but not @or newline because that would be the start of a new attribute
+  const attributeRegex = /(?<type>@[\w.]+)(?<args>\([^@\n\r]+\))?/g
+  const matches = [...attributes.matchAll(attributeRegex)]
+  return matches.map((m) => {
+    const { type, args } = m.groups! as { type: string; args?: string }
+    const noParens = args?.substring(1, args.length - 1) // arguments without starting '(' and closing ')'
+    const parsedArgs = noParens?.split(',')?.map((arg) => arg.trim()) ?? []
+    return {
+      type: type as `@${string}`,
+      args: parsedArgs,
+    }
+  })
 }

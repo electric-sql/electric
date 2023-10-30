@@ -190,6 +190,24 @@ export const write_uuid = (electric: Electric, id: string) => {
   })
 }
 
+export const get_int = (electric: Electric, id: string) => {
+  return electric.db.ints.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_int = (electric: Electric, id: string, i2: number, i4: number) => {
+  return electric.db.ints.create({
+    data: {
+      id,
+      i2,
+      i4,
+    }
+  })
+}
+
 export const get_item_columns = (electric: Electric, table: string, column: string) => {
   return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
 }
