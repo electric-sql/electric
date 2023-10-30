@@ -49,7 +49,6 @@ import {
 import { mergeEntries } from '../../src/satellite/merge'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { deserializeRow, serializeRow } from '../../src/satellite/client'
-import { serialiseBoolean } from '../../src/client/conversions/datatypes/boolean'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { HKT } from '../../src/client/util/hkt'
 
