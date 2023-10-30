@@ -99,31 +99,6 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
-  @spec create_publication(connection(), publication(), :all | binary | [binary]) ::
-          {:ok, String.t()}
-  def create_publication(conn, name, :all) do
-    # squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
-    create_publication(conn, name, "ALL TABLES")
-  end
-
-  def create_publication(conn, name, tables) when is_list(tables) do
-    # squery(conn, "CREATE PUBLICATION #{name} FOR TABLE t1, t2")
-    table_list =
-      tables
-      |> Enum.map(&~s|"#{&1}"|)
-      |> Enum.join(", ")
-
-    create_publication(conn, name, "TABLE #{table_list}")
-  end
-
-  def create_publication(conn, name, table_spec) when is_binary(table_spec) do
-    case squery(conn, ~s|CREATE PUBLICATION "#{name}" FOR #{table_spec}|) do
-      {:ok, _, _} -> {:ok, name}
-      # TODO: Verify that the publication has the correct tables
-      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
-    end
-  end
-
   defp squery(conn, query) do
     Logger.debug("#{__MODULE__}: #{query}")
     :epgsql.squery(conn, query)
