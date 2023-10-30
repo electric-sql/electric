@@ -8,6 +8,18 @@ const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
 const data = fs.readFileSync(path.join(DATA_DIR, 'raw_data.json'), 'utf8')
 const jsonData = JSON.parse(data)
 
+// Convert numeric IDs to UUIDs
+function numericIdToUUID(id) {
+  const hexString = id.toString(16).padStart(32, '0')
+  return [
+    hexString.substr(0, 8),
+    hexString.substr(8, 4),
+    hexString.substr(12, 4),
+    hexString.substr(16, 4),
+    hexString.substr(20),
+  ].join('-')
+}
+
 // Extract the issue objects
 const issueObjects = {}
 
@@ -17,8 +29,9 @@ function extractIssues(arr) {
       extractIssues(item)
     } else if (typeof item === 'object') {
       if ('id' in item && 'title' in item) {
-        issueObjects[item.id] = {
-          id: item.id,
+        const issueId = numericIdToUUID(item.id)
+        issueObjects[issueId] = {
+          id: issueId,
           title: item.title,
           description: '',
           priority: item.priority.toLowerCase(),
@@ -51,15 +64,16 @@ function extractComments(arr) {
         'body' in item &&
         'creator' in item
       ) {
+        const issueId = numericIdToUUID(item.issueID)
         const comment = {
-          id: item.id,
+          id: numericIdToUUID(item.id),
           body: item.body,
           username: item.creator,
-          issue_id: item.issueID,
+          issue_id: issueId,
           created_at: new Date(item.created).toISOString(),
         }
         commentObjects.push(comment)
-        issueObjects[item.issueID].comments.push(comment)
+        issueObjects[issueId].comments.push(comment)
       }
     }
   }

@@ -143,7 +143,7 @@ function IssuePage() {
 
   const shortId = () => {
     if (issue.id.includes('-')) {
-      return issue.id.slice(0, 8)
+      return issue.id.slice(issue.id.length - 8)
     } else {
       return issue.id
     }
