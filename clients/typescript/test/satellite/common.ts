@@ -28,7 +28,7 @@ export const dbDescription = new DbSchema(
     parent: {
       fields: new Map([
         ['id', PgBasicType.PG_INTEGER],
-        ['value', PgBasicType.PG_INTEGER],
+        ['value', PgBasicType.PG_TEXT],
         ['other', PgBasicType.PG_INTEGER],
       ]),
       relations: [],
