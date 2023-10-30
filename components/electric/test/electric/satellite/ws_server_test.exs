@@ -256,7 +256,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -306,7 +306,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -413,7 +413,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
         refute_receive {^conn, %SatOpLog{}}
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
         assert_receive {^conn, %SatOpLog{ops: [_, %{op: {:insert, insert}}, _]}}
         assert %SatOpInsert{row_data: %{values: ["fakeid", user_id, "a"]}} = insert
         assert user_id == ctx.user_id
@@ -454,7 +454,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
 
         # Expected LSN is the one BEFORE the insertion point
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "3")
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "3")
 
         for _ <- 4..10, do: assert_receive({^conn, %SatOpLog{}})
         refute_receive {^conn, %SatOpLog{}}
@@ -621,7 +621,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     Process.send_after(
       pid,
-      {:subscription_data, id, Enum.map(requests, &{&1.id, []})},
+      {:subscription_data, id, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
       data_delay_ms
     )
   end

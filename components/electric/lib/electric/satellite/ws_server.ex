@@ -30,7 +30,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
   alias Electric.Telemetry.Metrics
   use Electric.Satellite.Protobuf
-  import Electric.Satellite.Protocol, only: :macros
+  import Electric.Satellite.Protocol.State, only: :macros
 
   alias Electric.Utils
   alias Electric.Postgres.CachedWal
@@ -56,6 +56,7 @@ defmodule Electric.Satellite.WebsocketServer do
        auth_provider: Keyword.fetch!(opts, :auth_provider),
        connector_config: Keyword.fetch!(opts, :connector_config),
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
+       move_in_data_fun: Keyword.fetch!(opts, :move_in_data_fun),
        telemetry: %Telemetry{
          connection_span:
            Metrics.start_span([:satellite, :connection], %{}, %{
@@ -96,11 +97,22 @@ defmodule Electric.Satellite.WebsocketServer do
     last_msg_time = :erlang.timestamp()
 
     case Protocol.process_message(msg, %State{state | last_msg_time: last_msg_time}) do
-      {:stop, state} -> {:stop, :normal, state}
-      {:error, error} -> {:stop, :normal, 1007, binary_frames(error), state}
-      {nil, state} -> {:ok, state}
-      {reply, state} -> push({reply, state})
-      {:force_unpause, reply, state} -> push(unpause_and_send_pending_events([reply], state))
+      {:stop, state} ->
+        {:stop, :normal, state}
+
+      {:error, error} ->
+        {:stop, :normal, 1007, binary_frames(error), state}
+
+      {nil, state} ->
+        {:ok, state}
+
+      {reply, state} ->
+        push({reply, state})
+
+      {:force_unpause, reply, state} ->
+        Protocol.unpause_and_send_pending_events([reply], state)
+        |> Protocol.perform_pending_actions()
+        |> push()
     end
   rescue
     e ->
@@ -177,7 +189,9 @@ defmodule Electric.Satellite.WebsocketServer do
     origin = Electric.Replication.Connectors.origin(state.connector_config)
     migrations = InitialSync.migrations_since(schema_version, origin, lsn)
 
-    {msgs, state} =
+    # We're ignoring actions here since we've "manufactured" migration events
+    # which by definition aren't shape-dependent, so actions are always empty
+    {msgs, _actions, state} =
       migrations
       |> Enum.map(&{&1, &1.lsn})
       |> Protocol.handle_outgoing_txs(state)
@@ -201,76 +215,19 @@ defmodule Electric.Satellite.WebsocketServer do
     {:ok, state}
   end
 
-  def handle_info({:subscription_data, subscription_id, data}, %State{} = state)
-      when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) do
-    Logger.debug(
-      "Received initial data for subscription #{subscription_id} while paused waiting for it"
-    )
-
-    state = %{
-      state
-      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
-    }
-
-    push(send_subscription_data_and_unpause(subscription_id, data, state))
-  end
-
-  def handle_info({:subscription_data, subscription_id, data}, %State{} = state)
-      when is_out_rep_paused(state) do
-    Logger.debug(
-      "Received initial data for subscription #{subscription_id} while paused waiting for a different subscription"
-    )
-
-    state = %{
-      state
-      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
-    }
-
-    {:ok,
-     %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
-  end
-
   def handle_info({:subscription_data, subscription_id, data}, %State{} = state) do
-    Logger.debug("Saving the initial data until we reach insertion point")
-
-    state = %{
-      state
-      | telemetry: Telemetry.subscription_data_ready(state.telemetry, subscription_id)
-    }
-
-    # Stream hasn't reached the tx yet (otherwise it would be paused), so we're going to save the data
-    {:ok,
-     %{state | out_rep: OutRep.store_subscription_data(state.out_rep, subscription_id, data)}}
+    Protocol.subscription_data_received(subscription_id, data, state)
+    |> push()
   end
 
   def handle_info({:subscription_init_failed, subscription_id, reason}, state) do
-    Logger.error(
-      "Couldn't retrieve initial data for subscription #{subscription_id}, with reason #{inspect(reason)}"
-    )
+    Protocol.subscription_data_failed(subscription_id, reason, state)
+    |> push()
+  end
 
-    error = %SatSubsDataError{
-      subscription_id: subscription_id,
-      message: "Could not retrieve initial data for subscription"
-    }
-
-    # In any case we need to remove the subscription itself so that it doesn't register as "not pending anymore"
-    state
-    |> Map.update!(:subscriptions, &Map.delete(&1, subscription_id))
-    |> case do
-      state when is_out_rep_paused(state) and is_pending_subscription(state, subscription_id) ->
-        # We're paused on this, we want to send the error and unpause
-        error
-        |> send_subscription_data_error_and_unpause(state)
-        |> push()
-
-      state ->
-        # We're either paused on smth else, or replication is stopped, or replication is ongoing
-        # In any case, we just remove the "future" pause point and notify the client
-        # We remove the pause point and notify the client
-
-        {error, %{state | out_rep: OutRep.remove_pause_point(state.out_rep, subscription_id)}}
-        |> push()
-    end
+  def handle_info({:move_in_query_data, ref, {graph_updates, changes}}, state) do
+    Protocol.move_in_data_received(ref, graph_updates, changes, state)
+    |> push()
   end
 
   if Mix.env() == :test do
@@ -310,7 +267,9 @@ defmodule Electric.Satellite.WebsocketServer do
        when is_out_rep_active(state) do
     GenStage.ask(from, 1)
 
-    push(send_events_and_maybe_pause(events, state))
+    Protocol.send_events_and_maybe_pause(events, state)
+    |> Protocol.perform_pending_actions()
+    |> push()
   end
 
   defp handle_producer_msg(from, events, %State{} = state)
@@ -385,10 +344,11 @@ defmodule Electric.Satellite.WebsocketServer do
   end
 
   @typep deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
-  @typep pushable :: {deep_msg_list(), State.t()}
 
-  @spec push(pushable()) :: WebSock.handle_result()
+  @spec push(Protocol.outgoing()) :: WebSock.handle_result()
+  defp push({[], %State{} = state}), do: {:ok, state}
   defp push({pb_msg, %State{} = state}), do: {:push, binary_frames(pb_msg), state}
+  defp push({:error, msgs, state}), do: {:stop, :normal, 1007, binary_frames(msgs), state}
 
   @spec binary_frames(deep_msg_list()) :: [{:binary, iolist()}]
   defp binary_frames(pb_msg) when not is_list(pb_msg), do: [binary_frame(pb_msg)]
@@ -404,76 +364,6 @@ defmodule Electric.Satellite.WebsocketServer do
   defp schedule_ping(%State{} = state) do
     Process.send_after(self(), {:timeout, :ping_timer}, @ping_interval)
     state
-  end
-
-  @spec send_events_and_maybe_pause([PB.sq_pb_msg()], State.t()) :: pushable()
-  defp send_events_and_maybe_pause(events, %State{} = state)
-       when no_pending_subscriptions(state) do
-    Protocol.handle_outgoing_txs(events, state)
-  end
-
-  defp send_events_and_maybe_pause(events, %State{out_rep: out_rep} = state) do
-    {{xmin, subscription_id}, _} = out_rep.subscription_pause_queue
-
-    case Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end) do
-      {events, []} ->
-        # We haven't yet reached the pause point
-        Protocol.handle_outgoing_txs(events, state)
-
-      {events, pending} ->
-        # We've reached the pause point, but we may have some messages we can send
-        {msgs, state} = Protocol.handle_outgoing_txs(events, state)
-
-        state =
-          state.out_rep
-          |> OutRep.add_events_to_buffer(pending)
-          |> OutRep.set_status(:paused)
-          |> then(&%{state | out_rep: &1})
-
-        case Pathex.pop(state, path(:out_rep / :subscription_data_to_send / subscription_id)) do
-          {:ok, {data, state}} ->
-            send_subscription_data_and_unpause(msgs, subscription_id, data, state)
-
-          :error ->
-            {msgs, state}
-        end
-    end
-  end
-
-  @spec unpause_and_send_pending_events(deep_msg_list(), State.t()) :: pushable()
-  defp unpause_and_send_pending_events(msgs, state) do
-    buffer = state.out_rep.outgoing_ops_buffer
-
-    state =
-      state.out_rep
-      |> OutRep.set_event_buffer([])
-      |> OutRep.set_status(:active)
-      |> then(&%{state | out_rep: &1})
-
-    {next_msgs, state} =
-      buffer
-      |> :queue.to_list()
-      |> send_events_and_maybe_pause(state)
-
-    {[msgs, next_msgs], state}
-  end
-
-  @spec send_subscription_data_and_unpause(deep_msg_list(), String.t(), any(), State.t()) ::
-          pushable()
-  defp send_subscription_data_and_unpause(msgs \\ [], id, data, %State{} = state) do
-    state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
-
-    {more_msgs, state} = Protocol.handle_subscription_data(id, data, state)
-
-    unpause_and_send_pending_events([msgs, more_msgs], state)
-  end
-
-  @spec send_subscription_data_error_and_unpause(deep_msg_list(), State.t()) :: pushable()
-  defp send_subscription_data_error_and_unpause(error, state) do
-    unpause_and_send_pending_events(
-      [error],
-      Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
-    )
   end
 
   if Mix.env() == :test do

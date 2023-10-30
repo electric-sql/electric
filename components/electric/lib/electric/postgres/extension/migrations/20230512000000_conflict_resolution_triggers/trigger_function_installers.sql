@@ -463,22 +463,3 @@ BEGIN
     RETURN function_name;
 END;
 $outer_function$;
-
-CREATE OR REPLACE FUNCTION electric.install_conflict_resolution_functions(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
-    RETURNS JSONB
-    LANGUAGE PLPGSQL AS $function$
-DECLARE
-    function_names JSONB := '{}'::jsonb;
-BEGIN
-    function_names := jsonb_set(function_names, '{perform_reordered_op}', to_jsonb(electric.install_function__perform_reordered_op(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{generate_tombstone_entry}', to_jsonb(electric.install_function__generate_tombstone_entry(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{create_shadow_row_from_upsert}', to_jsonb(electric.install_function__create_shadow_row_from_upsert(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{update_shadow_row_from_delete}', to_jsonb(electric.install_function__update_shadow_row_from_delete(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{write_correct_max_tag}', to_jsonb(electric.install_function__write_correct_max_tag(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{reorder_main_op}', to_jsonb(electric.install_function__reorder_main_op(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{shadow_insert_to_upsert}', to_jsonb(electric.install_function__shadow_insert_to_upsert(schema_name, table_name, primary_key_list, non_pk_column_list)));
-    function_names := jsonb_set(function_names, '{resolve_observed_tags}', to_jsonb(electric.install_function__resolve_observed_tags(schema_name, table_name, primary_key_list, non_pk_column_list)));
-
-    RETURN function_names;
-END
-$function$;

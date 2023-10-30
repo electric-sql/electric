@@ -913,6 +913,15 @@
           def encode("INVALID_WHERE_CLAUSE") do
             5
           end
+        ),
+        (
+          def encode(:INVALID_INCLUDE_TREE) do
+            6
+          end
+
+          def encode("INVALID_INCLUDE_TREE") do
+            6
+          end
         )
       ]
 
@@ -939,6 +948,9 @@
         end,
         def decode(5) do
           :INVALID_WHERE_CLAUSE
+        end,
+        def decode(6) do
+          :INVALID_INCLUDE_TREE
         end
       ]
 
@@ -954,7 +966,8 @@
           {2, :REFERENTIAL_INTEGRITY_VIOLATION},
           {3, :EMPTY_SHAPE_DEFINITION},
           {4, :DUPLICATE_TABLE_IN_SHAPE_DEFINITION},
-          {5, :INVALID_WHERE_CLAUSE}
+          {5, :INVALID_WHERE_CLAUSE},
+          {6, :INVALID_INCLUDE_TREE}
         ]
       end
 
@@ -977,6 +990,9 @@
             true
           end,
           def has_constant?(:INVALID_WHERE_CLAUSE) do
+            true
+          end,
+          def has_constant?(:INVALID_INCLUDE_TREE) do
             true
           end
         ]
@@ -1019,6 +1035,9 @@
             {:delete, _field_value} -> encode_delete(acc, msg)
             {:migrate, _field_value} -> encode_migrate(acc, msg)
             {:compensation, _field_value} -> encode_compensation(acc, msg)
+            {:gone, _field_value} -> encode_gone(acc, msg)
+            {:additional_begin, _field_value} -> encode_additional_begin(acc, msg)
+            {:additional_commit, _field_value} -> encode_additional_commit(acc, msg)
           end
         end
       ]
@@ -1085,6 +1104,35 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:compensation, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_gone(acc, msg) do
+          try do
+            {_, child_field_value} = msg.op
+            [acc, "B", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:gone, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_additional_begin(acc, msg) do
+          try do
+            {_, child_field_value} = msg.op
+            [acc, "J", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:additional_begin, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_additional_commit(acc, msg) do
+          try do
+            {_, child_field_value} = msg.op
+            [acc, "R", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:additional_commit, "invalid field value"),
                       __STACKTRACE__
           end
         end
@@ -1259,6 +1307,67 @@
                    end
                  ], rest}
 
+              {8, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.op do
+                     {:gone, previous_value} ->
+                       {:op,
+                        {:gone,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpGone.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:op, {:gone, Electric.Satellite.SatOpGone.decode!(delimited)}}
+                   end
+                 ], rest}
+
+              {9, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.op do
+                     {:additional_begin, previous_value} ->
+                       {:op,
+                        {:additional_begin,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpAdditionalBegin.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:op,
+                        {:additional_begin,
+                         Electric.Satellite.SatOpAdditionalBegin.decode!(delimited)}}
+                   end
+                 ], rest}
+
+              {10, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.op do
+                     {:additional_commit, previous_value} ->
+                       {:op,
+                        {:additional_commit,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpAdditionalCommit.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:op,
+                        {:additional_commit,
+                         Electric.Satellite.SatOpAdditionalCommit.decode!(delimited)}}
+                   end
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -1322,7 +1431,14 @@
           4 => {:insert, {:oneof, :op}, {:message, Electric.Satellite.SatOpInsert}},
           5 => {:delete, {:oneof, :op}, {:message, Electric.Satellite.SatOpDelete}},
           6 => {:migrate, {:oneof, :op}, {:message, Electric.Satellite.SatOpMigrate}},
-          7 => {:compensation, {:oneof, :op}, {:message, Electric.Satellite.SatOpCompensation}}
+          7 => {:compensation, {:oneof, :op}, {:message, Electric.Satellite.SatOpCompensation}},
+          8 => {:gone, {:oneof, :op}, {:message, Electric.Satellite.SatOpGone}},
+          9 =>
+            {:additional_begin, {:oneof, :op},
+             {:message, Electric.Satellite.SatOpAdditionalBegin}},
+          10 =>
+            {:additional_commit, {:oneof, :op},
+             {:message, Electric.Satellite.SatOpAdditionalCommit}}
         }
       end
 
@@ -1332,10 +1448,15 @@
             }
       def defs_by_name() do
         %{
+          additional_begin:
+            {9, {:oneof, :op}, {:message, Electric.Satellite.SatOpAdditionalBegin}},
+          additional_commit:
+            {10, {:oneof, :op}, {:message, Electric.Satellite.SatOpAdditionalCommit}},
           begin: {1, {:oneof, :op}, {:message, Electric.Satellite.SatOpBegin}},
           commit: {2, {:oneof, :op}, {:message, Electric.Satellite.SatOpCommit}},
           compensation: {7, {:oneof, :op}, {:message, Electric.Satellite.SatOpCompensation}},
           delete: {5, {:oneof, :op}, {:message, Electric.Satellite.SatOpDelete}},
+          gone: {8, {:oneof, :op}, {:message, Electric.Satellite.SatOpGone}},
           insert: {4, {:oneof, :op}, {:message, Electric.Satellite.SatOpInsert}},
           migrate: {6, {:oneof, :op}, {:message, Electric.Satellite.SatOpMigrate}},
           update: {3, {:oneof, :op}, {:message, Electric.Satellite.SatOpUpdate}}
@@ -1409,6 +1530,33 @@
             name: :compensation,
             tag: 7,
             type: {:message, Electric.Satellite.SatOpCompensation}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "gone",
+            kind: {:oneof, :op},
+            label: :optional,
+            name: :gone,
+            tag: 8,
+            type: {:message, Electric.Satellite.SatOpGone}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "additionalBegin",
+            kind: {:oneof, :op},
+            label: :optional,
+            name: :additional_begin,
+            tag: 9,
+            type: {:message, Electric.Satellite.SatOpAdditionalBegin}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "additionalCommit",
+            kind: {:oneof, :op},
+            label: :optional,
+            name: :additional_commit,
+            tag: 10,
+            type: {:message, Electric.Satellite.SatOpAdditionalCommit}
           }
         ]
       end
@@ -1618,6 +1766,115 @@
 
           []
         ),
+        (
+          def field_def(:gone) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "gone",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :gone,
+               tag: 8,
+               type: {:message, Electric.Satellite.SatOpGone}
+             }}
+          end
+
+          def field_def("gone") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "gone",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :gone,
+               tag: 8,
+               type: {:message, Electric.Satellite.SatOpGone}
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:additional_begin) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalBegin",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_begin,
+               tag: 9,
+               type: {:message, Electric.Satellite.SatOpAdditionalBegin}
+             }}
+          end
+
+          def field_def("additionalBegin") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalBegin",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_begin,
+               tag: 9,
+               type: {:message, Electric.Satellite.SatOpAdditionalBegin}
+             }}
+          end
+
+          def field_def("additional_begin") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalBegin",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_begin,
+               tag: 9,
+               type: {:message, Electric.Satellite.SatOpAdditionalBegin}
+             }}
+          end
+        ),
+        (
+          def field_def(:additional_commit) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalCommit",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_commit,
+               tag: 10,
+               type: {:message, Electric.Satellite.SatOpAdditionalCommit}
+             }}
+          end
+
+          def field_def("additionalCommit") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalCommit",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_commit,
+               tag: 10,
+               type: {:message, Electric.Satellite.SatOpAdditionalCommit}
+             }}
+          end
+
+          def field_def("additional_commit") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalCommit",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :additional_commit,
+               tag: 10,
+               type: {:message, Electric.Satellite.SatOpAdditionalCommit}
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -1663,6 +1920,15 @@
       def default(:compensation) do
         {:error, :no_default_value}
       end,
+      def default(:gone) do
+        {:error, :no_default_value}
+      end,
+      def default(:additional_begin) do
+        {:error, :no_default_value}
+      end,
+      def default(:additional_commit) do
+        {:error, :no_default_value}
+      end,
       def default(_) do
         {:error, :no_such_field}
       end
@@ -1677,7 +1943,7 @@
   end,
   defmodule Electric.Satellite.SatShapeDef.Select do
     @moduledoc false
-    defstruct tablename: "", where: ""
+    defstruct tablename: "", where: "", include: []
 
     (
       (
@@ -1692,7 +1958,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_tablename(msg) |> encode_where(msg)
+          [] |> encode_tablename(msg) |> encode_where(msg) |> encode_include(msg)
         end
       )
 
@@ -1721,6 +1987,25 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:where, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_include(acc, msg) do
+          try do
+            case msg.include do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\x1A", Protox.Encode.encode_message(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:include, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -1769,6 +2054,15 @@
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[where: delimited], rest}
+
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   include:
+                     msg.include ++ [Electric.Satellite.SatShapeDef.Relation.decode!(delimited)]
+                 ], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -1826,7 +2120,11 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:tablename, {:scalar, ""}, :string}, 2 => {:where, {:scalar, ""}, :string}}
+        %{
+          1 => {:tablename, {:scalar, ""}, :string},
+          2 => {:where, {:scalar, ""}, :string},
+          3 => {:include, :unpacked, {:message, Electric.Satellite.SatShapeDef.Relation}}
+        }
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -1834,7 +2132,11 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{tablename: {1, {:scalar, ""}, :string}, where: {2, {:scalar, ""}, :string}}
+        %{
+          include: {3, :unpacked, {:message, Electric.Satellite.SatShapeDef.Relation}},
+          tablename: {1, {:scalar, ""}, :string},
+          where: {2, {:scalar, ""}, :string}
+        }
       end
     )
 
@@ -1859,6 +2161,15 @@
             name: :where,
             tag: 2,
             type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "include",
+            kind: :unpacked,
+            label: :repeated,
+            name: :include,
+            tag: 3,
+            type: {:message, Electric.Satellite.SatShapeDef.Relation}
           }
         ]
       end
@@ -1923,6 +2234,35 @@
 
           []
         ),
+        (
+          def field_def(:include) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "include",
+               kind: :unpacked,
+               label: :repeated,
+               name: :include,
+               tag: 3,
+               type: {:message, Electric.Satellite.SatShapeDef.Relation}
+             }}
+          end
+
+          def field_def("include") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "include",
+               kind: :unpacked,
+               label: :repeated,
+               name: :include,
+               tag: 3,
+               type: {:message, Electric.Satellite.SatShapeDef.Relation}
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -1952,6 +2292,9 @@
       end,
       def default(:where) do
         {:ok, ""}
+      end,
+      def default(:include) do
+        {:error, :no_default_value}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -3738,6 +4081,328 @@
       end,
       def default(:headers) do
         {:error, :no_default_value}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatShapeDef.Relation do
+    @moduledoc false
+    defstruct foreign_key: [], select: nil
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_foreign_key(msg) |> encode_select(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_foreign_key(acc, msg) do
+          try do
+            case msg.foreign_key do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\n", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:foreign_key, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_select(acc, msg) do
+          try do
+            if msg.select == nil do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_message(msg.select)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:select, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatShapeDef.Relation))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[foreign_key: msg.foreign_key ++ [delimited]], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   select:
+                     Protox.MergeMessage.merge(
+                       msg.select,
+                       Electric.Satellite.SatShapeDef.Select.decode!(delimited)
+                     )
+                 ], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatShapeDef.Relation,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:foreign_key, :unpacked, :string},
+          2 => {:select, {:scalar, nil}, {:message, Electric.Satellite.SatShapeDef.Select}}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          foreign_key: {1, :unpacked, :string},
+          select: {2, {:scalar, nil}, {:message, Electric.Satellite.SatShapeDef.Select}}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "foreignKey",
+            kind: :unpacked,
+            label: :repeated,
+            name: :foreign_key,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "select",
+            kind: {:scalar, nil},
+            label: :optional,
+            name: :select,
+            tag: 2,
+            type: {:message, Electric.Satellite.SatShapeDef.Select}
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:foreign_key) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "foreignKey",
+               kind: :unpacked,
+               label: :repeated,
+               name: :foreign_key,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("foreignKey") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "foreignKey",
+               kind: :unpacked,
+               label: :repeated,
+               name: :foreign_key,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("foreign_key") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "foreignKey",
+               kind: :unpacked,
+               label: :repeated,
+               name: :foreign_key,
+               tag: 1,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:select) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "select",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :select,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatShapeDef.Select}
+             }}
+          end
+
+          def field_def("select") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "select",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :select,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatShapeDef.Select}
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:foreign_key) do
+        {:error, :no_default_value}
+      end,
+      def default(:select) do
+        {:ok, nil}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -6252,7 +6917,12 @@
   end,
   defmodule Electric.Satellite.SatOpBegin do
     @moduledoc false
-    defstruct commit_timestamp: 0, trans_id: "", lsn: "", origin: nil, is_migration: false
+    defstruct commit_timestamp: 0,
+              trans_id: "",
+              lsn: "",
+              origin: nil,
+              is_migration: false,
+              additional_data_ref: 0
 
     (
       (
@@ -6273,6 +6943,7 @@
           |> encode_trans_id(msg)
           |> encode_lsn(msg)
           |> encode_is_migration(msg)
+          |> encode_additional_data_ref(msg)
         end
       )
 
@@ -6339,6 +7010,19 @@
               reraise Protox.EncodingError.new(:is_migration, "invalid field value"),
                       __STACKTRACE__
           end
+        end,
+        defp encode_additional_data_ref(acc, msg) do
+          try do
+            if msg.additional_data_ref == 0 do
+              acc
+            else
+              [acc, "0", Protox.Encode.encode_uint64(msg.additional_data_ref)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:additional_data_ref, "invalid field value"),
+                      __STACKTRACE__
+          end
         end
       ]
 
@@ -6399,6 +7083,10 @@
               {5, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_bool(bytes)
                 {[is_migration: value], rest}
+
+              {6, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[additional_data_ref: value], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -6461,7 +7149,8 @@
           2 => {:trans_id, {:scalar, ""}, :string},
           3 => {:lsn, {:scalar, ""}, :bytes},
           4 => {:origin, {:oneof, :_origin}, :string},
-          5 => {:is_migration, {:scalar, false}, :bool}
+          5 => {:is_migration, {:scalar, false}, :bool},
+          6 => {:additional_data_ref, {:scalar, 0}, :uint64}
         }
       end
 
@@ -6471,6 +7160,7 @@
             }
       def defs_by_name() do
         %{
+          additional_data_ref: {6, {:scalar, 0}, :uint64},
           commit_timestamp: {1, {:scalar, 0}, :uint64},
           is_migration: {5, {:scalar, false}, :bool},
           lsn: {3, {:scalar, ""}, :bytes},
@@ -6528,6 +7218,15 @@
             name: :is_migration,
             tag: 5,
             type: :bool
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "additionalDataRef",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :additional_data_ref,
+            tag: 6,
+            type: :uint64
           }
         ]
       end
@@ -6712,6 +7411,46 @@
              }}
           end
         ),
+        (
+          def field_def(:additional_data_ref) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additionalDataRef") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additional_data_ref") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -6750,6 +7489,9 @@
       end,
       def default(:is_migration) do
         {:ok, false}
+      end,
+      def default(:additional_data_ref) do
+        {:ok, 0}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -8855,6 +9597,237 @@
       end
     )
   end,
+  defmodule Electric.Satellite.SatOpAdditionalBegin do
+    @moduledoc false
+    defstruct ref: 0
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_ref(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_ref(acc, msg) do
+          try do
+            if msg.ref == 0 do
+              acc
+            else
+              [acc, "\b", Protox.Encode.encode_uint64(msg.ref)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:ref, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatOpAdditionalBegin))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[ref: value], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatOpAdditionalBegin,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{1 => {:ref, {:scalar, 0}, :uint64}}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{ref: {1, {:scalar, 0}, :uint64}}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "ref",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :ref,
+            tag: 1,
+            type: :uint64
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:ref) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "ref",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :ref,
+               tag: 1,
+               type: :uint64
+             }}
+          end
+
+          def field_def("ref") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "ref",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :ref,
+               tag: 1,
+               type: :uint64
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:ref) do
+        {:ok, 0}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
   defmodule Electric.Satellite.SatRpcResponse do
     @moduledoc false
     defstruct method: "", request_id: 0, result: nil
@@ -10698,7 +11671,7 @@
   end,
   defmodule Electric.Satellite.SatOpCommit do
     @moduledoc false
-    defstruct commit_timestamp: 0, trans_id: "", lsn: ""
+    defstruct commit_timestamp: 0, trans_id: "", lsn: "", additional_data_ref: 0
 
     (
       (
@@ -10713,7 +11686,11 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_commit_timestamp(msg) |> encode_trans_id(msg) |> encode_lsn(msg)
+          []
+          |> encode_commit_timestamp(msg)
+          |> encode_trans_id(msg)
+          |> encode_lsn(msg)
+          |> encode_additional_data_ref(msg)
         end
       )
 
@@ -10755,6 +11732,19 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:lsn, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_additional_data_ref(acc, msg) do
+          try do
+            if msg.additional_data_ref == 0 do
+              acc
+            else
+              [acc, " ", Protox.Encode.encode_uint64(msg.additional_data_ref)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:additional_data_ref, "invalid field value"),
+                      __STACKTRACE__
           end
         end
       ]
@@ -10807,6 +11797,10 @@
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[lsn: delimited], rest}
+
+              {4, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[additional_data_ref: value], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -10867,7 +11861,8 @@
         %{
           1 => {:commit_timestamp, {:scalar, 0}, :uint64},
           2 => {:trans_id, {:scalar, ""}, :string},
-          3 => {:lsn, {:scalar, ""}, :bytes}
+          3 => {:lsn, {:scalar, ""}, :bytes},
+          4 => {:additional_data_ref, {:scalar, 0}, :uint64}
         }
       end
 
@@ -10877,6 +11872,7 @@
             }
       def defs_by_name() do
         %{
+          additional_data_ref: {4, {:scalar, 0}, :uint64},
           commit_timestamp: {1, {:scalar, 0}, :uint64},
           lsn: {3, {:scalar, ""}, :bytes},
           trans_id: {2, {:scalar, ""}, :string}
@@ -10914,6 +11910,15 @@
             name: :lsn,
             tag: 3,
             type: :bytes
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "additionalDataRef",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :additional_data_ref,
+            tag: 4,
+            type: :uint64
           }
         ]
       end
@@ -11029,6 +12034,46 @@
 
           []
         ),
+        (
+          def field_def(:additional_data_ref) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 4,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additionalDataRef") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 4,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additional_data_ref") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataRef",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :additional_data_ref,
+               tag: 4,
+               type: :uint64
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -11061,6 +12106,9 @@
       end,
       def default(:lsn) do
         {:ok, ""}
+      end,
+      def default(:additional_data_ref) do
+        {:ok, 0}
       end,
       def default(_) do
         {:error, :no_such_field}
@@ -15412,6 +16460,562 @@
       end,
       def default(:sql) do
         {:ok, ""}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatOpAdditionalCommit do
+    @moduledoc false
+    defstruct ref: 0
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_ref(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_ref(acc, msg) do
+          try do
+            if msg.ref == 0 do
+              acc
+            else
+              [acc, "\b", Protox.Encode.encode_uint64(msg.ref)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:ref, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatOpAdditionalCommit))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[ref: value], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatOpAdditionalCommit,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{1 => {:ref, {:scalar, 0}, :uint64}}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{ref: {1, {:scalar, 0}, :uint64}}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "ref",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :ref,
+            tag: 1,
+            type: :uint64
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:ref) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "ref",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :ref,
+               tag: 1,
+               type: :uint64
+             }}
+          end
+
+          def field_def("ref") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "ref",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :ref,
+               tag: 1,
+               type: :uint64
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:ref) do
+        {:ok, 0}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatOpGone do
+    @moduledoc false
+    defstruct relation_id: 0, pk_data: nil
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_relation_id(msg) |> encode_pk_data(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_relation_id(acc, msg) do
+          try do
+            if msg.relation_id == 0 do
+              acc
+            else
+              [acc, "\b", Protox.Encode.encode_uint32(msg.relation_id)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:relation_id, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_pk_data(acc, msg) do
+          try do
+            if msg.pk_data == nil do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_message(msg.pk_data)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:pk_data, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatOpGone))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint32(bytes)
+                {[relation_id: value], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   pk_data:
+                     Protox.MergeMessage.merge(
+                       msg.pk_data,
+                       Electric.Satellite.SatOpRow.decode!(delimited)
+                     )
+                 ], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatOpGone,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:relation_id, {:scalar, 0}, :uint32},
+          2 => {:pk_data, {:scalar, nil}, {:message, Electric.Satellite.SatOpRow}}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          pk_data: {2, {:scalar, nil}, {:message, Electric.Satellite.SatOpRow}},
+          relation_id: {1, {:scalar, 0}, :uint32}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "relationId",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :relation_id,
+            tag: 1,
+            type: :uint32
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "pkData",
+            kind: {:scalar, nil},
+            label: :optional,
+            name: :pk_data,
+            tag: 2,
+            type: {:message, Electric.Satellite.SatOpRow}
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:relation_id) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+
+          def field_def("relationId") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+
+          def field_def("relation_id") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+        ),
+        (
+          def field_def(:pk_data) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+
+          def field_def("pkData") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+
+          def field_def("pk_data") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:relation_id) do
+        {:ok, 0}
+      end,
+      def default(:pk_data) do
+        {:ok, nil}
       end,
       def default(_) do
         {:error, :no_such_field}

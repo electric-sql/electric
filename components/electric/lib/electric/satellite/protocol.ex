@@ -27,229 +27,18 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.WriteValidation
   alias Electric.Telemetry.Metrics
 
+  alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
+  import Electric.Satellite.Protocol.State, only: :macros
+
   require Logger
 
   @type lsn() :: non_neg_integer
-  @producer_timeout 5_000
+  @type deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
+  @type actions() :: ShapeRequest.subquery_actions()
+  @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
+  @type txn_processing() :: {deep_msg_list(), actions(), State.t()}
+
   @producer_demand 5
-
-  defmodule Telemetry do
-    defstruct connection_span: nil,
-              replication_span: nil,
-              subscription_spans: %{}
-
-    @type t() :: %__MODULE__{
-            connection_span: Metrics.t(),
-            replication_span: Metrics.t() | nil,
-            subscription_spans: %{optional(subscription_id :: String.t()) => Metrics.t()}
-          }
-
-    @spec start_subscription_span(t(), String.t(), map(), map()) :: t()
-    def start_subscription_span(
-          %__MODULE__{replication_span: parent} = telemetry,
-          subscription_id,
-          measurements,
-          metadata
-        ) do
-      span =
-        Metrics.start_child_span(
-          parent,
-          [:satellite, :replication, :new_subscription],
-          measurements,
-          Map.put(metadata, :subscription_id, subscription_id)
-        )
-
-      put_in(telemetry.subscription_spans[subscription_id], span)
-    end
-
-    @spec subscription_data_ready(t(), String.t()) :: t()
-    def subscription_data_ready(%__MODULE__{} = telemetry, id) do
-      put_in(
-        telemetry.subscription_spans[id].intermediate_measurements[:data_ready_monotonic_time],
-        System.monotonic_time()
-      )
-    end
-
-    @spec stop_subscription_span(t(), String.t()) :: t()
-    def stop_subscription_span(%__MODULE__{} = telemetry, id) do
-      {span, telemetry} = pop_in(telemetry.subscription_spans[id])
-      monotonic_time = System.monotonic_time()
-      data_time = span.intermediate_measurements.data_ready_monotonic_time
-
-      Metrics.stop_span(span, %{
-        monotonic_time: monotonic_time,
-        data_ready_monotonic_time: data_time,
-        data_ready_duration: data_time - span.start_time,
-        send_lag: monotonic_time - data_time
-      })
-
-      telemetry
-    end
-  end
-
-  defmodule InRep do
-    defstruct lsn: "",
-              status: nil,
-              pid: nil,
-              stage_sub: nil,
-              relations: %{},
-              incomplete_trans: nil,
-              demand: 0,
-              sub_retry: nil,
-              queue: :queue.new(),
-              rpc_request_id: 0
-
-    @typedoc """
-    Incoming replication Satellite -> PG
-    """
-    @type t() :: %__MODULE__{
-            pid: pid() | nil,
-            lsn: String.t(),
-            status: nil | :active | :paused | :requested,
-            # retry is only used when there is an active consumer
-            sub_retry: nil | reference(),
-            stage_sub: GenStage.subscription_tag() | nil,
-            relations: %{
-              optional(PB.relation_id()) => %{
-                :schema => String.t(),
-                :table => String.t(),
-                :columns => [String.t()]
-              }
-            },
-            incomplete_trans: nil | Transaction.t(),
-            demand: non_neg_integer(),
-            queue: :queue.queue(Transaction.t()),
-            rpc_request_id: non_neg_integer()
-          }
-
-    @spec add_to_queue(t(), [Transaction.t()]) :: t()
-    def add_to_queue(%__MODULE__{queue: queue} = rep, events),
-      do: %__MODULE__{rep | queue: Utils.add_events_to_queue(events, queue)}
-  end
-
-  defmodule OutRep do
-    defstruct lsn: "",
-              status: nil,
-              pid: nil,
-              stage_sub: nil,
-              relations: %{},
-              last_seen_wal_pos: 0,
-              subscription_pause_queue: {nil, :queue.new()},
-              outgoing_ops_buffer: :queue.new(),
-              subscription_data_to_send: %{},
-              last_migration_xid_at_initial_sync: 0
-
-    @typedoc """
-    Insertion point for data coming from a subscription fulfillment.
-    """
-    @type subscription_insert_point :: {xmin :: non_neg_integer(), subscription_id :: binary()}
-
-    @typedoc """
-    Outgoing replication PG -> Satellite
-    """
-    @type t() :: %__MODULE__{
-            pid: pid() | nil,
-            lsn: String.t(),
-            status: nil | :active | :paused,
-            stage_sub: GenStage.subscription_tag() | nil,
-            relations: %{Changes.relation() => PB.relation_id()},
-            last_seen_wal_pos: non_neg_integer,
-            # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
-            subscription_pause_queue:
-              {subscription_insert_point() | nil, :queue.queue(subscription_insert_point())},
-            outgoing_ops_buffer: :queue.queue(),
-            subscription_data_to_send: %{optional(String.t()) => term()},
-            last_migration_xid_at_initial_sync: non_neg_integer
-          }
-
-    def add_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, new),
-      do: %{out | subscription_pause_queue: add_pause_point(queue, new)}
-
-    def add_pause_point({nil, queue}, new), do: {new, queue}
-    def add_pause_point({head, queue}, new), do: {head, :queue.in(new, queue)}
-
-    def remove_next_pause_point(%__MODULE__{subscription_pause_queue: queue} = out),
-      do: %{out | subscription_pause_queue: remove_next_pause_point(queue)}
-
-    def remove_next_pause_point({_, queue}) do
-      case :queue.out(queue) do
-        {{:value, item}, queue} -> {item, queue}
-        {:empty, queue} -> {nil, queue}
-      end
-    end
-
-    def remove_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, subscription_id),
-      do: %{out | subscription_pause_queue: remove_pause_point(queue, subscription_id)}
-
-    def remove_pause_point({nil, _} = queue, _), do: queue
-    def remove_pause_point({{_, id}, _} = queue, id), do: remove_next_pause_point(queue)
-
-    def remove_pause_point({head, queue}, id),
-      do: {head, :queue.delete_with(&match?({_, ^id}, &1), queue)}
-
-    def set_status(%__MODULE__{} = out, status) when status in [nil, :active, :paused],
-      do: %{out | status: status}
-
-    def store_subscription_data(%__MODULE__{} = out, id, data),
-      do: %{out | subscription_data_to_send: Map.put(out.subscription_data_to_send, id, data)}
-
-    def add_events_to_buffer(%__MODULE__{} = out, events),
-      do: %{out | outgoing_ops_buffer: Utils.add_events_to_queue(events, out.outgoing_ops_buffer)}
-
-    def set_event_buffer(%__MODULE__{} = out, buffer) when is_list(buffer),
-      do: %{out | outgoing_ops_buffer: :queue.from_list(buffer)}
-
-    def set_event_buffer(%__MODULE__{} = out, {_, _} = buffer),
-      do: %{out | outgoing_ops_buffer: buffer}
-
-    def subscription_pending?(_, %__MODULE__{subscription_pause_queue: {nil, _}}), do: false
-    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {{_, id}, _}}), do: true
-
-    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {_, queue}}),
-      do: :queue.any(&match?({_, ^id}, &1), queue)
-  end
-
-  defmodule State do
-    alias Electric.Replication.Shapes.ShapeRequest
-
-    defstruct auth_passed: false,
-              auth: nil,
-              last_msg_time: nil,
-              client_id: nil,
-              in_rep: %InRep{},
-              out_rep: %OutRep{},
-              auth_provider: nil,
-              connector_config: [],
-              subscriptions: %{},
-              subscription_data_fun: nil,
-              telemetry: nil
-
-    @type t() :: %__MODULE__{
-            auth_passed: boolean(),
-            auth: nil | Electric.Satellite.Auth.t(),
-            last_msg_time: :erlang.timestamp() | nil | :ping_sent,
-            client_id: String.t() | nil,
-            in_rep: InRep.t(),
-            out_rep: OutRep.t(),
-            auth_provider: Electric.Satellite.Auth.provider(),
-            connector_config: Keyword.t(),
-            subscriptions: map(),
-            subscription_data_fun: fun(),
-            telemetry: Telemetry.t() | nil
-          }
-  end
-
-  defguard auth_passed?(state) when state.auth_passed == true
-  defguard in_rep?(state) when state.in_rep.status == :active
-  defguard is_out_rep_active(state) when state.out_rep.status == :active
-  defguard is_out_rep_paused(state) when state.out_rep.status == :paused
-
-  defguard is_pending_subscription(state, subscription_id)
-           when is_tuple(elem(state.out_rep.subscription_pause_queue, 0)) and
-                  elem(elem(state.out_rep.subscription_pause_queue, 0), 1) == subscription_id
-
-  defguard no_pending_subscriptions(state)
-           when is_nil(elem(state.out_rep.subscription_pause_queue, 0))
 
   @spec handle_rpc_request(PB.rpc_req(), State.t()) ::
           {:error, %SatErrorResp{} | PB.rpc_resp()}
@@ -430,11 +219,11 @@ defmodule Electric.Satellite.Protocol do
 
   def handle_rpc_request(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
     needs_unpausing? =
-      is_out_rep_paused(state) and Enum.any?(ids, &is_pending_subscription(state, &1))
+      is_out_rep_paused(state) and Enum.any?(ids, &is_next_pending_subscription(state, &1))
 
     out_rep =
       ids
-      |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, &1))
+      |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, :subscription, &1))
       |> Map.update!(:subscription_data_to_send, &Map.drop(&1, ids))
 
     state =
@@ -452,9 +241,9 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec process_message(PB.sq_pb_msg(), State.t()) ::
-          {nil | :stop | PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
-          | {:force_unpause, PB.sq_pb_msg() | [PB.sq_pb_msg()], State.t()}
-          | {:error, PB.sq_pb_msg()}
+          {nil | :stop | deep_msg_list(), State.t()}
+          | {:force_unpause, deep_msg_list(), State.t()}
+          | {:error, deep_msg_list()}
   # RPC request handling
   def process_message(%SatRpcRequest{method: method} = req, %State{} = state)
       when is_allowed_rpc_method(method) do
@@ -531,7 +320,9 @@ defmodule Electric.Satellite.Protocol do
     #
     # Even though the server may have applied migrations to the schema that the client hasn't seen yet,
     # we can still look up column types on it due our migrations being additive-only and backwards-compatible.
-    %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
+    %{columns: columns, primary_keys: pks} =
+      SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
+
     relation_columns = Map.new(columns, &{&1.name, &1.type})
 
     enums = SchemaCache.Global.enums()
@@ -546,7 +337,12 @@ defmodule Electric.Satellite.Protocol do
             values -> {:enum, typename, values}
           end
 
-        %{name: name, type: type, nullable?: col.is_nullable}
+        %{
+          name: name,
+          type: type,
+          nullable?: col.is_nullable,
+          pk_position: Enum.find_index(pks, &(&1 == name))
+        }
       end
 
     relations =
@@ -584,7 +380,7 @@ defmodule Electric.Satellite.Protocol do
 
             {:error, accepted, error, trailing} ->
               state = send_transactions(accepted, incomplete, state)
-              telemetry_event(state, :bad_transaction)
+              Telemetry.event(state, :bad_transaction)
 
               Logger.error([
                 "WriteValidation.Error: " <> to_string(error),
@@ -597,7 +393,7 @@ defmodule Electric.Satellite.Protocol do
       end
     rescue
       e ->
-        telemetry_event(state, :bad_transaction)
+        Telemetry.event(state, :bad_transaction)
 
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
@@ -623,7 +419,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp send_transactions(complete, incomplete, state) do
     for tx <- complete do
-      telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+      Telemetry.event(state, :transaction_receive, Transaction.count_operations(tx))
     end
 
     in_rep =
@@ -653,7 +449,7 @@ defmodule Electric.Satellite.Protocol do
     # client first, followed by the initial migrations.
     send(self(), {:perform_initial_sync_and_subscribe, msg})
 
-    {:reply, %SatInStartReplicationResp{}, start_replication_telemetry(state, :initial_sync)}
+    {:reply, %SatInStartReplicationResp{}, Telemetry.start_replication_span(state, :initial_sync)}
   end
 
   defp handle_start_replication_request(_msg, :initial_sync, _state) do
@@ -670,7 +466,7 @@ defmodule Electric.Satellite.Protocol do
         {:ok, state} ->
           state =
             state
-            |> start_replication_telemetry(subscriptions: length(msg.subscription_ids))
+            |> Telemetry.start_replication_span(subscriptions: length(msg.subscription_ids))
             |> subscribe_client_to_replication_stream(lsn)
 
           {:reply, %SatInStartReplicationResp{}, state}
@@ -700,31 +496,37 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) ::
-          {[PB.sq_pb_msg()], State.t()}
-  def handle_outgoing_txs(events, state, acc \\ [])
+  @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) :: txn_processing()
+  def handle_outgoing_txs(events, state, acc \\ {[], %{}})
 
-  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, acc) do
-    filtered_tx =
+  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc}) do
+    {filtered_tx, new_graph, actions} =
       tx
       |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
-      |> Shapes.filter_map_changes_from_tx(current_shapes(state))
       |> Changes.filter_changes_belonging_to_user(state.auth.user_id)
+      |> Shapes.process_transaction(state.out_rep.sent_rows_graph, current_shapes(state))
 
     {out_rep, acc} =
       if filtered_tx.changes != [] do
-        telemetry_event(
+        Telemetry.event(
           state,
           :transaction_send,
           Transaction.count_operations(filtered_tx)
           |> Map.put(:original_operations, length(tx.changes))
         )
 
+        filtered_tx =
+          if actions != %{},
+            do: %Transaction{filtered_tx | additional_data_ref: state.out_rep.move_in_next_ref},
+            else: filtered_tx
+
         {relations, transaction, out_rep} = handle_out_trans({filtered_tx, offset}, state)
-        {out_rep, Enum.concat([transaction, relations, acc])}
+
+        {%OutRep{out_rep | sent_rows_graph: new_graph},
+         {[msgs_acc, relations, transaction], Shapes.merge_actions(actions_acc, actions)}}
       else
         Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
-        {state.out_rep, acc}
+        {state.out_rep, {msgs_acc, actions_acc}}
       end
 
     out_rep = %OutRep{out_rep | last_seen_wal_pos: offset}
@@ -732,8 +534,8 @@ defmodule Electric.Satellite.Protocol do
     handle_outgoing_txs(events, state, acc)
   end
 
-  def handle_outgoing_txs([], state, acc) do
-    {Enum.reverse(acc), state}
+  def handle_outgoing_txs([], state, {msgs_acc, actions_acc}) do
+    {msgs_acc, actions_acc, state}
   end
 
   # If the client received at least one migration during the initial sync, the value of
@@ -757,7 +559,7 @@ defmodule Electric.Satellite.Protocol do
   # The offset here comes from the producer
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  def handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
+  defp handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
     Logger.debug("trans: #{inspect(trans)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
@@ -775,36 +577,25 @@ defmodule Electric.Satellite.Protocol do
   def subscribe_client_to_replication_stream(%State{out_rep: out_rep} = state, lsn) do
     Metrics.satellite_replication_event(%{started: 1})
 
-    {:via, :gproc, producer} = CachedWal.Producer.name(state.client_id)
-    {sub_pid, _} = :gproc.await(producer, @producer_timeout)
-    sub_ref = Process.monitor(sub_pid)
+    {pid, ref} =
+      Utils.GenStage.gproc_subscribe_self!(
+        to: CachedWal.Producer.name(state.client_id),
+        start_subscription: lsn,
+        min_demand: 5,
+        max_demand: 10
+      )
 
-    opts = [
-      to: sub_pid,
-      start_subscription: lsn,
-      min_demand: 5,
-      max_demand: 10
-    ]
-
-    msg = {:"$gen_producer", {self(), sub_ref}, {:subscribe, nil, opts}}
-
-    Process.send(sub_pid, msg, [])
-    ask({sub_pid, sub_ref}, @producer_demand)
+    Utils.GenStage.ask({pid, ref}, @producer_demand)
 
     out_rep = %OutRep{
       out_rep
-      | pid: sub_pid,
+      | pid: pid,
         status: :active,
-        stage_sub: sub_ref,
+        stage_sub: ref,
         last_seen_wal_pos: lsn
     }
 
     %State{state | out_rep: out_rep}
-  end
-
-  # copied from gen_stage.ask, but form is defined as opaque there :/
-  def ask({pid, ref}, demand) when is_integer(demand) and demand > 0 do
-    Process.send(pid, {:"$gen_producer", {self(), ref}, {:ask, demand}}, [])
   end
 
   def terminate_subscription(out_rep) do
@@ -814,18 +605,194 @@ defmodule Electric.Satellite.Protocol do
     %OutRep{out_rep | status: nil, pid: nil, stage_sub: nil}
   end
 
-  def handle_subscription_data(id, data, %State{} = state) do
-    state = %{state | telemetry: Telemetry.stop_subscription_span(state.telemetry, id)}
+  @spec subscription_data_received(String.t(), term(), State.t()) :: outgoing()
+  def subscription_data_received(id, data, state)
+      when is_map_key(state.subscriptions, id) do
+    Logger.debug("Received initial data for subscription #{id}")
+
+    state = Telemetry.subscription_data_ready(state, id)
+
+    if is_paused_on_subscription(state, id) do
+      # We're currently waiting for data from this subscription, we can send it immediately
+      send_additional_data_and_unpause({:subscription, id}, data, state)
+      |> perform_pending_actions()
+    else
+      # We're not blocked on waiting for this data yet, store & continue
+      {[], State.store_subscription_data(state, id, data)}
+    end
+  end
+
+  @spec subscription_data_failed(String.t(), term(), State.t()) :: outgoing()
+  def subscription_data_failed(id, reason, state) do
+    Logger.error(
+      "Couldn't retrieve initial data for subscription #{id}, with reason #{inspect(reason)}"
+    )
+
+    error = %SatSubsDataError{
+      subscription_id: id,
+      message: "Could not retrieve initial data for subscription"
+    }
+
+    state
+    |> State.delete_subscription(id)
+    |> case do
+      state when is_paused_on_subscription(state, id) ->
+        # We're paused on this, we want to send the error and unpause
+        send_additional_data_error_and_unpause(error, state)
+        |> perform_pending_actions()
+
+      state ->
+        # We're either paused on smth else, or replication is stopped, or replication is ongoing
+        # In any case, we just remove the "future" pause point and notify the client
+
+        {error, %{state | out_rep: OutRep.remove_pause_point(state.out_rep, :subscription, id)}}
+    end
+  end
+
+  @spec move_in_data_received(
+          non_neg_integer(),
+          Graph.t(),
+          Querying.results(),
+          State.t()
+        ) :: outgoing()
+  def move_in_data_received(ref, _, changes, state) do
+    # It's a trade-off where to filter out already-sent changes. Current implementation
+    # prefers copying more data into itself and filtering here. Maybe sending a MapSet
+    # of already-sent IDs to the Task process that does the querying is more optimal,
+    # but more testing is required.
+    if is_paused_on_move_in(state, ref) do
+      # We're paused waiting for this, send changes immediately
+      send_additional_data_and_unpause({:move_in, ref}, changes, state)
+      |> perform_pending_actions()
+    else
+      # Didn't reach the pause point for this move-in yet, just store
+      {[], State.store_move_in_data(state, ref, changes)}
+    end
+  end
+
+  @doc """
+  Process all the events up to a possible pause point.
+  """
+  @spec send_events_and_maybe_pause([PB.sq_pb_msg()], State.t()) :: txn_processing()
+  def send_events_and_maybe_pause(events, %State{} = state)
+      when no_pending_subscriptions(state) do
+    handle_outgoing_txs(events, state)
+  end
+
+  def send_events_and_maybe_pause(events, %State{out_rep: out_rep} = state) do
+    {{xmin, kind, ref}, _} = out_rep.pause_queue
+
+    case Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end) do
+      {events, []} ->
+        # We haven't yet reached the pause point
+        handle_outgoing_txs(events, state)
+
+      {events, pending} ->
+        # We've reached the pause point, but we may have some messages we can send
+        {msgs, actions, state} = handle_outgoing_txs(events, state)
+
+        state =
+          state.out_rep
+          |> OutRep.add_events_to_buffer(pending)
+          |> OutRep.set_status(:paused)
+          |> then(&%{state | out_rep: &1})
+
+        case State.pop_pending_data(state, kind, ref) do
+          {data, state} ->
+            send_additional_data_and_unpause(msgs, {kind, ref}, data, state)
+
+          :error ->
+            # Data isn't yet available, pause here and send what we can
+            {msgs, actions, state}
+        end
+    end
+  end
+
+  @doc """
+  Unpause the outgoing replication stream and process all the unsent pending events.
+
+  Result includes a nested listed of messages to be sent and an actions map that should be
+  acted upon with `perform_pending_actions` once entire batch is processed.
+  """
+  @spec unpause_and_send_pending_events(deep_msg_list(), actions(), State.t()) :: txn_processing()
+  def unpause_and_send_pending_events(msgs, actions \\ %{}, state) do
+    buffer = state.out_rep.outgoing_ops_buffer
+
+    state =
+      state.out_rep
+      |> OutRep.set_event_buffer([])
+      |> OutRep.set_status(:active)
+      |> then(&%{state | out_rep: &1})
+
+    {next_msgs, more_actions, state} =
+      buffer
+      |> :queue.to_list()
+      |> send_events_and_maybe_pause(state)
+
+    {[msgs, next_msgs], Shapes.merge_actions(actions, more_actions), state}
+  end
+
+  @spec send_additional_data_and_unpause(deep_msg_list(), term(), point, any(), State.t()) ::
+          txn_processing()
+        when point: {OutRep.pause_kind(), term()}
+  defp send_additional_data_and_unpause(msgs \\ [], actions \\ %{}, point, data, %State{} = state)
+       when is_tuple(point) and elem(point, 0) in [:subscription, :move_in] do
+    state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
+
+    {more_msgs, state} = handle_additional_data(point, data, state)
+
+    unpause_and_send_pending_events([msgs, more_msgs], actions, state)
+  end
+
+  @spec send_additional_data_error_and_unpause(deep_msg_list(), State.t()) :: txn_processing()
+  defp send_additional_data_error_and_unpause(error, state) do
+    unpause_and_send_pending_events(
+      [error],
+      Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
+    )
+  end
+
+  @spec perform_pending_actions(txn_processing()) :: outgoing()
+  def perform_pending_actions({msgs, actions, state}) when actions == %{}, do: {msgs, state}
+
+  def perform_pending_actions({msgs, actions, state}) do
+    case query_move_in_data(actions, state) do
+      {:ok, state} -> {msgs, state}
+      {:error, error_msgs} -> {:error, error_msgs, state}
+    end
+  end
+
+  defp handle_additional_data({:subscription, id}, data, state),
+    do: handle_subscription_data(id, data, state)
+
+  defp handle_additional_data({:move_in, ref}, data, state),
+    do: handle_move_in_data(ref, data, state)
+
+  @spec handle_subscription_data(
+          binary(),
+          {Graph.t(), any(), nonempty_maybe_improper_list()},
+          State.t()
+        ) :: {deep_msg_list(), State.t()}
+  defp handle_subscription_data(id, {graph, data, request_ids}, %State{} = state) do
+    state = Telemetry.stop_subscription_span(state, id)
 
     # TODO: in a perfect world there would be potential to stream out the changes instead of
     #       sending it all at once. It's quite hard to do with :ranch, or I haven't found a way.
-    {relations, messages, state} =
-      Enum.reduce(data, {[], [], state}, fn shape_data, {relations, messages, state} ->
-        {new_relations, new_messages, out_rep} =
-          handle_shape_request_data(shape_data, state.out_rep)
+    # TODO: Addition of shapes complicated initial data sending for multiple requests due to records
+    #       fulfilling multiple requests so we're "cheating" here while the client doesn't care by
+    #       sending all but one "request data" messages empty, and stuffing entire response into the first one.
+    #       See paired comment in `ElectricTest.SatelliteHelpers.receive_subscription_data/3`
+    [req_id | rest] = request_ids
 
-        {[new_relations | relations], [new_messages | messages], %{state | out_rep: out_rep}}
-      end)
+    messages = Enum.map(rest, &[%SatShapeDataBegin{request_id: &1}, %SatShapeDataEnd{}])
+
+    {relations, more_msgs, out_rep} =
+      data
+      |> Stream.reject(fn {id, _} -> State.row_sent?(state, id) end)
+      |> Stream.map(fn {_id, {change, _req_ids}} -> change end)
+      |> handle_shape_request_data(req_id, state.out_rep)
+
+    state = %State{state | out_rep: OutRep.merge_in_graph(out_rep, graph)}
 
     # We use the `last_seen_wal_pos` here since if we're in this function, we're sending the data
     # at this point in the stream, and `last_seen_wal_pos` definitely contains the last LSN seen by
@@ -841,12 +808,12 @@ defmodule Electric.Satellite.Protocol do
          lsn:
            Electric.Postgres.CachedWal.Api.serialize_wal_position(state.out_rep.last_seen_wal_pos)
        },
-       messages,
+       [messages, more_msgs],
        %SatSubsDataEnd{}
      ], state}
   end
 
-  defp handle_shape_request_data({id, changes}, out_rep) do
+  defp handle_shape_request_data(changes, request_id, out_rep) do
     # TODO: This serializes entire shape data (i.e. entire table) as a transaction.
     #       I don't like that we're websocket-framing this much data, this should be split up
     #       but I'm not sure if we've implemented the collection
@@ -855,9 +822,27 @@ defmodule Electric.Satellite.Protocol do
 
     {
       serialize_unknown_relations(unknown_relations),
-      [%SatShapeDataBegin{request_id: id}, serialized_log, %SatShapeDataEnd{}],
+      [%SatShapeDataBegin{request_id: request_id}, serialized_log, %SatShapeDataEnd{}],
       %{out_rep | relations: known_relations}
     }
+  end
+
+  defp handle_move_in_data(ref, changes, %State{} = state) do
+    # No actions are possible from changes formatted as NewRecords.
+    {graph, changes, _actions} =
+      changes
+      |> Stream.reject(fn {id, _} -> State.row_sent?(state, id) end)
+      |> Stream.map(fn {_id, {change, _req_ids}} -> change end)
+      |> Shapes.process_additional_changes(state.out_rep.sent_rows_graph, current_shapes(state))
+
+    out_rep = state.out_rep
+
+    {msgs, unknown_relations, known_relations} =
+      Serialization.serialize_move_in_data_as_tx(ref, changes, out_rep.relations)
+
+    out_rep = %OutRep{out_rep | sent_rows_graph: graph, relations: known_relations}
+
+    {[serialize_unknown_relations(unknown_relations), msgs], %{state | out_rep: out_rep}}
   end
 
   @spec start_replication_from_client(binary(), State.t()) :: {[PB.sq_pb_msg()], State.t()}
@@ -908,7 +893,7 @@ defmodule Electric.Satellite.Protocol do
     ref = make_ref()
     parent = self()
 
-    state = start_subscription_telemetry_span(state, id, requests)
+    state = Telemetry.start_subscription_span(state, id, requests)
 
     shape_requests = List.flatten(Map.values(state.subscriptions))
 
@@ -919,10 +904,10 @@ defmodule Electric.Satellite.Protocol do
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
-    span = state.telemetry.subscription_spans[id]
+    span = Telemetry.get_subscription_span(state, id)
 
     Task.start(fn ->
-      # This is `InitiaSync.query_subscription_data/2` by default, but can be overridden for tests.
+      # This is `InitialSync.query_subscription_data/2` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
       fun.({id, requests, context},
         reply_to: {ref, parent},
@@ -942,7 +927,7 @@ defmodule Electric.Satellite.Protocol do
         state =
           state
           |> Pathex.force_set!(path(:subscriptions / id), requests)
-          |> Pathex.over!(path(:out_rep), &OutRep.add_pause_point(&1, {xmin, id}))
+          |> Pathex.over!(path(:out_rep), &OutRep.add_pause_point(&1, {xmin, :subscription, id}))
 
         {:reply, %SatSubsResp{subscription_id: id}, state}
     after
@@ -955,25 +940,57 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec start_subscription_telemetry_span(State.t(), String.t(), [ShapeRequest.t()]) :: State.t()
-  defp start_subscription_telemetry_span(state, id, requests) do
-    {included_tables, {total_requests, hashes}} =
-      Enum.flat_map_reduce(requests, {0, []}, fn req, {total, hashes} ->
-        {ShapeRequest.included_tables(req), {total + 1, [ShapeRequest.hash(req) | hashes]}}
-      end)
+  @spec query_move_in_data(ShapeRequest.subquery_actions(), State.t()) ::
+          {:ok, State.t()} | {:error, deep_msg_list()}
+  defp query_move_in_data(actions, %State{} = state) do
+    ref = make_ref()
+    parent = self()
 
-    telemetry =
-      Telemetry.start_subscription_span(
-        state.telemetry,
-        id,
-        %{
-          included_tables: length(Enum.uniq(included_tables)),
-          shapes: total_requests
-        },
-        Map.put(common_metadata(state), :shape_hashes, hashes)
+    # state = start_subscription_telemetry_span(state, id, requests)
+
+    shape_requests = List.flatten(Map.values(state.subscriptions))
+
+    context =
+      shape_requests
+      |> ShapeRequest.prepare_filtering_context()
+      |> Map.put(:user_id, Pathex.get(state, path(:auth / :user_id)))
+
+    # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
+    fun = state.move_in_data_fun
+    move_in_ref = state.out_rep.move_in_next_ref
+    # span = state.telemetry.subscription_spans[id]
+
+    Task.start(fn ->
+      # This is `InitialSync.query_subscription_data/2` by default, but can be overridden for tests.
+      # Please see documentation on that function for context on the next `receive` block.
+      fun.(move_in_ref, actions, context,
+        reply_to: {ref, parent},
+        connection: state.connector_config
+        # telemetry_span: span
       )
+    end)
 
-    %{state | telemetry: telemetry}
+    receive do
+      {:subscription_insertion_point, ^ref, xmin} ->
+        Logger.debug(
+          "Requested data after transaction move-ins, insertion point is at xmin = #{xmin}"
+        )
+
+        out_rep =
+          state.out_rep
+          |> OutRep.add_pause_point({xmin, :move_in, state.out_rep.move_in_next_ref})
+          |> OutRep.increment_move_in_ref()
+
+        {:ok, %{state | out_rep: out_rep}}
+    after
+      1_000 ->
+        {:error,
+         %SatErrorResp{
+           error_type: :REPLICATION_FAILED,
+           message:
+             "Connection to central database failed, cannot continue the replication because of possible consistency issues"
+         }}
+    end
   end
 
   defp serialize_unknown_relations(unknown_relations) do
@@ -1005,37 +1022,6 @@ defmodule Electric.Satellite.Protocol do
     %SatInStartReplicationResp{
       err: %SatInStartReplicationResp.ReplicationError{code: code, message: message}
     }
-  end
-
-  defp telemetry_event(%State{} = state, event, measurements \\ %{}, metadata \\ %{}) do
-    Metrics.untimed_span_event(
-      state.telemetry.replication_span,
-      event,
-      measurements,
-      Map.merge(common_metadata(state), metadata)
-    )
-  end
-
-  defp start_replication_telemetry(state, opts) do
-    {subscriptions, initial_sync} =
-      case opts do
-        :initial_sync -> {0, true}
-        [subscriptions: n] when is_integer(n) -> {n, false}
-      end
-
-    span =
-      Metrics.start_child_span(
-        state.telemetry.connection_span,
-        [:satellite, :replication],
-        %{continued_subscriptions: subscriptions},
-        Map.put(common_metadata(state), :initial_sync, initial_sync)
-      )
-
-    put_in(state.telemetry.replication_span, span)
-  end
-
-  defp common_metadata(%State{} = state) do
-    %{client_id: state.client_id, user_id: state.auth && state.auth.user_id}
   end
 
   @spec rpc(String.t(), PB.rpc_req(), State.t()) :: {%SatRpcRequest{}, State.t()}

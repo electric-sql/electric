@@ -17,9 +17,14 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       |> Keyword.put_new_lazy(:connector_config, fn ->
         Electric.Replication.PostgresConnector.connector_config()
       end)
-      |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
+      |> Keyword.put_new(
+        :subscription_data_fun,
         &Electric.Replication.InitialSync.query_subscription_data/2
-      end)
+      )
+      |> Keyword.put_new(
+        :move_in_data_fun,
+        &Electric.Replication.InitialSync.query_after_move_in/4
+      )
 
   @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
 

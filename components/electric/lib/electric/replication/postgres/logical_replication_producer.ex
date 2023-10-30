@@ -2,6 +2,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
   require Logger
 
+  alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Telemetry.Metrics
@@ -29,7 +30,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
-    TruncatedRelation
+    TruncatedRelation,
+    ReferencedRecord
   }
 
   defmodule State do
@@ -140,8 +142,28 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, [], state}
   end
 
+  defp process_message(
+         %Message{transactional?: true, prefix: "electric.fk_chain_touch", content: content},
+         state
+       ) do
+    received = Jason.decode!(content)
+
+    referenced = %ReferencedRecord{
+      relation: {received["schema"], received["table"]},
+      record: received["data"],
+      pk: received["pk"],
+      tags:
+        ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
+    }
+
+    {lsn, txn} = state.transaction
+
+    {:noreply, [],
+     %{state | transaction: {lsn, Transaction.add_referenced_record(txn, referenced)}}}
+  end
+
   defp process_message(%Message{} = msg, state) do
-    Logger.info("Got a message: #{inspect(msg)}")
+    Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
 
     {:noreply, [], state}
   end
@@ -252,7 +274,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
        when commit_lsn == current_txn_lsn do
     event =
       txn
-      |> Electric.Postgres.ShadowTableTransformation.enrich_tx_from_shadow_ops()
+      |> ShadowTableTransformation.enrich_tx_from_shadow_ops()
       |> build_message(end_lsn, state)
 
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))

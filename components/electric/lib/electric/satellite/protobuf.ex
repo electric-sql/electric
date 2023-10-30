@@ -121,7 +121,9 @@ defmodule Electric.Satellite.Protobuf do
         SatShapeReq,
         SatShapeDef,
         SatUnsubsReq,
-        SatUnsubsResp
+        SatUnsubsResp,
+        SatOpAdditionalBegin,
+        SatOpAdditionalCommit
       }
     end
   end

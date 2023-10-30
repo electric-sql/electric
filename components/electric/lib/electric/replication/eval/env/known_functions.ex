@@ -31,6 +31,13 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   defpostgres "uuidout(uuid) -> text", delegate: &BasicTypes.noop/1
 
+  ## Equality functions
+
+  defpostgres "*numeric_type* = *numeric_type* -> bool", delegate: &Kernel.==/2
+  defpostgres "text = text -> bool", delegate: &Kernel.==/2
+  defpostgres "uuid = uuid -> bool", delegate: &Kernel.==/2
+  defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
+
   ## Numeric functions
 
   defpostgres "+ *numeric_type* -> *numeric_type*", delegate: &Kernel.+/1
@@ -52,7 +59,6 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "*integral_type* # *integral_type* -> *integral_type*", delegate: &Bitwise.bxor/2
 
   ## String functions
-
   defpostgres "text || text -> text" do
     # Can't do `delegate: &Kernel.<>/2`, because it's a macro that gets converted to local function call
     def text_concat(t1, t2) when is_binary(t1) and is_binary(t2) do

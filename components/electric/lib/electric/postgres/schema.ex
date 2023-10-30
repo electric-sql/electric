@@ -145,14 +145,14 @@ defmodule Electric.Postgres.Schema do
     graph =
       tables
       |> Enum.filter(&(&1.name.schema == @public_schema))
-      |> Enum.map(& &1.name.name)
+      |> Enum.map(&{@public_schema, &1.name.name})
       |> then(&Graph.add_vertices(Graph.new(), &1))
 
     Enum.reduce(tables, graph, fn %Proto.Table{constraints: constraints, name: name}, graph ->
       constraints
       |> Enum.filter(&match?(%{constraint: {:foreign, _}}, &1))
       |> Enum.map(fn %{constraint: {:foreign, fk}} ->
-        {name.name, fk.pk_table.name, label: fk.fk_cols}
+        {{"public", name.name}, {"public", fk.pk_table.name}, label: fk.fk_cols}
       end)
       |> then(&Graph.add_edges(graph, &1))
     end)

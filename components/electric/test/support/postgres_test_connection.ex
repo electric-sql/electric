@@ -168,18 +168,42 @@ defmodule Electric.Postgres.TestConnection do
         content VARCHAR NOT NULL,
         content_b TEXT
       );
-
       """)
 
-    :epgsql.squery(conn, """
-    BEGIN;
-    CALL electric.migration_version('20230830154422');
-    CALL electric.electrify('public.users');
-    CALL electric.electrify('public.documents');
-    CALL electric.electrify('public.my_entries');
-    COMMIT;
-    """)
-    |> Enum.each(&assert {:ok, _, _} = &1)
+    {:ok, [], []} =
+      :epgsql.squery(conn, """
+      CREATE TABLE public.authored_entries (
+        id UUID PRIMARY KEY,
+        content TEXT NOT NULL,
+        author_id UUID REFERENCES users(id)
+      );
+      """)
+
+    {:ok, [], []} =
+      :epgsql.squery(conn, """
+      CREATE TABLE public.comments (
+        id UUID PRIMARY KEY,
+        content TEXT NOT NULL,
+        entry_id UUID REFERENCES authored_entries(id),
+        author_id UUID REFERENCES users(id)
+      );
+      """)
+
+    statement_count =
+      :epgsql.squery(conn, """
+      BEGIN;
+      CALL electric.migration_version('20230830154422');
+      CALL electric.electrify('public.users');
+      CALL electric.electrify('public.documents');
+      CALL electric.electrify('public.my_entries');
+      CALL electric.electrify('public.authored_entries');
+      CALL electric.electrify('public.comments');
+      COMMIT;
+      """)
+      |> Enum.map(&assert {:ok, _, _} = &1)
+      |> Enum.count()
+
+    electrified_count = statement_count - 3
 
     Stream.resource(
       fn -> 0 end,
@@ -200,7 +224,7 @@ defmodule Electric.Postgres.TestConnection do
     |> Enum.find(&Enum.all?(&1.changes, fn x -> Extension.is_ddl_relation(x.relation) end)) ||
       flunk("Migration statements didn't show up in the cached WAL")
 
-    []
+    [electrified_count: electrified_count]
   end
 
   def setup_with_sql_execute(%{conn: conn, with_sql: sql}) do

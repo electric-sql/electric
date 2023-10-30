@@ -1,0 +1,132 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_references(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
+    RETURNS TEXT
+    LANGUAGE PLPGSQL AS $outer_function$
+    DECLARE
+        shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
+        function_name TEXT := 'send_self_and_references___' || schema_name || '__' || table_name;
+        arg_name_list TEXT[] := <%= schema() %>.format_every(primary_key_list, 'arg_%s'); -- `{arg_id, arg_test}`
+        function_args_template TEXT := format('%%1$I %I.%I.%%2$I%%%%TYPE', schema_name, table_name); -- `%1$I schema.table%2$I%%TYPE` formatting template
+        function_args TEXT := <%= schema() %>.zip_format_every_and_join(arg_name_list, primary_key_list, function_args_template); -- `arg_id schema.table.id%TYPE, arg_test schema.table.test%TYPE`
+        pk_serialization TEXT;
+        pk_lookup TEXT := <%= schema() %>.zip_format_every_and_join(primary_key_list, arg_name_list, '_tbl.%1$I IS NOT DISTINCT FROM %2$I', ' AND ');
+        json_serialization TEXT := <%= schema() %>.format_every_and_join(primary_key_list || non_pk_column_list, '''%1$s'', __this_row.%1$I::text'); -- `'id', __this_row.id`
+        recursive_calls TEXT := '';
+        fk_info RECORD;
+    BEGIN
+
+    /* TODO: This makes an assumption that all foreign keys are to also-electrified tables.
+             This assumption holds until we allow not electrifying certain columns.
+    */
+    FOR fk_info IN SELECT * FROM <%= schema() %>.list_foreign_keys(schema_name, table_name)
+    LOOP
+        recursive_calls := recursive_calls ||
+            format(
+                E'        PERFORM <%= schema() %>.%I(%s);\n',
+                'send_self_and_references___' || fk_info.referenced_schema || '__' || fk_info.referenced_table,
+                <%= schema() %>.format_every_and_join(fk_info.fk_columns, '__this_row.%1$I')
+            );
+    END LOOP;
+
+    pk_serialization := 'ARRAY[' || <%= schema() %>.format_every_and_join(arg_name_list, '%I::text') || ']';
+
+    -- The `%n$I` placeholders use n-th argument for formatting.
+    EXECUTE format($injected$
+        CREATE OR REPLACE FUNCTION <%= schema() %>.%1$I(%2$s)
+            RETURNS void
+            LANGUAGE PLPGSQL SECURITY DEFINER AS
+        $function$
+        DECLARE
+            __this_row %3$I.%4$I%%ROWTYPE;
+            __tags <%= schema() %>.tag[];
+            __serialized_pk TEXT;
+            __message TEXT;
+        BEGIN
+            __serialized_pk := %5$s::text;
+            IF <%= schema() %>.__tx_is_row_already_touched('%3$s', '%4$s', __serialized_pk) THEN
+                RETURN;
+            END IF;
+
+            SELECT * INTO __this_row FROM %3$I.%4$I as _tbl WHERE %6$s;
+
+            IF FOUND THEN
+                SELECT _tbl._tags INTO __tags FROM <%= schema() %>.%8$I as _tbl WHERE %6$s;
+
+                PERFORM <%= schema() %>.__tx_store_touched_row('%3$s', '%4$s', __serialized_pk);
+
+                __message := json_build_object('schema', '%3$s', 'table', '%4$s', 'tags', __tags::text, 'data', json_build_object(%9$s), 'pk', array_to_json(%5$s))::text;
+
+                PERFORM pg_logical_emit_message(true, '<%= schema() %>.fk_chain_touch', __message);
+                -- RAISE NOTICE '%%', format('%3$I.%4$I:%%s', row_to_json(__this_row)::text);
+
+                -- Injected traversals to referenced tables
+                %7$s
+
+                RETURN;
+            END IF;
+        END;
+        $function$;$injected$,
+    function_name, -- 1
+    function_args, -- 2
+    schema_name, -- 3
+    table_name, -- 4
+    pk_serialization, -- 5
+    pk_lookup, -- 6
+    recursive_calls, -- 7
+    shadow_table_name, -- 8
+    json_serialization -- 9
+    );
+
+    RETURN function_name;
+END;
+$outer_function$;
+
+
+CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_trigger(schema_name TEXT, table_name TEXT, primary_key_list TEXT[])
+    RETURNS TEXT
+    LANGUAGE PLPGSQL AS $outer_function$
+    DECLARE
+        function_name TEXT := 'send_self_trigger___' || schema_name || '__' || table_name;
+        referenced_calls TEXT := '';
+        pk_serialization TEXT := 'ARRAY[' || <%= schema() %>.format_every_and_join(primary_key_list, '__this_row.%I') || ']::text';
+        fk_info RECORD;
+    BEGIN
+        FOR fk_info IN SELECT * FROM <%= schema() %>.list_foreign_keys(schema_name, table_name)
+        LOOP
+            referenced_calls := referenced_calls ||
+                format(
+                    E'        PERFORM <%= schema() %>.%I(%s);\n',
+                    'send_self_and_references___' || fk_info.referenced_schema || '__' || fk_info.referenced_table,
+                    <%= schema() %>.format_every_and_join(fk_info.fk_columns, '__this_row.%1$I')
+                );
+        END LOOP;
+
+        EXECUTE format($injected$
+            -- This trigger is meant to be `FOR EACH STATEMENT` trigger with `REFERENCING NEW TABLE AS new_table`
+            CREATE OR REPLACE FUNCTION <%= schema() %>.%1$I()
+                RETURNS TRIGGER
+                LANGUAGE PLPGSQL SECURITY DEFINER AS
+            $function$
+            DECLARE
+                __this_row %2$I.%3$I%%ROWTYPE;
+                __serialized_pk TEXT;
+            BEGIN
+
+                FOR __this_row IN SELECT * FROM new_table
+                LOOP
+                    __serialized_pk := %5$s;
+                    CONTINUE WHEN <%= schema() %>.__tx_is_row_already_touched('%2$s', '%3$s', __serialized_pk);
+
+                    PERFORM <%= schema() %>.__tx_store_touched_row('%2$s', '%3$s', __serialized_pk);
+                    %4$s
+                END LOOP;
+                RETURN NULL;
+            END;
+            $function$;$injected$,
+        function_name,
+        schema_name,
+        table_name,
+        referenced_calls,
+        pk_serialization);
+        RETURN function_name;
+    END;
+    $outer_function$;

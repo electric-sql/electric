@@ -33,16 +33,24 @@ defmodule Electric.Replication.Changes do
   defmodule Transaction do
     alias Electric.Replication.Changes
 
+    @type referenced_records :: %{
+            optional(Changes.relation()) => %{
+              optional([String.t(), ...]) => Changes.ReferencedRecord.t()
+            }
+          }
+
     @type t() :: %__MODULE__{
             xid: non_neg_integer() | nil,
             changes: [Changes.change()],
+            referenced_records: referenced_records(),
             commit_timestamp: DateTime.t(),
             origin: String.t(),
             # this field is only set by Electric
             origin_type: :postgresql | :satellite,
             publication: String.t(),
             lsn: Electric.Postgres.Lsn.t(),
-            ack_fn: (-> :ok | {:error, term()})
+            ack_fn: (-> :ok | {:error, term()}),
+            additional_data_ref: non_neg_integer()
           }
 
     defstruct [
@@ -53,11 +61,21 @@ defmodule Electric.Replication.Changes do
       :publication,
       :lsn,
       :ack_fn,
-      :origin_type
+      :origin_type,
+      referenced_records: %{},
+      additional_data_ref: 0
     ]
 
+    @spec count_operations(t()) :: %{
+            operations: non_neg_integer(),
+            inserts: non_neg_integer(),
+            updates: non_neg_integer(),
+            deletes: non_neg_integer(),
+            compensations: non_neg_integer(),
+            gone: non_neg_integer()
+          }
     def count_operations(%__MODULE__{changes: changes}) do
-      base = %{operations: 0, inserts: 0, updates: 0, deletes: 0, compensations: 0}
+      base = %{operations: 0, inserts: 0, updates: 0, deletes: 0, compensations: 0, gone: 0}
 
       Enum.reduce(changes, base, fn %module{}, acc ->
         key =
@@ -66,10 +84,23 @@ defmodule Electric.Replication.Changes do
             Changes.UpdatedRecord -> :updates
             Changes.DeletedRecord -> :deletes
             Changes.Compensation -> :compensations
+            Changes.Gone -> :gone
           end
 
         Map.update!(%{acc | operations: acc.operations + 1}, key, &(&1 + 1))
       end)
+    end
+
+    @spec add_referenced_record(t(), Changes.ReferencedRecord.t()) :: t()
+    def add_referenced_record(
+          %__MODULE__{} = txn,
+          %{relation: rel, pk: pk} = referenced
+        )
+        when is_struct(referenced, Changes.ReferencedRecord) do
+      updated =
+        Map.update(txn.referenced_records, rel, %{pk => referenced}, &Map.put(&1, pk, referenced))
+
+      %__MODULE__{txn | referenced_records: updated}
     end
   end
 
@@ -146,6 +177,26 @@ defmodule Electric.Replication.Changes do
           }
   end
 
+  defmodule ReferencedRecord do
+    defstruct [:relation, :record, :pk, tags: []]
+
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            record: Changes.record(),
+            pk: [String.t(), ...],
+            tags: [Changes.tag()]
+          }
+  end
+
+  defmodule Gone do
+    defstruct [:relation, :pk]
+
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            pk: [String.t(), ...]
+          }
+  end
+
   defmodule TruncatedRelation do
     defstruct [:relation]
   end
@@ -160,11 +211,13 @@ defmodule Electric.Replication.Changes do
     origin <> "@" <> Integer.to_string(DateTime.to_unix(tm, :millisecond))
   end
 
-  def convert_update(%UpdatedRecord{} = record, to: :new_record) do
-    %NewRecord{relation: record.relation, tags: record.tags, record: record.record}
+  def convert_update(%UpdatedRecord{} = change, to: :new_record) do
+    %NewRecord{relation: change.relation, tags: change.tags, record: change.record}
   end
 
-  def convert_update(%UpdatedRecord{} = record, to: :deleted_record) do
-    %DeletedRecord{relation: record.relation, tags: record.tags, old_record: record.old_record}
+  def convert_update(%UpdatedRecord{} = change, to: :deleted_record) do
+    %DeletedRecord{relation: change.relation, tags: change.tags, old_record: change.old_record}
   end
+
+  def convert_update(%UpdatedRecord{} = change, to: :updated_record), do: change
 end

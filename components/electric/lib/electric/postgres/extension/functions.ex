@@ -11,12 +11,12 @@ defmodule Electric.Postgres.Extension.Functions do
 
   @template_dir "priv/sql_function_templates"
 
-  template_dir_path = Application.app_dir(:electric, @template_dir)
-  sql_template_paths = Path.wildcard(template_dir_path <> "/**/*.sql.eex")
+  @template_dir_path Application.app_dir(:electric, @template_dir)
+  sql_template_paths = Path.wildcard(@template_dir_path <> "/**/*.sql.eex")
 
   function_paths =
     for path <- sql_template_paths do
-      relpath = Path.relative_to(path, template_dir_path)
+      relpath = Path.relative_to(path, @template_dir_path)
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
       {relpath, name}
     end
@@ -36,6 +36,11 @@ defmodule Electric.Postgres.Extension.Functions do
 
   @function_paths function_paths
   @function_names function_names
+
+  @name_hash :erlang.md5(sql_template_paths)
+  def __mix_recompile__?() do
+    @name_hash != Path.wildcard(@template_dir_path <> "/**/*.sql.eex") |> :erlang.md5()
+  end
 
   @doc """
   Get a list of `{name, SQL}` pairs where the SQL code contains the definition of a function (or multiple functions).
