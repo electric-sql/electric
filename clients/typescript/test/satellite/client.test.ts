@@ -19,8 +19,11 @@ import {
   SatelliteErrorCode,
   Transaction,
 } from '../../src/util/types'
-import { relations } from './common'
+import { dbDescription, relations } from './common'
 import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
+import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { PgBasicType } from '../../src/client/conversions/types'
+import { HKT } from '../../src/client/util/hkt'
 
 interface Context extends AuthState {
   server: SatelliteWSServerStub
@@ -38,6 +41,7 @@ test.beforeEach((t) => {
 
   const client = new SatelliteClient(
     dbName,
+    dbDescription,
     WebSocketNode,
     new MockNotifier(dbName),
     {
@@ -220,6 +224,32 @@ test.serial('receive transaction over multiple messages', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
 
+  const dbDescription = new DbSchema(
+    {
+      table: {
+        fields: new Map([
+          ['name1', PgBasicType.PG_TEXT],
+          ['name2', PgBasicType.PG_TEXT],
+        ]),
+        relations: [],
+      } as unknown as TableSchema<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        HKT
+      >,
+    },
+    []
+  )
+
+  client['dbDescription'] = dbDescription
+
   const start = Proto.SatInStartReplicationResp.create()
   const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
   const commit = Proto.SatOpCommit.create()
@@ -256,17 +286,25 @@ test.serial('receive transaction over multiple messages', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel),
+    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
   })
 
   const updateOp = Proto.SatOpUpdate.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Hello', name2: 'World!' }, rel),
-    oldRowData: serializeRow({ name1: '', name2: '' }, rel),
+    rowData: serializeRow(
+      { name1: 'Hello', name2: 'World!' },
+      rel,
+      dbDescription
+    ),
+    oldRowData: serializeRow({ name1: '', name2: '' }, rel, dbDescription),
   })
   const deleteOp = Proto.SatOpDelete.fromPartial({
     relationId: 1,
-    oldRowData: serializeRow({ name1: 'Hello', name2: 'World!' }, rel),
+    oldRowData: serializeRow(
+      { name1: 'Hello', name2: 'World!' },
+      rel,
+      dbDescription
+    ),
   })
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
@@ -598,6 +636,28 @@ test.serial('default and null test', async (t) => {
     ],
   })
 
+  const tbl = {
+    fields: new Map([
+      ['id', PgBasicType.PG_UUID],
+      ['content', PgBasicType.PG_VARCHAR],
+      ['text_null', PgBasicType.PG_TEXT],
+      ['text_null_default', PgBasicType.PG_TEXT],
+      ['intvalue_null', PgBasicType.PG_INT4],
+      ['intvalue_null_default', PgBasicType.PG_INT4],
+    ]),
+    relations: [],
+  } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+
+  const dbDescription = new DbSchema(
+    {
+      table: tbl,
+      Items: tbl,
+    },
+    []
+  )
+
+  client['dbDescription'] = dbDescription
+
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
     rowData: serializeRow(
@@ -609,7 +669,8 @@ test.serial('default and null test', async (t) => {
         intvalue_null: null,
         intvalue_null_default: '10',
       },
-      rel
+      rel,
+      dbDescription
     ),
   })
 
@@ -632,7 +693,7 @@ test.serial('default and null test', async (t) => {
     ],
   }
 
-  const record: any = deserializeRow(serializedRow, rel)!
+  const record: any = deserializeRow(serializedRow, rel, dbDescription)!
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
@@ -885,6 +946,28 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
 test.serial('subscription correct protocol sequence with data', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
+
+  const tablename = 'THE_TABLE_ID'
+
+  const tbl = {
+    fields: new Map([
+      ['name1', PgBasicType.PG_TEXT],
+      ['name2', PgBasicType.PG_TEXT],
+    ]),
+    relations: [],
+  } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+
+  const dbDescription = new DbSchema(
+    {
+      table: tbl,
+      [tablename]: tbl,
+    },
+    []
+  )
+
+  client['dbDescription'] = dbDescription
+  client['subscriptionsDataCache']['dbDescription'] = dbDescription
+
   await startReplication(client, server)
 
   const rel: Relation = {
@@ -906,7 +989,6 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const subscriptionId = 'THE_SUBS_ID'
   const uuid1 = 'THE_SHAPE_ID_1'
   const uuid2 = 'THE_SHAPE_ID_2'
-  const tablename = 'THE_TABLE_ID'
 
   const shapeReq1: ShapeRequest = {
     requestId: requestId1,
@@ -949,7 +1031,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 0,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel),
+    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
   })
 
   const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert: insertOp })

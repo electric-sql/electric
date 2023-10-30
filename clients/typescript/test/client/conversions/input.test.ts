@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'relatedId' int);"
   )
 
   db.exec('DROP TABLE IF EXISTS Dummy')
@@ -214,6 +214,7 @@ const dateNulls = {
   timetz: null,
   timestamp: null,
   timestamptz: null,
+  bool: null,
 }
 
 const nulls = {

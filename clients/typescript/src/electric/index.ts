@@ -61,6 +61,7 @@ export const electrify = async <DB extends DbSchema<any>>(
 
   const satellite = await registry.ensureStarted(
     dbName,
+    dbDescription,
     adapter,
     migrator,
     notifier,

@@ -43,3 +43,8 @@ model Datetimes {
   d  DateTime @db.Date
   t  DateTime @db.Time(3)
 }
+
+model Bools {
+  id String @id
+  b  Boolean?
+}

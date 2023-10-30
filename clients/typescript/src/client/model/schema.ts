@@ -9,7 +9,7 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { HKT } from '../util/hkt'
 import groupBy from 'lodash.groupby'
 import { Migration } from '../../migrators'
-import { PgType } from '../conversions/sqlite'
+import { PgType } from '../conversions/types'
 
 export type Arity = 'one' | 'many'
 
@@ -164,6 +164,10 @@ export class DbSchema<T extends TableSchemas> {
     })
 
     return obj
+  }
+
+  hasTable(table: TableName): boolean {
+    return Object.keys(this.extendedTables).includes(table)
   }
 
   getTableDescription(
