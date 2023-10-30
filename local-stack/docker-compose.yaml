@@ -11,7 +11,6 @@ configs:
 
 volumes:
   pg_data:
-  electric_data:
 
 services:
   postgres_1:
@@ -34,7 +33,5 @@ services:
       ELECTRIC_FEATURES:
     ports:
       - 5133:5133
-    volumes:
-      - electric_data:/app/data
     depends_on:
       - postgres_1

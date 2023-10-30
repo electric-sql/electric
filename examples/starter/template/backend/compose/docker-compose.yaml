@@ -7,7 +7,6 @@ configs:
 
 volumes:
   pg_data:
-  electric_data:
 
 services:
   postgres:
@@ -42,7 +41,5 @@ services:
     ports:
       - ${ELECTRIC_PORT:-5133}:5133
       - ${ELECTRIC_PROXY_PORT:-65432}:65432
-    volumes:
-      - electric_data:/app/data
     depends_on:
       - postgres
