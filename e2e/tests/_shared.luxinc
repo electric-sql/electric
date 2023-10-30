@@ -133,7 +133,6 @@
             intvalue_null integer,
             intvalue_null_default integer
         );
-        -- CALL electric.electrify('public.items');
         ALTER TABLE public.items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg $version $sql]

@@ -3,7 +3,7 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public."camelCase" (
@@ -11,6 +11,7 @@
             "userId" TEXT
         );
         CALL electric.electrify('public."camelCase"');
+        --ALTER TABLE public."camelCase" ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230921 $sql]
 

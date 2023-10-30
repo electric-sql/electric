@@ -4,14 +4,14 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.bools (
             id TEXT PRIMARY KEY,
             b BOOLEAN
         );
-        CALL electric.electrify('public.bools');
+        ALTER TABLE public.bools ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230908 $sql]
 

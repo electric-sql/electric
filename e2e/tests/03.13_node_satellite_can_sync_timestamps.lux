@@ -4,7 +4,7 @@
 
 [invoke setup]
 
-[shell pg_1]
+[shell proxy_1]
     [local sql=
         """
         CREATE TABLE public.timestamps (
@@ -12,7 +12,7 @@
             created_at TIMESTAMP NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL
         );
-        CALL electric.electrify('public.timestamps');
+        ALTER TABLE public.timestamps ENABLE ELECTRIC;
         """]
     [invoke migrate_pg 20230823 $sql]
 

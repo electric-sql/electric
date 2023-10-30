@@ -23,7 +23,6 @@
       id UUID PRIMARY KEY,
       content VARCHAR NOT NULL
     );
-    -- CALL electric.electrify('public.items');
     ALTER TABLE public.items ENABLE ELECTRIC;
 
     INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000011', 'first item');
