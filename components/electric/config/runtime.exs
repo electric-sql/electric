@@ -12,6 +12,19 @@ default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
 default_pg_proxy_port = "65432"
+default_listen_on_ipv6 = "false"
+default_database_require_ssl = "false"
+default_database_use_ipv6 = "false"
+
+###
+
+get_env_bool = fn name, default ->
+  String.downcase(System.get_env(name, default)) in ["yes", "true"]
+end
+
+get_env_int = fn name, default ->
+  System.get_env(name, default) |> String.to_integer()
+end
 
 ###
 
@@ -62,14 +75,15 @@ config :logger, :console,
     :proxy_session_id
   ]
 
-pg_server_port =
-  System.get_env("LOGICAL_PUBLISHER_PORT", default_pg_server_port) |> String.to_integer()
+pg_server_port = get_env_int.("LOGICAL_PUBLISHER_PORT", default_pg_server_port)
+listen_on_ipv6? = get_env_bool.("ELECTRIC_USE_IPV6", default_listen_on_ipv6)
 
 config :electric,
   # Used in telemetry, and to identify the server to the client
   instance_id: System.get_env("ELECTRIC_INSTANCE_ID", Electric.Utils.uuid4()),
-  http_port: System.get_env("HTTP_PORT", default_http_server_port) |> String.to_integer(),
-  pg_server_port: pg_server_port
+  http_port: get_env_int.("HTTP_PORT", default_http_server_port),
+  pg_server_port: pg_server_port,
+  listen_on_ipv6?: listen_on_ipv6?
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
@@ -101,8 +115,8 @@ if config_env() == :prod do
 
   config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-  require_ssl? =
-    String.downcase(System.get_env("DATABASE_REQUIRE_SSL", "false")) in ["yes", "true"]
+  require_ssl? = get_env_bool.("DATABASE_REQUIRE_SSL", default_database_require_ssl)
+  use_ipv6? = get_env_bool.("DATABASE_USE_IPV6", default_database_use_ipv6)
 
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
@@ -110,6 +124,7 @@ if config_env() == :prod do
     |> then(&Keyword.put(&1, :host, &1[:hostname]))
     |> Keyword.delete(:hostname)
     |> Keyword.put_new(:ssl, require_ssl?)
+    |> Keyword.put(:ipv6, use_ipv6?)
     |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
     |> Keyword.put(:replication, "database")
 
@@ -117,11 +132,18 @@ if config_env() == :prod do
     System.get_env("LOGICAL_PUBLISHER_HOST") ||
       raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
 
-  proxy_port = System.get_env("PG_PROXY_PORT", default_pg_proxy_port) |> String.to_integer()
+  proxy_port = get_env_int.("PG_PROXY_PORT", default_pg_proxy_port)
 
   proxy_password =
     System.get_env("PG_PROXY_PASSWORD") ||
       raise("Required environment variable PG_PROXY_PASSWORD is not set")
+
+  proxy_listener_opts =
+    if listen_on_ipv6? do
+      [transport_options: [:inet6]]
+    else
+      []
+    end
 
   connectors = [
     {"postgres_1",
@@ -138,9 +160,7 @@ if config_env() == :prod do
      proxy: [
        # listen opts are ThousandIsland.options()
        # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
-       listen: [
-         port: proxy_port
-       ],
+       listen: [port: proxy_port] ++ proxy_listener_opts,
        password: proxy_password,
        log_level: log_level
      ]}

@@ -34,6 +34,8 @@ Everything in the table below that doesn't have a default value is required to r
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                                      | PostgreSQL connection URL for the database.                                                                                                                                                                                                                                                                                     |
 | `DATABASE_REQUIRE_SSL`<p>&nbsp;&nbsp;(`false`)</p>  | Set to `yes` or `true` to require SSL for the connection to the database. Alternatively configure SSL for the connection by adding `sslmode=require` to [the `DATABASE_URL` parameters](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). Values set in the `DATABASE_URL` will have precedence. |
+| `DATABASE_USE_IPV6`<p>&nbsp;&nbsp;(`false`)</p>     | Set to `yes` or `true` if your database is only accessible over IPv6. This is the case with Fly Postgres, for example.                                                                                                                                                                                                          |
+| `ELECTRIC_USE_IPV6`<p>&nbsp;&nbsp;(`false`)</p>     | Set to `yes` or `true` to make Electric listen on `::` instead of `0.0.0.0`. On Linux this allows inbound connections over both IPv6 and IPv4. On Windows and some BSD systems inbound connections will only be accepted over IPv6 when this setting is enabled.                                                                |
 | `LOGICAL_PUBLISHER_HOST`                            | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`.                                                                                                                                                                  |
 | `LOGICAL_PUBLISHER_PORT`<p>&nbsp;&nbsp;(`5433`)</p> | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                       |
 | `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>              | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`                                                                                                                                                                                                                        |
@@ -59,10 +61,9 @@ By default, ElectricSQL collects aggregated, anonymous usage data and sends them
 
 It's extremely helpful to leave telemetry enabled if you can.
 
-| Variable                                 | Description                                                                                                      |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Variable                                           | Description                                                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `ELECTRIC_TELEMETRY`<p>&nbsp;&nbsp;(`enabled`)</p> | <p>Telemetry mode. Telemetry is enabled by default. Set to `disabled` to disable collection.</p> |
-
 
 ## Networking requirements
 
