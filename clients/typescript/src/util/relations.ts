@@ -39,7 +39,7 @@ export async function inferRelationsFromSQLite(
     relations[`${tableName}`] = relation
   }
 
-  return Promise.resolve(relations)
+  return relations
 }
 
 async function _getLocalTableNames(
@@ -62,7 +62,6 @@ async function _getLocalTableNames(
         WHERE type = 'table'
           AND name NOT IN (${notIn.map(() => '?').join(',')})
     `
-  return (await adapter.query({ sql: tables, args: notIn })) as {
-    name: string
-  }[]
+  const rows = await adapter.query({ sql: tables, args: notIn })
+  return rows as Array<{ name: string }>
 }
