@@ -30,7 +30,6 @@ services:
       <<: *preshared-auth-variables
       DATABASE_URL: postgresql://postgres:password@postgres_1:5432/electric
       LOGICAL_PUBLISHER_HOST: electric_1
-      PG_PROXY_PORT: "65432"
       PG_PROXY_PASSWORD: "password"
       ELECTRIC_FEATURES:
     ports:

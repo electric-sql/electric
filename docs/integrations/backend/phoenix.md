@@ -52,6 +52,10 @@ config :my_app, MyApp.ProxyRepo,
 # config/runtime.exs
 # because we need to apply migrations in production, ensure that
 # the ProxyRepo is included in the runtime.exs configuration.
+#
+# The `PROXY_URL` environment variable is part of your deployment configuration
+# that tells you application how to connect to the Electric proxy. 
+# e.g. `postgres://electric:proxy-password@localhost:65432/myapp`
 config :my_app, MyApp.ProxyRepo,
   ssl: false,
   url: System.get_env("PROXY_URL"),

@@ -68,7 +68,7 @@ $ psql -U electric -p ${PG_PROXY_PORT} my_database
 $ psql -U electric -p ${PG_PROXY_PORT} postgres
 ```
 
-Additionally the username is almost irrelevant, except [in certain cases](../../integrations/backend/prisma.md). To avoid complications we suggest using `electric` as the username when connecting to the proxy.
+Additionally the username is almost irrelevant except in certain cases, [such as using Prisma](../../integrations/backend/prisma.md). To avoid complications we suggest using `electric` as the username when connecting to the proxy.
 
 With this in mind, you should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
 
